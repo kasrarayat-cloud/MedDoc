@@ -41,14 +41,18 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Optional
 
+from studio.gi import clauses as gi_clauses
 from studio.gi import context as ctx
 from studio.gi import cues
 from studio.gi.profiles import DETECTED_FAMILIES, FAMILY_ORDER, PROFILES
+from studio.gi import purpose
 from studio.gi import sections as gi_sections
+from studio.gi import structure as gi_structure
 from studio.gi.sections import Layout, layout
 from studio.types import Fact, FamilyFinding, RoutingResult, ServiceMention, Span
 
-ROUTING_VERSION = 'gi-routing@7'
+ROUTING_VERSION = 'gi-routing@9'  # @9: the completion repair (U2-U5, U12; @8 is named in harness repair 3's record for
+# a reader it dropped before install, so it is skipped: no record or reader of HARNESS.md can take one for the other)
 PROCEDURE_FAMILIES = tuple(f for f in DETECTED_FAMILIES if PROFILES[f].procedure)
 # Within one mention the strongest reading wins; "performed" never beats a doubt.
 STATUS_PRECEDENCE = ('negated', 'historical', 'cancelled', 'incomplete', 'planned', 'uncertain', 'performed')
@@ -231,6 +235,11 @@ class Analysis:
     # family -> [(reference Mention, negation start)] of bare negated status words (gi2 negation lens), decided per
     # family in _route: released only when today's report independently establishes the procedure (_bare_negation_hold)
     bare_negations: dict = field(default_factory=dict)
+    # completion repair (R2): the instrument words read as their family's mentions (_instrument_mentions), and the spans
+    # of every candidate among them, which _clause_reading_cues reads as the examination's own, as it reads a name
+    instruments: tuple = ()
+    instrument_spans: frozenset = frozenset()
+    instrument_at: dict = field(default_factory=dict)  # (start, end) -> the instrument Mention there (_read_span)
 
     def __post_init__(self):
         self._service_starts = [m.start for m in self.services]
@@ -1531,6 +1540,18 @@ def _silent_section(an: Analysis, ts: int, te: int) -> Optional[str]:
         named = [m for m in an.services_in(max(s, ts - 120), min(e, max(te, ts + 1) + 120))
                  if _overlaps(m.start, m.end, ts, max(te, ts + 1))]
         for m in named:
+            label = _released_label_at(an, m.start, m.end)
+            after_label = an.services_in(label[1], e) if label is not None else ()
+            if label is not None and ((not after_label and (_denies(an, label[1], e, True) or _calls_off(an, label[1], e)))
+                                      or (after_label and all(x.family == m.family for x in after_label)
+                                          and _reschedules(an, label[1], e))):
+                # refutation cycle 4 (structure 4): a released label's own sentence after it is what its heading twin
+                # reads as the sentence after the name, bare ("Colonoscopy: The colonoscope was introduced ..., and then
+                # the examination was not performed because ..."): read as that sentence is - and, refutation cycle 5
+                # (structure 6), as the twin reads it, a sentence naming only the label's own family that reschedules it
+                # ("..., but the colonoscopy will be rescheduled because of poor preparation.") qualifies it too
+                an.memo[key] = f"{SILENT_SECTION_PREFIX} the text after it ('{an.text[label[1]:e].strip()}') qualifies it"
+                break
             end = _group_end(an, m, e)
             word = _continuation(an, end, e, _clause_end(an, m.start, e),
                                  procedure=an.lay.section_at(m.start).kind == 'procedure', target=(ts, te))
@@ -1852,6 +1873,43 @@ def _told_at_another_time(an: Analysis, start: int, end: int) -> bool:
     return any(owner == 'service' and _tells_history(an, name, m) for name, m, owner in _attached_times(an, start, end))
 
 
+def _purpose_is_not_the_targets(an: Analysis, cue: Cue, ts: int, te: int) -> bool:
+    """Completion repair (2026-11-06, U5; builder A): whether a planned cue is a purpose phrase's time word that is no
+    time of the target [ts, te) - the one reading the documented-service reader takes (studio.gi.purpose): the cue is
+    the time word of a purpose phrase (read to the end of its sentence, as the layout segments it); the target starts
+    before the phrase's opener; nothing inside the phrase is a service or an intervention (an act named there keeps the
+    purpose's future, and a passage that mixes it with the done act keeps it too); the target's sentence is a marking
+    statement read whole (purpose.marking_statement, refutation cycle 3) that holds the phrase; and the target is no act
+    word of another kind than the marking kinds (refutation cycle 2). Anything else reads as before."""
+    text = an.text
+    _ss, se = an.lay.sentence_for(cue.start, cue.end)
+    phrase = purpose.phrase_at(text, cue.start, se)
+    if phrase is None or ts >= phrase[0]:
+        return False
+    if an.services_in(phrase[0], phrase[2]) or an.interventions_in(phrase[0], phrase[2]):
+        return False
+    # refutation cycle 3: the target's sentence is a marking statement read whole (purpose.marking_statement, the one
+    # closed form the services reader reads too), holding the phrase; cycle 2's predicate and subject reading is replaced
+    statement = purpose.marking_statement(text, max(ts, _ss), (_ss, se))
+    if statement is None or not (statement[0] <= max(ts, _ss) and phrase[0] < statement[1]):
+        return False
+    # refutation cycle 2 (acts A6): the services reader's own rule (services._purpose_releases), read per mention as it
+    # reads it - a target that is itself an act word of another kind than the marking kinds (services.
+    # PURPOSE_MARKING_KINDS: a tattoo, an injection), whatever its position or its subject's head, keeps the purpose's
+    # future ("EMR" in "EMR margin marking was performed ... for future resection", "An EMR tattoo was placed ...", "EMR
+    # referral placed for future resection"); a marking word is released whatever head its subject has, and so is a
+    # passage, whose own act words the services reader reads each by itself. Cycle 1's subject head-word test is
+    # dropped. One reading of the target's act words, kept per target.
+    from studio.gi import services as gi_services  # local: the services reader reads routing lazily too
+    key = ('purpose-other-act', ts, te)
+    if key not in an.memo:
+        lead = len(text[ts:te]) - len(text[ts:te].lstrip())
+        trail = len(text[ts:te]) - len(text[ts:te].rstrip())
+        an.memo[key] = any(kind not in gi_services.PURPOSE_MARKING_KINDS and a <= ts + lead and te - trail <= b
+                           for kind, a, b in gi_services._acts_in(text, ts, te))
+    return not an.memo[key]
+
+
 def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int,
                          em: bool = False) -> list[tuple[str, str, bool, bool]]:
     """(status, label, about_past, doubt) for every cue that governs the target in one clause. ``em``: the target is
@@ -1869,6 +1927,8 @@ def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int
     named = [m for m in members if m in names] or [(max(ts, cs), min(max(te, ts + 1), ce))]
     for cue in clause_cues:
         status, doubt = cue.status, False
+        if cue.status == 'planned' and _purpose_is_not_the_targets(an, cue, ts, te):
+            continue  # U5: a purpose phrase's future is the purpose's, never the done act's (studio.gi.purpose)
         if cue.name == 'aborted':
             status, doubt = _abort_status(an, cue)
         if cue.name in ('terminated', 'stopped') and cues.MEDICATION.search(words):
@@ -1881,6 +1941,9 @@ def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int
                 and cues.AS_BOOKED_BEFORE.search(text, max(cs, cue.start - 30), cue.start):
             continue  # "was performed today as scheduled": the booking it kept, not a future
         if _attached(spans, index, cue.start, cue.end):
+            if (cue.status == 'incomplete' or cue.name == 'aborted') and _examination_target(an, ts, te) \
+                    and _a_sub_acts_failure_at(an, clause[0], cue.start, cue.name, cue.text):
+                continue  # completion repair (R2): a sub-act's or an accessory's failure is never the examination's
             if status in _B2_DENYING_STATUSES:  # round 4c-2 box2:I: an option's own words, read by its own box
                 read = _B2_option_words(an, cue.start, cue.end, ts, te, cue.text, status)
                 if read is not None:
@@ -3352,6 +3415,22 @@ def _P2_listed_under_a_denial(an: Analysis, start: int, reading: Reading) -> Rea
                    reading.basis, doubt=True)
 
 
+def _in_a_released_label(an: Analysis, start: int, end: int) -> bool:
+    """Whether [start, end) lies inside the label of a labelled procedure paragraph the structure reader released
+    (studio.gi.structure.released: the label as written, its colon included). Read once per document, then bisected."""
+    return _released_label_at(an, start, end) is not None
+
+
+def _released_label_at(an: Analysis, start: int, end: int) -> Optional[tuple[int, int]]:
+    """The span of the released label [start, end) lies inside (_in_a_released_label), or None."""
+    key = ('released-labels',)
+    if key not in an.memo:
+        an.memo[key] = sorted((p.label.start, p.label.end) for p in gi_structure.released(an.text))
+    labels = an.memo[key]
+    i = bisect.bisect_right(labels, (start, len(an.text) + 1)) - 1
+    return labels[i] if i >= 0 and labels[i][0] <= start and end <= labels[i][1] else None
+
+
 def _generic_reading(an: Analysis, start: int, end: int) -> Reading:
     """The reading of [start, end) from its clause cues or its section. A performed reading
     of a procedure (not of E/M documentation) becomes an uncertain doubt when an unresolved
@@ -3363,7 +3442,12 @@ def _generic_reading(an: Analysis, start: int, end: int) -> Reading:
         if boxed is not None:
             an.memo[key] = boxed
     if key not in an.memo:
-        reading = _cue_reading(an, start, end) or _default_reading(an, start, end)
+        # refutation cycle 3 (parity C3-1 to C3-3): a released labelled paragraph's label ("Colonoscopy: The colonoscope
+        # was introduced ...") is read as its heading twin's name is - by its section, never by the narrative's first
+        # clause, whose cue ('performed: was introduced', basis 'cue') had skipped _silent_section and won _aggregate
+        # before any contradiction (a status line, a typed "No", a call-off or a denial elsewhere) was asked
+        reading = (_default_reading(an, start, end) if _in_a_released_label(an, start, end) else None) \
+            or _cue_reading(an, start, end) or _default_reading(an, start, end)
         if reading.status == 'negated':
             joined = _denied_from_the_line_above(an, start, end)
             if joined:
@@ -3390,7 +3474,12 @@ def _generic_reading(an: Analysis, start: int, end: int) -> Reading:
 def _read_span(an: Analysis, start: int, end: int, adjust: bool = True) -> Reading:
     """The reading of [start, end). A span with no service name in it that covers
     an E/M documentation mention or a procedure reference reads as that mention.
-    ``adjust=False``: before its family's document-level judgement (own_status_for_span)."""
+    ``adjust=False``: before its family's document-level judgement (own_status_for_span). An instrument word read as its
+    family's mention (completion repair, R2) reads as that mention, exactly as routing stores it."""
+    instrument = an.instrument_at.get((start, end))
+    if instrument is not None:
+        reading = _instrument_reading(an, instrument)
+        return _adjusted(reading, an.adjustments.get(instrument.family)) if adjust else reading
     if not an.touches_service(start, end):
         for mentions, readings in ((an.references, an.references), (an.em, an.em_readings)):
             for m in mentions:
@@ -3626,12 +3715,14 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
                             or cues.REACHED_AFTER.search(post)
                             or (_reached_label(an, ws, m.start()) and _plain_tail(an, m.end(), we)
                                 and not _P2_label_denied(an, m.end(), depth, table))  # round 4c-2 plan:D
-                            or _straight_after_service(an, ws, m.start())):
+                            or _straight_after_service(an, ws, m.start())
+                            or _completion_states_reach(an, m.start(), m.end(), ws, we)):  # completion repair (R2)
                         reached.append(hit)
                         if cut is not None and _S2_read_by_the_cut(an, m.end(), we) \
                                 and not (_pe_reached_before(an, pre, depth, table, m.start(), post)
                                          or cues.REACHED_AFTER.search(post)
-                                         or _straight_after_service(an, ws, m.start())):
+                                         or _straight_after_service(an, ws, m.start())
+                                         or _completion_states_reach(an, m.start(), m.end(), ws, we)):
                             cut.append(hit)  # read only by declared:11's cell cut (round 4d regression:3)
                     elif status in ('performed', 'incomplete') and _depth_reach_today(an, ws, pre):
                         # "The pediatric colonoscope was advanced to 28 cm from the anal verge in the sigmoid colon"
@@ -4094,7 +4185,7 @@ def _gi4_marks(text: str, today: Optional[date]) -> _Gi4Marks:
     return _Gi4Marks(line_starts, heads, head_ends, flags, blanks, signoffs, dates, date_starts, foreign)
 
 
-def in_todays_narrative(text: str, pos: int, service_date: Optional[date] = None, span=None) -> bool:
+def in_todays_narrative(text: str, pos: int, service_date: Optional[date] = None, span=None, excuse=None) -> bool:
     """Whether the passage at ``pos`` of ``text`` (as written) lies inside today's procedure narrative, for a releasing
     reader (GI round 4 Wave 1 repair, cycle 1: PE's routing-only reach and PI's S1; PI's E1 read it too until Wave 1
     repair cycle 2 dropped it). Fail closed; every one of these holds:
@@ -4109,7 +4200,10 @@ def in_todays_narrative(text: str, pos: int, service_date: Optional[date] = None
     - its own sentence (``span``) states no unit statistics or generalisation;
     - it is not under another occurrence (sections.under_another_occurrence) and not beyond heading reach
       (sections.beyond_heading_reach).
-    "Today" is the head's one own date, else ``service_date``, else none (then every date holds)."""
+    "Today" is the head's one own date, else ``service_date``, else none (then every date holds). ``excuse`` (completion
+    repair, R2; None for every earlier caller, whose reading is unchanged): a predicate over a date in the block that is
+    not the passage's (the instrument rule passes _another_familys_date: a date whose own clause names only another
+    family's service)."""
     today = _gi4_today(text, service_date)
     marks = _gi4_marks(text, today)
     if pos >= marks.foreign:  # a foreign block opened above the passage
@@ -4145,6 +4239,8 @@ def in_todays_narrative(text: str, pos: int, service_date: Optional[date] = None
     for d in marks.dates[bisect.bisect_left(marks.date_starts, lo):]:
         if d.start >= hi:
             break
+        if excuse is not None and excuse(d):
+            continue  # completion repair (R2): a date the caller's excuse names as not the passage's
         if _gi4_other_day(d, today):  # another day's date in the passage's block
             return False
     k = bisect.bisect_left(marks.signoffs, lo)
@@ -5853,6 +5949,304 @@ def _bare_negation_hold(an: Analysis, family_readings: list, evidenced: bool) ->
     return f"{BARE_NEGATION_UNREAD} '{unread}'" if unread else None
 
 
+# --- completion repair (2026-11-06, builder R2): whose failure a not-completed statement is -------------------------
+# A clause's incompleteness is the examination's own only when its grammatical subject is the examination: the service
+# named or referred to ("the procedure"), its scope, its reach or entry ("Cecal intubation was unsuccessful"), or a
+# landmark or an obstruction it did not reach or pass ("The cecum could not be reached", "the stricture could not be
+# traversed"). Where the subject is a therapeutic or diagnostic sub-act or an accessory ("the polypectomy was
+# unsuccessful", "Biopsy attempts were unsuccessful", "The snare could not be passed around the polyp"), it is that
+# act's failure: routing reads no incompleteness of the family from it (neither as a reference nor in a named mention's
+# clause), so it rewrites no extent and pushes no incomplete cue onto the family's passages, and the failed act's
+# intervention is not listed as done (_in_a_failed_act). The subject is read by the shared primitive (studio.gi.clauses:
+# its noun phrase, prepositional attachments climbed, relative clauses and asides passed over, partitive and attempt
+# heads resolved, a pronoun read through the clause before it), never by a word list over the clause. An unread or
+# unknown subject - a person ("We could not pass the snare"), a lesion, a pronoun with no antecedent - keeps the base
+# reading, incomplete, which is the safe side. 'prevented' is not tested: its subject is the cause ("Poor preparation
+# prevented complete examination"), never what failed; nor are the 'failed cannulation' entry's own forms, which name
+# the cannulation themselves - only its bare "(was|were) unsuccessful".
+_SUBJECT_TESTED_NAMES = frozenset(name for name, _ in cues.INCOMPLETE_CLAUSE if name != 'prevented') | {'aborted'}
+SUB_ACT_FAILED_IN_IT = "performed: a sub-act attempted in it failed, the sub-act's own failure"  # refutation cycle 4
+_SUBJECT_TESTED = {**{id(pattern): name for name, pattern in cues.INCOMPLETE_CLAUSE if name in _SUBJECT_TESTED_NAMES},
+                   id(cues.ABORTED): 'aborted'}
+_BARE_UNSUCCESSFUL = re.compile(r'(?:was|were)\s+unsuccessful\b', re.A | re.I)
+_DEFINITE = re.compile(r'(?:the|this|that)\s', re.A | re.I)
+
+
+def _subject_tested(name: str, said: str) -> bool:
+    """Whether a failure cue's subject decides whose failure it is (see above)."""
+    if name not in _SUBJECT_TESTED_NAMES:
+        return False
+    return name != 'failed cannulation' or _BARE_UNSUCCESSFUL.match(said) is not None
+
+
+def _clause_before(an: Analysis, clause_start: int) -> Optional[tuple[int, int]]:
+    """The clause right before the one starting at ``clause_start``, inside the same sentence (where a pronoun or a bare
+    attempt finds its antecedent), or None. Indexed."""
+    clauses = an.lay.clauses
+    i = bisect.bisect_left(clauses, (clause_start, -1)) - 1
+    if i < 0:
+        return None
+    sentence = an.lay.sentence_for(clause_start, clause_start + 1)
+    prior = clauses[i]
+    return prior if prior[0] >= sentence[0] and prior[1] <= clause_start else None
+
+
+def _failure_subject(an: Analysis, clause_start: int, pos: int) -> Optional[gi_clauses.Subject]:
+    """The subject of the failure predicate whose word is matched at ``pos`` in the clause starting at ``clause_start``
+    (gi_clauses.predicate_start, gi_clauses.subject), a pronoun read through the clause before it. Memoised."""
+    key = ('failure-subject', clause_start, pos)
+    if key not in an.memo:
+        predicate = gi_clauses.predicate_start(an.text, clause_start, pos)
+        from studio.gi import services as gi_services  # local: the services reader reads routing lazily too
+        # the one subject reading (services.predicate_subject; integration of builders R2 and A)
+        an.memo[key] = gi_services.predicate_subject(an.text, clause_start, predicate, _clause_before(an, clause_start))
+    return an.memo[key]
+
+
+def _a_sub_acts_failure_at(an: Analysis, clause_start: int, pos: int, name: str, said: str) -> bool:
+    """Whether the failure cue ``name`` matched at ``pos`` (its text ``said``) in the clause starting at
+    ``clause_start`` states a sub-act's or an accessory's own failure (gi_clauses.failure_of), never the examination's.
+    False wherever the subject is the examination's or cannot be told: the base reading stands."""
+    if not _subject_tested(name, said):
+        return False
+    # refutation cycle 1 (outcome F6): a passage predicate or a subject naming the scope is the examination's failure
+    predicate = gi_clauses.predicate_start(an.text, clause_start, pos)
+    clause_end = next((ce for cs, ce in an.lay.clauses_for(pos, pos + 1) if cs == clause_start), len(an.text))
+    if gi_clauses.examinations_failure(an.text, clause_start, predicate, pos, clause_end):
+        return False
+    if gi_clauses.failure_of(an.text, _failure_subject(an, clause_start, pos)) != gi_clauses.SUB_ACT:
+        return False
+    form = _attempted_then_failed(an, pos)
+    if form is None:
+        return False
+    return _consumed_by_the_services_reader(an, clause_start, min(clause_end, form[1]), pos, said)
+
+
+# Refutation cycle 4 (outcome 1-4, cost 1 and 2; HARNESS.md "Refutation of the integrated diff, cycle 4"): a failure is a
+# sub-act's own only in one closed form, read whole inside its sentence - an attempt that introduces its own object
+# ("Hot snare polypectomy of a 14 mm pedunculated polyp in the sigmoid colon was attempted", "Balloon dilation of a
+# distal esophageal stricture was attempted"), then ", but the <its head> was unsuccessful" or "... failed", at most a
+# reason ("because of ...", "due to ..."), and the clause's or sentence's end. That is every shape the requirement was
+# built from (U3: e888f9ce, RT-a1, RT-a2, RT-d1, RT-d2, ARCH-D2a). Anything else - "aborted", a coordinated subject
+# ("Hot snare polypectomy and the cold forceps biopsy were unsuccessful"), a failure stated with the examination's ("...
+# was aborted ..., as was the remainder of the examination"), a later failure of an act already stated done ("The cold
+# snare polypectomy of this polyp was aborted") - keeps the installed release's reading: the examination's failure.
+# Cycle 3 had consumed any failure word the services reader also read off the subject, which handed the same act's
+# later failure, the first conjunct's and the examination's own to a sub-act. Bounded: one pass per sentence of at
+# most ATTEMPTED_THEN_FAILED_SENTENCE characters, each match at most a few hundred.
+ATTEMPTED_THEN_FAILED_SENTENCE = 2000
+ATTEMPT_CHARS = 240  # the attempt's own clause, at most (its subject and object)
+# Refutation cycle 5 (routing 1, 2): the form is read in fixed, unnested steps - the core "was attempted, but the X was
+# unsuccessful / failed" anchored by one regex, the attempt's clause read back to its own start, the end read forward -
+# so one sentence costs one pass (the cycle-4 regex nested lazy runs and backtracked for seconds on a long sentence); and
+# the form ends only at its sentence's full stop, or at a semicolon followed by "the polyp(s)/lesion(s) was/were left in
+# place" and the full stop - never at a line break or before a clause it does not know ("...\nas was the remainder of the
+# examination", "...; so was the remainder of the examination"), which keeps the installed reading.
+_ATTEMPT_CORE = re.compile(r'[ \t\n]+(?:was|were)[ \t\n]+attempted[ \t\n]*,?[ \t\n]+but[ \t\n]+the[ \t\n]+'
+                           r'(?P<head>[a-z]+)[ \t\n]+(?P<failed>(?:was|were)[ \t\n]+unsuccessful|failed)', re.A | re.I)
+_ATTEMPT_OBJECT = re.compile(r'\bof[ \t\n]+an?[ \t\n]', re.A | re.I)
+_COORDINATOR = re.compile(r'\b(?:and|or|but|as|with)\b', re.A | re.I)
+_RELATIVE = re.compile(r'\b(?:that|which|who|where|when|while)\b', re.A | re.I)  # a reason's own clause: not read
+# the sentence after the form continuing it elliptically ("So was the remainder of the examination."): the form is not read
+_ELLIPSIS_AFTER = re.compile(r'[ \t\n]*(?:so|as|neither|nor|likewise)\b', re.A | re.I)
+_CLAUSE_START_MARK = re.compile(r'[,;:.()\n]')
+_REASON = re.compile(r'[ \t\n]+(?:because[ \t\n]+of|due[ \t\n]+to)[ \t\n]+([^,;:.()\n]{1,80})', re.A | re.I)
+_LEFT_IN_PLACE = re.compile(r';[ \t\n]*the[ \t\n]+(?:polyps?|lesions?)[ \t\n]+(?:was|were)[ \t\n]+left[ \t\n]+in[ \t\n]+'
+                            r'place[ \t]*\.', re.A | re.I)
+
+
+def _attempted_then_failed(an: Analysis, pos: int) -> Optional[tuple[int, int]]:
+    """The span of the closed attempt-then-failure form whose failure predicate holds ``pos``, or None: an attempt that
+    introduces its own object ("Hot snare polypectomy of a 14 mm pedunculated polyp in the sigmoid colon"), naming the
+    failure's head and no coordinator, then "was attempted, but the <head> was unsuccessful" (or "... failed"), at most a
+    reason ("because of ...", "due to ..."), and then the sentence's full stop - or "; the polyp was left in place." and
+    the full stop. One pass per sentence of at most ATTEMPTED_THEN_FAILED_SENTENCE characters, memoised."""
+    s, e = an.lay.sentence_for(pos, pos + 1)
+    key = ('attempted-then-failed', s, e)
+    if key not in an.memo:
+        forms = []
+        text = an.text
+        if e - s <= ATTEMPTED_THEN_FAILED_SENTENCE:
+            for core in _ATTEMPT_CORE.finditer(text, s, e):
+                lo = max(s, core.start() - ATTEMPT_CHARS)
+                marks = list(_CLAUSE_START_MARK.finditer(text, lo, core.start()))
+                begin = marks[-1].end() if marks else lo
+                if not marks and lo > s:
+                    continue  # the attempt's clause runs past ATTEMPT_CHARS: not read
+                attempt = text[begin:core.start()]
+                head = core.group('head')
+                if not _ATTEMPT_OBJECT.search(attempt) or _COORDINATOR.search(attempt) \
+                        or not re.search(r'\b' + re.escape(head) + r'\b', attempt, re.A | re.I):
+                    continue
+                tail = core.end()
+                reason = _REASON.match(text, tail, e)
+                if reason is not None and not _COORDINATOR.search(reason.group(1)) \
+                        and not _RELATIVE.search(reason.group(1)):
+                    tail = reason.end()  # "because of poor positioning" - never "... a perforation that ended the procedure"
+                rest = text[tail:e]
+                stripped = rest.strip(' \t')
+                left = _LEFT_IN_PLACE.match(text, tail, e)
+                if stripped.startswith('.') and not text[tail:e].split('.', 1)[1].strip():
+                    end_at = tail + rest.index('.') + 1
+                elif not stripped:
+                    end_at = tail
+                elif left is not None and not text[left.end():e].strip():
+                    end_at = left.end()
+                else:
+                    continue
+                if _ELLIPSIS_AFTER.match(text, e):
+                    continue
+                forms.append((core.start('failed'), core.end('failed'), begin, end_at))
+        an.memo[key] = forms
+    for fs, fe, ms, me in an.memo[key]:
+        if fs <= pos < fe:
+            return ms, me
+    return None
+
+
+def _consumed_by_the_services_reader(an: Analysis, clause_start: int, clause_end: int, pos: int, said: str) -> bool:
+    """Refutation cycle 3 (outcome C3-3, cost C3-1; HARNESS.md "Refutation of the integrated diff, cycle 3"): whether
+    the documented-service reader reads the failure at ``pos`` (its text ``said``) as an act's own failure - its own
+    failure word (cues.FAILED_ACT) said of an act mention of its own vocabulary inside the failure's subject
+    (services._acts_in, read by services._failed_act in the same clause). Only then is the failure a sub-act's: the act
+    is held there, so the examination reads complete without any code reading READY on the failed act. Anything else -
+    a failure word the services reader does not read ("could not be advanced", "did not pass"), or a subject naming no
+    act it reads ("Removal was aborted", "The stent could not be advanced") - keeps the examination's reading, the base
+    reading. Cycle 2 had shared the failure WORDS instead, and routing's subject vocabulary (clauses.SUB_ACTS,
+    ACCESSORIES) is wider than the services reader's acts: a failure given to "Removal" or to an accessory left the
+    earlier act done and the code READY with no warning. One reader decides, the other consumes. Memoised."""
+    key = ('consumed', clause_start, pos)
+    if key not in an.memo:
+        consumed = False
+        found = _failure_subject(an, clause_start, pos) if cues.FAILED_ACT.search(said) else None
+        if found is not None:
+            from studio.gi import services as gi_services  # local: the services reader reads routing lazily too
+            s0, s1 = found.phrase
+            consumed = any(gi_services._failed_act(an.text, clause_start, clause_end, a, b)
+                           for _kind, a, b in gi_services._acts_in(an.text, s0, s1))
+        an.memo[key] = consumed
+    return an.memo[key]
+
+
+def _examination_target(an: Analysis, ts: int, te: int) -> bool:
+    """Whether [ts, te) is the examination's own mention: inside a service name, or an instrument word read as its
+    family's mention (_instrument_candidates). A cited passage, an intervention or a landmark never is: there a
+    sub-act's failure keeps its reading, the act's own failure. Indexed (services are sorted and never overlap)."""
+    stop = max(te, ts + 1)
+    i = bisect.bisect_left(an._service_starts, ts - an._longest_service)
+    while i < len(an.services) and an.services[i].start <= ts:
+        if stop <= an.services[i].end:
+            return True
+        i += 1
+    return (ts, te) in an.instrument_spans
+
+
+def _failed_acts(an: Analysis, s: int, e: int) -> tuple[list[int], list[int]]:
+    """The phrases, in the sentence [s, e), of the sub-acts its own clauses state failed (_a_sub_acts_failure_at): the
+    failure's subject, the antecedent a pronoun or a bare attempt resolves to, and - for a definite subject ("the
+    polypectomy") - the clause before it's subject with the same head ("Hot snare polypectomy of a 14 mm polyp ... was
+    attempted, but the polypectomy was unsuccessful"). Returned as the (starts, ends) of their union, sorted for
+    bisection. Memoised per sentence; bounded by its failure cues."""
+    key = ('failed-acts', s, e)
+    if key not in an.memo:
+        spans = []
+        for cs, ce in _clauses_in(an, s, e):
+            for cue in an.cues_in(cs, ce):
+                if not (cue.status == 'incomplete' or cue.name == 'aborted') \
+                        or not _a_sub_acts_failure_at(an, cs, cue.start, cue.name, cue.text):
+                    continue
+                found = _failure_subject(an, cs, cue.start)
+                spans.append(found.phrase)
+                if found.antecedent is not None:
+                    spans.append(found.antecedent.phrase)
+                elif _DEFINITE.match(an.text, found.phrase[0]) and not found.attached:
+                    # a definite anaphor names the earlier act only when it adds nothing of its own: no lesion or
+                    # site attached ("the polypectomy of the 14 mm polyp" is another act), no technique the earlier
+                    # phrase lacks ("the hot snare polypectomy" after "A cold snare polypectomy")
+                    prior = _clause_before(an, cs)
+                    predicate = gi_clauses.first_predicate(an.text, *prior) if prior else None
+                    from studio.gi import services as gi_services  # local, as above
+                    earlier = (gi_services.predicate_subject(an.text, prior[0], predicate) if predicate is not None
+                               else None)
+                    said = set(re.findall(r'[a-z]+', an.text[earlier.phrase[0]:earlier.phrase[1]].lower())) \
+                        if earlier is not None else set()
+                    if earlier is not None and earlier.head.word == found.head.word \
+                            and all(word.word in said for word in found.modifiers):
+                        spans.append(earlier.phrase)
+        merged: list[list[int]] = []  # indexed once: overlapping phrases are one failed act's
+        for a, b in sorted(spans):
+            if merged and a <= merged[-1][1]:
+                merged[-1][1] = max(merged[-1][1], b)
+            else:
+                merged.append([a, b])
+        an.memo[key] = ([a for a, _ in merged], [b for _, b in merged])
+    return an.memo[key]
+
+
+def _in_a_failed_act(an: Analysis, start: int, end: int) -> bool:
+    """Whether [start, end) lies inside the phrase of a sub-act its own sentence states failed (_failed_acts). One
+    bisection per question, never a scan of the sentence's failed phrases."""
+    s, e = an.lay.sentence_for(start, end)
+    starts, ends = _failed_acts(an, s, e)
+    i = bisect.bisect_right(starts, start) - 1
+    return i >= 0 and end <= ends[i]
+
+
+def _completion_states_reach(an: Analysis, ms: int, me: int, ws: int, we: int) -> bool:
+    """Whether the landmark at [ms, me) is the subject of a reach statement that is its whole sentence: "Cecal
+    intubation was achieved.", "Cecal intubation was achieved, as confirmed by photographs of the appendiceal orifice."
+    (completion repair, R2: D10b's "Cecal intubation was achieved." had read no extent; its reach-verb forms, "advanced
+    to the cecum", routing reads already through cues.REACHED_BEFORE). Refutation cycle 2 (outcome O5, O7, O8): a closed
+    positive form. The sentence is recognised whole by a small grammar (_REACH_STATEMENT): the landmark phrase - the hit
+    itself, after at most "the" - then "was" or "were", at most one adverb of a closed class, a completion participle of
+    a closed class, at most one tail of a closed class ("without difficulty", "with ease", "and photodocumented", "(as)
+    confirmed by photographs of the appendiceal orifice"), and the sentence's end. Anything else in the sentence -
+    another occasion ("in that examination", "during the procedure that preceded her hemicolectomy"), another person
+    ("during the procedure her sister had"), a hedge, a negation, a condition or a question - makes it no reach
+    statement, and the extent keeps its base reading, so an unlisted phrasing can only cost a hold. Cycle 1 had
+    searched the sentence for doubt words instead (structure._signals, HEDGE_WORDS and a doubt list), which let another
+    occasion's reach through and rescanned the sentence for every landmark hit. Each sentence is read once (memoised),
+    and only up to REACH_STATEMENT_CHARS characters: a longer sentence is no reach statement. The caller has checked the
+    landmark's own reading (performed or incomplete) and that nothing in its window [ws, we) blocks the reach."""
+    s, e = an.lay.sentence_for(ms, me)
+    key = ('reach-statement', s, e)
+    if key not in an.memo:
+        found = _REACH_STATEMENT.fullmatch(an.text, s, e) if e - s <= REACH_STATEMENT_CHARS else None
+        # refutation cycle 3 (cost C3-5): and it is the text's only word of a landmark - any other sentence naming one
+        # ("Correction: cecal intubation was not achieved.", "this was the hepatic flexure, not the cecum", "The
+        # statement of cecal intubation above was entered in error.") keeps the extent's base reading, whatever it says
+        if found is not None and any(not (s <= m.start() and m.end() <= e) for m in _landmark_words(an)):
+            found = None
+        an.memo[key] = found.span('subject') if found is not None else None
+    return an.memo[key] == (ms, me)
+
+
+_LANDMARK_WORD = re.compile(r'\b(?:c(?:a)?ec(?:um|al)|appendiceal|appendix|ileoc(?:a)?ecal|terminal\s+ileum|ileum|ileal|'
+                            r'triradiate)\b', re.A | re.I)
+
+
+def _landmark_words(an: Analysis) -> list:
+    """Every word of a reach landmark in the text (_LANDMARK_WORD), found once per document."""
+    key = ('landmark-words',)
+    if key not in an.memo:
+        an.memo[key] = list(_LANDMARK_WORD.finditer(an.text))
+    return an.memo[key]
+
+
+# The reach statement's grammar (_completion_states_reach): closed classes throughout; the subject is read as written
+# and believed only where it is exactly the landmark hit the caller found.
+REACH_STATEMENT_CHARS = 300
+_REACH_LANDMARK = (r'(?:the\s+)?(?:appendiceal\s+orifice|ileoc(?:a)?ecal\s+valve|c(?:a)?ecum|terminal\s+ileum|'
+                   r'triradiate\s+fold|c(?:a)?ecal\s+landmarks)')
+_REACH_EVIDENCE = (r'(?:the\s+)?(?:visuali[sz]ation|identification|photographs|photodocumentation)\s+of\s+'
+                   + _REACH_LANDMARK + r'(?:\s+and\s+' + _REACH_LANDMARK + r')?')
+_REACH_STATEMENT = re.compile(
+    r'\s*(?:the\s+)?(?P<subject>[a-z0-9][a-z0-9 -]*?)\s+(?:was|were)\s+(?:(?:successfully|easily|readily|then)\s+)?'
+    r'(?:(?:achieved|accomplished|confirmed|reached|performed|completed|obtained)'
+    r'(?:,?\s+(?:without\s+difficulty|with\s+ease|and\s+photodocumented|(?:as\s+)?confirmed\s+by\s+' + _REACH_EVIDENCE
+    + r'))?|confirmed\s+by\s+' + _REACH_EVIDENCE + r')\s*\.?\s*', re.A | re.I)
+
+
 def _references(an: Analysis, attributed: list[Optional[str]]) -> dict[Mention, Reading]:
     """Clauses that refer to a family's service without naming it ("the procedure
     was cancelled", "unable to advance beyond the splenic flexure"). Only these
@@ -5864,7 +6258,11 @@ def _references(an: Analysis, attributed: list[Optional[str]]) -> dict[Mention, 
         if family is None or an.lay.section_at(s).kind in ('plan', 'history', 'indication'):
             continue
         for cs, ce in _clauses_in(an, s, e):
-            if an.services_in(cs, ce) or cues.MEDICATION.search(text, cs, ce):
+            # refutation cycle 4 (structure 4): a released label is its heading twin's name, on a line of its own there -
+            # it makes the clause it opens no clause that names a service ("Colonoscopy: ... and the examination was
+            # incomplete because of poor preparation." reads the reference its twin's first sentence reads)
+            if any(not _in_a_released_label(an, m.start, m.end) for m in an.services_in(cs, ce)) \
+                    or cues.MEDICATION.search(text, cs, ce):
                 continue
             for status, pattern in _REFERENCE_PATTERNS:
                 for m in pattern.finditer(text, cs, ce):
@@ -5897,6 +6295,22 @@ def _references(an: Analysis, attributed: list[Optional[str]]) -> dict[Mention, 
                         continue
                     if status in ('incomplete', None) and _only_a_sub_act(an, attributed, family, s, e):
                         continue  # "The terminal ileum was not intubated" after the cecum was reached
+                    if status in ('incomplete', None) and _a_sub_acts_failure_at(
+                            an, cs, m.start(), _SUBJECT_TESTED.get(id(pattern), ''), m.group(0)):
+                        # completion repair (R2): "the polypectomy was unsuccessful" is the polypectomy's own. Refutation
+                        # cycle 4 (cost 2): it still says the examination took place - the installed release read it
+                        # 'incomplete', performed but cut short - so it stays the family's mention, performed by its
+                        # section as an instrument course is (never an explicit cue: a contradiction elsewhere still
+                        # holds, and an incompleteness elsewhere still pushes its own cue). Refutation cycle 5 (routing
+                        # 3): and only past the gates an instrument course passes that can speak of it (I8: a name of the
+                        # family read otherwise; I12: the heading twin qualified, by a status line such as "Procedure
+                        # completed: No") - else the failure keeps the installed reading, the examination's. I11 (a
+                        # procedure line's doubted act) is not asked: the form's own attempt is that act by construction
+                        consumed = Mention(family, m.start(), m.end(), 'reference', m.group(0))
+                        if not (_named_otherwise(an, family)
+                                or _heading_twin_qualified(an, consumed, frozenset((family,)))):
+                            found[consumed] = Reading('performed', (f'{SUB_ACT_FAILED_IN_IT}: {m.group(0)}',), 'section')
+                            continue
                     mention = Mention(family, m.start(), m.end(), 'reference', m.group(0))
                     negated = _negated_status(an, m.start())
                     if negated is not None:
@@ -5925,7 +6339,7 @@ def _interventions(an: Analysis, attributed: list[Optional[str]], family: str) -
         if family not in iv.families or index < 0 or attributed[index] != family:
             continue
         if _generic_reading(an, iv.start, iv.end).status == 'performed' \
-                and not _about_another_procedure(an, iv.start, iv.end):
+                and not _about_another_procedure(an, iv.start, iv.end) and not _in_a_failed_act(an, iv.start, iv.end):
             found.append((iv.label, _span(an.text, iv.start, iv.end)))
     labels = {label for label, _ in found}
     found = [(label, span) for label, span in found
@@ -8288,8 +8702,503 @@ def _stated(reading: Reading, m: Mention) -> Reading:
     return reading
 
 
+# --- completion repair (2026-11-06, builder R2): the instrument's own course is a mention of its family -------------
+# U4: a procedure narrative under a title routing reads as silent ("Colonoscopy Report (fictional)", "Colonoscopy"), or
+# naming no service at all ("Procedure: The gastroscope was advanced to the second portion of the duodenum."), had no
+# mention that read performed, so its family was held or not detected - and on e888f9ce only U3's false incompleteness
+# had kept the codes READY. The instrument's own course in a positive section (POSITIVE_SECTIONS: procedure, findings,
+# technique; never the head of a document with no heading) is now a mention of the family the documented-service reader
+# maps the instrument to (services.INSTRUMENTS and services._instrument_family: one mapping), performed by its own
+# predicate and its section. Every condition holds, or there is no such mention and the base reading stands:
+# - I1 the word names a routed procedure family (a bare 'endoscope' names none);
+# - I2 its section is a positive one;
+# - I3 the instrument is the subject of its own course predicate in its clause (_INSTRUMENT_COURSE, read by the shared
+#   subject primitive: "The snare was passed through the colonoscope" is the snare's course), never under "No";
+# - I4 its own reading is performed (no negation, hedge, condition, other time, place, source or label hold), and the
+#   documented-service reader's own source, agent, hedge and condition rules do not hold its statement
+#   (_instrument_statement_held: the same functions that reader reads them with);
+# - I5 it lies inside today's procedure narrative (in_todays_narrative: no attached, copied, outside or other-day block
+#   above it, no history, plan or indication heading over it, no sign-off in its block);
+# - I6 its family is named in the document, or no procedure family is named at all (a colonoscope in a flexible
+#   sigmoidoscopy's report, a gastroscope in an EUS's, is that service's instrument);
+# - I7 no title-shaped line above it names a service or a report in a shape routing's title rules do not read, unless
+#   its only addition is an aside of a closed class about the document itself (_ASIDE_SAFE: fictional, synthetic,
+#   final). "(Void)", "(Preop)", "(Tomorrow)", "(External)" ... keep the base reading;
+# - I8 no name of the family in the head or a positive section reads planned, historical, negated, cancelled or held;
+# - I9 the document is a procedure's own report by its head (_procedure_report: a procedure title, or no title and a
+#   head of fields and headings only), never an office visit, a consult, a discharge summary, a nursing note, a letter;
+# - I10 its section says nothing of its narrative being a copy or another occasion's report (_section_refers_back);
+# - I11 no act the documented-service reader reads in doubt stands where that reader lifts a listing to performed
+#   (_procedure_line_doubt: its procedure-line promotion, U6, would make the failed or hedged act READY where the base
+#   held it for want of a performed mention);
+# - I12 its heading twin is not qualified (_heading_twin_qualified). The instrument's course names its family as a
+#   procedure heading names it: the twin is the same text with the family's name on the heading line of the
+#   instrument's section ("Procedure: Colonoscopy" over "The colonoscope was advanced to the cecum."; with every family
+#   whose course stands there, "Procedure: EGD and colonoscopy" over both courses), and the
+#   instrument's mention is read no more permissively than that twin. Routing reads a family named on a positive
+#   section's heading line as performed by its section unless the text after it qualifies it (_silent_section,
+#   _later_denial: the first sentence under the heading denies it, or a status line, a typed or boxed "not performed"
+#   or a call-off stands within DENIAL_SENTENCES sentences of it - "Status: Cancelled - inadequate bowel preparation.",
+#   "Status: Refused by the patient.", "The patient refused the procedure."); I4 already reads the instrument word's
+#   own clause as that name's would be read, and I12 reads the rest with the same predicates over the twin's sentences,
+#   so where the twin's name is qualified the instrument adds no mention. What the twin itself reads as today's ("Status:
+#   Abandoned", a hedged or second-hand course, a course a later sentence dates) the instrument reads so too: those are
+#   the installed engine's own readings of the named form, never a release the named form does not give.
+#   (Refutation cycle 2, 2026-11-06: in place of cycle 1's I12 and I13 - word lists over the course's sentence and
+#   over the whole document - which leaked "Abandoned", "Perhaps" and "three years ago", held "Aspirin was discontinued
+#   five days before the procedure." and "inserted per rectum", and rescanned a sentence per match.)
+# Its reading is the section's ('section' basis), so a cancellation, a denial or a doubt about today's service still
+# contradicts it in _aggregate. Bounded: INSTRUMENT_READS instrument words in positive sections are examined,
+# INSTRUMENT_MENTIONS kept per family (routing's mention bound, settings.MAX_SERVICE_MENTIONS, is untouched by them),
+# and I12 reads at most 4 * DENIAL_SENTENCES + 1 sentences per section.
+INSTRUMENT_COURSE = "performed: the instrument's own course in today's procedure narrative"
+INSTRUMENT_READS = 64
+INSTRUMENT_MENTIONS = 4
+_INSTRUMENT_COURSE = re.compile(
+    r'\b(?:was|were|had\s+been|has\s+been)\s+(?:(?:then|carefully|gently|easily|subsequently|readily|smoothly|'
+    r'successfully|slowly|finally|initially|next)\s+)?(?:advanced|inserted|introduced|passed|withdrawn|retroflexed|'
+    r'reinserted|steered|navigated|maneuvered|manoeuvred)\b'
+    r'|\b(?:(?:then|easily|successfully|subsequently|readily|smoothly|finally)\s+)?(?:reached|entered|traversed|'
+    r'went\s+(?:in|into|through|down|past|beyond|to))\b', re.A | re.I)
+_INSTRUMENT_COURSE_REACH = 80  # characters after the instrument its course predicate is read within
+_NO_SUBJECT = re.compile(r'(?:no|neither|nor|without)\b', re.A | re.I)
+_TITLE_REPORT_WORD = re.compile(r'\b(?:report|note|record)s?\b', re.A | re.I)
+_TITLE_ASIDE = re.compile(r'(?P<title>\S(?:.*?\S)?)\s*(?:\((?P<paren>[^()\n]{1,40})\)|\s[-–—]\s*'
+                          r'(?P<dash>[^\n]{1,40}?))', re.A)
+_ASIDE_SAFE = re.compile(r'\s*(?:fictional|synthetic|final)\s*', re.A | re.I)
+_TITLE_CONNECTOR = re.compile(r'[\s,/&+]*(?:(?:and|or|plus)[\s,/&+]*)*', re.A | re.I)
+
+
+def _plain_title(line: str) -> bool:
+    """A title routing's own rules read: a procedure title (cues.PROCEDURE_TITLE, "Colonoscopy Report") or services'
+    names alone ("Colonoscopy", "EGD and colonoscopy")."""
+    if cues.PROCEDURE_TITLE.match(line):
+        return True
+    names = sorted(m.span() for _, pattern in cues.SERVICE_PATTERNS for m in pattern.finditer(line))
+    if not names:
+        return False
+    rest, last = [], 0
+    for a, b in names:
+        if a < last:
+            return False
+        rest.append(line[last:a])
+        last = b
+    rest.append(line[last:])
+    return all(_TITLE_CONNECTOR.fullmatch(part) for part in rest)
+
+
+def _unsafe_title_at(an: Analysis) -> int:
+    """Where the first title-shaped line (_gi4_heading_like) naming a service or a report stands whose shape routing's
+    title rules do not read and whose only addition is no _ASIDE_SAFE aside (I7); len(text) + 1 when there is none. One
+    pass over the lines (each read at most _GI4_HEADING_CHARS characters), memoised."""
+    key = ('unsafe-title',)
+    if key not in an.memo:
+        text, found, start = an.text, len(an.text) + 1, 0
+        while start <= len(text):
+            nl = text.find('\n', start)
+            end = len(text) if nl < 0 else nl
+            line = _gi4_line(text, start, end)
+            section = an.lay.section_at(start)
+            positive_heading = section.kind in POSITIVE_SECTIONS and section.heading is not None \
+                and section.start == start  # "Procedure note:": a heading of today's narrative, never a title
+            if line and not positive_heading and _gi4_heading_like(line) and not _plain_title(line) and (
+                    _TITLE_REPORT_WORD.search(line) or any(p.search(line) for _, p in cues.SERVICE_PATTERNS)):
+                aside = _TITLE_ASIDE.fullmatch(line)
+                if aside is None or not _plain_title(aside.group('title')) \
+                        or not _ASIDE_SAFE.fullmatch(aside.group('paren') or aside.group('dash') or ''):
+                    found = start
+                    break
+            if nl < 0:
+                break
+            start = nl + 1
+        an.memo[key] = found
+    return an.memo[key]
+
+
+# I9's closed class: the words of a generic procedure report's title ("Endoscopy Report", "Procedure Note",
+# "Gastroenterology Procedure Report"); an unknown word reads as no such title (the safe side).
+_GENERIC_TITLE_WORD = re.compile(r'(?:endoscopy|endoscopic|gastroenterology|gastrointestinal|gi|lower|upper|operative|'
+                                 r'procedure|procedural|digestive|report|note|record)', re.A | re.I)
+# I10: a statement that the narrative is a copy or another occasion's report (a closed list, read only to hold).
+_BACK_REFERENCE = re.compile(
+    r'\b(?:cop(?:y|ied)|pasted|transcribed|reproduced|excerpted|imported|carried[ \t]+forward)\b'
+    r'|\b(?:from|of|in)[ \t]+(?:the|an?|her|his|their)[ \t]+(?:prior|previous|earlier|outside|old|last|index|referring)'
+    r'[ \t]+(?:reports?|records?|notes?|procedures?|examinations?|exams?|stud(?:y|ies)|colonoscop(?:y|ies)|'
+    r'endoscop(?:y|ies)|EGDs?)\b', re.A | re.I)
+_BACK_REFERENCE_REACH = 2000  # characters of the instrument's section read either side of it
+
+
+def _accepted_title(line: str) -> bool:
+    """A title routing's own title rules read (_plain_title), or the same with an _ASIDE_SAFE aside after it (I7)."""
+    if _plain_title(line):
+        return True
+    aside = _TITLE_ASIDE.fullmatch(line)
+    return (aside is not None and _plain_title(aside.group('title'))
+            and _ASIDE_SAFE.fullmatch(aside.group('paren') or aside.group('dash') or '') is not None)
+
+
+def _procedure_title(line: str) -> bool:
+    """I9: a procedure report's own title - an accepted title naming a procedure service ("Colonoscopy Report
+    (fictional)", "Colonoscopy", "EGD Report"), or an accepted title whose words are all of a generic procedure report's
+    (_GENERIC_TITLE_WORD: "Endoscopy Report", "Procedure Note"). "Office Visit Note", "Nursing Note" and "Discharge
+    Summary" are none."""
+    if not _accepted_title(line):
+        return False
+    if any(pattern.search(line) for _, pattern in cues.SERVICE_PATTERNS):
+        return True
+    aside = None if _plain_title(line) else _TITLE_ASIDE.fullmatch(line)
+    words = re.findall(r'[A-Za-z]+', aside.group('title') if aside is not None else line)
+    return bool(words) and all(_GENERIC_TITLE_WORD.fullmatch(word) for word in words)
+
+
+def _fields_and_headings_only(an: Analysis, upto: int) -> bool:
+    """Whether every non-empty line before ``upto`` - at most sections.PROCEDURE_HEAD_LINES of them - is a labelled field
+    or opens a layout section by its heading (D1b: "Date of service: ..." and "Indications: Dysphagia." before
+    "Procedure:"): a head with nothing else in it, no salutation, letterhead or other title."""
+    text, start, seen = an.text, 0, 0
+    while start < upto:
+        nl = text.find('\n', start, upto)
+        end = upto if nl < 0 else nl
+        body = _GI4_MARKUP.match(text, start, end).end()
+        if body < end:
+            seen += 1
+            if seen > gi_sections.PROCEDURE_HEAD_LINES:
+                return False
+            section = an.lay.section_at(start)
+            if not (section.heading is not None and section.start == start) and not _GI4_FIELD.match(text, body, end):
+                return False
+        if nl < 0:
+            break
+        start = nl + 1
+    return True
+
+
+def _procedure_report(an: Analysis, section_start: int) -> bool:
+    """I9: positive evidence that the document is a procedure's own report, one of: a head title that is a procedure
+    title (_procedure_title); or, with no title-shaped head line at all, a head of fields and section headings only up
+    to the instrument's section (_fields_and_headings_only). Never where a head title names a later review, a result, a
+    copy or another record (_GI4_TITLE_HOLD), or the document is a note written around a procedure
+    (sections.around_procedure_title: a letter, instructions, a consent, a call, a booking). An office visit note, a
+    consult, a discharge summary, an anesthesia or nursing note, or a letterhead with no procedure title, recounting the
+    instrument's course is no procedure report by its head, and there the base reading stands - a strong head of fields
+    is not enough without a procedure title ("Anesthesia Note" over date, proceduralist and sedation fields). Memoised
+    per document; the head check per section."""
+    key = ('procedure-report',)
+    if key not in an.memo:
+        text = an.text
+        titles = [line for line in (_gi4_line(text, s, e) for s, e in _gi4_head(text).titles) if line]
+        if any(_GI4_TITLE_HOLD.search(line) for line in titles) or gi_sections.around_procedure_title(text):
+            an.memo[key] = 'no'
+        elif any(_procedure_title(line) for line in titles):
+            an.memo[key] = 'yes'
+        else:
+            an.memo[key] = 'no' if titles else 'head'
+    verdict = an.memo[key]
+    if verdict != 'head':
+        return verdict == 'yes'
+    hkey = ('procedure-report-head', section_start)
+    if hkey not in an.memo:
+        an.memo[hkey] = _fields_and_headings_only(an, section_start)
+    return an.memo[hkey]
+
+
+def _section_refers_back(an: Analysis, start: int) -> bool:
+    """I10: the instrument's own section, within _BACK_REFERENCE_REACH characters either side of it, says its narrative is
+    a copy or another occasion's report ("This narrative is copied from the prior report."). Hold-only."""
+    section = an.lay.section_at(start)
+    lo, hi = max(section.start, start - _BACK_REFERENCE_REACH), min(section.end, start + _BACK_REFERENCE_REACH)
+    return _BACK_REFERENCE.search(an.text, lo, hi) is not None
+
+
+def _instrument_course(an: Analysis, start: int, end: int) -> bool:
+    """I3: the instrument word at [start, end) is the subject of its own course predicate in its clause."""
+    cs, ce = _clause_at(an, start)
+    hit = _INSTRUMENT_COURSE.search(an.text, end, min(ce, end + _INSTRUMENT_COURSE_REACH))
+    if hit is None:
+        return False
+    from studio.gi import services as gi_services  # local: the services reader reads routing lazily too
+    found = gi_services.predicate_subject(an.text, cs, hit.start())  # the one subject reading
+    return (found is not None and not found.pronoun and found.head.end == end and found.head.start >= start
+            and not _NO_SUBJECT.match(an.text, found.phrase[0]))
+
+
+def _instrument_candidates(an: Analysis) -> list[Mention]:
+    """The instrument words that meet I1, I2, I3, I6, I7, I9 and I10, in one pass over services.INSTRUMENTS."""
+    from studio.gi import services as gi_services  # local: the services reader reads routing lazily too
+    named = {m.family for m in an.services}
+    found, reads = [], 0
+    for m in gi_services.INSTRUMENTS.finditer(an.text):
+        family = gi_services._instrument_family(m.group(0))
+        if family not in PROCEDURE_FAMILIES:  # I1
+            continue
+        if an.lay.section_at(m.start()).kind not in POSITIVE_SECTIONS:  # I2
+            continue
+        if named and family not in named:  # I6
+            continue
+        reads += 1
+        if reads > INSTRUMENT_READS or m.start() >= _unsafe_title_at(an):  # the bound; I7 (every later word is below it)
+            break
+        if not _procedure_report(an, an.lay.section_at(m.start()).start) or _section_refers_back(an, m.start()):
+            continue  # I9, I10
+        if _instrument_course(an, m.start(), m.end()):  # I3
+            found.append(Mention(family, m.start(), m.end(), 'instrument', m.group(0)))
+    return found
+
+
+_INSTRUMENT_CLAUSE_WINDOW = 600  # characters either side of the instrument its clause is cut within (bounds the cut)
+
+
+def _instrument_statement_held(an: Analysis, m: Mention) -> bool:
+    """I4, the documented-service reader's half: that reader's own rules hold the instrument's statement - another
+    facility, provider or source in its clause, its fronted frame or its section's heading ("At a community hospital,
+    the colonoscope was advanced", "Reportedly ...", "(outside report)"), a named agent no physician line names ("by
+    Dr. Other Person"), a hedge, or a condition or an open question over it ("It is unknown whether the colonoscope was
+    advanced"). Read with that reader's own functions (services.statement_hold and services.in_condition, which its
+    read_clause reads them with) over its own clause cut, so one instrument statement reads alike in both readers.
+    Hold-only: a hold keeps the base reading. Bounded: the cut is made within _INSTRUMENT_CLAUSE_WINDOW characters."""
+    from studio.gi import services as gi_services  # local: the services reader reads routing lazily too
+    text = an.text
+    s, e = an.lay.sentence_for(m.start, m.end)
+    lo, hi = max(s, m.start - _INSTRUMENT_CLAUSE_WINDOW), min(e, m.end + _INSTRUMENT_CLAUSE_WINDOW)
+    clause = next((c for c in gi_services.clauses(text, lo, hi) if c[0] <= m.start < c[1]), (lo, hi))
+    cs, ce = gi_services._bounded_clause(text, clause, m.start, m.end)
+    frame = gi_services._fronted_frame(text, cs)
+    frame = frame if frame.rstrip().endswith(',') else ''
+    whole = text[cs:ce]
+    return (gi_services.statement_hold(text, frame + whole, whole, m.start) is not None
+            or gi_services.in_condition(text, cs, m.start, m.end))
+
+
+_LISTED_ACT_READS = 32  # acts on procedure lines read at most (beyond them: not read, so the instrument rule holds)
+_ACTS_EXAMINED = 256  # act mentions of the document examined for a procedure line at most (beyond: not read)
+
+
+def _procedure_line_doubt(an: Analysis) -> bool:
+    """I11: an act the documented-service reader reads in doubt stands where that reader lifts a listing to performed
+    (services._on_procedure_line: a "Procedure:" field line, the first line under a bare procedure heading, a physician
+    part's title): "Procedure: The colonoscope was advanced to the cecum. Hot snare polypectomy was attempted, but the
+    polypectomy was unsuccessful." Read with that reader's own read_clause, over its own parts and clauses: an attempt,
+    a failure, a hedge, a source or a condition - never a listing's silence (services.SILENT_READINGS), and not a reading
+    the lift leaves alone (hypothetical, a row's hold). The lift (U6, the services reader's placement repair) makes such
+    an act performed; where routing had no performed mention of its family the base held its code, so the instrument
+    rule keeps the base reading while one stands. A boxed line is not read (read_clause hands a box back to routing):
+    it holds too. Memoised per document; bounded by _ACTS_EXAMINED and _LISTED_ACT_READS (beyond them: held)."""
+    key = ('procedure-line-doubt',)
+    if key not in an.memo:
+        from studio.gi import services as gi_services  # local: the services reader reads routing lazily too
+        text = an.text
+        plist = gi_services.parts(text, service_date=an.service_date, dates=an.dates)
+        starts = [p.start for p in plist]
+        acts = gi_services._acts_in(text, 0, len(text))
+        doubt, reads = len(acts) > _ACTS_EXAMINED, 0
+        for _, ms, me in acts if not doubt else ():
+            s, e = an.lay.sentence_for(ms, me)
+            part = gi_services._part_at(plist, starts, s)
+            if not gi_services._on_procedure_line(text, ms, part):
+                continue
+            reads += 1
+            ls = text.rfind('\n', 0, ms) + 1
+            le = text.find('\n', ms)
+            le = len(text) if le < 0 else le
+            if reads > _LISTED_ACT_READS or gi_services.BOX_MARK.search(text, ls, le):
+                doubt = True
+                break
+            lo, hi = max(s, ms - _INSTRUMENT_CLAUSE_WINDOW), min(e, me + _INSTRUMENT_CLAUSE_WINDOW)
+            clause = next((c for c in gi_services.clauses(text, lo, hi) if c[0] <= ms < c[1]), (lo, hi))
+            reading = gi_services.read_clause(text, clause, ms, me, service_date=an.service_date, dates=an.dates,
+                                              part=part, in_today_report=part.kind == 'report')
+            if reading.status == 'uncertain' and reading.cues and reading.cues[0] not in gi_services.SILENT_READINGS \
+                    and not gi_services.hypothetical_reading(reading) and not gi_services._row_hold(reading):
+                doubt = True
+                break
+        an.memo[key] = doubt
+    return an.memo[key]
+
+
+def _named_otherwise(an: Analysis, family: str) -> bool:
+    """I8: a name of ``family`` in the document's head or in a positive section, about this encounter, reads planned,
+    historical, negated, cancelled or held (any uncertain reading but silence)."""
+    for m in an.services:
+        if m.family != family or _elsewhere(an, m):
+            continue
+        section = an.lay.section_at(m.start)
+        if not (section.kind in POSITIVE_SECTIONS or (section.kind == 'other' and section.heading is None)):
+            continue
+        reading = _generic_reading(an, m.start, m.end)
+        if reading.status in ('planned', 'historical', 'negated', 'cancelled') \
+                or (reading.status == 'uncertain' and reading.cues != (SILENT,)):
+            return True
+    return False
+
+
+def _heading_twin_qualified(an: Analysis, m: Mention, families: frozenset) -> bool:
+    """I12: whether the instrument's family, named on the heading line of the instrument's own section as its heading
+    twin names it ("Procedure: Colonoscopy" over the same narrative), would be qualified there as routing reads such a
+    name (_silent_section's _later_denial; see the comment block above): the first sentence after the heading denies
+    it, or a status line, a typed or boxed answer or a call-off within DENIAL_SENTENCES sentences after or before the
+    heading says it was not done. ``families``: every family whose instrument course stands in that section (``m``'s
+    among them), which the twin's heading names together ("Procedure: EGD and colonoscopy"). Memoised per section."""
+    section = an.lay.section_at(m.start)
+    key = ('heading-twin', section.start, families)
+    if key not in an.memo:
+        an.memo[key] = _heading_twin_denial(an, section, families) is not None
+    return an.memo[key]
+
+
+def _heading_twin_denial(an: Analysis, section, families: frozenset) -> Optional[str]:
+    """The sentence that qualifies ``families`` named on ``section``'s heading line, or None. The twin's names are a bare
+    service line of their own right after the heading (the layout reads "Procedure:" and the names after it as two
+    sentences), so its next sentence is the first sentence that runs past the heading, read with routing's own test of
+    the sentence after a bare service line (_denies; _reschedules for one naming only those families); its walk is
+    _called_off_further's from that position - DENIAL_SENTENCES sentences read each way, within 2 * DENIAL_SENTENCES
+    positions, heading lines skipped, plans and histories and unselected options passed over, stopping at a sentence
+    naming the service of a family the line does not name and reading on through one naming only ``families`` (the
+    twin's line names them) - each sentence asked _calls_off. Bounded: at most 4 * DENIAL_SENTENCES + 1 sentences."""
+    sentences = an.lay.sentences
+    anchor = section.heading.end if section.heading is not None else section.start
+    first = bisect.bisect_right(sentences, anchor, key=lambda span: span[1])  # the first sentence running past it
+    if first < len(sentences) and an.lay.section_at(sentences[first][0]) is section:  # routing's same-section test
+        ns, ne = sentences[first]
+        named = {x.family for x in an.services_in(ns, ne)}
+        if (not named and _denies(an, ns, ne, bare=True)) or (named and named <= families and _reschedules(an, ns, ne)):
+            return an.text[ns:ne]
+    for step, start in ((1, first), (-1, first - 1)):
+        read, position = 0, start
+        while 0 <= position < len(sentences) and abs(position - start) < 2 * DENIAL_SENTENCES:
+            ks, ke = sentences[position]
+            position += step
+            heading = an.lay.section_at(ks).heading
+            if heading is not None and heading.start == ks and ke <= heading.end:
+                continue  # a heading line is structure, not a sentence about the service
+            read += 1
+            if read > DENIAL_SENTENCES or {x.family for x in an.services_in(ks, ke)} - families:
+                break
+            if an.lay.section_at(ks).kind in ELSEWHERE_SECTIONS or _unchecked_option(an, ks, ke):
+                continue
+            if _calls_off(an, ks, ke):
+                return an.text[ks:ke]
+    return None
+
+
+def _instrument_mentions(an: Analysis, candidates: list[Mention]) -> list[Mention]:
+    """The candidates that meet I4, I5, I8, I11 and I12, at most INSTRUMENT_MENTIONS per family (see above). The
+    candidates' spans are in an.instrument_spans before any of them is read, so a sub-act's failure in its clause is
+    never its own (_examination_target)."""
+    kept: dict[str, list[Mention]] = {}
+    blocked: dict[str, bool] = {}
+    in_section: dict[int, set] = {}  # I12: per section, the families whose instrument course stands in it
+    for m in candidates:
+        in_section.setdefault(an.lay.section_at(m.start).start, set()).add(m.family)
+    named_sections: dict[int, bool] = {}
+    if candidates and _a_named_positive_section(an):
+        return []  # refutation cycle 5 (structure 2): the report names its examination on a heading of its own
+    for m in candidates:
+        if len(kept.get(m.family, ())) >= INSTRUMENT_MENTIONS:
+            continue
+        # refutation cycle 3 (parity C3-6): the rule reads a narrative under a heading that names NO family - a section
+        # whose heading line names a service ("Procedure: Upper endoscopy" over "The colonoscope was then introduced. A 6
+        # mm sessile polyp was removed ...") is read by that name alone, as its named twin is; its other family's course
+        # is no mention (_heading_line_names_a_service)
+        section = an.lay.section_at(m.start)
+        if section.start not in named_sections:
+            named_sections[section.start] = _heading_line_names_a_service(an, section)
+        if named_sections[section.start]:
+            continue
+        if _generic_reading(an, m.start, m.end).status != 'performed' or _instrument_statement_held(an, m):  # I4
+            continue
+        if _heading_twin_qualified(an, m, frozenset(in_section[an.lay.section_at(m.start).start])):  # I12
+            continue
+        if not in_todays_narrative(an.text, m.start, an.service_date, an.lay.sentence_for(m.start, m.end),
+                                   excuse=lambda d, family=m.family: _another_familys_date(an, d, family)):  # I5
+            continue
+        if m.family not in blocked:
+            blocked[m.family] = _named_otherwise(an, m.family)
+        if blocked[m.family]:  # I8
+            continue
+        if _procedure_line_doubt(an):  # I11, read once, for the first mention that would be kept
+            return []
+        kept.setdefault(m.family, []).append(m)
+    return [m for family in kept.values() for m in family]
+
+
+_FINITE_VERB = re.compile(r'\b(?:was|were|is|are|been|had|has|have)\b', re.A | re.I)
+# Where a segment of a heading's name's place ends (refutation cycles 4 and 5): a mark of a clause, an aside or a list
+_NAME_SEGMENT_END = re.compile(r'[.;,:()\[\]/]')
+NAME_LEAD_WORDS = 3  # at most this many words before the service name in its segment ("Screening", "1 -", "Diagnostic")
+
+
+def _heading_line_names_a_service(an: Analysis, section) -> bool:
+    """Whether ``section`` names a service as a heading names it: its label is a service name ("UPPER ENDOSCOPY:"), or
+    a segment of its name's place - the rest of the label's line, or, where nothing follows the label on its line, the
+    next line that holds words - begins with a service name: before it, in its segment (cut at a mark of a clause, an
+    aside or a list: . ; , : ( ) [ ] /), at most NAME_LEAD_WORDS words and no finite verb ("Procedure: Upper endoscopy",
+    "Procedure:" over "Upper endoscopy", "Procedure: 1. Upper endoscopy", "Procedure: [EGD]", "Procedure: Diagnostic,
+    upper endoscopy", "Procedure: Upper endoscopy was performed under monitored anesthesia care.", "Procedure: Upper
+    endoscopy -- the patient was sedated ..."). A narrative that mentions a service in passing ("Procedure: The
+    colonoscope was advanced to the cecum. This was done on the same day as her upper endoscopy.") names no family
+    (refutation cycle 3). Refutation cycle 4 read the name's place to its first mark, and cycle 5 (structure 1, 4) found
+    a list number or a qualifier before the name ending it there, and a name that is the line's subject left out."""
+    text = an.text
+    heading = section.heading
+    if heading is not None and an.services_in(heading.start, heading.end) \
+            and not _FINITE_VERB.search(text, heading.start, heading.end):
+        return True  # the label is the name ("UPPER ENDOSCOPY:")
+    start = heading.end if heading is not None else section.start
+    while start < section.end and text[start] in ' \t':
+        start += 1
+    if start < section.end and text[start] == '\n':  # nothing after the label: the name is the next line that holds words
+        while start < section.end and text[start] in ' \t\n':
+            start += 1
+    line_end = text.find('\n', start, section.end)
+    line_end = section.end if line_end < 0 else line_end
+    seg = start
+    while seg < line_end:
+        mark = _NAME_SEGMENT_END.search(text, seg, line_end)
+        seg_end = mark.start() if mark is not None else line_end
+        named = an.services_in(seg, seg_end)
+        if named:
+            lead = text[seg:named[0].start]
+            if len(lead.split()) <= NAME_LEAD_WORDS and not _FINITE_VERB.search(lead):
+                return True
+        seg = seg_end + 1
+    return False
+
+
+def _a_named_positive_section(an: Analysis) -> bool:
+    """Whether a headed section of a procedure, findings or technique kind names a service as a heading names it
+    (_heading_line_names_a_service): then the report names its examination, and the instrument rule reads no narrative
+    of it (refutation cycle 5, structure 2: "Procedure: Upper endoscopy" over "Description of procedure: The gastroscope
+    was advanced ... The colonoscope was then introduced. A 6 mm sessile polyp was removed ..."). Read once per
+    document."""
+    key = ('named-positive-section',)
+    if key not in an.memo:
+        an.memo[key] = any(section.heading is not None and section.kind in gi_sections.POSITIVE_KINDS
+                           and _heading_line_names_a_service(an, section) for section in an.lay.sections)
+    return an.memo[key]
+
+
+def _another_familys_date(an: Analysis, d, family: str) -> bool:
+    """Whether the date ``d`` is another service's own: its clause names a procedure service, and none of ``family``
+    ("History: Per outside report, an upper endoscopy with balloon dilation was performed ... in 2025." beside today's
+    colonoscopy narrative). A date in a clause naming ``family`` itself ("the colonoscopy above was performed in 2025"),
+    or naming no service ("the report below is from 2025"), is never excused: it may date the narrative."""
+    named = set()
+    for cs, ce in an.lay.clauses_for(d.start, d.end):
+        named.update(m.family for m in an.services_in(cs, ce))
+    return bool(named) and family not in named
+
+
+def _instrument_reading(an: Analysis, m: Mention) -> Reading:
+    return Reading('performed', (INSTRUMENT_COURSE, _section_label(an.lay.section_at(m.start))), 'section')
+
+
 def _route(an: Analysis) -> RoutingResult:
-    detected = [f for f in PROCEDURE_FAMILIES if any(m.family == f for m in an.services)]
+    candidates = _instrument_candidates(an)
+    an.instrument_spans = frozenset((m.start, m.end) for m in candidates)
+    an.instruments = tuple(_instrument_mentions(an, candidates))
+    an.instrument_at = {(m.start, m.end): m for m in an.instruments}
+    detected = [f for f in PROCEDURE_FAMILIES if any(m.family == f for m in an.services)
+                or any(m.family == f for m in an.instruments)]
     others = _other_mentions(an, detected)
     # round 4c-2 box2:E: a part read from a coordinated name is no item of a box line, and one that reads planned,
     # historical, cancelled or negated documents nothing, as before (the plain name reads that way alone)
@@ -8302,6 +9211,7 @@ def _route(an: Analysis) -> RoutingResult:
     attributed = an.attributed = _attribute_sentences(an, detected)
     an.references = _references(an, attributed)
     readings.update(an.references)
+    readings.update({m: _instrument_reading(an, m) for m in an.instruments})  # completion repair (R2): I1-I8
     base = {m: _em_base_reading(an, m) for m in an.em}
     absent = {m for m, r in base.items() if r.cues[:1] == (EM_ABSENT_CUE,)}  # a set: one look per other reading
     if absent:
@@ -8323,7 +9233,8 @@ def _route(an: Analysis) -> RoutingResult:
     findings: dict[str, FamilyFinding] = {}
     for family in detected:
         mentions = sorted([m for m in an.services if m.family == family]
-                          + [m for m in an.references if m.family == family], key=lambda m: m.start)
+                          + [m for m in an.references if m.family == family]
+                          + [m for m in an.instruments if m.family == family], key=lambda m: m.start)
         incomplete = [m for m in mentions if readings[m].status == 'incomplete']
         facts, short = _procedure_facts(an, family, attributed, len(detected) == 1, incomplete)
         # In an office visit note a "Procedures" heading alone is not evidence the
@@ -8376,13 +9287,84 @@ def _route(an: Analysis) -> RoutingResult:
 
 @functools.lru_cache(maxsize=16)
 def _analysis(text: str, service_date: Optional[date] = None) -> tuple[Analysis, RoutingResult]:
-    lay = layout(text)
+    # Completion repair 2026-11-06 (U2, U12): the clinical readings read the derived layout, in which each released
+    # labelled procedure paragraph ("Upper endoscopy: The gastroscope was advanced ...") is a procedure section of its
+    # own (studio.gi.structure). sections.layout(text) itself is unchanged - it is the context reader's frozen input for
+    # the date of service - and with nothing released the derived layout IS it. The E/M mentions read it as before.
+    lay = gi_structure.clinical_layout(text)
     interventions = tuple(Intervention(label, families, m.start(), m.end())
                           for label, pattern, families in cues.INTERVENTIONS for m in pattern.finditer(text))
     effective = service_date if service_date is not None else ctx.service_date_of(text)
-    an = Analysis(text, lay, _service_mentions(text), _em_mentions(text, lay), _clause_cues(text),
+    an = Analysis(text, lay, _service_mentions(text), _em_mentions(text, layout(text)), _clause_cues(text),
                   ctx.find_dates(text), effective, interventions)
     return an, _route(an)
+
+
+@functools.lru_cache(maxsize=4)
+def _frozen_analysis(text: str) -> Analysis:
+    """An analysis of ``text`` on sections.layout itself, for the document's own date and with no routing run: read only
+    by named_with_a_cue, for studio.gi.structure's N3 (completion repair 2026-11-06), which reads a section's own
+    mentions before the derived layout exists - the derived layout carries the paragraphs that reading decides. A
+    mention outside those paragraphs lies in the same section in both layouts."""
+    interventions = tuple(Intervention(label, families, m.start(), m.end())
+                          for label, pattern, families in cues.INTERVENTIONS for m in pattern.finditer(text))
+    an = Analysis(text, layout(text), _service_mentions(text), (), _clause_cues(text), ctx.find_dates(text),
+                  ctx.service_date_of(text), interventions)
+    # the frozen layout releases nothing (structure is still deciding, and reads this very analysis): no label is read
+    # as a heading here, and _in_a_released_label never calls back into the structure reader (refutation cycle 3)
+    an.memo[('released-labels',)] = []
+    return an
+
+
+def named_as_another_occasion(text: str, family: str, start: int, end: int, skip: tuple = (),
+                              doubt: bool = False) -> bool:
+    """Whether a mention of ``family``'s name inside [start, end) reads as another occasion of the family: historical,
+    cancelled or incomplete; denied for today (a past negation, "no prior colonoscopy", denies another occasion and so
+    does not count); a performance statement its section holds ("She underwent a colonoscopy"); another time or a date
+    ("She had a colonoscopy", "the index colonoscopy", "Her last colonoscopy", "colonoscopy in 2019"). A hedge, a consent
+    or a discussion ("Risks and benefits of upper endoscopy and colonoscopy were discussed.") and a plan are no other
+    occasion. ``doubt``: a doubt counts too ("Colonoscopy aborted.", "Colonoscopy pending."; for a later mention). Routing's
+    own per-mention reading (_generic_reading) on the frozen layout, for the document's own date: a pure function of the
+    text, for studio.gi.structure's N2 and N3. Bounded: the mentions inside the range, each read once."""
+    an = _frozen_analysis(text)
+    for m in an.services_in(start, end):
+        if m.family != family or any(lo <= m.start < hi for lo, hi in skip):
+            continue  # ``skip``: spans the caller has read already (a labelled paragraph's frame of today's steps)
+        reading = _generic_reading(an, m.start, m.end)
+        if reading.status in ('historical', 'cancelled', 'incomplete') or (doubt and reading.doubt) \
+                or (reading.status == 'negated' and not reading.past_negation) \
+                or any(c.startswith(('performed:', 'historical:', 'incomplete:', 'cancelled:', ANOTHER_TIME_PREFIX))
+                       or 'service date' in c for c in reading.cues):
+            return True
+    return False
+
+
+def dated_earlier_occasions_only(text: str, family: str, start: int, end: int) -> bool:
+    """Whether every mention of ``family``'s name inside [start, end) - at least one - reads, by routing's own reading on
+    the frozen layout (_frozen_analysis, _generic_reading), as an occasion its own clause dates before the document's
+    service date ("history of adenomatous polyps on colonoscopy in 2022", "last colonoscopy 2022", "Prior colonoscopy in
+    2019 showed two adenomas"): an earlier occasion named as history, by a date - never an undated one ("Hx colonoscopy",
+    "Follow-up after colonoscopy", "the colonoscopy she had"), a planned one, or one only its section dates. For
+    studio.gi.structure's N3 (completion repair, integration). Bounded: the mentions inside the range, each read once."""
+    an = _frozen_analysis(text)
+    found = [m for m in an.services_in(start, end) if m.family == family]
+    if not found:
+        return False
+    for m in found:
+        reading = _generic_reading(an, m.start, m.end)
+        if reading.status != 'historical' or not any(c.endswith('is before the service date') for c in reading.cues):
+            return False
+    return True
+
+
+def past_negation_only(text: str, start: int, end: int) -> bool:
+    """Whether every service mention inside [start, end) - at least one - reads as a past negation only ("no prior
+    colonoscopy", "never had an EGD"): it denies another occasion of the service. Routing's own reading on the frozen
+    layout (_frozen_analysis), for studio.gi.structure's N3."""
+    an = _frozen_analysis(text)
+    found = an.services_in(start, end)
+    return bool(found) and all(_generic_reading(an, m.start, m.end).status == 'negated'
+                               and _generic_reading(an, m.start, m.end).past_negation for m in found)
 
 
 def _checked_date(service_date, caller):

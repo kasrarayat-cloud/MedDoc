@@ -367,7 +367,11 @@ this installer's) and reloads nginx; the certificate lineage is kept.
     revision since the core repair writes (a member's answer, a reviewer's
     chosen modifier: no worker makes either) written since the file was
     replaced: a revision before the core repair shows them wrongly, and its
-    worker's re-assessment would drop a chosen modifier. Which web wrote one
+    worker's re-assessment would drop a chosen modifier. Since the completion
+    repair (2026-11-06) a member's answer also re-makes the assessment, whose
+    answered code a revision before it reads as an ordinary exclusion - so a
+    base code that answer still held may show READY there; the standing answer
+    that made it names the encounter for the same reason. Which web wrote one
     cannot be read - a revision since the core repair writes them too, and
     reads them as this one does - so the receipt says when each was written,
     never by whom. Such records written before the switch began are named only:
@@ -744,7 +748,11 @@ before the harness, 80df1831d168 included, on the last two:
   same revision), as this revision's review applies it. No revision
   before the core repair reads one: its page asks that question again and shows
   the code held, where this revision shows it Excluded with the answer and who
-  gave it. Named, never handed over; the answer row stays.
+  gave it. Named, never handed over; the answer row stays. An assessment this
+  revision's worker re-made with a member's answer (support 'answered') names
+  the hazard too, standing answer or not, and always counts as written since
+  the switch (completion repair, refutation cycle 2): only this revision makes
+  such an assessment, so the undo holds the old worker for it.
 - **modifier** (core repair 2026-11-03): a current decision of the current
   assessment carries the reviewer's chosen modifier (59 or XS). No revision
   before the core repair reads one: its page and both reports show that

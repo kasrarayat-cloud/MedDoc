@@ -42,6 +42,7 @@ from .types import (ConfirmedFinding, EvidenceSpan, Fact, NormalizedResponse, Pa
                     ProviderRequest, RawExchange, RoutingResult, from_jsonable, sha256_json, to_jsonable)
 from .validation import checks as validation_checks
 from .validation.engine import assess as run_assessment
+from .validation.questions import MemberAnswerInput
 
 log = logging.getLogger(__name__)
 
@@ -530,16 +531,20 @@ def _route_child(text, service_date):
 
 
 def _assess_child(text, service_date, pages, context, normalized, reference, provider_status, extraction_status,
-                  extraction_messages, second=None, second_scope=None, participant_inputs=(), confirmed=()):
+                  extraction_messages, second=None, second_scope=None, participant_inputs=(), confirmed=(),
+                  member_answers=()):
     """The routing for ``service_date`` and the validation assessment that reads it, in one child: validation's span
     readings reuse the routing analysis the child already made. The documented-service inventory is read here too
     (engine @4), under the same deadline and memory limit. ``participant_inputs``: the configured harness participants'
-    readings (HARNESS.md 5); ``confirmed``: the revision's reviewer-confirmed findings (HARNESS.md 12.5). Each is passed
-    to the engine only when there is one, so with none it is called exactly as before (I1)."""
+    readings (HARNESS.md 5); ``confirmed``: the revision's reviewer-confirmed findings (HARNESS.md 12.5);
+    ``member_answers``: the revision's standing member answers (member_answers_of; completion repair 2026-11-06). Each
+    is passed to the engine only when there is one, so with none it is called exactly as before (I1)."""
     data = to_jsonable(gi_detect.route(text, service_date))
     harness = {'participants': participant_inputs} if participant_inputs else {}
     if confirmed:
         harness['confirmed'] = confirmed
+    if member_answers:
+        harness['member_answers'] = member_answers
     result = run_assessment(
         text=text, pages=pages, context=context, routing=from_jsonable(RoutingResult, data), normalized=normalized,
         reference=reference, service_date=service_date, provider_status=provider_status,
@@ -549,7 +554,13 @@ def _assess_child(text, service_date, pages, context, normalized, reference, pro
 
 
 ROUTING_CACHE_MODULES = ('studio.gi.detect', 'studio.gi.sections', 'studio.gi.context', 'studio.validation.checks',
-                         'studio.validation.engine')
+                         'studio.validation.engine',
+                         # completion repair (builder A): the documented-service reader's text-keyed caches too
+                         # (services._occasion_indications, with _report_physician_words and _act_frame), so nothing a
+                         # stage read stays resident
+                         'studio.gi.services',
+                         # completion repair (builder R1): the structure overlay's caches
+                         'studio.gi.structure')
 
 
 def release_routing_caches():
@@ -2184,7 +2195,11 @@ def _retrieval(result, service_date, reference, provider_codes):
     CMS reference file applied to the service date - so that the codes' checks read the CMS facts - is the engine's own
     record of the lookup (``result.reference_sources``), read here in memory, never asked of the database again. The
     entry names the step that failed: loading the stored passages, or the retrieval (refutation round 4, truth-5)."""
-    codes = sorted({proposal.code for proposal in result.proposals if review.decidable(proposal)} & set(provider_codes))
+    # Completion repair (integration, 2026-11-06; builder Q1's measured patch): every decidable proposal's code, whoever
+    # proposed it - an admitted participant code is a proposal a member decides (directive item 3), and its checks read
+    # the lookup prefetched for every proposed code (stage_assess). ``provider_codes`` is kept for the record's callers;
+    # review.decidable still keeps every alternative out, so the refutation rounds' cases above are unchanged.
+    codes = sorted({proposal.code for proposal in result.proposals if review.decidable(proposal)})
     if not codes:
         return []
     step = RETRIEVAL_STEP_LOAD
@@ -2280,11 +2295,15 @@ def stage_assess(job):
     reference = prefetched_lookup(tuple(sorted(set(provider_codes) | proposed)))
     service_date = context_service_date(context)
     confirmed = confirmed_findings(revision) if names else ()
+    # Completion repair (2026-11-06, U11): every assessment of the revision reads the members' standing answers, each
+    # bound to the question it answered (engine._MemberAnswers) - whatever made this stage: the answer's own recompute
+    # (recompute_after_answers), a context save, a peer phase, a Resume or a release's refresh.
+    member = member_answers_of(revision)
     data, result = _bounded(
         _assess_child, revision.text, service_date, tuple(PageSpan(**p) for p in revision.pages),
         context_facts(context), normalized, reference, provider_status, revision.extraction_status,
         tuple(revision.messages), second_normalized, dict(second.scope) if second is not None else None, inputs,
-        confirmed, seconds=settings.JOB_DEADLINE_SECONDS['assess'], memory_bytes=settings.ASSESS_MEMORY_BYTES)
+        confirmed, member, seconds=settings.JOB_DEADLINE_SECONDS['assess'], memory_bytes=settings.ASSESS_MEMORY_BYTES)
     routing_run = _record_routing(revision, data, service_date)
     retrieval = _retrieval(result, service_date, reference, provider_codes)  # a decidable code's only (r7, r8, r9)
     records = {record['name']: record for _, record in read}
@@ -3244,6 +3263,71 @@ def reassess_after_confirmation(encounter, user):
                       provider_run=final.provider_run, key=key, requested_by=user)
         review.refresh_state(encounter)
     return job
+
+
+# --- completion repair (2026-11-06, U11): a member's answer recomputes the assessment, nothing sent ------------------
+
+ANSWERS_MARK = 'a'  # an answer recompute's AGAIN part: ':c:a' and 11 hex of the revision's answer history
+
+
+def member_answers_of(revision) -> tuple[MemberAnswerInput, ...]:
+    """The standing member answers of ``revision`` as the engine reads them (engine._MemberAnswers): every MemberAnswer
+    no MemberAnswerRevocation withdrew, oldest first, each with the question it answered - its fingerprint, '' for an
+    answer recorded before answers carried one, which binds by its code, family and fact as the installed release bound
+    it (questions.bind; refutation cycle 2, answers W2). () for none, and the engine is then called exactly as
+    before."""
+    return tuple(MemberAnswerInput(code=answer.code, family=answer.family, fact=answer.fact, value=answer.value,
+                                   question=answer.question or '', answer_id=str(answer.pk))
+                 for answer in models.MemberAnswer.objects.filter(revision=revision, revocation__isnull=True)
+                 .order_by('answered_at', 'pk'))
+
+
+def answers_digest(revision) -> str:
+    """11 hex of the sha256 of ``revision``'s whole answer history - every answer ever recorded and every revocation -
+    so each save or withdrawal that changes what stands names a recompute of its own, and no history ever recurs (a
+    revocation is permanent): the answers' part of the recompute's key (recompute_after_answers)."""
+    answered = sorted(str(pk) for pk in models.MemberAnswer.objects.filter(revision=revision)
+                      .values_list('pk', flat=True))
+    revoked = sorted(f'r{pk}' for pk in models.MemberAnswerRevocation.objects.filter(answer__revision=revision)
+                     .values_list('pk', flat=True))
+    return hashlib.sha256(','.join(answered + revoked).encode()).hexdigest()[:11]
+
+
+def recompute_after_answers(encounter, user):
+    """ONE assess after a member's answers changed (a save of "Not documented" or "Cannot confirm", or a withdrawal):
+    the AGAIN path - it reads exactly what the final assessment read (the Corti run, every participant run and peer run
+    its entries name: _reread), plus the revision's standing answers (stage_assess, member_answers_of) - in the bounded
+    assess child; it builds no request, sends nothing and queues no peer review. Called under the encounter's row lock,
+    by the save or the withdrawal that changed the answers (answers.save_details, answers.revoke_answer).
+
+    Its key is the key of the stage that made the final assessment with any earlier ':c:' part left off, ':c:a' and the
+    revision's answer history (answers_digest), so the assess job's key includes the answers: the same history queues
+    one assess, and a changed one is never taken for an assessment already made.
+
+    None, queuing nothing, when there is no final assessment of the current revision and context to make again, when a
+    newer assessment of the revision exists (the stage would assess nothing), when its peer phase has not finished
+    (is_final), when the context was recorded under earlier context rules (the stage would remake it and could send), or
+    when no finished assess stage made it: the answers stand, the review overlay reads them, and the next assessment
+    made reads them too."""
+    revision, context, final = encounter.current_revision, encounter.current_context, encounter.current_assessment
+    if (revision is None or context is None or final is None or final.revision_id != revision.pk
+            or final.context_id != context.pk or not review.is_final(final)):
+        return None
+    if context.version in EARLIER_CONTEXT_VERSIONS:
+        return None  # the stage would remake the context first and could send (reassess_retained's RETAINED_EARLIER)
+    newest = _newest_assessment(revision)
+    if newest is None or newest.pk != final.pk:
+        return None
+    made = (Job.objects.filter(encounter=encounter, revision=revision, kind=Job.ASSESS, state=Job.SUCCEEDED,
+                               result__assessment=str(final.pk)).order_by('-created_at', '-pk').first())
+    if made is None:
+        return None
+    key = f'{made.idempotency_key.split(AGAIN_MARK, 1)[0]}{AGAIN_MARK}{ANSWERS_MARK}{answers_digest(revision)}'
+    if len(key) > Job._meta.get_field('idempotency_key').max_length:
+        return None
+    clear_stop(encounter)  # a member's answer asks for processing, as a context save does
+    return enqueue(Job.ASSESS, encounter=encounter, revision=revision, context=context,
+                   provider_run=final.provider_run, key=key, requested_by=user)
 
 
 # --- P5 FLOW: re-assessment from retained answers, nothing sent (owner directive 2026-11-03, section 6; R6 6.4) ----------

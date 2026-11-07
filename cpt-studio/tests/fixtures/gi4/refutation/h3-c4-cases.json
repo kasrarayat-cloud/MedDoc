@@ -12,14 +12,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -30,17 +32,20 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": [
-    "HELD"
+    "READY"
    ],
    "participant": [
-    "ALT"
+    "READY"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion A": "READY/READY",
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -54,14 +59,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -75,14 +82,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -96,14 +105,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -117,14 +128,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -138,14 +151,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -159,14 +174,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/ALT",
     "round 1": "READY/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -180,14 +197,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -201,14 +220,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -222,14 +243,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -243,14 +266,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -264,14 +289,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -285,14 +312,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -306,14 +335,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/ALT",
     "round 1": "READY/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -327,14 +358,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -348,14 +381,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -369,14 +404,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -390,14 +427,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -411,14 +450,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -439,7 +480,9 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -460,7 +503,9 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -481,7 +526,9 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -502,7 +549,9 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -516,14 +565,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -537,14 +588,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -558,14 +611,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -579,14 +634,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -600,14 +657,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -621,14 +680,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -642,14 +703,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -663,14 +726,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -684,14 +749,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -705,14 +772,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -726,14 +795,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -747,14 +818,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -768,14 +841,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -789,14 +864,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -810,14 +887,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -831,14 +910,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -857,14 +938,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -878,14 +961,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -899,14 +984,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -920,14 +1007,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -941,14 +1030,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -962,14 +1053,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -983,14 +1076,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1004,14 +1099,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1025,14 +1122,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1046,14 +1145,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1067,14 +1168,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1088,14 +1191,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1109,14 +1214,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1130,14 +1237,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   }
  ],
@@ -1240,6 +1349,34 @@
       [
        "READY",
        false
+      ]
+     ]
+    },
+    "completion (integration)": {
+     "43233": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "completion (refutation cycle 2)": {
+     "43233": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
       ]
      ]
     }
@@ -1345,6 +1482,34 @@
        false
       ]
      ]
+    },
+    "completion (integration)": {
+     "43233": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "completion (refutation cycle 2)": {
+     "43233": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
     }
    }
   },
@@ -1446,6 +1611,34 @@
       [
        "READY",
        false
+      ]
+     ]
+    },
+    "completion (integration)": {
+     "44394": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "45385": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "completion (refutation cycle 2)": {
+     "44394": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "45385": [
+      [
+       "HELD",
+       true
       ]
      ]
     }
@@ -1551,6 +1744,34 @@
        false
       ]
      ]
+    },
+    "completion (integration)": {
+     "44394": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "45385": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "completion (refutation cycle 2)": {
+     "44394": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "45385": [
+      [
+       "HELD",
+       true
+      ]
+     ]
     }
    }
   },
@@ -1642,6 +1863,34 @@
      ]
     },
     "cycle 3": {
+     "44394": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "45385": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "completion (integration)": {
+     "44394": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "45385": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "completion (refutation cycle 2)": {
      "44394": [
       [
        "HELD",
@@ -1757,6 +2006,34 @@
        false
       ]
      ]
+    },
+    "completion (integration)": {
+     "43233": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "completion (refutation cycle 2)": {
+     "43233": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
     }
    }
   },
@@ -1858,6 +2135,34 @@
       [
        "READY",
        false
+      ]
+     ]
+    },
+    "completion (integration)": {
+     "43233": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "completion (refutation cycle 2)": {
+     "43233": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
       ]
      ]
     }
@@ -1963,6 +2268,34 @@
        true
       ]
      ]
+    },
+    "completion (integration)": {
+     "43245": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "completion (refutation cycle 2)": {
+     "43245": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
     }
    }
   },
@@ -1986,13 +2319,13 @@
     "43248": [
      [
       "HELD",
-      true
+      false
      ]
     ],
     "43249": [
      [
-      "HELD",
-      true
+      "READY",
+      false
      ]
     ]
    },
@@ -2057,6 +2390,34 @@
      "43248": [
       [
        "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "completion (integration)": {
+     "43248": [
+      [
+       "HELD",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "completion (refutation cycle 2)": {
+     "43248": [
+      [
+       "HELD",
        false
       ]
      ],
@@ -2089,13 +2450,13 @@
     "43248": [
      [
       "HELD",
-      true
+      false
      ]
     ],
     "43249": [
      [
-      "HELD",
-      true
+      "READY",
+      false
      ]
     ]
    },
@@ -2167,6 +2528,34 @@
       [
        "HELD",
        true
+      ]
+     ]
+    },
+    "completion (integration)": {
+     "43248": [
+      [
+       "HELD",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "completion (refutation cycle 2)": {
+     "43248": [
+      [
+       "HELD",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
       ]
      ]
     }
@@ -2192,13 +2581,13 @@
     "43248": [
      [
       "HELD",
-      true
+      false
      ]
     ],
     "43249": [
      [
-      "HELD",
-      true
+      "READY",
+      false
      ]
     ]
    },
@@ -2263,6 +2652,34 @@
      "43248": [
       [
        "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "completion (integration)": {
+     "43248": [
+      [
+       "HELD",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "completion (refutation cycle 2)": {
+     "43248": [
+      [
+       "HELD",
        false
       ]
      ],
@@ -2373,6 +2790,34 @@
       [
        "READY",
        false
+      ]
+     ]
+    },
+    "completion (integration)": {
+     "44394": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "45385": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "completion (refutation cycle 2)": {
+     "44394": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "45385": [
+      [
+       "HELD",
+       true
       ]
      ]
     }

@@ -1943,7 +1943,20 @@ COMMON_STAGE_KINDS = ('analyze', 'assess', 'extract', 'predict')
 #   member_answer - the current assessment has a member's answer that stands (MemberAnswer, not revoked: "Not
 #              documented" or "Cannot confirm", core repair 2026-11-03). No revision before it reads one: its page asks
 #              that question again and shows the code held, where this revision shows it Excluded with the answer and
-#              who gave it. The answer row stays; no state can be put back for it (SHOWN_HAZARDS).
+#              who gave it. The answer row stays; no state can be put back for it (SHOWN_HAZARDS). Completion repair
+#              (2026-11-06, U11): an answer now re-makes the assessment (jobs.recompute_after_answers), whose answered
+#              code is stored Excluded with the answer as its reason (support 'answered') while it still holds the codes
+#              it held (the base code of a therapeutic code answered away: decision (e)). A revision before the
+#              completion repair reads that row as an ordinary exclusion, which holds nothing, so its page may show such
+#              a base code READY. Such an assessment is named by this same reason whether or not the answer that made
+#              it still stands (refutation cycle 1, answers F6: withdrawn, and the recompute it queued stopped or
+#              failed, the stored marker stays): a current or shown assessment with a proposal carrying support
+#              'answered' is named too. No state can be put back for it either. Only a worker since the completion
+#              repair makes such an assessment, so it is this revision's write: written_since counts it as written
+#              since the switch when no standing answer explains it, and when it was made since then, whenever the
+#              answer that made it was given (refutation cycle 2, answers W3: timed by standing answers alone, a marker
+#              with none - or one re-made in the window from an answer given before it - read as written before the
+#              switch, so the undo did not hold the old worker and its receipt said the record predated the new web).
 #   modifier - a current decision of the current assessment carries the reviewer's chosen modifier (Decision.modifiers,
 #              core repair 2026-11-03). No revision before it reads one: its page and both reports show that approval
 #              without the modifier. The decision row stays; no state can be put back for it (SHOWN_HAZARDS).
@@ -1961,6 +1974,16 @@ def standing_answers(revision_id):  # the answers that stand on a revision, as t
 
 def answer_revisions(encounter, assessment):  # whose standing answers 'member_answer' reads: the shown and the current
     return sorted(str(pk) for pk in {encounter.current_revision_id, getattr(assessment, 'revision_id', None)} if pk)
+
+
+def answer_markers(encounter, assessment):  # the shown and current assessments the engine re-made with an answer
+    # refutation cycle 3 (answers C3-2): a proposal the answer excluded ('answered' support), or a documented service's
+    # question the answer closed (Clarification.answer: engine close_service), each marks this revision's write
+    shown = {item.pk: item for item in (assessment, getattr(encounter, 'current_assessment', None)) if item is not None}
+    return [shown[pk] for pk in sorted(shown, key=str)
+            if any(isinstance(proposal.support, dict) and proposal.support.get('answered')
+                   for proposal in shown[pk].proposals.all())
+            or shown[pk].clarifications.filter(answer__isnull=False).exists()]
 
 
 def undo_hazards():
@@ -2060,6 +2083,10 @@ def undo_hazards():
         if hasattr(models, 'MemberAnswer'):
             if any(standing_answers(revision_id) for revision_id in answer_revisions(encounter, assessment)):
                 found.setdefault(str(encounter.pk), set()).add('member_answer')
+            # refutation cycle 1 (answers F6): an assessment the engine re-made with an answer carries its marker
+            # (support 'answered') even once that answer is withdrawn and its recompute stopped or failed
+            elif answer_markers(encounter, assessment):
+                found.setdefault(str(encounter.pk), set()).add('member_answer')
         if assessment is not None and any(f.name == 'modifiers' for f in models.Decision._meta.get_fields()) and any(
                 decision.modifiers for decision in review.current_decisions(assessment).values()):
             found.setdefault(str(encounter.pk), set()).add('modifier')
@@ -2070,16 +2097,22 @@ def written_since(since, pks):
     """{encounter id: reasons}: of the encounters ``pks`` names, each 'member_answer' or 'modifier' whose record - read
     as undo_hazards reads it - was written at or after ``since``: a standing answer given since then, a current decision
     carrying a chosen modifier recorded since then (refutation r3, D-2: an undo holds the old worker only for these, the
-    records its own window wrote; the older ones were there before the install)."""
+    records its own window wrote; the older ones were there before the install). An assessment the engine re-made with
+    a member's answer (answer_markers) is this revision's write - only a worker since the completion repair makes one -
+    and is written since when no standing answer explains it, or when it was made since then (refutation cycle 2,
+    answers W3)."""
     from studio import models, review
     found = {}
     for encounter in models.Encounter.objects.filter(pk__in=sorted(pks)).order_by('pk'):
         assessment = encounter.current_assessment if encounter.current_assessment_id is not None else None
         reasons = []
-        if hasattr(models, 'MemberAnswer') and any(
-                answer.answered_at >= since for revision_id in answer_revisions(encounter, assessment)
-                for answer in standing_answers(revision_id)):
-            reasons.append('member_answer')
+        if hasattr(models, 'MemberAnswer'):
+            standing = [answer for revision_id in answer_revisions(encounter, assessment)
+                        for answer in standing_answers(revision_id)]
+            marked = answer_markers(encounter, assessment)
+            if (any(answer.answered_at >= since for answer in standing) or (marked and not standing)
+                    or any(item.created_at >= since for item in marked)):
+                reasons.append('member_answer')
         if assessment is not None and any(f.name == 'modifiers' for f in models.Decision._meta.get_fields()) and any(
                 decision.modifiers and decision.created_at >= since
                 for decision in review.current_decisions(assessment).values()):
@@ -3498,7 +3531,9 @@ def held_sentence(hold, notes) -> str:
 
 
 # Refutation r2, L6-6, as refutation r3 (D-2) corrected it: the SHOWN_HAZARDS only a revision since the core repair
-# writes - a member's answer, a reviewer's chosen modifier; no worker makes either. Which web wrote one cannot be read
+# writes - a member's answer, a reviewer's chosen modifier; no worker makes either, but for the assessment a worker since
+# the completion repair re-makes with a member's answer, which UNDO_HAZARDS' written_since times as this revision's own
+# write (refutation cycle 2, answers W3). Which web wrote one cannot be read
 # (a revision since the core repair writes them too, and reads them as this one does), but WHEN it was written can: one
 # written in an undo's window (CLOSE_STAGES' 'written_since') holds the old worker - a revision before the core repair
 # shows it wrongly, and its worker's re-assessment would drop a chosen modifier (its carry has no such column) - while
@@ -3508,7 +3543,8 @@ WEB_WRITTEN_HAZARDS = ('member_answer', 'modifier')
 WEB_WRITTEN_NOTE = 'hold records only a revision since the core repair writes'
 WEB_WRITTEN_SHOWN = ('a revision before the core repair shows them wrongly - it asks the answered question again, and '
                      'shows the approval without its modifier - and its worker would drop a chosen modifier when it '
-                     're-assesses')
+                     're-assesses; a revision before the completion repair also reads an assessment re-made with an '
+                     'answer as an ordinary exclusion, so a base code that answer still held may show READY')
 
 
 def merge_hazards(*answers) -> dict:

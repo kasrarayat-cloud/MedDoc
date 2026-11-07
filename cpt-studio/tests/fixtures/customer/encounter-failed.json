@@ -1,8 +1,8 @@
 {
  "id": "c6000000-0000-4000-8000-000000000001",
  "title": "Synthetic office follow-up 6",
- "created_at": "2026-11-01T09:02:22Z",
- "updated_at": "2026-11-01T09:02:36Z",
+ "created_at": "2026-11-01T09:02:23Z",
+ "updated_at": "2026-11-01T09:02:37Z",
  "state": "failed",
  "state_label": "Could not finish",
  "permissions": {
@@ -51,35 +51,35 @@
     "key": "reading",
     "label": "Reading your document",
     "state": "done",
-    "started_at": "2026-11-01T09:02:25Z",
-    "finished_at": "2026-11-01T09:02:27Z"
+    "started_at": "2026-11-01T09:02:26Z",
+    "finished_at": "2026-11-01T09:02:28Z"
    },
    {
     "key": "identifying",
     "label": "Identifying procedures",
     "state": "done",
-    "started_at": "2026-11-01T09:02:28Z",
-    "finished_at": "2026-11-01T09:02:29Z"
+    "started_at": "2026-11-01T09:02:29Z",
+    "finished_at": "2026-11-01T09:02:30Z"
    },
    {
     "key": "checking",
     "label": "Checking suggested codes",
     "state": "failed",
-    "started_at": "2026-11-01T09:02:30Z",
-    "finished_at": "2026-11-01T09:02:32Z"
+    "started_at": "2026-11-01T09:02:31Z",
+    "finished_at": "2026-11-01T09:02:33Z"
    },
    {
     "key": "preparing",
     "label": "Preparing your results",
     "state": "done",
-    "started_at": "2026-11-01T09:02:33Z",
-    "finished_at": "2026-11-01T09:02:35Z"
+    "started_at": "2026-11-01T09:02:34Z",
+    "finished_at": "2026-11-01T09:02:36Z"
    }
   ],
   "active_detail": "",
-  "started_at": "2026-11-01T09:02:24Z",
-  "finished_at": "2026-11-01T09:02:35Z",
-  "server_time": "2026-11-01T09:02:37Z",
+  "started_at": "2026-11-01T09:02:25Z",
+  "finished_at": "2026-11-01T09:02:36Z",
+  "server_time": "2026-11-01T09:02:38Z",
   "slow": false,
   "message": "The coding service could not complete its review of this document, so no codes were suggested. You can upload the document again.",
   "can_stop": false,
@@ -111,6 +111,7 @@
  "other_codes": [],
  "not_separately_coded": [],
  "details_needed": [],
+ "earlier_answers": [],
  "unresolved": [
   "Office / outpatient evaluation and management: no supported code was found for it."
  ],
@@ -138,28 +139,28 @@
    "summary": "Document added",
    "actor": "Reviewer",
    "actor_kind": "human",
-   "at": "2026-11-01T09:02:23Z"
+   "at": "2026-11-01T09:02:24Z"
   },
   {
    "event": "text_read",
    "summary": "Text read",
    "actor": "CPT Studio",
    "actor_kind": "system",
-   "at": "2026-11-01T09:02:26Z"
+   "at": "2026-11-01T09:02:27Z"
   },
   {
    "event": "checks_completed",
    "summary": "Checks completed",
    "actor": "CPT Studio",
    "actor_kind": "system",
-   "at": "2026-11-01T09:02:31Z"
+   "at": "2026-11-01T09:02:32Z"
   },
   {
    "event": "checks_completed",
    "summary": "Checks completed",
    "actor": "CPT Studio",
    "actor_kind": "system",
-   "at": "2026-11-01T09:02:34Z"
+   "at": "2026-11-01T09:02:35Z"
   }
  ]
 }

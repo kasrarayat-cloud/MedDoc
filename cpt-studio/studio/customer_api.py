@@ -25,6 +25,7 @@ from django.conf import settings
 from . import answers, models, progress, review
 from .gi.profiles import PROFILES
 from .models import Decision, Proposal, ProviderRun, ReportArtifact, SourceRevision
+from .validation import questions
 
 # --- the customer vocabulary --------------------------------------------------------------------------------------
 
@@ -245,6 +246,7 @@ BLOCKER_EXACT = {
     'No text was extracted': 'The text of the document could not be read.',
     review.NOT_FINAL_BLOCKER: 'The independent checks have not finished.',
     review.DATE_CONFIRMATION_BLOCKER: 'Confirm the date of service under "A few details needed".',
+    review.STALE_ANSWER_BLOCKER: 'A detail you withdrew or changed is still being applied: resume processing if it was stopped.',
     'The encounter context changed; re-assessment has not finished': 'The details changed; the results are being updated.',
     'The provider was not run': 'The coding service did not run for this document.',
     'The provider outcome is unknown': 'We are confirming whether an earlier check completed.',
@@ -457,15 +459,17 @@ QUESTION_WORDS = {
     # refutation round 1 of harness repair 3 (L4-6): a competition hold says what settles it
     'competing_codes': 'Another code is proposed for the same documented act: reject the one the documentation does '
                        'not support, and this one is then ready for review.',
-    'performed_status': 'The document does not establish that this was done on the date of service.',
-    'extent': 'How far the examination reached is not documented.',
-    'completion': 'Whether the examination was completed is not documented.',
-    'separate_em': 'A separately identifiable office visit is not documented beside the procedure.',
-    'em_basis': 'The basis for the visit level is not documented.',
-    'setting': 'The place of service is not documented.',
-    'patient_status': 'Whether the patient is new or established is not documented.',
-    'target': 'The structure examined is not documented.',
-    'cannulation': 'Whether cannulation was achieved is not documented.',
+    # completion repair (2026-11-06, U9/U10): what CPT Studio could not confirm - a reading's limit, never a statement
+    # that the document leaves it out, which only a passage makes (its question shows the passages it concerns)
+    'performed_status': 'CPT Studio could not confirm from the document that this was done on the date of service.',
+    'extent': 'CPT Studio could not confirm how far the examination reached.',
+    'completion': 'CPT Studio could not confirm whether the examination was completed.',
+    'separate_em': 'CPT Studio could not confirm a separately identifiable office visit beside the procedure.',
+    'em_basis': 'CPT Studio could not confirm the basis for the visit level.',
+    'setting': 'CPT Studio could not confirm the place of service.',
+    'patient_status': 'CPT Studio could not confirm whether the patient is new or established.',
+    'target': 'CPT Studio could not confirm the structure examined.',
+    'cannulation': 'CPT Studio could not confirm whether cannulation was achieved.',
 }
 # why approve is withheld from a code (review_view.View.withheld_by, same_day_held); a reinstated code its gate withholds
 # reads "Needs a detail" with the row that asks it (the overlay asks its waits: refutation round 2, L3-8)
@@ -601,8 +605,11 @@ def code_rows(assessment, current, views, membership=None, details=()):
     first, then, others = [], [], []
     for proposal in proposals:
         decision = current.get(proposal.pk)
-        if proposal.bucket == Proposal.SELECTED or (proposal.bucket == Proposal.EXCLUDED and decision is not None
-                                                    and decision.action != Decision.CONFIRM):
+        # a code the engine excluded by a member's answer stays where the selected code it was is listed (completion
+        # repair 2026-11-06, U11): excluded, "A needed detail is not documented", withdrawable by the answer's row
+        if (proposal.bucket == Proposal.SELECTED or questions.answered_away(proposal)
+                or (proposal.bucket == Proposal.EXCLUDED and decision is not None
+                    and decision.action != Decision.CONFIRM)):
             first.append(proposal)
         elif proposal.bucket == Proposal.EXCLUDED and (proposal.reinstatable or decision is not None):
             then.append(proposal)
@@ -1009,6 +1016,7 @@ def encounter_json(encounter, membership):
         'codes': codes, 'other_codes': other_codes,
         'not_separately_coded': _not_separately_coded(completeness, services),
         'details_needed': details,
+        'earlier_answers': answers.earlier_answers(encounter, assessment),
         'unresolved': _unresolved(completeness, services),
         'recheck': recheck_block(encounter, membership),
         'limitations': limitations(assessment, revision),

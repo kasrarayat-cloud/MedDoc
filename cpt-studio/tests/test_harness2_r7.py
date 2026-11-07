@@ -121,7 +121,27 @@ class RetrievalTests(r6m.MeaningCase):
         return detail
 
     def test_time_2_p4_astra_s_first_reading(self):
-        self.time_2(astra=hp.reading(codes=[('45385', r6m.LAST_LABEL)], services=[r6m.colon_service(r6m.LAST_LABEL)]))
+        """Moved by the completion repair (owner directive 2026-11-06, item 3: equal eligibility; builder Q1): Astra's
+        first-reading 45385 is no alternative now - it is a proposal read by the per-code path, exactly as Corti's own
+        selection of the same line is (held; 45378's base question names it), so the alternatives' tracing this test
+        pinned is pinned by the peer-review variant (p6, below). Whether an admitted code is traced as Corti's selection
+        is: tests/test_cptc_q1_admission.py, AdmittedCodePipelineTests."""
+        text = r6m.earlier(r6m.LAST_LABEL)
+        detail = self.detail(self.scenario(text, [('45378', r6m.CECUM_LANDMARKS)], astra=hp.reading(
+            codes=[('45385', r6m.LAST_LABEL)], services=[r6m.colon_service(r6m.LAST_LABEL)])))
+        # Corti selecting both, on another request (a trailing blank line): an identical Corti request reuses the
+        # workspace's retained result, which selected 45378 alone
+        both = self.corti_alone(text + '\n', [('45378', r6m.CECUM_LANDMARKS), ('45385', r6m.LAST_LABEL)])
+
+        def read_as(view):
+            asked = {}
+            for question in view['clarifications']:
+                asked.setdefault(question['proposal_id'], []).append(question['question'])
+            return sorted((p['code'], p['bucket'], p['status'], tuple(sorted(asked.get(p['id'], ()))))
+                          for p in r6m.proposals(view))
+        self.assertEqual(read_as(detail), read_as(both))
+        (item,) = [p for p in r6m.proposals(detail) if participant(p)]
+        self.assertEqual((item['code'], item['bucket'], item['status']), ('45385', 'selected', 'needs_clarification'))
 
     def test_time_2_p6_fable_s_peer_review(self):
         detail = self.time_2(fable_peer=hp.peer_answer(codes=[('45385', r6m.LAST_LABEL)]))
@@ -129,11 +149,14 @@ class RetrievalTests(r6m.MeaningCase):
         self.assertEqual((item['code'], item['phases']), ('45385', {'fable': 'peer_review'}))
 
     def test_n1_in_the_reviewed_report(self):
-        """d14-1: N1 - Astra's 45385 on "Hot snare polypectomy failed." - with Corti's 45378 approved: the reviewed
-        report a reviewer signs lists no CMS rule pairing 45378 with a code no proposal carries."""
+        """d14-1: N1 - a participant's 45385 on "Hot snare polypectomy failed." - with Corti's 45378 approved: the
+        reviewed report a reviewer signs lists no CMS rule pairing 45378 with a code no proposal carries. Moved by the
+        completion repair (builder Q1, equal eligibility): Astra's first-reading 45385 is admitted and excluded with that
+        passage now, a proposal like Corti's own selection of it (tests/test_harness2_r6_meaning.py, D14), so the code
+        no proposal carries is a peer review's addition, which stays an alternative."""
         text = r6m.doc(r6m.COLON, r6m.SEEN, r6m.FAILED)
         encounter_id, detail = self.assert_as_alone(text, [('45378', r6m.CECUM)],
-                                                    astra=hp.reading(codes=[('45385', r6m.FAILED)]))
+                                                    astra_peer=hp.peer_answer(codes=[('45385', r6m.FAILED)]))
         (item,) = [p for p in r6m.proposals(detail) if p['code'] == '45378']
         made = self.post(f'/api/encounters/{encounter_id}/decisions',
                          {'proposal_id': item['id'], 'action': 'approve', 'acknowledgement': ACK,
@@ -146,9 +169,10 @@ class RetrievalTests(r6m.MeaningCase):
     def test_time_1_p1_no_code_is_counted_as_checked(self):
         """d14-2, display-4: Corti selects nothing and Astra's 45385 is the only code listed - an alternative, never
         checked - so reference validation reads as with Corti alone: not run, never "Done 1 code checked"."""
+        # moved by the completion repair (builder Q1, equal eligibility): a first reading's 45385 is a held proposal now
+        # (D14BlockerTests in tests/test_harness2_r6_meaning.py), so the only-an-alternative input is a peer review's
         text = r6m.earlier(r6m.LAST_LABEL)
-        _, detail = self.assert_as_alone(
-            text, astra=hp.reading(codes=[('45385', r6m.LAST_LABEL)], services=[r6m.colon_service(r6m.LAST_LABEL)]))
+        _, detail = self.assert_as_alone(text, fable_peer=hp.peer_answer(codes=[('45385', r6m.LAST_LABEL)]))
         block = detail['harness']['reference_validation']
         self.assertEqual((block['state'], block['codes_checked'], block['passages']), ('not_run', 0, 0))
         row = browser('rowOf(page(), "data-participant", "reference_validation")', detail)
@@ -161,11 +185,13 @@ class RetrievalTests(r6m.MeaningCase):
 
     def test_a_corti_candidate_beside_a_participant_s_copy(self):
         """d14-1: a code Corti lists without selecting it is never looked up, and a participant's copy of it changed
-        that (its row and the alternative each had the code's facts and passages, and 45378 the family rule)."""
+        that (its row and the alternative each had the code's facts and passages, and 45378 the family rule). Moved by
+        the completion repair (builder Q1, equal eligibility): a first reading's copy is admitted now - a proposal, read
+        as Corti's own selection of it is - so the copy that stays an alternative is a peer review's."""
         text = r6m.doc(r6m.COLON, r6m.SEEN, r6m.FAILED)
         with with_candidate('45385', r6m.SEEN):
             encounter_id, detail = self.assert_as_alone(text, [('45378', r6m.CECUM)],
-                                                        astra=hp.reading(codes=[('45385', r6m.FAILED)]))
+                                                        astra_peer=hp.peer_answer(codes=[('45385', r6m.FAILED)]))
         rows = sorted((p['key'].split(':')[0], p['code'], p['retrieval']) for p in r6m.proposals(detail)
                       if p['code'] == '45385')
         self.assertEqual(rows, [('alt', '45385', []), ('altp', '45385', [])])
@@ -194,13 +220,15 @@ class SummarySentenceTests(r6m.MeaningCase):
 
     def test_a_code_in_no_code_s_shape_is_counted_and_never_listed(self):
         """d14-3: 'W/LES(S)' is counted, never listed, beside a sentence that said every other code a participant
-        gives is listed as an alternative."""
+        gives is listed as an alternative. Moved by the completion repair (builder Q1, equal eligibility): Astra's
+        45385 on the failed polypectomy is admitted and read as Corti's own selection of it is (it was an
+        alternative); refutation cycle 4: held with its question (the observed-only exclusion abandoned)."""
         text = r6m.doc(r6m.COLON, r6m.SEEN, r6m.FAILED)
         encounter_id = self.scenario(text, [('45378', r6m.CECUM)],
                                      astra=hp.reading(codes=[('45385', r6m.FAILED), ('W/LES(S)', r6m.CECUM)]))
         detail = self.detail(encounter_id)
         self.assertEqual([(p['code'], p['bucket']) for p in r6m.proposals(detail)],
-                         [('45378', 'selected'), ('45385', 'alternative')])
+                         [('45378', 'selected'), ('45385', 'selected')])
         self.assertIn('It returned 1 code that cannot be listed', self.summary(detail))
         self.assertIn('one in neither shape is counted and never listed', self.summary(detail))
         self.assert_closing(detail)
@@ -371,15 +399,35 @@ class PeerOnlyBlockerTests(r6m.MeaningCase):
 
 class AlternativeRationaleTests(r6m.MeaningCase):
     def test_n1_the_failed_act_s_sentence(self):
-        encounter_id = self.scenario(r6m.doc(r6m.COLON, r6m.SEEN, r6m.FAILED), [('45378', r6m.CECUM)],
-                                     astra=hp.reading(codes=[('45385', r6m.FAILED)]))
+        """display-5: an alternative's rationale never calls a participant's verbatim quote an evidence passage. Moved
+        by the completion repair (owner directive 2026-11-06, item 3: equal eligibility; builder Q1): Astra's
+        first-reading 45385 on "Hot snare polypectomy failed." is admitted now and excluded with that passage, so its
+        rationale is the one Corti's own selection of the passage has, apart from who proposed it; the alternative this
+        pinned is a peer review's addition, whose rationale is still worded as display-5 requires."""
+        text = r6m.doc(r6m.COLON, r6m.SEEN, r6m.FAILED)
+        encounter_id = self.scenario(text, [('45378', r6m.CECUM)], astra=hp.reading(codes=[('45385', r6m.FAILED)]))
+        (item,) = [p for p in r6m.proposals(self.detail(encounter_id)) if p['code'] == '45385']
+        # refutation cycle 4 (closed 1, 2): the observed-only exclusion is abandoned - held with its question, as
+        # Corti's own selection of the passage is on the installed release
+        self.assertEqual((item['bucket'], item['status'], item['reinstatable']),
+                         ('selected', 'needs_clarification', False))
+        lead = 'Proposed by Astra (independent participant); Corti did not propose this code. '
+        self.assertTrue(item['rationale'].startswith(lead), item['rationale'])
+        # Corti selecting it too, on another request (a trailing blank line): an identical Corti request reuses the
+        # workspace's retained result, which selected 45378 alone
+        (corti_s,) = [p for p in r6m.proposals(self.corti_alone(text + '\n', [('45378', r6m.CECUM),
+                                                                              ('45385', r6m.FAILED)]))
+                      if p['code'] == '45385']
+        self.assertEqual(item['rationale'][len(lead):], corti_s['rationale'].split('. ', 1)[1])
+        # a peer review's addition stays an alternative, worded as display-5 requires (a third request, so neither
+        # retained answer is reused for it)
+        encounter_id = self.scenario(text + '\n\n', [('45378', r6m.CECUM)],
+                                     astra_peer=hp.peer_answer(codes=[('45385', r6m.FAILED)]))
         (item,) = [p for p in r6m.proposals(self.detail(encounter_id)) if p['code'] == '45385']
         self.assertEqual([e['text'] for e in item['evidence']], [r6m.FAILED])
         self.assertTrue(item['rationale'].endswith('Informational only. 1 passage of the document quoted verbatim.'),
                         item['rationale'])
         self.assertNotIn('evidence passage', item['rationale'])
-        # HARNESS.md P-ADMIT (2026-11-05): the failed act's sentence accounts for nothing left open, and its reason says
-        # so (D14's reason before)
         said = r6m.not_added_reason(item['exclusion_reason'])
         self.assertTrue(said, item['exclusion_reason'])
         self.assertIn(said, item['rationale'])

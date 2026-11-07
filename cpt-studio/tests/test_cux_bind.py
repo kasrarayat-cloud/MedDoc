@@ -579,8 +579,12 @@ class MaraEndToEndTests(SimpleTestCase):
                          {('biopsy', 'performed', by_size['2 mm']), ('snare', 'negated', by_size['2 mm']),
                           ('snare', 'performed', by_size['8 mm']), ('biopsy', 'negated', by_size['8 mm']),
                           ('clip', 'performed', by_size['8 mm'])})
+        # Completion repair (2026-11-06, U13; builder A): "from the proximal and distal esophagus" reads both sites, in
+        # the order written (the coordinated modifier shares the head), where the base had read the distal one only
         self.assertEqual({a.anatomy[0] if a.anatomy else '' for a in egd.acts if a.kind == 'biopsy'},
-                         {'distal esophagus', 'gastric antrum and body', 'duodenum'})
+                         {'proximal esophagus', 'gastric antrum and body', 'duodenum'})
+        self.assertIn(('proximal esophagus', 'distal esophagus'),
+                      [tuple(a.anatomy) for a in egd.acts if a.kind == 'biopsy'])
         self.assertNotIn('clip', [a.kind for a in egd.acts])
         self.assertLess(egd.scope_end, self.text.index('COLONOSCOPY - PERFORMED TODAY') + 1)
         self.assertEqual(service(inv, 'gi.office_em').status, 'negated')

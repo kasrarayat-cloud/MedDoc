@@ -132,6 +132,9 @@ class View:
     modifiers: tuple  # the modifier chosen on the current approval ('59' or 'XS'), () when none
     summary: str  # one plain sentence of CPT Studio's own reading of the documented service and act, '' when none
     answer: str  # the member answer that made it detail_unavailable ('not_documented' | 'cannot_confirm'), else ''
+    # the fact of the question that answer answered (completion repair 2026-11-06: the engine records it on the code it
+    # excludes, engine._MemberAnswers), '' when no answer made it detail_unavailable
+    answered: str = ''
 
 
 def stored_from(proposal, clarifications=None) -> Stored:
@@ -197,10 +200,23 @@ def service_answers(answers) -> set:
             if not _field(answer, 'code') and _field(answer, 'value') in UNAVAILABLE_ANSWERS}
 
 
+def answered_by_engine(p: Stored) -> tuple[str, str]:
+    """(fact, value) of the member answer the engine excluded ``p`` by (engine.answered_away: completion repair
+    2026-11-06, the answers read as an input), ('', '') for any other code."""
+    if not engine.answered_away(p):
+        return '', ''
+    marker = (p.support or {}).get(engine.ANSWERED_SUPPORT) or {}
+    return str(marker.get('fact') or ''), str(marker.get('value') or '')
+
+
 def counts(p: Stored, decided: Optional[Decided]) -> bool:
     """Whether ``p`` is decided like a code that is billed, before any member answer: a selected code not rejected, or
-    an excluded, reinstatable code with a current reinstatement (or the approval that rests on one)."""
+    an excluded, reinstatable code with a current reinstatement (or the approval that rests on one). A code the engine
+    excluded by a member's answer counts as the selected code it was (session decision (e): its presence still holds
+    every code it held), exactly as one this overlay leaves detail_unavailable does."""
     action = decided.action if decided is not None else ''
+    if answered_by_engine(p)[0]:
+        return True
     if p.bucket == SELECTED:
         return action != REJECT
     return p.bucket == EXCLUDED and p.reinstatable and action in (REINSTATE, APPROVE)
@@ -455,7 +471,9 @@ def summary(p: Stored, inventory) -> str:
     if state == 'uncertain':
         if reason == 'conflict':
             return f'The document states the {what} both as done and as not done.'
-        return f'The document does not establish the {what} as done on the date of service.'
+        # completion repair 2026-11-06 (U9): a reading that is not established is CPT Studio's, never a statement that
+        # the document leaves it out - only a passage says that (the not_performed sentences below quote one's reading)
+        return f'CPT Studio could not confirm the {what} as done on the date of service.'
     if state == 'not_performed':
         if reason == 'service_negative':
             return f'The document gives the {name} as {service.status}, not as done on the date of service.'
@@ -520,6 +538,10 @@ def review_view(stored: Sequence[Stored], decisions: Mapping, *, services=None, 
     # closed by an answered open question too.
     unavailable = {}
     for p in rows:
+        if answered_by_engine(p)[0]:
+            # the engine read the member's answer already (completion repair 2026-11-06): the same view, never read twice
+            unavailable[p.key] = answered_by_engine(p)
+            continue
         if p.key in counted:
             by = _unavailable_by(p, bases.get(p.code), readable, answered, counted=True,
                                  same_day=reinstated_procedures and _gated(p))
@@ -534,7 +556,11 @@ def review_view(stored: Sequence[Stored], decisions: Mapping, *, services=None, 
     # Whether a set is the engine's own (the selected codes, none rejected, none reinstated, none answered away): when it
     # is not, a check that could not be recomputed over it is marked stale rather than shown as current.
     selected = {p.key for p in rows if p.bucket == SELECTED}
-    moved, counted_moved = keys != selected, counted != selected
+    # The set the engine read its holds over: its selected codes and, where it read a member's answer, the codes it
+    # excluded by that answer, which it still counted (engine._MemberAnswers); its CMS endoscopic-family checks it read
+    # over the selected codes alone, the codes still in review.
+    engine_counted = selected | {p.key for p in rows if answered_by_engine(p)[0]}
+    moved, counted_moved = keys != selected, counted != engine_counted
     pfs = _pfs_rows(retrieval)
     sources = _sources(reference_sources)
     pfs_keys = {s.key for s in sources if s.kind == PFS}
@@ -561,7 +587,7 @@ def review_view(stored: Sequence[Stored], decisions: Mapping, *, services=None, 
                 blocker=(f'{p.code} was approved, but a detail it needs was answered as {words}: revoke the approval'
                          if action == APPROVE else ''),
                 recomputed=(), stale=(), modifier_review=None, modifiers=chosen, summary=summary(p, inventory),
-                answer=value)
+                answer=value, answered=fact)
             continue
         items = [dict(c) for c in p.checks]
         questions = [dict(q) for q in p.questions

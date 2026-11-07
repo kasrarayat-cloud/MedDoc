@@ -1,0 +1,24 @@
+{
+ "package": "Completion repair (owner directive 2026-11-06), builder R1: labelled procedure paragraphs and one section fact (studio.gi.structure; U2, U12). The H4 battery's movements against b452c6c42aa62037716b9e4fe2e3154a4f379f04 (the completion branch's stage-1 base, whose cpt-studio/studio is the installed fd8040d71e44's).",
+ "measured_after_code": true,
+ "provenance": "Not declared before the code: measured by python -m ops.gi4.battery --base b452c6c42aa6 --head <the r1 worktree> after the rules were written (battery-gate-1: 2 movements, 0 new violations, the base's 2 violations unchanged), and each movement read against its row's provisional truth before it was written here.",
+ "battery": [
+  [
+   "R8 D4 F1 EGD snare line, colonoscopy normal",
+   "43251",
+   "selected/needs_clarification",
+   "selected/ready"
+  ],
+  [
+   "R8 D4 F7N EGD biopsy line, colonoscopy denies",
+   "43239",
+   "selected/needs_clarification",
+   "selected/ready"
+  ]
+ ],
+ "why": {
+  "R8 D4 F1 EGD snare line, colonoscopy normal": "Truth done. The report's \"EGD:\" labelled paragraph (the gastroscope's own course, under \"Procedures: EGD and colonoscopy\") is released, so its \"The polyp was removed with a hot snare.\" is the EGD part's act and 43251 is READY on it; the declared fail-closed cost of P2 READ-HOLD's D4 (the act bound to no family, so the correct code was held too) no longer applies. The same sentence's 45385 (truth not_done) stays held.",
+  "R8 D4 F7N EGD biopsy line, colonoscopy denies": "Truth done. The \"EGD:\" labelled paragraph runs to the \"Colonoscopy:\" label line, so \"Biopsies were taken with cold forceps.\" is the EGD part's biopsy and 43239 is READY; the same sentence's 45380 (truth not_done: the colonoscopy says no biopsies were taken) stays held."
+ },
+ "freeze": "python -m ops.gi4.freeze --base b452c6c42aa6 --head <the r1 worktree> --quick: (a) no pattern of context.py or sections.py added, changed or removed (324 and 324); sections.layout over 427 texts identical; (b) the date channel over 3,123 text and member states: NEW-SEND 0, NEW-TAKE 0, NEW-HELD 0, SEND->ASK 0; (c) 1,212 requests unchanged; (d) no mention count changed. GATE HOLDS."
+}

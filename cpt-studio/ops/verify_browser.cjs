@@ -66,8 +66,14 @@
  *       affects lists C when one fact is asked for more than one code
  *   modifiers: {"45385": "XS"}   the modifier chosen in the review dialog when that code is approved: "59" or "XS"
  *   stop_and_resume: true        Stop the document while it processes, check the stopped state, then Resume it
+ *   addendum: {"fact": F, "code"?: C, "text": T, "expect_ready"?: [codes]}   the physician's addendum, added after the
+ *       details save through the panel's own control (a saved answer of the row withdrawn first by "Change this answer",
+ *       since the panel offers the addendum only on an open row): a new revision, read by the providers again, with no
+ *       earlier answer applied to it and expect_ready READY on it (completion repair 2026-11-06)
  * and the document-level key expected_no_em_questions: true (no office E/M question may be asked: no separate E/M
- * service is documented). review_plan.second_review is not carried out: it spends one bounded paid request, and the
+ * service is documented), and expected_codes: {"ready": [...], "not_ready": [...], "units": {code: n}, "complete":
+ * [families]} (completion repair 2026-11-06): written from sealed expectations, judged hard on the first assessment and,
+ * for not_ready, again after an addendum (checkExpectedCodes). review_plan.second_review is not carried out: it spends one bounded paid request, and the
  * walk holds the contract's `recheck` offer to its keys only (session decision (n), 2026-11-04).
  *
  * The document-level key expected_failure: "extraction_failed" (or another failed state: FAILED_STATES) walks a document
@@ -220,7 +226,7 @@ const PERCENT_OR_ETA = /\d\s*%|\bETA\b|\b(?:about|approximately|around|roughly|~
 const MODIFIER_CHOICES = new Set(['59', 'XS']);
 const MODIFIER_OPTIONS = ['', '59', 'XS'];  // select#reviewModifier (CORE-UX-DESIGN 8): none, 59 or XS; never both, never prefilled
 const DETAIL_VALUES = new Set(['use_document', 'not_documented', 'cannot_confirm']);
-const PLAN_KEYS = new Set(['reject', 'approve_codes', 'context_edit', 'second_review', 'details', 'modifiers', 'stop_and_resume']);
+const PLAN_KEYS = new Set(['reject', 'approve_codes', 'context_edit', 'second_review', 'details', 'modifiers', 'stop_and_resume', 'addendum']);
 // A modifier-shaped token a row might show although none is assigned.
 const MODIFIER_TOKEN = /\b(?:59|X[ESPU]|25|33|PT|5[23]|7[6-9])\b/;
 // The /ops/ surface (CORE-UX-DESIGN 5): every URL answers 404 to anyone who is not a platform operator.
@@ -557,10 +563,47 @@ function checkMustNotCode(list, enc) {
   });
 }
 
+// Completion repair (2026-11-06, item 7: "check omitted supported services and unsupported additions"): the document-level
+// key expected_codes {"ready": [codes], "not_ready": [codes], "units": {code: n}, "complete": [families]}, written from the
+// sealed expectations, judged HARD: each code of ready is a selected READY proposal (an omitted supported service fails);
+// no code of not_ready is (an unsupported addition fails); a code of units is READY at most once, with exactly that many
+// units; no selected proposal of a family in complete carries an incompleteness signal (a failing check or a modifier
+// consideration that reads incomplete, reduced, discontinued, 52 or 53). Read on the first assessment, and after an
+// addendum (prefix) for the not_ready codes its expect_ready does not name.
+function checkExpectedCodes(expected, enc, prefix = 'codes') {
+  if (!expected) return [];
+  const live = proposalsOf(enc).filter(p => p.bucket === 'selected' && !isExcluded(p));
+  const ready = code => live.filter(p => p.code === code && p.status === 'ready');
+  const shown = code => proposalsOf(enc).filter(p => p.code === code).map(p => `${p.bucket}/${p.status}`).join(', ') || 'not proposed';
+  const out = [];
+  for (const code of expected.ready || []) out.push(check(`${prefix}.ready.${code}`, 'hard', ready(code).length > 0, `${code}: ${shown(code)}`));
+  for (const code of expected.not_ready || []) out.push(check(`${prefix}.not_ready.${code}`, 'hard', ready(code).length === 0, `${code}: ${shown(code)}`));
+  for (const [code, units] of Object.entries(expected.units || {})) {
+    const rows = ready(code);
+    out.push(check(`${prefix}.units.${code}`, 'hard', rows.length <= 1 && rows.every(p => p.units === units),
+      `${rows.length} READY proposal(s) of ${code}, units ${JSON.stringify(rows.map(p => p.units))} (expected at most one, with ${units} unit(s))`));
+  }
+  for (const family of expected.complete || []) {
+    const flagged = live.filter(p => p.family === family
+      && ((p.checks || []).some(c => c.status !== 'pass' && INCOMPLETE_SIGNAL.test(`${c.id} ${c.label} ${c.detail}`))
+        || (p.modifier_considerations || []).some(m => INCOMPLETE_SIGNAL.test(m))));
+    out.push(check(`${prefix}.complete.${family}`, 'hard', flagged.length === 0,
+      flagged.length ? `incompleteness signalled on ${flagged.map(p => p.code).join(', ')}` : `no incompleteness signal in ${family}`));
+  }
+  return out;
+}
+
+// An expected fact and the open questions that ask it: the engine asks whether an act was performed as
+// 'performed_status', or as 'conflict:<act>' when two of its passages disagree about it (engine: an uncertain reconcile
+// match with a conflict), which asks the same fact (completion repair 2026-11-06, for expectations written blind).
+function asksFact(question, fact) {
+  return question.fact === fact || (fact === 'performed_status' && typeof question.fact === 'string' && question.fact.startsWith('conflict:'));
+}
+
 function checkClarifications(expected, enc) {
   const open = (enc.clarifications || []).filter(c => c.state === 'open');
   const out = (expected || []).map(({ fact, scope_in: scopes }) => {
-    const any = open.filter(c => c.fact === fact);
+    const any = open.filter(c => asksFact(c, fact));
     const hit = any.find(c => !scopes || scopes.includes(c.scope));
     return check(`clarification.${fact}`, 'hard', Boolean(hit),
       hit ? `open ${hit.scope} clarification: ${hit.question}` : any.length ? `open only with scope ${any.map(c => c.scope).join('|')} (expected ${scopes.join('|')})` : 'no open clarification for this fact');
@@ -819,7 +862,36 @@ function planProblems(doc, notes = {}, options = {}) {
     }
   }
   if (plan.stop_and_resume !== undefined && typeof plan.stop_and_resume !== 'boolean') problems.push(`${id}: review_plan.stop_and_resume must be true or false`);
+  if (plan.addendum !== undefined) {
+    const add = plan.addendum;
+    const where = `${id}: review_plan.addendum`;
+    if (!add || typeof add !== 'object' || Array.isArray(add)) problems.push(`${where} must be an object`);
+    else {
+      if (typeof add.fact !== 'string' || !add.fact) problems.push(`${where}.fact must name the detail the addendum answers`);
+      if (typeof add.text !== 'string' || !add.text.trim()) problems.push(`${where}.text must be the physician's addendum text`);
+      if (add.code !== undefined && (typeof add.code !== 'string' || !/^\d{5}$/.test(add.code))) problems.push(`${where}.code must be a five-digit code`);
+      if (add.expect_ready !== undefined && !(Array.isArray(add.expect_ready) && add.expect_ready.every(c => typeof c === 'string' && /^\d{5}$/.test(c)))) problems.push(`${where}.expect_ready must be a list of five-digit codes`);
+      const unknown = Object.keys(add).filter(k => !['fact', 'code', 'text', 'expect_ready'].includes(k));
+      if (unknown.length) problems.push(`${where} has an unknown key: ${unknown.join(', ')}`);
+    }
+  }
   if (doc?.expected_no_em_questions !== undefined && typeof doc.expected_no_em_questions !== 'boolean') problems.push(`${id}: expected_no_em_questions must be true or false`);
+  if (doc?.expected_codes !== undefined) {
+    const codes = doc.expected_codes;
+    const where = `${id}: expected_codes`;
+    const listOf = value => Array.isArray(value) && value.every(code => typeof code === 'string' && /^\d{5}$/.test(code)) && new Set(value).size === value.length;
+    if (!codes || typeof codes !== 'object' || Array.isArray(codes)) problems.push(`${where} must be an object`);
+    else {
+      const unknown = Object.keys(codes).filter(key => !['ready', 'not_ready', 'units', 'complete'].includes(key));
+      if (unknown.length) problems.push(`${where} has an unknown key: ${unknown.join(', ')}`);
+      for (const key of ['ready', 'not_ready']) if (codes[key] !== undefined && !listOf(codes[key])) problems.push(`${where}.${key} must be a list of distinct five-digit codes`);
+      const both = (codes.ready || []).filter(code => (codes.not_ready || []).includes(code));
+      if (both.length) problems.push(`${where} names ${both.join(', ')} both ready and not_ready`);
+      if (codes.units !== undefined && !(codes.units && typeof codes.units === 'object' && !Array.isArray(codes.units)
+        && Object.entries(codes.units).every(([code, n]) => /^\d{5}$/.test(code) && Number.isInteger(n) && n > 0))) problems.push(`${where}.units must map five-digit codes to a whole number of units`);
+      if (codes.complete !== undefined && !(Array.isArray(codes.complete) && codes.complete.every(f => typeof f === 'string' && /^gi\.[a-z_]+$/.test(f)))) problems.push(`${where}.complete must be a list of families`);
+    }
+  }
   if (doc?.expected_failure !== undefined) {
     if (!FAILED_STATES.has(doc.expected_failure)) problems.push(`${id}: expected_failure must be one of ${[...FAILED_STATES].join(', ')}`);
     // a document that must fail has nothing to decide, answer, stop or attach: a plan beside it would never be carried out
@@ -828,7 +900,7 @@ function planProblems(doc, notes = {}, options = {}) {
     if (options.acceptanceReviewer) problems.push(`${id}: expected_failure is walked in agent mode only (an acceptance reviewer only approves)`);
     // the walk of a failed document checks none of these, so a manifest carrying one would read as checked when it is not
     const unwalked = ['expected_extraction', 'expected_context', 'expected_routing', 'must_not_code', 'expected_clarifications',
-      'incomplete_services', 'author_expected_cpt'].filter(key => doc[key] !== undefined);
+      'incomplete_services', 'author_expected_cpt', 'expected_codes'].filter(key => doc[key] !== undefined);
     if (unwalked.length) problems.push(`${id}: a document with expected_failure carries ${unwalked.join(', ')}, which its walk never checks`);
   }
   if (options.acceptanceReviewer) {
@@ -2545,6 +2617,82 @@ function checkCustomerListing(downloads, cust) {
   });
 }
 
+// --- the physician's addendum (review_plan.addendum; completion repair 2026-11-06, U11) ---------------------------------
+
+// review_plan.addendum: {"fact": F, "code"?: C, "text": T, "expect_ready"?: [codes]} - the physician's own documentation,
+// added through the details panel's control as a new revision. The panel offers the addendum only on an OPEN row, and a
+// saved "Not documented" closes it, so a saved answer of the row is first withdrawn through the page's "Change this
+// answer" (a recompute: nothing sent) and the addendum is then added from the reopened row. The new revision is read by
+// the providers again (a paid stage), so this step runs only where a manifest names it.
+async function addAddendum(page, ctx, op, id, plan, cust, deadlineAt, history) {
+  const out = { record: { plan: { fact: plan.fact, code: plan.code || null, characters: Array.from(plan.text || '').length } }, error: null };
+  const rowsOf = c => (c?.details_needed || []).filter(row => row.fact === plan.fact && (!plan.code || (row.affects || []).includes(plan.code)));
+  out.before = { cust, op: await fetchOperator(op, ctx, id) };
+  let current = cust;
+  const saved = rowsOf(current).find(row => row.saved && row.saved.answer_id);
+  if (saved) {
+    const own = page.locator(`#detail-${attributeValue(saved.id)}-revoke`);
+    const earlier = page.locator(`#earlier-${attributeValue(saved.saved.answer_id)}-revoke`);
+    const button = (await own.count()) ? own : earlier;
+    if (!(await button.count())) { out.error = `no "Change this answer" control for the saved ${plan.fact} answer`; return out; }
+    await button.first().click({ timeout: UI_TIMEOUT_MS });
+    out.record.withdrew = saved.saved.answer_id;
+    const settled = await waitForProcessing(page, ctx, id, deadlineAt, history);
+    if (settled.timedOut) { out.error = 'the recompute after withdrawing the answer did not finish'; return out; }
+    current = await fetchCustomer(page, ctx, id);
+    out.reopened = { cust: current, op: await fetchOperator(op, ctx, id) };
+  }
+  const open = rowsOf(current).filter(row => !row.saved && row.addendum_allowed === true);
+  out.record.open_rows = open.length;
+  if (open.length !== 1) { out.error = `expected one open ${plan.fact} row that offers the addendum, found ${open.length}`; return out; }
+  const target = `/api/encounters/${id}/addenda`;
+  const seen = [];
+  const listen = request => { if (request.method() === 'POST' && pathnameOf(request.url()) === target) seen.push(request); };
+  page.on('request', listen);
+  try {
+    await page.click(`section.details-panel button.detail-addendum[data-detail="${attributeValue(open[0].id)}"]`, { timeout: UI_TIMEOUT_MS });
+    await page.fill('#addendumText', plan.text, { timeout: UI_TIMEOUT_MS });
+    await page.check('#addendumAttestation', { timeout: UI_TIMEOUT_MS });
+    const answered = settle(page.waitForResponse(r => r.request().method() === 'POST' && pathnameOf(r.url()) === target, { timeout: UI_TIMEOUT_MS }));
+    await page.click('#saveAddendum', { timeout: UI_TIMEOUT_MS });
+    const response = await answered.catch(() => null);
+    await page.waitForTimeout(600);  // a second request the page made for the same addendum is counted too
+    out.record.requests = seen.length;
+    out.record.http_status = response ? response.status() : null;
+  } finally {
+    page.off('request', listen);
+  }
+  if (!out.record.http_status || out.record.http_status >= 300) { out.error = `the addendum was not accepted (HTTP ${out.record.http_status})`; return out; }
+  const settled = await waitForProcessing(page, ctx, id, deadlineAt, history);
+  if (settled.timedOut) { out.error = 'processing after the addendum did not finish'; return out; }
+  out.after = { op: await fetchOperator(op, ctx, id), cust: await fetchCustomer(page, ctx, id) };
+  const rev = r => r && { id: r.id, number: r.number, total: r.revisions_total, kind: r.kind };
+  out.record.revision = { before: rev(out.before.op?.revision), after: rev(out.after.op?.revision) };
+  return out;
+}
+
+function checkAddendum(plan, step) {
+  const out = [];
+  out.push(check('addendum.added', 'hard', !step.error && step.record.requests === 1 && step.record.http_status >= 200 && step.record.http_status < 300,
+    step.error || `one POST /addenda for one addendum (HTTP ${step.record.http_status}${step.record.withdrew ? '; the saved answer was withdrawn first' : ''})`));
+  if (step.error || !step.after) return out;
+  const before = step.record.revision?.before;
+  const after = step.record.revision?.after;
+  out.push(check('addendum.new_revision', 'hard', Boolean(before && after) && after.kind === 'addendum' && after.id !== before.id
+    && after.total === before.total + 1 && after.number === before.number + 1,
+  `revision ${before?.number} of ${before?.total} -> ${after?.number} of ${after?.total} (${after?.kind})`));
+  const rows = (step.after.cust?.details_needed || []).filter(row => row.fact === plan.fact && (!plan.code || (row.affects || []).includes(plan.code)));
+  const applied = rows.filter(row => row.saved);
+  out.push(check('addendum.earlier_answer_not_applied', 'hard', applied.length === 0,
+    applied.length ? `${plan.fact} still shows a saved answer on the new revision` : `no answer of ${plan.fact} is applied to the new revision`));
+  for (const code of plan.expect_ready || []) {
+    const found = proposalsOf(step.after.op).filter(p => p.code === code && p.bucket === 'selected');
+    out.push(check(`addendum.ready.${code}`, 'hard', found.length === 1 && found[0].status === 'ready',
+      `${code} after the addendum: ${found.map(p => `${p.bucket}/${p.status}`).join(', ') || 'not proposed'}`));
+  }
+  return out;
+}
+
 // --- the details panel: answers as member context (directive section 4) ------------------------------------------------
 
 // The answers a document's plan makes through the details panel: review_plan.details as written, and a context_edit
@@ -2624,6 +2772,34 @@ function checkDetailsSave(answers, before, after, save, reloaded, account) {
       `${fresh.length} new run(s) after a save of ${member.length} "not documented" / "cannot confirm" answer(s)${onlyMember ? '' : ' (with context answers beside them)'}`));
   }
   return out;
+}
+
+// Completion repair (2026-11-06, U11): a "Not documented" or "Cannot confirm" answer given for a code re-makes the
+// assessment from the recorded runs (jobs.recompute_after_answers). Once that recompute settled, read from the operator
+// view: every proposal of the code is excluded, with the 'member.answer' check naming the answer
+// (engine._MemberAnswers._excluded), and no question of the answered fact is still open for it. state: {op} after the
+// save's processing settled (the reloaded one, when the walk reloaded).
+const MEMBER_ANSWER_LABELS = { not_documented: 'Not documented', cannot_confirm: 'Cannot confirm' };
+function checkMemberAnswers(answers, state) {
+  const op = state?.op;
+  if (!op) return [];
+  const proposals = proposalsOf(op);
+  return (answers || []).filter(answer => MEMBER_ANSWER_LABELS[answer.value] && answer.code).flatMap(answer => {
+    const label = MEMBER_ANSWER_LABELS[answer.value];
+    const rows = proposals.filter(p => p.code === answer.code);
+    const byAnswer = p => isExcluded(p) && (p.checks || []).some(c => c.id === 'member.answer' && c.status !== 'pass' && String(c.detail || '').includes(`"${label}"`));
+    const left = rows.filter(p => !byAnswer(p));
+    const ids = new Set(rows.map(p => p.id));
+    const open = (op.clarifications || []).filter(c => c.state === 'open' && c.fact === answer.fact && ids.has(c.proposal_id));
+    return [
+      check(`details.member_answer.${answer.code}.excluded`, 'hard', rows.length > 0 && left.length === 0,
+        !rows.length ? `no proposal of ${answer.code} in the recomputed assessment`
+          : left.length ? `${left.map(p => `${p.code} ${p.bucket}/${p.status}`).join(', ')}: not excluded by the member's "${label}" answer`
+            : `${rows.length} proposal(s) of ${answer.code} excluded by the member's "${label}" answer`),
+      check(`details.member_answer.${answer.code}.question_closed`, 'hard', open.length === 0,
+        open.length ? `${open.length} ${answer.fact} question(s) still open for ${answer.code}` : `no ${answer.fact} question open for ${answer.code}`),
+    ];
+  });
 }
 
 function summarize(enc) {
@@ -3834,6 +4010,7 @@ async function verifyDocument(page, opts, manifest, item, sink, sessions = {}) {
     else add(checkMustNotCode(doc.must_not_code, opView));
     add(checkClarifications(doc.expected_clarifications, opView));
     if (!editing) add(checkIncomplete(doc.incomplete_services, opView));
+    if (editing) { if (doc.expected_codes) add([skip('codes', 'judged after the context edit')]); } else add(checkExpectedCodes(doc.expected_codes, opView));
     add(checkProvenance(opView, trace, { expectHarness: opts.expectHarness }));
     add(checkNoDuplicateSends(opView));
     add([check('customer.processed', 'hard', CUSTOMER_DONE_STATES.has(processed.state) && !isBusy(processed), `state ${processed.state}, phase ${processed.progress?.phase}`)]);
@@ -3909,10 +4086,32 @@ async function verifyDocument(page, opts, manifest, item, sink, sessions = {}) {
           opView = reloaded.op;
         }
         add(checkDetailsSave(answers, before, after, save, reloaded, opts.account || sessions.account));
+        add(checkMemberAnswers(answers, reloaded || after));
       }
       cust = await fetchCustomer(page, ctx, id);
       dom = await readPage(page, ctx);
       add([...checkCustomerVsOperator(cust, opView), ...checkResultList(cust, dom), ...checkDetailsPanel(cust, dom)].map(a => ({ ...a, id: `after_details.${a.id}` })));
+    }
+
+    if (plan.addendum) {
+      if (stopRequested(opts.out)) throw new Error('stopped: a STOP file is present; the addendum was not added');
+      const step = await addAddendum(page, ctx, op, id, plan.addendum, cust, deadlineAt, record.state_history);
+      record.addendum = step.record;
+      add(checkAddendum(plan.addendum, step));
+      if (step.after) {
+        opView = step.after.op;
+        cust = step.after.cust;
+        saveSnapshot(record, docDir, opts.out, 'after_addendum', opView, 'operator');
+        await reloadPage(page, ctx);
+        await waitForResults(page).catch(() => {});
+        dom = await readPage(page, ctx);
+        add([...checkPipeline(opView), ...checkEvidenceExact(opView), ...checkMustNotCode(doc.must_not_code, opView), ...checkIncomplete(doc.incomplete_services, opView),
+          ...checkCustomerVsOperator(cust, opView), ...checkResultList(cust, dom)].map(a => ({ ...a, id: `after_addendum.${a.id}` })));
+        if (doc.expected_codes?.not_ready) {
+          const wanted = new Set(plan.addendum.expect_ready || []);
+          add(checkExpectedCodes({ not_ready: doc.expected_codes.not_ready.filter(code => !wanted.has(code)) }, opView, 'after_addendum.codes'));
+        }
+      }
     }
 
     const secondPlan = secondReviewPlan(doc);
@@ -4217,10 +4416,12 @@ module.exports = {
   checkDetailRows, checkNoEmQuestions, readCustomerDom, checkResultList, checkChecksPanel, checkDetailsPanel, checkProgressDom, foldedSteps,
   checkProgressFold, checkUploadAck, duplicateSends, checkNoDuplicateSends, jobsKept, checkReloadIdentity, checkStopResume, checkProvenance,
   checkAuthorization, checkArtifactsHidden, checkViewport, checkDecisionRows, checkCustomerDecisions, checkModifierDialogs,
-  expectedCustomerDownloads, checkCustomerDownloads, checkCustomerListing, detailsPlan, detailRowFor, checkDetailsSave, modifierFor,
+  expectedCustomerDownloads, checkCustomerDownloads, checkCustomerListing, detailsPlan, detailRowFor, checkDetailsSave, checkMemberAnswers, checkExpectedCodes, modifierFor,
   mergeSamples, sampleProgress, scanDocument, checkBundle, customerSummary, isBusy, saved, OPS_GET_PATHS, OPS_POST_PATHS, REMOVED_PATHS,
   // the 2026-11-05 acceptance walk's corrections: the compact line, a model-less participant, the upload key, a failed document
   checkCompactProgress, PANEL_PHASES, MODELLESS_PARTICIPANTS, uploadCarriedClientKey, checkFailure, FAILED_STATES, FAILURE_WALKED,
+  // the completion repair's physician addendum step (review_plan.addendum)
+  checkAddendum,
 };
 
 if (require.main === module) {

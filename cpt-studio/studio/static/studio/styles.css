@@ -259,3 +259,15 @@
 .details-actions .button,.result-actions .button{flex:1 1 auto}
 .result-head .status{margin-left:0}
 }
+/* completion repair (2026-11-06, U10/U11): a question's statement and passages; earlier answers, kept and not applied */
+.detail-question{margin:8px 0 0}
+.detail-statement{font-size:12px;color:#3d4a36;margin:0}
+.detail-passages-label{font-size:11px;color:var(--muted);margin:6px 0 2px}
+.detail-passages{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.detail-passages .detail-quote{margin-top:0}
+.detail-page{display:inline-block;font-size:10px;color:var(--muted);margin-left:6px}
+.earlier-answers{margin-top:14px;border-top:1px solid #ece5d4;padding-top:10px}
+.earlier-answers h3{font-size:12px;margin:0 0 6px}
+.earlier-answers ul{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.earlier-answer{display:grid;gap:2px;font-size:12px;overflow-wrap:anywhere}
+.earlier-why{color:var(--muted);font-size:11px}

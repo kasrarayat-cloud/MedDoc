@@ -161,7 +161,7 @@ HARNESS_REPAIR_PINNED = {
 # Harness repair 3 (2026-11-05, second message; cpt-studio-validation@8, gi-services@5, gi-routing@7 kept) computes these.
 # With the three labels set back to installed e6d451f03d86's every case equals HARNESS_REPAIR_PINNED above, byte for
 # byte: on these Corti-only cases the repair moves the labels and nothing else (ServedLabelParity3Tests).
-PINNED = {
+HARNESS_REPAIR_3_PINNED = {
     'a-conflict-in-the-record': '1ced964ed8d58c29bb808880287fbb409f52850c67242a99231ad1722675cd90',
     'member-date-conflict-answered': 'b213b8002bfb5af16ac96a913b6a07c0f4ad4c784f6805518d04b151c366524a',
     'member-date-conflict-failed': 'a06d4d8f47fc76b9e8d8b4f2ed9fdb6a4723a05d07881dccdc554ee13e1bf483',
@@ -174,6 +174,32 @@ PINNED = {
     'two-codes-a-plan-code-and-hcpcs': 'a63817cea859ec3c37f7bfe35e8841940196b5ff4be45c7a015a0b5868990a8c',
     'visit-beside-a-procedure': 'dd5138e408497a1b0459595584188fede5c01e579de33fb6239f57ccd50a83d2',
 }
+
+# The completion repair (owner directive 2026-11-06; cpt-studio-validation@9, gi-services@6, gi-routing@9, gi-catalogue@2)
+# computes these. With its labels set back to installed fd8040d71e44's (and the catalogue's to @1, which every release
+# before it carried) every case equals HARNESS_REPAIR_3_PINNED, byte for byte: on these Corti-only cases the repair moves
+# the labels and nothing else (ServedLabelParityCompletionTests; measured on the base tree and the head tree alike).
+PINNED = {
+    'a-conflict-in-the-record': '1dc5c25098fda55e5f8660d3d31914ac8d389c541284c8b06248d79129854659',
+    'member-date-conflict-answered': '49502beee7ce4660678c5d5b795e5f5dc8783b3e5fee2b007bcd53a28dd7a097',
+    'member-date-conflict-failed': '724c4ba36d150dc69b9a923dc3840d108fd66ab5a0e42f828756d657f280516e',
+    'polypectomy-and-a-candidate': '8cec276db7ca1df977c6bff910838262e26933824dfc779811af1e2e85c3859e',
+    'provider-failed': 'b216568a2aa496da3af152c4168c65f1e4e93bdf4231aa6ae05fac608dff93a0',
+    'provider-not-run': 'dee787d3d34e69d18aadfa4396aa42dcb638bfd7f538f82f62398a5a5e69cc77',
+    'provider-unknown': '535726dd738d0775057fc05996b964cdd3422764bc3dd840323544592210200b',
+    'response-refused': '1bd75462a719548609660a873e5979cd2e3ff9b8c6efb26063171fc251548a0d',
+    'second-review': '60977c3b21495cab59e7147f508660879e4651631cf503b8937ebddea7135825',
+    'two-codes-a-plan-code-and-hcpcs': '76427c6f5598cbcd2f7564502fd2f2d5a7263a381f7c9030bc6f6fef26e6de2e',
+    'visit-beside-a-procedure': 'bbefed477b2e7e348c6a1aa7f040ae4b803982059685eef829d17db372b95261',
+
+}
+def _earlier_catalogue(stack):
+    """Every release before the completion repair reconciled with gi-catalogue@1: the older parity tests set it back."""
+    from studio.gi import catalogue
+    from studio.validation import reconcile
+    stack.enter_context(mock.patch.object(catalogue, 'CATALOGUE_VERSION', 'gi-catalogue@1'))
+    stack.enter_context(mock.patch.object(reconcile, 'SOURCE', 'cpt-studio:gi-catalogue@1'))
+    return stack
 
 
 class ServedLabelParityTests(SimpleTestCase):
@@ -188,7 +214,7 @@ class ServedLabelParityTests(SimpleTestCase):
         stack = contextlib.ExitStack()
         for (module, name), value in HARNESS_REPAIR_INSTALLED_LABELS.items():
             stack.enter_context(mock.patch.object(module, name, value))
-        return stack
+        return _earlier_catalogue(stack)
 
     def test_every_case_but_the_refused_response_is_the_served_engines_byte_for_byte(self):
         with self.served():
@@ -222,12 +248,31 @@ class ServedLabelParity3Tests(SimpleTestCase):
         with contextlib.ExitStack() as stack:
             for (module, name), value in HARNESS_REPAIR_3_INSTALLED_LABELS.items():
                 stack.enter_context(mock.patch.object(module, name, value))
+            _earlier_catalogue(stack)
             for name, kwargs in cases().items():
                 self.assertEqual(sha256_json(assess(**kwargs)), HARNESS_REPAIR_PINNED[name], name)
         # and the labels moved every digest: no case is pinned twice by accident
         for name, kwargs in cases().items():
             self.assertNotEqual(sha256_json(assess(**kwargs)), HARNESS_REPAIR_PINNED[name], name)
 
+
+class ServedLabelParityCompletionTests(SimpleTestCase):
+    """The completion repair's I1 declaration (HARNESS.md, "Completion repair, 2026-11-06"): with its four reader labels set
+    back to installed fd8040d71e44's and the catalogue's to @1, every Corti-only case is byte-identical to harness repair
+    3's pin - the readers' repairs, equal eligibility, member answers and the dilation technique move nothing these
+    assessments record but their labels."""
+
+    def test_every_case_is_the_installed_engines_byte_for_byte(self):
+        import contextlib
+        from tests.test_gi4_state import COMPLETION_INSTALLED_LABELS
+        with contextlib.ExitStack() as stack:
+            for (module, name), value in COMPLETION_INSTALLED_LABELS.items():
+                stack.enter_context(mock.patch.object(module, name, value))
+            _earlier_catalogue(stack)
+            for name, kwargs in cases().items():
+                self.assertEqual(sha256_json(assess(**kwargs)), HARNESS_REPAIR_3_PINNED[name], name)
+        for name, kwargs in cases().items():
+            self.assertNotEqual(sha256_json(assess(**kwargs)), HARNESS_REPAIR_3_PINNED[name], name)
 
 class PinnedParityTests(SimpleTestCase):
     def test_every_case_is_pinned(self):

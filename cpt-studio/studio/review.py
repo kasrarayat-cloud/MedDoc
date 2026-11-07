@@ -30,8 +30,9 @@ from . import audit, candidates, participants
 from .gi.context import charge_date_problem
 from .participants import loop as participant_loop
 from .models import (Assessment, Clarification, Decision, DecisionInvalidation, Encounter, FindingConfirmation, Job,
-                     Proposal, ProviderExchange, ProviderRun, SourceRevision, ToolCall)
+                     MemberAnswer, Proposal, ProviderExchange, ProviderRun, SourceRevision, ToolCall)
 from .types import sha256_json, to_jsonable
+from .validation import questions
 
 log = logging.getLogger(__name__)
 
@@ -184,6 +185,12 @@ NOT_FINAL_DECISION = ('The peer reviews of this document have not finished: a de
 NOT_FINAL_BLOCKER = 'The peer reviews have not finished: decisions are recorded on the final assessment'
 # refutation round 2, L7-02: an upload date that chose between the dates the document states is asked back as a
 # confirmation (answers.date_confirmation_open); the approved export waits for it
+# Integration of refutation cycle 2 (the withdrawal window, answers W1): the stored assessment read a member's answer
+# that no longer stands - withdrawn or superseded - and the recompute that applies the change has not run (queued,
+# stopped or failed). Every surface reads that stored assessment until it does; approving and exporting meanwhile
+# could omit a code on the strength of an answer the member took back, so readiness holds.
+STALE_ANSWER_BLOCKER = ('A detail answer was withdrawn or changed and the re-assessment that applies it has not '
+                        'finished')
 DATE_CONFIRMATION_BLOCKER = ('The date of service entered at upload chooses between the dates the document states and '
                              'has not been confirmed')
 
@@ -237,30 +244,23 @@ def _current_decision(proposal):
 DETAIL_UNAVAILABLE = 'detail_unavailable'  # review_view.DETAIL_UNAVAILABLE
 
 
-def _member_answers(assessment):
-    """The member-answer effects (CORE-UX-DESIGN.md 6; P5's details flow): the standing member answers of
-    ``assessment``'s revision - MemberAnswer rows no MemberAnswerRevocation withdrew (answers.saved_answers) - each a
-    mapping with ``code``, ``family``, ``fact`` and ``value`` ('not_documented' | 'cannot_confirm'), bound to the
-    (code, family, fact) it was asked of and never to a proposal key (lesson EV-1); ``code`` is '' for a documented
-    service's question. The review overlay applies them at read time (review_view.review_view: a code's answered
-    question makes it detail_unavailable - excluded, never approvable, nothing to decide - until the answer is
-    withdrawn; a service's closes that question only), so every reader of the overlay - the actions, readiness, coding
-    completeness, the encounter state, both APIs and the reports - reads the same answers."""
-    from . import answers  # local import: answers imports this module
-    return answers.saved_answers(assessment)
+def _standing(assessment):
+    """The standing member answers of ``assessment``'s revision (MemberAnswer rows no MemberAnswerRevocation withdrew),
+    oldest first."""
+    return list(MemberAnswer.objects.filter(revision_id=assessment.revision_id, revocation__isnull=True)
+                .select_related('answered_by').order_by('answered_at', 'pk'))
 
 
-def effective_view(assessment, current=None):
-    """{proposal key: review_view.View} of ``assessment`` as its current decisions and member answers leave it
-    (studio.validation.review_view): each proposal's status, checks, open questions, approve gate, readiness blocker,
-    modifier review and summary. With no decision and no answer every view equals its stored proposal. ``current``:
-    current_decisions(assessment), when the caller has it. {} for no assessment, or one never persisted."""
+def _overlay_inputs(assessment, current):
+    """(proposals, stored rows, decided, keyword arguments) review_view.review_view reads ``assessment`` with: its stored
+    rows as they are. A code the engine excluded by a member's answer (questions.answered_away) reads as stored until
+    the recompute an answer's withdrawal queued has run, whatever surface reads it - one source of truth (refutation
+    cycle 2, answers W1, W5, W6: the cycle-1 reopen made this one row disagree with the five readers of the stored
+    bucket). While that recompute is queued or stopped, a withdrawn answer the assessment read stays in effect; the
+    recompute is a visible job with Stop and Resume (API.md, the recorded limitation)."""
     from .jobs import context_service_date  # local import: jobs imports this module
     from .validation import review_view  # local import: the validation layer is only needed with an assessment
 
-    if assessment is None or not getattr(assessment, 'pk', None):
-        return {}
-    current = current_decisions(assessment) if current is None else current
     proposals = list(assessment.proposals.all())
     rows = {}
     for clarification in assessment.clarifications.all():  # every state: the open ones are the questions shown
@@ -273,10 +273,154 @@ def effective_view(assessment, current=None):
     completeness = assessment.completeness or {}
     # an inconsistent documented-service reading decided nothing (engine: usable is None), and nothing re-reads it here
     services = None if completeness.get('inventory_problems') else assessment.services
-    return review_view.review_view(stored, decided, services=services, retrieval=assessment.retrieval,
-                                   reference_sources=assessment.reference_sources,
-                                   service_date=context_service_date(assessment.context),
-                                   answers=_member_answers(assessment))
+    return proposals, stored, decided, {'services': services, 'retrieval': assessment.retrieval,
+                                        'reference_sources': assessment.reference_sources,
+                                        'service_date': context_service_date(assessment.context)}
+
+
+def question_pairs(assessment, proposals, views):
+    """(member key, questions.instance) of every open question ``assessment`` asks as ``views`` leave it - each
+    proposal's (its view's questions: the stored ones as the decisions leave them and the ones the overlay adds), with
+    the passages its stored support and evidence give (questions.passages, re-checked against the revision's text),
+    then each documented service's open question (with its service's passages: questions.service_passages) and the
+    encounter's (none). The one reading of "the question a member is asked": the details rows (studio/answers.py)
+    record it with an answer (asked_fingerprints), and answer_states binds by it, exactly as the engine binds an answer
+    to the questions it asks (engine._MemberAnswers)."""
+    text = assessment.revision.text
+    acts = questions.acts_of(assessment.services)
+    pairs = []
+    for proposal in sorted(proposals, key=lambda item: item.position):
+        view = views.get(proposal.key)
+        for item in (view.questions if view is not None else ()):
+            family = item.get('family') or proposal.family
+            shown = questions.question_passages(assessment.services, family, item.get('fact') or '', proposal.evidence,
+                                                proposal.support, text, acts)
+            pairs.append((questions.member_key(proposal.code, family, item.get('fact')),
+                          questions.instance(item.get('scope'), family, item.get('fact'), proposal.code,
+                                             item.get('question'), item.get('reason'), shown)))
+    for row in assessment.clarifications.filter(state=Clarification.OPEN, proposal__isnull=True).order_by('created_at',
+                                                                                                       'pk'):
+        shown = (questions.service_passages(assessment.services, row.family, row.fact, text) if row.scope == 'service'
+                 else ())
+        pairs.append((questions.member_key('', row.family, row.fact),
+                      questions.instance(row.scope, row.family, row.fact, '', row.question, row.reason, shown)))
+    return pairs
+
+
+def answer_states(assessment, current=None, inputs=None):
+    """(applied, bound, earlier) of the standing member answers of ``assessment``'s revision (completion repair
+    2026-11-06, U11): ``applied``, those the assessment itself read (each closes a stored question of its,
+    Clarification.answer: engine._MemberAnswers excluded the code it answers); ``bound``, those that answer a question
+    the assessment asks - the same (code, family, fact) with the same fingerprint, or by that key alone for an answer
+    recorded in the earlier form (questions.bind; refutation cycle 2, answers W2 and W4) - read against the questions
+    the overlay asks open with the current decisions alone, which the review overlay applies at read time (an
+    assessment made before the answer, until its recompute), and then against the questions the assessment closed with
+    another member's answer that no longer stands (_closed_pairs: a value superseded since, which the overlay leaves as
+    stored until the recompute that reads the new one has run); ``earlier``, (answer, why) of every other one: kept,
+    shown as an earlier answer and never applied (answered to a question no longer asked, or asked differently).
+    ([], [], []) for none. ``inputs``: _overlay_inputs(assessment, current), when the caller has them."""
+    from .validation import review_view  # local import: the validation layer is only needed with an assessment
+
+    if assessment is None or not getattr(assessment, 'pk', None):
+        return [], [], []
+    standing = _standing(assessment)
+    if not standing:
+        return [], [], []
+    current = current_decisions(assessment) if current is None else current
+    read = set(assessment.clarifications.filter(state=Clarification.ANSWERED, answer__isnull=False)
+               .values_list('answer_id', flat=True))
+    applied = [answer for answer in standing if answer.pk in read]
+    rest = [answer for answer in standing if answer.pk not in read]
+    if not rest:
+        return applied, [], []
+    proposals, stored, decided, kwargs = _overlay_inputs(assessment, current) if inputs is None else inputs
+    views = review_view.review_view(stored, decided, **kwargs, answers=())
+    bound, earlier = questions.bind(rest, questions.group(question_pairs(assessment, proposals, views)))
+    unasked = [answer for answer, why in earlier if why == questions.NO_LONGER_ASKED]
+    if unasked:
+        # refutation cycle 2 (answers W6; cycle 1's F5): an answer to a question the assessment closed with another
+        # member's answer that no longer stands - its value superseded, the recompute that reads the new one queued or
+        # stopped - answers a question the stored assessment asks: never "no longer asked". Nothing is re-asked; the
+        # code reads as stored (its stored exclusion stands) until that recompute has run.
+        superseding, _ = questions.bind(unasked, questions.group(_closed_pairs(assessment, proposals)))
+        if superseding:
+            ids = {answer.pk for answer in superseding}
+            bound += superseding
+            earlier = [(answer, why) for answer, why in earlier if answer.pk not in ids]
+    return applied, bound, earlier
+
+
+def _closed_pairs(assessment, proposals):
+    """(member key, questions.instance) of every question ``assessment`` closed with a member's answer it read
+    (Clarification ANSWERED with ``answer``: engine._MemberAnswers), worded and with its passages exactly as
+    question_pairs reads an open one, so its fingerprint is the one the engine bound that answer by. Read for an answer
+    saved to such a question since (answer_states). One query."""
+    text = assessment.revision.text
+    acts = questions.acts_of(assessment.services)
+    by_pk = {proposal.pk: proposal for proposal in proposals}
+    pairs = []
+    for row in assessment.clarifications.filter(state=Clarification.ANSWERED, answer__isnull=False) \
+            .order_by('created_at', 'pk'):
+        proposal = by_pk.get(row.proposal_id) if row.proposal_id else None
+        if proposal is not None:
+            family = row.family or proposal.family
+            shown = questions.question_passages(assessment.services, family, row.fact, proposal.evidence,
+                                                proposal.support, text, acts)
+            pairs.append((questions.member_key(proposal.code, family, row.fact),
+                          questions.instance(row.scope, family, row.fact, proposal.code, row.question, row.reason,
+                                             shown)))
+        elif not row.proposal_id:
+            shown = (questions.service_passages(assessment.services, row.family, row.fact, text)
+                     if row.scope == 'service' else ())
+            pairs.append((questions.member_key('', row.family, row.fact),
+                          questions.instance(row.scope, row.family, row.fact, '', row.question, row.reason, shown)))
+    return pairs
+
+
+def asked_fingerprints(assessment, current=None) -> dict:
+    """{member key (code, family, fact): fingerprint} of every question ``assessment`` asks open, as the overlay asks
+    it with the current decisions alone (question_pairs): what a member's answer saved now binds to (answers.py)."""
+    from .validation import review_view  # local import: the validation layer is only needed with an assessment
+
+    if assessment is None or not getattr(assessment, 'pk', None):
+        return {}
+    current = current_decisions(assessment) if current is None else current
+    proposals, stored, decided, kwargs = _overlay_inputs(assessment, current)
+    views = review_view.review_view(stored, decided, **kwargs, answers=())
+    return questions.group(question_pairs(assessment, proposals, views))
+
+
+def _answer_effect(answer) -> dict:
+    return {'code': answer.code, 'family': answer.family, 'fact': answer.fact, 'value': answer.value,
+            'answer_id': str(answer.pk)}
+
+
+def _member_answers(assessment, current=None, inputs=None):
+    """The member-answer effects the review overlay applies at read time (CORE-UX-DESIGN.md 6; P5's details flow):
+    the standing answers of ``assessment``'s revision that answer a question it asks open, each bound to that question -
+    its (code, family, fact) and fingerprint (answer_states' ``bound``; completion repair 2026-11-06), never to a
+    proposal key (lesson EV-1) - as mappings with ``code`` ('' for a documented service's question), ``family``,
+    ``fact`` and ``value`` ('not_documented' | 'cannot_confirm'). An answer the assessment read itself is in its rows
+    already (engine._MemberAnswers), and one answered to another question is never applied. The overlay (review_view:
+    a code's answered question makes it detail_unavailable - excluded, never approvable, nothing to decide - until the
+    answer is withdrawn; a service's closes that question only) is read by every reader - the actions, readiness,
+    coding completeness, the encounter state, both APIs and the reports - so they all read the same answers."""
+    return [_answer_effect(answer) for answer in answer_states(assessment, current, inputs)[1]]
+
+
+def effective_view(assessment, current=None):
+    """{proposal key: review_view.View} of ``assessment`` as its current decisions and member answers leave it
+    (studio.validation.review_view): each proposal's status, checks, open questions, approve gate, readiness blocker,
+    modifier review and summary. With no decision and no answer every view equals its stored proposal. ``current``:
+    current_decisions(assessment), when the caller has it. {} for no assessment, or one never persisted."""
+    from .validation import review_view  # local import: the validation layer is only needed with an assessment
+
+    if assessment is None or not getattr(assessment, 'pk', None):
+        return {}
+    current = current_decisions(assessment) if current is None else current
+    inputs = _overlay_inputs(assessment, current)
+    _, stored, decided, kwargs = inputs
+    return review_view.review_view(stored, decided, **kwargs, answers=_member_answers(assessment, current, inputs))
 
 
 def open_questions_of(assessment, views=None):
@@ -288,7 +432,7 @@ def open_questions_of(assessment, views=None):
 
     views = effective_view(assessment) if views is None else views
     proposals = {proposal.pk: proposal for proposal in assessment.proposals.all()}
-    closed = review_view.service_answers(_member_answers(assessment))
+    closed = review_view.service_answers(_member_answers(assessment))  # bound to the question it answered (U11)
     out = []
     for row in assessment.clarifications.filter(state=Clarification.OPEN).order_by('created_at', 'pk'):
         entry = {'id': str(row.pk), 'scope': row.scope, 'family': row.family, 'fact': row.fact,
@@ -335,15 +479,8 @@ def _page_of(pages, offset):
 
 def act_index(services):
     """{act id: act} of a recorded documented-service reading (Assessment.services): what evidence_spans reads of
-    each act a code was matched to."""
-    out = {}
-    listed = services.get('services') if isinstance(services, dict) else None
-    for service in listed if isinstance(listed, list) else []:
-        if isinstance(service, dict):
-            for act in service.get('acts') or []:
-                if isinstance(act, dict) and isinstance(act.get('id'), str):
-                    out[act['id']] = act
-    return out
+    each act a code was matched to (questions.acts_of: one reading, which a question's passages read too)."""
+    return questions.acts_of(services)
 
 
 def evidence_spans(proposal, text, pages, acts):
@@ -719,18 +856,71 @@ def _clarification_identity(clarification):
     return (clarification.scope, clarification.family, clarification.fact, proposal.fingerprint if proposal else '')
 
 
-def _withdraw_superseded(encounter, assessment, raised):
-    """Withdraw earlier open clarifications that this assessment does not raise again."""
+def _withdraw_superseded(encounter, assessment, raised, answered=()):
+    """Withdraw earlier open clarifications that this assessment does not raise again - except one a member answered on
+    its own assessment, with an answer this one read (``answered``: the MemberAnswers _close_answered closed this
+    assessment's questions with): that question is closed with its answer (completion repair 2026-11-06, U11)."""
     reraised = {_clarification_identity(item) for item in raised}
+    by = {}
+    for answer in answered:
+        by.setdefault((answer.assessment_id, questions.member_key(answer.code, answer.family, answer.fact)), answer)
     withdrawn = 0
     earlier = (encounter.clarifications.select_related('proposal')
                .filter(state=Clarification.OPEN).exclude(assessment=assessment))
     for clarification in earlier:
+        proposal = clarification.proposal
+        key = questions.member_key(proposal.code if proposal is not None else '',
+                                   clarification.family or (proposal.family if proposal is not None else ''),
+                                   clarification.fact)
+        answer = by.get((clarification.assessment_id, key))
+        if answer is not None:
+            clarification.state, clarification.answer = Clarification.ANSWERED, answer
+            clarification.save(update_fields=['state', 'answer'])
+            continue
         if _clarification_identity(clarification) not in reraised:
             clarification.state = Clarification.WITHDRAWN
             clarification.save(update_fields=['state'])
             withdrawn += 1
     return withdrawn
+
+
+def _close_answered(encounter, revision, result, raised):
+    """Close each question of this assessment that a member's answer the engine read answers (completion repair
+    2026-11-06, U11; engine._MemberAnswers records them in completeness['member_answers']['applied']): ANSWERED, with
+    the answer. Only an answer of this encounter and revision that still stands is read; returns those MemberAnswers."""
+    record = result.completeness.get('member_answers') if isinstance(result.completeness, dict) else None
+    applied = [entry for entry in ((record or {}).get('applied') or ()) if isinstance(entry, dict)]
+    ids = []
+    for entry in applied:
+        try:
+            ids.append(uuid.UUID(str(entry.get('answer'))))
+        except ValueError:
+            continue
+    if not ids:
+        return []
+    found = {str(answer.pk): answer for answer in MemberAnswer.objects.filter(
+        pk__in=ids, encounter=encounter, revision=revision, revocation__isnull=True)}
+    used = []
+    for row in raised:
+        proposal = row.proposal
+        for entry in applied:
+            answer = found.get(str(entry.get('answer')))
+            if answer is None or row.fact != entry.get('fact') or row.state != Clarification.OPEN:
+                continue
+            if entry.get('scope') == 'proposal':
+                matched = (proposal is not None and proposal.key in (entry.get('proposals') or ())
+                           and proposal.code == entry.get('code')
+                           and (row.family or proposal.family) == entry.get('family'))
+            else:
+                matched = (proposal is None and row.scope == 'service' and not entry.get('code')
+                           and row.family == entry.get('family'))
+            if matched:
+                row.state, row.answer = Clarification.ANSWERED, answer
+                row.save(update_fields=['state', 'answer'])
+                if answer not in used:
+                    used.append(answer)
+                break
+    return used
 
 
 def _fact_value(fact):
@@ -913,7 +1103,8 @@ def persist_assessment(*, encounter, revision, context, routing_run, provider_ru
             for position, item in enumerate(result.proposals)])
         proposals = {row.key: row for row in rows}
         raised = _create_clarifications(locked, assessment, result, proposals)
-        withdrawn = _withdraw_superseded(locked, assessment, raised)
+        answered = _close_answered(locked, revision, result, raised)  # completion repair 2026-11-06 (U11)
+        withdrawn = _withdraw_superseded(locked, assessment, raised, answered)
         # Decisions carry between FINAL assessments only (HARNESS.md 12.1; refutation r1, Q1). An assess #1 whose peer
         # stages are owed neither carries nor invalidates one: it does not have the codes a peer review adds, so a code
         # whose checks read them (an endoscopic base, say) would lose its approval there for good. The final assessment
@@ -972,7 +1163,12 @@ def decidable(proposal) -> bool:
 
 def _reviewable(proposal, decision):
     """Selected proposals need an approve or reject. A documentation check's exclusion (reinstatable) needs the
-    reviewer to confirm it or to reinstate the code and decide it; a reinstated exclusion needs an approve or reject."""
+    reviewer to confirm it or to reinstate the code and decide it; a reinstated exclusion needs an approve or reject. A
+    selected code the engine excluded by a member's answer (questions.answered_away; completion repair 2026-11-06) is
+    read as the selected code it was, whose detail the member answered as unavailable: resolved, needing no decision
+    (session decision (f)), exactly as one the review overlay excludes by an answer."""
+    if questions.answered_away(proposal):
+        return True
     return proposal.bucket == SELECTED or (proposal.bucket == EXCLUDED
                                            and (decision is not None or proposal.reinstatable))
 
@@ -986,6 +1182,20 @@ def _could_bill(proposal, decision):
     return decision.action in (APPROVE, REINSTATE)
 
 
+def _reads_a_withdrawn_answer(assessment) -> bool:
+    """Whether ``assessment`` was made with a member's answer that no longer stands (STALE_ANSWER_BLOCKER): a question it
+    closed with an answer (Clarification.answer) or a code it excluded by one (support 'answered') names an answer that
+    is not among its revision's standing answers. Two queries."""
+    standing = {answer.pk for answer in _standing(assessment)}
+    if assessment.clarifications.filter(answer__isnull=False).exclude(answer__in=standing).exists():
+        return True
+    for proposal in assessment.proposals.all():
+        marker = (proposal.support or {}).get(questions.ANSWERED_SUPPORT) if isinstance(proposal.support, dict) else None
+        if isinstance(marker, dict) and {str(item) for item in marker.get('answers') or ()} - {str(pk) for pk in standing}:
+            return True
+    return False
+
+
 def _assessment_blockers(encounter, assessment):
     from . import answers  # local import: the details flow reads this module
     blockers = []
@@ -995,6 +1205,8 @@ def _assessment_blockers(encounter, assessment):
         blockers.append(DATE_CONFIRMATION_BLOCKER)
     if assessment.context_id != encounter.current_context_id:
         blockers.append('The encounter context changed; re-assessment has not finished')
+    if _reads_a_withdrawn_answer(assessment):
+        blockers.append(STALE_ANSWER_BLOCKER)
     run = assessment.provider_run
     if run is None:
         blockers.append('The provider was not run')

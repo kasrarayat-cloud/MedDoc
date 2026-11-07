@@ -968,9 +968,11 @@ one save for every row of "A few details needed" (owner or reviewer; 403 otherwi
   added to the documentation by the physician.", "Choose one of the answers offered for this detail.", ...); 409 while
   processing runs or for a detail no longer asked.
 
-**`POST /api/encounters/{id}/details/{answer id}/revoke`** - withdraws one saved answer (the detail is asked again);
-201 `{"revoked": "<answer id>"}`; 404 for another document's answer; 409 while processing runs or when already
-withdrawn. A later answer to the same detail withdraws the earlier one itself.
+**`POST /api/encounters/{id}/details/{answer id}/revoke`** - withdraws one saved answer: the detail is asked again, at
+once for an answer only the review overlay applied, and once the recompute the withdrawal queues has run for one the
+assessment itself read (until then every surface reads that assessment, the answer still in effect: the recorded
+limitation under "Completion repair (2026-11-06)"); 201 `{"revoked": "<answer id>"}`; 404 for another document's answer;
+409 while processing runs or when already withdrawn. A later answer to the same detail withdraws the earlier one itself.
 
 **Blocks** (built by `answers.details_needed(encounter, assessment, view)`, `answers.service_date_block(encounter)`,
 `progress.encounter_progress(encounter, now)` and `progress.checks_summary(encounter)` with DESIGN section 7's keys):
@@ -1213,3 +1215,79 @@ installed revision 41e03656df61, and keep the round-2 improvements. What its rep
     null while it runs or when it did nothing for the step.
   - The walk and the download check judge the customer page and the exports against these fields. They never
     re-derive them, and they cannot verify without them.
+
+## Completion repair (2026-11-06): questions, answers and their recompute
+
+Appended notes (builder Q2; CPT-HARNESS-CHECKLIST.md U10, U11; HARNESS.md contract C5); nothing above is rewritten. The
+tests are `tests/test_completion_answers.py` unless named.
+
+- **A question says what CPT Studio could not confirm, and shows the passages it concerns.** Every `details_needed`
+  row carries `missing` (the fact it names, in plain words), `statement` (a confirm row's fixed sentence: "From the
+  document, CPT Studio could not confirm ...", a conflict's or a competition's own sentence, '' for a date or choice
+  row) and `passages` (`[{text, start, end, page}]`, exact slices of the document: the passages of the act the code was
+  matched to - for an act in doubt, the passage that raised the doubt - then CPT Studio's own located passages, then
+  the code's own cited ones; a documented service's question shows its service's passages; at most four a row). No
+  sentence a member reads says a fact "is not documented" unless a passage says so: the code's qualification is "CPT
+  Studio could not confirm ..." (`customer_api.QUESTION_WORDS`), and the overlay's summary of a service in doubt is
+  "CPT Studio could not confirm the <act> as done on the date of service." The control is unchanged and concise: "Not
+  documented", "Cannot confirm", "Add to the documentation (physician)" - the confirming answer while reviewer
+  confirmation stays off (decision D7; `POST .../clarifications/<id>/confirm` still answers 409) - and the choice and
+  date controls for context facts. No answer value confirms a clinical fact.
+- **An answer recomputes the assessment.** A save of "Not documented" or "Cannot confirm" - with no context change in the
+  same save, whose own re-assessment reads it - and a withdrawal queue ONE assess (`jobs.recompute_after_answers`): the
+  AGAIN path with the recorded runs, the bounded assess child, nothing sent; its key is the key of the stage that made
+  the final assessment, `:c:a` and 11 hex of the revision's whole answer history (`jobs.answers_digest`), so the job's
+  key includes the answers and de-duplication never returns the old assessment. `saved` then answers `reassessing:
+  true`, and the page shows the progress, then the recomputed result. Every assessment of the revision reads the
+  standing answers as an input (`engine.assess(member_answers=...)`, `engine._MemberAnswers`): a code answered "Not
+  documented" or "Cannot confirm" is excluded by the engine (`bucket` excluded, `exclusion_reason` "The member answered
+  "<answer>" to <fact>; this code is excluded by that answer until it is withdrawn.", a `member.answer` check,
+  `support.answered`), and its answered question is kept, closed: the Clarification row is `answered` with `answer` (the
+  MemberAnswer), on the new assessment and on the one the member answered. `queue_reasons`' `question` reads the
+  questions the review overlay leaves open (`review.open_questions_of`; the stored OPEN rows alone where no decision
+  and no standing answer moves them), so the queue never says `question` of one a member answered; the operator view's
+  `open_clarifications` stays the stored rows' count. The code reads exactly as before on the customer page
+  (`excluded`, "A needed detail is not documented"), in the reports and in readiness (resolved, needing no decision).
+  **A withdrawal takes effect through its recompute** (refutation cycle 2, answers W1, W5, W6; recorded as a
+  limitation, not hidden): an answer the assessment itself read stays in effect on every surface - the stored exclusion
+  and its reason, the closed question, readiness, coding completeness, the queue and the reports - until the recompute
+  the withdrawal queued has run, and while that recompute is queued or stopped the page shows it as a job with Stop and
+  Resume; nothing asks the question again before it has run. One source of truth: cycle 1's read-time reopen changed the
+  overlay's row alone, so the page asked the question again while five readers of the stored row still read the code
+  excluded "by a documentation check" behind a blocker naming actions it did not offer.
+- **Its cross-code effects are the overlay's, read by the engine.** The code still holds every code its presence held -
+  a diagnostic base beside it keeps its `base_included` question, an E/M its separate-visit question (session decision
+  (e), refutation round 2 L7-01: a member's answer never releases a code; only a reviewer's decision does). A
+  competition it was a rival in is released or narrowed (refutation round 1 of harness repair 3, L4-5). The CMS
+  endoscopic-family check (`pfs.endoscopic_base`) of every other code is read again without it. A proposal whose checks
+  or status moved gets a new fingerprint (its unanswered one, its checks and its status), so a decision carries only by
+  the existing fingerprint rule.
+- **An answer binds to the question it answered.** `MemberAnswer.question` holds the fingerprint of the question as its
+  row showed it - scope, family, fact, code, CPT Studio's question and reason, and its passages, in the form
+  `cpt-studio-question@1` (`studio/validation/questions.py`), every instance of that (code, family, fact) together. A
+  later assessment, the engine or the read-time overlay, applies it only where it asks the same question. Any other
+  standing answer is kept and listed in `earlier_answers` (`[{answer_id, fact, family_label, prompt, affects, value,
+  label, by, at, why, why_text}]`, `why` one of `no_longer_asked`, `asked_differently`), never applied, and can be
+  withdrawn alone. An answer saved to a question the assessment closed with another member's answer that no longer
+  stands (a value superseded while the recompute that reads it is queued or stopped) answers that question: it is shown
+  on its row, never listed as no longer asked, and the code reads as stored until that recompute has run.
+  **The rule for answers stored before this release** (no fingerprint; refutation cycle 2 of the integrated diff,
+  2026-11-06, answers W2 and W4): they were given to the installed release's fixed prompt for their (code, family,
+  fact) - no question, reason or passage reached the member - and that release applied each one wherever an assessment
+  of its revision asked a question with that key. They bind by that key, as it did, in the engine and in the read-time
+  overlay alike: through a re-assessment by this release (the installer's reassess phase, the recompute after the
+  member's next answer) and for a question only the overlay asks (a reinstated procedure's separate-visit question).
+  Two earlier forms of this rule are withdrawn. The first (never applied) turned three reviewed encounters of the
+  install's read-only prediction (2026-11-06T15:12Z) back to needing details at the state recompute alone. The second
+  (refutation cycle 1: bind where the question asked now has the words of the one the answer's own assessment asked,
+  `why` `earlier_form` otherwise) keyed on CPT Studio's question and reason, which that member never saw and this
+  release words anew for the two commonest facts: the first re-assessment by this release turned a settled answer back
+  into an open question and told the member the question was "now asked in other words" beside an unchanged prompt.
+  Measured read-only on this release's tree against the throwaway restore that prediction uses: all 14 stored answers
+  bind and the derived state of every encounter equals its stored state; 39f0ac49's six answers are `no_longer_asked`
+  once it is re-assessed with them (its codes READY, no question asked with their keys).
+- **Migration `0013_completion_answer_binding`** adds `MemberAnswer.question` (`db_default` '') and
+  `Clarification.answer` (a nullable foreign key): additive (`ops/install.py migration_verdict` safe), so a row the
+  previous release inserts stays valid. A rollback past this release leaves assessments whose answered codes carry
+  `support.answered`, which the previous release reads as an ordinary exclusion that holds nothing: re-assess such an
+  encounter after a rollback (recorded for the installer's undo hazards).

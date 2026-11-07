@@ -3367,3 +3367,589 @@ finding.
 - `tests/test_h3_refutation_r1.py`: the tables are regenerated, and L4-2's first case is now the recorded hold.
 - The cycle-2 and cycle-3 fixtures carry a cycle-3 column.
 - The cycle-3 module's judged releases are now L3-9's only.
+
+## Completion repair (2026-11-06): the completion contract
+
+The owner directive of 2026-11-06 is recorded verbatim, with the session's interpretation (a)-(m), in
+`docs/foundation/rulings/2026-10-23-cpt-studio-gi.md`. Integration and deployment owner: session a12d8fb3.
+
+The starting point is the installed `fd8040d71e44`, recorded in
+`docs/deploy-reports/20261106-cpt-studio-fd8040d7-install-and-walk.md`. main is `eb7c9a77`, and its `cpt-studio/` is
+identical to the installed revision.
+
+This section is the contract. The state (revisions, stage, next action, defects, tests, runs, usage, receipts) is kept
+in `CPT-HARNESS-CHECKLIST.md`, "Completion repair, 2026-11-06", and its append-only progress log.
+
+### Objective
+
+The installed website works end to end:
+- an uploaded GI PDF or Word document is assessed by Corti, Astra and Fable;
+- supported proposals reach review;
+- decisions persist;
+- the downloaded report matches those decisions.
+
+The way there is to repair the shared application logic, never individual documents or expected-code lists.
+
+### Acceptance criteria (each item passes only on its own evidence)
+
+- **C1: the failures are established.**
+  - 39f0ac49, d44a77b3 (h3a) and e888f9ce (h3b) are reproduced offline from their retained source and responses.
+  - Each is traced from source text through section boundaries, act interpretation, admission, and questions and
+    status, to review and export.
+  - The counterexamples that defeated F-ACTS, F-SECTIONS T and L, F-TIME R and the other withdrawn fixes are recovered
+    and pinned as regression cases.
+- **C2: the interpretation is repaired, structurally.**
+  - A definite noun phrase ("the bolus") resolves to its documented antecedent.
+  - A procedure narrative after an inline label is read as that procedure, and the Indications do not extend over it.
+  - Evidence is bound to its procedure, action, anatomy, lesion, extent, date, performer and outcome.
+  - A failed therapeutic attempt does not change the examination's own status.
+  - Historical, planned, deferred, unsuccessful, negated and other-provider acts stay distinct from completed current
+    services.
+  - A completed marking performed for future localization is a completed current act.
+  - Routing, services and admission read each such fact once.
+  - No exception names a patient, filename, document id or CPT code, checked by a grep gate over the diff.
+- **C3: proposals are equally eligible.** One per-code validation applies to every proposer, pinned as a matrix:
+  - only Astra proposes the code;
+  - only Fable proposes it;
+  - Corti returns another code;
+  - Corti lists it only as an alternative;
+  - all three agree on an unsupported, denied or historical act.
+
+  Provenance is kept. Alternatives and incidental mentions never enter. Competing codes each reach review, held by one
+  question that shows the passages.
+- **C4: false READYs are fixed as well as false holds.** These all read safely:
+  - every earlier refuter input;
+  - the base's false READYs, "The polyp was left in place." among them;
+  - minimal positive and negative pairs across layouts and GI families.
+
+  No input is READY where the installed revision is not, unless judged correct with its reason recorded. No act has
+  two READY codes.
+- **C5: statuses and questions are truthful.**
+  - "Not done", "historical", "planned" and the like are said only with the passage that says so.
+  - An explicit proposal CPT Studio can neither confirm nor exclude is held by a question. The question shows the
+    passage, names the missing fact, and offers an answer that can confirm as well as exclude.
+  - A fact the source states is resolved before the doctor is asked.
+  - An answer recomputes the assessment.
+  - Earlier answers and approvals are bound to the assessment and fact they answered, and never silently reused.
+- **C6: the retained evidence passes, with nothing sent.**
+  - 88d9db32 keeps its six READY codes.
+  - The participants' 43247 on 39f0ac49 and d44a77b3 is eligible for review, with its remaining reference requirements
+    stated.
+  - e888f9ce's colonoscopy reads as performed.
+  - The originals are preserved beside the new results.
+  - An independent check, not the author, agrees.
+- **C7: acceptance passes before any paid test, and then on the website.**
+  - Before: the focused suite, the full suite, CI, and an independent refutation pass over the final diff.
+  - Then a fresh sealed PDF and Word set, with expectations and their references written before any output is read.
+  - It runs through the ordinary website with:
+    - usable Corti, Astra and Fable first readings, frozen before peers;
+    - peer reviews stored separately, and reconciliation;
+    - Stop and Resume, duplicate prevention and visible progress;
+    - a clarification answered and recomputed;
+    - labelled synthetic decisions, persisted after a reload;
+    - downloads checked against both omitted supported services and unsupported additions.
+- **C8: the install is served and verified.**
+  - Installed through the ruled-act door, with rollback, and the site available throughout.
+  - The served revision, the worker, the retained records and customer-provider privacy are verified.
+  - The repaired workflow is verified live.
+  - The PDF security and reference limitations are accounted for in the report.
+- **C9: the closing record.** It gives:
+  - the revision and links;
+  - each original defect's before and after;
+  - the fresh results;
+  - the three participants' usable contributions;
+  - the persisted decisions and downloads;
+  - usage and estimates.
+
+  Functional completion is marked only when C1 to C8 pass. Clinical validation and content-use permissions are
+  reported separately.
+
+### Rules of execution
+
+- **Status and evidence.** Status is NOT RUN, IN PROGRESS, PASS, FAIL or BLOCKED. Evidence is IMPLEMENTED, VERIFIED
+  OFFLINE or VERIFIED LIVE. A PASS names its kind and its evidence path. A later contradicting result reopens it, with
+  the reason.
+- **The two-cycle rule applies to patches, never to requirements** (interpretation (a)).
+- **Stages advance automatically.** A checkpoint is a record, not a request.
+- **One owner.** Agents are read-only in sealed sandboxes, or work in isolated worktrees on bounded areas. Integration,
+  merges, installs and walks are serialized under the owner.
+- **Provider execution:**
+  - concurrency one, finite deadlines, Stop and duplicate prevention;
+  - unknown outcomes reconciled before any resubmission;
+  - no identical failing paid attempt repeated.
+
+### Stage 1 (2026-11-06): the failures, established (C1)
+
+The full trace is `docs/cpt-harness/completion-20261106/stage1-trace.md`.
+
+**Reproduced.** The four retained cases (39f0ac49, d44a77b3, e888f9ce and the guard 88d9db32) were recomputed in
+memory from their recorded inputs, on the installed code, against a throwaway copy of a read-only dump. Each result is
+identical to the stored assessment, measured twice and independently. Re-assessing through the pipeline is no
+reproduction: the assess job's key returns the stored assessment.
+
+**The causes, each measured:**
+- **U2: section kind.** An inline service label with text after its colon opens no section (`sections._heading`:398,
+  :405, :409-410; :752). Indications therefore runs to the Impression. Routing then holds every performance cue there
+  (detect.py:2162-2164), reads no extent, and the services reader folds that doubt over its own performed reading
+  (services.py:5943-5959).
+- **U1: the bolus.** There are two causes:
+  - the vocabulary: "the bolus" names no act (services.py:252);
+  - the binding: with no part family, no site in the sentence and two families present, the act is dropped
+    (services.py:3907-3940, :5118-5134).
+  The listing reason then asserts non-performance (engine.py:719-722, :3382; never reinstatable, :3935).
+- **U3 and U4: one repair, not two.**
+  - U3: a bare `(was|were) unsuccessful` in `INCOMPLETE_CLAUSE` (cues.py:470) is read as the examination's
+    incompleteness for any subject (detect.py:5856-5913, 6492, 7724-7729).
+  - U4: a title with an aside is silent (cues.py:727), and an instrument's own course is never a family mention
+    (detect.py:115-122).
+  - Measured: removing U3 alone turns e888f9ce PLANNED (detect.py:6502).
+- **U6: placement overwrites outcome.** A failed act sharing the Procedure line is promoted to performed
+  (services.py:5181-5183): a false READY.
+- **F1: F-NEG S, a kept rule.** It reads three of the earlier repair's counterexamples READY where base and main held
+  them (services.py:542-546, :857-859, :2724).
+- **U9 to U11:**
+  - "Not documented" and "does not establish" are said from absence: engine.py:549, :719-722, :3381-3382;
+    reconcile.py:236-238; checks.py:579, :705, :743; customer_api.py:456-467; review_view.py:455-458.
+  - Every proposal question offers only excluding answers (answers.py:475-478, :648-660).
+  - No answer recomputes anything (answers.py:705-711; the engine has no member-answer input).
+  - Answers bind only to the revision and (code, family, fact), so they are reused for a changed assessment
+    (models.py:430-446; answers.py:347-362; review_view.py:182-190).
+- **U12: one fact, three readers.** Section kind, act status, date binding, performer, extent, lesion identity and
+  segmentation are each computed twice or three times. For each, a measured input shows the readers disagreeing. The
+  services reader copies routing's status, and the admission then counts routing again as an independent second
+  opinion.
+
+**Pinned.** `tests/fixtures/gi4/completion/corpus.json` holds 611 entries over 532 synthetic texts, measured by
+`ops.gi4.completion` and checked by `tests/test_completion_corpus.py`:
+- group A: every withdrawn rule's counterexamples, measured on that rule's own trees;
+- group B: the base's false READYs;
+- group C: the base's false holds;
+- group D: the stage-1 minimal pairs and the two fictional walk documents.
+
+Two invariants:
+- every entry reads as pinned, and a movement is re-pinned only beside its declaration;
+- no entry is a false READY unless it already was one on `fd8040d71e44`.
+
+The guard is mutation-proved: restoring the bare "bolus" fails 82 subtests.
+
+**C5's confirming answer, given decision D7 (reviewer confirmation off, kept by the owner's instruction of
+2026-11-03):**
+- **The document does not state the fact (genuine ambiguity):** the confirming answer is the physician's addendum
+  stating it. That makes a new revision, which is recomputed.
+- **A context fact (setting, patient status, billing context, a date):** the confirming answer is its choice or date
+  control.
+- **The document states the fact but a reader misses it:** that is a reader defect, repaired at the reader. Item 5
+  forbids both an addendum that repeats existing documentation and a blanket override.
+- **Checklist 4.6 (a human-override confirmation)** stays the owner's decision.
+
+### Stages 2 to 5 (2026-11-06): the repair, built by five builders and integrated (C2 to C5)
+
+**Builders** (workflow `wf_33ae45a0-361`, each in its own worktree from `b452c6c4`, none pushed; integrated serially by
+the owner session in the order R1, R2, A, Q1, Q2, each merge re-measured before the next):
+
+| builder | what it repaired | new module |
+|---|---|---|
+| R1 | U2, U12: a labelled procedure paragraph is released as its family's part only when P1-P4 and N1-N3 hold; routing, the services reader, reconcile and the engine read one derived layout; `sections.layout()` unchanged | `studio/gi/structure.py` |
+| R2 | U3, U4, U12: a sub-act's failure is not the examination's; the instrument's own course is a family mention under eleven guards; one extent | `studio/gi/clauses.py` |
+| A | U1, U5, U6, U13, F1, F5: the bolus's antecedent and structural removal; placement never overrides outcome; dispositions; purpose time; coordinated anatomy | `studio/gi/purpose.py` |
+| Q1 | U8, U9, C3: equal eligibility; one code read over every proposer's passages; truthful reasons | - |
+| Q2 | U10, U11: truthful questions with passages; recompute after an answer; answers bound to their question | `studio/validation/questions.py`, migration 0013 |
+
+**Integration rules** (each a commit with its own measurement and mutation proof; `tests/test_completion_integration.py`):
+- **The dilation technique.** `catalogue.CodeProfile.technique`: 'balloon' for 43249, 43233, 43214, 43220, 44381,
+  45386, 44405, 45340, 43277; 'wire_bougie' for 43248, 43226. `reconcile.technique_fits` reads a documented dilation's
+  technique from its own evidence (or the service's other dilations'); a dilation of another technique is not the act a
+  one-technique code accounts for (act_missing, a truthful question) and the code claims none of it in competition. Found
+  because R2's routing made the Word walk's h2c document (a Savary-Gilliard dilation) route its EGD: 43249 READY there, a
+  base false READY class (measured on the base tree with a plain title).
+- **One evaluation in competition.** `engine._competition`: two codes the proposal provider alone selected for one act
+  compete as any other two do (harness repair 3 had kept them "as before": both READY).
+- **The another-act hold removed.** Q1's `_another_act_of_its_kind` held a code the document supports because the cited
+  passage stated another, not-done act of its kind (R2's pinned READY: 45385 citing a failed hot snare beside a cold snare
+  done). Its F4 purpose is the technique reading's; the corpus ledger is identical without it.
+- **One subject reading.** `services.predicate_subject`: R2's structural walk, unless A's attachment walk reads another
+  subject (then None: the base reading); the removal, disposition and purpose readers also need A's walk to read it. The
+  walks agree on 191 of 222 corpus calls; each alone misread shapes the other read (the overtube refuters; "impacted
+  before presentation").
+- **A dated history in the indication.** `detect.dated_earlier_occasions_only` and `structure._announced`: an indication
+  whose every mention of the family is dated before the service date by its own clause no longer holds the labelled
+  paragraph (the heading form read it today's; the labelled form was held). `_ANNOUNCE` reads "described next" and the
+  plural "follow" (never "follow-up"), which the exemption would otherwise have released.
+- **Another act's doubt.** `engine._another_acts_doubt`: a cited passage overlapping none of the matched acts' evidence
+  and stating another, not-done act of the code's kinds, on a lesion record of its own distinct from every matched act's,
+  does not hold the code through the second opinion. A clause-by-clause release for a passage that also states the
+  matched act was built and dropped before commit (the corpus invariant caught eight NEG-REL refuters turning READY); the
+  lesion condition was added after the first full suite on the integrated tree, which measured 31 genuine holds released
+  without it (a Procedure-line listing and its narrative line, a cut plan verb, a history item, a check box, a
+  confirmation: one act the reader records twice). With it the suite's held cases hold again and the failed attempt at
+  another polyp still does not hold today's polypectomy.
+- **The retrieval trace** covers every decidable code (Q1's patch); **the rollback hazard** of an assessment re-made with
+  an answer is stated (Q2's residual 3; `ops/install.py`, `ops/INSTALL.md`).
+- **Labels:** gi-routing@9 (@8 skipped: it names harness repair 3's dropped reader), gi-services@6,
+  cpt-studio-validation@9, gi-catalogue@2; gi-context@4 unchanged.
+
+**Measured on the integrated tree:** the completion corpus re-pinned once (627 entries; no FALSE READY beyond the
+installed baseline; FALSE READY 57 to 39, FALSE HOLD 81 to 51; `docs/cpt-harness/completion-20261106/corpus-repin.md`);
+the refutation tables re-pinned once with every moved row classified (`.../table-repin.md`; no participant row reads
+differently from Corti's selection); the freeze gate holds on the full corpus; the H4 battery's 10 movements are declared
+(`tests/fixtures/gi4/declarations/completion-integration.json`); the H1 replay differs by the labels alone; the 11
+Corti-only parity cases are byte-identical to harness repair 3's once the labels are set back; the four retained cases
+recompute as required (39f0ac49: 43239, 45380, 45385, 43247 READY; d44a77b3: 43239, 45385, 45381, 43247 READY;
+e888f9ce: 45385, 45380 READY with no incompleteness; 88d9db32: its six READY).
+
+**Recorded residuals** (reported, not claimed closed): 39 base false READYs (group B; among them a requested tattoo and a
+bolus pushed into the stomach, owner question Q1); 51 false holds on the safe side, 7 of them admission rows whose
+requirement conflicts with the truthful reading of a consent or a question (left for the owner); a site-less removal in
+one "Description of procedure" over two scopes (H2|PLAIN-43247); codes that share an act kind are told apart by technique
+for dilations only (not by anatomy, 43245 against 43249, nor by descriptor, 43236 against 43243); two dilation techniques
+on one stricture held for the reviewer (owner question Q2); a pronoun-subject denial beside a done tattoo in one quoted
+passage holds the tattoo code (the second opinion reads the passage whole).
+
+### Refutation of the integrated diff, cycle 1 (2026-11-06): seven lenses, and what changed
+
+**The pass.** Workflow `wf_5ea89702-382`: seven lenses (structure, outcome, acts, admission, answers, cost, consistency),
+each in a sealed, write-disabled sandbox at `179fdff9`, told to refute `b452c6c4..179fdff9` with concrete synthetic
+inputs measured on the head and the base. They returned 45 findings (structure 8, admission 8, outcome 8, acts 8,
+answers 7, consistency 5, cost 1). **Every finding was reproduced by the owner session on both trees
+before any repair** (`verify/refute1/`), and each repair fails closed: a rule that releases a hold needs positive
+structural evidence, and what it does not recognise keeps the base reading. Pinned in
+`tests/test_completion_refutation_c1.py` (20 tests; a mutant of one repair fails its pin).
+
+| lens | NEW false READYs | repaired by |
+|---|---|---|
+| structure | an announced earlier narrative ("is reprinted here", "carried forward", "for comparison"); an earlier paragraph's tail ("The paragraph that follows belongs to her sister."); an appended prior report; "The next paragraph is from her 2023 visit ..."; "None of this was done today."; "Impression: ... removed in 2022." | N3's document self-reference, present-tense occasion and attribution reads (before the paragraph in its section, earlier paragraphs included); the dated-history exemption only without a present-tense statement of the family; P4's later-report rule (after the first impression, assessment or plan); N1's negative quantifier; N2's summary dating |
+| outcome | a cancelled status line; a course "on a prior occasion", reported, or hedged; a reach of another attempt; a pronoun's abort after a done act | I12 and I13 on the instrument rule; the reach reader's plain-statement condition; pronoun resolution only through an attempt or failure; passage predicates and a scope subject are the examination's failure |
+| acts | a listed act "aborted"; "EMR referral placed for future resection"; "Removal of the bolus was impossible ..."; an anaphor of a 2023 impaction or another person's coin; a coin's site from another clause | "aborted", "terminated", "discontinued" as act failures (one vocabulary with R2); the purpose release frees only what the done predicate is said of, routing's rule subtracting a non-material modifier; a nominal removal needs a done predicate or none; an anaphor inherits its antecedent's other year, place or person, and takes its own clause's site |
+| admission | another lesion's failure releasing a doubted act (order-dependent); a participant's code on the procedure line while its passage says the polyp was left in place; an inflated dilator read as a wire bougie | every doubtful reading must be another act's, beside a matched act its own sentence states plainly; a coordinated verb phrase shares its subject, an observed-then-left lesion is a plain disposition, a purpose tail states it too; an inflation names a balloon |
+| answers | an aborted biopsy (found outside the lens) | a later failure of the same act on the same lesion, or of the only act of its kind, doubts it |
+
+**Cost** (the one superlinear path the cost lens found): the labelled paragraphs' tract check reads a whole section's
+sites through `services._anatomy_in`, which tested each match against every site taken so far; a released paragraph
+beside a long run of site names overran the analyze child's 60 s deadline at 400k characters (the base: 11.8 s). The taken
+spans are now sorted and each overlap is one bisection (`fa9d7020`): output identical on all 548 corpus texts, the lens's
+shape at 384k characters 2.4 s for the release and 12.5 s for routing, linear.
+
+**False holds and surfaces repaired:** a "Colonoscopy Report" title (the occasion indication reads the clinical layout); a
+generic instrument naming its tract (P2: "The endoscope was inserted through the mouth ... to the second part of the
+duodenum"); a hedge in the procedure line's reason ("for suspected celiac disease"); a residual left in place beside the
+lesion's own removal; a removal before a failed technique (held, never excluded); a wire-guided balloon (balloon only);
+the coverage count's technique test; a withdrawn answer the engine had applied (its question reopens at once,
+`review._reopened`); an extent or conflict question shows the service's own passages (`questions.question_passages`);
+the panel heading with earlier answers only; the rollback hazard reads the stored answer marker.
+
+**The rule for answers stored before the binding** changed in this cycle, for a reason measured outside the lenses: the
+install's prediction (a read-only dump restored on the test server, the installer's own one-shots) found the first form
+(never applied) turning three reviewed encounters back to needing details at the state recompute alone - two of the
+owner's records among them - because their settled questions reopened. All 14 stored answers had been given to questions
+their current assessments ask word for word. They now bind where the question asked now has their own question's words
+(`questions.wording`, `review.earlier_wordings`, `MemberAnswerInput.worded`); measured again on the cycle-1 commit, the
+state recompute after migration 0013 changes no encounter and the rollback read changes none.
+
+**Measured after the repairs:** the completion corpus keeps its invariant (no FALSE READY beyond the installed baseline:
+0); its seven purpose-marking entries moved once to FALSE HOLD under the first acts repair and were restored by keeping
+routing's own purpose rule (`95392c99`); the freeze gate holds; the H4 battery's 10 declared movements are unchanged (0
+undeclared, 0 new violations); the H1 replay differs by the three labels alone; the four retained cases read as required.
+
+**Recorded, not repaired** (each on the safe side, or the installed release's own): a report field line inside a
+labelled paragraph (held; the base held it too); the dated-history exemption with a member-supplied date (the base's
+hold); a dilation the reader keeps no act for, held with another dilation's technique (the base read it READY); a listed
+act switching off the another-act release (the base's hold); competition without participants configured (the base's
+two READY codes; the installed site always configures them); an engine-applied answer whose question a later decision
+releases (the code stays excluded by the member's answer until it is withdrawn, which now takes effect at once); the
+earlier-answers wording during a date hold; "The cecum was identified as the site of the mass on the staging CT" read as
+the reach (the base's).
+
+### Refutation of the integrated diff, cycle 2 (2026-11-06): five lenses over cycle 1's repairs, and the two-cycle rule
+
+**The pass.** Workflow `wf_3e6e5e6d-2f1`: five lenses (structure, outcome, acts, admission, answers), each in a sealed,
+write-disabled sandbox at `cccc7122`, told to refute cycle 1's repairs (`179fdff9..cccc7122`) with concrete synthetic
+inputs measured on the repaired head, the pre-repair head and the base. They returned 37 findings (structure 8,
+outcome 8, acts 8, admission 7, answers 6): 20 false READYs, the rest false holds, untrue text and one cost path. The
+owner session reproduced every structure, acts and admission finding exactly on the three trees before deciding
+anything (`verify/refute3/`).
+
+**What the findings showed.** Cycle 1 had repaired with readers of words - deny-lists of announcements, hedges,
+cancellations, occasions and failures. Cycle 2 broke them in both directions at once: an unlisted phrasing leaked
+("Status: Abandoned", "Perhaps the colonoscope ...", "The next one was done in 2022.", "in that examination", "after two
+attempts; it was then aborted"), and the listed words over-held ordinary reports ("This is a 58-year-old man referred
+from an outside hospital.", "Pre-procedure assessment: ASA class II.", "History of adenomatous polyps on colonoscopy in
+2022; she is now due for surveillance.", "Aspirin was discontinued five days before the procedure."). That is the
+owner's two-cycle rule: "abandon that patch and change the approach. Do not abandon the underlying requirement or
+repeatedly ship the known failure as completion."
+
+**Measured before deciding.** Every structure false READY of both cycles (cycle 1's five, cycle 2's S1-S4) has a heading
+twin - the same text with each "Colonoscopy: <narrative>" line written "Procedure: Colonoscopy" over the narrative -
+that the installed release reads READY too; so do the family-named twins of the instrument rule's O1, O3 and O4. Those
+readings are the installed engine's own, carried into the new layouts; the cycle-1 readers had made the new layouts
+stricter than their twins and paid for it with the over-holds. Ablations on the corpus (11 s a run): without the
+instrument rule six required-READY entries become false holds, the retained e888f9ce among them; without the reach
+statement one does; dropping cycle 1's reason-lead skip moves nothing; withholding a listed removal unless the report
+states a lesion removed fixes four of the installed release's own false READYs and moves nothing else; dropping the
+another-act release moves one entry, the integration's own, and no retained case.
+
+**The change of approach, per mechanism** (five builders, `wf_f7121d1f-985`, each in its own worktree; then the owner
+session's integration):
+
+| approach | mechanisms |
+|---|---|
+| layout parity: a labelled paragraph reads as its heading twin; an instrument's course names its family as a heading names it; never more permissively than that twin (`tests/test_completion_parity.py`: every corpus text with a labelled paragraph, both cycles' structure inputs, the instrument inputs, a routing differential) | structure.py loses cycle 1's N3 widening, N2 summary dating and P4 first-summary rule; detect.py's I12/I13 word lists give way to I12, the twin's own qualification read by routing's heading-denial reader; a generic scope's frame registered like a named one's (S8) |
+| a closed positive form: the release fires only where its scope is recognised whole, so an unlisted phrasing costs a hold, never a READY | the reach statement (one grammar per sentence, memoised: O8's shape linear); a pronoun read through its antecedent's own attempt or failure predicate, the number agreeing (O2); a coordinated verb phrase's shared subject, a done auxiliary only (A2); the bolus anaphor's antecedent (A3); the nominal removal (A4); the purpose release, the marking kinds only, in both readers (A6); a listed removal only beside a lesion stated removed (A7, D3; the installed release's own false READYs fall 39 to 35); a "not performed" exclusion of a removal only beside lesions stated not removed or only observed (D4) |
+| the base reading | the reason-lead hedge skip (A1); the dilation deferral - two techniques named go back to the competition, the owner's Q2 (D2, D6); the another-act release - a doubt in the code's own passage holds it, whatever act it is about, for every proposer (D1, D5; builder D's repair of it still released doubts no reader binds to an act); the overlay reopen of a withdrawn answer (W1, W5, W6); answers stored before the binding bind by their key, as the installed release bound them (W2, W4) |
+| a widened hold (the safe side) | a lesion-less done act followed by its own abort (A5); an act word modifying a defect, specimen or site is no act (A8); one failure vocabulary for both readers, derived from one constant (O6); readiness holds while the stored assessment reads an answer that no longer stands (the window W1 measured: an approved export could omit the code); a marker assessment always counts as this revision's write at an undo (W3) |
+
+**Integrated and measured** (`dd7a4b3a..ae3b19b8`; builders merged as `60263289` O, `6c253203` D, `86ac8d37` W,
+`dd7a4b3a` P, `60e5922b` K; the owner session's integration rules `613998b3`, `7a4c4c41`, `27cc87a0`, `ae3b19b8`):
+- **The corpus** re-pinned once beside `tests/fixtures/gi4/declarations/completion-refutation-c2-corpus.json`: 8 entries
+  moved - four installed false READYs fixed by the listing rule (FALSE READY 39 to 35), X2 and X3 held by the closed
+  antecedent form and D|ARCH-D5a held, each as the installed release held it, and E|ANOTHER-failed-attempt held, the
+  declared cost of abandoning the another-act release. **No FALSE READY where the installed baseline had none: 0.**
+- **Layout parity** (`tests/test_completion_parity.py`, and the owner session's independent check over the same 65
+  pairs): a labelled or unnamed-family input READY only where its twin is READY on the same tree, the one exception
+  recorded - corpus text 137's 43247 (and S6, its one-sentence edit), READY as required where the heading twin holds it
+  (the documented-service reader drops the bolus under "Procedure: Upper endoscopy": the installed release's own heading
+  false hold). 30 of 65 pairs read exactly as their twins (22 on the cycle-1 head).
+- **Every cycle-2 finding** read as designed on the integrated head (`verify/refute3/c2int-cases.txt`): A1-A7, D1-D4,
+  D6, O2, O6 held; D2 the competition; S5-S7, A8, O7 and S8's generic scope released; S1-S4, O1, O3, O4 as their twins.
+- **The retained cases** as required: 39f0ac49 43239/45380/45385/43247 READY; d44a77b3 43239/45385/45381/43247 READY;
+  e888f9ce 45385/45380 READY; 88d9db32 its six READY.
+- **The gates**: the freeze gate holds (layout identical over 5,723 texts; NEW-SEND 0, NEW-TAKE 0; requests changed 0);
+  the H4 battery's 10 declared movements unchanged (0 undeclared, 0 new violations); the H1 replay identical to cycle 1's,
+  the labels alone - after the integration found it was not (h2-10's ERCP snare, withheld by the listing rule beside a
+  stricture: the rule now judges only lesions such a removal removes, `ae3b19b8`).
+- **What the integration added, each pinned** (`tests/test_completion_refutation_c2_integration.py`, the admission and
+  answers modules): the another-act release abandoned (`_matched_acts_plain`, `_another_acts_doubt` removed); a removal
+  excluded as not performed beside a lesion only observed, in a closed observation form (`engine._observed_only`; the
+  installed release's "polyp seen; snare polypectomy failed" exclusion kept, D4 held); units counted on the documented
+  match before any hold; readiness held while the stored assessment reads a withdrawn answer
+  (`review.STALE_ANSWER_BLOCKER`: builder W measured an approved export omitting the code in that window); a sentence that
+  is only a lesion's removal lets a listed removal stand (`services._removed_only`: the plain subject reading fails on "A
+  6 mm polyp in the ascending colon was removed."); two specific techniques of one kind are two instances
+  (`services._techniques_differ`); the listing rule judges only lesions such a removal removes; the shared not-removed
+  dispositions restored, the base-code label made true, a withheld listing counted unresolved in coding completeness.
+- **Superseded cycle-1 statements** in the section above, kept as the record: the overlay reopen of a withdrawn answer
+  (`review._reopened`) and "takes effect at once"; the earlier-form word binding (`questions.wording`,
+  `review.earlier_wordings`, `MemberAnswerInput.worded`); N3's deixis, present-occasion and attribution reads, N2's summary
+  dating, P4's first-summary rule; I12/I13 as word lists; the reason-lead skip; the dilation deferral; the another-act
+  release's window and word list.
+
+**Recorded, not repaired:**
+- the installed engine's own readings carried by parity (each twin READY on the installed release): an appended or pasted
+  prior report with its own skeleton (S1); an impression or narrative sentence that denies or dates the narrated act in
+  words routing does not read ("None of the above was performed today.", "removed two years ago", S2); an indication that
+  introduces the narrative as another person's or a dated occasion's in the past tense (S3); a pro-form announcement ("The
+  next one was done in 2022.", S4); a status line, a hedge or a back-reference about an unnamed family's course that
+  routing does not read for the named heading either ("Status: Abandoned", "Perhaps ...", "That was at her examination
+  three years ago.", O1, O3, O4); cycle 1's C1-S1 to C1-S4 and C1-S5(b);
+- a reach statement that a later sentence dates ("Cecal intubation was achieved. That was at her examination three years
+  ago.") reads complete where the installed release reads the extent incomplete (a false completeness: the code's READY
+  is the installed release's own);
+- the closed forms' false holds (the safe side): a reach with a tail the grammar does not admit ("at 10:32"); a dilation
+  "stopped at 15 mm"; "halted briefly ... then completed"; a cited failed attempt beside another removed polyp
+  (E|ANOTHER-failed-attempt); a diagnosis hedge after "for" ("biopsies for suspected celiac disease"); a listed removal beside a polyp only seen, or whose removal is phrased outside the closed forms ("not removed until the end of the procedure"); X2 and X3; "History of AS" opening a history part before the snare sentence;
+- D7 ("could not be removed endoscopically" + a failed technique) is held, not excluded: the services reader records no
+  lesion in that negated clause (the base's hold);
+- the withdrawal window: a withdrawn answer the stored assessment read stays in effect until its reassessment runs, and
+  readiness holds meanwhile;
+- the installed release's own false READYs seen and not moved: "was tried; it was unsuccessful", "was started, but it was
+  abandoned because of bleeding", Corti's 43249 alone on a balloon that failed beside wire-guided dilators, Corti's 43248
+  alone on "a CRE wire-guided balloon dilator".
+
+### Refutation of the integrated diff, cycle 3 (2026-11-06): six lenses over cycle 2's change of approach
+
+**The pass.** Workflow `wf_bab4d28d-c76`: six lenses (parity, closed forms, outcome, admission, answers, cost), each in a
+sealed, write-disabled sandbox at `844fe54c`, told to refute cycle 2's change of approach with concrete synthetic inputs
+measured on that head, the cycle-1 head `5fa33480` and the installed base. They returned 32 findings (parity 7, closed 7,
+outcome 4, admission 5, answers 4, cost 5). The owner session reproduced every engine-level input on the three trees
+before deciding anything (`verify/refute4/`: 51 inputs, the parity lens's 188 pairs, the answers lens's six scripts).
+
+**What the findings showed.** Each closed form leaked where a slot was not closed - an instrument phrase took "with no
+success", a place phrase took "and was removed", the antecedent was judged by its clause, the purpose release checked an
+act kind (vacuous for a service name) instead of the subject's head. The labelled paragraph's parity was broken at its
+root: the overlay keeps the frozen sentences, so a released label was read through the narrative's first clause (basis
+'cue') - it skipped the status-line reader and won the aggregation before any contradiction was asked. The integration's
+own rules (the observed-only exclusion, the units count) acted on the reader's partial records. And the shared failure
+vocabulary failed both ways: too narrow for routing's subject vocabulary ("could not be advanced", "Removal was aborted"),
+too wide for the services reader ("and retrieval was precluded").
+
+**Measured before deciding: which release the requirement rests on.** Each release disabled in memory
+(`verify/refute4/mechs.py`), the completion corpus read: the labelled paragraph carries 13 required READYs (d44a77b3
+among them), the instrument rule 6 (e888f9ce), the purpose release 8 (d44a77b3's 45381), the bolus anaphor 6 (d44a77b3's
+43247), routing's sub-act failure 6 (e888f9ce's "no incompleteness flag"), the observed-only exclusion 5, the reach
+statement 1. The pronoun rule, the nominal removal, the shared subject, rule 6b and the removed-only form carry none.
+
+**The repair, per mechanism** (`acadc296`), under the two-cycle rule:
+
+| approach | mechanisms |
+|---|---|
+| abandoned - the base reading (nothing required rests on them) | the pronoun read through the clause before it (refuted in cycles 1, 2 and 3: outcome C3-1, C3-2); the nominal removal's done form (C3-6) and the coordinated verb phrase's shared subject (C3-7), each refuted twice; rule 6b's presupposing heads (closed C3-1); cycle 2's additions to the services reader's failure words (outcome C3-4); cycle 2's units rule (admission C3-4: the group's units again, with the installed `units.duplicate` prompt) |
+| kept because required, recognized WHOLE - every slot a closed class, anything else the base reading | the purpose release: one marking statement (`purpose.MARKING_STATEMENT`) read by routing and the services reader alike on the reader's own sentence cut at its semicolons - a marking material or a lesion as the subject, a marking participle, closed place phrases, "for future localization/identification/reference" (closed C3-2, C3-3; cost C3-2, C3-3); the bolus antecedent's whole sentence is the plain finding (closed C3-4); the reach statement is the text's only landmark word (cost C3-5); a removal's "not performed" exclusion needs no removal word anywhere outside the code's own acts' passages, and its place phrase holds no clause (admission C3-1 to C3-3) |
+| one reader decides, the other consumes | a failure is a sub-act's only where the services reader reads that act failed by the same word (`detect._consumed_by_the_services_reader`); otherwise the examination's, the base reading - replacing the shared vocabulary cycles 2 and 3 refuted both ways (outcome C3-3, cost C3-1) |
+| layout parity, at its root | a released label is read as its heading twin's name, by its section (`detect._in_a_released_label`; parity C3-1 to C3-3); another family's instrument anywhere in the paragraph holds it (C3-4); the frame read stops at the candidate's own extent - linear again (C3-5: a 73 KB paste had taken 67 s); the instrument rule reads only a narrative that names no family (C3-6); the parity test reads against the installed base's twin readings, pinned (C3-7) |
+| holds narrowed toward the base | a hedge no longer blocks the listing's promotion (closed C3-5: "for possible adenoma"); an attribute failure never crosses a word of time order ("aborted after the biopsies", cost C3-4); a failure stating a specific technique beside a done act stating none is another instance (admission C3-5) |
+| answers | an answer recorded before the binding excludes only its own code in the engine, so no other fingerprint or decision moves (C3-1); the undo marks a service question an answer closed (C3-2); a superseding answer keeps its row (C3-3); a new answer to a closed row binds to that question's recorded fingerprint (C3-4) |
+
+**Measured on the repair:**
+- **Every cycle-3 input** reads as the installed base (`tests/test_completion_refutation_c3.py`, its fixture
+  `completion-c3-cases.json` holding each input's base, cycle-1 and cycle-2 readings), the intended releases apart: the
+  marked lesion and the bolus with its plain antecedent READY; a participant's removal code read as Corti's (held, with
+  the base code it holds). outcome C3-3 and cost C3-4 read READY with the installed `service.incomplete` warning again.
+- **Parity** against the installed base's own twin readings (`completion-c3-parity.json`, 180 pairs): no labelled input
+  READY where the base holds its twin but five, each recorded - four are the H2 shape's 43247, whose heading twin holds
+  the bolus by its own false hold (corpus 137, cycle 2's recorded exception; the base twin reads the same document's
+  43239 and 45385 READY whatever its status line says, the line beyond the base's window), and one the base reads READY
+  itself on the input (b8).
+- **The corpus** re-pinned beside `completion-refutation-c3-corpus.json`: 8 entries moved, every one to the installed
+  baseline's own verdict (the purpose release closed); FALSE READY 35, **0 where the installed baseline had none**;
+  FALSE HOLD 54.
+- **The retained cases**, recomputed from their recorded runs: 39f0ac49 43239/45380/45385/43247 READY; d44a77b3
+  43239/45385/45381/43247 READY (its wrapped tattoo sentence read whole); e888f9ce 45385/45380 READY with no
+  incompleteness flag; 88d9db32 its six READY.
+- **Cost**: the 73 KB and 182 KB label pastes take 0.40 s and 0.23 s in the structure reader (67 s and 94 s before).
+
+**Refined after the full suite on `acadc296`** (6,347 Django tests; every failure read before it was re-pinned):
+- the removal exclusion's scan passes over a participle's own negated verb group ("The polyp could not be removed.")
+  and a removal noun after a purpose "for" ("left in place for surgical resection") - both are the installed release's
+  exclusions, pinned since cycle 2; every positive removal participle still blocks the exclusion;
+- a hedge that only heads a reason phrase naming no act ("for possible adenoma", "for suspected celiac disease") no
+  longer blocks the listing's promotion; a hedge on the act itself ("was possibly performed", "for possible
+  polypectomy", "for attempted polypectomy") still does (`services._reason_hedges_only`) - dropping the hedge from the
+  guard outright had re-opened the act's own hedge;
+- rule 6b gives way to one closed form, `services._governed_by_another_act`: an act noun that is the object of another
+  act's noun and modifies what the act left ("Clip closure of the polypectomy defect failed.", "Retrieval of the
+  polypectomy specimen was unsuccessful.") states no act - the installed release's READY; every product noun's own
+  acquisition ("Biopsy tissue acquisition failed.") keeps its reading (closed C3-1 stays closed);
+- a listed removal stands beside "A 25 mm polyp was found in the cecum and was removed piecemeal." by one closed
+  observation-then-removal sentence (`services._OBSERVED_THEN_REMOVED`, its place phrase an anatomical site only) -
+  the abandoned shared subject had withheld that listing, which the installed release reads READY;
+- the instrument rule reads a narrative unless its heading LINE names a service with no finite verb on it
+  (`detect._heading_line_names_a_service`): "Procedure: Upper endoscopy" is named; "Procedure: The colonoscope ... This
+  was done on the same day as her upper endoscopy." is not (cycle 2's O4, as its named twin);
+- the marking statement admits a reduced passive after a lesion ("Separate transverse-colon lesion marked with
+  submucosal tattoo ...", 88d9db32's impression line), a hyphenated site, and "a tattoo mark".
+
+### Refutation of the integrated diff, cycle 4 (2026-11-06): five lenses over cycle 3's repair, then a differential check
+
+**The pass.** Workflow `wf_3ad094a1-5d9`: five lenses (structure, closed forms, outcome, answers, cost), each in a sealed,
+write-disabled sandbox at `52a5f774`, measured against that head, the cycle-2 head `844fe54c` and the installed base. They
+returned 23 findings (structure 4, closed 8, outcome 5, answers 3, cost 3). The owner session reproduced every one before
+changing anything (`verify/refute5/`: 130 inputs, variants and parity twins on three trees; the answers lens's twelve
+Django scenarios; the cost lens's generators).
+
+**What the findings showed.** Cycle 3's narrowings still released what the installed base holds, each through a mechanism
+that already had refuted cycles behind it: routing's sub-act consumption (a later failure of an act already stated done,
+a coordinated subject, the examination's failure stated with the sub-act's, and a quadratic clause scan - a 63 KB paste
+ran past the 60 s limits); the time-order exclusion added to the attribute failure ("abandoned before biopsies were
+obtained" read done); the observed-only removal exclusion (a removal stated in words no list holds, or inside the
+failure's own passage, excluded as not performed); the instrument rule's named-section test (a name on the line under a
+bare "Procedure:", or a narrative on the name's own line); the labelled paragraph's binding (a scope switch named with no
+instrument word) and its own first sentence (a denial the heading twin reads); and the answers' early return (stored
+fingerprints depending on an answer's form). The rest - the purpose release's dated or retracted clauses, the reach
+statement's later correction or limitation, the bolus anaphor's dated antecedent - were measured against their twins:
+each reads as the installed reader reads the same statement without the released construct (or, for the bolus, as this
+release reads every act's clause-local time).
+
+**The repair** (the two-cycle rule; every change narrows toward the installed base or restores parity):
+
+| approach | mechanisms |
+|---|---|
+| back to the installed reading | the services reader's failure words and attribute are the installed three again, read across any three words (`cues.FAILED_ACT`, `FAILED_ACT_BEFORE`; outcome 1, 5): routing holds the family on "aborted" as installed, so cycle 1's words, which held plainly done acts on a medication's or another session's aside, are not needed; routing gives a failure to a sub-act only in one closed form read whole in its sentence - "X of a/an ... was attempted, but the X was unsuccessful/failed [because of / due to ...]" then the clause's end (`detect._attempted_then_failed`), every U3 shape the requirement was built from - and the services reader is consulted only over that bounded span (outcome 2-4, cost 1: 350 KB in 1.5 s); the observed-only arm of the removal exclusion is abandoned (closed 1, 2) - only the reader's own NOT_REMOVED dispositions establish "not removed" |
+| kept because required, its gap closed | a consumed failure stays the family's mention, performed by its section as an instrument course is (cost 2: the e888f9ce shape with "scope", "endoscope" or the History label on its own line read READY again, not "only as planned"); the instrument rule's named section is read at the name's place - after the label to the first clause mark, or the next line's words under a bare label (structure 1, 3); a labelled paragraph binds its acts only until a sentence that takes a scope to no site or outside its tract (structure 2; "the scope was advanced to the second portion of the duodenum" changes nothing); a released label's own sentence is read as its heading twin's first sentence - by the silent-section reader and for references (structure 4) |
+| answers | the engine reads only an answer carrying its question's fingerprint, to a question no review decision opens or closes; every other answer - recorded before the binding, or to base_included, separate_em or a competition - is the review overlay's, read at read time over the current decisions as the installed release read every answer (`engine.OVERLAY_READ` in the record); another code's checks read again without an answered code keep that code's fingerprint (answers 1-3) |
+| recorded, not changed (bounded by parity) | closed 3, 4, 7 (the purpose release: a marking dated or taken back in another clause or sentence reads as the installed base reads the same statement without "for future localization"); closed 5, 8 (the reach statement: as the base reads "The colonoscope was advanced to the cecum."); closed 6 (the bolus anaphor: this release's clause-local time, as for every act); cost 3 (d44a77b3 with "36cm": the installed release holds the labelled form either way) |
+
+**Measured on the repair, and then a differential check in place of a fifth open cycle** (`verify/refute5/`):
+- **Every cycle-4 input** reads as the installed base, the parity classes apart (`tests/test_completion_refutation_c4.py`,
+  `completion-c4-cases.json` with the base, cycle-2, cycle-3 and repair readings of all 130 inputs and twins); outcome 3
+  and 4 read READY with the installed `service.incomplete` warning again.
+- **The differential scan**: every case file the lenses of cycles 1 to 4 built, deduplicated (1,862 inputs), read on this
+  repair, the installed base and the cycle-3 head. Every input this repair reads READY where the base does not is either
+  a parity twin the base reads READY (34) or a release the cycle-3 head already read READY and cycle 3 measured against
+  the base's twins (139); **none is open**. Every READY this repair adds over the cycle-3 head is READY on the base too
+  (44): the cycle-3 false holds removed. The BASE warnings it drops are U3's (the e888f9ce shapes) and the reach
+  statement's twin.
+- **The corpus** re-pinned beside `completion-refutation-c4-corpus.json`: 5 entries moved, all `ADM|C3-2-1` (the
+  abandoned observed-only arm: the participant's removal code admitted by equal eligibility is held and holds the base
+  code - a hold on the safe side); FALSE READY 35, **0 where the installed baseline had none**; FALSE HOLD 59.
+- **The retained cases**, recomputed: byte-identical to the cycle-3 head's readings - 39f0ac49 4 READY, d44a77b3 4 READY,
+  e888f9ce 2 READY with no incompleteness flag, 88d9db32 6 READY.
+- **The answers lens's scenarios** (`tests/test_completion_refutation_c4_answers.py`): no answer - unrelated, withdrawn,
+  a corrected value, recorded before the binding - invalidates a decision; a rejection that closes the base code's
+  base_included question releases it; a check the overlay cannot recompute is marked stale.
+- **The gates**: freeze holds; the battery 6 movements, none undeclared, no new violation (cycle 3's four removal
+  exclusions no longer move); the replay differs from the base by its version labels alone.
+- **The full suite on `e273dc5a`** (frozen sandbox, 6,385 Django tests in three chunks): 14 tests (44 subtests) pinned the
+  abandoned observed-only exclusion - builder Q1's stated-not-done rule, harness 2's D14 N1 and its r7 rationale, the H4
+  battery rows R8 D1 N1 and R8 D9 "to be removed tomorrow" - each read, measured on the installed base, and re-pinned to
+  the held reading (`completion-refutation-c4-battery.json` chains the battery rows' move); ops 524, verification 43,
+  browser verifier 135, frontend 65 and operator 135 pass; check and makemigrations are clean. The install predictions on
+  it equal cycle 3's (retained 4/4/2/6 READY, nothing sent, RECOMPUTE_STATES unchanged, e888f9ce's two decisions
+  invalidated, the planted control caught), and the c1 set's offline reading still matches its manifest.
+
+### The differential round over cycle 4's repair (2026-11-07): three lenses, and what it closed
+
+**The pass.** Workflow `wf_f8f66730-784`: three lenses (routing, structure, answers) at `e273dc5a`, each asked only
+whether the new head is worse than the installed base or the previous head `52a5f774` in a must-fix class, and only
+through the code cycle 4 changed. They returned 10 findings (structure 6, routing 3, answers 1); every one was reproduced
+on the three trees before any change (`verify/refute5/`: the structure lens's 40 inputs and twins, the routing lens's 617
+inputs, the answers lens's ten scenarios). Five came from cycle 4's own new code (structure 1 and 5, routing 1 and 2,
+answers 1); the rest were gaps cycles 3 and 4 had not closed.
+
+**The repair** (every change toward the installed base or its twin):
+
+| finding | repair |
+|---|---|
+| structure 1, 4: a list number, bracket or qualifier before the name ("Procedure: 1. Upper endoscopy", "[EGD]", "Diagnostic, upper endoscopy") ended the name's place; a name that is the line's subject ("Upper endoscopy was performed ...") was exempt | the name's place is cut into segments at a clause, aside or list mark, and a segment that begins with a service name - at most three words, no finite verb, before it - names the section (`detect._heading_line_names_a_service`) |
+| structure 2: the narrative under a sub-heading ("Description of procedure:", "Technique:", "Findings:") of a report that names its examination on its procedure line | the instrument rule reads no narrative of a report whose procedure, findings or technique heading names a family (`detect._a_named_positive_section`) |
+| structure 3, 5: a labelled paragraph's switch naming an own-tract site, or in its first sentence; an ordinary "The colonoscope was withdrawn slowly." returning the rest of a paragraph to the Indications it stood in | the label binds its acts only until the first later sentence naming a scope, and not at all where the first sentence names two; past that point the paragraph is today's report binding no single family (a combined report part), so a sited act binds by its site and a site-less one is the twin's |
+| structure 6: a label sentence that reschedules its own family | read as the twin reads its first sentence (`_reschedules`, the label's family only) |
+| routing 1: the closed form's regex backtracked for seconds on one 2,000-character sentence | read in fixed, unnested steps: the core anchored, the attempt's clause read back to its start, the end read forward (200 KB in 2.7 s; it was 64 s) |
+| routing 2: a line break or a semicolon's unknown clause ended the form ("...was unsuccessful\nas was the remainder of the examination") | the form ends only at its sentence's full stop, or at "; the polyp was left in place."; a reason with its own clause ("... a perforation that ended the procedure") and an elliptical next sentence ("So was the remainder of the examination.") end none |
+| routing 3: the consumed failure's performed mention skipped the gates an instrument course passes | it stands only where no name of the family reads otherwise (I8) and the heading twin is not qualified (I12: "Procedure completed: No"); else the installed reading |
+| answers 1: a fingerprinted base_included answer, moved to the overlay in cycle 4, was dropped as "asked differently" when a decision reworded the hidden reason | an answer to base_included or separate_em binds by its key in every reader, as the installed release bound every answer (`questions.KEY_BOUND_FACTS`) - the member's row never changes with a decision |
+
+**Measured on the repair:** every input of the three lenses reads as the installed base or its twin (the routing lens's
+remaining READYs over the base are its twins' or cycle 3's measured releases; its remaining dropped flags are U3's, or a
+statement no tree reads without the failed attempt); every answers scenario step equals the base's but one recorded
+"no longer asked" listing that the previous head shares; the corpus moves nothing (FALSE READY 35, 0 new); the retained
+cases are byte-identical to cycle 3's; the structure repairs move none of the 1,673 earlier lens inputs. The final scan
+and the full suite are recorded below.
+
+**The final scan** (`verify/refute5/`, `fin.*`): every case file the lenses of cycles 1 to 4 and of this round built,
+deduplicated (2,568 inputs; 195 carry a date the harness refuses on every tree alike), read on the repair (`443740630`),
+the installed base and the cycle-3 head.
+- **234 READYs the base does not read; none is open.**
+  - From the earlier cycles, 173: parity twins the base reads READY (34), and releases cycle 3 measured against the base's
+    twins (139), as in cycle 4's scan.
+  - From this round's inputs, 61, each bounded by its own twin on the base:
+    - 30 by their heading twins;
+    - the routing lens's U3 group, 4 (a failed removal or dilation in an unnamed or "scope" section), by its named variant;
+    - its cancellation group, 22 (the closed form beside "The colonoscopy was cancelled.", "Colonoscopy was not performed.",
+      a decline, a pending or hedged examination, in a section that does not name it), by its heading twins. The base
+      reads those READY with its incompleteness warning - this head's own reading of the input, the I8 gate giving the
+      closed form its installed reading. The base holds the unnamed form only through its base_included question on the
+      failed polypectomy, which U3 removes;
+    - the structure lens's 5 (H2's withdrawn-slowly and repositioned shapes) by theirs, one of them the recorded exception
+      (43247, the twin's own false hold).
+- **211 READYs over the cycle-3 head:** 161 are READY on the base, and the other 50 are among the twin-bounded ones above.
+- **109 base warnings dropped on READYs both trees read.**
+  - From the earlier cycles, 52: U3's e888f9ce shapes (49), the reach statement's recorded twin (1) and the purpose
+    release's marking statement (2).
+  - From this round, 57:
+    - 35 with the examination named, where the base reads the same text without the attempt READY with no warning;
+    - 16 in an unnamed section, each read as the base reads its heading twin without the attempt (or keeping the warning);
+    - 6 with the closed form in another occasion's section of an EGD report (the recorded residual).
+- The two routing groups are pinned with their twins (`completion-c5-cases.json`, now 309 inputs). Disabling the I8 gate
+  on the consumed failure fails 48 of them, 42 in the cancellation group; before the extension only 6 caught it.
+  The mutation was asserted applied, and the file was restored byte-identical (sha256).
+
+**The full suite on `443740630`** (frozen sandbox): 6,390 Django tests pass in three chunks (4 skipped); ops 524, verification 43, the browser verifier 135, frontend 65 and operator 135 pass; check and makemigrations are clean (2026-11-07T00:17:18Z to 00:34:04Z). The fixture extension above adds pins only, and its module was re-run on it (3 tests OK).
+
+**The gates and the install predictions on `443740630`:**
+- freeze holds; the battery has 6 movements, all declared, and no new violation; the replay differs by its version labels
+  alone.
+- The predictions (a fresh read-only dump restored into throwaway databases) are identical to cycles 3 and 4 apart from
+  the code fingerprint in the reassess keys:
+  - retained 4/4/2/6 READY, and e888f9ce's two decisions invalidated;
+  - nothing sent;
+  - RECOMPUTE_STATES unchanged on the head, the installed revision and the rollback read;
+  - the planted control caught.

@@ -7,16 +7,19 @@ Refutation cycle 2 (HARNESS.md "Harness repair 3, refutation cycle 2") dropped F
 rule, and cycle 4 dropped F-ACTS: the titles with an aside, the labelled paragraphs and "the bolus was removed" read as
 the base reads them, pinned below as recorded residuals - so 39f0ac49's 43247 has no documented act and is listed. The
 admission cases therefore read a plain report (PLAIN) and its documented biopsy, and the labelled one shows the
-provider-neutral hold: a participant's code for an act stated done in a doubted service is held as Corti's code is."""
+provider-neutral hold: a participant's code for an act stated done in a doubted service is held as Corti's code is.
+
+Completion repair (2026-11-06, U2): the labelled paragraphs are read as today's procedures by studio.gi.structure, so
+the labelled report's codes are READY for Corti and a participant alike (InlineServiceLabelTests' moved pins); the
+bolus stays the base's (no foreign-body act for "the bolus was removed")."""
 from datetime import date
 
 from django.test import SimpleTestCase
 
-from studio.gi import detect, sections
+from studio.gi import detect, sections, structure
 from studio.gi import services as gi_services
 from studio.validation import engine, review_view
-from tests.test_harness_engine import DAY, code, corti, not_coded, proposal, read, run, span
-from tests.test_harness2_r6_meaning import P_ADMIT_REASONS
+from tests.test_harness_engine import DAY, code, corti, decision, not_coded, proposal, read, run, span
 
 HEAD = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n'
         'Gastroenterology Procedure Report\n'
@@ -65,14 +68,20 @@ class TitleAsideTests(SimpleTestCase):
         return sections.layout(text).sections[0].kind if sections.layout(text).sections[0].start == 0 else None
 
     def test_an_aside_title_reads_as_the_base_reads_it(self):
-        for title, family in (('Colonoscopy Report (fictional)', 'gi.colonoscopy'),
-                              ('Colonoscopy Report (Final)', 'gi.colonoscopy'),
-                              ('Upper Endoscopy Report (amended)', 'gi.egd'),
-                              ('EGD Procedure Note (corrected)', 'gi.egd')):
+        # The layout is the base's for every title (the frozen request side). Completion repair (2026-11-06, builder R2,
+        # U4): the colonoscope's own course under the "Procedure" heading is now a mention of today's colonoscopy
+        # (detect._instrument_mentions), so under a title whose only addition is an aside about the document itself
+        # ("(fictional)", "(Final)") the colonoscopy reads performed - moved from uncertain. The counter-cases stay as
+        # the base reads them: a colonoscope's course under an upper endoscopy's title is no colonoscopy of a report that
+        # names another family (I6), and "(amended)" or "(corrected)" is outside the closed class of asides (I7).
+        for title, family, status in (('Colonoscopy Report (fictional)', 'gi.colonoscopy', 'performed'),
+                                      ('Colonoscopy Report (Final)', 'gi.colonoscopy', 'performed'),
+                                      ('Upper Endoscopy Report (amended)', 'gi.egd', 'uncertain'),
+                                      ('EGD Procedure Note (corrected)', 'gi.egd', 'uncertain')):
             text = f'{title}\nDate of service: 2026-10-14\nProcedure\nThe colonoscope was advanced to the cecum.\n'
             with self.subTest(title):
                 self.assertEqual(sections.layout(text).sections[0].kind, 'other')
-                self.assertEqual(families(text), {family: 'uncertain'})
+                self.assertEqual(families(text), {family: status})
         self.assertEqual(self.title_kind('Colonoscopy Report'), 'procedure')
 
     def test_an_aside_of_another_time_a_plan_a_doubt_or_a_denial_is_no_title(self):
@@ -83,51 +92,73 @@ class TitleAsideTests(SimpleTestCase):
                 self.assertNotEqual(self.title_kind(title), 'procedure')
 
     def test_the_walks_word_reports_read_as_the_base_reads_them(self):
-        # recorded residual: the Word walk's titles with an aside route their procedure as the base does (h2b
-        # historical, h2c uncertain), so neither is READY there
+        # Was a recorded residual (the Word walk's titles with an aside routed their procedure as the base does: h2b
+        # historical, h2c uncertain). Completion repair (2026-11-06, builder R2, U4): each report's instrument course
+        # under its "Procedure" heading ("The colonoscope was advanced to the cecum ...", "The gastroscope was passed to
+        # the second portion of the duodenum.") is today's procedure, so both read performed. The layout itself is
+        # unchanged (the title still opens no section).
         from tests.test_participants_support import FIXTURES
-        for name, day, family, status in (('h2b', date(2026, 10, 29), 'gi.colonoscopy', 'historical'),
-                                          ('h2c', date(2026, 10, 28), 'gi.egd', 'uncertain')):
+        for name, day, family, status in (('h2b', date(2026, 10, 29), 'gi.colonoscopy', 'performed'),
+                                          ('h2c', date(2026, 10, 28), 'gi.egd', 'performed')):
             text = (FIXTURES / 'fable-walk' / f'{name}.context.txt').read_text(encoding='utf-8')
             with self.subTest(name):
                 self.assertEqual(families(text, day)[family], status)
 
 
 class InlineServiceLabelTests(SimpleTestCase):
-    """F-SECTIONS L, dropped under the two-cycle rule (L5-1 to L5-3, then C2-3-1 to C2-3-8): a paragraph labelled with a
-    service's name inside the Indications reads as the base reads it - both services uncertain, with or without the
-    labels - so 39f0ac49's shape is held, never READY. A recorded residual (a false hold). Its codes reach review held:
-    a participant's code for the act its own passage shows exactly as Corti's code for that act (refutation cycle 2,
-    the provider-neutral admission)."""
+    """F-SECTIONS L, dropped under the two-cycle rule (L5-1 to L5-3, then C2-3-1 to C2-3-8), changed sections.py
+    itself. The completion repair (2026-11-06, U2) reads the same shape without touching the layout:
+    studio.gi.structure releases a labelled procedure paragraph only on the structural conditions P1-P4 and N1-N3, and
+    the clinical readers read the derived layout (tests/test_completion_structure.py pins each condition).
 
-    def test_the_labelled_parts_read_as_the_base_reads_them(self):
-        self.assertEqual(families(LABELLED), {'gi.egd': 'uncertain', 'gi.colonoscopy': 'uncertain'})
+    MOVED PINS (completion repair, U2; these were the residual pins of the dropped rule): 39f0ac49's shape - a
+    "Gastroenterology Procedure Report" whose "Upper endoscopy:" and "Colonoscopy:" paragraphs narrate each scope's own
+    course after an Indications line with content of its own - now reads both services performed, each paragraph a
+    report part of its family, and its codes READY for Corti and for a participant alike (the provider-neutral
+    admission: one evaluation, whoever proposed the code). sections.layout itself is unchanged: the frozen layout still
+    opens no procedure section there. Every counter-case pin below is kept, and now also asserts that nothing is
+    released."""
+
+    def test_the_labelled_parts_read_as_todays_procedures(self):
+        # moved (U2): was {'gi.egd': 'uncertain', 'gi.colonoscopy': 'uncertain'} and no report part, as the base read it
+        self.assertEqual(families(LABELLED), {'gi.egd': 'performed', 'gi.colonoscopy': 'performed'})
         kinds = [(s.kind, s.label) for s in sections.layout(LABELLED).sections]
-        self.assertNotIn(('procedure', 'upper endoscopy'), kinds)
+        self.assertNotIn(('procedure', 'upper endoscopy'), kinds)  # the frozen layout is unchanged
         self.assertNotIn(('procedure', 'colonoscopy'), kinds)
-        self.assertFalse([part for part in gi_services.parts(LABELLED, service_date=DAY) if part.kind == 'report'])
+        derived = [(s.kind, s.label) for s in structure.clinical_layout(LABELLED).sections]
+        self.assertIn(('procedure', 'upper endoscopy'), derived)
+        self.assertIn(('procedure', 'colonoscopy'), derived)
+        self.assertEqual([part.family for part in gi_services.parts(LABELLED, service_date=DAY) if part.kind == 'report'],
+                         ['gi.egd', 'gi.colonoscopy'])
 
-    def test_a_participants_code_is_held_as_cortis_code_for_the_same_act(self):
-        # the biopsy is stated done inside the EGD the reading documents in doubt: a participant's 43239 is held exactly
-        # as Corti's is (the provider-neutral admission as refutation cycle 3 narrowed it)
+    def test_a_participants_code_reads_as_cortis_code_for_the_same_act(self):
+        # moved (U2): the biopsy is stated done inside today's EGD, so Corti's 43239 is READY, and a participant's 43239
+        # for the same passage reads exactly as Corti's (was: both held, the service's doubt)
         codes = corti(('45385', span(LABELLED, SNARE)))
         by_corti = proposal(run(LABELLED, codes + corti(('43239', span(LABELLED, EGD_BIOPSY)))), '43239')
-        self.assertEqual((by_corti.bucket, by_corti.status), ('selected', 'needs_clarification'))
+        self.assertEqual((by_corti.bucket, by_corti.status), ('selected', 'ready'))
         for name in ('astra', 'fable'):
             with self.subTest(name):
                 item = proposal(run(LABELLED, codes, [read(name, [code(LABELLED, '43239', EGD_BIOPSY)])]), '43239')
                 self.assertEqual((item.bucket, item.status, item.support['origin'], item.support['proposed_by']),
-                                 ('selected', 'needs_clarification', 'participant', [name]))
+                                 ('selected', 'ready', 'participant', [name]))
 
-    def test_without_f_acts_39f0ac49s_bolus_removal_is_no_documented_act(self):
-        # F-ACTS was refuted in cycles 3 and 4 and is dropped (recorded residual): "the bolus was removed" names no
-        # foreign-body act, so Corti's 43247 on it is held by the service's doubt and a participant's is listed
+    def test_39f0ac49s_bolus_removal_is_the_egds_foreign_body_act(self):
+        # MOVED PIN (completion repair 2026-11-06, integration of builders R1 and A). Was: F-ACTS refuted in cycles 3
+        # and 4 and dropped, so "the bolus was removed" named no foreign-body act, Corti's 43247 was held by the
+        # service's doubt and a participant's was listed. Now the bolus resolves to its documented antecedent ("A large
+        # impacted meat bolus was found at 34 cm") and is the structural subject of its removal (U1, builder A), inside
+        # the report's own labelled "Upper endoscopy:" part (U2, builder R1): one foreign-body act today, so Corti's
+        # 43247 is READY and a participant's 43247 for the same passage reads exactly as Corti's
         codes = corti(('43239', span(LABELLED, EGD_BIOPSY)), ('45385', span(LABELLED, SNARE)))
         by_corti = proposal(run(LABELLED, codes + corti(('43247', span(LABELLED, NET)))), '43247')
-        self.assertEqual((by_corti.bucket, by_corti.status), ('selected', 'needs_clarification'))
-        listed = proposal(run(LABELLED, codes, [read('astra', [code(LABELLED, '43247', NET)])]), '43247')
-        self.assertEqual((listed.bucket, listed.status), ('alternative', 'informational'))
-        self.assertIn(engine.PARTICIPANT_NO_ACT, listed.exclusion_reason)
+        self.assertEqual((by_corti.bucket, by_corti.status), ('selected', 'ready'))
+        for name in ('astra', 'fable'):
+            with self.subTest(name):
+                item = proposal(run(LABELLED, codes, [read(name, [code(LABELLED, '43247', NET)])]), '43247')
+                self.assertEqual((item.bucket, item.status, item.support['origin'], item.support['proposed_by']),
+                                 ('selected', 'ready', 'participant', [name]))
+                self.assertEqual(decision(item), decision(by_corti))  # builder Q1: one evaluation, whoever proposed
 
     def test_without_its_reading_the_installed_reader_held_both(self):
         flat = LABELLED.replace('Upper endoscopy: ', '').replace('Colonoscopy: ', '')
@@ -150,15 +181,22 @@ class InlineServiceLabelTests(SimpleTestCase):
         for label, text in cases.items():
             with self.subTest(label):
                 self.assertNotIn(('procedure', 'colonoscopy'), [(s.kind, s.label) for s in sections.layout(text).sections])
+                # the completion repair's release opens nothing here either (U2: each counter-case keeps the base)
+                self.assertEqual(structure.released(text), ())
+                self.assertNotIn(('procedure', 'colonoscopy'),
+                                 [(s.kind, s.label) for s in structure.clinical_layout(text).sections])
 
 
 class ForeignBodyActTests(SimpleTestCase):
     """F-ACTS (a bolus named by its food, or "the bolus", read as the foreign-body act where its clause states it
-    removed) was refuted in refutation cycles 3 and 4 and is dropped under the two-cycle rule: the foreign-body act is
-    the base's "foreign body", "food bolus" and "food impaction" again. A recorded residual (39f0ac49's 43247)."""
+    removed) was refuted in refutation cycles 3 and 4 and dropped under the two-cycle rule. The completion repair
+    (2026-11-06, U1, builder A) changed the approach rather than the requirement: a definite bolus phrase resolves to
+    its documented antecedent, and a removal is the bolus's only when the bolus is the removal predicate's structural
+    subject or object (services._removal_subject, _bolus_index). The F-ACTS refuters below stay non-removals."""
 
-    def test_the_bolus_the_net_removed_reads_as_the_base_reads_it(self):
-        self.assertNotIn(('foreign_body', 'performed'), acts(LABELLED, 'gi.egd'))
+    def test_the_bolus_the_net_removed_is_the_foreign_body_act(self):
+        # MOVED PIN (integration of builders R1 and A): was assertNotIn - the base read no act there
+        self.assertIn(('foreign_body', 'performed'), acts(LABELLED, 'gi.egd'))
 
     def test_a_medication_bolus_a_finding_or_a_push_is_no_removal(self):
         egd = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report\n'
@@ -206,9 +244,17 @@ class AdmissionCaseTests(SimpleTestCase):
                 result = run(text, corti(('45380', span(text, biopsy))),
                              [read('astra', [code(text, '45385', line)]), read('fable', [code(text, '45385', line)])])
                 found = [p for p in result.proposals if p.code == '45385']
-                self.assertEqual([(p.bucket, p.status) for p in found], [('alternative', 'informational')])
-                after = found[0].exclusion_reason.split('but not added as a proposal: ', 1)[1]
-                self.assertTrue(any(after.startswith(reason) for reason in P_ADMIT_REASONS), after)
+                # moved by the completion repair (builder Q1, equal eligibility): never READY, and read exactly as
+                # Corti's own selection of the passage - excluded with the passage that states the act failed, denied
+                # or planned (reinstatable), held for the earlier colonoscopy's - never an alternative
+                self.assertEqual(len(found), 1)
+                self.assertNotEqual(found[0].status, 'ready')
+                self.assertIn((found[0].bucket, found[0].status),
+                              (('excluded', 'excluded'), ('selected', 'needs_clarification')))
+                by_corti = proposal(run(text, corti(('45380', span(text, biopsy)), ('45385', span(text, line)))),
+                                    '45385')
+                self.assertEqual((found[0].bucket, found[0].status, found[0].exclusion_reason),
+                                 (by_corti.bucket, by_corti.status, by_corti.exclusion_reason))
 
     def test_a_number_only_in_an_alternative_list_is_never_promoted(self):
         codes = corti(('45385', span(PLAIN, SNARE))) + [engine.ProviderCode('candidate', 'cpt', '43239', '', ())]
@@ -228,10 +274,13 @@ class CompetitionReviewTests(SimpleTestCase):
            'The gastroscope was passed to the second portion of the duodenum.\n')
     DILATION = ('A through-the-scope balloon was positioned across the Schatzki ring and inflated to 18 mm under direct '
                 'visualization.')
+    # Completion repair (integration, 2026-11-06): a guide-wire code (43248) no longer accounts for a balloon
+    # dilation (reconcile.technique_fits), so the rival here is the other balloon code (43233), whose technique
+    # the document does not tell apart from 43249's; the competition this pins is unchanged
 
     def setUp(self):
         self.text = self.EGD + self.DILATION + '\n'
-        self.result = run(self.text, corti(('43248', span(self.text, self.DILATION))),
+        self.result = run(self.text, corti(('43233', span(self.text, self.DILATION))),
                           [read('astra', [code(self.text, '43249', self.DILATION)])])
         self.rows = [review_view.stored_from(p) for p in self.result.proposals]
         self.keys = {p.code: p.key for p in self.result.proposals if p.bucket == 'selected'}
@@ -243,15 +292,15 @@ class CompetitionReviewTests(SimpleTestCase):
     def test_both_are_held_until_one_is_rejected_then_the_other_is_ready(self):
         views = self.views()
         self.assertEqual({views[k].status for k in self.keys.values()}, {'needs_clarification'})
-        after = self.views({self.keys['43248']: 'reject'})
+        after = self.views({self.keys['43233']: 'reject'})
         kept = after[self.keys['43249']]
         self.assertEqual((kept.status, kept.released), ('ready', (engine.COMPETING_FACT,)))
         self.assertFalse(any(c.get('id') == engine.COMPETING_CHECK for c in kept.checks))
-        other = self.views({self.keys['43249']: 'reject'})[self.keys['43248']]
+        other = self.views({self.keys['43249']: 'reject'})[self.keys['43233']]
         self.assertEqual(other.status, 'ready')  # the same rule for Corti's code: neither is preferred
 
     def test_a_member_answer_never_lifts_the_hold_on_the_other_code(self):
-        answers = [{'code': '43248', 'family': 'gi.egd', 'fact': engine.COMPETING_FACT, 'value': 'not_documented'}]
+        answers = [{'code': '43233', 'family': 'gi.egd', 'fact': engine.COMPETING_FACT, 'value': 'not_documented'}]
         views = self.views(answers=answers)
         self.assertEqual(views[self.keys['43249']].status, 'needs_clarification')
 

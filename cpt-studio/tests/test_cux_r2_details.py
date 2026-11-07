@@ -408,15 +408,47 @@ class OneQuestionPerServiceFactTests(DetailsCase):
     def test_a_code_the_answer_does_not_yet_cover_keeps_the_row_open_and_one_save_covers_it(self):
         assessment = self.assess(asks('sel:0', '45385', pf.SNARE_PASSAGE, 'extent'),
                                  asks('sel:1', '45380', pf.CECUM_PASSAGE, 'extent'))
-        earlier = models.MemberAnswer.objects.create(  # an answer saved while only 45385 asked it
+        # an answer saved while only 45385 asked it - bound to 45385's question as it was asked (completion repair
+        # 2026-11-06, U11), which the assessment asks the same way now
+        earlier = models.MemberAnswer.objects.create(
             encounter=self.s.encounter, revision=self.s.revision, assessment=assessment, fact='extent', family=COLON,
-            code='45385', value='not_documented', answered_by=self.s.reviewer)
+            code='45385', value='not_documented', answered_by=self.s.reviewer,
+            question=review.asked_fingerprints(assessment)[('45385', COLON, 'extent')])
         (row,) = self.extent_rows()
         self.assertIsNone(row['saved'])  # 45380 has no answer: asked, never answered for it silently
         response = self.post([self.answer(row, 'not_documented')])
         self.assertEqual((response.status_code, len(response.json()['answer_ids'])), (201, 1))
         self.assertFalse(models.MemberAnswerRevocation.objects.filter(answer=earlier).exists())  # kept as it was
         self.assertEqual(sorted(item['code'] for item in answers.saved_answers(assessment)), ['45380', '45385'])
+
+    def test_an_answer_saved_in_the_earlier_form_binds_by_its_key(self):
+        """Completion repair (2026-11-06, U11), as refutation cycle 2 decided (answers W2, W4): an answer recorded before
+        answers carried their question's fingerprint was given to the installed release's fixed prompt for its (code,
+        family, fact) - no question, reason or passage reached the member - so it binds by that key, as the installed
+        release bound it: to the question its own assessment asked, and to the same key asked for another reason by a
+        later assessment of its revision (cycle 1 bound it by the engine's words, which this release rewords). Applied to
+        its code only, and kept as it was."""
+        first = self.assess(asks('sel:0', '45385', pf.SNARE_PASSAGE, 'extent'),
+                            asks('sel:1', '45380', pf.CECUM_PASSAGE, 'extent'))
+        legacy = models.MemberAnswer.objects.create(
+            encounter=self.s.encounter, revision=self.s.revision, assessment=first, fact='extent', family=COLON,
+            code='45385', value='not_documented', answered_by=self.s.reviewer)
+        self.assertEqual(legacy.question, '')
+        views = review.effective_view(first)
+        self.assertEqual((views['sel:0'].reason, views['sel:1'].reason), (review.DETAIL_UNAVAILABLE, ''))
+        self.assertEqual(answers.earlier_answers(self.s.encounter, first), [])
+        (row,) = self.extent_rows()
+        self.assertIsNone(row['saved'])  # 45380 has no answer: the row still asks it
+        # the same (code, family, fact) asked for another reason: bound by its key, applied to 45385 alone
+        second = self.assess(
+            pf.proposal('sel:0', '45385', [pf.SNARE_PASSAGE], status='needs_clarification', clarifications=(
+                pf.clarification('extent', scope='proposal', family=COLON, proposal_key='sel:0',
+                                 reason='The extent is asked for another reason.'),)),
+            asks('sel:1', '45380', pf.CECUM_PASSAGE, 'extent'))
+        views = review.effective_view(second)
+        self.assertEqual((views['sel:0'].reason, views['sel:1'].reason), (review.DETAIL_UNAVAILABLE, ''))
+        self.assertEqual(answers.earlier_answers(self.s.encounter, second), [])
+        self.assertFalse(models.MemberAnswerRevocation.objects.filter(answer=legacy).exists())  # kept as it was
 
     def test_a_question_about_one_code_stays_that_codes_own(self):
         self.assess(asks('sel:0', '45385', pf.SNARE_PASSAGE, 'base_included', 'performed_status'),

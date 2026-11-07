@@ -84,7 +84,11 @@ class MemberAnswerEffectTests(WireCase):
         (answer,) = models.MemberAnswer.objects.filter(encounter=s.encounter)
         self.assertEqual((answer.code, answer.family, answer.fact, answer.value),
                          ('45378', COLON, 'base_included', 'not_documented'))
-        self.assertEqual(review._member_answers(assessment), answers.saved_answers(assessment))
+        # bound to the overlay's own question as it is asked (completion repair 2026-11-06, U11): the overlay reads it
+        self.assertEqual(review._member_answers(assessment),
+                         [{key: item[key] for key in ('code', 'family', 'fact', 'value', 'answer_id')}
+                          for item in answers.saved_answers(assessment)])
+        self.assertEqual(answer.question, review.asked_fingerprints(assessment)[('45378', COLON, 'base_included')])
 
         # every reader of the overlay
         view = review.effective_view(assessment)[assessment.proposals.get(code='45378').key]

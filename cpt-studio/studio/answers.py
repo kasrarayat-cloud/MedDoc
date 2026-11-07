@@ -13,17 +13,28 @@ the answers a member saves, and the date of service as the document and the memb
   one of the document's conflicting dates before they were in view (L7-02).
 - ``save_details(encounter, user, answers)``: one save for every row. Context values go through ONE jobs.change_context
   call (the existing path: a new context, then a re-assessment exactly as a context save makes it); "Not documented" and
-  "Cannot confirm" are MemberAnswer rows - one for each code the row's question holds - read by the review overlay at
-  read time (no re-assessment, nothing sent). A repeated identical save makes nothing.
+  "Cannot confirm" are MemberAnswer rows - one for each code the row's question holds - each bound to the question it
+  answered, and the save queues ONE recompute of the assessment (jobs.recompute_after_answers: the AGAIN path with the
+  recorded runs, the bounded assess child, nothing sent), which reads the answers as an input (engine._MemberAnswers).
+  Until it has run, the review overlay applies them at read time. A repeated identical save makes nothing.
 - ``revoke_answer(encounter, user, answer_id)``: withdraws one answer - with it, the same question's answer for the
-  row's other codes.
-- ``saved_answers(assessment)``: the standing answers of the assessment's revision, which the overlay applies.
+  row's other codes - and queues the recompute the same way. An answer the assessment itself read stays in effect on
+  every surface until that recompute has run (refutation cycle 2, answers W1: one source of truth); the recompute is
+  a visible job, with Stop and Resume.
+- ``saved_answers(assessment)``: the standing answers of the assessment's revision.
+- ``earlier_answers(encounter, assessment)``: the standing answers no question asked now takes, each with why.
 - ``service_date_block(encounter)``: the date of service as the document and the member state it, side by side.
 
-An answer binds to (code, family, fact) and its revision - never to a clarification row or a proposal key, which every
-re-assessment makes anew - so it stands through a re-assessment of the same revision. Every sentence a member reads here
-is from the fixed tables below: no stored question, reason or note text (engine prose, which may quote anything) is
-passed through; the document's own words are quoted only as exact slices of its text.
+An answer binds to the question it answered (completion repair 2026-11-06, U11): the code, family and fact it was asked
+of, its revision, and the fingerprint of that question as the row showed it - CPT Studio's question and reason and the
+passages it concerns (studio.validation.questions) - never to a clarification row or a proposal key, which every
+re-assessment makes anew. A later assessment applies it only where it asks the same question; an answer to a question
+no longer asked, or asked differently, is kept and listed as an earlier answer, never applied. An answer given before
+rows showed their passages (MemberAnswer.question '') was given to the installed release's fixed prompt for its code,
+family and fact, and binds by them, as that release bound it (refutation cycle 2, answers W2 and W4). Every sentence a
+member reads here is from the fixed tables below: no stored question, reason or
+note text (engine prose, which may quote anything) is passed through; the document's own words are quoted only as
+exact slices of its text.
 """
 from __future__ import annotations
 
@@ -38,6 +49,7 @@ from django.db import transaction
 from . import audit, jobs, models, review
 from .gi import context as gi_context
 from .gi.profiles import PROFILES
+from .validation import questions
 from .validation.engine import COMPETING_FACT
 from .validation.reconcile import act_label
 
@@ -84,7 +96,7 @@ PROMPTS = {
                     'does not support; the code left is then ready for review.',
 }
 CONFLICT_PROMPT = 'The record has conflicting statements about the {act}. Which is right for this date?'
-DEFAULT_PROMPT = 'A detail this code depends on is not clear in the document.'
+DEFAULT_PROMPT = 'CPT Studio could not confirm a detail this code depends on.'  # U9: CPT Studio's reading
 DATE_PROMPTS = {'member': 'The date of service entered for this document differs from the date in the document.',
                 'document': 'The document states more than one date of service.',
                 'asked': 'Confirm the date of service for this document.',
@@ -97,6 +109,27 @@ DATE_PROMPTS = {'member': 'The date of service entered for this document differs
                 'chosen': 'The document states more than one date of service. The date chosen is in use.',
                 'entered': 'The date of service entered for this document is in use.'}
 USE_DOCUMENT_LABELS = {DATE: 'Use document date', CHOICE: 'Use what the document states'}
+# Completion repair (2026-11-06, U10): what a clinical question's row says, beside its passages - what CPT Studio could
+# not confirm, never that the document does not state it (only a passage says that; a conflict's row says the record
+# states it both ways, which its passages show)
+STATEMENT = 'From the document, CPT Studio could not confirm {missing}.'
+CONFLICT_STATEMENT = ('The document states the {act} in more than one way, and CPT Studio could not confirm which '
+                      'statement is right for this date.')
+COMPETING_STATEMENT = ('More than one code is proposed for the same documented act, and CPT Studio does not choose '
+                       'between them.')
+# a coding question, not a documentation one: what the code depends on is the reviewer's call, never the document's
+CODING_STATEMENTS = {
+    'base_included': ('This diagnostic examination is normally included in the other procedures documented with it; '
+                      'CPT Studio does not decide whether it is reported separately.'),
+}
+MAX_ROW_PASSAGES = 4  # a row asked for several codes shows each code's passages, a short list in all
+# Why a standing answer is listed as an earlier answer (questions.bind's reasons), as a member reads it
+EARLIER_WHY = {
+    questions.NO_LONGER_ASKED: 'This question is no longer asked, so this answer is not applied.',
+    questions.ASKED_DIFFERENTLY: ('This question is now asked differently, so this answer is not applied; answer the '
+                                  'question as it is asked now.'),
+    'not_applied': 'This answer is not applied to the current results.',
+}
 STATED_IN_DOCUMENT = '{value} (stated in the document)'
 # The activity rows this flow writes, as a customer reads them (the customer activity allowlist reads these).
 ACTIVITY_SUMMARIES = {'detail.answered': 'A detail was answered', 'detail.revoked': 'A saved detail was withdrawn',
@@ -302,6 +335,11 @@ class _Row:
     saved_date: Optional[dict] = None
     confirm: bool = False
     addendum: bool = False
+    # completion repair (2026-11-06, U10): the passages the row's questions concern, the fact they name, and what CPT
+    # Studio could not confirm
+    passages: list = field(default_factory=list)
+    missing: str = ''
+    statement: str = ''
 
     @property
     def id(self):
@@ -341,6 +379,7 @@ class _Row:
             'prompt': self.prompt, 'control': self.control, 'choices': list(self.choices), 'allow': list(self.allow),
             'document_value': self.document_value, 'entered_value': self.entered_value, 'quote': self.quote,
             'affects': list(self.codes), 'saved': saved, 'addendum_allowed': self.addendum_allowed,
+            'missing': self.missing, 'statement': self.statement, 'passages': [dict(item) for item in self.passages],
         }
 
 
@@ -351,14 +390,16 @@ def standing_answers(revision_id):
 
 
 def saved_answers(assessment) -> list[dict]:
-    """[{code, family, fact, value, answer_id, by, at}]: the standing member answers of ``assessment``'s revision, which
-    the review overlay applies to the questions they answer (a proposal's question answered 'not documented' or 'cannot
-    confirm' leaves that proposal excluded until the answer is withdrawn; a service's question is closed). One per
-    detail and code: a later answer to the same detail withdraws the earlier one."""
+    """[{code, family, fact, value, answer_id, by, at, question}]: the standing member answers of ``assessment``'s
+    revision, oldest first: a later answer to the same detail withdraws the earlier one. Each is applied only to the
+    question it answered (``question``, its fingerprint; review.answer_states): by the assessment that read it as an
+    input, or by the review overlay until that assessment is made; one no question asked now takes is an earlier
+    answer (earlier_answers)."""
     if assessment is None:
         return []
     return [{'code': answer.code, 'family': answer.family, 'fact': answer.fact, 'value': answer.value,
-             'answer_id': str(answer.pk), 'by': answer.answered_by.label(), 'at': _iso(answer.answered_at)}
+             'answer_id': str(answer.pk), 'by': answer.answered_by.label(), 'at': _iso(answer.answered_at),
+             'question': answer.question}
             for answer in standing_answers(assessment.revision_id)]
 
 
@@ -369,18 +410,22 @@ def effective_view(assessment):
     return view_of(assessment) if callable(view_of) and assessment is not None else None
 
 
-def _questions(encounter, assessment, view, answers):
+def _questions(encounter, assessment, view, states=((), (), ())):
     """(scope, fact, family, code, position) of every open question of ``assessment`` - the stored ones, or with the
-    overlay's ``view`` the proposals' questions it holds (plus any stored one a standing answer answers, so the member
-    can see and withdraw it) - when ``assessment`` is the live one on the current context; none otherwise.
+    overlay's ``view`` the proposals' questions it holds (plus any stored one an answer the overlay applies answers, so
+    the member can see and withdraw it) - and every question the assessment closed with a member's answer it read, so
+    the member sees that answer in effect and can withdraw it; when ``assessment`` is the live one on the current
+    context; none otherwise.
 
     ``view``: review.effective_view's {proposal key: review_view.View}, whose ``questions`` are the dicts the overlay
     builds ({id, scope, family, fact, question, reason}; review_view._question). Only a view in the effective set asks
     (``active``): a rejected code's stored question decides nothing, as readiness reads it (review._assessment_blockers),
-    and it is asked again once a revocation brings the code back."""
+    and it is asked again once a revocation brings the code back. ``states``: review.answer_states(assessment) - the
+    answers the assessment read, those the overlay applies, and the earlier ones (which ask nothing)."""
     if assessment is None or assessment.pk != getattr(review.live_assessment(encounter), 'pk', None) \
             or assessment.context_id != encounter.current_context_id:
         return []
+    applied, bound = list(states[0]), list(states[1])
     out = []
     stored = assessment.clarifications.filter(state=models.Clarification.OPEN).select_related('proposal')
     for item in stored.order_by('created_at', 'pk'):
@@ -389,12 +434,30 @@ def _questions(encounter, assessment, view, answers):
             out.append(('proposal', item.fact, item.family or proposal.family, proposal.code, (2, proposal.position)))
         else:
             out.append((item.scope, item.fact, item.family, '', (0 if item.scope == 'encounter' else 1, 0)))
+    # completion repair (2026-11-06, U11): a question the assessment closed with a member's answer it read
+    read = {answer.pk for answer in applied}
+    # refutation cycle 3 (answers C3-3): and a closed question a standing answer now supersedes (bound to it by
+    # review._closed_pairs) keeps its row - the member's saved answer is shown on it, never on no surface at all
+    superseding = {(answer.fact, answer.family, answer.code) for answer in bound}
+    closed = []
+    for item in (assessment.clarifications.filter(state=models.Clarification.ANSWERED, answer__isnull=False)
+                 .select_related('proposal').order_by('created_at', 'pk')):
+        proposal = item.proposal
+        key = (item.fact, item.family or (proposal.family if proposal is not None else ''),
+               proposal.code if proposal is not None else '')
+        if item.answer_id not in read and key not in superseding:
+            continue
+        if proposal is not None:
+            closed.append(('proposal', item.fact, item.family or proposal.family, proposal.code,
+                           (2, proposal.position)))
+        else:
+            closed.append((item.scope, item.fact, item.family, '', (0 if item.scope == 'encounter' else 1, 0)))
     if view is None:
-        return out
+        return out + closed
     proposals = {proposal.key: proposal for proposal in assessment.proposals.all()}
-    standing = {(answer.fact, answer.family, answer.code) for answer in answers}
+    answered = {(answer.fact, answer.family, answer.code) for answer in bound}
     held = [entry for entry in out if entry[0] != 'proposal']
-    held += [entry for entry in out if entry[0] == 'proposal' and entry[1:4] in standing]
+    held += [entry for entry in out if entry[0] == 'proposal' and entry[1:4] in answered]
     for key, item in view.items():
         proposal = proposals.get(key)
         if proposal is None or not getattr(item, 'active', True):
@@ -402,17 +465,17 @@ def _questions(encounter, assessment, view, answers):
         for spec in getattr(item, 'questions', ()) or ():
             fact, family = spec.get('fact') or '', spec.get('family') or ''
             held.append(('proposal', fact, family or proposal.family, proposal.code, (2, proposal.position)))
-    # A code a standing answer excluded (review.DETAIL_UNAVAILABLE) holds no open question in its view - the answer
-    # closed it - and the question may be the overlay's own, with no stored row: its answered rows stay, so the member
-    # still sees the answer in effect and can withdraw it.
+    # A code an answer the overlay applies excluded (review.DETAIL_UNAVAILABLE) holds no open question in its view - the
+    # answer closed it - and the question may be the overlay's own, with no stored row: its answered rows stay, so the
+    # member still sees the answer in effect and can withdraw it.
     excluded = {proposal.code: proposal for key, proposal in proposals.items()
                 if getattr(view.get(key), 'reason', '') == review.DETAIL_UNAVAILABLE}
-    for answer in answers:
+    for answer in bound:
         proposal = excluded.get(answer.code) if answer.code else None
         if proposal is not None:
             held.append(('proposal', answer.fact, answer.family or proposal.family, answer.code,
                          (2, proposal.position)))
-    return held
+    return held + closed
 
 
 def _row_key(fact, family, code):
@@ -425,9 +488,48 @@ def _row_key(fact, family, code):
     return (fact, family, code)
 
 
-def _rows(encounter, assessment, view=None):
+def _states(encounter, assessment):
+    """review.answer_states of the live assessment (([], [], []) for any other, or none)."""
+    if assessment is None or assessment.pk != getattr(review.live_assessment(encounter), 'pk', None):
+        return [], [], []
+    return review.answer_states(assessment)
+
+
+def _passages_of(assessment, members, by_code) -> list:
+    """The passages the questions ``members`` ((fact, family, code) each) concern, as their row shows them: each
+    code's (questions.passages of its proposals: its matched acts' passages, its own, CPT Studio's located ones), a
+    documented service's (questions.service_passages), in member order, each once, at most MAX_ROW_PASSAGES, exact
+    slices of the revision's text with their page. ``by_code``: the assessment's proposals by code, in stored order."""
+    if assessment is None:
+        return []
+    revision = assessment.revision
+    text, pages = revision.text, revision.pages
+    acts = questions.acts_of(assessment.services)
+    found = []
+    for fact, family, code in members:
+        if code:
+            for proposal in by_code.get(code, ()):
+                found += questions.question_passages(assessment.services, family, fact, proposal.evidence,
+                                                     proposal.support, text, acts)
+        else:
+            found += questions.service_passages(assessment.services, family, fact, text)
+    out, seen = [], []
+    for start, end, quoted in found:
+        if len(out) >= MAX_ROW_PASSAGES:
+            break
+        if any(start < b and a < end for a, b in seen):
+            continue  # it overlaps a passage the row shows already (another code's question's)
+        seen.append((start, end))
+        out.append({'text': quoted, 'start': start, 'end': end, 'page': review._page_of(pages, start)})
+    return out
+
+
+def _rows(encounter, assessment, view=None, states=None):
     context = _context_of(encounter)
-    answers = standing_answers(encounter.current_revision_id) if encounter.current_revision_id else []
+    states = _states(encounter, assessment) if states is None else states
+    # the answers that stand for a question asked now: those the assessment read, and those the overlay applies until
+    # the recompute that reads them has run (review.answer_states); an earlier answer stands for none (earlier_answers)
+    answers = list(states[0]) + list(states[1])
     by_key = {(answer.fact, answer.family, answer.code): answer for answer in answers}
     rows: dict = {}
     hold = context is not None and gi_context.is_member_conflict((context.facts or {}).get(DATE_FACT))
@@ -435,7 +537,7 @@ def _rows(encounter, assessment, view=None):
         if assessment is not None else []
     if hold or _date_in_use(context):  # the date of service, which every selected code depends on
         rows[(DATE_FACT, '', '')] = _Row(DATE_FACT, '', '', 'encounter', (0, -1), codes=list(selected))
-    for scope, fact, family, code, position in _questions(encounter, assessment, view, answers):
+    for scope, fact, family, code, position in _questions(encounter, assessment, view, states):
         if hold and fact != DATE_FACT:
             # While a member's date conflicts with the document nothing is sent: the date is the one detail asked.
             # Every other question belongs to a reading made without a settled date, and the assessment that follows
@@ -455,6 +557,9 @@ def _rows(encounter, assessment, view=None):
         if code and code not in row.codes:
             row.codes.append(code)
     values = dict((context.user_values if context is not None else encounter.user_values) or {})
+    by_code: dict = {}
+    for proposal in (assessment.proposals.order_by('position') if assessment is not None else ()):
+        by_code.setdefault(proposal.code, []).append(proposal)
     out = []
     for row in sorted(rows.values(), key=lambda item: item.position):
         row.answers = {member: by_key.get(member) for member in row.members}
@@ -472,6 +577,7 @@ def _rows(encounter, assessment, view=None):
             row.allow = [] if conflict or row.scope == 'encounter' else [NOT_DOCUMENTED]
             row.entered_value = values.get(row.fact) or None
             row.prompt = PROMPTS[row.fact]
+            row.missing = questions.missing(row.fact)
         else:
             # codes competing for one act are settled by rejecting one (P-ADMIT2): no detail answer fits the question
             row.allow = [] if row.scope == 'encounter' or row.fact == COMPETING_FACT \
@@ -479,6 +585,13 @@ def _rows(encounter, assessment, view=None):
             subject = row.fact.split(':', 1)[1] if row.fact.startswith('conflict:') else ''
             row.prompt = CONFLICT_PROMPT.format(act=act_label(subject)) if subject else PROMPTS.get(row.fact,
                                                                                                    DEFAULT_PROMPT)
+            # completion repair (2026-11-06, U10): the question shows the passages it concerns and names the fact
+            # CPT Studio could not confirm - never that the document leaves it out
+            row.missing = questions.missing(row.fact, act_label(subject) if subject else '')
+            row.statement = (CONFLICT_STATEMENT.format(act=act_label(subject)) if subject
+                             else COMPETING_STATEMENT if row.fact == COMPETING_FACT
+                             else CODING_STATEMENTS.get(row.fact) or STATEMENT.format(missing=row.missing))
+            row.passages = _passages_of(assessment, row.members, by_code)
         out.append(row)
     return out
 
@@ -625,7 +738,9 @@ def save_details(encounter, user, items) -> dict:
     is checked against the detail's own control before anything is written (InvalidAnswer: 400), the whole save is
     refused while processing runs or when a detail is no longer asked (jobs.Refused: 409). Context values are ONE
     jobs.change_context call; 'not_documented' / 'cannot_confirm' are MemberAnswer rows, one for each question the row
-    answers (a later answer withdraws the earlier one). A date typed outside the panel that the member confirms with the
+    answers, each bound to that question as it is asked now (its fingerprint; a later answer withdraws the earlier one),
+    and - with no context change, whose re-assessment reads them - ONE recompute of the assessment
+    (jobs.recompute_after_answers: nothing sent). A date typed outside the panel that the member confirms with the
     document's own dates in view is recorded as confirmed (a detail.answered row; nothing is re-assessed or sent). An
     answer already in effect is left as it is, so a repeated identical save makes nothing. Every save ends by
     re-deriving the stored list state (review.refresh_state), after its last row is written."""
@@ -635,7 +750,19 @@ def save_details(encounter, user, items) -> dict:
         if jobs.busy(encounter):
             raise jobs.Refused(BUSY)
         assessment = review.live_assessment(encounter)
-        rows = {row.id: row for row in _rows(encounter, assessment, effective_view(assessment))}
+        states = _states(encounter, assessment)
+        rows = {row.id: row for row in _rows(encounter, assessment, effective_view(assessment), states)}
+        # the question each member of a row is asked now (review.asked_fingerprints), which its answer binds to; one a
+        # standing answer the assessment read answers is that answer's question (its row shows it, closed)
+        asked = review.asked_fingerprints(assessment) if assessment is not None else {}
+        # refutation cycle 3 (answers C3-4): a question the assessment closed with an answer it read is asked as the
+        # engine recorded it (completeness member_answers 'asked'), so a new answer to that row is bound to it, never
+        # recorded in the earlier, key-only form
+        if assessment is not None:
+            for entry in ((assessment.completeness or {}).get('member_answers') or {}).get('applied') or ():
+                if entry.get('asked'):
+                    asked.setdefault(questions.member_key(entry.get('code') or '', entry.get('family') or '',
+                                                          entry.get('fact') or ''), entry['asked'])
         answers = standing_answers(encounter.current_revision_id) if encounter.current_revision_id else []
         values, recorded, superseded, unchanged, confirming = {}, [], [], 0, None
         for ident, fact, value in parsed:
@@ -693,9 +820,11 @@ def save_details(encounter, user, items) -> dict:
                     models.MemberAnswerRevocation.objects.create(answer=standing, revoked_by=user,
                                                                  reason=models.MemberAnswerRevocation.SUPERSEDED)
                 fact, family, code = member
+                question = asked.get(questions.member_key(code, family, fact)) or (
+                    standing.question if standing is not None else '')
                 answer = models.MemberAnswer.objects.create(
                     encounter=encounter, revision=encounter.current_revision, assessment=assessment, fact=fact,
-                    family=family, code=code, value=value, answered_by=user)
+                    family=family, code=code, value=value, answered_by=user, question=question)
                 saved_ids.append(str(answer.pk))
                 audit.record(encounter.workspace, 'detail.answered', encounter=encounter, actor=user, fact=fact,
                              family=family, code=code, value=value, answer=str(answer.pk))
@@ -713,6 +842,15 @@ def save_details(encounter, user, items) -> dict:
             audit.record(encounter.workspace, 'detail.answered', encounter=encounter, actor=user, fact=DATE_FACT,
                          family='', code='', kind='context', confirmed=True, context=str(encounter.current_context_id),
                          revision=revision, value=values[DATE_FACT])
+        # Completion repair (2026-11-06, U11): an answer recomputes the assessment - one AGAIN assess of the recorded runs
+        # with the answers as an input (jobs.recompute_after_answers; nothing sent). A context change's own
+        # re-assessment reads the answers already, so it queues none of its own.
+        recompute = None
+        if saved_ids and not changed:
+            recompute = jobs.recompute_after_answers(encounter, user)
+            if recompute is not None:
+                audit.record(encounter.workspace, 'assessment.recompute_queued', encounter=encounter, actor=user,
+                             job=str(recompute.pk), answers=saved_ids)
         # The list state follows every save, derived once the save's last row is written: the answers the overlay
         # reads, the confirmation readiness reads (review.DATE_CONFIRMATION_BLOCKER) and a context change's
         # re-assessment (refutation round 3, B-01 and C-R3-1: a save that only confirmed the date never refreshed it, and
@@ -721,7 +859,7 @@ def save_details(encounter, user, items) -> dict:
         review.refresh_state(encounter)
     withdrawn = [answer for answer in superseded if answer.fact not in changed]  # counted once with its value
     return {'saved': len(recorded) + len(changed) + len(withdrawn) + (1 if confirming is not None else 0),
-            'unchanged': unchanged, 'answer_ids': saved_ids, 'reassessing': bool(changed)}
+            'unchanged': unchanged, 'answer_ids': saved_ids, 'reassessing': bool(changed) or recompute is not None}
 
 
 def _siblings(encounter, answer):
@@ -732,7 +870,9 @@ def _siblings(encounter, answer):
     assessment = review.live_assessment(encounter)
     key = (answer.fact, answer.family, answer.code)
     for row in _rows(encounter, assessment, effective_view(assessment)):
-        if key in row.members:
+        # only the row whose answer it is: an earlier answer (no question asked now takes it) withdraws alone, never
+        # the answers that stand for the question as it is asked now
+        if key in row.members and row.answers.get(key) is not None and row.answers[key].pk == answer.pk:
             return [item for item in row.answers.values() if item is not None and item.pk != answer.pk]
     return []
 
@@ -755,5 +895,31 @@ def revoke_answer(encounter, user, answer_id):
                 answer=item, revoked_by=user, reason=models.MemberAnswerRevocation.WITHDRAWN))
             audit.record(encounter.workspace, 'detail.revoked', encounter=encounter, actor=user, fact=item.fact,
                          family=item.family, code=item.code, answer=str(item.pk))
+        # completion repair (2026-11-06, U11): the withdrawal recomputes the assessment, as the answer did
+        if answer.revision_id == encounter.current_revision_id:
+            recompute = jobs.recompute_after_answers(encounter, user)
+            if recompute is not None:
+                audit.record(encounter.workspace, 'assessment.recompute_queued', encounter=encounter, actor=user,
+                             job=str(recompute.pk), withdrawn=[str(item.answer_id) for item in revocations])
         review.refresh_state(encounter)
     return revocations[0]
+
+
+def earlier_answers(encounter, assessment) -> list[dict]:
+    """The standing answers of the current revision that no question the live assessment asks now takes (completion
+    repair 2026-11-06, U11): answered to a question no longer asked, or asked differently. Kept, never applied, each
+    listed with who gave it, when, the code it was given for and why it is not applied (EARLIER_WHY), and withdrawable.
+    Every sentence is from the fixed tables above."""
+    out = []
+    for answer, why in _states(encounter, assessment)[2]:
+        subject = answer.fact.split(':', 1)[1] if answer.fact.startswith('conflict:') else ''
+        out.append({
+            'answer_id': str(answer.pk), 'fact': answer.fact,
+            'family_label': PROFILES[answer.family].label if answer.family in PROFILES else '',
+            'prompt': (CONFLICT_PROMPT.format(act=act_label(subject)) if subject
+                       else PROMPTS.get(answer.fact, DEFAULT_PROMPT)),
+            'affects': [answer.code] if answer.code else [],
+            'value': answer.value, 'label': ANSWER_LABELS.get(answer.value, ''),
+            'by': answer.answered_by.label(), 'at': _iso(answer.answered_at),
+            'why': why, 'why_text': EARLIER_WHY.get(why, EARLIER_WHY['not_applied'])})
+    return out

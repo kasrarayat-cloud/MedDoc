@@ -179,7 +179,8 @@ class DiagnosticExaminationTests(EvidenceCase):
         encounter_id = self.create(DIAGNOSTIC)
         drain()
         question = self.status_question(self.final(encounter_id), '45385')
-        self.assertIn('shows no snare removal', question.question)
+        # completion repair (builder Q1, U9): worded as what CPT Studio could not find, never as a fact of the document
+        self.assertIn('CPT Studio could not find a snare removal', question.question)
         candidate = self.candidate_on(encounter_id, question, CECUM)
         self.assertRefusedNotReady(encounter_id, question, candidate, 'The passage does not name the snare removal.',
                                    '45385')

@@ -356,6 +356,11 @@ class Clarification(models.Model):
     reason = models.TextField()
     state = models.CharField(max_length=10, default=OPEN)
     answered_by_revision = models.ForeignKey(SourceRevision, null=True, blank=True, on_delete=models.PROTECT, related_name='+')
+    # Completion repair (2026-11-06, U11): the member's answer this question was closed with (state ANSWERED) - by the
+    # assessment that read the answer (engine._MemberAnswers), and on the assessment whose question the member answered.
+    # Null for any other state, and for a question an addendum answered (answered_by_revision). Nullable, so a row an
+    # older release inserts leaves it NULL (ops/install.py migration_verdict).
+    answer = models.ForeignKey('MemberAnswer', null=True, blank=True, on_delete=models.PROTECT, related_name='+')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -429,21 +434,29 @@ class DecisionInvalidation(ImmutableModel):
 
 class MemberAnswer(ImmutableModel):
     """A member's answer to a detail CPT Studio asked (directive section 4; P5 FLOW, 2026-11-03): that it is not
-    documented, or that the member cannot confirm it. Bound to its revision and to the code, family and fact it answers -
-    never to a clarification row or a proposal key, which every re-assessment makes anew. It is what a member said, never
-    clinical documentation: it never enters the document text, a provider request or an addendum, and it approves
-    nothing. Append-only; a MemberAnswerRevocation withdraws it."""
+    documented, or that the member cannot confirm it. Bound to its revision and to the question it answered - the code,
+    family and fact it was asked of and that question's fingerprint (``question``; studio.validation.questions) - never to
+    a clarification row or a proposal key, which every re-assessment makes anew. A later assessment applies it only
+    where it asks the same question (completion repair 2026-11-06, U11); otherwise it is kept and shown as an earlier
+    answer. It is what a member said, never clinical documentation: it never enters the document text, a provider request
+    or an addendum, and it approves nothing. Append-only; a MemberAnswerRevocation withdraws it."""
     NOT_DOCUMENTED, CANNOT_CONFIRM = 'not_documented', 'cannot_confirm'
     VALUES = [(NOT_DOCUMENTED, 'Not documented'), (CANNOT_CONFIRM, 'Cannot confirm')]
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     encounter = models.ForeignKey(Encounter, on_delete=models.PROTECT, related_name='member_answers')
     revision = models.ForeignKey(SourceRevision, on_delete=models.PROTECT, related_name='member_answers')
-    # the assessment whose question the member answered (provenance only: the answer binds to code, family and fact)
+    # the assessment whose question the member answered (provenance: the answer binds to the question it answered)
     assessment = models.ForeignKey('Assessment', on_delete=models.PROTECT, related_name='+')
     fact = models.CharField(max_length=40)
     family = models.CharField(max_length=40, blank=True)
     code = models.CharField(max_length=10, blank=True)
     value = models.CharField(max_length=20, choices=VALUES)
+    # Completion repair (2026-11-06, U11): the fingerprint of the question answered (questions.fingerprint, 64 hex). ''
+    # for an answer recorded before answers carried one - given to the installed release's fixed prompt for its (code,
+    # family, fact), which showed no passage - which binds by that key, as that release bound it (questions.bind;
+    # refutation cycle 2). The database default keeps a row an older release inserts valid (ops/install.py
+    # migration_verdict).
+    question = models.CharField(max_length=64, blank=True, default='', db_default='')
     answered_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name='+')
     answered_at = models.DateTimeField(auto_now_add=True)
 

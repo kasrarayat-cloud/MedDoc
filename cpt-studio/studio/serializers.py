@@ -133,7 +133,8 @@ def queue_reasons(encounter, coding=None):
     """What the encounter waits on a workspace member for, in this order; the review queue - and the session's count of it
     - lists the encounter when this is not empty (refutation gi2, demo RC6: ho-06, no code selected with a second review
     available, and ho-09, reviewed with a documented service unresolved, were off a queue of three states):
-      'question'        an open clarification on the assessment of the current revision;
+      'question'        a question the review overlay leaves open on the assessment of the current revision
+                        (review.open_questions_of: never one a member's answer closed);
       'decision'        a code that needs a reviewer's decision - selected or reinstated with none that stands, or an
                         exclusion to confirm or reinstate - counted as readiness counts it (review._decisions_waiting);
       'reconciliation'  a provider request whose outcome is unknown and not reconciled;
@@ -152,7 +153,16 @@ def queue_reasons(encounter, coding=None):
     reasons = []
     assessment = review.live_assessment(encounter)
     if assessment is not None:
-        if assessment.clarifications.filter(state=models.Clarification.OPEN).exists():
+        # completion repair (2026-11-06, U11): the questions the review overlay leaves open - the stored ones as the
+        # decisions and the members' answers leave them, and the ones the overlay adds (review.open_questions_of) - so
+        # the queue never says "question" of a question a member answered, nor misses one a decision raised. With no
+        # decision and no standing answer the overlay is the stored rows exactly (its positive control), so the stored
+        # rows are read alone, as before: the list and the session count read this for every document.
+        stored = assessment.clarifications.filter(state=models.Clarification.OPEN).exists()
+        moved = (models.Decision.objects.filter(assessment=assessment).exists()
+                 or models.MemberAnswer.objects.filter(revision_id=assessment.revision_id,
+                                                       revocation__isnull=True).exists())
+        if (review.open_questions_of(assessment) if moved else stored):
             reasons.append('question')
         if review._decisions_waiting(assessment)[0]:
             reasons.append('decision')

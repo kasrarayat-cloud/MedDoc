@@ -21,16 +21,18 @@ from typing import Optional, Sequence
 
 from studio.gi import catalogue
 from studio.gi import sections as gi_sections
+from studio.gi import structure as gi_structure
 from studio.gi.context import is_member_conflict
 from studio.gi.services import (ACTS, FAMILY_REGIONS, INSTRUMENT_FAMILY, INSTRUMENTS, LUMEN, POSITIVE,
                                  HYPOTHETICAL_CUE, ROUTING_CONTRARY_CUE, ROUTING_DOUBT_CUE, SERVICES, Act, Conflict,
                                  DocumentedService,
-                                 ServiceInventory, _sentences, act_regions, examined_regions, reflow)
+                                 ServiceInventory, _sentences, act_regions, examined_regions, listed_contradicted,
+                                 listed_in_doubt, reflow)
 from studio.types import Check, ClarificationSpec, EvidenceSpan, PageSpan, Span
 from studio.validation import checks
 
 SOURCE = f'cpt-studio:{catalogue.CATALOGUE_VERSION}'
-INVENTORY_SOURCE = 'cpt-studio:gi-services@5'  # the inventory's label (services.INVENTORY_VERSION)
+INVENTORY_SOURCE = 'cpt-studio:gi-services@6'  # the inventory's label (services.INVENTORY_VERSION)
 REMOVAL_KINDS = ('snare', 'emr', 'hot_biopsy', 'esd')
 OWN_ROLES = ('physician', 'unknown')  # whose documentation of the procedure the reconciliation counts
 # A denial that states a failed attempt, never a mere denial ("was not attempted"): refutation round 2, esc-7 and the
@@ -139,6 +141,67 @@ def gi_services_name_only(act) -> bool:
     return NAME_ONLY_CUE in act.cues
 
 
+# A documented dilation's technique (completion repair, integration; catalogue.CodeProfile.technique), read from the
+# act's own evidence: a balloon (any "balloon", TTS, CRE, through-the-scope, pneumatic); dilators passed over a guide wire
+# (Savary or Savary-Gilliard, American dilators, a wire-guided bougie or dilator, or a bougie or dilator with a guide wire
+# named and no balloon); an unguided bougie (Maloney, Hurst, or a bougie or dilator with no wire and no balloon named).
+# (refutation cycle 1, admission F3: an inflation names a balloon - "a 15 mm dilator advanced over a guide wire and
+# inflated to 6 atm", "a hydrostatic dilator", "controlled radial expansion"; it only ever adds a technique.)
+# Refutation cycle 2 (admission D2, D6): cycle 1's deferral - a generic wire-guided dilator read as a balloon's wherever
+# a balloon is named in the same passage - is abandoned: it took a balloon that failed or was not used ("dilated with
+# wire-guided dilators to 15 mm after balloon dilation failed", "... instead of balloon dilation") for the device used.
+# A wire-guided dilator and a balloon named in one passage are two techniques, and the competition holds both codes for
+# the reviewer (owner question Q2). "Wire-guided dilation" and "over-the-wire dilation" name the wire technique.
+DILATION_BALLOON = re.compile(r'\bballoons?\b|\bCRE\b|\bTTS\b|\bthrough[- ]the[- ]scope\b|\bpneumatic\b|\binflat\w*'
+                              r'|\b\d+(?:\.\d+)?\s*(?:atm|atmospheres?|psi)\b|\bhydrostatic\b'
+                              r'|\bcontrolled\s+radial\s+expansion\b', re.I)
+DILATION_WIRE_GUIDED = re.compile(r'\bSavary\b|\bAmerican\s+(?:dilat\w*|bougie\w*)\b'
+                                  r'|\bwire[- ]guided\s+(?:[\w-]+\s+){0,2}?(?:bougie\w*|dilators?|dilations?)\b'
+                                  r'|\bover[- ]the[- ]wire\s+(?:[\w-]+\s+){0,2}?(?:bougie\w*|dilators?|dilations?)\b',
+                                  re.I)
+DILATION_BOUGIE = re.compile(r'\bbougie\w*\b|\bMaloney\b|\bHurst\b|\bdilators?\b', re.I)
+DILATION_WIRE = re.compile(r'\bguide[- ]?wires?\b|\bover\s+(?:the|a)\s+wire\b', re.I)
+
+
+def dilation_techniques(text: str) -> frozenset:
+    """The dilation techniques ``text`` names: 'balloon', 'wire_bougie' (dilators over a guide wire) and 'bougie' (an
+    unguided bougie). A wire-guided dilator and a balloon named together are both techniques (refutation cycle 2, D2);
+    a bare bougie or dilator word counts only where no balloon is named ("a CRE balloon dilator" is a balloon); a guide
+    wire alone names no technique (a balloon may be passed over one)."""
+    found = set()
+    if DILATION_BALLOON.search(text):
+        found.add(catalogue.BALLOON)
+    if DILATION_WIRE_GUIDED.search(text):
+        found.add(catalogue.WIRE_BOUGIE)
+    elif not found and DILATION_BOUGIE.search(text):
+        found.add(catalogue.WIRE_BOUGIE if DILATION_WIRE.search(text) else 'bougie')
+    return frozenset(found)
+
+
+def _act_techniques(act: Act) -> frozenset:
+    named = frozenset().union(*(dilation_techniques(ev.text) for ev in act.evidence)) if act.evidence else frozenset()
+    return named | ({catalogue.BALLOON} if act.technique == 'balloon' else frozenset())
+
+
+def technique_fits(profile, act: Act, service: DocumentedService) -> bool:
+    """Whether the dilation ``act`` is one ``profile``'s code accounts for by technique (CodeProfile.technique): always
+    for a code of any technique and for any other act kind; else where the act's technique is the code's, or where the
+    document names no technique for it. An act whose own evidence names none takes the techniques the service's other
+    performed dilations name (an Impression's "Esophageal narrowing dilated to 16 mm" restates the narrative's Savary
+    dilation). Never releases: it only keeps a dilation of another technique from accounting for the code."""
+    if not getattr(profile, 'technique', '') or act.kind != 'dilation':
+        return True
+    named = _act_techniques(act)
+    if not named:
+        named = frozenset().union(*(_act_techniques(a) for a in service.acts
+                                    if a.kind == 'dilation' and a.status == 'performed'))
+    return not named or profile.technique in named
+
+
+TECHNIQUE_WORDS = {catalogue.BALLOON: 'balloon dilation', catalogue.WIRE_BOUGIE: 'dilation with dilators passed over a guide '
+                   'wire', 'bougie': 'dilation with an unguided bougie'}
+
+
 def match(code: str, inventory: ServiceInventory, family: str) -> Optional[Match]:
     """The inventory's reading of ``code`` (None when the inventory documents no service of its family: the code is
     then judged as before, by its own passages and routing)."""
@@ -156,9 +219,9 @@ def match(code: str, inventory: ServiceInventory, family: str) -> Optional[Match
         # The cue that made it uncertain: routing's reading of the family when that decided it (services._finish adds it
         # after the statement of performance it overrides), else the service's own first doubt.
         cue = next((c for c in service.cues if c.startswith((ROUTING_CONTRARY_CUE, ROUTING_DOUBT_CUE))),
-                   service.cues[0] if service.cues else 'its documentation does not establish it')
+                   service.cues[0] if service.cues else 'CPT Studio read no statement of it')
         return Match('uncertain', service, (), 'service_uncertain',
-                     f'The document does not establish the {name} as performed on the date of service ({cue}).',
+                     f'CPT Studio could not confirm the {name} as performed on the date of service ({cue}).',
                      question=f'Confirm whether the {name} was performed on the date of service.')
     positive = 'incomplete' if service.status == 'incomplete' else 'performed'
     if profile is None or profile.family != family:
@@ -177,6 +240,9 @@ def match(code: str, inventory: ServiceInventory, family: str) -> Optional[Match
         return Match(positive, service, (), 'service', detail)
     kinds = profile.covers
     done = tuple(a for a in service.acts if a.kind in kinds and a.status == 'performed')
+    # a dilation of another technique than the code's is not the act the code accounts for (technique_fits)
+    unfit = tuple(a for a in done if not technique_fits(profile, a, service))
+    done = tuple(a for a in done if a not in unfit)
     denied = tuple(a for a in service.acts if a.kind in kinds and a.status in ('negated', 'cancelled'))
     conflict = next((c for c in inventory.conflicts if c.service == service.id
                      and (c.subject in kinds or any(k in ('tattoo', 'injection') for k in kinds)
@@ -219,7 +285,12 @@ def match(code: str, inventory: ServiceInventory, family: str) -> Optional[Match
         listed = '; '.join(describe_act(service, a) for a in done[:4])
         return Match(positive, service, done, 'service',
                      f'The {name} is documented as {service.status} with {listed}.')
-    if denied:
+    # refutation cycle 2 (admission D6): a dilation code is never excluded as not performed while the service documents a
+    # performed dilation, whatever its technique fit (``unfit``): "Balloon dilation to 15 mm was performed instead of
+    # bougie dilation." denies the bougie, never the dilation, so 43248 is asked the technique question below, never
+    # excluded (D6 itself, "Wire-guided dilation ... instead of balloon dilation.", reached here through the abandoned
+    # deferral, which read its performed dilation as a balloon's)
+    if denied and not unfit:
         return Match('not_performed', service, (), 'act_denied',
                      f'The {name} is documented as {service.status}, but the document states the {what} was not '
                      f'performed: {quote(denied[0].evidence[0])}.')
@@ -229,13 +300,26 @@ def match(code: str, inventory: ServiceInventory, family: str) -> Optional[Match
         # that passage, never reported as an act the document does not mention. Still 'act_missing' - no such act is
         # documented as done - so every rule that reads that reason (engine._select, engine._second_opinion) is unchanged.
         return Match('uncertain', service, (), 'act_missing',
-                     f'The {name} is documented as {service.status}, but the document does not establish the {what} '
+                     f'The {name} is documented as {service.status}, but CPT Studio could not confirm the {what} '
                      f'as done: {quote(doubted.evidence[0])}.',
                      question=f'The documented {name} leaves the {what} in doubt ({quote(doubted.evidence[0], 120)}). '
                               f'Was a {what} performed on the date of service?')
+    if unfit:
+        # Still 'act_missing' (no act of the code's own technique is documented as done), so every rule that reads that
+        # reason is unchanged; the wording names the dilation the document does state.
+        required = TECHNIQUE_WORDS.get(profile.technique, profile.technique)
+        stated = ' and '.join(sorted({TECHNIQUE_WORDS.get(t, t) for a in unfit for t in _act_techniques(a)}))
+        stated = stated or 'dilation of another technique'
+        return Match('uncertain', service, (), 'act_missing',
+                     f'The {name} is documented as {service.status} with a {stated} ({quote(unfit[0].evidence[0])}); '
+                     f'this code accounts for a {required}, which CPT Studio could not find in the document.',
+                     question=f'The documented dilation ({quote(unfit[0].evidence[0], 120)}) states a {stated}. Was a '
+                              f'{required} performed on the date of service?')
     return Match('uncertain', service, (), 'act_missing',
-                 f'The {name} is documented as {service.status}, but no {what} is documented as done in it.',
-                 question=f'The documented {name} shows no {what}. Was a {what} performed on the date of service?')
+                 f'The {name} is documented as {service.status}, but CPT Studio could not find a {what} documented '
+                 'as done in it.',
+                 question=f'CPT Studio could not find a {what} in the documented {name}. Was a {what} performed on the '
+                          'date of service?')
 
 
 @dataclass(frozen=True)
@@ -353,8 +437,10 @@ def held_why(kind: str) -> str:
 
 def held_section(text: str, start: int, end: int) -> str:
     """The first history, plan or indication section (gi.sections, the routing sections reader) the passage [start, end)
-    lies in, or '' - a passage there never documents a service at this encounter."""
-    lay = gi_sections.layout(text)
+    lies in, or '' - a passage there never documents a service at this encounter. Read on routing's own derived layout
+    (studio.gi.structure.clinical_layout: a released labelled procedure paragraph is a procedure section of its own), so
+    the admission and routing read one section fact (completion repair 2026-11-06, U12)."""
+    lay = gi_structure.clinical_layout(text)
     kinds = [section.kind for section in lay.sections if section.start < end and start < section.end]
     return next((kind for kind in kinds or [lay.section_at(start).kind] if kind in HELD_SECTIONS), '')
 
@@ -562,7 +648,7 @@ class Unresolved:
     act: str  # '' when the whole service has no proposal
     label: str
     evidence: tuple[Span, ...]
-    reason: str  # no_proposal | not_covered | unsupported | coverage_unknown
+    reason: str  # no_proposal | not_covered | unsupported | coverage_unknown | in_doubt (F5: a listing stated in doubt)
 
 
 @dataclass(frozen=True)
@@ -755,6 +841,24 @@ def reconcile(inventory: ServiceInventory, selected: Sequence[tuple[str, str]], 
                                              'attempted or in doubt: no code profile of this service accounts for it',
                                              act.evidence[:2], 'unsupported'))
                 continue
+            withheld = listed_contradicted(act)  # integration of cycle 2: a listed removal the report does not bear out
+            if (listed_in_doubt(act) or withheld) and act.role in OWN_ROLES and act.kind in entry.acts \
+                    and act.kind not in covers and not (act.kind in ('tattoo', 'injection')
+                                                        and covers & {'tattoo', 'injection'}):
+                # Completion repair (2026-11-06, F5; builder A): an act the procedure line lists and the report states
+                # only in doubt ("It is unknown whether hot snare polypectomy was performed."): whether a coded act was
+                # done is open, so coding completeness stays open while no selected code accounts for it - never
+                # complete on the doubt. Its own reason: no paid second review is asked for it (jobs.SECOND_REVIEW_REASONS)
+                # and no participant's code is admitted on it (engine's documented items read no_proposal/not_covered)
+                # integration of refutation cycle 2: so is a listed removal none of whose lesions the report states removed
+                # today (services.listed_contradicted, widened by the cycle): open, never complete on the listing alone
+                unresolved.append(Unresolved(service.id, service.family, act.kind,
+                                             f'{describe_act(service, act)} in the {service_label(service)}: listed on '
+                                             + ('the procedure line, and the report states none of its lesions removed today'
+                                                if withheld and not listed_in_doubt(act) else
+                                                'the procedure line, and the report states it only in doubt'),
+                                             act.evidence[:2], 'in_doubt'))
+                continue
             if act.status != 'performed' or act.role not in OWN_ROLES:
                 continue
             act = _needle_sampling(service, act) or act
@@ -795,10 +899,15 @@ def reconcile(inventory: ServiceInventory, selected: Sequence[tuple[str, str]], 
                                              'profile of this service accounts for it', act.evidence[:2],
                                              'unsupported'))
                 continue
-            if act.kind in covers or (act.kind in ('tattoo', 'injection') and covers & {'tattoo', 'injection'}):
+            # refutation cycle 1 (consistency F2): a one-technique dilation code covers a dilation of its own technique
+            # only (technique_fits), as the engine's match and competition read it - a Savary dilation beside 43249 alone
+            # is unresolved, never covered
+            fits = act.kind != 'dilation' or any(technique_fits(p, act, service) for p in profiles
+                                                 if p is not None and p.family == service.family and act.kind in p.covers)
+            if fits and (act.kind in covers or (act.kind in ('tattoo', 'injection') and covers & {'tattoo', 'injection'})):
                 continue
-            if any(other.kind in covers for other in service.acts if other.status == 'performed'
-                   and other.kind == act.kind):
+            if fits and any(other.kind in covers for other in service.acts if other.status == 'performed'
+                            and other.kind == act.kind):
                 continue
             unresolved.append(Unresolved(service.id, service.family, act.kind,
                                          f'{describe_act(service, act)} in the {service_label(service)}',

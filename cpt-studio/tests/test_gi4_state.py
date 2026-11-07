@@ -29,6 +29,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 
 from ops.gi4 import battery, regression, replay
 from studio import jobs, models, review
+from studio.gi import catalogue
 from studio.gi import context as gi_context
 from studio.gi import detect
 from studio.gi import services as gi_services
@@ -44,22 +45,31 @@ H404 = DOCS['h4-04']
 STORED = {r['service_date']: r['request_sha256'] for r in H404['runs']}  # None: the dateless primary
 # installed 80df1831d168's labels: every encounter recorded before the round-4 install carries its context label
 INSTALLED_LABELS = {'CONTEXT_VERSION': 'gi-context@3', 'EARLIER_CONTEXT_VERSIONS': ('gi-context@1', 'gi-context@2')}
+# Every release before the completion repair reconciled with gi-catalogue@1 (reconcile.SOURCE carries it into every
+# check), so each of the label maps below sets the catalogue back too: a map of an older release that left it at @2
+# would make every I1 digest pinned at that release differ by the catalogue label alone.
 INSTALLED_READER_LABELS = {(detect, 'ROUTING_VERSION'): 'gi-routing@4',
                            (gi_services, 'INVENTORY_VERSION'): 'gi-services@1',
                            (reconcile, 'INVENTORY_SOURCE'): 'cpt-studio:gi-services@1',
-                           (engine, 'ENGINE_VERSION'): 'cpt-studio-validation@4'}
+                           (engine, 'ENGINE_VERSION'): 'cpt-studio-validation@4',
+                           (catalogue, 'CATALOGUE_VERSION'): 'gi-catalogue@1',
+                           (reconcile, 'SOURCE'): 'cpt-studio:gi-catalogue@1'}
 # installed 41e03656df61's labels (the harness install, 2026-11-03), which the core repair's readers move by one
 CORE_REPAIR_INSTALLED_LABELS = {(detect, 'ROUTING_VERSION'): 'gi-routing@5',
                                 (gi_services, 'INVENTORY_VERSION'): 'gi-services@2',
                                 (reconcile, 'INVENTORY_SOURCE'): 'cpt-studio:gi-services@2',
-                                (engine, 'ENGINE_VERSION'): 'cpt-studio-validation@5'}
+                                (engine, 'ENGINE_VERSION'): 'cpt-studio-validation@5',
+                                (catalogue, 'CATALOGUE_VERSION'): 'gi-catalogue@1',
+                                (reconcile, 'SOURCE'): 'cpt-studio:gi-catalogue@1'}
 # The harness repair (owner directive 2026-11-05): the four labels as installed b0dc3446c64c records them; the repair's
 # readers read differently (the package's reader patch, the negation release, the two reconciliation rules and P-ADMIT),
 # so each moves once more
 HARNESS_REPAIR_INSTALLED_LABELS = {(detect, 'ROUTING_VERSION'): 'gi-routing@6',
                                    (gi_services, 'INVENTORY_VERSION'): 'gi-services@3',
                                    (reconcile, 'INVENTORY_SOURCE'): 'cpt-studio:gi-services@3',
-                                   (engine, 'ENGINE_VERSION'): 'cpt-studio-validation@6'}
+                                   (engine, 'ENGINE_VERSION'): 'cpt-studio-validation@6',
+                                   (catalogue, 'CATALOGUE_VERSION'): 'gi-catalogue@1',
+                                   (reconcile, 'SOURCE'): 'cpt-studio:gi-catalogue@1'}
 # Harness repair 3 (owner directive 2026-11-05, second message): the four labels as installed e6d451f03d86 records them.
 # Its inventory and engine read differently (F-ACTS, F-TIME, F-NEG S, P-ADMIT2), so those move once more. Routing and
 # the context do not: after refutation cycle 2 dropped F-SECTIONS and F-TIME R, detect.py, cues.py, sections.py and
@@ -67,7 +77,19 @@ HARNESS_REPAIR_INSTALLED_LABELS = {(detect, 'ROUTING_VERSION'): 'gi-routing@6',
 HARNESS_REPAIR_3_INSTALLED_LABELS = {(detect, 'ROUTING_VERSION'): 'gi-routing@7',
                                      (gi_services, 'INVENTORY_VERSION'): 'gi-services@4',
                                      (reconcile, 'INVENTORY_SOURCE'): 'cpt-studio:gi-services@4',
-                                     (engine, 'ENGINE_VERSION'): 'cpt-studio-validation@7'}
+                                     (engine, 'ENGINE_VERSION'): 'cpt-studio-validation@7',
+                                     (catalogue, 'CATALOGUE_VERSION'): 'gi-catalogue@1',
+                                     (reconcile, 'SOURCE'): 'cpt-studio:gi-catalogue@1'}
+# The completion repair (owner directive 2026-11-06): the four labels as installed fd8040d71e44 records them. Every
+# reader reads differently (routing: the labelled paragraphs, the sub-act failure, the instrument course; the inventory:
+# the bolus, placement and outcome, purpose time; the engine: equal eligibility, member answers, the dilation
+# technique), so each moves once more - routing to @9, past harness repair 3's dropped @8.
+COMPLETION_INSTALLED_LABELS = {(detect, 'ROUTING_VERSION'): 'gi-routing@7',
+                               (gi_services, 'INVENTORY_VERSION'): 'gi-services@5',
+                               (reconcile, 'INVENTORY_SOURCE'): 'cpt-studio:gi-services@5',
+                               (engine, 'ENGINE_VERSION'): 'cpt-studio-validation@8',
+                               (catalogue, 'CATALOGUE_VERSION'): 'gi-catalogue@1',
+                               (reconcile, 'SOURCE'): 'cpt-studio:gi-catalogue@1'}
 # a rule (a) document (pd.json, CTS-6's PD-06): installed reads and sends 2026-10-19; the round-4 reader asks the date
 RULE_A = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy Report\n'
           'Date of service: 10/19/2026\nDate seen: 10/12/2026 in clinic; procedure today\nEndoscopist: Synthetic MD\n'
@@ -341,7 +363,7 @@ class RoundFourLabelTests(SimpleTestCase):
                          ('gi-context@4', ('gi-context@1', 'gi-context@2', 'gi-context@3')))
         self.assertEqual((detect.ROUTING_VERSION, gi_services.INVENTORY_VERSION, reconcile.INVENTORY_SOURCE,
                           engine.ENGINE_VERSION),
-                         ('gi-routing@7', 'gi-services@5', 'cpt-studio:gi-services@5', 'cpt-studio-validation@8'))
+                         ('gi-routing@9', 'gi-services@6', 'cpt-studio:gi-services@6', 'cpt-studio-validation@9'))
         self.assertEqual(reconcile.INVENTORY_SOURCE, f'cpt-studio:{gi_services.INVENTORY_VERSION}')
         for (module, name), installed in INSTALLED_READER_LABELS.items():
             self.assertNotEqual(getattr(module, name), installed, name)
@@ -356,9 +378,11 @@ class RoundFourLabelTests(SimpleTestCase):
         # base's again after refutation cycle 2, keeps its label
         for (module, name), installed in HARNESS_REPAIR_3_INSTALLED_LABELS.items():
             if name == 'ROUTING_VERSION':
-                self.assertEqual(getattr(module, name), installed)
-            else:
-                self.assertNotEqual(getattr(module, name), installed, name)
+                self.assertEqual(installed, 'gi-routing@7')  # harness repair 3 kept routing's label
+            self.assertNotEqual(getattr(module, name), installed, name)
+        # the completion repair (2026-11-06): every reader once more beside installed fd8040d71e44
+        for (module, name), installed in COMPLETION_INSTALLED_LABELS.items():
+            self.assertNotEqual(getattr(module, name), installed, name)
 
     def labels_and_fingerprints(self):
         """Every H4 row read through the stages (ops/gi4/battery.py): the labels each result carries and every
@@ -387,8 +411,8 @@ class RoundFourLabelTests(SimpleTestCase):
         # the patches applied: every result names installed's labels under them, and these labels without them
         self.assertEqual(installed_labels - {('source', 'cpt-studio:gi-services@1')},
                          {('gi-routing@4', 'gi-services@1', 'cpt-studio-validation@4')})
-        self.assertEqual(current_labels - {('source', 'cpt-studio:gi-services@5')},
-                         {('gi-routing@7', 'gi-services@5', 'cpt-studio-validation@8')})
+        self.assertEqual(current_labels - {('source', 'cpt-studio:gi-services@6')},
+                         {('gi-routing@9', 'gi-services@6', 'cpt-studio-validation@9')})
         self.assertIn(('source', 'cpt-studio:gi-services@1'), installed_labels)
         self.assertGreater(len(current), 50)
         self.assertEqual(installed, current)

@@ -266,8 +266,13 @@ class PieceHoldsTests(r6m.MeaningCase):
         self.assertNotEqual(text, r6m.C6_PLACED)
         titles = self.titles(self.corti_alone(text, [('45380', r6m.PLACED_COL_BX),
                                                      ('43251', f'{TAIL}\n\n{r6m.PLACED_COL_BX}')]))
-        self.assertEqual(titles[r6m.PLACED_COL_BX], 'Evidence for 43251, 45380')
-        self.assertEqual(titles[TAIL], 'Evidence for 43251; Passage of the documented service for 45380')
+        # MOVED (completion repair 2026-11-06, U2; studio.gi.structure): the report's "Colonoscopy:" and "EGD:" labelled
+        # parts are released, so the EGD's own "A sessile polyp was removed with a hot snare." is the EGD's documented
+        # act and 43251 is READY on it (it was held: the act bound to no family). Its cited passage - the colonoscopy's
+        # lines across the blank line - shows the colonoscopy, not that act, and both its pieces now say so (were
+        # 'Evidence for 43251, 45380' and 'Evidence for 43251; Passage of the documented service for 45380').
+        self.assertEqual(titles[r6m.PLACED_COL_BX], 'Evidence for 45380; ' + NOT_THE_ACT.format(codes='43251'))
+        self.assertEqual(titles[TAIL], NOT_THE_ACT.format(codes='43251') + '; Passage of the documented service for 45380')
 
     def test_page_1_an_unchecked_support_s_passage_in_one_piece_only(self):
         """page-1 (a): a blank line after the cecum line; 45380 quotes across it, and its support was not checked."""

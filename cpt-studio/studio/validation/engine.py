@@ -9,6 +9,7 @@ check says exactly why.
 from __future__ import annotations
 
 import bisect
+import functools
 import re
 from collections import Counter
 from dataclasses import dataclass, replace
@@ -18,6 +19,7 @@ from typing import Mapping, Optional, Sequence
 from studio.gi.context import charge_question_day, is_member_conflict
 from studio.gi import cues as gi_cues
 from studio.gi import sections as gi_sections
+from studio.gi import structure as gi_structure
 from studio.gi import services as gi_services
 from studio.gi.profiles import DETECTED_FAMILIES, PROFILES, PROFILES_VERSION, ServiceProfile, family_for_code
 from studio.participants import LABELS as PARTICIPANT_LABELS, PARTICIPANTS as PARTICIPANT_ORDER
@@ -31,9 +33,9 @@ from studio.types import (CONFIDENCES, CONTEXT_FACTS, PARTICIPANT_STATES, PEER_P
                           ProviderCode, QuestionAnswer, ReferenceLookup, ReferenceSourceInfo, RoutingResult,
                           ServiceMention, Span, sha256_json)
 from studio.gi.detect import DOUBT_PREFIX, UNESTABLISHED
-from studio.validation import checks, rationale, reconcile
+from studio.validation import checks, questions, rationale, reconcile
 
-ENGINE_VERSION = 'cpt-studio-validation@8'  # @8: harness repair 3 (P-ADMIT2)
+ENGINE_VERSION = 'cpt-studio-validation@9'  # @9: the completion repair (equal eligibility, member answers, technique)
 # The documented-service inventory decides the status of the codes it matches (5.10). Off, every code is judged by the
 # routing-era reading alone - the path the inventory falls back to when its reading is inconsistent; the routing-era
 # unit tests, whose stubbed passage readings describe no real document, run that path.
@@ -106,6 +108,12 @@ class _Selection:
     # least one of the two is a participant's admitted code; each is then held by one question naming the others
     # (competing_hold), whoever proposed it, and a reviewer's rejection of the others releases it (review_view)
     competes: tuple[str, ...] = ()
+    # Completion repair (owner directive 2026-11-06, builder Q1): the provider codes this selection was read from, so the
+    # harness can read the same code again with an independent participant's own passages added (_Harness.merge); and,
+    # once it has, who cited each passage: ((start, end, (proposer, ...)), ...) in evidence order, recorded in the
+    # support as 'provenance' (never in the fingerprint's inputs beyond the evidence itself). Empty with no participant.
+    group: tuple = ()
+    cited_by: tuple = ()
 
     @property
     def profile(self) -> ServiceProfile:
@@ -155,7 +163,8 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
            provider_status: str, extraction_status: Optional[str] = None,
            extraction_messages: Sequence[str] = (), second: Optional[NormalizedResponse] = None,
            second_scope: Optional[dict] = None, participants: Sequence[ParticipantInput] = (),
-           confirmed: Sequence[ConfirmedFinding] = ()) -> AssessmentResult:
+           confirmed: Sequence[ConfirmedFinding] = (),
+           member_answers: Sequence[questions.MemberAnswerInput] = ()) -> AssessmentResult:
     """``participants``: one input per CONFIGURED independent participant (HARNESS.md 5). With none (an installation
     where Astra and Fable are disabled) nothing below reads them and the result is the one this engine made before them
     (I1). With any, _Harness merges their codes, from both phases (HARNESS.md 11.1): they never decide a status (I2) and
@@ -163,13 +172,20 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
 
     ``confirmed``: the reviewer-confirmed findings of this revision (HARNESS.md 11.3). Each answers exactly the open
     question it was made for, read against the assessment these same inputs make without any confirmation
-    (_Confirmations); none read, nothing below changes. Empty, the result is the one this engine made before them (I1)."""
+    (_Confirmations); none read, nothing below changes. Empty, the result is the one this engine made before them (I1).
+
+    ``member_answers``: the revision's standing member answers (completion repair 2026-11-06; _MemberAnswers). Each
+    answers exactly the question it was given to - its (code, family, fact) asked with its fingerprint
+    (studio.validation.questions) - in the assessment these same inputs make without any answer; one that answers no
+    such question is kept as an earlier answer and changes nothing. Empty, the result is the one this engine made before
+    them."""
     if provider_status not in PROVIDER_STATUSES:
         raise ValueError(f'Unknown provider status {provider_status!r}.')
     if extraction_status is not None and extraction_status not in EXTRACTION_STATUSES:
         raise ValueError(f'Unknown extraction status {extraction_status!r}.')
     # read once, whatever iterable is given: an exhausted or empty iterator is no input (I1), never a dropped one
-    participants, confirmed = tuple(participants), tuple(confirmed)
+    participants, confirmed, member_answers = tuple(participants), tuple(confirmed), tuple(member_answers)
+    answering = _MemberAnswers(member_answers, text) if member_answers else None
     response = normalized if provider_status == 'succeeded' else None
     if provider_status == 'succeeded' and response is None:
         raise ValueError('A succeeded provider status needs its normalized response.')
@@ -253,6 +269,7 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
     else:
         procedure_day = _encounter('', context, routing, sources, date_state, selections).procedure_day
     confirmation = _Confirmations(confirmed, text, pages) if confirmed else None
+    keyed = _keys(selections)  # the decidable proposals' keys, in selection order (_MemberAnswers maps them back)
     if confirmation is not None:
         # HARNESS.md 11.3: each confirmation is matched to the question these inputs ask without any - a proposal's by
         # the proposal it was made for, never by its key - then read; the proposals keep the keys they have without them
@@ -263,6 +280,15 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
     if harness is not None:
         proposals = harness.recorded(proposals)
         provider = harness.provider_checks(provider, provider_status, response, proposals)
+    # The questions these inputs ask without any member answer: what each answer is bound against (_MemberAnswers), and
+    # what the documented services' own questions are read beside, so an answer never makes another question asked.
+    unanswered = proposals
+    if answering is not None:
+        answering.reading = _jsonable_inventory(inventory)  # the documented-service reading, as it is recorded
+        proposals = answering.apply(proposals, dict(zip(keyed, selections)),
+                                    None if problems else answering.reading,
+                                    checks.reference_source_entries(sources, date_state.value), sources,
+                                    date_state.value)
     active = [(s.code, s.family) for s in selections if not s.excluded]
     # The same-day E/M rule decides for the reconciliation too: on a (possible) procedure day - a routed procedure
     # family or another GI service done or possibly done today, or a selected procedural code (_Encounter) - an office
@@ -285,7 +311,7 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
         coverage.append(checks.unproposed_check(*_missed(routing, selections, procedure_day,
                                                          _accounted_elsewhere(usable, included_by, routing)),
                                                 separate_em=documented_em))
-    service_questions = (_service_questions(usable, proposals, context,
+    service_questions = (_service_questions(usable, unanswered, context,
                                             confirmation.answered if confirmation is not None else ())
                          if usable else [])
     unsupported = _unsupported(routing, selections)
@@ -306,8 +332,12 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
         encounter_checks += confirmation.encounter_checks()
     clarification = checks.service_date_clarification(date_state)
     clarifications = ((clarification,) if clarification else ()) + tuple(service_questions)
-    clarifications += tuple(_member_conflict_questions(context, clarifications, proposals))
+    clarifications += tuple(_member_conflict_questions(context, clarifications, unanswered))
+    if answering is not None:
+        answering.close_service(clarifications)  # a documented service's question a member answered: closed
     open_questions = len(clarifications) + sum(len(p.clarifications) for p in proposals)
+    if answering is not None:
+        open_questions -= answering.closed  # the questions a member answered are kept, answered, and are not open
     read = {s.evaluation.match.service.id for s in selections
             if s.evaluation is not None and getattr(s.evaluation, 'match', None) is not None}
     unestablished = sum(1 for svc in (usable or inventory).services if svc.status == 'uncertain' and svc.id not in read)
@@ -337,6 +367,8 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
         'inventory_problems': list(problems)})
     if confirmation is not None:
         complete['confirmations'] = confirmation.record()
+    if answering is not None:
+        complete['member_answers'] = answering.record()
     return AssessmentResult(
         profiles_version=PROFILES_VERSION, engine_version=ENGINE_VERSION, proposals=proposals,
         encounter_checks=tuple(encounter_checks), clarifications=clarifications,
@@ -462,8 +494,12 @@ def _claimed(candidate: '_Selection', items: Sequence[tuple], lay=None) -> set:
     match = candidate.evaluation.match if candidate.evaluation is not None else None
     spans = [(e.start, e.end) for e in candidate.evidence]
     support = candidate.evaluation.support if candidate.evaluation is not None else None
-    supported_by = ({a.id for a in match.acts} if match is not None and support is not None
-                    and support.status in ('pass', 'warn') else set())
+    # what the engine supports the code by: the acts of a match it reads as done - never a held one's (completion repair,
+    # builder Q1: a code that is not READY on a done act it does not show claims none of them, so it can never be the
+    # second READY code for that act - F4; a guide-wire code beside a balloon dilation claims nothing at all, by the
+    # technique reading below)
+    supported_by = ({a.id for a in match.acts} if match is not None and match.state in checks.POSITIVE
+                    and support is not None and support.status in ('pass', 'warn') else set())
 
     def summary(a) -> bool:
         # A restatement of the report's own account of an act: an act stated only in an Impression, an assessment
@@ -507,12 +543,20 @@ def _claimed(candidate: '_Selection', items: Sequence[tuple], lay=None) -> set:
         return {('act', a.service, a.kind, a.lesion, ','.join(a.anatomy), a.id, summary(a)) for a in out}
 
     claimed = set()
+    profile = reconcile.catalogue.code_profile(candidate.code)
     for service, family, act, label in items:
         svc = match.service if match is not None and match.service.id == service else None
         if act:
-            acts = [a for a in (svc.acts if svc is not None else ()) if a.status == 'performed'
-                    and a.role in reconcile.OWN_ROLES
-                    and (a.kind == act or (act in ('tattoo', 'injection') and a.kind in ('tattoo', 'injection')))]
+            performed = [a for a in (svc.acts if svc is not None else ()) if a.status == 'performed'
+                         and a.role in reconcile.OWN_ROLES
+                         and (a.kind == act or (act in ('tattoo', 'injection') and a.kind in ('tattoo', 'injection')))]
+            # completion repair (integration): a dilation of another technique than the code's is no act the code
+            # accounts for (reconcile.technique_fits, as reconcile.match reads it), so the code claims none of them and
+            # competes for none - a guide-wire code beside a balloon dilation is held by its own question, never as a
+            # rival of the balloon code
+            acts = [a for a in performed if reconcile.technique_fits(profile, a, svc)]
+            if performed and not acts:
+                continue
             if not acts:
                 claimed.add(('item', service, family, act, label))
             kinds = {'tattoo', 'injection'} if act in ('tattoo', 'injection') else {act}
@@ -546,7 +590,8 @@ def _not_added_why(candidate: '_Selection', code: str, accounts: bool, open_item
                      'kept; neither is chosen)' if match is not None and match.reason == 'conflict'
                 else 'the act it accounts for is part of another documented act, not a separate service'
                 if match is not None and match.reason == 'act_included'
-                else 'the act it accounts for is not documented as done in the service left unresolved')
+                else 'CPT Studio could not find the act it accounts for documented as done in the service left '
+                     'unresolved')
     if not accounts:
         return f'it accounts for no documented service or act {left_by} left unresolved'
     if candidate.evaluation is None:
@@ -580,9 +625,8 @@ def _documented_items(inventory, procedure_day: bool = False) -> list[tuple]:
               and service.id not in listed]
     # Refutation cycle 2 of harness repair 3 (provider-neutral admission, the owner's "validation is provider-neutral"),
     # narrowed by cycle 3: an act the reading states done, inside a service the reading documents in doubt (its time,
-    # place or performance not established), is a documented item too. Corti's code for it is selected and held for the
-    # service's question; a participant's code for it, read by the same path, is held the same way
-    # (_shows_doubted_act), never left an alternative a reviewer cannot approve.
+    # place or performance not established), is a documented item too: what a code for it claims (_competition), whoever
+    # proposed it (the completion repair admits every explicit participant code by the same path as Corti's).
     have = {(item[0], item[2]) for item in items}
     for service in inventory.services:
         entry = reconcile.catalogue.entry(service.family)
@@ -599,16 +643,14 @@ def _documented_items(inventory, procedure_day: bool = False) -> list[tuple]:
 
 
 def _in_doubt(act, service) -> bool:
-    """Whether ``act`` is one the provider-neutral admission adds a participant's code for, held: an act the reading
-    states done ('performed') inside a service the reading documents in doubt ('uncertain'). Corti's codes for that
-    service are held for its question, and a participant's code whose own passages show the act is held the same way.
+    """Whether ``act`` is a documented item of a service in doubt (_documented_items): an act the reading states done
+    ('performed') inside a service the reading documents in doubt ('uncertain'), which a code for it claims in the
+    competition (_competition). Never an act whose own reading is 'uncertain' (refutation cycle 3, C3-2-1 to C3-2-3).
 
-    Never an act whose own reading is 'uncertain'. Refutation cycle 3 (C3-2-1 to C3-2-3) showed that a list of the
-    uncertain readings that are not doubts never closes: a listed act withheld by its failure, a consent's act, a
-    question's act. Each was held, and its held code made Corti's correct base code included. A participant's code for
-    such an act is listed with its reason (PARTICIPANT_NOT_ESTABLISHED), as P-ADMIT2 lists it, while the shared path's
-    own leniency holds a proposal provider's selection on it (the recorded asymmetry; the owner's "passes the same path
-    as Corti is insufficient proof")."""
+    Completion repair (builder Q1): no longer an admission rule. Every explicit participant code is admitted and read by
+    the shared per-code path, as Corti's selection is - the recorded asymmetry (a participant's code listed where
+    Corti's was held) is gone; an act the document states not done is excluded with its passage for every proposer
+    (_stated_not_done), and every other doubt is held for every proposer."""
     return act.status == 'performed' and service.status == 'uncertain'
 
 
@@ -618,34 +660,343 @@ def _in_doubt(act, service) -> bool:
 RESTATING_SECTIONS = ('impression', 'assessment')
 
 
-def _shows_doubted_act(candidate: '_Selection', code: str) -> bool:
-    """Whether ``code``'s own passages (``candidate``'s evidence) show an act of a kind it accounts for that the reading
-    states done inside a service it documents in doubt (_in_doubt, the document's own role): the provider-neutral
-    admission of P-ADMIT2, which adds the code held, as the same reading holds Corti's code for that act (refutation
-    cycles 2 and 3 of harness repair 3). Never a conflict, which has its own question, and never an act read in doubt
-    itself, denied, dated, planned or stated not done."""
+# --- completion repair (owner directive 2026-11-06, items 3 and 5; builder Q1): an act the document states not done --
+# The shared per-code path held a code whose act the document itself states was not done today - "Hot snare polypectomy
+# failed.", "... is to be performed at a later date." - with a question asking whether it was done, and the held code
+# held its family's base code as included in it (base_included). Item 5 resolves a fact the source states before the
+# doctor is asked, and "not done" is said only with the passage that says so: such a code is EXCLUDED, with that
+# passage, reinstatable - whoever proposed it (equal eligibility: before, a participant's code for it was an
+# alternative, and Corti's own selection of the same passage was held; refutation cycle 3, C3-2-1).
+
+# The documented-service reader's own readings (services.read_clause: a status and its deciding first cue) that state
+# an act NOT done on the date of service. A closed class of the reader's categories, never words of the document, and
+# its failure mode is the safe side: every other reading - a hedge or an attempt ("was attempted"), a condition or an
+# open question ("It is unknown whether ..."), a consent's object, a question, another source or agent, an indication,
+# silence, an unknown cue - is no statement that the act was not done, and the code keeps the shared path's hold. A
+# consent's object and a bare question were measured as unsafe to exclude on: "Consent was obtained for biopsy, which was
+# performed." and "Were biopsies taken from the polyp? Yes." read as the consent's object and as a question alone.
+STATED_NOT_DONE_STATUSES = ('planned', 'historical', 'negated', 'cancelled')
+STATED_FAILURE_CUES = ('uncertain: failed', 'uncertain: unsuccessful', 'uncertain: unsuccessfully',
+                       'uncertain: abandoned')  # services._failed_act's own words, cues.FAILED_ACT
+
+
+def _time_from_section(cues: Sequence[str]) -> bool:
+    """Whether a documented-service reading's time is its section's alone ("historical: in a history section", "planned:
+    in a plan section", "planned: listed under a plan heading", a plan read from a plan section or label alone): the
+    layout's reading, never the act's own clause's (round 4 PA: "one cause, not two readings"; a numbered "3. Upcoming
+    procedures" item makes today's item after it planned)."""
+    first = cues[0] if cues else ''
+    return first.startswith(_SECTION_ONLY_SERVICES + ('planned: listed under a plan heading',)
+                            + tuple(gi_services.SECTION_PLAN_CUES))
+
+
+def _states_not_done(status: str, cues: Sequence[str], *, own: bool = True) -> bool:
+    """Whether a documented-service reading states the act NOT done on the date of service: planned, historical,
+    denied or cancelled; failed (its own failure word, services._failed_act, or a later clause of its sentence stating the
+    same act failed, LATER_FAILURE_CUE); or still to be done (an infinitive predicate, INFINITIVE_CUE). ``own``: only a
+    statement of the act's own clause - never a time its section alone gives it (_time_from_section); a reading read after
+    such a statement (``own=False``) may take its section's time."""
+    first = cues[0] if cues else ''
+    if status in STATED_NOT_DONE_STATUSES:
+        return not (own and _time_from_section(cues))
+    return status == 'uncertain' and (first in STATED_FAILURE_CUES or first == gi_services.INFINITIVE_CUE
+                                      or first.startswith(gi_services.LATER_FAILURE_CUE))
+
+
+def _stated_words(status: str, cue: str) -> str:
+    """How a not-done reading is said in a reason."""
+    if status in ('planned', 'historical', 'cancelled'):
+        return {'planned': 'planned', 'historical': 'on another occasion', 'cancelled': 'cancelled'}[status]
+    if status == 'negated':
+        return 'not done'
+    return 'still to be done' if cue == gi_services.INFINITIVE_CUE else 'failed'
+
+
+def _mention_readings(text: str, flow: str, ev, kind: str, day: Optional[date], pages=()) -> Optional[list]:
+    """The documented-service reader's own reading of each mention of an act of ``kind`` in the passage ``ev``
+    (services.passage_readings over the mention alone: the mention read in its own clause, as pass 3 reads acts), or
+    None where the passage holds no such mention or is not read through. ``flow``: the reflowed text the reader reads
+    (services.reflow, one character for one)."""
+    pattern = next((p for k, p in gi_services.ACTS if k == kind), None)
+    if pattern is None:
+        return None
+    out = []
+    for m in pattern.finditer(flow, ev.start, ev.end):
+        readings = gi_services.passage_readings(text, m.start(), m.end(), day, pages)
+        if readings is None:
+            return None
+        out += [reading for reading, _clause in readings]
+    return out or None
+
+
+# The words of a removal or sampling (_removal_said_elsewhere). Refutation cycle 4: the observed-only sentence form
+# (_OBSERVED_ONLY, _observed_only) that cycle 2's integration read beside them is abandoned (see _stated_not_done).
+_REMOVAL_IN_NP = re.compile(r'\b(?:remov\w*|resect\w*|excis\w*|snar\w*|polypectom\w*|retriev\w*|extract\w*|'
+                            r'taken|cleared|biops\w*|ablat\w*|cauteri\w*)\b', re.I)
+
+
+def _removal_said_elsewhere(text: str, acts) -> bool:
+    """Refutation cycle 3 (admission C3-1 to C3-3): whether any word of a removal or sampling (_REMOVAL_IN_NP) stands in
+    the text outside the passages of ``acts`` - the code's own failed, planned or listed acts. A removal the reader binds
+    to no lesion ("The polyp was removed and retrieved.", "It was removed piecemeal."), states partially ("was partially
+    removed piecemeal") or reads after a place ("seen in the sigmoid colon and was removed") is then still a removal the
+    report states, and "not performed" is not established: the code keeps its hold. Closed and fail-safe: any such word
+    anywhere (a later plan, the impression) costs only the exclusion. One pass over the text."""
+    spans = sorted((ev.start, ev.end) for a in acts for ev in a.evidence)
+    for m in _REMOVAL_IN_NP.finditer(text):
+        if any(s <= m.start() and m.end() <= e for s, e in spans):
+            continue
+        if _NEGATED_BEFORE.search(text, max(0, m.start() - 40), m.start()):
+            continue  # "The polyp could not be removed.", "was not removed": a statement that it was NOT removed
+        if _PURPOSE_BEFORE.search(text, max(0, m.start() - 40), m.start()):
+            continue  # "left in place for surgical resection", "referred for polypectomy": what it is for, not done
+        return True
+    return False
+
+
+# The two shapes _removal_said_elsewhere passes over, each anchored right before the word (never a window of words):
+# its participle's own negated verb group, and a purpose "for" with at most two modifiers before the noun.
+_NEGATED_BEFORE = re.compile(r"\b(?:not|never|cannot|n['’]t)[ \t\n]+(?:(?:be|been)[ \t\n]+)?(?:(?!only\b)[a-z]+ly[ \t\n]+)?$",
+                             re.I)
+_PURPOSE_BEFORE = re.compile(r"\bfor[ \t\n]+(?:[a-z-]+[ \t\n]+){0,2}$", re.I)
+
+
+def _stated_not_done(code: str, found: reconcile.Match, own: Sequence[checks.Reading], text: str,
+                     day: Optional[date], pages=()) -> tuple:
+    """((status, cue, passage), ...): where the documented service is performed and every act it documents of a kind
+    ``code`` accounts for is stated NOT done today by the document itself, each such statement with its passage - else
+    () and the code keeps the shared path's hold. Conjunctive, every condition read on the readers' own output:
+    - the code accounts for an act (never a base, E/M or uncatalogued code), matched 'act_missing' - no act of its kinds
+      is documented as done, denied or in conflict;
+    - every act of its kinds is the physician's own, and each either reads not done (_states_not_done) or is the
+      procedure line's listing that the report itself withheld (LISTED_WITHHELD_CUE), each of whose passages reads, at
+      every mention of the act, either nothing (the listing line, a bare name) or not done;
+    - for a removal kind (services.REMOVAL_KINDS), the service records its lesions and the reader states every one of
+      them not removed today (services.NOT_REMOVED; refutation cycle 2, D4 and D7);
+    - at least one passage states it not done;
+    - from each such passage to the end of the service's text, nothing the reader reads says anything was done or is in
+      doubt (services.passage_readings: a later "The polyp was then removed.", "It is unclear whether ...", or a passage
+      too full to read through keeps the hold) - so a failure the document later overtakes never excludes;
+    - the routing-era reader reads none of the code's own passages as performed by a cue of its own clause.
+    Bounded: a few reads per act of the code's kinds, each bounded by services.PASSAGE_READS."""
     profile = reconcile.catalogue.code_profile(code)
-    match = candidate.evaluation.match if candidate.evaluation is not None else None
-    if profile is None or match is None or match.state != 'uncertain' or match.reason == 'conflict':
+    service = found.service
+    if profile is None or profile.base or not profile.covers or 'em_visit' in profile.covers \
+            or found.state != 'uncertain' or found.reason != 'act_missing' or service.status not in checks.POSITIVE:
+        return ()
+    if any(r.origin == 'evidence' and r.status == 'performed'
+           and any(c.startswith(checks.PERFORMED_CUE_PREFIX) for c in r.cues) for r in own):
+        return ()
+    kinds = set(profile.covers)
+    if kinds & {'tattoo', 'injection'}:
+        kinds |= {'tattoo', 'injection'}  # one marking for both, as reconcile.match reads it
+    acts = [a for a in service.acts if a.kind in kinds]
+    if not acts or any(a.role not in reconcile.OWN_ROLES for a in acts):
+        return ()
+    # refutation cycle 2 (admission D4, D7): "not performed" needs supporting documentation. A removal (snare, EMR, ESD,
+    # hot biopsy) stated failed, planned or otherwise not done establishes nothing about its lesion, which another
+    # technique may have removed ("Piecemeal resection of a 25 mm sessile polyp in the ascending colon was completed."
+    # then "En bloc hot snare polypectomy failed."), so the code is excluded only where the service records its lesions
+    # and the documented-service reader states EVERY one of them not removed today - its own NOT_REMOVED dispositions
+    # (left in place, not removed, could not be removed, a removal still to come), which it never gives a lesion it reads
+    # removed. Any other lesion record, or none, keeps the hold: an unrecognised removal ("taken out", "extracted",
+    # "cleared", a nominal "resection ... was completed") can only cost a hold. Cycle 1's early return on any removal word
+    # before the statement (LESION_REMOVAL) is abandoned, refuted both ways (unlisted removal phrasings still excluded;
+    # "could not be removed" and removed stool blocked a correct exclusion).
+    # Integration of refutation cycle 2: a lesion the report only observes - every sentence the reader records it in is
+    # an observation in its closed form (_OBSERVED_ONLY: "A 9 mm pedunculated polyp in the sigmoid colon was seen.",
+    # "Findings: A 9 mm polyp was found in the sigmoid colon.") - is no removal either, so a failed or planned removal
+    # beside it still excludes the code, as the installed release read it; any other predicate about the lesion
+    # ("Piecemeal resection of ... was completed.", "... was taken out piecemeal ...", "was seen and removed") keeps the
+    # hold. Closed: an unrecognised sentence can only cost a hold.
+    # Refutation cycle 4 (closed 1 and 2; HARNESS.md "Refutation of the integrated diff, cycle 4"): that observed-only
+    # arm is abandoned under the two-cycle rule. It was refuted in cycles 3 and 4 the same way - a removal the report
+    # states in words no list holds ("the stalk was transected with the same loop and the head was recovered"), or
+    # inside the failure's own passage ("Hot snare polypectomy (polyp removed and retrieved on the second attempt)
+    # initially failed."), excluded a supported code as not performed and released its base code READY - and no retained
+    # or acceptance case needs it. Only the reader's own NOT_REMOVED dispositions establish "not removed" again; a lesion
+    # only observed keeps the installed release's hold on both codes.
+    if kinds & gi_services.REMOVAL_KINDS and (not service.lesions or any(
+            lesion.disposition not in gi_services.NOT_REMOVED for lesion in service.lesions)
+            or _removal_said_elsewhere(text, acts)):
+        return ()  # refutation cycle 3: and no removal is said anywhere but in the code's own acts' passages
+    # the reader's own reflowed view, its sentences and its act mentions: one index per document, date and pages
+    # (_reader_index) - never a rescan of the text per code
+    flow, sentences, starts, mentions, mention_starts = _reader_index(text, day, tuple(pages or ()))
+    stated, listing = [], []
+    for act in acts:
+        if _states_not_done(act.status, act.cues):
+            stated += [(act.status, act.cues[0] if act.cues else '', ev) for ev in act.evidence]
+            continue
+        if not (act.status == 'uncertain' and gi_services.LISTED_CUE in act.cues
+                and gi_services.LISTED_WITHHELD_CUE in act.cues):
+            return ()
+        for ev in act.evidence:
+            readings = _mention_readings(text, flow, ev, act.kind, day, pages)
+            if readings is None:
+                return ()
+            said = [r for r in readings if not _says_nothing(r.status, r.cues)]
+            if not said:
+                listing.append(ev)
+                continue  # the procedure line itself, or a bare name: it names the act and states nothing either way
+            if not all(_states_not_done(r.status, r.cues) for r in said):
+                return ()
+            stated.append((said[0].status, said[0].cues[0] if said[0].cues else '', ev))
+    if not stated:
+        return ()
+    # Second review of the rule (builder Q1, measured before it shipped): the reader is silent on many statements that
+    # the act was done after all - "... was then successful", "repeated with success", "it was successful on the second
+    # attempt", "a second pass yielded tissue", a failure in a relative clause ("that failed last year was successfully
+    # repeated today"), "unsuccessful x1, successful x1" - and its silence is no statement. Each read the code EXCLUDED
+    # and released its base code READY. So the statement must close what the document says: it ends its sentence (and,
+    # for a failure, the sentence ends with the reader's own failure word, cues.FAILED_ACT); its sentence ends its
+    # paragraph (a blank line or the document's end follows); no other mention of an act of the code's kinds in the
+    # service, before or after it, reads anything but not done (a silent one included); and nothing read after it says
+    # anything was done or is in doubt.
+    texts = [ev for _s, _c, ev in stated]
+    for status, cue, ev in stated:
+        failure = status == 'uncertain' and (cue in STATED_FAILURE_CUES or cue.startswith(gi_services.LATER_FAILURE_CUE))
+        if not _closes_its_paragraph(flow, sentences, starts, mentions, mention_starts, kinds, ev, failure):
+            return ()
+    lo = min([service.scope_start] + [ev.start for ev in texts])
+    hi = max([service.scope_end] + [ev.end for ev in texts])
+    first = bisect.bisect_left(mention_starts, lo)
+    last = bisect.bisect_left(mention_starts, hi)
+    if last - first > gi_services.PASSAGE_READS:
+        return ()  # too many mentions to read through: what they say is not established
+    for kind, ms, me in mentions[first:last]:
+        if kind not in kinds or any(ev.start <= ms and me <= ev.end for ev in texts + listing):
+            continue
+        readings = gi_services.passage_readings(text, ms, me, day, pages)
+        if not readings or not all(_states_not_done(r.status, r.cues, own=False) for r, _clause in readings):
+            return ()  # another mention of the act - silent, done, in doubt, or unread - keeps the hold
+    for _status, _cue, ev in stated:
+        end = service.scope_end if service.scope_end > ev.end else len(text)
+        rest = gi_services.passage_readings(text, ev.start, end, day, pages)
+        if rest is None or any(not _says_nothing(r.status, r.cues) and not _states_not_done(r.status, r.cues, own=False)
+                               for r, _clause in rest):
+            return ()
+    return tuple(stated)
+
+
+@functools.lru_cache(maxsize=1)
+def _reader_index(text: str, day: Optional[date], pages: tuple) -> tuple:
+    """(flow, sentences, their starts, act mentions (kind, start, end), their starts): the documented-service reader's
+    own reflowed view and sentences (services._act_frame, which passage_readings reads) and its act mentions
+    (services._acts_in over the whole view), computed once per document, date and pages and searched by bisection."""
+    flow, _dates, _plist, _starts, sentences = gi_services._act_frame(text, day, pages)
+    mentions = tuple(gi_services._acts_in(flow, 0, len(flow)))
+    return flow, tuple(sentences), tuple(s for s, _ in sentences), mentions, tuple(m[1] for m in mentions)
+
+
+_WORD = re.compile(r'[^\W\d_]+')
+_BLANK_LINE = re.compile(r'\n[ \t]*\n')
+_CLAUSE_MARK = re.compile(r'[,;:()\[\]\u2013\u2014]|\s-\s')  # what opens another clause or an aside before the act
+
+
+def _closes_its_paragraph(flow: str, sentences: Sequence[tuple], starts: Sequence[int], mentions: Sequence[tuple],
+                          mention_starts: Sequence[int], kinds, ev, failure: bool) -> bool:
+    """Whether the not-done statement ``ev`` is the whole end of what its paragraph says: nothing but punctuation
+    follows it in its sentence (the reader's own sentences); a failure's sentence ends with the reader's own failure
+    word (cues.FAILED_ACT: "Hot snare polypectomy failed.", "Polypectomy: unsuccessful.") and nothing before its first
+    mention of the act opens another clause - no comma, semicolon, colon, dash or bracket, and no act predicate of the
+    reader's (ACT_VERB, BARE_PARTICIPLE): never "failed initially; it was successful ...", "failed last year was
+    successfully repeated today", "Although the first attempt was successful, a second ... failed." or "Despite the polyp
+    being removed ..."; and a blank line or the document's end follows the sentence. Any other shape keeps the hold."""
+    i = bisect.bisect_right(starts, max(ev.start, ev.end - 1)) - 1
+    if i < 0:
         return False
-    spans = [(e.start, e.end) for e in candidate.evidence]
-    return any(_in_doubt(a, match.service) and a.role in reconcile.OWN_ROLES
-               and (a.kind in profile.covers or (a.kind in ('tattoo', 'injection')
-                                                 and {'tattoo', 'injection'} & set(profile.covers)))
-               and any(ev.start < hi and lo < ev.end for ev in a.evidence for lo, hi in spans)
-               for a in match.service.acts)
+    ss, se = sentences[i]
+    if not ss <= max(ev.start, ev.end - 1) < se or _WORD.search(flow, ev.end, max(ev.end, se)):
+        return False
+    if failure:
+        words = _WORD.findall(flow, ss, se)
+        if not words or not gi_cues.FAILED_ACT.fullmatch(words[-1]):
+            return False
+        first = None
+        for kind, ms, _me in mentions[bisect.bisect_left(mention_starts, ss):]:
+            if ms >= se:
+                break
+            if kind in kinds:
+                first = ms
+                break
+        if first is None or _CLAUSE_MARK.search(flow, ss, first) or gi_services.ACT_VERB.search(flow, ss, first) \
+                or gi_services.BARE_PARTICIPLE.search(flow, ss, first):
+            return False
+    nxt = sentences[i + 1][0] if i + 1 < len(sentences) else len(flow)
+    return not _WORD.search(flow, se, nxt) and (nxt >= len(flow) or bool(_BLANK_LINE.search(flow, se, nxt + 1)))
+
+
+def _not_done_match(code: str, found: reconcile.Match, stated: Sequence[tuple]) -> reconcile.Match:
+    """The match of a code whose act the document states not done (_stated_not_done): not performed, saying so with
+    the passages that say it (item 5), the first three quoted and the rest counted."""
+    what = ' or '.join(reconcile.act_label(k) for k in reconcile.catalogue.code_profile(code).covers)
+    seen, quoted = set(), []
+    for status, cue, ev in stated:
+        if (ev.start, ev.end) not in seen:
+            seen.add((ev.start, ev.end))
+            quoted.append(f'{reconcile.quote(ev, 120)} ({_stated_words(status, cue)})')
+    more = f'; and {len(quoted) - 3} more' if len(quoted) > 3 else ''
+    return replace(found, state='not_performed', reason='act_not_done', acts=(), question='',
+                   detail=f'The {reconcile.service_label(found.service)} is documented as {found.service.status}, but '
+                          f'the document states the {what} was not done on the date of service: '
+                          f'{"; ".join(quoted[:3])}{more}.')
+
+
+def _another_roles_hold(code: str, found: reconcile.Match) -> reconcile.Match:
+    """Completion repair (owner directive 2026-11-06, item 2: "other-provider acts must remain distinct from completed
+    current services"; builder Q1): a code whose documented service the readers read as done, but every act of which it
+    accounts for is documented only in another role's entry - a pathology addendum, a nursing note, an anesthesia
+    record, a radiology report (services' role reader) - is held with a question naming that entry, whoever proposed it.
+    Before, a participant's code there was kept out by an admission rule of its own (own-3, the reconciliation's role
+    rule applied to admission) while Corti's own selection of the same passage was READY: equal eligibility made the
+    base's false READY the participants' too. It is a hold, never an exclusion: the role reader can be wrong (refutation
+    round 2, over-6: an Impression right after "Pathology results: pending." is read as the pathology entry's), and a
+    held code keeps its family's base code held beside it, so a misread role never releases anything. Unchanged
+    otherwise."""
+    if found.state not in checks.POSITIVE or found.reason != 'service' or not found.acts \
+            or any(a.role in reconcile.OWN_ROLES for a in found.acts):
+        return found
+    what = ' or '.join(reconcile.act_label(k) for k in reconcile.catalogue.code_profile(code).covers) \
+        if reconcile.catalogue.code_profile(code) is not None else 'act'
+    entry = found.acts[0]
+    roles = checks._join(sorted({a.role for a in found.acts}))
+    passage = reconcile.quote(entry.evidence[0], 120) if entry.evidence else ''
+    return replace(found, state='uncertain', reason='another_role',
+                   detail=f'{found.detail} But the {what} it accounts for is documented only in the {roles} entry'
+                          + (f' ({passage})' if passage else '') + ', not by the physician performing the '
+                          f'{reconcile.service_label(found.service)}. Held for the reviewer, not excluded.',
+                   question=(f'The {what} is documented only in the {roles} entry' + (f' ({passage})' if passage else '')
+                             + f'. Was it performed in this {reconcile.service_label(found.service)} on the date of '
+                               'service?'))
+
+
+def _not_done_outcome(found: reconcile.Match, stated: Sequence[tuple]) -> checks.StatusOutcome:
+    """The not-performed outcome of a _not_done_match: its deciding reading is the first passage that says so."""
+    status, _cue, ev = stated[0]
+    reading = checks.Reading(status if status in checks.NEGATIVE else 'negated', (found.detail,), 'service', ev.text,
+                             ev.start, ev.end)
+    return checks.StatusOutcome('not_performed', reading, reason=found.reason)
 
 
 def _competition(admissible: Mapping[str, tuple], selections: Sequence['_Selection'],
                  documented: Sequence[tuple], inventory, text: Optional[str] = None) -> dict[str, tuple[str, ...]]:
     """code -> the codes it competes with (P-ADMIT2, harness repair 3): two different decidable codes compete where
     each claims one same documented act (_claimed: an EGD's dilation code and its biopsy code never do; two dilation
-    codes for its one dilation do), and at least one of them is a participant's admitted code (``admissible``: code ->
-    (its reading, the documented items it accounts for, its first proposers)). A participant's code competes with every
-    other such code, a proposal provider's or a second review's only with the participants' (two codes the proposal
-    provider alone selected read as before). Each is then held by one question naming the others, whoever proposed it:
-    CPT Studio never chooses between codes, nor prefers one for its proposer."""
-    lay = gi_sections.layout(text) if text is not None else None
+    codes for its one dilation do), whoever proposed either (``admissible``: a participant's admitted code -> (its
+    reading, the documented items it accounts for, its first proposers); ``selections``: the proposal provider's and a
+    second review's). Each is then held by one question naming the others, whoever proposed it: CPT Studio never chooses
+    between codes, nor prefers one for its proposer.
+
+    Completion repair (integration, 2026-11-06; directive item 3, one evaluation whoever proposed): two codes the
+    proposal provider alone selected for one act compete as any other two do. Harness repair 3 had kept them "as
+    before" - both READY for the one dilation where only Corti proposed 43248 and 43249 - which made two READY codes for
+    one act and a rule that read Corti's codes differently from a participant's."""
+    lay = gi_structure.clinical_layout(text) if text is not None else None
+    # Completion repair (builder Q1): every explicit participant code is admitted now, excluded ones too (reinstatable,
+    # with the passage); a code that is not active claims nothing and holds nothing, whoever proposed it, as an
+    # excluded selection of Corti's never did
+    admissible = {code: entry for code, entry in admissible.items() if not entry[0].excluded}
     claims_of: dict[str, set] = {code: _claimed(candidate, items, lay)
                                  for code, (candidate, items, _) in admissible.items()}
     for selection in selections:
@@ -660,8 +1011,6 @@ def _competition(admissible: Mapping[str, tuple], selections: Sequence['_Selecti
         # cycle 2, C2-4-2), or the same kind at one site stated twice in the narrative (_same_claim)
         rivals = {other for other, theirs in claims_of.items() if other != code
                   and any(_same_claim(mine, their) for mine in claimed for their in theirs)}
-        if code not in admissible:
-            rivals &= set(admissible)  # a decidable code competes only with the participants' codes
         if rivals:
             out[code] = tuple(sorted(rivals))
     return out
@@ -697,30 +1046,6 @@ def _same_claim(mine: tuple, theirs: tuple) -> bool:
 def _site_contains(outer: str, inner: str) -> bool:
     """Whether the site ``outer`` names ``inner`` whole-word ("distal esophagus" names "esophagus")."""
     return re.search(r'(?<![\w-])' + re.escape(inner) + r'(?![\w-])', outer) is not None
-
-
-def _not_admitted_why(candidate: '_Selection', code: str, accounts: bool, documented: Sequence[tuple]) -> str:
-    """Why a participant's first-reading proposal, read by the per-code path as ``candidate``, is not added as a
-    proposal (P-ADMIT2): what CPT Studio's own reading of the document leaves it - never what another proposer did with
-    the code. ``accounts``: it accounts for a documented service or act the reading reads done (``documented``)."""
-    profile = reconcile.catalogue.code_profile(code)
-    match = candidate.evaluation.match if candidate.evaluation is not None else None
-    if profile is None:
-        return 'the coverage catalogue does not establish which documented act it accounts for'
-    if candidate.evaluation is None:
-        return (candidate.scope_reason or NO_EVIDENCE).rstrip('.')
-    if candidate.excluded:
-        return 'the document reads what it accounts for as not performed on the date of service'
-    if match is not None and match.reason == 'conflict':
-        return ('the document states the act it accounts for both as done and as not done (both are kept; neither is '
-                'chosen)')
-    if match is not None and match.reason == 'act_included':
-        return 'the act it accounts for is part of another documented act, not a separate service'
-    if not any(family == candidate.family for _, family, _, _ in documented):
-        return PARTICIPANT_NO_SERVICE
-    if not accounts:
-        return PARTICIPANT_NO_ACT
-    return 'the document reads what it accounts for as not performed on the date of service'
 
 
 def _includes_through(inventory, service_id: str, code: str, family: str) -> bool:
@@ -1146,7 +1471,7 @@ def _po_section_only_across_unread_heading(text: str, pos: int, status: str, cue
             or not all(c.startswith((checks.SECTION_CUE_PREFIX, checks.PERFORMED_CUE_PREFIX)) for c in cues) \
             or not any(c.startswith(checks.SECTION_CUE_PREFIX) for c in cues):
         return False
-    lay = gi_sections.layout(text)
+    lay = gi_structure.clinical_layout(text)
     section = lay.section_at(pos)
     if section.heading is None:
         return False
@@ -1243,13 +1568,21 @@ def _merge_selected(codes: Sequence[ProviderCode]) -> list[list[ProviderCode]]:
 
 
 def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult, reference: ReferenceLookup,
-            day: Optional[date], inventory=None, *, dated: bool = True) -> _Selection:
+            day: Optional[date], inventory=None, *, dated: bool = True,
+            extra: Sequence[EvidenceSpan] = ()) -> _Selection:
+    """One code read from ``group`` (its proposer's entries for it). ``extra``: another proposer's exact passages for
+    the same code (an independent participant's first reading, _Harness.merge): read with the group's, each passage
+    once and all of them in document order, so the same passages give the same reading whoever cited which; they add
+    no unit and no display. Empty, the reading is exactly the group's (I1)."""
     code = group[0].code
     code_kind, scope_reason = checks.code_scope(code)
-    kept, dropped = checks.exact_evidence([span for item in group for span in item.evidence], text, pages)
+    kept, dropped = checks.exact_evidence([span for item in group for span in item.evidence] + list(extra), text, pages)
+    if extra:
+        kept = tuple(sorted(kept, key=lambda span: (span.start, span.end)))
     displays = dict.fromkeys(item.display for item in group if item.display)
     selection = _Selection(code=code, units=len(group), display=' | '.join(displays), code_kind=code_kind,
-                           scope_reason=scope_reason, evidence=kept, dropped=dropped, family=family_for_code(code))
+                           scope_reason=scope_reason, evidence=kept, dropped=dropped, family=family_for_code(code),
+                           group=tuple(group))
     if scope_reason or not kept:
         return selection
     # Only a family routing detects is read through its routed finding. A gi.other finding gathers different
@@ -1284,9 +1617,10 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
     placed = None
     if found is not None:
         # Engine @4: the documented service and act decide the code's status; its passages are verified against them.
-        found = _second_opinion(outcome, found, code, text, inventory, routing)
+        found = _second_opinion(outcome, found, code, text, inventory, routing, own, day, pages)
         if found.reason == 'act_missing' and outcome.state == 'not_performed' \
                 and not _time_in_doubt(code, found.service) \
+                and not _listing_contradicted(code, found.service) \
                 and _agreed_not_done(code, outcome, found.service, text, day, pages):
             # The inventory documents no such act and the code's own passage reads it as not performed today (a
             # planned repeat, an earlier procedure), and the inventory reads the same not-done status there: the
@@ -1308,6 +1642,14 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
             # documents no act the code accounts for as done or in conflict - it has nothing to add, and the exclusion
             # stands. A code whose act the inventory reads as done, or a base or E/M code, stays held.
             found = None
+    # Completion repair (builder Q1): an act the document itself states not done today - failed, planned, historical,
+    # still to be done - is no doubt to ask about: the code is excluded with the passage that says so, reinstatable,
+    # whoever proposed it (_stated_not_done; every other reading keeps the hold above)
+    stated = _stated_not_done(code, found, own, text, day, pages) if found is not None else ()
+    if stated:
+        found = _not_done_match(code, found, stated)
+    if found is not None:
+        found = _another_roles_hold(code, found)
 
     def today(span):
         return _today_passage(text, span, day)
@@ -1317,7 +1659,7 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
         # never its header, its signature or another line no such section heads (OWN_REPORT_SECTIONS); and only where
         # the document reports that study alone and the passage states nothing else (attr-F3: never another study's
         # result in a combined report, never a biopsy taken after the study)
-        layout = gi_sections.layout(text)
+        layout = gi_structure.clinical_layout(text)
         if any(layout.section_at(pos).kind not in OWN_REPORT_SECTIONS for pos in (span.start, max(span.start,
                                                                                                     span.end - 1))):
             return ''
@@ -1343,7 +1685,7 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
             # the layout's reading, not the passage's (round 4 PA's "one cause"; a numbered "3. Upcoming procedures"
             # item makes today's "4. 6 mm sigmoid polyp removed with cold snare." planned: test_repairs_r4_sections)
             own_time = {(r.start, r.end) for r in own if r.status in checks.NEGATIVE and not _section_time(r)}
-            elsewhere = _passages_elsewhere(kept, own_time, found, inventory)
+            elsewhere = _passages_elsewhere(kept, own_time, found, inventory, code, text)
             if elsewhere:
                 found = replace(found, state='uncertain', reason='readings_disagree', question=(
                     f'Confirm whether {code} is supported: none of the passages it cites shows what was done on the date '
@@ -1351,7 +1693,7 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
                     detail=f'{found.detail} But none of the passages the code cites shows it: {elsewhere} Held for the '
                            'reviewer, not excluded.')
         note = _undecided(outcome, found, supported, kept)
-        outcome = _service_outcome(found)
+        outcome = _not_done_outcome(found, stated) if stated else _service_outcome(found)
     elif unmatched and inventory is not None:
         # No documented service of the code's family: its own passages still decide its status. Where the inventory
         # documents the act it accounts for in another family's service, its passages are verified against that act,
@@ -1361,19 +1703,30 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
             supported = reconcile.support(elsewhere, kept, today=today, report_family=report_family)
             placed = reconcile.placed_check(elsewhere, inventory, PROFILES[selection.family].label)
     row = reference.lookup(code, day if dated else None)
-    return replace(selection, evaluation=_Evaluation(finding, outcome, row, own, speaks_for, found, supported, note, placed,
-                                                     (row if dated else reference.lookup(code, day)).pfs))
+    # refutation cycle 3 (admission C3-4): units are the group's, as the installed release counts them, with its
+    # units.duplicate prompt; cycle 2's _supported_units dropped a unit wherever the reader read an act anything but
+    # done - a modifier misread as "historical" ("across the prior sphincterotomy") silently removed a placed stent
+    return replace(selection, evaluation=_Evaluation(finding, outcome, row, own, speaks_for, found, supported, note,
+                                                     placed, (row if dated else reference.lookup(code, day)).pfs))
 
 
-def _passages_elsewhere(kept: Sequence[EvidenceSpan], another_time: set, found: reconcile.Match, inventory) -> str:
+def _passages_elsewhere(kept: Sequence[EvidenceSpan], another_time: set, found: reconcile.Match, inventory,
+                        code: str = '', text: str = '') -> str:
     """P2 READ-HOLD, R3 7.5.1 (the narrow evidence hold): why EVERY passage the code cites is about something other
     than the matched service today - each lies in another documented service's evidence or acts (_elsewhere), or in
     another service's scope and outside the matched service's, or is read by the routing-era reader as planned,
     historical, negated or cancelled by a cue of its own (``another_time``: never by its section alone) - or '' when one
-    is not. Read only where the documented service reads the code as performed and the passages' support is warn or
-    fail; the code is then held, never excluded. A passage of the matched service's own (its procedure-level statement)
-    is never elsewhere: such a code stays as it is (R3 open question 1, the narrow choice). Bounded: one pass over the
-    inventory's services per passage."""
+    is not. Completion repair (integration, 2026-11-06): builder Q1's added arm - a passage stating another act of the
+    code's kinds not done, where the passage shows none done - is removed. It held a code the document supports by its
+    own documented act because the proposer cited text about another act ("Hot snare polypectomy was attempted, but the
+    polypectomy was unsuccessful." for 45385 beside a cold snare polypectomy done today), which item 3's reconciliation
+    excludes: a code is held only where the passages showing its own documented act are in doubt. The arm's F4 purpose
+    (a guide-wire code READY on a balloon dilation) is the technique reading's now (reconcile.technique_fits); the
+    corpus ledger is identical with and without the arm (measured). Read only where the
+    documented service reads the code as performed and the passages' support is warn or fail; the code is then held,
+    never excluded. A passage of the matched service's own (its procedure-level statement) is never elsewhere: such a
+    code stays as it is (R3 open question 1, the narrow choice). Bounded: one pass over the inventory's services per
+    passage."""
     if inventory is None or not kept:
         return ''
     own = found.service
@@ -1398,14 +1751,15 @@ def _passages_elsewhere(kept: Sequence[EvidenceSpan], another_time: set, found: 
 def _today_passage(text: str, span, day: Optional[date]) -> bool:
     """A passage that states something of this encounter in its own sections: none of them a plan, history or
     indication section (NOT_TODAY_SECTIONS), and not read as about another time, planned, denied or cancelled."""
-    layout = gi_sections.layout(text)
+    layout = gi_structure.clinical_layout(text)
     if any(layout.section_at(pos).kind in NOT_TODAY_SECTIONS for pos in (span.start, max(span.start, span.end - 1))):
         return False
     return gi_services.current_statement(text, span.start, span.end, day)
 
 
 def _second_opinion(old: checks.StatusOutcome, found: reconcile.Match, code: str, text: str,
-                    inventory=None, routing: Optional[RoutingResult] = None) -> reconcile.Match:
+                    inventory=None, routing: Optional[RoutingResult] = None, readings=(),
+                    day: Optional[date] = None, pages=()) -> reconcile.Match:
     """The documented service decides the code's status, with the routing-era reading as a second opinion that can
     only hold (ARCHITECTURE 5.10):
     - a hedge, a denial or a cancellation read in the code's OWN passage, when that passage is about the matched
@@ -1427,7 +1781,16 @@ def _second_opinion(old: checks.StatusOutcome, found: reconcile.Match, code: str
     if positive and old.state in ('uncertain', 'not_performed'):
         doubt = old.decisive
         own = doubt is not None and doubt.origin == 'evidence' and doubt.start is not None
-        holds = (old.state == 'uncertain' and own and _about(doubt, found, code, text, routing, inventory)) or (
+        # Refutation cycle 2 (2026-11-06), the owner's two-cycle rule: the integration's another-act release - a doubt in
+        # the code's own passage about another act of its kinds did not hold it (_another_acts_doubt) - is abandoned. It
+        # was refuted in cycle 1 (another lesion's failure releasing a doubted act) and again in cycle 2 (a hard-wrapped
+        # or unlisted hedge; sentence order), and its cycle-2 repair still released doubts no reader binds to an act
+        # ("Removal could not be confirmed.", "The removal was likely incomplete."). The base reading stands: a doubt the
+        # routing-era reader reads in the code's own passage about this service holds the code, whichever act of the
+        # service it is about, for every proposer alike. Measured: one completion corpus entry moves to a hold
+        # (E|ANOTHER-failed-attempt), the four retained cases read as before.
+        holds = (old.state == 'uncertain' and own
+                 and _about(doubt, found, code, text, routing, inventory)) or (
             old.state == 'not_performed' and own and doubt.status in ('negated', 'cancelled')
             and _about(doubt, found, code, text, routing, inventory)) or (
             old.state == 'not_performed' and own and _another_time_on_the_act(doubt, found, text))
@@ -1543,6 +1906,18 @@ def _time_in_doubt(code: str, service) -> bool:
     kinds = set(profile.covers) if profile is not None else set()
     return any(a.kind in kinds and a.status == 'uncertain'
                and any(cue.startswith(gi_services.OTHER_TIME_CUE) for cue in a.cues) for a in service.acts)
+
+
+def _listing_contradicted(code: str, service) -> bool:
+    """Whether ``service`` documents an act ``code`` accounts for as a procedure-line listing the report contradicts
+    (services.listed_contradicted; completion repair, builder A). The inventory holds that listing in doubt: it reads
+    the act neither done nor not done, so it never agrees with the routing-era reading of the code's own passage that
+    the act was not done, and the code is held, never newly excluded through it (cux-hold R8 D3 N17: "The polyp was not
+    removed." cited for 45385 under "Procedure: Colonoscopy with hot snare polypectomy" stays held, as the base read it).
+    """
+    profile = reconcile.catalogue.code_profile(code)
+    kinds = set(profile.covers) if profile is not None else set()
+    return any(a.kind in kinds and gi_services.listed_contradicted(a) for a in service.acts)
 
 
 def _not_done_class(status: str) -> str:
@@ -1743,7 +2118,7 @@ def _pa_unread_heading(text: str, pos: int) -> str:
     heading-like line names another occurrence's record (sections.ANOTHER_OCCURRENCE_HEAD: the document's own words date
     the passage); _PA_FAR, fail-closed, when the heading lies more than HEADING_REACH_LINES lines or HEADING_REACH_CHARS
     characters back and nothing nearer decides. Bounded: those lines and characters, three lines down per candidate."""
-    section = gi_sections.layout(text).section_at(pos)
+    section = gi_structure.clinical_layout(text).section_at(pos)
     if section.heading is None:
         return ''
     lo = text.find('\n', section.heading.end)  # the heading's own line (its label's answer) is never such a line
@@ -1779,7 +2154,7 @@ def _pa_reach(text: str, pos: int, what: str = 'it') -> str:
     further below its heading than is read (HEADING_REACH_LINES lines or HEADING_REACH_CHARS characters: fail-closed),
     or else past the real unread heading line _pa_unread_heading finds, quoted whole. Words only; it decides nothing
     (GI round 4, PA; the line quoted since Wave 1 repair cycle 1)."""
-    section = gi_sections.layout(text).section_at(pos)
+    section = gi_structure.clinical_layout(text).section_at(pos)
     heading = section.heading.text.rstrip(':').strip() if section.heading is not None else ''
     named = f' \u201c{heading}\u201d' if heading else ''
     line = _pa_unread_heading(text, pos)
@@ -2611,8 +2986,21 @@ def base_included(members) -> tuple[tuple[str, tuple[str, ...]], ...]:
         entry = reconcile.catalogue.entry(family)
         reportable = [a for a in service.acts if a.status == 'performed' and a.role in ('physician', 'unknown')
                       and entry is not None and a.kind in entry.acts and not reconcile._bundled(service, a)]
-        if others or reportable:
-            bases.append((code, others or tuple(sorted({reconcile.act_label(a.kind) for a in reportable}))))
+        # Completion repair (2026-11-06, F5; builder A): an intervention the procedure line lists and the report states
+        # only in doubt ("It is unknown whether hot snare polypectomy was performed.") may have been done, and then this
+        # base code is included in it: held beside it, never final alone (never excluded either)
+        # Full-suite repair (builder A): so too a listed removal the report contradicts (every lesion it records stated
+        # not removed today, services.listed_contradicted). The listing and the report disagree, and that rule only
+        # holds: the base code stays held beside it as the base read it (cux-hold R8 D3 N17), never released READY
+        doubted = [a for a in service.acts if (gi_services.listed_in_doubt(a) or gi_services.listed_contradicted(a))
+                   and a.role in ('physician', 'unknown')
+                   and entry is not None and a.kind in entry.acts and not reconcile._bundled(service, a)]
+        if others or reportable or doubted:
+            bases.append((code, others or tuple(sorted({reconcile.act_label(a.kind) for a in reportable}
+                                                       | {reconcile.act_label(a.kind) + (' (stated in doubt)'
+                                                                                         if gi_services.listed_in_doubt(a)
+                                                                                         else ' (listed, not stated done)')
+                                                          for a in doubted}))))
     return tuple(bases)
 
 
@@ -2909,6 +3297,12 @@ def _proposal(s: _Selection, key: str, enc: _Encounter, extra: Sequence[Check] =
         exclusion = _service_exclusion(m) if m is not None else checks.exclusion_reason(outcome, name)
     context_values = _relevant_context(s.family, enc, bool(pctc))
     support = _support_json(m, supported, s.origin)
+    if s.cited_by:
+        # item 2 (builder Q1): who cited each of its passages, in evidence order - with the support's 'supporting' and
+        # 'unrelated' indices, the evidence report of a proposer whose passages are about another act. Operator-only
+        # diagnostics (the participants' names stay out of every customer surface, as support['proposed_by'] does)
+        support = {**support, 'provenance': [{'start': start, 'end': end, 'by': list(by)}
+                                             for start, end, by in s.cited_by]}
     if s.competes and not s.excluded:
         support = {**support, 'competes': list(s.competes)}  # what review_view releases the hold by (P-ADMIT2)
     if used:
@@ -3376,15 +3770,18 @@ PARTICIPANT_COMPETING = ('independent readings propose different codes for the s
                          'Studio does not choose between them')
 PARTICIPANT_UNREAD = ('the documented-service reading was not available, so no participant code could be checked '
                       'against it')
-# P-ADMIT2 (harness repair 3): what CPT Studio's own reading leaves a participant's code that accounts for nothing it
-# reads done - a failed, denied, earlier, planned or another provider's act among them - never what another proposer did
-PARTICIPANT_NO_SERVICE = 'no service of its family is documented as done on the date of service'
-PARTICIPANT_NO_ACT = 'the act it accounts for is not documented as done on the date of service'
+# P-ADMIT2 (harness repair 3): what CPT Studio's own reading left a participant's code that accounted for nothing it
+# read done. RETIRED by the completion repair (owner directive 2026-11-06, items 3 and 5; builder Q1): an explicit code
+# is admitted and read by the shared per-code path, so none of these is produced any more - before, they listed a code
+# "not documented as done" from a reader's silence (U9: the retained cases' participant codes for "the bolus was
+# removed").
+# Kept, in CPT Studio's own "could not find" words, for the earlier releases' records and their tests.
+PARTICIPANT_NO_SERVICE = 'CPT Studio could not find a service of its family documented as done on the date of service'
+PARTICIPANT_NO_ACT = 'CPT Studio could not find the act it accounts for documented as done on the date of service'
 PARTICIPANT_LEFT_BY = 'the other proposals'
-PARTICIPANT_NOT_SHOWN = ('none of its passages shows the act it accounts for, as CPT Studio reads them; a code carried '
-                         "only by CPT Studio's own reading of another passage is never added for a participant")
-PARTICIPANT_NOT_ESTABLISHED = ("CPT Studio's readers, reading its passages, do not establish the act it accounts for as "
-                               "done on the date of service, and a participant's code is added only where they do")
+PARTICIPANT_NOT_SHOWN = 'CPT Studio could not find the act it accounts for in its passages'
+PARTICIPANT_NOT_ESTABLISHED = ("CPT Studio's readers could not confirm from its passages the act it accounts for as done "
+                               'on the date of service')
 # What a participant that gave a code with no entry quoting the document verbatim did: it listed the code and did not
 # propose it (refutation round 1, EV-2 = IND-3), said wherever who proposed an alternative is said (refutation round 5,
 # the session's D12: "Proposed by Astra" was said of a reading the same assessment says did not propose the code).
@@ -3826,28 +4223,49 @@ class _Harness:
         PARTICIPANT_PEER_ONLY where no first reading proposed it with one, PARTICIPANT_UNREAD where the
         documented-service reading is unavailable; otherwise it is read by the proposal provider's own path (_select:
         scope, exact evidence, the routed family, the documented service and act, the P2 READ-HOLD holds, the passages'
-        support, required facts, PFS, MUE, the endoscopic base) from its first-reading proposers' spans alone, and is
-        admissible where it is not excluded, its own passages show the act it accounts for (support 'pass'), and it
-        accounts for a documented service or act the reading reads done as if nothing were proposed (P-ADMIT2, harness
-        repair 3: _documented_items - whatever any other proposer selected, omitted or listed). Otherwise it is an
-        alternative with CPT Studio's own reason (_not_admitted_why). Codes of different proposers for one documented
+        support, required facts, PFS, MUE, the endoscopic base) from its first-reading proposers' spans alone (until
+        2026-11-06 it was then admissible only where it was not excluded, its own passages showed the act and it
+        accounted for a documented item - P-ADMIT2's narrowed form - and was otherwise an alternative; see below). Codes
+        of different proposers for one documented
         act each reach review, held by one question naming the others (_competition): CPT Studio never chooses between
         them. An added code is a selection like any other - its status, checks and questions are the readers',
         it counts as covering what it accounts for, and only a member's decision approves it. ``corti_listed`` and
-        ``corti_second_listed`` word its rationale's first sentence (_lead)."""
+        ``corti_second_listed`` word its rationale's first sentence (_lead).
+
+        Completion repair (owner directive 2026-11-06, items 3 and 5; builder Q1) - EQUAL ELIGIBILITY. A participant's
+        explicit first-reading code (in scope, quoted verbatim with an exact span, by its frozen first reading) that no
+        decidable proposal carries is ADMITTED: it is read by the same per-code path as a code Corti selects (_select,
+        from its first-reading proposers' spans), and its outcome is that path's - READY where the readers document
+        the act today, held with that path's question where they read it in doubt or cannot find it, excluded with the
+        passage (reinstatable) where the path excludes it. No rule of the admission's own decides it any more: before,
+        a code that accounted for no documented item, or whose own passages did not show the act, was an alternative
+        "not documented as done", never reinstatable, where Corti's selection of the same passages was held (U8, U9;
+        the participants' foreign-body removal code for "the bolus was removed" on two retained cases). Corti
+        selecting, omitting or listing the code changes nothing. Only a genuine non-proposal stays an alternative: out
+        of scope, no quote found verbatim, no exact span, proposed only in peer review, or no documented-service reading
+        to read it by.
+
+        A code a decidable proposal carries that a participant's first reading also proposed is read ONCE, over every
+        proposer's exact passages (_select's ``extra``; item 2, evidence-based reconciliation): so it is never held by
+        the evidence hold (P2 READ-HOLD) because one proposer cited text about another act while another proposer's
+        passage shows the act, and a passage that reads the code's own act in doubt, historical, planned or denied still
+        holds it, whoever cited it. Who cited each passage is recorded (support['provenance']). A participant whose
+        quotes add no passage changes nothing but the record (I3).
+
+        Cross-code effects are computed once over every active selection, whoever proposed it: the base rules
+        (base_included, base_within) and competition (_competition, over the codes that are not excluded)."""
         have = {s.code for s in selections if s.evaluation is not None}  # decidable, as _second_review reads it
-        # P-ADMIT2 (owner directive 2026-11-05, second message): every documented service and act the reading reads
-        # done, as if nothing were proposed - never only what the other proposals left open, so no proposer's selection,
-        # or its silence, decides whether a participant's code reaches review
-        # refutation round 1 (L4-1): never the same-day office-visit suppression, which reads Corti's own procedure
-        # selections (merge_day): a separately documented visit is a documented service whatever Corti selected
+        # The documented items each admitted code's claims are read from (_competition): every documented service and act
+        # the reading reads done, as if nothing were proposed (P-ADMIT2); refutation round 1 (L4-1): never the same-day
+        # office-visit suppression, which reads Corti's own procedure selections
         documented = _documented_items(inventory, False) if inventory is not None else []
+        selections = [self._with_first_passages(s, routing, reference, day, inventory, dated) for s in selections]
         order: list[str] = []
         why: dict[str, str] = {}
-        admissible: dict[str, tuple] = {}  # code -> (its reading, the open items it accounts for, its first proposers)
+        admissible: dict[str, tuple] = {}  # code -> (its reading, the documented items it accounts for, its proposers)
         for code in self.codes:
             if code in have:
-                continue  # recorded on that proposal (recorded): nothing else about it changes
+                continue  # read with that proposal (_with_first_passages) and recorded on it (recorded)
             order.append(code)
             proposers, first = self.proposers(code), self.first_proposers(code)
             _, scope_reason = checks.code_scope(code)
@@ -3864,29 +4282,11 @@ class _Harness:
             else:
                 group = [ProviderCode('selected', 'participant', code, '', self._first_evidence(code, first))]
                 candidate = _select(group, self.text, self.pages, routing, reference, day, inventory, dated=dated)
-                items = _open_items_covered(candidate, code, documented, inventory)
-                supported = candidate.evaluation.support if candidate.evaluation is not None else None
-                if items and candidate.evaluation is not None and not candidate.excluded:
-                    # Exact evidence in its complete context (owner directive 2026-11-05): at least one of the
-                    # participant's own passages shows the act the code accounts for, as the support reading reads it
-                    # ('pass'). Found by the meaning-check battery at integration: under "Procedure: Colonoscopy with hot
-                    # snare polypectomy", "The polyp was left in place." admitted 45385 READY on the title's reading alone.
-                    # A code its own passages leave in doubt (support 'not_applicable': the readers do not establish
-                    # the act as performed) is never admitted either: a held participant code would count as covering
-                    # the act and could hold Corti's base code as included in it (the meaning check's time-2).
-                    if supported is not None and supported.status == 'pass':
-                        admissible[code] = (candidate, items, first)
-                    elif supported is not None and supported.status == 'not_applicable' \
-                            and _shows_doubted_act(candidate, code):
-                        # provider-neutral (refutation cycle 2): its own passages show the act it accounts for, which
-                        # the reading documents in doubt - added and held, as Corti's code for that act is
-                        admissible[code] = (candidate, items, first)
-                    elif supported is not None and supported.status == 'not_applicable':
-                        why[code] = PARTICIPANT_NOT_ESTABLISHED
-                    else:
-                        why[code] = PARTICIPANT_NOT_SHOWN
-                else:
-                    why[code] = _not_admitted_why(candidate, code, bool(items), documented)
+                if candidate.evaluation is None:  # unreachable after the gates above; never an unread admission
+                    why[code] = (candidate.scope_reason or NO_EVIDENCE).rstrip('.')
+                    continue
+                candidate = replace(candidate, cited_by=self._cited_by(code, candidate.evidence, first))
+                admissible[code] = (candidate, _open_items_covered(candidate, code, documented, inventory), first)
         competes = _competition(admissible, selections, documented, inventory, self.text)
         added, listed = [], []
         for code in order:
@@ -3898,13 +4298,47 @@ class _Harness:
                 added.append(replace(candidate, origin='participant', proposers=first,
                                      lead=self._lead(code, self.proposers(code), selections, corti_listed,
                                                      corti_second_listed),
-                                     competes=competes.get(code, ())))
+                                     competes=competes.get(code, ()) if not candidate.excluded else ()))
                 continue
             names = tuple(n for n in PARTICIPANT_ORDER if n in self.codes[code])
             listed.append(self._alternative(len(listed), code, names, why[code]))
         kept = [replace(s, competes=competes[s.code]) if s.code in competes and s.evaluation is not None
                 and not s.excluded else s for s in selections]
         return kept + added, tuple(listed)
+
+    def _cited_by(self, code: str, evidence: Sequence[EvidenceSpan], names: Sequence[str],
+                  primary: Sequence[EvidenceSpan] = (), by: str = PRIMARY) -> tuple:
+        """Who cited each passage of ``evidence`` (support['provenance']): ``by`` for the ``primary`` spans (a decidable
+        proposal's own: Corti's, or its second review's), each of ``names`` for its own first-reading exact spans."""
+        own = {(span.start, span.end) for span in primary}
+        quoted = {name: {(span.start, span.end) for said in self.codes.get(code, {}).get(name, ())
+                         if said.phase == INDEPENDENT for span in said.good} for name in names}
+        return tuple((span.start, span.end, tuple(([by] if (span.start, span.end) in own else [])
+                                                  + [name for name in names if (span.start, span.end) in quoted[name]]))
+                     for span in evidence)
+
+    def _with_first_passages(self, s: '_Selection', routing: RoutingResult, reference: ReferenceLookup,
+                             day: Optional[date], inventory, dated: bool) -> '_Selection':
+        """A decidable proposal ``s`` read again over its own passages and those of every participant whose first
+        reading proposed its code with exact quotes (item 2: one code, read once, over all its proposers' passages),
+        keeping its own units, display and origin. Unchanged where no such participant adds a passage it lacks (I3:
+        the same quotes change nothing but the record), where it has no reading (no exact passage of its own: the
+        participant's code is then read on its own beside it, as before), or where it has no group to read again."""
+        if s.evaluation is None or not s.group or s.origin != 'primary':
+            # a second review's addition was read on the date its own review reads (_second_review): it keeps that
+            # reading, and a participant's code of its number is recorded on it, as before
+            return s
+        first = self.first_proposers(s.code)
+        spans = self._first_evidence(s.code, first) if first else ()
+        have = {(span.start, span.end) for span in s.evidence}
+        extra = tuple(span for span in spans if not checks._evidence_problem(span, self.text)
+                      and (span.start, span.end) not in have)
+        if not extra:
+            return s
+        again = _select(list(s.group), self.text, self.pages, routing, reference, day, inventory, dated=dated,
+                        extra=extra)
+        return replace(again, origin=s.origin, proposers=s.proposers, lead=s.lead,
+                       cited_by=self._cited_by(s.code, again.evidence, first, s.evidence))
 
     def _alternative(self, index: int, code: str, names: tuple[str, ...], why: str) -> ProposalAssessment:
         """A participant's code that is not a proposal, saying why: informational, never approvable. ``names``: every
@@ -4763,3 +5197,230 @@ class _Confirmations:
                                        for sp in a.spans]} for a in self.applied],
                 'ignored': [{'id': c.confirmation_id if isinstance(c.confirmation_id, str) else '', 'why': why}
                             for c, why in self.ignored]}
+
+
+# --- member answers, read as an input (completion repair 2026-11-06: U10, U11; contract C5) -------------------------
+
+MEMBER_ANSWER_CHECK = 'member.answer'
+MEMBER_ANSWER_SOURCE = 'cpt-studio:member-answer@1'
+ANSWERED_SUPPORT = questions.ANSWERED_SUPPORT  # support[...] of a code a member's answer excluded: {fact, value, answers}
+MEMBER_ANSWER_LABELS = {questions.NOT_DOCUMENTED: 'Not documented', questions.CANNOT_CONFIRM: 'Cannot confirm'}
+_ENDOSCOPIC_CHECK = 'pfs.endoscopic_base'  # checks.endoscopic_check's id
+NOT_APPLIED = 'not_applied'  # an answer bound to a question asked that excluded nothing (recorded, never dropped)
+# refutation cycle 4 (answers 1-3): an answer this reader leaves to the review overlay, which reads it at read time over the
+# current decisions as the installed release read every answer - one recorded before the binding (no fingerprint), or one
+# to a question a review decision can open or close (_MemberAnswers.engine_reads)
+OVERLAY_READ = 'read_by_the_review_overlay'
+
+
+answered_away = questions.answered_away  # the one reading of support['answered'] (questions.py)
+
+
+def answered_fingerprint(fingerprint: str, found: Sequence[Check], status: str) -> str:
+    """The fingerprint of a proposal a member's answer excluded: the one it has without the answer, with what moved - so
+    a decision made on one carries only onto the same reading (review._carry_decisions), and a decision made without the
+    answer never carries onto it. (Refutation cycle 4: another code an answer only reaches through a cross-code check
+    keeps its own fingerprint, _MemberAnswers.apply.)"""
+    return sha256_json({'unanswered': fingerprint, 'checks': sorted([check.id, check.status] for check in found),
+                        'status': status})
+
+
+class _MemberAnswers:
+    """The revision's standing member answers, read as an input (``assess(member_answers=...)``).
+
+    Each answer is bound to the question it was given to - its (code, family, fact) asked, in the assessment these same
+    inputs make WITHOUT any answer, with the fingerprint it carries, or by that key alone for an answer recorded before
+    answers carried a fingerprint, as the installed release bound it (studio.validation.questions.bind; refutation
+    cycle 2, answers W2) - and is read there only. An answer that answers no question asked now, or a question asked
+    differently, is kept as an earlier answer (completeness['member_answers']['earlier'], with why) and changes
+    nothing.
+
+    Read, an answer ("Not documented" or "Cannot confirm") excludes the code whose question it answers - and nothing
+    else - by the review overlay's one rule (studio.validation.review_view: the first open question of the code a
+    member answered as unavailable): the code is excluded by the member's answer (a 'member.answer' check, its reason
+    naming the answer, support['answered']), its answered questions are kept, answered, and its other questions are
+    not asked of an excluded code. Its cross-code effects are the overlay's: it still holds every code its presence
+    held - a diagnostic base beside it keeps its base_included question, an E/M beside a procedure its separate-visit
+    question (session decision (e) of 2026-11-03; refutation round 2, L7-01) - a competition it was a rival in is
+    released or narrowed (refutation round 1 of harness repair 3, L4-5), and the CMS endoscopic-family check of every
+    other code is read again without it. A documented service's question a member answered is closed and changes
+    nothing else. No answer confirms a clinical fact, and none approves (decision D7)."""
+
+    def __init__(self, given: Sequence[questions.MemberAnswerInput], text: str):
+        self.text = text
+        answers = []
+        for answer in given:
+            if not isinstance(answer, questions.MemberAnswerInput):
+                raise ValueError(f'A member answer must be a MemberAnswerInput, not {type(answer).__name__}.')
+            if not all(isinstance(getattr(answer, name), str)
+                       for name in ('code', 'family', 'fact', 'value', 'question', 'answer_id')):
+                raise ValueError('A member answer names its code, family, fact, value, question and id as text.')
+            answers.append(answer)
+        self.answers = sorted(answers, key=lambda a: (a.answer_id, a.code, a.family, a.fact, a.value, a.question))
+        self.reading: dict = {}  # the documented-service reading's JSON form, as Assessment.services records it
+        self.asked: dict = {}  # member key -> fingerprint of every question these inputs ask without any answer
+        self.applied: list = []  # (answer, scope, proposal key or '')
+        self.closed = 0  # the questions an applied answer answers: kept, answered, never open
+
+    def _proposal_questions(self, proposals) -> dict:
+        pairs = []
+        acts = questions.acts_of(self.reading)
+        for p in proposals:
+            for spec in p.clarifications:
+                family = spec.family or p.family
+                shown = questions.question_passages(self.reading, family, spec.fact, p.evidence, p.support, self.text,
+                                                    acts)
+                pairs.append((questions.member_key(p.code, family, spec.fact),
+                              questions.instance(spec.scope, family, spec.fact, p.code, spec.question, spec.reason,
+                                                 shown)))
+        return questions.group(pairs)
+
+    def apply(self, proposals: Sequence[ProposalAssessment], by_key: Mapping[str, '_Selection'], services,
+              reference_sources, sources, day: Optional[date]) -> tuple[ProposalAssessment, ...]:
+        """``proposals`` as the bound answers leave them. ``by_key``: each decidable proposal's selection by its key;
+        ``services``: the documented-service reading's JSON form (None when it was inconsistent, as the review overlay
+        reads it); ``sources`` and ``day``: what the CMS endoscopic-family check reads (engine._proposal's)."""
+        from studio.validation import review_view  # local import: review_view imports this module
+
+        asked = self._proposal_questions(proposals)
+        self.asked.update(asked)
+        # Refutation cycle 4 (answers 1-3; HARNESS.md "Refutation of the integrated diff, cycle 4"): this reads only an
+        # answer that carries its question's fingerprint, to a question no review decision can open or close - every
+        # other answer is the review overlay's, read at read time over the current decisions exactly as the installed
+        # release read every answer (review.answer_states binds it there; review_view applies it). An answer recorded
+        # before the binding (no fingerprint) read here had made the stored checks and fingerprint of every OTHER code
+        # depend on which branch a later, unrelated answer took (cycle 3's early return), invalidating approvals that
+        # nothing shown had moved; and an answer to a decision-dependent question (a base code's base_included, a
+        # visit's separate_em, a competition) stayed applied after a rejection had closed that question, leaving a
+        # supported code excluded with no action.
+        bound, _ = questions.bind([a for a in self.answers if self.engine_reads(a)], asked)
+        answer_of: dict = {}
+        for answer in bound:
+            answer_of.setdefault(questions.member_key(answer.code, answer.family, answer.fact), answer)
+        if not answer_of:
+            return tuple(proposals)
+        views = review_view.review_view(
+            [review_view.stored_from(p) for p in proposals], {}, services=services, retrieval=(),
+            reference_sources=reference_sources, service_date=day,
+            answers=[{'code': a.code, 'family': a.family, 'fact': a.fact, 'value': a.value}
+                     for a in answer_of.values()])
+        away = {p.key for p in proposals if getattr(views.get(p.key), 'reason', '') == review_view.DETAIL_UNAVAILABLE}
+        if not away:
+            return tuple(proposals)
+        # the CMS endoscopic-family check of every other code reads the codes still in review (the overlay's EFFECTIVE
+        # set): engine._encounter's active rows without the codes a member's answer excluded
+        rows = endoscopic_rows((s.code, s.evaluation.reference.pfs) for key, s in by_key.items()
+                               if key not in away and not s.excluded and s.evaluation is not None)
+        out = []
+        for p in proposals:
+            view = views.get(p.key)
+            if p.key in away:
+                out.append(self._excluded(p, view, answer_of))
+                continue
+            found, specs, status = list(p.checks), list(p.clarifications), p.status
+            if view is not None and COMPETING_CHECK in view.recomputed:
+                # L4-5: a rival a member's answer to one of its own questions excluded is no longer in review
+                new = next((c for c in view.checks if c.get('id') == COMPETING_CHECK), None)
+                found = [Check(**{name: str(new.get(name) or '') for name in ('id', 'label', 'status', 'detail',
+                                                                             'source')})
+                         if c.id == COMPETING_CHECK else c for c in found if c.id != COMPETING_CHECK or new is not None]
+                worded = next((q for q in view.questions if q.get('fact') == COMPETING_FACT), None)
+                specs = [spec for spec in specs if spec.fact != COMPETING_FACT or worded is not None]
+                specs = [replace(spec, question=str(worded['question']), reason=str(worded['reason']))
+                         if spec.fact == COMPETING_FACT and worded is not None else spec for spec in specs]
+                status = view.status
+            selection = by_key.get(p.key)
+            if selection is not None and selection.evaluation is not None:
+                found = [checks.endoscopic_check(p.code, selection.evaluation.reference, rows, sources, day)
+                         if c.id == _ENDOSCOPIC_CHECK and c.status != 'not_verified' else c for c in found]
+            if (tuple(found), tuple(specs), status) == (tuple(p.checks), tuple(p.clarifications), p.status):
+                out.append(p)
+                continue
+            # refutation cycle 4 (answers 1): another code's checks read again without an answered code keep that
+            # code's fingerprint - the review overlay already showed it so (it recomputes them over the codes still in
+            # review, or marks them stale), so a decision made on it is carried, as the installed release carried every
+            # decision across an answer; a moved fingerprint had invalidated approvals and rejections nothing shown had
+            # moved ("Re-assessed: the checks for 45378 changed.") when an answer passed from the overlay to this reader
+            out.append(replace(p, checks=tuple(found), clarifications=tuple(specs), status=status))
+        return tuple(out)
+
+    @staticmethod
+    def engine_reads(answer) -> bool:
+        """Whether this reader reads ``answer`` (refutation cycle 4): a code's answer carrying its question's fingerprint,
+        to a question no review decision can open or close; every other answer is the review overlay's (OVERLAY_READ)."""
+        return bool(answer.code and answer.question) \
+            and answer.fact not in questions.KEY_BOUND_FACTS + (COMPETING_FACT,)
+
+    def _excluded(self, p: ProposalAssessment, view, answer_of: Mapping) -> ProposalAssessment:
+        """``p`` excluded by the member's answer that left the detail its view names unavailable: its answered questions
+        kept (answered), the 'member.answer' check and reason naming the answer, support['answered'] recording it."""
+        keys = [questions.member_key(p.code, spec.family or p.family, spec.fact) for spec in p.clarifications]
+        mine = [spec for spec, key in zip(p.clarifications, keys) if key in answer_of]
+        answered = list(dict.fromkeys(key for key in keys if key in answer_of))
+        deciding = answer_of.get(questions.member_key(p.code, p.family, getattr(view, 'answered', '') or '')) \
+            or answer_of[answered[0]]
+        subject = deciding.fact.split(':', 1)[1] if deciding.fact.startswith('conflict:') else ''
+        what = questions.missing(deciding.fact, reconcile.act_label(subject) if subject else '')
+        reason = (f'The member answered "{MEMBER_ANSWER_LABELS[deciding.value]}" to {what}; this code is excluded by '
+                  'that answer until it is withdrawn.')
+        found = tuple(p.checks) + (Check(MEMBER_ANSWER_CHECK, 'Member answer', 'fail', reason, MEMBER_ANSWER_SOURCE),)
+        ids = sorted({answer_of[key].answer_id for key in answered})
+        for key in answered:
+            self.applied.append((answer_of[key], 'proposal', p.key))
+        self.closed += len(mine)
+        support = {**(p.support or {}),
+                   ANSWERED_SUPPORT: {'fact': deciding.fact, 'value': deciding.value, 'answers': ids}}
+        return replace(p, bucket='excluded', status='excluded', exclusion_reason=reason, reinstatable=False,
+                       checks=found, clarifications=tuple(mine), support=support,
+                       fingerprint=answered_fingerprint(p.fingerprint, found, 'excluded'))
+
+    def close_service(self, specs: Sequence[ClarificationSpec]) -> None:
+        """Bind the answers given for a documented service's question (no code) to the service questions ``specs`` ask,
+        and close each one answered: it is kept, answered, and changes nothing else."""
+        pairs = [(questions.member_key('', spec.family, spec.fact),
+                  questions.instance(spec.scope, spec.family, spec.fact, '', spec.question, spec.reason,
+                                     questions.service_passages(self.reading, spec.family, spec.fact, self.text)))
+                 for spec in specs if spec.scope == 'service' and not spec.proposal_key]
+        asked = questions.group(pairs)
+        self.asked.update(asked)
+        bound, _ = questions.bind([a for a in self.answers if not a.code], asked)
+        counts = Counter(key for key, _ in pairs)
+        done = set()
+        for answer in bound:
+            key = questions.member_key('', answer.family, answer.fact)
+            if key in done:
+                continue
+            done.add(key)
+            self.applied.append((answer, 'service', ''))
+            self.closed += counts[key]
+
+    def closes(self, scope: str, key: str, family: str, fact: str, code: str = '') -> str:
+        """The id of the applied answer that answers this question ('' for none): a proposal's by its key, a documented
+        service's by its family and fact. What persisting the assessment closes the stored question with."""
+        for answer, where, proposal_key in self.applied:
+            if where == scope and (proposal_key == key if scope == 'proposal' else True) \
+                    and questions.member_key(answer.code, answer.family, answer.fact) == (code, family, fact):
+                return answer.answer_id
+        return ''
+
+    def record(self) -> dict:
+        """completeness['member_answers']: each answer read, with the question it answered and where; each answer not
+        read, with why (questions.bind's reasons; NOT_APPLIED for one bound that excluded nothing)."""
+        applied: dict = {}
+        for answer, scope, key in self.applied:
+            # 'asked' (refutation cycle 3, answers C3-4): the question as these inputs ask it without any answer - what
+            # a later answer saved to the closed question's row binds to (answers.save_details), even where the answer
+            # read was recorded before the binding ('question' '')
+            entry = applied.setdefault(answer.answer_id, {
+                'answer': answer.answer_id, 'scope': scope, 'code': answer.code, 'family': answer.family,
+                'fact': answer.fact, 'value': answer.value, 'question': answer.question, 'proposals': [],
+                'asked': self.asked.get(questions.member_key(answer.code, answer.family, answer.fact), '')})
+            if key and key not in entry['proposals']:
+                entry['proposals'].append(key)
+        rest = [answer for answer in self.answers if answer.answer_id not in applied]
+        bound, earlier = questions.bind(rest, self.asked)
+        why = {id(answer): reason for answer, reason in earlier}
+        listed = [{'answer': a.answer_id, 'code': a.code, 'family': a.family, 'fact': a.fact, 'value': a.value,
+                   'why': why.get(id(a)) or (NOT_APPLIED if not a.code or self.engine_reads(a) else OVERLAY_READ)}
+                  for a in rest if a.value in questions.UNAVAILABLE]
+        return {'form': questions.FORM, 'applied': list(applied.values()), 'earlier': listed}

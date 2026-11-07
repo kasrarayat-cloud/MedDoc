@@ -43,9 +43,11 @@ class MarkingTenseTests(SimpleTestCase):
 
     def test_a_completed_marking_with_a_future_purpose_reads_as_main_reads_it(self):
         # round 6 dropped the package's whole-sentence purpose rule, and refutation cycle 2 harness repair 3's F-TIME R
-        # (two cycles refuted): "for future localization" dates even a completed injection as planned, as at main and
-        # the live revision - Corti's code excluded, a participant's listed. A recorded residual (a false exclusion):
-        # directive item 4's "completed marking versus future localization" stays undelivered
+        # (two cycles refuted), leaving a recorded residual (a false exclusion). Completion repair (2026-11-06, U5;
+        # builder A) delivers directive item 4's "completed marking versus future localization" by another mechanism
+        # (studio.gi.purpose: the purpose's "future" never dates the act its main predicate states done): READY. Builder
+        # Q1's equal eligibility (item 3) holds with it: a participant's explicit code reads exactly as Corti's does
+        # (Q1's own branch, without U5, pinned both excluded with the passage; integrated, both read READY)
         for line in DONE:
             with self.subTest(line):
-                self.assertEqual(outcomes(line), ([('excluded', 'excluded')], [('alternative', 'informational')]))
+                self.assertEqual(outcomes(line), ([('selected', 'ready')], [('selected', 'ready')]))

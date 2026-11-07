@@ -576,7 +576,9 @@ def uncertain_reason(outcome: StatusOutcome, name: str) -> str:
         if outcome.contrary:
             reason += f' Routing reads it as {outcome.contrary.status} elsewhere: {cite(outcome.contrary)}.'
         return reason
-    reason = f'No documentation establishes that {name} was performed on the date of service.'
+    # completion repair (owner directive 2026-11-06, item 5; builder Q1): said of what CPT Studio read, never as a fact
+    # about the document - no reader rule matching is no proof the service was not performed (U9)
+    reason = f'CPT Studio could not confirm that {name} was performed on the date of service.'
     if outcome.reason == 'unnamed' and outcome.decisive:
         reason += (f' The linked passage reads as {outcome.decisive.status} ({cite(outcome.decisive)}), but the '
                    f'document never names {name}.')
@@ -651,6 +653,13 @@ class FactState:
     confirmed: str = ''
 
 
+# Completion repair (2026-11-06, builder R2; directive item 5): a required extent no reader found a statement of is the
+# readers' finding, never a document fact - "Not documented: extent reached." said it from absence. The one extent the
+# readers read is routing's (which the documented-service reader takes as its own, and which reads the completion
+# reader's reach statements: detect._completion_states_reach), read here by required_fact_states.
+EXTENT_NOT_FOUND = 'CPT Studio could not find how far the examination reached'
+
+
 def is_documented(fact: Optional[Fact]) -> bool:
     return fact is not None and fact.origin in DOCUMENTED and fact.value not in (None, '')
 
@@ -697,12 +706,15 @@ def required_facts_check(profile: ServiceProfile, states: Sequence[FactState]) -
     supplied = [f'{fact_label(s.name)} = {excerpt(str(s.fact.value))}' for s in states
                 if not s.problem and is_member_entered(s.fact)]
     confirmed = [f'{fact_label(s.name)} = {excerpt(str(s.fact.value))}, {s.confirmed}' for s in states if s.confirmed]
-    missing = [fact_label(s.name) for s in states if s.problem == 'missing']
+    missing = [fact_label(s.name) for s in states if s.problem == 'missing' and s.name != 'extent']
+    unfound = [s for s in states if s.problem == 'missing' and s.name == 'extent']
     conflicting = [fact_label(s.name) for s in states if s.problem == 'conflict' and not is_member_conflict(s.fact)]
     entered = [fact_label(s.name) for s in states if s.problem == 'conflict' and is_member_conflict(s.fact)]
     parts = []
     if missing:
         parts.append(f'Not documented: {"; ".join(missing)}.')
+    if unfound:
+        parts.append(f'{EXTENT_NOT_FOUND}.')
     if conflicting:
         parts.append(f'Conflicting values documented: {"; ".join(conflicting)}.')
     if entered:
@@ -714,7 +726,7 @@ def required_facts_check(profile: ServiceProfile, states: Sequence[FactState]) -
         parts.append(f'{MEMBER_ENTERED}: {"; ".join(supplied)}.')
     if confirmed:
         parts.append(f'{CONFIRMED_HEADING}: {"; ".join(confirmed)}.')
-    status = 'warn' if missing or conflicting or entered else 'pass'
+    status = 'warn' if missing or unfound or conflicting or entered else 'pass'
     return Check('facts.required', 'Required documentation (CPT Studio profile)', status, ' '.join(parts),
                  f'cpt-studio:{profile.version}')
 
@@ -739,6 +751,8 @@ def fact_clarifications(states: Sequence[FactState], profile: ServiceProfile, fa
         elif state.problem == 'conflict':
             reason = (f'The document gives conflicting values for the {fact_label(state.name)}: '
                       f'{conflict_values(state.fact)}.')
+        elif state.name == 'extent':
+            reason = f'{EXTENT_NOT_FOUND}; the {profile.label} profile requires it.'
         else:
             reason = f'The {fact_label(state.name)} is not documented; the {profile.label} profile requires it.'
         out.append(ClarificationSpec(scope='proposal', fact=state.name, question=question, reason=reason,

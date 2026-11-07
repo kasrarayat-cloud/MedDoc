@@ -1,8 +1,8 @@
 {
  "id": "c9000000-0000-4000-8000-000000000001",
  "title": "Synthetic EGD and two-lesion colonoscopy",
- "created_at": "2026-11-01T09:03:00Z",
- "updated_at": "2026-11-01T09:03:02Z",
+ "created_at": "2026-11-01T09:03:01Z",
+ "updated_at": "2026-11-01T09:03:03Z",
  "state": "ready",
  "state_label": "Ready for review",
  "permissions": {
@@ -79,7 +79,7 @@
   "active_detail": "",
   "started_at": null,
   "finished_at": null,
-  "server_time": "2026-11-01T09:03:05Z",
+  "server_time": "2026-11-01T09:03:06Z",
   "slow": false,
   "message": "Your results are ready.",
   "can_stop": false,
@@ -136,7 +136,7 @@
     "action": "approve",
     "by": "Reviewbot (automated agent)",
     "by_kind": "agent",
-    "at": "2026-11-01T09:03:03Z",
+    "at": "2026-11-01T09:03:04Z",
     "note": "",
     "modifiers": []
    }
@@ -257,6 +257,7 @@
   }
  ],
  "details_needed": [],
+ "earlier_answers": [],
  "unresolved": [],
  "recheck": {
   "available": false,
@@ -285,14 +286,14 @@
    "summary": "Checks completed",
    "actor": "CPT Studio",
    "actor_kind": "system",
-   "at": "2026-11-01T09:03:01Z"
+   "at": "2026-11-01T09:03:02Z"
   },
   {
    "event": "decision_recorded",
    "summary": "Review decision recorded",
    "actor": "Reviewbot (automated agent)",
    "actor_kind": "agent",
-   "at": "2026-11-01T09:03:04Z"
+   "at": "2026-11-01T09:03:05Z"
   }
  ]
 }

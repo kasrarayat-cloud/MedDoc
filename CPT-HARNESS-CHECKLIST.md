@@ -203,6 +203,83 @@ marks: `[ ]` not completed; `[x]` completed and verified with current evidence; 
 | [ ] | 8. Tested and installed: required Linux tests and CI; an independent refutation of the finished diff; regressions repaired without weakening safeguards; a declared, reversible install; retained cases re-assessed with sends disabled, then a small fresh Word and PDF acceptance set; all previous records, failures and approvals preserved | **PARTIAL**: every step ran, and the acceptance set did not pass. Linux tests and CI on the merge commit: CI 42159987582 and secrets-scan 42159987651 success; cpt-studio 42159987583 passes every test, its audit red on the accounted pypdf advisories. Four refutation cycles over the finished diff. Installed blue/green through the ruled-act door from the committed declaration: 299 availability samples, all 200; the rollback image kept. 88d9db32 and 39f0ac49 were re-assessed from retained answers with nothing sent, and exactly the declared rows moved. Previous records, decisions and answers are kept. The fresh acceptance set was walked: h3a (PDF) fails 2 hard checks and h3b (Word) 1, all routing and main-equal, and h3a's expected 43247 cannot reach review | live `fd8040d71e44` | `docs/deploy-reports/20261106-cpt-studio-fd8040d7-install-and-walk.md`; the receipts in /home/claude/cpt-studio-install-20261023; `docs/foundation/mutations/20261106-cpt-studio-harness-repair3-install.md` | the acceptance failures are items 3 and 4 |
 | [x] | 9. Release readiness reported honestly: the corrected checklist and evidence paths, the installed revision, 39f0ac49's code and its verified outcome, proof that Astra and Fable both contributed usable live results, fresh acceptance and download results, the remaining clinical, security, reference and licensing limitations; the PDF advisories resolved or accounted for | DONE: reported in `docs/deploy-reports/20261106-cpt-studio-fd8040d7-install-and-walk.md`. It covers this checklist and the evidence paths; the installed revision `fd8040d71e44`; 39f0ac49's 43247 (listed, not approvable) and its three held codes; Astra's and Fable's live contributions; the walk's acceptance and download results; and the remaining clinical, security, reference and licensing limitations. The pypdf advisories are accounted for, not resolved (`docs/cpt-harness/repair3-20261105/pypdf-advisories-accounting.md`). The report states that the GI release is not complete | live `fd8040d71e44` | `docs/deploy-reports/20261106-cpt-studio-fd8040d7-install-and-walk.md` | - |
 
+## Completion repair, 2026-11-06 (owner directive of 2026-11-06)
+
+The owner directive of 2026-11-06 is recorded verbatim, with the session's interpretation (a)-(m), in
+`docs/foundation/rulings/2026-10-23-cpt-studio-gi.md`. The contract is `cpt-studio/HARNESS.md`, "Completion repair
+(2026-11-06): the completion contract", criteria C1 to C9. This section is the live state: one owner, one table and
+the progress log below.
+
+**Marks.**
+- Status is NOT RUN, IN PROGRESS, PASS, FAIL or BLOCKED.
+- Kind is IMPLEMENTED, VERIFIED OFFLINE or VERIFIED LIVE.
+- `[x]` only when the item's acceptance evidence passes.
+- A passed item is reopened when later evidence disproves it.
+
+### Checkpoint
+
+| field | value |
+|---|---|
+| owner | session a12d8fb3 (integration and deployment) |
+| objective | the installed website assesses an uploaded GI PDF or Word document with Corti, Astra and Fable, supported proposals reach review, decisions persist, and the download matches them |
+| installed | `fd8040d71e44` at https://cpt.quillmd.com since 2026-11-06 (app phase 05:14-05:17Z); rollback image `cpt-studio:e6d451f03d86` |
+| candidate | branch `fix/cpt-studio-completion-20261106`: the five builders, refutation cycles 1 to 4 and the differential round over cycle 4's repair integrated (code `443740630`; the final scan's record and pins in the next commit); not installed |
+| current stage | 8: the differential round over cycle 4's repair (`wf_f8f66730-784`: structure 6, routing 3, answers 1 findings) answered toward the installed reading or the twin's (`443740630`); the final scan over 2,568 lens inputs of cycles 1-5 finds nothing open (22 READYs bounded by twins measured by hand, now pinned); corpus 0 new false READY (FALSE READY 35, FALSE HOLD 59); retained 4/4/2/6 READY byte-identical to cycle 3; gates hold; install predictions identical to cycles 3 and 4; the full suite green on `443740630` (6,390 Django tests, ops 524, verification 43, node 135/65/135; check and makemigrations clean) |
+| next action | the push (two-view), CI on the final head, ready, the merge (scripts/merge-pr.sh), the install declaration landed first and the install; the walk of c1 and the blind c2 |
+
+### Unresolved defects (each closed only by acceptance evidence)
+
+| id | defect | evidence | status |
+|---|---|---|---|
+| U1 | Astra's and Fable's explicit 43247 for a food-bolus removal ("the bolus was removed") is listed as not done and is not reinstatable. Two causes: the act's vocabulary (services.py:252) and its binding with no part family and no site while two families are present (services.py:3907-3940, :5118-5134) | d44a77b3 (h3a), 39f0ac49; stage-1 trace; corpus D\|AB-B1 to B5, D\|CASE-d44a77b3 | OPEN |
+| U2 | procedure narratives after inline labels are read as part of the Indications (sections.py:398, :405, :409-410, :752; detect.py:2162-2164), and the services reader folds that doubt over its own performed reading (services.py:5943-5959) | d44a77b3 and 39f0ac49; stage-1 trace; corpus D\|ARCH-D1a | OPEN |
+| U3 | a failed sub-act's "was unsuccessful" or "could not be passed" is read as the examination's incompleteness (cues.py:450-451, :470; detect.py:5856-5913, :6492, :7724-7729); an EGD's extent is rewritten too (detect.py:6020-6022) | e888f9ce (h3b); corpus WRONG FLAG entries (e888f9ce, a1, a2, d1, d2, D2a) | OPEN |
+| U4 | a report title with an aside is silent (cues.py:727), and an instrument's own course is never a family mention (detect.py:115-122). U3 masks it: repairing U3 alone turns e888f9ce PLANNED (detect.py:6502), so U3 and U4 are one repair | e888f9ce; corpus D\|ARCH-D9, D\|RT-c1, D\|ARCH-D1b | OPEN |
+| U5 | a completed marking for future localization is read as future (F-TIME R dropped); routing reads d44a77b3's tattoo "planned: future" | HARNESS.md "refutation cycle 2"; repair 2 round 6; corpus group A F-TIME R (35) | OPEN |
+| U6 | false READYs: the base's 53 (with "The polyp was left in place.", C3-4-4, 5, 8, 10, 11 and 12); a failed act sharing the Procedure line promoted to performed (services.py:5181-5183); F1, F-NEG S reading three of the earlier repair's counterexamples READY (services.py:542-546, :857-859, :2724); F5's "It is unknown whether ..." | corpus groups B and A (F5), D\|RT-f1, f3, D\|ARCH-D3a | OPEN |
+| U7 | false holds: the base's 66, the competition holds F4 (4), and the stage-1 minimal pairs (11) | corpus groups C, A (F4) and D | OPEN |
+| U8 | asymmetries: a participant's code for a doubted act is listed where Corti's is held (`engine._in_doubt`); every participant alternative is non-reinstatable (engine.py:3935) | L4-4; stage-1 trace | OPEN |
+| U9 | "not documented" and "does not establish" said from absence, not a passage: engine.py:549, :719-722, :3381-3382; reconcile.py:236-238; checks.py:579, :705, :743; customer_api.py:456-467; review_view.py:455-458 (the summary contradicts the reader's own performed biopsy) | stage-1 trace (c1-questions) | OPEN |
+| U10 | every proposal question offers only excluding answers (answers.py:475-478, :648-660); a held code's only action is Reject (review.py:431-437) | 39f0ac49: three codes excluded, reviewed report with no billable code | OPEN |
+| U11 | no answer recomputes the assessment (answers.py:705-711; the engine has no member-answer input); stored questions stay open while the customer page says answered (serializers.py:155-156); answers bind only to (revision, code, family, fact), so 39f0ac49's engine@7 answers exclude engine@8's codes (models.py:430-446; answers.py:347-362) | stage-1 trace (c1-questions) | OPEN |
+| U12 | one fact, three readers: section kind, act status (copied, then counted again as a second opinion), date binding, performer, extent, lesion, segmentation; each with a measured disagreement | stage-1 trace, "One fact, three readers"; corpus group D | OPEN |
+| U13 | adjacent: the interventions fact lists a failed attempt's "hot snare" (detect.py:5921-5935); "right and left colon" reads as the descending colon (services.py:102, :3713); "the polyp was left in place" leaves the disposition unknown (services.py:6004-6018) | e888f9ce; stage-1 trace | OPEN |
+| Q1 | owner question (class (a)): does 43247 cover a food bolus pushed into the stomach? 13 corpus entries wait on it | corpus RULING entries | OWNER |
+| Q2 | owner question: two dilation techniques on one stricture (an NCCI question; NCCI unconnected) | corpus | OWNER |
+| L1 | pypdf 6.21.2's seven denial-of-service advisories: accounted for, not resolved | `docs/cpt-harness/repair3-20261105/pypdf-advisories-accounting.md` | LIMITATION, reported until resolved |
+| L2 | NCCI PTP unconnected; D3 to D5 open | External dependencies above | LIMITATION, reported separately |
+
+### Items
+
+| | Item | Status | Kind | Revision | Evidence | Next |
+|---|---|---|---|---|---|---|
+| [x] | 1. Establish the exact remaining failures (C1) | PASS | VERIFIED OFFLINE | `fd8040d71e44` (branch `studio/` identical) | `docs/cpt-harness/completion-20261106/stage1-trace.md`; `tests/test_completion_corpus.py` | - |
+| [ ] | 2. Repair the shared document interpretation (C2) | IN PROGRESS | IMPLEMENTED, VERIFIED OFFLINE | `443740630` | `cpt-studio/HARNESS.md` "Stages 2 to 5"; `docs/cpt-harness/completion-20261106/corpus-repin.md` | install; the walk (C7) |
+| [ ] | 3. Preserve equal proposal eligibility (C3) | IN PROGRESS | IMPLEMENTED, VERIFIED OFFLINE | `443740630` | `docs/cpt-harness/completion-20261106/table-repin.md` (no participant row reads differently from Corti's selection) | install; the walk (C7) |
+| [ ] | 4. Fix false positives as well as false holds (C4) | IN PROGRESS | IMPLEMENTED, VERIFIED OFFLINE | `443740630` | corpus: no FALSE READY beyond the installed baseline; FALSE READY 57 to 35, FALSE HOLD 81 to 59 (39 and 51 at integration; cycles 2-4 re-pinned, the differential round moves none) | install; the walk (C7) |
+| [ ] | 5. Make questions and statuses truthful (C5) | IN PROGRESS | IMPLEMENTED, VERIFIED OFFLINE | `443740630` | `tests/test_completion_answers.py` (the chain, the binding, D7 unchanged) | install; the walk (C7) |
+| [x] | 6. Prove the repair against retained evidence first (C6) | PASS | VERIFIED OFFLINE | `443740630` (byte-identical since cycle 3) | the four retained cases recomputed in memory on a migrated throwaway copy (39f0ac49 43239, 45380, 45385, 43247 READY; d44a77b3 43239, 45385, 45381, 43247 READY; e888f9ce 45385, 45380 READY with no incompleteness; 88d9db32 its six READY); the gates (`tests/fixtures/gi4/declarations/completion-integration.json`) | re-run after any refutation repair (reopened if disproved) |
+| [ ] | 7. Complete meaningful independent acceptance (C7) | NOT RUN | - | - | - | after item 6 |
+| [ ] | 8. Install and verify the served result (C8) | NOT RUN | - | - | - | with item 7 |
+| [ ] | 9. Close with evidence of the result (C9) | NOT RUN | - | - | - | last |
+
+### Tests, provider runs, usage and receipts
+
+- **Stage 1 (VERIFIED OFFLINE, `fd8040d71e44`):**
+  - the four retained cases recomputed in memory, each identical to its stored assessment, twice and independently;
+  - the corpus's 815 inputs measured twice (the lens and the session), all readings identical;
+  - `tests.test_completion_corpus`: 3 tests OK in 7.4 s; mutation-proved (bare "bolus": 82 failures, the file
+    restored byte-identical);
+  - the export traced with the report's own snapshot, read-only.
+- **Tests on the candidate (`89fe6328f38d`, VERIFIED OFFLINE):**
+  - the full CI-like suite: 6,229 Django tests OK in three chunks, ops 524 OK, verification 43 OK, the node suites 131, 65 and 135 passing, check and makemigrations clean (second run, 2026-11-06T14:33:40Z to 14:50:18Z);
+  - the completion corpus re-pinned (627 entries; no FALSE READY beyond the installed baseline), the refutation
+    tables re-pinned with every moved row classified, the freeze gate on the full corpus (holds), the H4 battery
+    (10 declared movements, 0 new violations), the H1 replay (the labels alone), the Corti-only parity (byte-identical
+    to harness repair 3's pins once the labels are set back), the installer suites (350 OK).
+- **Provider runs and usage in this repair:** none sent.
+- **Deployment receipts:** none yet. Earlier receipts are in /home/claude/cpt-studio-install-20261023.
+
 ## Progress log (append only)
 
 - **2026-11-01T21:10Z** Checklist created before any harness change. Carried in from round 4, as context and not as
@@ -729,3 +806,153 @@ marks: `[ ]` not completed; `[x]` completed and verified with current evidence; 
     removal is listed as not done and cannot be approved. The owner's central requirement fails for this act class
     while F-ACTS stays dropped.
   - Items 3, 4, 7 and 8 stay PARTIAL.
+
+- **2026-11-06T06:55Z: the owner's completion directive received and recorded; the contract put into the harness
+  before implementation.**
+  - The directive is recorded verbatim, with interpretation (a)-(m), in the rulings file, plus its index row.
+  - The contract is in `cpt-studio/HARNESS.md`, criteria C1 to C9.
+  - The state is in "Completion repair, 2026-11-06": checkpoint, defects U1 to U12, limitations L1 and L2, and items 1
+    to 9.
+  - Preflight GO: `docs/preflight-reports/preflight-20261106T064528Z.md` (shared tree, untracked by convention).
+  - Stage 1 is in progress.
+- **2026-11-06T08:30Z Completion repair, stage 1 PASS (VERIFIED OFFLINE).** The four retained cases recompute identical
+  to their stored assessments on the installed code. Five read-only lenses traced every core defect to FILE:LINE, and
+  the session reproduced each headline claim before recording it (`docs/cpt-harness/completion-20261106/stage1-trace.md`).
+  The counterexamples are pinned in `tests/fixtures/gi4/completion/corpus.json`: 611 entries, with the guard that no
+  entry becomes a false READY that was not one on `fd8040d71e44`. New, by measuring:
+  - U3 masks U4, so they are one repair;
+  - F1, a kept rule's false READYs;
+  - U11's answer reuse;
+  - U13's adjacent misreadings;
+  - two owner coding questions (Q1, Q2).
+  Next: the repair's design and its bounded implementation.
+- **2026-11-06T08:50Z Completion repair, stages 2 to 5 started.**
+  - Preflight GO: `docs/preflight-reports/preflight-20261106T082530Z.md`.
+  - Five builders run in isolated worktrees from `b452c6c4`, each with a written brief
+    (`/home/claude/cpt-studio-completion-20261106/build/briefs/`): `wip/cptc-r1-structure`, `wip/cptc-r2-outcome`,
+    `wip/cptc-a-acts`, `wip/cptc-q-admission` and `wip/cptc-q2-answers`.
+  - Every brief carries the stage-1 causes, the refuted attempts' counterexamples, and the same measures: the corpus
+    ledger with its no-new-false-READY invariant, the focused suites, the full suite, the retained-case recompute, and
+    the freeze where layout or routing moves.
+  - No version label moves on a builder branch. The owner integrates and declares once.
+- **Correction to the two entries above (appended, not rewritten).** Their stamps, 08:30Z and 08:50Z, were estimated,
+  not read from the clock. The clock and the records give:
+  - stage 1's commit `b452c6c4` at 08:18:43Z;
+  - the build workflow's script written at 08:35:59Z;
+  - this checkpoint's commit at 08:36:20Z;
+  - the clock read 08:39:35Z when the error was found.
+  The checkpoint table now carries the read times. Later entries use the clock.
+- **2026-11-06T08:41Z Completion repair: the fresh acceptance set is written and sealed, before any code read it and
+  before the repair's code existed.**
+  - Sealed (mode 0400, directory 0500) in `/home/claude/cpt-studio-completion-20261106/acceptance/sealed/`, with these
+    sha256 prefixes:
+    - c1a-procedure-report.txt `976be07404d0fe93` (PDF): labelled EGD and colonoscopy paragraphs after an Indications
+      line, the bolus's antecedent, a completed marking for a later resection, an outside history sentence;
+    - c1b-colonoscopy.txt `477dbbd5679ac420` (Word): a title with an aside, a failed hot snare attempt whose polyp was
+      left in place, a repeat colonoscopy in the Plan, an outside EGD in the history, Stop and Resume;
+    - c1c-flexible-sigmoidoscopy.txt `2e59f3a1c00fa967` (PDF): a labelled colonoscopy paragraph of another occasion
+      (negative), and a genuinely missing extent, answered "Not documented" and recomputed, then confirmed by a
+      physician's addendum on a new revision;
+    - expectations-c1.json `f131fd2a0bce250a`.
+  - The expectations are the session's provisional reading, supported per code by the stored CMS references
+    (PFS RVU26D, MUE 2026-Q4). They are not a coder's adjudication. NCCI is not connected.
+  - The builders' briefs do not name the set, and no code reads it before the walk.
+- **2026-11-06T14:50:46Z Completion repair: the five builders integrated, measured, and the full suite green on `89fe6328f38d`.**
+  - Builders (workflow `wf_33ae45a0-361`, finished 2026-11-06T12:25Z): R1 structure, R2 outcome, A acts, Q1 admission,
+    Q2 answers; merged serially into `fix/cpt-studio-completion-20261106` (R1 `7d42e2cd`, R2 `3815eaa6`, A `22e79e5c`,
+    Q1 `cc38fb1d`, Q2 `2a46a267`), each merge re-measured before the next.
+  - The integration's own rules, each committed with its measurement: the dilation technique (43249 READY on a Savary
+    dilation was a base false READY made reachable on the walk's h2c document), one evaluation in competition, the
+    another-act hold removed, one subject reading, a dated history in the indication, another act's doubt (narrowed to
+    a distinct lesion record after the first full suite measured 31 genuine holds released), the retrieval trace for
+    admitted codes, the rollback hazard's wording, the labels (gi-routing@9, gi-services@6, cpt-studio-validation@9,
+    gi-catalogue@2).
+  - The first full suite on the integrated tree (`3bb8b723`) failed 41 and errored 4: attributed rule by rule in memory
+    and repaired (`f4b34778`, `89fe6328`); the second (6,229 Django tests OK in three chunks, ops 524 OK, verification 43 OK, the node suites 131, 65 and 135 passing, check and makemigrations clean (second run, 2026-11-06T14:33:40Z to 14:50:18Z)).
+  - An independent acceptance set c2 was written by an agent blind to the repair and sealed at 2026-11-06T14:11:22Z
+    (mode 0400, directory 0500) in `/home/claude/cpt-studio-completion-20261106/acceptance/sealed-c2/`, sha256
+    prefixes: c2a.txt `358e42f28f26a4e1` (PDF), c2b.txt `811efefbb15f9518` (PDF), c2c.txt `2c884ef1a2d1462b` (Word),
+    expectations-c2.json `7174de3cdfb579c5`. Its author returned only these hashes; no one has read it. The session
+    wrote set c1 itself and knows its content, so c2 is the independent acceptance evidence and c1 is walked beside it.
+  - No provider request has been sent in this repair.
+- **2026-11-06T16:15Z Completion repair: refutation cycle 1 over the integrated diff, and its repairs.**
+  - Workflow `wf_5ea89702-382`: seven lenses in write-disabled sandboxes at `179fdff9`; six returned 44 findings
+    (structure 8, admission 8, outcome 8, acts 8, answers 7, consistency 5; the cost lens had not returned). The owner
+    session reproduced every finding on the head and the base (`verify/refute1/`): 17 NEW false READYs among them.
+  - Repaired fail-closed in `34b8d0c9e` and `95392c99f` (HARNESS.md "Refutation of the integrated diff, cycle 1"; pinned
+    in `tests/test_completion_refutation_c1.py`, a mutant of one repair failing its pin). The first acts repair moved
+    seven purpose-marking corpus entries to FALSE HOLD; routing's own purpose rule was kept and narrowed instead.
+  - The install prediction (a read-only dump restored on the test server, the installer's own one-shots, nothing sent)
+    measured the stored-answer rule of the repair turning three reviewed encounters back to needing details at the state
+    recompute alone; the rule now binds an earlier-form answer by its own question's words, and on the cycle-1 commit the
+    state recompute after migration 0013 changes no encounter and the rollback read changes none.
+  - Measured: corpus invariant 0 new false READYs; freeze gate holds; H4 battery 10 declared movements unchanged; H1
+    replay the labels alone; the four retained cases as required; the walk tool's new hard checks (expected codes, the
+    member's answer, a conflict question) and the manifest builders for c1 and the blind c2 (the latter written from the
+    schema the c2 author was given; c2 still unread).
+  - No provider request has been sent in this repair.
+- **2026-11-06T20:10Z Completion repair: refutation cycle 2, the two-cycle rule, and the change of approach.**
+  - Workflow `wf_3e6e5e6d-2f1`: five lenses over cycle 1's repairs returned 37 findings (structure 8, outcome 8, acts 8,
+    admission 7, answers 6), 20 of them false READYs; every structure, acts and admission finding reproduced exactly on
+    the three trees (`verify/refute3/`). The cycle-1 word readers had leaked and over-held at once.
+  - The owner's two-cycle rule applied: the refuted patches abandoned, the approach changed per mechanism, the requirement
+    kept (HARNESS.md "Refutation of the integrated diff, cycle 2"). Measured first: every structure false READY of both
+    cycles, and the instrument rule's O1/O3/O4, has a twin the installed release reads READY too (layout parity);
+    ablations showed which releases the corpus and the retained cases need.
+  - Five builders (`wf_f7121d1f-985`: parity, outcome, acts, admission, answers), each in its own worktree; the owner
+    session integrated them and added: the another-act release abandoned; the closed observation form for "not
+    performed"; units on the documented match; readiness held on a withdrawn answer; the removed-only form beside a
+    listing; two specific techniques as two instances; the listing rule judging only removable lesions (found by the
+    replay gate: h2-10).
+  - Measured on `ae3b19b8`: corpus re-pinned beside its declaration (8 moved; FALSE READY 39 to 35; 0 new false READY);
+    parity 65 pairs, one recorded exception (corpus 137's 43247, the heading form's own false hold); the retained cases as
+    required; freeze gate holds; battery 10 declared movements (0 undeclared); replay the labels alone. The first full
+    suite on the integrated head (`7a4c4c41`) failed 49 subtests, each classified and re-pinned (`d4f4ecff`), none a
+    regression.
+  - No provider request has been sent in this repair.
+- **2026-11-06T21:15Z Refutation cycle 3 answered (offline only):**
+  - Six lenses at `844fe54c` (`wf_bab4d28d-c76`, about 35 minutes) returned 32 findings: parity 7, closed forms 7,
+    outcome 4, admission 5, answers 4, cost 5. Every engine-level input was reproduced on this head, the installed base
+    and the cycle-1 head before any change; the answers lens's scripts were re-run.
+  - Each release was disabled in memory and the corpus read, to see which requirement rests on which release. The
+    releases nothing required rests on were abandoned to the base reading; the required ones were closed whole; routing
+    now gives a failure to a sub-act only where the services reader reads that act failed; a released label is read as
+    its heading twin's name. Commit `acadc296`; HARNESS.md "Refutation of the integrated diff, cycle 3".
+  - The full suite at `844fe54c` had one failure, harness 3's judged-release list still naming X2 and X3 after their
+    re-pin (fixed in `a5e9b5f5`).
+  - 844fe54c was pushed (origin confirmed); CI on it: the `cpt-studio` workflow's tests pass and its dependency audit
+    fails on pypdf 6.21.2, as on main since #1449 (L1).
+  - Install predictions on `844fe54c` over a fresh read-only dump: the retained cases 4/4/2/6 READY, nothing sent,
+    RECOMPUTE_STATES unchanged.
+- 2026-11-06 23:45Z - refutation cycle 4 over cycle 3's repair (`52a5f774`): five lenses (structure 4, closed 8, outcome 5,
+  answers 3, cost 3 findings), every one reproduced on three trees before any change (`verify/refute5/`).
+  - Repair under the two-cycle rule: the services reader's failure words are the installed three; a sub-act's failure only
+    in the closed attempt form (bounded: 350 KB in 1.5 s); the observed-only removal exclusion abandoned; the instrument
+    rule's named section read at the name's place; the labelled binding stops at a scope sentence outside its tract and
+    its own sentence reads as the twin's; a consumed failure stays the family's mention (performed by its section); the
+    engine reads only fingerprinted answers to decision-independent questions, other codes' fingerprints kept.
+  - Differential scan (1,862 inputs from every lens of cycles 1-4, three trees): no open release; every READY added over
+    52a5f774 is READY on the base. Parity residuals recorded (purpose, reach, bolus; ACCURACY-RESIDUALS cycle 4).
+  - Corpus re-pinned beside `completion-refutation-c4-corpus.json` (5 moved, ADM C3-2-1, to FALSE HOLD); retained 4/4/2/6
+    READY byte-identical to 52a5f774; freeze holds, battery 6 declared movements, replay labels alone; the completion and
+    h3 refutation suites (401 tests) pass.
+- **2026-11-07T00:34Z Completion repair: the differential round over cycle 4's repair, answered (offline only).**
+  - Workflow `wf_f8f66730-784`: three lenses at `e273dc5a` (routing 3, structure 6, answers 1 findings). Each was asked
+    only whether the new head is worse than the installed base or the previous head in a must-fix class. Every finding
+    was reproduced on the three trees first.
+  - Repair `443740630`, every change toward the installed reading or its twin:
+    - the instrument rule's name read in segments, and no instrument-named narrative under a named procedure, findings
+      or technique heading;
+    - the labelled binding cut at the first later scope sentence, with a combined report part past it;
+    - the closed form read in fixed steps (200 KB in 2.7 s; it was 64 s) and ended only at its full stop or "; the polyp
+      was left in place.";
+    - the consumed failure gated by I8 and I12;
+    - base_included and separate_em answers bound by key.
+  - The final scan (2,568 lens inputs of cycles 1-5, three trees): 234 READYs the base does not read, each bounded by a
+    twin the base reads READY or a release cycle 3 measured; none is open. 22 needed their twins measured by hand (the
+    routing lens's U3 and cancellation groups) and are now pinned with them (`completion-c5-cases.json`, 309 inputs).
+    The I8 mutation fails 48 pins; 6 caught it before.
+  - The corpus moves nothing (FALSE READY 35, 0 new; FALSE HOLD 59); the retained cases read 4/4/2/6 READY,
+    byte-identical; freeze holds, the battery has 6 declared movements, and the replay differs by the labels alone; the
+    install predictions are identical to cycles 3 and 4; the full suite green on `443740630` (6,390 Django tests, ops 524, verification 43, node 135/65/135; check and makemigrations clean).
+  - No provider request has been sent in this repair.

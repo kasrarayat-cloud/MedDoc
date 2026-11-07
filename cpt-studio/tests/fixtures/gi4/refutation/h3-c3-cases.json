@@ -17,14 +17,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -43,14 +45,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -69,14 +73,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -92,17 +98,21 @@
    ],
    "day": "2026-10-14",
    "corti": [
-    "HELD"
+    "READY"
    ],
    "participant": [
-    "ALT"
+    "READY"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion U2 (studio.gi.structure)": "READY/READY: the labelled COLONOSCOPY part under the report's own Procedure line is a report part of the colonoscopy, so the site-less removal binds to it (corpus C3|C3-1:c31-1:F1a, required READY)",
+    "completion A": "READY/READY",
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -121,14 +131,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -142,14 +154,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -163,14 +177,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -184,14 +200,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -205,14 +223,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -226,14 +246,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/ALT",
     "round 1": "READY/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -247,14 +269,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/ALT",
     "round 1": "READY/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -268,14 +292,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/ALT",
     "round 1": "READY/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -289,14 +315,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -307,17 +335,20 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": [
-    "HELD"
+    "READY"
    ],
    "participant": [
-    "ALT"
+    "READY"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion A": "READY/READY",
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -336,14 +367,16 @@
     "EXCL"
    ],
    "participant": [
-    "ALT"
+    "EXCL"
    ],
    "read": {
     "base": "EXCL/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -362,14 +395,16 @@
     "EXCL"
    ],
    "participant": [
-    "ALT"
+    "EXCL"
    ],
    "read": {
     "base": "EXCL/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -388,14 +423,16 @@
     "EXCL"
    ],
    "participant": [
-    "ALT"
+    "EXCL"
    ],
    "read": {
     "base": "EXCL/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -414,14 +451,16 @@
     "EXCL"
    ],
    "participant": [
-    "ALT"
+    "EXCL"
    ],
    "read": {
     "base": "EXCL/ALT",
     "stage": "EXCL/ALT",
     "round 1": "EXCL/ALT",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -440,14 +479,16 @@
     "EXCL"
    ],
    "participant": [
-    "ALT"
+    "EXCL"
    ],
    "read": {
     "base": "EXCL/ALT",
     "stage": "EXCL/ALT",
     "round 1": "EXCL/ALT",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -466,14 +507,16 @@
     "EXCL"
    ],
    "participant": [
-    "ALT"
+    "EXCL"
    ],
    "read": {
     "base": "EXCL/ALT",
     "stage": "EXCL/ALT",
     "round 1": "EXCL/ALT",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -492,14 +535,16 @@
     "EXCL"
    ],
    "participant": [
-    "ALT"
+    "EXCL"
    ],
    "read": {
     "base": "EXCL/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -515,17 +560,19 @@
    ],
    "day": "2026-10-14",
    "corti": [
-    "HELD"
+    "EXCL"
    ],
    "participant": [
-    "ALT"
+    "EXCL"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -544,14 +591,16 @@
     "EXCL"
    ],
    "participant": [
-    "ALT"
+    "EXCL"
    ],
    "read": {
     "base": "EXCL/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -570,14 +619,16 @@
     "EXCL"
    ],
    "participant": [
-    "ALT"
+    "EXCL"
    ],
    "read": {
     "base": "EXCL/ALT",
     "stage": "EXCL/ALT",
     "round 1": "EXCL/ALT",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -593,17 +644,19 @@
    ],
    "day": "2026-10-14",
    "corti": [
-    "HELD"
+    "EXCL"
    ],
    "participant": [
-    "ALT"
+    "EXCL"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -622,14 +675,16 @@
     "EXCL"
    ],
    "participant": [
-    "ALT"
+    "EXCL"
    ],
    "read": {
     "base": "EXCL/ALT",
     "stage": "EXCL/ALT",
     "round 1": "EXCL/ALT",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -650,7 +705,9 @@
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -664,14 +721,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "EXCL/ALT",
     "round 1": "EXCL/ALT",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -692,7 +751,9 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -713,7 +774,9 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -724,17 +787,20 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": [
-    "HELD"
+    "READY"
    ],
    "participant": [
-    "ALT"
+    "READY"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion A": "READY/READY",
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -745,17 +811,20 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": [
-    "HELD"
+    "READY"
    ],
    "participant": [
-    "ALT"
+    "READY"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion A": "READY/READY",
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -769,14 +838,17 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion A": "READY/READY",
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -790,14 +862,17 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion A": "READY/READY",
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -818,7 +893,9 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -839,7 +916,9 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -853,14 +932,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -881,7 +962,9 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -895,14 +978,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -916,14 +1001,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -937,14 +1024,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -958,14 +1047,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -986,7 +1077,9 @@
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1000,14 +1093,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1021,14 +1116,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1049,7 +1146,9 @@
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1060,17 +1159,20 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": [
-    "READY"
+    "HELD"
    ],
    "participant": [
-    "READY"
+    "HELD"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion A": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1081,17 +1183,20 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": [
-    "READY"
+    "HELD"
    ],
    "participant": [
-    "READY"
+    "HELD"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion A": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1105,14 +1210,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1133,7 +1240,9 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1154,7 +1263,9 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1168,14 +1279,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/HELD",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1189,14 +1302,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1210,14 +1325,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1238,7 +1355,9 @@
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1252,14 +1371,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1273,14 +1394,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1294,14 +1417,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1322,7 +1447,9 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1343,7 +1470,9 @@
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1364,7 +1493,9 @@
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1385,7 +1516,9 @@
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1396,17 +1529,19 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": [
-    "HELD"
+    "EXCL"
    ],
    "participant": [
-    "ALT"
+    "EXCL"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -1417,17 +1552,19 @@
    "primary": [],
    "day": "2026-10-14",
    "corti": [
-    "HELD"
+    "EXCL"
    ],
    "participant": [
-    "ALT"
+    "EXCL"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -1448,7 +1585,9 @@
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1469,7 +1608,9 @@
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1483,14 +1624,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1511,7 +1654,9 @@
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1532,7 +1677,9 @@
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1546,14 +1693,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "READY/READY",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1574,7 +1723,9 @@
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1588,14 +1739,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "READY/READY",
     "stage": "HELD/ALT",
     "round 1": "READY/READY",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1616,7 +1769,9 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1637,7 +1792,9 @@
     "stage": "READY/READY",
     "round 1": "READY/READY",
     "cycle 2": "READY/READY",
-    "cycle 3": "READY/READY"
+    "cycle 3": "READY/READY",
+    "completion (integration)": "READY/READY",
+    "completion (refutation cycle 2)": "READY/READY"
    }
   },
   {
@@ -1651,14 +1808,16 @@
     "EXCL"
    ],
    "participant": [
-    "ALT"
+    "EXCL"
    ],
    "read": {
     "base": "EXCL/ALT",
     "stage": "EXCL/ALT",
     "round 1": "READY/READY",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "EXCL/ALT"
+    "cycle 3": "EXCL/ALT",
+    "completion (integration)": "EXCL/EXCL",
+    "completion (refutation cycle 2)": "EXCL/EXCL"
    }
   },
   {
@@ -1672,14 +1831,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "EXCL/ALT",
     "round 1": "EXCL/ALT",
     "cycle 2": "EXCL/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   },
   {
@@ -1693,14 +1854,16 @@
     "HELD"
    ],
    "participant": [
-    "ALT"
+    "HELD"
    ],
    "read": {
     "base": "HELD/ALT",
     "stage": "EXCL/ALT",
     "round 1": "HELD/ALT",
     "cycle 2": "HELD/ALT",
-    "cycle 3": "HELD/ALT"
+    "cycle 3": "HELD/ALT",
+    "completion (integration)": "HELD/HELD",
+    "completion (refutation cycle 2)": "HELD/HELD"
    }
   }
  ],
@@ -1793,6 +1956,34 @@
      ]
     },
     "cycle 3": {
+     "43233": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "completion (integration)": {
+     "43233": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "completion (refutation cycle 2)": {
      "43233": [
       [
        "HELD",
@@ -1908,6 +2099,34 @@
        true
       ]
      ]
+    },
+    "completion (integration)": {
+     "43202": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43239": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "completion (refutation cycle 2)": {
+     "43202": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43239": [
+      [
+       "HELD",
+       true
+      ]
+     ]
     }
    }
   },
@@ -1999,6 +2218,34 @@
      ]
     },
     "cycle 3": {
+     "43233": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "completion (integration)": {
+     "43233": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "completion (refutation cycle 2)": {
      "43233": [
       [
        "HELD",
@@ -2114,6 +2361,34 @@
        true
       ]
      ]
+    },
+    "completion (integration)": {
+     "43233": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "completion (refutation cycle 2)": {
+     "43233": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
     }
    }
   },
@@ -2205,6 +2480,34 @@
      ]
     },
     "cycle 3": {
+     "43233": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "completion (integration)": {
+     "43233": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "completion (refutation cycle 2)": {
      "43233": [
       [
        "HELD",
@@ -2320,6 +2623,34 @@
        false
       ]
      ]
+    },
+    "completion (integration)": {
+     "43245": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "completion (refutation cycle 2)": {
+     "43245": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
     }
    }
   },
@@ -2411,6 +2742,34 @@
      ]
     },
     "cycle 3": {
+     "43245": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "completion (integration)": {
+     "43245": [
+      [
+       "HELD",
+       true
+      ]
+     ],
+     "43249": [
+      [
+       "HELD",
+       true
+      ]
+     ]
+    },
+    "completion (refutation cycle 2)": {
      "43245": [
       [
        "HELD",
@@ -2526,6 +2885,34 @@
        false
       ]
      ]
+    },
+    "completion (integration)": {
+     "43245": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "completion (refutation cycle 2)": {
+     "43245": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
     }
    }
   },
@@ -2629,6 +3016,34 @@
        false
       ]
      ]
+    },
+    "completion (integration)": {
+     "43245": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "completion (refutation cycle 2)": {
+     "43245": [
+      [
+       "READY",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
     }
    }
   },
@@ -2652,13 +3067,13 @@
     "43248": [
      [
       "HELD",
-      true
+      false
      ]
     ],
     "43249": [
      [
-      "HELD",
-      true
+      "READY",
+      false
      ]
     ]
    },
@@ -2730,6 +3145,34 @@
       [
        "HELD",
        true
+      ]
+     ]
+    },
+    "completion (integration)": {
+     "43248": [
+      [
+       "HELD",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "completion (refutation cycle 2)": {
+     "43248": [
+      [
+       "HELD",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
       ]
      ]
     }
@@ -2755,13 +3198,13 @@
     "43248": [
      [
       "HELD",
-      true
+      false
      ]
     ],
     "43249": [
      [
-      "HELD",
-      true
+      "READY",
+      false
      ]
     ]
    },
@@ -2833,6 +3276,34 @@
       [
        "HELD",
        true
+      ]
+     ]
+    },
+    "completion (integration)": {
+     "43248": [
+      [
+       "HELD",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "completion (refutation cycle 2)": {
+     "43248": [
+      [
+       "HELD",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
       ]
      ]
     }
@@ -2858,13 +3329,13 @@
     "43248": [
      [
       "HELD",
-      true
+      false
      ]
     ],
     "43249": [
      [
-      "HELD",
-      true
+      "READY",
+      false
      ]
     ]
    },
@@ -2936,6 +3407,34 @@
       [
        "HELD",
        true
+      ]
+     ]
+    },
+    "completion (integration)": {
+     "43248": [
+      [
+       "HELD",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
+      ]
+     ]
+    },
+    "completion (refutation cycle 2)": {
+     "43248": [
+      [
+       "HELD",
+       false
+      ]
+     ],
+     "43249": [
+      [
+       "READY",
+       false
       ]
      ]
     }
@@ -2964,45 +3463,45 @@
      "astra",
      "Hot snare polypectomy failed.",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "astra",
      "Colonoscopy with hot snare polypectomy",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "fable",
      "Hot snare polypectomy failed.",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "fable",
      "Colonoscopy with hot snare polypectomy",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ]
    ],
    "read": {
@@ -3229,6 +3728,98 @@
       "Colonoscopy with hot snare polypectomy",
       [
        "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "completion (integration)": [
+     [
+      "astra",
+      "Hot snare polypectomy failed.",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy failed.",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "completion (refutation cycle 2)": [
+     [
+      "astra",
+      "Hot snare polypectomy failed.",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy failed.",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "EXCL"
       ],
       [
        "READY"
@@ -3259,45 +3850,45 @@
      "astra",
      "Hot snare polypectomy was unsuccessful.",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "astra",
      "Colonoscopy with hot snare polypectomy",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "fable",
      "Hot snare polypectomy was unsuccessful.",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "fable",
      "Colonoscopy with hot snare polypectomy",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ]
    ],
    "read": {
@@ -3524,6 +4115,98 @@
       "Colonoscopy with hot snare polypectomy",
       [
        "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "completion (integration)": [
+     [
+      "astra",
+      "Hot snare polypectomy was unsuccessful.",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy was unsuccessful.",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "completion (refutation cycle 2)": [
+     [
+      "astra",
+      "Hot snare polypectomy was unsuccessful.",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy was unsuccessful.",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "EXCL"
       ],
       [
        "READY"
@@ -3554,45 +4237,45 @@
      "astra",
      "Hot snare polypectomy was abandoned.",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "astra",
      "Colonoscopy with hot snare polypectomy",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "fable",
      "Hot snare polypectomy was abandoned.",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "fable",
      "Colonoscopy with hot snare polypectomy",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ]
    ],
    "read": {
@@ -3819,6 +4502,98 @@
       "Colonoscopy with hot snare polypectomy",
       [
        "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "completion (integration)": [
+     [
+      "astra",
+      "Hot snare polypectomy was abandoned.",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy was abandoned.",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "completion (refutation cycle 2)": [
+     [
+      "astra",
+      "Hot snare polypectomy was abandoned.",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy was abandoned.",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "EXCL"
       ],
       [
        "READY"
@@ -3849,45 +4624,45 @@
      "astra",
      "Hot snare polypectomy was attempted but the polyp could not be removed.",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "astra",
      "Colonoscopy with hot snare polypectomy",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "fable",
      "Hot snare polypectomy was attempted but the polyp could not be removed.",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "fable",
      "Colonoscopy with hot snare polypectomy",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ]
    ],
    "read": {
@@ -4119,6 +4894,98 @@
        "READY"
       ],
       "complete_pending_review"
+     ]
+    ],
+    "completion (integration)": [
+     [
+      "astra",
+      "Hot snare polypectomy was attempted but the polyp could not be removed.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy was attempted but the polyp could not be removed.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ]
+    ],
+    "completion (refutation cycle 2)": [
+     [
+      "astra",
+      "Hot snare polypectomy was attempted but the polyp could not be removed.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy was attempted but the polyp could not be removed.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
      ]
     ]
    }
@@ -4144,7 +5011,7 @@
      "astra",
      "Hot snare polypectomy will be performed at a later date.",
      [
-      "ALT"
+      "EXCL"
      ],
      [
       "READY"
@@ -4155,18 +5022,18 @@
      "astra",
      "Colonoscopy with hot snare polypectomy",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "fable",
      "Hot snare polypectomy will be performed at a later date.",
      [
-      "ALT"
+      "EXCL"
      ],
      [
       "READY"
@@ -4177,12 +5044,12 @@
      "fable",
      "Colonoscopy with hot snare polypectomy",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ]
    ],
    "read": {
@@ -4409,6 +5276,98 @@
       "Colonoscopy with hot snare polypectomy",
       [
        "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "completion (integration)": [
+     [
+      "astra",
+      "Hot snare polypectomy will be performed at a later date.",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy will be performed at a later date.",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "completion (refutation cycle 2)": [
+     [
+      "astra",
+      "Hot snare polypectomy will be performed at a later date.",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy will be performed at a later date.",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "EXCL"
       ],
       [
        "READY"
@@ -4439,45 +5398,45 @@
      "astra",
      "Hot snare polypectomy is to be performed at a later date.",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "astra",
      "Colonoscopy with hot snare polypectomy",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "fable",
      "Hot snare polypectomy is to be performed at a later date.",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "fable",
      "Colonoscopy with hot snare polypectomy",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ]
    ],
    "read": {
@@ -4704,6 +5663,98 @@
       "Colonoscopy with hot snare polypectomy",
       [
        "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "completion (integration)": [
+     [
+      "astra",
+      "Hot snare polypectomy is to be performed at a later date.",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy is to be performed at a later date.",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "completion (refutation cycle 2)": [
+     [
+      "astra",
+      "Hot snare polypectomy is to be performed at a later date.",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Hot snare polypectomy is to be performed at a later date.",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "EXCL"
       ],
       [
        "READY"
@@ -4725,54 +5776,54 @@
    ],
    "alone": [
     [
-     "READY"
+     "HELD"
     ],
-    "complete_pending_review"
+    "incomplete"
    ],
    "rows": [
     [
      "astra",
      "It is unknown whether hot snare polypectomy was performed.",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "astra",
      "Colonoscopy with hot snare polypectomy",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "fable",
      "It is unknown whether hot snare polypectomy was performed.",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "fable",
      "Colonoscopy with hot snare polypectomy",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ]
    ],
    "read": {
@@ -5004,6 +6055,99 @@
        "READY"
       ],
       "complete_pending_review"
+     ]
+    ],
+    "completion A": "HELD incomplete",
+    "completion (integration)": [
+     [
+      "astra",
+      "It is unknown whether hot snare polypectomy was performed.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "It is unknown whether hot snare polypectomy was performed.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ]
+    ],
+    "completion (refutation cycle 2)": [
+     [
+      "astra",
+      "It is unknown whether hot snare polypectomy was performed.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "astra",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "It is unknown whether hot snare polypectomy was performed.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Colonoscopy with hot snare polypectomy",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
      ]
     ]
    }
@@ -5029,7 +6173,7 @@
      "astra",
      "Band ligation of the varices was unsuccessful.",
      [
-      "ALT"
+      "EXCL"
      ],
      [
       "READY"
@@ -5040,7 +6184,7 @@
      "astra",
      "EGD with band ligation",
      [
-      "ALT"
+      "EXCL"
      ],
      [
       "READY"
@@ -5051,7 +6195,7 @@
      "fable",
      "Band ligation of the varices was unsuccessful.",
      [
-      "ALT"
+      "EXCL"
      ],
      [
       "READY"
@@ -5062,7 +6206,7 @@
      "fable",
      "EGD with band ligation",
      [
-      "ALT"
+      "EXCL"
      ],
      [
       "READY"
@@ -5294,6 +6438,98 @@
       "EGD with band ligation",
       [
        "ALT"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "completion (integration)": [
+     [
+      "astra",
+      "Band ligation of the varices was unsuccessful.",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "EGD with band ligation",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Band ligation of the varices was unsuccessful.",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "EGD with band ligation",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ]
+    ],
+    "completion (refutation cycle 2)": [
+     [
+      "astra",
+      "Band ligation of the varices was unsuccessful.",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "astra",
+      "EGD with band ligation",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "Band ligation of the varices was unsuccessful.",
+      [
+       "EXCL"
+      ],
+      [
+       "READY"
+      ],
+      "complete_pending_review"
+     ],
+     [
+      "fable",
+      "EGD with band ligation",
+      [
+       "EXCL"
       ],
       [
        "READY"
@@ -5323,23 +6559,23 @@
      "astra",
      "Consent was obtained for biopsy and cold snare polypectomy.",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "fable",
      "Consent was obtained for biopsy and cold snare polypectomy.",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ]
    ],
    "read": {
@@ -5461,6 +6697,54 @@
        "READY"
       ],
       "complete_pending_review"
+     ]
+    ],
+    "completion (integration)": [
+     [
+      "astra",
+      "Consent was obtained for biopsy and cold snare polypectomy.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Consent was obtained for biopsy and cold snare polypectomy.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ]
+    ],
+    "completion (refutation cycle 2)": [
+     [
+      "astra",
+      "Consent was obtained for biopsy and cold snare polypectomy.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Consent was obtained for biopsy and cold snare polypectomy.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
      ]
     ]
    }
@@ -5485,23 +6769,23 @@
      "astra",
      "Consent was obtained for biopsy and cold snare polypectomy.",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "fable",
      "Consent was obtained for biopsy and cold snare polypectomy.",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ]
    ],
    "read": {
@@ -5623,6 +6907,54 @@
        "READY"
       ],
       "complete_pending_review"
+     ]
+    ],
+    "completion (integration)": [
+     [
+      "astra",
+      "Consent was obtained for biopsy and cold snare polypectomy.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Consent was obtained for biopsy and cold snare polypectomy.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ]
+    ],
+    "completion (refutation cycle 2)": [
+     [
+      "astra",
+      "Consent was obtained for biopsy and cold snare polypectomy.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Consent was obtained for biopsy and cold snare polypectomy.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
      ]
     ]
    }
@@ -5647,23 +6979,23 @@
      "astra",
      "Written consent was obtained for possible hot snare polypectomy.",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "fable",
      "Written consent was obtained for possible hot snare polypectomy.",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ]
    ],
    "read": {
@@ -5785,6 +7117,54 @@
        "READY"
       ],
       "complete_pending_review"
+     ]
+    ],
+    "completion (integration)": [
+     [
+      "astra",
+      "Written consent was obtained for possible hot snare polypectomy.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Written consent was obtained for possible hot snare polypectomy.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ]
+    ],
+    "completion (refutation cycle 2)": [
+     [
+      "astra",
+      "Written consent was obtained for possible hot snare polypectomy.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Written consent was obtained for possible hot snare polypectomy.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
      ]
     ]
    }
@@ -5809,23 +7189,23 @@
      "astra",
      "Informed consent was obtained for EGD with biopsy.",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "fable",
      "Informed consent was obtained for EGD with biopsy.",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ]
    ],
    "read": {
@@ -5947,6 +7327,54 @@
        "READY"
       ],
       "complete_pending_review"
+     ]
+    ],
+    "completion (integration)": [
+     [
+      "astra",
+      "Informed consent was obtained for EGD with biopsy.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Informed consent was obtained for EGD with biopsy.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ]
+    ],
+    "completion (refutation cycle 2)": [
+     [
+      "astra",
+      "Informed consent was obtained for EGD with biopsy.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Informed consent was obtained for EGD with biopsy.",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
      ]
     ]
    }
@@ -5971,23 +7399,23 @@
      "astra",
      "Were biopsies taken from the polyp?",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "fable",
      "Were biopsies taken from the polyp?",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ]
    ],
    "read": {
@@ -6109,6 +7537,54 @@
        "READY"
       ],
       "complete_pending_review"
+     ]
+    ],
+    "completion (integration)": [
+     [
+      "astra",
+      "Were biopsies taken from the polyp?",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Were biopsies taken from the polyp?",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ]
+    ],
+    "completion (refutation cycle 2)": [
+     [
+      "astra",
+      "Were biopsies taken from the polyp?",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Were biopsies taken from the polyp?",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
      ]
     ]
    }
@@ -6133,23 +7609,23 @@
      "astra",
      "Was the polyp removed with a cold snare?",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ],
     [
      "fable",
      "Was the polyp removed with a cold snare?",
      [
-      "ALT"
+      "HELD"
      ],
      [
-      "READY"
+      "HELD"
      ],
-     "complete_pending_review"
+     "incomplete"
     ]
    ],
    "read": {
@@ -6271,6 +7747,54 @@
        "READY"
       ],
       "complete_pending_review"
+     ]
+    ],
+    "completion (integration)": [
+     [
+      "astra",
+      "Was the polyp removed with a cold snare?",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Was the polyp removed with a cold snare?",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ]
+    ],
+    "completion (refutation cycle 2)": [
+     [
+      "astra",
+      "Was the polyp removed with a cold snare?",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
+     ],
+     [
+      "fable",
+      "Was the polyp removed with a cold snare?",
+      [
+       "HELD"
+      ],
+      [
+       "HELD"
+      ],
+      "incomplete"
      ]
     ]
    }

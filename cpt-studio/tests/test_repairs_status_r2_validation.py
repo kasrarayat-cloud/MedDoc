@@ -385,6 +385,7 @@ class Status13HedgedOwnPassageTests(RealCase):
         self.assertIn(positive, status.detail)
         self.assertIn(hedge, status.detail)
         self.assertFalse(status.detail.startswith('No documentation establishes'), status.detail)
+        self.assertFalse(status.detail.startswith('CPT Studio could not confirm'), status.detail)  # builder Q1's words
         (asked,) = [c for c in item.clarifications if c.fact == 'performed_status']
         self.assertIn(hedge, asked.reason)
         self.assertIn(positive, asked.reason)
@@ -747,4 +748,4 @@ class EngineVersionTests(SimpleTestCase):
         # installed 41e03656df61's @5 (P2's holds, the D15 base rule, the lead's L3; cux-hold.json, cux-lead.json); @7: the
         # harness repair (2026-11-05) reads differently from installed b0dc3446c64c's @6 (the negation release, P-ADMIT,
         # the act-included and unsupported-act reconciliation rules, a refused response as no available answer)
-        self.assertEqual(ENGINE_VERSION, 'cpt-studio-validation@8')
+        self.assertEqual(ENGINE_VERSION, 'cpt-studio-validation@9')  # the completion repair (2026-11-06)
