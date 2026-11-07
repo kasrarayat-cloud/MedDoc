@@ -313,8 +313,9 @@ ACT_PARTICIPLES = (r'(?:performed|done|obtained|taken|removed|resected|retrieved
                    r'biopsied|snared|cannulated|completed|carried\s+out|accomplished|made|used|passed|advanced|'
                    r'introduced|reached|intubated|replaced|exchanged|ingested|recorded|positioned|attached|delivered|'
                    r'fragmented|crushed|cut|sent|submitted|marked|administered|given|provided|supervised|closed|'
-                   # the walk round (2026-11-07, finding 4): a removal stated with its particle "out", as REMOVAL_PREDICATE
-                   r'(?:brought|pulled)\s+out)')
+                   # the walk round (2026-11-07, finding 4): a removal stated with its particle "out" and its route out of
+                   # the body, as REMOVAL_PREDICATE
+                   r'(?:brought|taken|pulled)\s+out\s+(?:through|via)\s+the\s+(?:mouth|oropharynx|overtube|oral\s+cavity))')
 ACT_VERB = _rx(r'\b(?:was|were|been|is|are)\s+(?:then\s+|also\s+|successfully\s+|subsequently\s+|completely\s+|each\s+)?'
                + ACT_PARTICIPLES + r'\b'
                r'|\b(?:we|I)\s+(?:then\s+)?(?:performed|obtained|took|removed|resected|placed|deployed|injected|ablated|'
@@ -329,8 +330,8 @@ ACT_VERB = _rx(r'\b(?:was|were|been|is|are)\s+(?:then\s+|also\s+|successfully\s+
 BARE_PARTICIPLE = _rx(r'\b(?:performed|obtained|taken|removed|resected|retrieved|placed|deployed|injected|ablated|treated|'
                       r'dilated|banded|clipped|extracted|sampled|biopsied|snared|achieved|done|completed|sent|replaced|'
                       r'exchanged|reinserted|ligated|administered|decompressed|disrupted|inflated|left\s+in\s+(?:place|situ)|'
-                      # the walk round (finding 4): with its not-done form in FRAGMENT_NOT, as "removed" has
-                      r'(?:brought|taken|pulled)\s+out)\b')
+                      # the walk round (finding 4): with its route out of the body; its not-done form is in FRAGMENT_NOT
+                      r'(?:brought|taken|pulled)\s+out\s+(?:through|via)\s+the\s+(?:mouth|oropharynx|overtube|oral\s+cavity))\b')
 # What may open a clause before its negation word - spaces, dashes, bullets, brackets and list labels ("- ", "A1 ", "2) ")
 # - read one at a time (refutation r1 cost lens, ec5 cost: as "(?:[\s\-*•(]*(?:<label>)?\s*)*" a run was tried in every
 # way of sharing it among the repetitions, so "*" and 16 spaces before "Colonoscopy was performed" took the assess stage
@@ -1724,53 +1725,39 @@ def _clinical_layout(text: str):
 # An instrument named as a scope, by its word's form (gastroscope, colonoscope, duodenoscope, "the scope", "the upper
 # scope"): where a labelled paragraph's label stops binding its acts (_labelled_parts; refutation cycle 4)
 _SCOPE_WORD = _rx(r'\b\w*scopes?\b')
-# The walk round (2026-11-07, finding 2; a fresh blind report): a labelled paragraph's binding ends where its narrative
-# leaves the examination its label names, never merely where it names a scope again. Cycle 5's any-scope cut held the
-# dilation after "A Savary guidewire was passed through the scope into the gastric antrum, and the scope was withdrawn over
-# the wire." (the heading twin binds it to its section). The narrative leaves its examination where a sentence
-#  (a) names another examination's scope: another family's instrument ("The colonoscope was then introduced." in an EGD's
-#      paragraph), a scope the other tract's word names ("and the upper scope was then passed" in a colonoscopy's), or a
-#      generic scope where only the other tract's sites or route are named ("the scope was advanced to the second portion
-#      of the duodenum" in a colonoscopy's);
-#  (b) has a scope withdrawn or removed ("The gastroscope was withdrawn. Next, the PCF-H190 was introduced ...") - the
-#      examination it told is over - unless over a wire, which leaves the examination going on over that wire;
-#  (c) has a generic or modified scope introduced or inserted anew ("Next, the pediatric scope was introduced") - the
-#      label's own instrument re-introduced, or any scope advanced or passed, continues it ("The scope was advanced to the
-#      second portion of the duodenum.", "The scope was repositioned above the bolus.").
-# (a) is read in the paragraph's first sentence too; (b) and (c) only in the later ones (the first tells its own course).
-_TRACT_WORD_BEFORE = _rx(r'\b(?P<tract>upper|lower)[ \t\n]++$')
-_OTHER_TRACT = {'upper': 'lower', 'lower': 'upper'}
-_SCOPE_VERB = _rx(r'\b(?P<scope>\w*scopes?)[ \t\n]++(?:was|were)[ \t\n]++(?:(?:then|next|subsequently|slowly|carefully|gently|'
-                  r'completely|finally|again|fully)[ \t\n]++)?(?P<verb>withdrawn|removed|pulled[ \t\n]++back|extracted|'
-                  r'taken[ \t\n]++out|introduced|inserted|reintroduced|reinserted)\b')
-_SCOPE_WITHDRAWN = frozenset(('withdrawn', 'removed', 'extracted'))
-_OVER_A_WIRE = _rx(r'[ \t\n]++over[ \t\n]++(?:the|a|an)[ \t\n]++(?:[\w-]++[ \t\n]++){0,2}?(?:guide-?)?wires?\b')
+# The walk round (2026-11-07, finding 2): a labelled paragraph's binding ends, as installed, at the first sentence after
+# its first that names a scope - and binds nothing where its first sentence names two - except where every scope the
+# sentence names is the label's own instrument or a generic one in one of two closed forms that keep its examination
+# going: an accessory passed through it ("A Savary guidewire was passed through the scope into the gastric antrum") or
+# the instrument leaving over the wire the next step uses ("and the scope was withdrawn over the wire."). The round's
+# first form read the end of an examination from its wording (another tract's word right before the scope, listed
+# withdrawal and introduction verbs) and its refutation showed the wording open - "the lower GI scope was passed", "was
+# then gently withdrawn", a switch inside the first sentence - each binding the other examination's act to the label and
+# reading it READY under the wrong family, at a quadratic cost; a missed variant of these two forms holds instead, as
+# installed. Linear: one scope-word pass per sentence.
+_THROUGH_THE_SCOPE = _rx(r'\b(?:through|via|down)[ \t\n]++(?:the|its)[ \t\n]++(?:working[ \t\n]++channel[ \t\n]++of[ \t\n]++the'
+                         r'[ \t\n]++)?$')
+_WITHDRAWN_OVER_THE_WIRE = _rx(r'[ \t\n]++(?:was|were)[ \t\n]++(?:withdrawn|removed)[ \t\n]++over[ \t\n]++(?:the|a)[ \t\n]++'
+                               r'(?:guide-?)?wire\b')
+
+
+def _keeps_the_examination(text: str, m: re.Match, family: str, lo: int) -> bool:
+    """Whether the scope mention ``m`` (inside a paragraph whose label is ``family``; its sentence starts at ``lo``) is
+    the label's own instrument or a generic one, in one of the two closed forms that keep the examination going."""
+    named = _instrument_family(m.group(0))
+    if named and named != family:
+        return False  # another family's instrument: never kept
+    if _THROUGH_THE_SCOPE.search(text, max(lo, m.start() - 48), m.start()) is not None:
+        return True
+    return _WITHDRAWN_OVER_THE_WIRE.match(text, m.end()) is not None
 
 
 def _scope_switch(text: str, a: int, b: int, family: str, first: bool = False) -> bool:
-    from studio.gi import structure as gi_structure  # local: the tract and instrument readers are structure's
-    tract = gi_structure._TRACT_OF.get(family, '')
-    for m in _SCOPE_WORD.finditer(text, a, b):
-        named = _instrument_family(m.group(0))
-        if named:
-            if named != family:
-                return True  # (a) another family's instrument
-            continue  # the label's own instrument again
-        word = _TRACT_WORD_BEFORE.search(text, max(a, m.start() - 12), m.start())
-        if word is not None and tract and word.group('tract').lower() == _OTHER_TRACT[tract]:
-            return True  # (a) "the upper scope" beside a colonoscopy, "the lower scope" beside an upper endoscopy
-        if not tract or gi_structure._course_tract(text, a, b) == _OTHER_TRACT[tract]:
-            return True  # (a) a generic scope where the other tract's sites or route alone are named, or no tract to fit
-    if first:
-        return False
-    for m in _SCOPE_VERB.finditer(text, a, b):
-        verb = ' '.join(m.group('verb').lower().split())
-        if verb in _SCOPE_WITHDRAWN or verb in ('pulled back', 'taken out'):
-            if _OVER_A_WIRE.match(text, m.end(), b) is None:
-                return True  # (b) a scope withdrawn: the examination it told is over
-        elif not _instrument_family(m.group('scope')):
-            return True  # (c) a generic or modified scope introduced anew
-    return False
+    """Whether the sentence [a, b) of a labelled paragraph whose label is ``family`` ends the label's binding: in its
+    first sentence, two scope mentions outside the closed forms (the course's own instrument is one); in a later one,
+    any scope mention outside them."""
+    moved = sum(1 for m in _SCOPE_WORD.finditer(text, a, b) if not _keeps_the_examination(text, m, family, a))
+    return moved >= 2 if first else moved >= 1
 
 
 def _labelled_parts(text: str, plist: Sequence[_Part]) -> tuple[_Part, ...]:
@@ -4217,9 +4204,13 @@ _CLAUSE_WORDS = frozenset(('and', 'or', 'but', 'nor', 'yet', 'so', 'then', 'thus
                            'he', 'she', 'they', 'it', 'there', 'also', 'to'))
 _FUNCTION_WORDS = _PREPOSITIONS | _RELATIVES | _AUXILIARIES | _CLAUSE_WORDS
 # The walk round (2026-11-07, finding 4; a fresh blind report): "the bolus was captured and brought out through the mouth" -
-# a removal stated with its particle "out" (brought, taken or pulled out of the body), never a push or a passage, which
-# stays Q1's ("cleared", "dislodged"); the subject is resolved structurally exactly as for "removed".
-REMOVAL_PREDICATE = _rx(r'\b(?:removed|retrieved|extracted|(?:brought|taken|pulled)[ \t\n]+out)\b')
+# a removal stated with its particle "out" AND its route out of the body (through the mouth, the oropharynx or an
+# overtube), never a push or a passage, which stays Q1's ("cleared", "dislodged"); the subject is resolved structurally
+# exactly as for "removed". The route is required since the round's refutation (acts 3, 4): bare, the particle read an
+# image "brought out with narrow band imaging", a bolus that "pulled out of the net" and fell back, and a tube "pulled
+# out by the patient" as removals.
+REMOVAL_PREDICATE = _rx(r'\b(?:removed|retrieved|extracted|(?:brought|taken|pulled)[ \t\n]+out[ \t\n]+(?:through|via)'
+                        r'[ \t\n]+the[ \t\n]+(?:mouth|oropharynx|overtube|oral[ \t\n]+cavity))\b')
 # the verb group right before a participle: auxiliaries, modals, negations and adverbs ("was then", "could not be")
 _VERB_GROUP = _rx(r"(?:\b(?:was|were|is|are|be|been|being|has|have|had|will|would|could|can|cannot|should|may|might|"
                   r"must|did|does|do|shall|to|not|never|then|also|[a-z]+ly|\w+n['’]t)[ \t\n]+)+$")
@@ -4623,6 +4614,11 @@ def _bolus_index(text: str, sentences: Sequence[tuple[int, int]], sentence_start
         # ("Her prior endoscopy was in 2023; an impacted meat bolus was found at 32 cm." dates it; so does "Her brother
         # underwent EGD; ..." give it to another person)
         anchored = not negated and (antecedent is not None or _plain_finding(text, (ss, se), s, e))
+        if not anchored and low_head in FOOD_WORDS and not text[max(0, s - 9):s].lower().endswith('impacted '):
+            # the walk round's refutation (acts notes): a food word as the subject of an impaction is a phrase only as an
+            # anchored plain finding of today; otherwise it is no phrase at all - as installed, which never read it - and
+            # never the nearest antecedent that takes "the bolus" from today's ("... in 2023.", "... at the last episode.")
+            continue
         mention = _BolusMention(s, e, head, foreign, negated, sites, anchored)
         out.append(mention)
         if not negated:

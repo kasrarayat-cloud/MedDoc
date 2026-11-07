@@ -230,22 +230,13 @@ class HeldConditionTests(SimpleTestCase):
         self.assertHeld(colonoscopy(COL, tail='Medical decision making: Moderate.\nPlan: Await pathology.\n'), 'P1')
         self.assertHeld(colonoscopy(COL, ind='Reason for visit: Follow-up.\n'), 'P1')
 
-    def test_a_fronted_time_place_or_source_is_n1s_to_hold(self):
-        """The walk round (2026-11-07, finding 1): P2 reads the course whatever frame opens it (its frame allow-list held
-        ordinary reports: "After informed consent and a time-out, the gastroscope ..."); a frame that states another time,
-        place, agent or source is held by N1, which reads every sentence of the paragraph, the frame included."""
+    def test_p2_the_first_sentence_is_the_scopes_own_course(self):
         for label, paragraph in {
             'fronted place': 'Colonoscopy: At the referring hospital, the colonoscope was advanced to the cecum.\n',
             'fronted time': 'Colonoscopy: Previously, the colonoscope was introduced through the anus.\n',
             'aside after the label': 'Colonoscopy: (outside) The colonoscope was advanced to the cecum.\n',
             'proper-named place': 'Colonoscopy: At Synthetic Valley Medical Center, the colonoscope was advanced to the '
                                   'cecum.\n',
-        }.items():
-            with self.subTest(label):
-                self.assertHeld(colonoscopy(paragraph + SNARE + '\n'), 'N1')
-
-    def test_p2_the_first_sentence_is_the_scopes_own_course(self):
-        for label, paragraph in {
             'future': 'Colonoscopy: The colonoscope will be advanced to the cecum.\n',
             'negated': 'Colonoscopy: The colonoscope was not advanced beyond the sigmoid colon.\n',
             'no course': 'Colonoscopy: Two adenomas were removed.\n',

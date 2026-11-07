@@ -22,11 +22,7 @@ BY_LABEL = {case['label']: case for case in CASES}
 QUIET = ('pass', 'not_applicable', 'not_verified', 'info')
 # READY where the installed base holds the twin, recorded: the H2 (39f0ac49) shape's bolus removal, which the heading
 # twin holds by its own false hold (corpus 137, the parity test's recorded exception since cycle 2)
-PARITY_EXCEPTIONS = {('c5s|F4 H2 as is', '43247'), ('c5s|F4 H2 colonoscope withdrawn slowly', '43247'),
-                     # the walk round (2026-11-07, finding 2): a scope repositioned in its own tract no longer ends the
-                     # label's binding, so the bolus removal after it reads as in the other H2 shapes - READY, which the
-                     # twin holds by the same recorded false hold (corpus 137)
-                     ('c5s|F4 H2 scope repositioned', '43247')}
+PARITY_EXCEPTIONS = {('c5s|F4 H2 as is', '43247'), ('c5s|F4 H2 colonoscope withdrawn slowly', '43247')}
 
 
 def label(p) -> str:

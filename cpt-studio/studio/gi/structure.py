@@ -142,6 +142,9 @@ _SERVICE_NAMES = '|'.join(f'(?:{pattern.pattern})' for _, pattern in cues.SERVIC
 # Today's procedure steps that may open the first sentence before its instrument (an allow-list: anything else fails).
 _FRAME = (r'(?:(?:after|following)[ \t\n]++(?:(?:the[ \t\n]++)?(?:patient[ \t\n]++)?repositioning(?:[ \t\n]++(?:of[ \t\n]++)?the[ \t\n]++'
           r'patient)?|(?:completion[ \t\n]++of[ \t\n]++)?(?:the[ \t\n]++)?(?:' + _SERVICE_NAMES + r'))'
+          # the walk round (2026-11-07, finding 1): informed consent and a time-out, today's first steps
+          r'|(?:after|following)[ \t\n]++(?:(?:informed|written)[ \t\n]++)?consent(?:[ \t\n]++was[ \t\n]++obtained)?'
+          r'(?:[ \t\n]++and[ \t\n]++(?:a[ \t\n]++)?time-?[ \t\n]?out)?'
           r'|next|then|subsequently|thereafter|afterwards?'
           r'|with[ \t\n]++the[ \t\n]++patient[ \t\n]++in[ \t\n]++the[ \t\n]++(?:left|right)[ \t\n]++lateral(?:[ \t\n]++decubitus)?[ \t\n]++position)'
           r'[ \t\n]*+,[ \t\n]*+')
@@ -850,58 +853,45 @@ def _tract_misfit(text: str, lay: Layout, kept: list, declared: frozenset) -> bo
     return False
 
 
-# The walk round (2026-11-07, finding 1): the label's paragraph may open with up to this many sentences before its course
-# - preparation ("The patient was turned to the left lateral position.", "Digital rectal examination was normal.") - each
-# naming no GI service and no instrument; and the course sentence may open with any frame of at most COURSE_FRAME_READ
-# characters ("After informed consent and a time-out, the gastroscope was passed ..."). The frame allow-list this replaced
-# held ordinary reports; another time, place, agent or source anywhere in the paragraph, the frame included, is N1's to
-# hold (_paragraph_holds), as it always was.
+# P2 (the walk round, 2026-11-07, finding 1; the approach changed after its refutation): the installed rule - the label
+# line's first sentence opens with the scope's own course, after at most an allow-listed frame of today's steps (_FRAME,
+# now with informed consent and a time-out) - with one closed extension: the course may follow at most
+# PREPARATION_SENTENCES opening sentences, each one of the two preparation statements reports write before the
+# instrument goes in (_PREPARATION: the patient's position, a digital rectal examination). The round's first form took
+# any frame of 160 characters and any two opening sentences naming no service or instrument; its refutation released a
+# hedged course ("It is unclear whether the colonoscope was advanced to the cecum ..."), a denial ("Colonoscopy: Not
+# performed.") and another time ("The next year, ..."). Nothing in the release reads status, so it admits only shapes
+# that state none; anything else refuses, as installed.
 PREPARATION_SENTENCES = 2
-COURSE_FRAME_READ = 160
+_PREPARATION = re.compile(
+    r'[ \t\n]*+(?:'
+    r'(?:the[ \t\n]++)?patient[ \t\n]++was[ \t\n]++(?:placed|positioned|turned)[ \t\n]++(?:in|into|to|on)[ \t\n]++'
+    r'(?:(?:the|a|his|her)[ \t\n]++)?(?:(?:left|right)[ \t\n]++lateral(?:[ \t\n]++decubitus)?|supine|prone)'
+    r'(?:[ \t\n]++position)?'
+    r'|(?:(?:a|the)[ \t\n]++)?digital[ \t\n]++rectal[ \t\n]++exam(?:ination)?[ \t\n]++was[ \t\n]++'
+    r'(?:performed|done|normal|unremarkable)(?:[ \t\n]++and[ \t\n]++was[ \t\n]++(?:normal|unremarkable))?'
+    r')[ \t\n]*+\.[ \t\n]*+', FLAGS)
 
 
-@functools.lru_cache(maxsize=1)
-def _course_core() -> re.Pattern:
-    return re.compile(r'\b(?:the|a|an)[ \t\n]++' + _INSTRUMENT_MODIFIER + r'(?P<instrument>' + _instruments_pattern()
-                      + r')[ \t\n]++(?:was|were)[ \t\n]++' + _COURSE_ADVERB + _COURSE_VERB + r'\b', FLAGS)
-
-
-@functools.lru_cache(maxsize=1)
-def _generic_course_core() -> re.Pattern:
-    return re.compile(r'\b(?:the|a|an)[ \t\n]++' + _INSTRUMENT_MODIFIER + r'(?P<instrument>' + _GENERIC_INSTRUMENT
-                      + r')[ \t\n]++(?:was|were)[ \t\n]++' + _COURSE_ADVERB + _COURSE_VERB + r'\b', FLAGS)
-
-
-_GENERIC_INSTRUMENT_WORD = re.compile(r'\b' + _GENERIC_INSTRUMENT + r's?\b', FLAGS)
-
-
-def _course_in(text: str, lo: int, hi: int, family: str) -> Optional[bool]:
-    """Whether the sentence [lo, hi) narrates the label's scope's own course (True), another family's (False), or no
-    course at all (None): the course starting within its first COURSE_FRAME_READ characters."""
-    limit = min(hi, lo + COURSE_FRAME_READ)
-    m = _course_core().search(text, lo, hi)
-    if m is not None and m.start() <= limit:
-        named = _instrument_family(m.group('instrument'))
-        if named:
-            return named == family
+def _own_course(text: str, lo: int, hi: int, family: str) -> Optional[bool]:
+    """Whether the sentence [lo, hi) opens (after its own whitespace) with the label's scope's own course (True), with
+    another family's (False), or with no course (None) - the installed P2 shape, at the sentence's start."""
+    lo += len(text[lo:hi]) - len(text[lo:hi].lstrip())
+    m = _course_start().match(text, lo, hi)
+    named = _instrument_family(m.group('instrument')) if m is not None else ''
+    if named:
+        return named == family
     # refutation cycle 1: a generic instrument (a bare "endoscope", "scope") - the tract its course names decides
-    g = _generic_course_core().search(text, lo, hi)
-    if g is not None and g.start() <= limit:
+    g = _generic_course_start().match(text, lo, hi)
+    if g is not None:
         return bool(_TRACT_OF.get(family)) and _course_tract(text, g.end(), hi) == _TRACT_OF[family]
     return None
 
 
-def _names_service_or_instrument(text: str, lo: int, hi: int) -> bool:
-    from studio.gi import services as gi_services  # local, as in _index
-    return (any(pattern.search(text, lo, hi) for _, pattern in cues.SERVICE_PATTERNS)
-            or gi_services.INSTRUMENTS.search(text, lo, hi) is not None
-            or _GENERIC_INSTRUMENT_WORD.search(text, lo, hi) is not None)
-
-
 def _first_sentence_ok(text: str, c: _Candidate, ix: _Index) -> bool:
     """P2: the label line starts a sentence of its own, and the paragraph narrates the scope's own course with the label's
-    family's instrument - in its first sentence from the colon on, or after at most PREPARATION_SENTENCES opening
-    sentences that name no GI service and no instrument."""
+    family's instrument - in its first sentence from the colon on, or after at most PREPARATION_SENTENCES preparation
+    statements (_PREPARATION)."""
     k = bisect.bisect_right(ix.sentence_starts, c.body) - 1
     if k < 0:
         return False
@@ -915,11 +905,11 @@ def _first_sentence_ok(text: str, c: _Candidate, ix: _Index) -> bool:
         lo, hi = (c.body if step == 0 else lo), min(hi, c.end)
         if lo >= hi:
             return False
-        found = _course_in(text, lo, hi, c.family)
+        found = _own_course(text, lo, hi, c.family)
         if found is not None:
             return found
-        if _names_service_or_instrument(text, lo, hi):
-            return False  # an opening sentence that names a service or an instrument is no preparation
+        if not _PREPARATION.fullmatch(text, lo, hi):
+            return False  # neither the course nor a preparation statement: refused, as installed
     return False
 
 

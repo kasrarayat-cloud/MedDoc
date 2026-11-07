@@ -3658,26 +3658,41 @@ def _family_sentences(an: Analysis, attributed: list[Optional[str]], family: str
 # pylorus", "past the ileocecal valve") and the preposition before the later landmark: nothing else, no verb of its own.
 _COURSE_CONTINUATION = re.compile(
     r'(?:[ \t\n]*+,[ \t\n]*+(?:which|where)\b(?:(?!\b(?:not|no|never|unable|cannot|could[ \t\n]++not)\b)[^,;.]){0,160}+)?'
-    r'[ \t\n,]*+(?:and[ \t\n]++)?(?:then[ \t\n]++)?'
+    r'[ \t\n,]*+(?:and[ \t\n]++(?:then[ \t\n]++)?|then[ \t\n]++)'
     r'(?:(?:through|past|beyond|across|via)[ \t\n]++(?:the[ \t\n]++)?[a-z-]++(?:[ \t\n]++[a-z-]++){0,3}?[ \t\n]++)?'
     r'(?:to|into|through|past|beyond)[ \t\n]++(?:the[ \t\n]++)?', re.A | re.I)
 COURSE_CONTINUATION_READ = 300  # how far after a reached landmark its course is read on (bounded)
+# the walk round's refutation (acts 1, 2): the continued landmark ends its sentence - "... and through the pylorus to the
+# second portion of the duodenum." - at most after a closed, plain description of it ("..., which was also normal.";
+# an allow-list, so an unknown phrasing refuses), so nothing after it can deny, hedge or unsay the reach ("..., and then
+# to the cecum, but this could not be confirmed.", "... to the cecum unexamined."); anything else keeps the installed
+# reading
+_SENTENCE_END = re.compile(r'(?:[ \t\n]*+,[ \t\n]*+(?:which|where[ \t\n]++the[ \t\n]++[a-z]++)[ \t\n]++(?:was|were|appeared|looked)'
+                           r'[ \t\n]++(?:also[ \t\n]++)?(?:normal|unremarkable))?[ \t\n]*+[.;:]?[ \t\n]*+', re.A | re.I)
 
 
 def _course_continued(an: Analysis, s: int, e: int, table, reached: list, reached_before: int, refused: list) -> None:
     """Append to ``reached`` every landmark of the sentence [s, e) that its course reaches by continuation (above) from a
     landmark this sentence already reached, read as performed or incomplete and refused by nothing (linear: the
-    sentence's landmark matches, once)."""
+    sentence's landmark matches, once). The walk round's refutation (acts 1, 2): the anchor is a reached landmark's
+    FIRST mention in the sentence - its course's own, never a later mention naming a segment ("the colon beyond the
+    transverse colon to the cecum") - the continuation is coordinated ("and", "then"), and the continued landmark ends
+    its sentence (_SENTENCE_END)."""
     text = an.text
     done = {(hit[0], hit[1]) for hit in reached[reached_before:]}
     no = {(hit[0], hit[1]) for hit in refused}
     found = sorted((m.start(), m.end(), depth, label) for label, depth, pattern in table for m in pattern.finditer(text, s, e))
-    anchors = [end for start, end, depth, label in found if (depth, label) in done]
+    anchors, seen = [], set()
+    for start, end, depth, label in found:
+        if (depth, label) in done and (depth, label) not in seen:
+            anchors.append(end)
+        seen.add((depth, label))
     for start, end, depth, label in found:
         if (depth, label) in done or (depth, label) in no:
             continue
         prior = [a for a in anchors if a <= start and start - a <= COURSE_CONTINUATION_READ]
-        if not prior or not _COURSE_CONTINUATION.fullmatch(text, max(prior), start):
+        if not prior or not _COURSE_CONTINUATION.fullmatch(text, max(prior), start) \
+                or not _SENTENCE_END.fullmatch(text, end, e):
             continue
         if _about_another_procedure(an, start, end) \
                 or _generic_reading(an, start, end).status not in ('performed', 'incomplete'):
@@ -6182,7 +6197,13 @@ def closed_attempt_failure(text: str, start: int, end: int, service_date: Option
     for _fs, _fe, begin, end_at, attempt_end, negated in an.memo.get(('attempted-then-failed', s, e), ()):
         if not negated or not (begin <= lo and hi <= end_at):
             continue
-        if not gi_services._acts_in(an.text, begin, attempt_end):
+        acts = gi_services._acts_in(an.text, begin, attempt_end)
+        core = _ATTEMPT_CORE.match(an.text, attempt_end)
+        head = re.compile(r'\b' + re.escape(core.group('head')) + r'\b', re.A | re.I) if core is not None else None
+        # the walk round's refutation (set-aside notes): the failure is the attempt's own only where its subject is a word
+        # of an act mention the services reader reads in the attempt ("Hot snare polypectomy ... but the snare could not
+        # be closed") - never "the examination could not be completed" in an attempt made "during the examination"
+        if head is None or not any(head.search(an.text, a, b) for _kind, a, b in acts):
             return False
         readings = [reading for reading, span in gi_services.passage_readings(an.text, begin, end_at, an.service_date)
                     if span.start < attempt_end and begin < span.end]
