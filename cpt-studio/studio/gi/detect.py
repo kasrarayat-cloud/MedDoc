@@ -4143,10 +4143,19 @@ def _stated_family_doubts(an: Analysis, sentences) -> bool:
     examination (_STATED_LIMITED: "Exam limited to the bulb."), whatever its subject. Hold-only: it keeps the
     findings-stated reach from releasing, and never touches an installed reading."""
     text = an.text
+    checks = 0
     for s, e in sentences:
         for cs, ce in _clauses_in(an, s, e):
-            if _STATED_NO_REACH.search(text, cs, ce) and not _P2_doubt_is_a_finding(an, cs, ce):
-                return True
+            if _STATED_NO_REACH.search(text, cs, ce):
+                # Bounded (the recall round's second refutation, cost): the denied-finding reader walks every finding
+                # span per negation token, so a clause of tens of thousands of characters cost 15 s at 200 KB. A clause
+                # longer than _STATED_DOUBT_CLAUSE_CHARS, or more than _STATED_DOUBT_CHECKS such clauses, doubts: the
+                # statements are not used and the installed reading stands (hold-only, never a release).
+                checks += 1
+                if ce - cs > _STATED_DOUBT_CLAUSE_CHARS or checks > _STATED_DOUBT_CHECKS:
+                    return True
+                if not _P2_doubt_is_a_finding(an, cs, ce):
+                    return True
             if _STATED_LIMITED.search(text, cs, ce) \
                     or any(pattern.search(text, cs, ce) for _, pattern in _REFERENCE_PATTERNS):
                 return True
@@ -4175,6 +4184,8 @@ def _stated_family_doubts(an: Analysis, sentences) -> bool:
 _STATED_SENTENCE_CLAUSES = 6  # clauses a statement's sentence may hold (bounded): a longer sentence is no statement
 _STATED_PART_READS = 64  # duodenal parts whose own readings a family's release asks at most (bounded): more hold
 _STATED_TRIES = 64  # statements tried against the guards at most (bounded): when that many fail, the family is held
+_STATED_DOUBT_CLAUSE_CHARS = 1500  # a reach-denial clause longer than this doubts (bounded; _stated_family_doubts)
+_STATED_DOUBT_CHECKS = 64  # reach-denial clauses read for a denied finding at most (bounded): more doubt
 # a word without which no landmark of a clause reads 'denied' (_stated_reading: NOT_REACHED_AFTER, _STATED_NOT_BEFORE)
 _STATED_NEGATION = re.compile(r"\b(?:not|never|nor|neither|no|without)\b|n't", re.A | re.I)
 _STATED_MARK_ONLY = re.compile(r'[ \t\n]*(?:\(?\d{1,3}[.)]|\(?[a-z][.)]|[-*\u2022\u2013\u2014]+)[ \t\n]*', re.A | re.I)

@@ -416,3 +416,23 @@ class RequestSideTests(SimpleTestCase):
     def test_a_clause_too_long_or_naming_too_many_parts_is_no_statement(self):
         long = egd('Duodenum: ' + ' and the '.join(['bulb'] * (detect._STATED_PARTS + 1)) + ' were normal.')
         self.assertIsNone(extent(long, 'gi.egd'))
+
+
+class StatedDoubtCostTests(SimpleTestCase):
+    """The recall round's second refutation (cost): the denied-finding reader over one huge reach-denial clause cost 15 s
+    at 200 KB. Past _STATED_DOUBT_CLAUSE_CHARS (or _STATED_DOUBT_CHECKS clauses) the family doubts: the statements are
+    not used and the installed reading stands - bounded and hold-only."""
+
+    def test_a_huge_denial_clause_doubts_quickly_and_holds(self):
+        import time
+        head = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEndoscopy Procedure Report\n'
+                'Date of service: 2026-11-09\nEndoscopist: Synthetic Endoscopist, MD (fictional)\n'
+                'Procedure: Colonoscopy\nIndication: Screening.\n\nFindings:\n'
+                '- A 6 mm polyp was removed by cold snare from the transverse colon (jar A).\n- Terminal ileum normal.\n')
+        text = head + '- Polyps were not seen and ' + 'no NBI and ' * 9000 + 'mucosa was normal.\n\nPlan:\n- Await pathology.\n'
+        started = time.monotonic()
+        findings = detect.route(text, date(2026, 11, 9)).findings
+        self.assertLess(time.monotonic() - started, 10.0)
+        colon = next(f for f in findings if f.family == 'gi.colonoscopy')
+        self.assertIsNone(next((x.value for x in colon.facts if x.name == 'extent'), None))
+        self.assertGreater(detect._STATED_DOUBT_CLAUSE_CHARS, 500)
