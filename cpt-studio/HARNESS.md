@@ -3948,8 +3948,97 @@ the installed base and the cycle-3 head.
 - freeze holds; the battery has 6 movements, all declared, and no new violation; the replay differs by its version labels
   alone.
 - The predictions (a fresh read-only dump restored into throwaway databases) are identical to cycles 3 and 4 apart from
-  the code fingerprint in the reassess keys:
+  the reassess keys' `:c:` part (corrected 2026-11-07: this line first called it a code fingerprint; it is
+  sha256(tag)[:12], the release tag the reassessment is made for - jobs.reassess_retained - so it differs whenever the
+  revision does; the merge commit `6f306af1`'s predictions equal these in every reading and count):
   - retained 4/4/2/6 READY, and e888f9ce's two decisions invalidated;
   - nothing sent;
   - RECOMPUTE_STATES unchanged on the head, the installed revision and the rollback read;
   - the planted control caught.
+
+## The walk round (2026-11-07): the acceptance walk of 6f306af1, and its repair
+
+**The walk.** The installed completion repair (6f306af1b030) failed its acceptance walk on holds only - no false READY
+(docs/deploy-reports/20261107-cpt-studio-6f306af1-install-and-walk.md, findings 1 to 7). The walk sets c1 and c2 are
+regression inputs from here (c2 was read while finding the causes); the independent acceptance is the blind set c3,
+sealed 2026-11-07T03:12:06Z and not read until this round's code is frozen.
+
+**The repairs, as finally built** (shared readers and the engine; no document's text, no expected-code list). Findings 1,
+5, 6 and 7 are repaired; findings 2, 3 and 4 stay OPEN under the two-cycle rule, each with its requirement kept for a changed
+approach:
+
+| finding | repair |
+|---|---|
+| 1 labelled paragraphs refused | structure: P1 reads an E/M visit only outside plan-kind sections; P2 is the installed rule (the course opens the label's sentence after an allow-listed frame) with the frame "after informed consent and a time-out" and at most two preparation statements before the course (the patient's position, a digital rectal examination: _PREPARATION, an allow-list); P3 reads a procedure section whose content is its heading line as a procedure line that declares; N1 no longer reads "last" before a non-time word, "informed consent", place objects, "on its own" or "<rectal/physical/...> examination" as another time, place or procedure |
+| 2 Savary dilators over a wire | OPEN: the binding's exceptions and the device-tract binding were each refuted twice and dropped under the two-cycle rule (round 4: a guide wire's brand name read as a dilation where the stricture was not dilated, and a paragraph rescan per mention cost 81.8 s on an admitted input); the binding is the installed rule and the shape is held, recorded in ACCURACY-RESIDUALS.md |
+| 3 extent from the first landmark | OPEN: both forms of a continuation reader were refuted (a segment named after a later mention; any words as its route) and dropped under the two-cycle rule; the shape reads as installed (the first landmark's incomplete extent) and is recorded in ACCURACY-RESIDUALS.md |
+| 4 bolus "brought out" | OPEN: the out-words as done participles and the route-bound removal were each refuted twice and dropped under the two-cycle rule (round 4: "taken out ... by the emergency physician", "by Dr. <another physician>" and a bolus that fell back read done); services.py is the installed module (gi-services@6) and the shape is held, recorded in ACCURACY-RESIDUALS.md |
+| 5 another polyp's failed attempt held the done removal's code | engine._set_aside_attempts with detect.closed_attempt_failure: the closed attempt form's negated-passive failure (its subject a word of the attempt's own act mention; the services reader reading the attempt as an attempt or its failure) cited beside a cited performed act the code is matched to, on a lesion the reader tells apart (another site or size), with the units not exceeding those acts, is set aside: the code reads as with those passages cited alone. Cited alone the failure keeps the installed hold; routing keeps its installed doubt |
+| 6 the walk's code-list check | ops/verification/verify_browser.cjs lists a code excluded by a member's answer where its code was (U11) |
+| 7 the addendum response | POST /api/encounters/{id}/addenda answers {"revision": <number>}, never an internal id |
+
+**How it got there - four refutation rounds, and what each taught:**
+- **First form (3dfbeb7e)** consumed the negated-passive failure in routing (_doubt). The full suite failed 66 tests,
+  nearly all the cycle-2 pinned another-lesion class: removing the doubt upstream released every code citing that
+  sentence - a hedged, earlier or doubted removal read READY - the another-act release the owner's two-cycle rule had
+  abandoned, through another door. The round's own differential scan had shown five new READYs; the pinned modules
+  showed the class. Changed approach (0eda9a02): routing keeps the doubt; the engine sets the failure aside only beside
+  the code's own cited act; plus a selected-passage hold for the round's own D1 (a hedged act whose code cites only the
+  failure).
+- **The replay gate on 0eda9a02** differed from the base by more than labels for the first time: the selected-passage
+  hold raised an untruthful question on h4-03 (a family-level "never named" reading under a sentence stating the act
+  done). Narrowed in 2ecd8431.
+- **Refutation round 1** (four lenses - binding, set-aside, acts and reach, structure - over 0eda9a02, write-disabled
+  sandboxes, INSTALLED and BASE as the bounds) returned 14 findings (10 HIGH, 4 MEDIUM; plus parity notes), each
+  reproduced on the three trees: every first form had read an open class from its wording (the end of an examination,
+  any frame of 160 characters, any later landmark mention, any "out", any clause of the act's sentence). Each rule was
+  closed to the installed one plus what the walk needs (1e5f6864); the selected-passage hold was dropped (it held codes
+  both releases read READY; the false READY it aimed at is the base's and installed's, recorded).
+- **Refutation round 2** (two lenses over the closures, 1e5f6864) returned 8 findings (3 HIGH, 4 MEDIUM, 1 LOW:
+  closures 3 HIGH and 1 MEDIUM, attempts 3 MEDIUM and 1 LOW). Three mechanisms were then refuted in both rounds,
+  and the owner's two-cycle rule was applied to each - the patch abandoned and the approach changed, the requirement
+  kept: the binding's exceptions (refuted for their wording, then for judging a scope by its local form) gave way to
+  the installed rule plus a device-tract binding read from routing's own vocabulary; the out-words as done
+  participles and denials (refuted bare, then route-bound) gave way to the removal predicate's own reading for the
+  bolus phrase it binds; the continuation reader (refuted for its anchor, then for its route) was dropped with no
+  replacement this round - walk finding 3 stays OPEN. The set-aside's robustness findings were repaired in place
+  (a crash on more act spots than the reader reads; one reading per form, not per cited span; only a cited span holding
+  the failure is set aside; the reason quotes at most two). The dated-removal case (attempts 3) reads exactly as the
+  installed release reads its twin - the recorded cycle-4 residual - and is ruled parity.
+
+- **Refutation round 3** (one lens on the changed approaches, f8f72354) returned 4 findings (3 HIGH, 1 MEDIUM), all in the
+  two new approaches - their first refutation, so repaired in place: the device binding now only confirms an "Upper
+  endoscopy:" paragraph's own label in a narrative that has not left the upper tract (Savary bougies dilate
+  anastomotic strictures, a Soehendra bougie a bile duct, a Savary guidewire carries a colonic balloon), and the
+  removal reading needs the endoscopic capture and closed adverbs, with no agent after it ("nearly brought out",
+  "regurgitated and brought out", "seemingly", "by the emergency physician"). Its claims on the extent (routing equal
+  to installed over 2,701 suite texts) and the set-aside held.
+- **Refutation round 4** (one lens on the two narrowed rules, cb3d7bfb, about 330 probes) returned 6 findings (4 HIGH,
+  2 MEDIUM), each reproduced here on the three trees - head READY, installed and base held. The device binding: a guide
+  wire's brand name ("Savary-Gilliard guide wire") was read as a dilation past the binding where the stricture was not
+  dilated; "Savary dilation is usually performed for such strictures" read done; and a paragraph rescan per site-less
+  mention cost 81.8 s against 1.5 s installed on an admitted input (380,880 characters, 981 mentions; measured here: 18.5 s
+  against 1.5 s at 190,630 characters, 16.1 s of it in the rule). The route-bound removal: "brought out through the mouth
+  by Dr. <another physician>", "taken out through the mouth by the emergency physician" (the clause reader reads "was
+  taken" as done, outside the closed form) and a bolus that fell back in the next clause read 43247 READY. Each rule was
+  the changed approach after two refutations of its predecessor, and this was its own second refutation, so both were
+  dropped (32003524): services.py and reconcile.py are the installed modules again, and walk findings 2 and 4 stay OPEN
+  beside finding 3, each pinned as the recorded open defect. The lens found no lost required reading.
+
+**Measured on the final head (32003524):**
+- The four rounds' inputs, re-run with each lens's own probe (rounds 1 and 2: 1,675 and 1,146; rounds 3 and 4: 635): no
+  READY the installed release reads is lost and no installed incompleteness flag is dropped. The new READYs (55, 174 and
+  8) are the structure and set-aside repairs, and they are a strict subset of those read on cb3d7bfb, whose remainder was
+  exactly the dropped rules' 43247 and 43248 readings.
+- The 2,763-input differential scan (2,568 inputs, the 195 that need their document's date re-run with it): one READY
+  the installed release does not read, which the base reads; none lost, no installed warning dropped.
+- Corpus (627 entries): nothing moved from the pins, no false READY where the baseline had none.
+- The walk documents offline: c1b 45385 READY (finding 5; held on installed); c1a and all of c2 read as installed -
+  c2a 43248 and c2b 43247 held (findings 2 and 4), c2b 43239 READY with the incompleteness warning (finding 3).
+- Gates: the freeze holds; the battery has 6 declared movements and no new violation; the replay differs from the base
+  by its version labels alone (gi-routing@10, gi-services@6, cpt-studio-validation@10).
+- Full suite: 6,418 Django tests (2,034 + 2,276 + 2,108), ops 524, verification 43, node 135/65/135.
+- Install predictions (install/predict_w.sh on 32003524, over a read-only dump of 2026-11-07T07:33:34Z): the four
+  retained encounters read 4/4/2/6 READY with no open question; nothing is sent; the state recompute changes no
+  encounter on this revision, on the installed one, after the reassessments or on the rollback read; the planted
+  control is caught.

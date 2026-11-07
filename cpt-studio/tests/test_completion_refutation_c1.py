@@ -218,13 +218,15 @@ class AdmissionTests(SimpleTestCase):
                                                                                                          self.P2)])])):
             with self.subTest(picks):
                 self.assertEqual(ready(text, picks, readings), set())
-        # refutation cycle 2 (the two-cycle rule): the another-act release is abandoned, so a cited failed attempt holds
-        # the code even beside another polyp plainly removed (the declared cost, E|ANOTHER-failed-attempt); the removed
-        # polyp's own passage, cited alone, is READY
+        # refutation cycle 2 (the two-cycle rule): the another-act release is abandoned, so a cited failed attempt held
+        # the code even beside another polyp plainly removed (the declared cost, E|ANOTHER-failed-attempt). The walk round
+        # (2026-11-07, finding 5) changes the approach: the closed-form failure cited beside the removed polyp's own
+        # passage, by any proposer, is set aside (engine._set_aside_attempts) - READY; cited alone it holds (above). The
+        # removed polyp's own passage, cited alone, is READY
         clean = COLON_HEAD + 'Procedure: Colonoscopy\n' + ADVANCED + self.P1 + '\nA 6 mm polyp in the transverse colon ' \
             'was removed with a cold snare.\n'
         removed = 'A 6 mm polyp in the transverse colon was removed with a cold snare.'
-        self.assertEqual(ready(clean, [('45385', self.P1)], [read('astra', [code(clean, '45385', removed)])]), set())
+        self.assertEqual(ready(clean, [('45385', self.P1)], [read('astra', [code(clean, '45385', removed)])]), {'45385'})
         self.assertEqual(ready(clean, [('45385', removed)]), {'45385'})
 
     def test_a_polyp_found_and_left_in_place_contradicts_the_listing(self):

@@ -175,22 +175,26 @@ HARNESS_REPAIR_3_PINNED = {
     'visit-beside-a-procedure': 'dd5138e408497a1b0459595584188fede5c01e579de33fb6239f57ccd50a83d2',
 }
 
-# The completion repair (owner directive 2026-11-06; cpt-studio-validation@9, gi-services@6, gi-routing@9, gi-catalogue@2)
+# The walk round (2026-11-07; cpt-studio-validation@10, gi-services@6, gi-routing@10, gi-catalogue@2) re-pinned these
+# on its labels alone, three times: the readers' labels, then the engine's (@10; with ENGINE_VERSION set back to @9 every
+# case equals the previous pin, byte for byte - measured), then the inventory's back to the installed @6 when its two
+# repairs were dropped (with gi-services@7 restored every case equals the previous pin - measured), and the served-label
+# parity below still holds. The completion repair (owner directive 2026-11-06)
 # computes these. With its labels set back to installed fd8040d71e44's (and the catalogue's to @1, which every release
 # before it carried) every case equals HARNESS_REPAIR_3_PINNED, byte for byte: on these Corti-only cases the repair moves
 # the labels and nothing else (ServedLabelParityCompletionTests; measured on the base tree and the head tree alike).
 PINNED = {
-    'a-conflict-in-the-record': '1dc5c25098fda55e5f8660d3d31914ac8d389c541284c8b06248d79129854659',
-    'member-date-conflict-answered': '49502beee7ce4660678c5d5b795e5f5dc8783b3e5fee2b007bcd53a28dd7a097',
-    'member-date-conflict-failed': '724c4ba36d150dc69b9a923dc3840d108fd66ab5a0e42f828756d657f280516e',
-    'polypectomy-and-a-candidate': '8cec276db7ca1df977c6bff910838262e26933824dfc779811af1e2e85c3859e',
-    'provider-failed': 'b216568a2aa496da3af152c4168c65f1e4e93bdf4231aa6ae05fac608dff93a0',
-    'provider-not-run': 'dee787d3d34e69d18aadfa4396aa42dcb638bfd7f538f82f62398a5a5e69cc77',
-    'provider-unknown': '535726dd738d0775057fc05996b964cdd3422764bc3dd840323544592210200b',
-    'response-refused': '1bd75462a719548609660a873e5979cd2e3ff9b8c6efb26063171fc251548a0d',
-    'second-review': '60977c3b21495cab59e7147f508660879e4651631cf503b8937ebddea7135825',
-    'two-codes-a-plan-code-and-hcpcs': '76427c6f5598cbcd2f7564502fd2f2d5a7263a381f7c9030bc6f6fef26e6de2e',
-    'visit-beside-a-procedure': 'bbefed477b2e7e348c6a1aa7f040ae4b803982059685eef829d17db372b95261',
+    'a-conflict-in-the-record': '04f320d02d9a39362ff01e016f92f2d777e7033764719ac8da0bf8dc14b242e0',
+    'member-date-conflict-answered': '514c6a02363eb8d776e7512d04f91e7f8c317af7c0a1c09bba23f36040280e24',
+    'member-date-conflict-failed': '167a68ce485009b189c05ba67c9df67593f4992a8fa10e964818b87f45dad7a4',
+    'polypectomy-and-a-candidate': '5ca8fecaa2d5921f1f86752b8af84f3b76ee4ebe53723840fd25e44cae6b78fb',
+    'provider-failed': '1050398056576754c33b63ecd79781994a3ab9b6f81b66673d1de80a4c9e63e0',
+    'provider-not-run': 'c0e3aa3b3c8c0ddb7a460f6d2811d380a33645ceca352993a8503b7a369f6919',
+    'provider-unknown': '2dd901defb0740a7b8768faf0eefd04127ed6644108d091fd1ed8ac1cf2a73d4',
+    'response-refused': 'b8c1dbd49cbf4f8963a51364115dd90fdf740b24e3aded88d21fffef4f7fb99e',
+    'second-review': '64653716b5e6bade3b4faadc03c49f0f663ae257a806a5c225a0508017d2a456',
+    'two-codes-a-plan-code-and-hcpcs': 'e16a02dac8a2d16f2617b4724efd05a82c78d13f71686dc664b2d8612a942315',
+    'visit-beside-a-procedure': 'b504dcf1cff552d21bb3ea2ee05d4a9e6ffe04ee3927e390ce41ea6504ca0e29',
 
 }
 def _earlier_catalogue(stack):

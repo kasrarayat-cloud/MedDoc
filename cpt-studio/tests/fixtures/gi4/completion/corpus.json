@@ -27290,20 +27290,18 @@
     "verdict": "matches"
    },
    "pinned": {
-    "verdict": "FALSE HOLD",
+    "verdict": "matches",
     "reading": {
      "outcome": {
       "45385": [
        [
-        "HELD",
+        "READY",
         false,
-        [
-         "performed_status"
-        ]
+        []
        ]
       ]
      },
-     "completeness": "incomplete"
+     "completeness": "complete_pending_review"
     }
    }
   },

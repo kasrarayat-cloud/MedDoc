@@ -1999,6 +1999,21 @@ test('expectedCustomerStatus and expectedCodeRows: the status is the server\'s s
     { id: 'c-sel', bucket: 'selected', decision: { action: 'approve' } },
   ] } };
   assert.deepEqual(vb.expectedCodeRows(op).map(p => p.id), ['a-sel', 'b-rein', 'c-sel', 'x-excl', 'conf']);
+  // the walk round (finding 6): a code a member's answer excluded is listed where its selected code was (U11), exactly
+  // when its support records an unavailable answer to a named fact (questions.answered_away)
+  const answered = value => ({ fact: 'extent', value, answers: ['a1'] });
+  const op2 = { assessment: { proposals: [
+    { id: 'sel', bucket: 'selected', decision: null },
+    { id: 'away', bucket: 'excluded', reinstatable: false, decision: null, support: { answered: answered('not_documented') } },
+    { id: 'away2', bucket: 'excluded', reinstatable: false, decision: null, support: { answered: answered('cannot_confirm') } },
+    { id: 'other', bucket: 'excluded', reinstatable: false, decision: null, support: { answered: answered('documented') } },
+    { id: 'nofact', bucket: 'excluded', reinstatable: false, decision: null, support: { answered: { fact: '', value: 'not_documented' } } },
+    { id: 'plain', bucket: 'excluded', reinstatable: false, decision: null, support: {} },
+  ] } };
+  assert.deepEqual(vb.expectedCodeRows(op2).map(p => p.id), ['sel', 'away', 'away2']);
+  for (const support of [null, 'answered', { answered: null }, { answered: 'not_documented' }, { answered: { value: 'not_documented' } }]) {
+    assert.equal(vb.answeredAway({ bucket: 'excluded', support }), false, JSON.stringify(support));
+  }
 });
 
 test('checkCustomerVsOperator: the samples agree; each disagreement with the operator view is named', () => {

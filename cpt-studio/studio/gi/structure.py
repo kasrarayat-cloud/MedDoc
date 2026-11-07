@@ -142,6 +142,9 @@ _SERVICE_NAMES = '|'.join(f'(?:{pattern.pattern})' for _, pattern in cues.SERVIC
 # Today's procedure steps that may open the first sentence before its instrument (an allow-list: anything else fails).
 _FRAME = (r'(?:(?:after|following)[ \t\n]++(?:(?:the[ \t\n]++)?(?:patient[ \t\n]++)?repositioning(?:[ \t\n]++(?:of[ \t\n]++)?the[ \t\n]++'
           r'patient)?|(?:completion[ \t\n]++of[ \t\n]++)?(?:the[ \t\n]++)?(?:' + _SERVICE_NAMES + r'))'
+          # the walk round (2026-11-07, finding 1): informed consent and a time-out, today's first steps
+          r'|(?:after|following)[ \t\n]++(?:(?:informed|written)[ \t\n]++)?consent(?:[ \t\n]++was[ \t\n]++obtained)?'
+          r'(?:[ \t\n]++and[ \t\n]++(?:a[ \t\n]++)?time-?[ \t\n]?out)?'
           r'|next|then|subsequently|thereafter|afterwards?'
           r'|with[ \t\n]++the[ \t\n]++patient[ \t\n]++in[ \t\n]++the[ \t\n]++(?:left|right)[ \t\n]++lateral(?:[ \t\n]++decubitus)?[ \t\n]++position)'
           r'[ \t\n]*+,[ \t\n]*+')
@@ -152,6 +155,13 @@ _COURSE_VERB = r'(?P<verb>introduced|advanced|inserted|passed)'
 _COURSE_ADVERB = r'(?:(?:then|carefully|gently|subsequently|easily|successfully|readily)[ \t\n]++)?'
 
 # --- N1, N2, N3: another time, place, agent or source (each a hold signal; any one blocks) ---------------------------
+# The walk round (2026-11-07, finding 1; a fresh blind report): N1 held ordinary narrative on four words that cannot place
+# the procedure in time or place - "After informed consent and a time-out, the gastroscope ...", "removed with the last
+# dilator", "On a second look ...", "stopped on its own", "Digital rectal examination was normal." Each now reads as what
+# it is: informed consent a step of today's procedure (_TODAYS_STEP); "last" another time only as a determiner of a time
+# or an occasion, or before a participle of having been seen or done (_LAST_TIME); a look, a pass and an attempt today's
+# handling, and "on its own" an idiom (_PP_SPECIFIC, _PP_IDIOM); an examination another examination's name qualifies is
+# not the procedure (_EXAM_TOLERATED). Every other reading of N1 is unchanged and still fails closed.
 _YEAR = r'\b(?:19|20)\d{2}s?\b|\B\'\d{2}s\b'
 _MONTH_NAMES = (r'\b(?:January|February|March|April|June|July|August|September|October|November|December|Jan|Feb|Mar|'
                 r'Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\b\.?|\bMay\b(?![ \t]++(?:be|have|need|require|also)\b)')
@@ -192,6 +202,10 @@ _MONTH = re.compile(_MONTH_NAMES, re.A)
 # The same signals without the time ones (a plan section's or a future form's time is the plan's).
 _NOT_TIME_SIGNALS = re.compile('|'.join(f'(?:{p})' for p in (_OTHER_PLACE, _AGENT, _SOURCE, _ANOTHER)), FLAGS)
 _TIME_SIGNALS = re.compile('|'.join(f'(?:{p})' for p in (_YEAR, _WEEKDAY, _TIME_UNIT, _PAST_WORD)), FLAGS)
+_LAST_TIME = re.compile(r'last[ \t\n]++(?:(?:' + _TIME_UNIT + r')|(?:' + _WEEKDAY + r')|(?:' + _MONTH_NAMES + r')'
+                        r'|(?:time|night|occasion|visit|admission|appointment|procedure|examination|exam|endoscopy|scope)s?\b'
+                        r'|(?:' + _SERVICE_NAMES + r')'
+                        r'|(?:seen|done|performed|examined|evaluated|scoped|treated|had|underwent|undergone)\b)', FLAGS)
 # A temporal adjunct ("during ...", "while ...", "after ...", "following ...", "upon ...", "at the time/end of ...") tells
 # another time unless it anchors to one of today's procedure steps, the scope, or the examination itself (an allow-list:
 # "after lavage", "during withdrawal", "following the upper endoscopy", "at the time of the procedure"); anything else -
@@ -201,7 +215,8 @@ _TEMPORAL_LEAD = re.compile(r'\b(?:during|while|after|following|upon|at[ \t\n]++
                             r'completion|close|start|beginning|outset)[ \t\n]++of)[ \t\n]++', FLAGS)
 _TODAYS_STEP = re.compile(
     r'(?:(?:the|this|its|each|both|further|careful|gentle|scope|initial[ \t\n]++scope|complete|completion[ \t\n]++of[ \t\n]++the|'
-    r'endoscopic|balloon|snare)[ \t\n]++){0,3}(?:withdrawal|insertion|intubation|retroflexion|lavage|irrigation|suction(?:ing)?|'
+    r'endoscopic|balloon|snare|informed|written)[ \t\n]++){0,3}(?:withdrawal|insertion|intubation|retroflexion|lavage|irrigation|suction(?:ing)?|'
+    r'consent|'
     r'clearance|repositioning|dilation|dilatation|injection|resection|polypectomy|biops(?:y|ies)|deflation|inflation|'
     r'retrieval|removal|cleaning|washing|advancement|passage|entry|extubation|sedation|induction|insufflation|'
     r'decompression|examination|exam|procedure|procedures|endoscopy|inspection|evaluation|clipping|tattooing|'
@@ -237,7 +252,8 @@ _PP_SPECIFIC = (r'(?:pieces?|fragments?|jars?|containers?|bottles?|cups?|specime
                 r'periphery|stalks?|heads?|surfaces?|fields?|condition|defects?|beds?|retroflexion|withdrawal|insertion|'
                 r'cm|mm|centimet(?:er|re)s?|millimet(?:er|re)s?|minutes?|seconds?|o\'clock|diameter|length|size|'
                 r'dimensions?|extent|width|caliber|calibre|images?|photos?|photographs?|pictures?|patients?|'
-                r'procedures?|examinations?|exams?|inspection|visuali[sz]ation|evaluation|palpation|'
+                r'procedures?|examinations?|exams?|inspection|visuali[sz]ation|evaluation|palpation|looks?|'
+                r'pass(?:es)?|attempts?|'
                 r'this[ \t\n]++(?:time|point))')
 _PP_LESION = (r'(?:polyps?|polypoid|lesions?|mass(?:es)?|ulcers?|ulcerations?|erosions?|tumou?rs?|nodules?|strictures?|'
               r'stenos[ie]s|diverticul(?:um|a)|h(?:a)?emorrhoids?|varices|varix|scars?|clips?|tattoos?|stents?|sutures?|'
@@ -273,6 +289,7 @@ _PP_CLOCK = re.compile(r'\d{1,2}:\d{2}(?:[ \t]*+(?:am|pm|a\.m\.|p\.m\.))?(?!\d)|
 _PP_IDIOM = re.compile(
     r'(?:place|situ|total|addition|order|turn|tandem|part|full|general|particular|summary|brief|least|most|once|all|'
     r'first|times|rest|view|sequence)\b(?![ \t\n]++of\b)'
+    r'|(?:its|their|his|her)[ \t\n]++own\b'
     r'|keeping[ \t\n]++with\b|order[ \t\n]++to\b|preparation[ \t\n]++for\b|addition[ \t\n]++to\b'
     r'|(?:combination|conjunction|comparison|contrast)[ \t\n]++(?:with|to)\b|response[ \t\n]++to\b'
     r'|normal[ \t\n]++limits\b|(?:proximal|distal)[ \t\n]++to[ \t\n]++(?:proximal|distal)\b', FLAGS)
@@ -354,7 +371,9 @@ _EXAM_PREDICATE_OK = re.compile(
 # only what the subject allow-list says, or that the patient tolerated it ("The patient tolerated both procedures
 # ..."); anything else about the examination ("The patient had this colonoscopy when she was 50.") holds.
 _EXAM_MENTION = re.compile(r'\b' + _EXAM_NOUN + r'\b', FLAGS)
-_EXAM_TOLERATED = re.compile(r'[ \t\n]*+(?:(?:the[ \t\n]++)?(?:patient|she|he)[ \t\n]++tolerated[ \t\n]++(?:(?:the|both|this|all|each)'
+_EXAM_TOLERATED = re.compile(r'[ \t\n]*+(?:(?:(?:a|the)[ \t\n]++)?(?:digital[ \t\n]++rectal|rectal|physical|abdominal|perianal|'
+                             r'anal|pelvic|cardiopulmonary|neurologic(?:al)?)[ \t\n]++(?:examination|exam)\b'
+                             r'|(?:the[ \t\n]++)?(?:patient|she|he)[ \t\n]++tolerated[ \t\n]++(?:(?:the|both|this|all|each)'
                              r'[ \t\n]++)?' + _EXAM_NOUN + r'\b'
                              r'|there[ \t\n]++(?:were|was)[ \t\n]++no[ \t\n]++(?:(?:immediate|apparent|other)[ \t\n]++)?'
                              r'complications?[ \t\n]++(?:of|from|during|after)[ \t\n]++(?:the|this)[ \t\n]++' + _EXAM_NOUN
@@ -476,6 +495,8 @@ def _signals(text: str, start: int, end: int, time: bool = True, narrative: bool
             return True  # "during her pregnancy", "after her surgery": a time no step of today's procedure anchors
     future = _FUTURE_CLAUSE.search(text, start, end) is not None
     for m in _TIME_SIGNALS.finditer(text, start, end):
+        if m.group(0).lower() == 'last' and _LAST_TIME.match(text, m.start(), end) is None:
+            continue  # the walk round (finding 1): "with the last dilator" - an ordinal of a thing, no time
         if future and not re.fullmatch(_PAST_WORD, m.group(0), FLAGS):
             continue  # "it will be referred in 6 weeks": the plan's time
         if not re.fullmatch(_PAST_WORD, m.group(0), FLAGS) and any(
@@ -621,8 +642,10 @@ def _head(text: str) -> _Head:
         if _PROCEDURE_REPORT_TITLE.fullmatch(bare):
             positive = True
     families = frozenset(f for line in titles for f, pattern in cues.SERVICE_PATTERNS if pattern.search(line))
+    # the walk round (2026-11-07, finding 1): an E/M visit a plan section names ("Clinic visit in four weeks") is a later
+    # visit, never this document's own structure; named anywhere else it still is
     em = (any(s.kind in ('mdm', 'time', 'exam') or s.label in _EM_LABELS for s in lay.sections)
-          or cues.EM_VISIT.search(text) is not None)
+          or any(lay.section_at(m.start()).kind != 'plan' for m in cues.EM_VISIT.finditer(text)))
     if em or denied:
         return _Head(False, families, body_start)
     if positive:
@@ -732,12 +755,30 @@ def _positive_bodies(text: str, lay: Layout) -> dict:
     body = _head(text).body_start
     out = {}
     for n, section in enumerate(lay.sections):
-        if section.kind not in gi_sections.POSITIVE_KINDS:
+        if section.kind not in gi_sections.POSITIVE_KINDS or _procedure_line(text, section):
             continue
         lo = max(section.start, body)
         if lo < section.end and text[lo:section.end].strip():
             out[n] = (lo, section.end)
     return out
+
+
+# The walk round (2026-11-07, finding 1): a procedure line - a procedure heading whose content lies on its heading line
+# alone and states nothing ("Procedures: Esophagogastroduodenoscopy with Savary dilation; colonoscopy") - is the report's
+# declaration of its families (P3, _procedure_lines), never a positive section of its own: counted as one it held the very
+# families it declares. A heading line that states something ("Procedure: The colonoscope was advanced ...") stays a body.
+_STATES = re.compile(r'\b(?:was|were|is|are|been|had|has|have)\b', FLAGS)
+PROCEDURE_LINE_READ = 400  # a heading line is read in its first characters (bounded)
+
+
+def _procedure_line(text: str, section: Section) -> bool:
+    if section.kind != 'procedure' or section.heading is None or ':' not in section.heading.text:
+        return False
+    line_end = text.find('\n', section.heading.start)
+    line_end = section.end if line_end < 0 or line_end > section.end else line_end
+    if text[line_end:section.end].strip():
+        return False  # lines below the heading line: a body
+    return not _STATES.search(text, section.heading.start, min(line_end, section.heading.start + PROCEDURE_LINE_READ))
 
 
 def _any_between(sorted_starts: list, lo: int, hi: int) -> bool:
@@ -812,22 +853,64 @@ def _tract_misfit(text: str, lay: Layout, kept: list, declared: frozenset) -> bo
     return False
 
 
+# P2 (the walk round, 2026-11-07, finding 1; the approach changed after its refutation): the installed rule - the label
+# line's first sentence opens with the scope's own course, after at most an allow-listed frame of today's steps (_FRAME,
+# now with informed consent and a time-out) - with one closed extension: the course may follow at most
+# PREPARATION_SENTENCES opening sentences, each one of the two preparation statements reports write before the
+# instrument goes in (_PREPARATION: the patient's position, a digital rectal examination). The round's first form took
+# any frame of 160 characters and any two opening sentences naming no service or instrument; its refutation released a
+# hedged course ("It is unclear whether the colonoscope was advanced to the cecum ..."), a denial ("Colonoscopy: Not
+# performed.") and another time ("The next year, ..."). Nothing in the release reads status, so it admits only shapes
+# that state none; anything else refuses, as installed.
+PREPARATION_SENTENCES = 2
+_PREPARATION = re.compile(
+    r'[ \t\n]*+(?:'
+    r'(?:the[ \t\n]++)?patient[ \t\n]++was[ \t\n]++(?:placed|positioned|turned)[ \t\n]++(?:in|into|to|on)[ \t\n]++'
+    r'(?:(?:the|a|his|her)[ \t\n]++)?(?:(?:left|right)[ \t\n]++lateral(?:[ \t\n]++decubitus)?|supine|prone)'
+    r'(?:[ \t\n]++position)?'
+    r'|(?:(?:a|the)[ \t\n]++)?digital[ \t\n]++rectal[ \t\n]++exam(?:ination)?[ \t\n]++was[ \t\n]++'
+    r'(?:performed|done|normal|unremarkable)(?:[ \t\n]++and[ \t\n]++was[ \t\n]++(?:normal|unremarkable))?'
+    r')[ \t\n]*+\.[ \t\n]*+', FLAGS)
+
+
+def _own_course(text: str, lo: int, hi: int, family: str) -> Optional[bool]:
+    """Whether the sentence [lo, hi) opens (after its own whitespace) with the label's scope's own course (True), with
+    another family's (False), or with no course (None) - the installed P2 shape, at the sentence's start."""
+    lo += len(text[lo:hi]) - len(text[lo:hi].lstrip())
+    m = _course_start().match(text, lo, hi)
+    named = _instrument_family(m.group('instrument')) if m is not None else ''
+    if named:
+        return named == family
+    # refutation cycle 1: a generic instrument (a bare "endoscope", "scope") - the tract its course names decides
+    g = _generic_course_start().match(text, lo, hi)
+    if g is not None:
+        return bool(_TRACT_OF.get(family)) and _course_tract(text, g.end(), hi) == _TRACT_OF[family]
+    return None
+
+
 def _first_sentence_ok(text: str, c: _Candidate, ix: _Index) -> bool:
-    """P2: the label line's own first sentence, from the colon on, narrates the scope's own course with the label's
-    family's instrument."""
+    """P2: the label line starts a sentence of its own, and the paragraph narrates the scope's own course with the label's
+    family's instrument - in its first sentence from the colon on, or after at most PREPARATION_SENTENCES preparation
+    statements (_PREPARATION)."""
     k = bisect.bisect_right(ix.sentence_starts, c.body) - 1
     if k < 0:
         return False
     s, e = ix.sentences[k]
     if not s <= c.body < e or s < c.start:
         return False  # the layout runs the label line on from the line above: a sentence's continuation, no label
-    m = _course_start().match(text, c.body, e)
-    named = _instrument_family(m.group('instrument')) if m is not None else ''
-    if named:
-        return named == c.family
-    # refutation cycle 1: a generic instrument (a bare "endoscope", "scope") - the tract its course names decides
-    g = _generic_course_start().match(text, c.body, e)
-    return g is not None and bool(_TRACT_OF.get(c.family)) and _course_tract(text, g.end(), e) == _TRACT_OF[c.family]
+    for step in range(PREPARATION_SENTENCES + 1):
+        if k + step >= len(ix.sentences):
+            return False
+        lo, hi = ix.sentences[k + step]
+        lo, hi = (c.body if step == 0 else lo), min(hi, c.end)
+        if lo >= hi:
+            return False
+        found = _own_course(text, lo, hi, c.family)
+        if found is not None:
+            return found
+        if not _PREPARATION.fullmatch(text, lo, hi):
+            return False  # neither the course nor a preparation statement: refused, as installed
+    return False
 
 
 def _paragraph_holds(text: str, c: _Candidate, ix: _Index, frames: tuple = ()) -> bool:

@@ -357,7 +357,9 @@ def addenda(request, encounter_id):
         # Queued in the same transaction, so the encounter is never seen idle between the
         # new revision and its pipeline (a context change or reconcile would slip in there).
         jobs.start_pipeline(revision, request.user)
-    return JsonResponse({'revision_id': str(revision.pk)}, status=201)
+    # The walk round (2026-11-07, finding 7): the revision's number, never its internal id - a customer surface carries
+    # no identifier the operator view holds (ops/verification/customer-contract.json's deny values; API.md)
+    return JsonResponse({'revision': revision.number}, status=201)
 
 
 @require_POST

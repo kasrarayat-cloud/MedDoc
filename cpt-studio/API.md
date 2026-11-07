@@ -654,7 +654,9 @@ exclusion, or rejecting or revoking the reinstatement releases it.
 
 ## POST /api/encounters/{id}/addenda
 
-`{"text": "...", "clarification_id": "uuid|null", "synthetic_attestation": "yes"}` → `201 {"revision_id": "uuid"}`.
+`{"text": "...", "clarification_id": "uuid|null", "synthetic_attestation": "yes"}` → `201 {"revision": <number>}`: the new
+revision's number on this document. The walk round (2026-11-07) replaced the earlier `{"revision_id": "uuid"}`: a
+customer surface carries no internal identifier, and no page read it.
 Creates a new revision (original text + labelled addendum), invalidates current
 decisions, runs the pipeline. 400 when the document plus the addendum would
 exceed the length limit (nothing is created); 409 while a stage is queued or

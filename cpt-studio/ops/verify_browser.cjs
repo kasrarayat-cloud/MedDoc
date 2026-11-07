@@ -1681,9 +1681,19 @@ function checkScan(id, hits, what) {
 // The codes the customer list must show, in the contract's order (CORE-UX-DESIGN 7): selected and reinstated codes by
 // stored position, then the excluded codes a reviewer can still decide (reinstatable, or a confirmed exclusion);
 // alternatives only in other_codes. A reinstated code is an excluded one whose current decision is not a confirmation.
+// A code the engine excluded by a member's answer (its support records the answer: questions.answered_away, mirrored
+// here field for field) stays listed where its selected code was (customer_api.code_rows, completion repair U11). The walk
+// round (2026-11-07, finding 6): the list check had predated that case and named the product's own listing a failure.
+const UNAVAILABLE_ANSWERS = new Set(['not_documented', 'cannot_confirm']);
+function answeredAway(p) {
+  const marker = p && isObject(p.support) ? p.support.answered : null;
+  return isObject(marker) && UNAVAILABLE_ANSWERS.has(marker.value) && typeof marker.fact === 'string' && marker.fact !== '';
+}
+
 function expectedCodeRows(op) {
   const proposals = proposalsOf(op);
-  const first = proposals.filter(p => p.bucket === 'selected' || (p.bucket === 'excluded' && p.decision && p.decision.action !== 'confirm'));
+  const first = proposals.filter(p => p.bucket === 'selected' || answeredAway(p)
+    || (p.bucket === 'excluded' && p.decision && p.decision.action !== 'confirm'));
   const then = proposals.filter(p => p.bucket === 'excluded' && !first.includes(p) && (p.reinstatable === true || p.decision?.action === 'confirm'));
   return [...first, ...then];
 }
@@ -4410,7 +4420,7 @@ module.exports = {
   ACCEPTANCE_LABEL, REVIEW_NOTE_MAX, checkAcceptanceDecisions, loadPasswordFile, loadOperatorCredentials, credentialsRecord, debugMayLog,
   secretForms, scrubSecret, writeEvidence, reviewerAccount, main,
   // the customer surface (CORE-UX-DESIGN 5-8)
-  CONTRACT, DENYLIST, shapeProblems, checkCustomerContract, checkCustomerVocabulary, harvest, denyValuesFrom, scanContext, scanText,
+  answeredAway, CONTRACT, DENYLIST, shapeProblems, checkCustomerContract, checkCustomerVocabulary, harvest, denyValuesFrom, scanContext, scanText,
   scanJson, scanFile, scanHeaders, csvRows, checkScan, expectedCodeRows, expectedCustomerStatus, allowedPassages, actIndex, checkCustomerVsOperator,
   serverCustomer, decidedModifiers, serverActions, NONE_APPROVED_BLOCKER,
   checkDetailRows, checkNoEmQuestions, readCustomerDom, checkResultList, checkChecksPanel, checkDetailsPanel, checkProgressDom, foldedSteps,

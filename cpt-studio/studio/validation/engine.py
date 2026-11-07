@@ -32,10 +32,12 @@ from studio.types import (CONFIDENCES, CONTEXT_FACTS, PARTICIPANT_STATES, PEER_P
                           ParticipantNotCoded, ParticipantReading, ParticipantService, PeerReview, ProposalAssessment,
                           ProviderCode, QuestionAnswer, ReferenceLookup, ReferenceSourceInfo, RoutingResult,
                           ServiceMention, Span, sha256_json)
-from studio.gi.detect import DOUBT_PREFIX, UNESTABLISHED
+from studio.gi.detect import DOUBT_PREFIX, UNESTABLISHED, closed_attempt_failure
 from studio.validation import checks, questions, rationale, reconcile
 
-ENGINE_VERSION = 'cpt-studio-validation@9'  # @9: the completion repair (equal eligibility, member answers, technique)
+ENGINE_VERSION = 'cpt-studio-validation@10'  # @10: the walk round (2026-11-07: a cited failed attempt set aside beside
+# the code's own act, _set_aside_attempts)
+# @9: the completion repair (equal eligibility, member answers, technique)
 # The documented-service inventory decides the status of the codes it matches (5.10). Off, every code is judged by the
 # routing-era reading alone - the path the inventory falls back to when its reading is inconsistent; the routing-era
 # unit tests, whose stubbed passage readings describe no real document, run that path.
@@ -1615,9 +1617,19 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
     supported = None
     note = ''
     placed = None
+    set_aside = _set_aside_attempts(found, len(group), kept, text, day, legacy) if found is not None else frozenset()
+    if set_aside:
+        # The walk round (finding 5): read as if the other attempt's failed passage were not cited (_set_aside_attempts)
+        outcome = checks.resolve_status(tuple(r for r in own if (r.start, r.end) not in set_aside)
+                                        + checks.routing_readings(finding), detectable=legacy in DETECTED_FAMILIES)
     if found is not None:
         # Engine @4: the documented service and act decide the code's status; its passages are verified against them.
         found = _second_opinion(outcome, found, code, text, inventory, routing, own, day, pages)
+        if set_aside and found.state in checks.POSITIVE:
+            quoted = '; '.join([reconcile.quote(span, 80) for span in kept if (span.start, span.end) in set_aside][:2])
+            found = replace(found, detail=f'{found.detail} A passage the code also cites states another attempt\'s own '
+                                          f'failure ({quoted}); read as that attempt\'s, it does not decide this code, '
+                                          'whose own documented act is cited beside it.')
         if found.reason == 'act_missing' and outcome.state == 'not_performed' \
                 and not _time_in_doubt(code, found.service) \
                 and not _listing_contradicted(code, found.service) \
@@ -1672,9 +1684,12 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
         # under Plan. The visit's own history and plan sentences are no such reading, so they still show it. A study's
         # own result sentence, or a passage of its own report, shows the study (today=, report_family=).
         another_time = {(r.start, r.end) for r in own if r.status in checks.NEGATIVE}
-        supported = reconcile.support(found, kept, current=lambda span: (span.start, span.end) not in another_time
-                                      and gi_services.current_statement(text, span.start, span.end, day),
-                                      today=today, report_family=report_family)
+
+        def current(span):
+            return (span.start, span.end) not in another_time \
+                and gi_services.current_statement(text, span.start, span.end, day)
+
+        supported = reconcile.support(found, kept, current=current, today=today, report_family=report_family)
         if found.state in checks.POSITIVE and supported.status in ('warn', 'fail') and found.reason != 'own_passage' \
                 and legacy not in checks.EM_FAMILIES:
             # P2 READ-HOLD, R3 7.5.1: the narrow evidence hold (_passages_elsewhere), for a procedure code. Never over
@@ -1755,6 +1770,65 @@ def _today_passage(text: str, span, day: Optional[date]) -> bool:
     if any(layout.section_at(pos).kind in NOT_TODAY_SECTIONS for pos in (span.start, max(span.start, span.end - 1))):
         return False
     return gi_services.current_statement(text, span.start, span.end, day)
+
+
+def _set_aside_attempts(found: Optional[reconcile.Match], units: int, kept: Sequence[EvidenceSpan], text: str,
+                        day: Optional[date], legacy: str) -> frozenset:
+    """The walk round (2026-11-07, finding 5; the changed approach after the round's first form reopened the abandoned
+    another-act release): the cited passages a code's status reading sets aside, as (start, end) - empty unless every
+    condition holds:
+    - the passage is one closed attempt form whose failure is a negated passive of the attempt's own word, and the
+      documented-service reader reads that attempt as an attempt or its failure (detect.closed_attempt_failure: "Hot
+      snare polypectomy of a 12 mm pedunculated polyp in the sigmoid colon was attempted, but the snare could not be
+      closed around the stalk, and the polyp was left in place.");
+    - another cited passage, whoever cited it, shows a performed act the code is matched to (it overlaps that act's
+      evidence): the code's own documented act is cited beside the failure;
+    - the code's units do not exceed the performed acts its other cited passages show, whoever cited them (the owner
+      session's units defect - the code listed once for the done act and once for the failure - stays held);
+    - the documented-service reader tells each of those acts apart from the attempt's own act - another site or another
+      size (_told_apart): a failure it cannot tell from the act done ("The 12 mm sigmoid polyp was removed ..." beside the
+      failed attempt at a 12 mm sigmoid polyp) is a contradiction about one lesion, never set aside;
+    - the code is a procedure code of a detected family, matched to acts, and documented as performed.
+    The code then reads exactly as it reads with those other passages cited alone - their own hedges, denials and other
+    times still hold it through the second opinion - so this never reads a passage the base did not; and a code citing
+    the failed attempt alone keeps the installed hold (the declared cost of the abandoned release). Reads passages only,
+    never who cited them: the same passages read the same whoever cited which (I1)."""
+    if found is None or found.state not in checks.POSITIVE or len(kept) < 2 or legacy not in DETECTED_FAMILIES \
+            or legacy in checks.EM_FAMILIES:
+        return frozenset()
+    done = [act for act in found.acts if act.status == 'performed']
+    if not done:
+        return frozenset()
+    aside = frozenset((span.start, span.end) for span in kept
+                      if closed_attempt_failure(text, span.start, span.end, day))
+    if not aside:
+        return frozenset()
+    shown = [act for act in done
+             if any((span.start, span.end) not in aside and span.start < ev.end and ev.start < span.end
+                    for span in kept for ev in act.evidence)]
+    if not shown or units > len(shown):
+        return frozenset()
+    attempts = [act for act in found.service.acts if act.status != 'performed'
+                and any(start <= ev.start < end or ev.start <= start < ev.end for start, end in aside for ev in act.evidence)]
+    if not attempts or not all(_told_apart(found.service, act, attempt) for act in shown for attempt in attempts):
+        return frozenset()
+    return aside
+
+
+def _told_apart(service, act, other) -> bool:
+    """Whether the documented-service reader tells ``act`` and ``other`` apart as acts on different lesions: both have
+    a site (their own, or their lesion's) and no site is shared, or both lesions have a size and the sizes differ. An act
+    with no site and no sized lesion is told apart from nothing (fail-closed)."""
+    lesions = {lesion.id: lesion for lesion in service.lesions}
+
+    def where(a):
+        lesion = lesions.get(a.lesion)
+        sites = set(a.anatomy or ()) | ({lesion.anatomy} if lesion is not None and lesion.anatomy else set())
+        return sites, (getattr(lesion, 'size', None) or None) if lesion is not None else None
+
+    sites, size = where(act)
+    other_sites, other_size = where(other)
+    return bool(sites and other_sites and not sites & other_sites) or bool(size and other_size and size != other_size)
 
 
 def _second_opinion(old: checks.StatusOutcome, found: reconcile.Match, code: str, text: str,
