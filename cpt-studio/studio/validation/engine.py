@@ -32,10 +32,12 @@ from studio.types import (CONFIDENCES, CONTEXT_FACTS, PARTICIPANT_STATES, PEER_P
                           ParticipantNotCoded, ParticipantReading, ParticipantService, PeerReview, ProposalAssessment,
                           ProviderCode, QuestionAnswer, ReferenceLookup, ReferenceSourceInfo, RoutingResult,
                           ServiceMention, Span, sha256_json)
-from studio.gi.detect import DOUBT_PREFIX, UNESTABLISHED
+from studio.gi.detect import DOUBT_PREFIX, UNESTABLISHED, closed_attempt_failure
 from studio.validation import checks, questions, rationale, reconcile
 
-ENGINE_VERSION = 'cpt-studio-validation@9'  # @9: the completion repair (equal eligibility, member answers, technique)
+ENGINE_VERSION = 'cpt-studio-validation@10'  # @10: the walk round (2026-11-07: a cited failed attempt set aside beside
+# the code's own act, _set_aside_attempts; the selected passage's second opinion, _selected_passages_hold)
+# @9: the completion repair (equal eligibility, member answers, technique)
 # The documented-service inventory decides the status of the codes it matches (5.10). Off, every code is judged by the
 # routing-era reading alone - the path the inventory falls back to when its reading is inconsistent; the routing-era
 # unit tests, whose stubbed passage readings describe no real document, run that path.
@@ -1615,9 +1617,19 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
     supported = None
     note = ''
     placed = None
+    set_aside = _set_aside_attempts(found, len(group), kept, text, day, legacy) if found is not None else frozenset()
+    if set_aside:
+        # The walk round (finding 5): read as if the other attempt's failed passage were not cited (_set_aside_attempts)
+        outcome = checks.resolve_status(tuple(r for r in own if (r.start, r.end) not in set_aside)
+                                        + checks.routing_readings(finding), detectable=legacy in DETECTED_FAMILIES)
     if found is not None:
         # Engine @4: the documented service and act decide the code's status; its passages are verified against them.
         found = _second_opinion(outcome, found, code, text, inventory, routing, own, day, pages)
+        if set_aside and found.state in checks.POSITIVE:
+            quoted = '; '.join(reconcile.quote(span, 80) for span in kept if (span.start, span.end) in set_aside)
+            found = replace(found, detail=f'{found.detail} A passage the code also cites states another attempt\'s own '
+                                          f'failure ({quoted}); read as that attempt\'s, it does not decide this code, '
+                                          'whose own documented act is cited beside it.')
         if found.reason == 'act_missing' and outcome.state == 'not_performed' \
                 and not _time_in_doubt(code, found.service) \
                 and not _listing_contradicted(code, found.service) \
@@ -1672,9 +1684,26 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
         # under Plan. The visit's own history and plan sentences are no such reading, so they still show it. A study's
         # own result sentence, or a passage of its own report, shows the study (today=, report_family=).
         another_time = {(r.start, r.end) for r in own if r.status in checks.NEGATIVE}
-        supported = reconcile.support(found, kept, current=lambda span: (span.start, span.end) not in another_time
-                                      and gi_services.current_statement(text, span.start, span.end, day),
-                                      today=today, report_family=report_family)
+
+        def current(span):
+            return (span.start, span.end) not in another_time \
+                and gi_services.current_statement(text, span.start, span.end, day)
+
+        supported = reconcile.support(found, kept, current=current, today=today, report_family=report_family)
+        if found.state in checks.POSITIVE and found.acts and supported.status == 'warn' and supported.source \
+                and found.reason != 'own_passage' and legacy in DETECTED_FAMILIES and legacy not in checks.EM_FAMILIES:
+            # The walk round (2026-11-07, its refutation's D1): none of the code's passages shows its act, so the code
+            # rests on the passages CPT Studio selected - the act's own (a code matched to acts: its source is their
+            # evidence; a code of the service alone is not read here). The routing-era second opinion reads those, each
+            # in its whole sentence, exactly as it reads a passage the code cites (_selected_passages_hold): a code whose
+            # act the document doubts in its own sentence ("A 6 mm polyp was removed with a cold snare, but it is unclear
+            # whether the polyp was removed or only biopsied.", or that act "at her last colonoscopy") is held whichever
+            # passage its proposer cited - never READY because the citation was another polyp's failed attempt.
+            held = _selected_passages_hold(found, supported.source, code, text, inventory, routing, finding, legacy,
+                                           day, pages)
+            if held is not None:
+                found = held
+                supported = reconcile.support(found, kept, current=current, today=today, report_family=report_family)
         if found.state in checks.POSITIVE and supported.status in ('warn', 'fail') and found.reason != 'own_passage' \
                 and legacy not in checks.EM_FAMILIES:
             # P2 READ-HOLD, R3 7.5.1: the narrow evidence hold (_passages_elsewhere), for a procedure code. Never over
@@ -1757,9 +1786,71 @@ def _today_passage(text: str, span, day: Optional[date]) -> bool:
     return gi_services.current_statement(text, span.start, span.end, day)
 
 
+def _set_aside_attempts(found: Optional[reconcile.Match], units: int, kept: Sequence[EvidenceSpan], text: str,
+                        day: Optional[date], legacy: str) -> frozenset:
+    """The walk round (2026-11-07, finding 5; the changed approach after the round's first form reopened the abandoned
+    another-act release): the cited passages a code's status reading sets aside, as (start, end) - empty unless every
+    condition holds:
+    - the passage is one closed attempt form whose failure is a negated passive of the attempt's own word, and the
+      documented-service reader reads that attempt as an attempt or its failure (detect.closed_attempt_failure: "Hot
+      snare polypectomy of a 12 mm pedunculated polyp in the sigmoid colon was attempted, but the snare could not be
+      closed around the stalk, and the polyp was left in place.");
+    - another cited passage, whoever cited it, shows a performed act the code is matched to (it overlaps that act's
+      evidence): the code's own documented act is cited beside the failure;
+    - the code's units do not exceed the performed acts its other cited passages show: a unit resting on the failed
+      attempt alone is never read READY (the owner session's units defect, pinned since cycle 2);
+    - the code is a procedure code of a detected family, matched to acts, and documented as performed.
+    The code then reads exactly as it reads with those other passages cited alone - their own hedges, denials and other
+    times still hold it through the second opinion - so this never reads a passage the base did not; and a code citing
+    the failed attempt alone keeps the installed hold (the declared cost of the abandoned release). Reads passages only,
+    never who cited them: the same passages read the same whoever cited which (I1)."""
+    if found is None or found.state not in checks.POSITIVE or len(kept) < 2 or legacy not in DETECTED_FAMILIES \
+            or legacy in checks.EM_FAMILIES:
+        return frozenset()
+    done = [act for act in found.acts if act.status == 'performed']
+    if not done:
+        return frozenset()
+    aside = frozenset((span.start, span.end) for span in kept
+                      if closed_attempt_failure(text, span.start, span.end, day))
+    if not aside:
+        return frozenset()
+    shown = [act for act in done
+             if any((span.start, span.end) not in aside and span.start < ev.end and ev.start < span.end
+                    for span in kept for ev in act.evidence)]
+    if not shown or units > len(shown):
+        return frozenset()
+    return aside
+
+
+def _selected_passages_hold(found: reconcile.Match, source: Sequence[Span], code: str, text: str, inventory,
+                            routing: RoutingResult, finding, legacy: str, day: Optional[date],
+                            pages=()) -> Optional[reconcile.Match]:
+    """The walk round (2026-11-07, its refutation's D1): the hold the routing-era second opinion makes on the passages
+    CPT Studio selected for a code none of whose own passages shows its act (reconcile.support's ``source``, the matched
+    act's evidence), or None. Each selected passage is read in its whole sentence - an act's evidence is a clause, and
+    the sentence is what a proposer citing the act would cite - by the same reader, with the same rules, as a cited
+    passage (_second_opinion with ``selected``): a hedge, a denial or another time stated of the act in its own sentence
+    holds the code, which reads exactly as it does when the act's sentence is cited. Only a hold is taken: this never
+    releases or excludes anything, and a reading of the selected sentence that holds nothing changes nothing."""
+    layout = gi_structure.clinical_layout(text)
+    spans: list[EvidenceSpan] = []
+    for span in source:
+        start, end = layout.sentence_for(span.start, span.end)
+        if end > start and all((s.start, s.end) != (start, end) for s in spans):
+            spans.append(EvidenceSpan(0, start, end, text[start:end], True))
+    own = checks.evidence_readings(text, spans, day)
+    if not own:
+        return None
+    families = _VAL_family_index(routing) if any(r.status == 'uncertain' for r in own) else {}
+    own = tuple(replace(r, other_service=True) if _other_service(r, legacy, families, text) else r for r in own)
+    outcome = checks.resolve_status(own + checks.routing_readings(finding), detectable=legacy in DETECTED_FAMILIES)
+    held = _second_opinion(outcome, found, code, text, inventory, routing, own, day, pages, selected=True)
+    return held if held.state != found.state else None
+
+
 def _second_opinion(old: checks.StatusOutcome, found: reconcile.Match, code: str, text: str,
                     inventory=None, routing: Optional[RoutingResult] = None, readings=(),
-                    day: Optional[date] = None, pages=()) -> reconcile.Match:
+                    day: Optional[date] = None, pages=(), *, selected: bool = False) -> reconcile.Match:
     """The documented service decides the code's status, with the routing-era reading as a second opinion that can
     only hold (ARCHITECTURE 5.10):
     - a hedge, a denial or a cancellation read in the code's OWN passage, when that passage is about the matched
@@ -1808,6 +1899,13 @@ def _second_opinion(old: checks.StatusOutcome, found: reconcile.Match, code: str
             reading = 'is not established as performed' if doubt.status in checks.POSITIVE else f'reads as {doubt.status}'
             name = checks.service_name(PROFILES[legacy_family(found.service.family)], code)
             why = checks.uncertain_reason(old, name) if old.state == 'uncertain' else checks.exclusion_reason(old, name)
+            if selected:
+                # _selected_passages_hold: the passage is the act's own, selected by CPT Studio - said so, never "cites"
+                return replace(found, state='uncertain', reason='readings_disagree', question=(
+                    f'Confirm whether {code} is supported: the passage that documents its act {reading}.'),
+                    detail=f'{found.detail} None of the passages the code cites shows that act; the routing-era reading '
+                           f'of the passage that documents it, which CPT Studio selected, holds it: {why} Held for the '
+                           'reviewer.')
             return replace(found, state='uncertain', reason='readings_disagree', question=(
                 f'Confirm whether {code} is supported: a passage it cites about this service {reading}.'),
                 detail=f'{found.detail} But the routing-era reading of the passage the code cites holds it: {why} '

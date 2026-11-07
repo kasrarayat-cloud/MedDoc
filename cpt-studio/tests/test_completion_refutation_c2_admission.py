@@ -110,16 +110,18 @@ class AnotherActReleaseTests(SimpleTestCase):
 
     def test_a_cited_failed_attempt_holds_beside_another_removed_polyp(self):
         """The cycle-1 another-act controls under the base reading: another polyp plainly removed beside the cited failed
-        attempt no longer releases the code; it is held for the reviewer whoever cites the failed attempt, and with the
-        removed polyp's own passage cited beside it (one reading over every proposer's passages). The release this
-        replaced was refuted twice; the hold is the declared cost (E|ANOTHER-failed-attempt)."""
+        attempt does not release the code; cited alone, the failure holds it for the reviewer whoever cites it. The
+        release this replaced was refuted twice, and the hold was its declared cost (E|ANOTHER-failed-attempt), which
+        the acceptance walk met (finding 5). The walk round changes the approach (engine._set_aside_attempts): with the
+        removed polyp's own passage cited beside it (one reading over every proposer's passages), the closed-form
+        failure is set aside and the code reads as with that passage cited alone - READY."""
         for body in (self.P1 + '\n' + self.B, self.B + '\n' + self.P1):
             text = colon(body)
             for who, result in three_ways(text, '45385', self.P1).items():
                 with self.subTest(body[:20], who=who):
                     self.assertEqual(outcome(result, '45385')['45385'][:2], HELD)
             joint = run(text, corti(('45385', span(text, self.P1))), [read('astra', [code(text, '45385', self.B)])])
-            self.assertEqual(outcome(joint, '45385')['45385'][:2], HELD)
+            self.assertEqual(outcome(joint, '45385')['45385'][:2], READY)
         # the removed polyp's own passage, cited alone, is READY: the hold is the cited failure's, not the code's
         text = colon(self.P1 + '\n' + self.B)
         self.assertEqual(outcome(run(text, corti(('45385', span(text, self.B)))), '45385')['45385'][:2], READY)
@@ -396,12 +398,14 @@ class UnitsTests(SimpleTestCase):
         self.assertEqual(self.units(text, (self.DONE, self.DONE2)), ('ready', 2))
 
     def test_a_participant_alone_has_one_unit(self):
-        """Cycle 2, units with Astra alone: a participant's admitted code is one entry, one unit, as before (held: one
-        of its passages is the failed attempt)."""
+        """Cycle 2, units with Astra alone: a participant's admitted code is one entry, one unit, as before. Held until
+        the walk round, because one of its passages is the failed attempt; that failure, cited beside the done
+        polypectomy's own passage, is now set aside (engine._set_aside_attempts), and the one unit rests on the one
+        documented act - READY."""
         text = colon(self.DONE + '\n' + self.FAILED)
         result = run(text, [], [read('astra', [code(text, '45385', self.DONE), code(text, '45385', self.FAILED)])])
         item = next(p for p in result.proposals if p.code == '45385' and p.bucket == 'selected')
-        self.assertEqual((item.status, item.units), ('needs_clarification', 1))
+        self.assertEqual((item.status, item.units), ('ready', 1))
 
     def test_an_entry_with_no_exact_passage_keeps_its_unit(self):
         """Cycle 2, units bounds: never fewer than one, and an entry with no exact passage keeps its unit (an empty test

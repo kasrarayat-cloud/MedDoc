@@ -748,4 +748,6 @@ class EngineVersionTests(SimpleTestCase):
         # installed 41e03656df61's @5 (P2's holds, the D15 base rule, the lead's L3; cux-hold.json, cux-lead.json); @7: the
         # harness repair (2026-11-05) reads differently from installed b0dc3446c64c's @6 (the negation release, P-ADMIT,
         # the act-included and unsupported-act reconciliation rules, a refused response as no available answer)
-        self.assertEqual(ENGINE_VERSION, 'cpt-studio-validation@9')  # the completion repair (2026-11-06)
+        # @9: the completion repair (2026-11-06); @10: the walk round (2026-11-07) reads differently from installed
+        # 6f306af1b030's @9 (a cited failed attempt set aside beside the code's own act; the selected passage's hold)
+        self.assertEqual(ENGINE_VERSION, 'cpt-studio-validation@10')

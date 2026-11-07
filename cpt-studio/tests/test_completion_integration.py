@@ -255,14 +255,17 @@ class AnotherActsDoubtTests(SimpleTestCase):
     FAILED = ('Hot snare polypectomy of a 15 mm pedunculated polyp in the sigmoid colon was attempted, but the snare could '
               'not be closed around the stalk, and the polyp was left in place.')
 
-    def test_a_participants_passage_about_the_failed_attempt_holds_the_code_for_the_reviewer(self):
-        # refutation cycle 2 (the two-cycle rule): the integration's another-act release is abandoned - refuted in
-        # cycles 1 and 2 - so a passage about another polyp's failed attempt, cited by any proposer, holds the code for
-        # the reviewer (the installed release's reading); the done polyp's own passage cited alone is READY
+    def test_a_participants_passage_about_the_failed_attempt_is_set_aside_beside_the_done_polyp(self):
+        # refutation cycle 2 (the two-cycle rule) abandoned the integration's another-act release, so a passage about
+        # another polyp's failed attempt held the code for the reviewer wherever it was cited - the declared cost the
+        # acceptance walk then met (finding 5). The walk round changes the approach (engine._set_aside_attempts): the
+        # closed-form failure cited BESIDE the done polyp's own passage, by any proposer, is set aside and the code reads
+        # as with that passage cited alone - READY; the failure cited alone still holds; the done polyp's own passage
+        # cited alone is READY
         text = self.HEAD + self.COLD + '\n' + self.FAILED + '\n'
         result = run(text, corti(('45385', span(text, self.COLD))), [read('astra', [code(text, '45385', self.FAILED)])])
         item = proposal(result, '45385')
-        self.assertEqual(item.status, 'needs_clarification')
+        self.assertEqual(item.status, 'ready')
         self.assertEqual((item.support['supporting'], item.support['unrelated']), ([0], [1]))
         alone = proposal(run(text, corti(('45385', span(text, self.FAILED))), [read('astra', [])]), '45385')
         self.assertEqual(alone.status, 'needs_clarification')

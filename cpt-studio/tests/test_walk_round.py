@@ -10,7 +10,12 @@ synthetic paraphrases of the shapes, never the walk sets' own text.
    (services._scope_switch).
 3. A course continued in its sentence reaches its later landmarks (detect._course_continued).
 4. A bolus the report names by its food as the subject of an impaction, removed by "brought out" (services).
-5. A sub-act's failure stated of its own instrument by a negated passive, inside the closed attempt form (detect)."""
+5. A sub-act's failure stated of its own instrument by a negated passive, inside the closed attempt form, cited beside
+   the code's own documented act: set aside, so the code reads as with that act's passage cited alone (detect recognises
+   the form; engine._set_aside_attempts decides). The round's first form consumed the negation in routing, which
+   released every code citing it - the abandoned another-act release - and the pinned cycle-2 cases caught it.
+6. The round's refutation (D1): a code none of whose passages shows its act rests on the act's passage CPT Studio selects,
+   which the routing-era second opinion reads in its whole sentence as it reads a cited passage (engine)."""
 from django.test import SimpleTestCase
 
 from studio.gi import detect
@@ -173,9 +178,85 @@ class NegatedPassiveFailureTests(SimpleTestCase):
     def test_the_other_polyps_failed_attempt_no_longer_holds_the_done_removal(self):
         self.assertEqual(self.reading(self.ATTEMPT)[0], 'ready')
 
+    def text(self, done=None):
+        return HEAD + 'Procedure: Colonoscopy\nThe colonoscope was advanced to the terminal ileum. ' + (done or self.DONE) \
+            + ' ' + self.ATTEMPT + '\n'
+
+    def test_the_same_passages_read_the_same_whoever_cited_which(self):
+        text = self.text()
+        done, attempt = span(text, self.DONE), span(text, self.ATTEMPT)
+        corti_done = run(text, corti(('45385', done)), [read('astra', [code(text, '45385', self.ATTEMPT)])])
+        corti_attempt = run(text, corti(('45385', attempt)), [read('astra', [code(text, '45385', self.DONE)])])
+        self.assertEqual((proposal(corti_done, '45385').status, proposal(corti_done, '45385').units), ('ready', 1))
+        self.assertEqual((proposal(corti_attempt, '45385').status, proposal(corti_attempt, '45385').units), ('ready', 1))
+        detail = next(c.detail for c in proposal(corti_done, '45385').checks if c.id == 'service.status')
+        self.assertIn("states another attempt's own failure", detail)
+
+    def test_the_failed_attempt_cited_alone_keeps_the_installed_hold(self):
+        """Nothing the code is matched to is cited beside the failure: the installed hold (the declared cost of the
+        abandoned another-act release) stands, for every proposer."""
+        text = self.text()
+        for result in (run(text, corti(('45385', span(text, self.ATTEMPT)))),
+                       run(text, (), [read('astra', [code(text, '45385', self.ATTEMPT)])])):
+            self.assertEqual(proposal(result, '45385').status, 'needs_clarification')
+
+    def test_a_unit_resting_on_the_failed_attempt_is_never_ready(self):
+        """Corti lists the code twice, once on the failed attempt: two units, one documented act - held, in either
+        order (the owner session's units defect, pinned since cycle 2)."""
+        text = self.text()
+        for first, second in ((self.DONE, self.ATTEMPT), (self.ATTEMPT, self.DONE)):
+            p = proposal(run(text, corti(('45385', span(text, first)), ('45385', span(text, second)))), '45385')
+            self.assertEqual((p.status, p.units), ('needs_clarification', 2))
+
+    def test_a_doubt_of_the_done_removal_itself_still_holds(self):
+        """Set aside, the failure takes nothing else with it: the done removal's own sentence is read as before."""
+        hedged = ('A 7 mm polyp in the transverse colon was removed with a cold snare, but it is unclear whether the '
+                  'polyp was removed or only biopsied.')
+        text = self.text(hedged)
+        selected = ProviderCode('selected', 'cpt', '45385', 'UNVERIFIED PROVIDER WORDING',
+                                (span(text, hedged), span(text, self.ATTEMPT)))
+        self.assertEqual(proposal(run(text, [selected]), '45385').status, 'needs_clarification')
+
     def test_outside_the_closed_form_the_doubt_stays(self):
         for attempt in ('The snare could not be closed around the stalk of the 12 mm sigmoid polyp.',
                         'Hot snare polypectomy of a 12 mm pedunculated polyp in the sigmoid colon was attempted, but the '
                         'snare could not be closed around the stalk, and the remainder of the examination was abandoned.'):
             with self.subTest(attempt):
                 self.assertNotEqual(self.reading(attempt)[0], 'ready')
+
+
+class SelectedPassageHoldTests(SimpleTestCase):
+    """The cited passage is another polyp's failed attempt in a form the base and the installed release already read as
+    that attempt's own failure ("..., but the snare failed; the polyp was left in place."), so the code rests on the act
+    CPT Studio selects. Its sentence is read by the routing-era second opinion exactly as a cited passage: a hedge or
+    another time there holds the code - which both releases read READY - and a plain act stays READY with the citation
+    flagged, as before. (The negated-passive form cited alone keeps the installed hold: NegatedPassiveFailureTests.)"""
+    HEDGED = ('A 6 mm polyp in the transverse colon was removed with a cold snare, but it is unclear whether the polyp '
+              'was removed or only biopsied.')
+    ATTEMPTS = ('Hot snare polypectomy of a 12 mm pedunculated polyp in the sigmoid colon was attempted, but the snare '
+                'failed; the polyp was left in place.',
+                'Snare polypectomy of a 12 mm pedunculated polyp in the sigmoid colon failed.')
+
+    def reading(self, attempt, other):
+        text = HEAD + 'Procedure: Colonoscopy\nThe colonoscope was advanced to the terminal ileum. ' + attempt + '\n' \
+            + other + '\n'
+        return proposal(run(text, corti(('45385', span(text, attempt)))), '45385')
+
+    def test_an_act_its_own_sentence_doubts_is_held(self):
+        for other in (self.HEDGED, self.HEDGED.replace('it is unclear', 'it is\nunclear'),
+                      'A 6 mm polyp in the transverse colon was removed with a cold snare at her last colonoscopy.'):
+            for attempt in self.ATTEMPTS:
+                with self.subTest(other=other, attempt=attempt):
+                    p = self.reading(attempt, other)
+                    self.assertEqual(p.status, 'needs_clarification')
+                    asked = ' '.join(c.question for c in p.clarifications)
+                    self.assertIn('Confirm whether 45385 is supported: the passage that documents its act', asked)
+                    status = next(c for c in p.checks if c.id == 'service.status')
+                    self.assertIn('which CPT Studio selected', status.detail)
+
+    def test_a_plain_act_stays_ready_with_the_citation_flagged(self):
+        for attempt in self.ATTEMPTS:
+            with self.subTest(attempt):
+                p = self.reading(attempt, 'A 6 mm polyp in the transverse colon was removed with a cold snare.')
+                self.assertEqual(p.status, 'ready')
+                self.assertEqual(next(c.status for c in p.checks if c.id == 'evidence.support'), 'warn')

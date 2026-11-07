@@ -671,8 +671,7 @@ def _doubt(an: Analysis, ts: int, te: int) -> Optional[str]:
             spans, index, _ = _groups(an, cs, ce, ts, te)
             token = next((t for t in cues.DOUBT_TOKEN.finditer(an.text, cs, ce)
                           if _attached(spans, index, t.start(), t.end())
-                          and _unexplained(an, clause, cs, ce, (t.start(), t.end()), ts, te)
-                          and not _negated_form_consumed(an, t.start())), None)
+                          and _unexplained(an, clause, cs, ce, (t.start(), t.end()), ts, te)), None)
             if token:
                 an.memo[key] = f"{DOUBT_PREFIX} '{token.group(0)}' in its clause"
                 break
@@ -6086,9 +6085,12 @@ ATTEMPT_CHARS = 240  # the attempt's own clause, at most (its subject and object
 # The walk round (2026-11-07, finding 5; a fresh blind report): the failure may also be stated of the attempted act's own
 # instrument by a negated passive - "Hot snare polypectomy of a 12 mm pedunculated polyp in the sigmoid colon was
 # attempted, but the snare could not be closed around the stalk, and the polyp was left in place." (the head is a word of
-# the attempt, as before); its negation is then the sub-act's own, not a doubt of the examination (_doubt), where the
-# services reader reads the attempted act as failed (_negated_form_consumed). The end may be ", and the polyp was left in
-# place." as well as the semicolon form.
+# the attempt, as before), ending at the full stop, at "; the polyp was left in place." or, for this failure alone, at
+# ", and the polyp was left in place.". Routing still reads that negation as a doubt, the installed reading: the round's
+# first form consumed it here (_doubt), which released every code citing it - the another-act release the owner's
+# two-cycle rule abandoned, reopened, and caught by the pinned cycle-2 cases. The form is only recognised here
+# (closed_attempt_failure); the engine alone decides when such a passage, cited beside the code's own act, does not
+# decide the code (engine._set_aside_attempts).
 _ATTEMPT_CORE = re.compile(r'[ \t\n]+(?:was|were)[ \t\n]+attempted[ \t\n]*,?[ \t\n]+but[ \t\n]+the[ \t\n]+'
                            r'(?P<head>[a-z]+)[ \t\n]+(?P<failed>(?:was|were)[ \t\n]+unsuccessful|failed'
                            r'|(?P<negated>could[ \t\n]+not[ \t\n]+be[ \t\n]+[a-z]+(?:ed|en)(?:[ \t\n]+(?:around|through|over|across|'
@@ -6100,8 +6102,11 @@ _RELATIVE = re.compile(r'\b(?:that|which|who|where|when|while)\b', re.A | re.I) 
 _ELLIPSIS_AFTER = re.compile(r'[ \t\n]*(?:so|as|neither|nor|likewise)\b', re.A | re.I)
 _CLAUSE_START_MARK = re.compile(r'[,;:.()\n]')
 _REASON = re.compile(r'[ \t\n]+(?:because[ \t\n]+of|due[ \t\n]+to)[ \t\n]+([^,;:.()\n]{1,80})', re.A | re.I)
-_LEFT_IN_PLACE = re.compile(r'(?:;|,[ \t\n]*and)[ \t\n]*the[ \t\n]+(?:polyps?|lesions?)[ \t\n]+(?:was|were)[ \t\n]+left[ \t\n]+in'
-                            r'[ \t\n]+place[ \t]*\.', re.A | re.I)
+_LEFT_IN_PLACE = re.compile(r';[ \t\n]*the[ \t\n]+(?:polyps?|lesions?)[ \t\n]+(?:was|were)[ \t\n]+left[ \t\n]+in[ \t\n]+'
+                            r'place[ \t]*\.', re.A | re.I)
+# the negated-passive failure's own second ending (the walk round): never the failure words', whose form stays installed
+_LEFT_IN_PLACE_AND = re.compile(r',[ \t\n]*and[ \t\n]+the[ \t\n]+(?:polyps?|lesions?)[ \t\n]+(?:was|were)[ \t\n]+left[ \t\n]+in'
+                                r'[ \t\n]+place[ \t]*\.', re.A | re.I)
 
 
 def _attempted_then_failed(an: Analysis, pos: int) -> Optional[tuple[int, int]]:
@@ -6135,6 +6140,8 @@ def _attempted_then_failed(an: Analysis, pos: int) -> Optional[tuple[int, int]]:
                 rest = text[tail:e]
                 stripped = rest.strip(' \t')
                 left = _LEFT_IN_PLACE.match(text, tail, e)
+                if left is None and core.group('negated') is not None:
+                    left = _LEFT_IN_PLACE_AND.match(text, tail, e)
                 if stripped.startswith('.') and not text[tail:e].split('.', 1)[1].strip():
                     end_at = tail + rest.index('.') + 1
                 elif not stripped:
@@ -6154,24 +6161,34 @@ def _attempted_then_failed(an: Analysis, pos: int) -> Optional[tuple[int, int]]:
     return None
 
 
-def _negated_form_consumed(an: Analysis, pos: int) -> bool:
-    """The walk round (finding 5): whether ``pos`` is a negation word inside the closed form's negated-passive failure
-    ("but the snare could not be closed around the stalk") whose attempt the documented-service reader reads as a
-    failed act of its own vocabulary (services._failed_act over the attempt's acts): one reader decides, the other
-    consumes, exactly as for the failure words (_consumed_by_the_services_reader)."""
-    if _attempted_then_failed(an, pos) is None:
+def closed_attempt_failure(text: str, start: int, end: int, service_date: Optional[date] = None) -> bool:
+    """The walk round (finding 5, the changed approach): whether the passage [start, end) is one closed attempt form whose
+    failure is a negated passive of the attempt's own word - "Hot snare polypectomy of a 12 mm pedunculated polyp in the
+    sigmoid colon was attempted, but the snare could not be closed around the stalk, and the polyp was left in place." -
+    its non-space text lying wholly inside the form, and whose attempt the documented-service reader reads, in its own
+    clause, as an attempt or a failure of it (services._attempt_or_failure), every act it reads there alike and at least
+    one. Routing reads that negation as a doubt (_doubt, the installed reading); this answers only what the passage is,
+    for the engine's narrow set-aside (engine._set_aside_attempts). One pass per sentence, memoised by _analysis."""
+    if not isinstance(text, str) or not (0 <= start < end <= len(text)):
         return False
-    s, e = an.lay.sentence_for(pos, pos + 1)
+    an = _analysis(text, _checked_date(service_date, 'closed_attempt_failure()'))[0]
+    lo = start + len(text[start:end]) - len(text[start:end].lstrip())
+    hi = end - (len(text[start:end]) - len(text[start:end].rstrip()))
+    if hi <= lo:
+        return False
+    s, e = an.lay.sentence_for(lo, lo + 1)
+    _attempted_then_failed(an, lo)  # reads the sentence's forms into the memo
     from studio.gi import services as gi_services  # local: the services reader reads routing lazily too
-    for fs, fe, begin, end_at, attempt_end, negated in an.memo.get(('attempted-then-failed', s, e), ()):
-        if negated and fs <= pos < fe:
-            # the attempt's own act, read by the services reader in its own clause: an attempt or a failure of it
-            # ("uncertain: attempted") - its outcome stated otherwise than done (services._attempt_or_failure)
-            acts = gi_services._acts_in(an.text, begin, attempt_end)
-            readings = gi_services.passage_readings(an.text, begin, end_at, an.service_date) if acts else None
-            return bool(readings) and all(
-                reading.status == 'uncertain' and gi_services._attempt_or_failure(reading.cues)
-                for reading, span in readings if span.start < attempt_end and begin < span.end)
+    for _fs, _fe, begin, end_at, attempt_end, negated in an.memo.get(('attempted-then-failed', s, e), ()):
+        if not negated or not (begin <= lo and hi <= end_at):
+            continue
+        if not gi_services._acts_in(an.text, begin, attempt_end):
+            return False
+        readings = [reading for reading, span in gi_services.passage_readings(an.text, begin, end_at, an.service_date)
+                    if span.start < attempt_end and begin < span.end]
+        # never vacuous: the attempt's own act is read, and every reading of it is an attempt or its failure
+        return bool(readings) and all(reading.status == 'uncertain' and gi_services._attempt_or_failure(reading.cues)
+                                      for reading in readings)
     return False
 
 
