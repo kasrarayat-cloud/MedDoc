@@ -3963,19 +3963,21 @@ the installed base and the cycle-3 head.
 regression inputs from here (c2 was read while finding the causes); the independent acceptance is the blind set c3,
 sealed 2026-11-07T03:12:06Z and not read until this round's code is frozen.
 
-**The repairs, as finally built** (shared readers and the engine; no document's text, no expected-code list):
+**The repairs, as finally built** (shared readers and the engine; no document's text, no expected-code list). Findings 1,
+5, 6 and 7 are repaired; findings 2, 3 and 4 stay OPEN under the two-cycle rule, each with its requirement kept for a changed
+approach:
 
 | finding | repair |
 |---|---|
 | 1 labelled paragraphs refused | structure: P1 reads an E/M visit only outside plan-kind sections; P2 is the installed rule (the course opens the label's sentence after an allow-listed frame) with the frame "after informed consent and a time-out" and at most two preparation statements before the course (the patient's position, a digital rectal examination: _PREPARATION, an allow-list); P3 reads a procedure section whose content is its heading line as a procedure line that declares; N1 no longer reads "last" before a non-time word, "informed consent", place objects, "on its own" or "<rectal/physical/...> examination" as another time, place or procedure |
-| 2 Savary dilators over a wire | services: the installed binding rule (the first later sentence naming a scope ends a label's binding); past it, inside a released "Upper endoscopy:" paragraph whose text before the act reads as the upper tract alone and names no other family's instrument, a site-less dilation whose own clause names a device routing's intervention vocabulary gives the upper endoscopy (cues.INTERVENTIONS "dilation (bougie)") is the upper endoscopy's (_upper_tract_device) |
+| 2 Savary dilators over a wire | OPEN: the binding's exceptions and the device-tract binding were each refuted twice and dropped under the two-cycle rule (round 4: a guide wire's brand name read as a dilation where the stricture was not dilated, and a paragraph rescan per mention cost 81.8 s on an admitted input); the binding is the installed rule and the shape is held, recorded in ACCURACY-RESIDUALS.md |
 | 3 extent from the first landmark | OPEN: both forms of a continuation reader were refuted (a segment named after a later mention; any words as its route) and dropped under the two-cycle rule; the shape reads as installed (the first landmark's incomplete extent) and is recorded in ACCURACY-RESIDUALS.md |
-| 4 bolus "brought out" | services: a food word as the subject of an impaction is a bolus antecedent only as an anchored plain finding of today; an endoscopic extraction stated "was [then] captured/grasped/netted/snared/secured/trapped/engaged and [then] brought out through the mouth" (or via the overtube), with no "by <agent>" after it, is the bolus phrase's own act predicate - for the mention the removal reader adds from it alone, never for another act of its clause, and only where both clause readings are silent |
+| 4 bolus "brought out" | OPEN: the out-words as done participles and the route-bound removal were each refuted twice and dropped under the two-cycle rule (round 4: "taken out ... by the emergency physician", "by Dr. <another physician>" and a bolus that fell back read done); services.py is the installed module (gi-services@6) and the shape is held, recorded in ACCURACY-RESIDUALS.md |
 | 5 another polyp's failed attempt held the done removal's code | engine._set_aside_attempts with detect.closed_attempt_failure: the closed attempt form's negated-passive failure (its subject a word of the attempt's own act mention; the services reader reading the attempt as an attempt or its failure) cited beside a cited performed act the code is matched to, on a lesion the reader tells apart (another site or size), with the units not exceeding those acts, is set aside: the code reads as with those passages cited alone. Cited alone the failure keeps the installed hold; routing keeps its installed doubt |
 | 6 the walk's code-list check | ops/verification/verify_browser.cjs lists a code excluded by a member's answer where its code was (U11) |
 | 7 the addendum response | POST /api/encounters/{id}/addenda answers {"revision": <number>}, never an internal id |
 
-**How it got there - three forms, each refuted, and what each taught:**
+**How it got there - four refutation rounds, and what each taught:**
 - **First form (3dfbeb7e)** consumed the negated-passive failure in routing (_doubt). The full suite failed 66 tests,
   nearly all the cycle-2 pinned another-lesion class: removing the doubt upstream released every code citing that
   sentence - a hedged, earlier or doubted removal read READY - the another-act release the owner's two-cycle rule had
@@ -4011,5 +4013,32 @@ sealed 2026-11-07T03:12:06Z and not read until this round's code is frozen.
   removal reading needs the endoscopic capture and closed adverbs, with no agent after it ("nearly brought out",
   "regurgitated and brought out", "seemingly", "by the emergency physician"). Its claims on the extent (routing equal
   to installed over 2,701 suite texts) and the set-aside held.
+- **Refutation round 4** (one lens on the two narrowed rules, cb3d7bfb, about 330 probes) returned 6 findings (4 HIGH,
+  2 MEDIUM), each reproduced here on the three trees - head READY, installed and base held. The device binding: a guide
+  wire's brand name ("Savary-Gilliard guide wire") was read as a dilation past the binding where the stricture was not
+  dilated; "Savary dilation is usually performed for such strictures" read done; and a paragraph rescan per site-less
+  mention cost 81.8 s against 1.5 s installed on an admitted input (380,880 characters, 981 mentions; measured here: 18.5 s
+  against 1.5 s at 190,630 characters, 16.1 s of it in the rule). The route-bound removal: "brought out through the mouth
+  by Dr. <another physician>", "taken out through the mouth by the emergency physician" (the clause reader reads "was
+  taken" as done, outside the closed form) and a bolus that fell back in the next clause read 43247 READY. Each rule was
+  the changed approach after two refutations of its predecessor, and this was its own second refutation, so both were
+  dropped (32003524): services.py and reconcile.py are the installed modules again, and walk findings 2 and 4 stay OPEN
+  beside finding 3, each pinned as the recorded open defect. The lens found no lost required reading.
 
-**Measured on the final head:** FINAL-MEASUREMENTS.
+**Measured on the final head (32003524):**
+- The four rounds' inputs, re-run with each lens's own probe (rounds 1 and 2: 1,675 and 1,146; rounds 3 and 4: 635): no
+  READY the installed release reads is lost and no installed incompleteness flag is dropped. The new READYs (55, 174 and
+  8) are the structure and set-aside repairs, and they are a strict subset of those read on cb3d7bfb, whose remainder was
+  exactly the dropped rules' 43247 and 43248 readings.
+- The 2,763-input differential scan (2,568 inputs, the 195 that need their document's date re-run with it): one READY
+  the installed release does not read, which the base reads; none lost, no installed warning dropped.
+- Corpus (627 entries): nothing moved from the pins, no false READY where the baseline had none.
+- The walk documents offline: c1b 45385 READY (finding 5; held on installed); c1a and all of c2 read as installed -
+  c2a 43248 and c2b 43247 held (findings 2 and 4), c2b 43239 READY with the incompleteness warning (finding 3).
+- Gates: the freeze holds; the battery has 6 declared movements and no new violation; the replay differs from the base
+  by its version labels alone (gi-routing@10, gi-services@6, cpt-studio-validation@10).
+- Full suite: 6,418 Django tests (2,034 + 2,276 + 2,108), ops 524, verification 43, node 135/65/135.
+- Install predictions (install/predict_w.sh on 32003524, over a read-only dump of 2026-11-07T07:33:34Z): the four
+  retained encounters read 4/4/2/6 READY with no open question; nothing is sent; the state recompute changes no
+  encounter on this revision, on the installed one, after the reassessments or on the rollback read; the planted
+  control is caught.
