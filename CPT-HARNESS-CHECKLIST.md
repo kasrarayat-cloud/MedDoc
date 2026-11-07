@@ -222,10 +222,10 @@ the progress log below.
 |---|---|
 | owner | session a12d8fb3 (integration and deployment) |
 | objective | the installed website assesses an uploaded GI PDF or Word document with Corti, Astra and Fable, supported proposals reach review, decisions persist, and the download matches them |
-| installed | `fd8040d71e44` at https://cpt.quillmd.com since 2026-11-06 (app phase 05:14-05:17Z); rollback image `cpt-studio:e6d451f03d86` |
-| candidate | branch `fix/cpt-studio-completion-20261106`: the five builders, refutation cycles 1 to 4 and the differential round over cycle 4's repair integrated (code `443740630`; the final scan's record and pins in the next commit); not installed |
-| current stage | 8: the differential round over cycle 4's repair (`wf_f8f66730-784`: structure 6, routing 3, answers 1 findings) answered toward the installed reading or the twin's (`443740630`); the final scan over 2,568 lens inputs of cycles 1-5 finds nothing open (22 READYs bounded by twins measured by hand, now pinned); corpus 0 new false READY (FALSE READY 35, FALSE HOLD 59); retained 4/4/2/6 READY byte-identical to cycle 3; gates hold; install predictions identical to cycles 3 and 4; the full suite green on `443740630` (6,390 Django tests, ops 524, verification 43, node 135/65/135; check and makemigrations clean) |
-| next action | the push (two-view), CI on the final head, ready, the merge (scripts/merge-pr.sh), the install declaration landed first and the install; the walk of c1 and the blind c2 |
+| installed | `6f306af1b030` at https://cpt.quillmd.com since 2026-11-07 (app phase 02:14-02:17Z; declaration `docs/foundation/mutations/20261107-cpt-studio-completion-install.md`); rollback image `cpt-studio:fd8040d71e44` |
+| candidate | none yet: the next round (the walk findings 1-7 of `docs/deploy-reports/20261107-cpt-studio-6f306af1-install-and-walk.md`) starts from `main` |
+| current stage | 9: installed and walked. The install matched its declaration and sent nothing; the retained cases read 4/4/2/6 READY live. The acceptance walk failed: blind c2 1 of 3, c1 1 of 3 - four clearly documented codes held (the labelled release refused by allow-lists; a dilation and a bolus removal phrasing; extent from the first landmark; a failed act outside the closed form holding another act's code), the walk's code-list check out of date, and the addendum response carrying a revision id |
+| next action | the next round on findings 1-7: a changed approach for the labelled release and for another act's doubt (both already refuted twice); the readers for dilation, bolus removal and extent; the walk's list check; the addendum response. Then refutation, suite, CI, install, a fresh blind set c3 and the walk of c1, c2 and c3 |
 
 ### Unresolved defects (each closed only by acceptance evidence)
 
@@ -258,9 +258,9 @@ the progress log below.
 | [ ] | 3. Preserve equal proposal eligibility (C3) | IN PROGRESS | IMPLEMENTED, VERIFIED OFFLINE | `443740630` | `docs/cpt-harness/completion-20261106/table-repin.md` (no participant row reads differently from Corti's selection) | install; the walk (C7) |
 | [ ] | 4. Fix false positives as well as false holds (C4) | IN PROGRESS | IMPLEMENTED, VERIFIED OFFLINE | `443740630` | corpus: no FALSE READY beyond the installed baseline; FALSE READY 57 to 35, FALSE HOLD 81 to 59 (39 and 51 at integration; cycles 2-4 re-pinned, the differential round moves none) | install; the walk (C7) |
 | [ ] | 5. Make questions and statuses truthful (C5) | IN PROGRESS | IMPLEMENTED, VERIFIED OFFLINE | `443740630` | `tests/test_completion_answers.py` (the chain, the binding, D7 unchanged) | install; the walk (C7) |
-| [x] | 6. Prove the repair against retained evidence first (C6) | PASS | VERIFIED OFFLINE | `443740630` (byte-identical since cycle 3) | the four retained cases recomputed in memory on a migrated throwaway copy (39f0ac49 43239, 45380, 45385, 43247 READY; d44a77b3 43239, 45385, 45381, 43247 READY; e888f9ce 45385, 45380 READY with no incompleteness; 88d9db32 its six READY); the gates (`tests/fixtures/gi4/declarations/completion-integration.json`) | re-run after any refutation repair (reopened if disproved) |
-| [ ] | 7. Complete meaningful independent acceptance (C7) | NOT RUN | - | - | - | after item 6 |
-| [ ] | 8. Install and verify the served result (C8) | NOT RUN | - | - | - | with item 7 |
+| [x] | 6. Prove the repair against retained evidence first (C6) | PASS | VERIFIED LIVE | `6f306af1b030` | the four retained encounters re-assessed on the installed revision read exactly as predicted (39f0ac49 43239, 45380, 45385, 43247 READY; d44a77b3 43239, 45385, 45381, 43247 READY; e888f9ce 45385, 45380 READY, no incompleteness flag; 88d9db32 its six READY); `docs/deploy-reports/20261107-cpt-studio-6f306af1-install-and-walk.md` | re-run after any repair (reopened if disproved) |
+| [ ] | 7. Complete meaningful independent acceptance (C7) | FAIL | VERIFIED LIVE | `6f306af1b030` | the walk on cpt.quillmd.com: blind c2 1 of 3 (c2c pass; c2a, c2b fail), c1 1 of 3 (c1a pass; c1b, c1c fail); every failure a hold or an instrument/privacy finding, no false READY; Stop/Resume, answers, addendum, reload persistence and downloads observed working; `docs/deploy-reports/20261107-cpt-studio-6f306af1-install-and-walk.md` | the next round, then a fresh blind set c3 |
+| [ ] | 8. Install and verify the served result (C8) | IN PROGRESS | VERIFIED LIVE | `6f306af1b030` | installed via the ruled-mutation door, every declared row matched, nothing sent, rollback image kept; the served walk found the addendum response carrying an internal revision id (finding 7, pre-existing) | with the next round's install |
 | [ ] | 9. Close with evidence of the result (C9) | NOT RUN | - | - | - | last |
 
 ### Tests, provider runs, usage and receipts
@@ -956,3 +956,13 @@ the progress log below.
     byte-identical; freeze holds, the battery has 6 declared movements, and the replay differs by the labels alone; the
     install predictions are identical to cycles 3 and 4; the full suite green on `443740630` (6,390 Django tests, ops 524, verification 43, node 135/65/135; check and makemigrations clean).
   - No provider request has been sent in this repair.
+- **2026-11-07T02:45Z Completion repair: installed as `6f306af1b030` and walked; the acceptance failed.**
+  - PR #1480 merged as `6f306af1`; its declaration (#1481, `a7d2b517`) committed at 01:49:43Z before the act. Every phase
+    ran through the ruled-mutation door and matched its declaration: image fully cached (packages identical to the
+    live image), 301/301 availability samples 200, migration 0013 only, states_recomputed unchanged, verify clean (the
+    vhost differs only in its proxy_pass port), the reassess making exactly the declared rows, e888f9ce's two
+    invalidations included. Nothing was sent.
+  - The walk (Corti, Astra, Fable, concurrency one): blind c2 1 of 3, c1 1 of 3; no false READY anywhere. Findings
+    1-7 are in `docs/deploy-reports/20261107-cpt-studio-6f306af1-install-and-walk.md`, each cause read from the live
+    records and reproduced offline; findings 1-4 read the same or worse on the installed base (not regressions).
+  - Usage: c2 15 runs (+0.145872 Corti credits), c1 19 runs (+0.129748); no unknown outcome left.
