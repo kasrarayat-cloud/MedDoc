@@ -143,6 +143,25 @@ class BindingTests(SimpleTestCase):
                 result = run(text, corti(('43251', span(text, 'removed with a cold snare'))))
                 self.assertNotEqual(proposal(result, '43251').status, 'ready')
 
+    def test_a_device_binds_only_inside_its_own_upper_endoscopy_paragraph(self):
+        """The round's third refutation: Savary bougies dilate anastomotic strictures too, a Savary guidewire carries a
+        colonic balloon - so the device only confirms an "Upper endoscopy:" paragraph's own label, in a narrative that has
+        not left the upper tract or named another family's instrument."""
+        egd_ok = HEAD + IND + self.WIRE + 'Impression: Dilated.\n'
+        quote = 'Savary dilators of 15 and 16 mm were then passed over the wire'
+        self.assertEqual(proposal(run(egd_ok, corti(('43248', span(egd_ok, quote)))), '43248').status, 'ready')
+        colon = (HEAD + IND + EGD_OPEN + 'The esophagus, stomach and duodenum were normal.\n'
+                 + 'Colonoscopy: ' + COURSE + 'The colonoscope was withdrawn to the colorectal anastomosis, where a tight '
+                 'stricture was found. Savary dilators of 15 and 16 mm were then passed over a guidewire across the '
+                 'stricture.\nImpression: Anastomotic stricture dilated.\n')
+        result = run(colon, corti(('43248', span(colon, 'Savary dilators of 15 and 16 mm were then passed over a guidewire'))))
+        self.assertNotEqual(proposal(result, '43248').status, 'ready')
+        switched = (HEAD + IND + EGD_OPEN + 'A Savary guidewire was passed through the scope into the gastric antrum, and '
+                    'the scope was withdrawn over the wire. The colonoscope was then introduced. Savary bougies were passed '
+                    'across the anastomotic stricture.\n' + COL + 'Impression: Dilated.\n')
+        result = run(switched, corti(('43248', span(switched, 'Savary bougies were passed across the anastomotic stricture'))))
+        self.assertNotEqual(proposal(result, '43248').status, 'ready')
+
     def test_a_switch_in_the_first_sentence_ends_it_there(self):
         first = ('Upper endoscopy: The gastroscope was advanced under direct visualization into the esophagus and to the '
                  'second portion of the duodenum and then withdrawn, and the pediatric scope was introduced. A 6 mm '
@@ -218,7 +237,13 @@ class BolusRemovalTests(SimpleTestCase):
                      'The bolus was pushed into the stomach.',
                      # the round's refutation (acts 3): the particle without its route out of the body
                      'The bolus pulled out of the Roth net and fell back into the esophagus.',
-                     'The bolus pulled out of the net and remained impacted in the distal esophagus.'):
+                     'The bolus pulled out of the net and remained impacted in the distal esophagus.',
+                     # the third refutation: no endoscopic capture, a hedge, an intention, another agent
+                     'The bolus was nearly brought out through the mouth, but it slipped from the net and fell back.',
+                     'The bolus was regurgitated and brought out through the mouth.',
+                     'The bolus was seemingly brought out through the mouth.',
+                     'The bolus was to be brought out through the mouth, but it fragmented and passed into the stomach.',
+                     'The bolus was grasped and brought out through the mouth by the emergency physician.'):
             with self.subTest(tail):
                 self.assertNotIn(('foreign_body', 'performed'), self.acts(tail))
 

@@ -223,9 +223,9 @@ the progress log below.
 | owner | session a12d8fb3 (integration and deployment) |
 | objective | the installed website assesses an uploaded GI PDF or Word document with Corti, Astra and Fable, supported proposals reach review, decisions persist, and the download matches them |
 | installed | `6f306af1b030` at https://cpt.quillmd.com since 2026-11-07 (app phase 02:14-02:17Z; declaration `docs/foundation/mutations/20261107-cpt-studio-completion-install.md`); rollback image `cpt-studio:fd8040d71e44` |
-| candidate | none yet: the next round (the walk findings 1-7 of `docs/deploy-reports/20261107-cpt-studio-6f306af1-install-and-walk.md`) starts from `main` |
-| current stage | 9: installed and walked. The install matched its declaration and sent nothing; the retained cases read 4/4/2/6 READY live. The acceptance walk failed: blind c2 1 of 3, c1 1 of 3 - four clearly documented codes held (the labelled release refused by allow-lists; a dilation and a bolus removal phrasing; extent from the first landmark; a failed act outside the closed form holding another act's code), the walk's code-list check out of date, and the addendum response carrying a revision id |
-| next action | the next round on findings 1-7: a changed approach for the labelled release and for another act's doubt (both already refuted twice); the readers for dilation, bolus removal and extent; the walk's list check; the addendum response. Then refutation, suite, CI, install, a fresh blind set c3 and the walk of c1, c2 and c3 |
+| candidate | the walk round, branch `fix/cpt-studio-walk-round-20261107` (findings 1, 2, 4, 5, 6 and 7 of `docs/deploy-reports/20261107-cpt-studio-6f306af1-install-and-walk.md` repaired; finding 3 OPEN, recorded); three refutation rounds; not yet merged or installed |
+| current stage | 9 again for the walk round: built, refuted three times (14, 8 and the third round's findings), the two-cycle rule applied to three mechanisms; full suite and gates green; the install, the blind c3 walk and the c1/c2 regression walks to follow |
+| next action | push, PR and CI; merge; a prospective declaration (baseline, image precheck, predictions, citation) landed before the act; install through the ruled-mutation door; build c3's manifest from the sealed set once frozen; walk c3, then c1 and c2 as regression; record |
 
 ### Unresolved defects (each closed only by acceptance evidence)
 
@@ -244,6 +244,7 @@ the progress log below.
 | U11 | no answer recomputes the assessment (answers.py:705-711; the engine has no member-answer input); stored questions stay open while the customer page says answered (serializers.py:155-156); answers bind only to (revision, code, family, fact), so 39f0ac49's engine@7 answers exclude engine@8's codes (models.py:430-446; answers.py:347-362) | stage-1 trace (c1-questions) | OPEN |
 | U12 | one fact, three readers: section kind, act status (copied, then counted again as a second opinion), date binding, performer, extent, lesion, segmentation; each with a measured disagreement | stage-1 trace, "One fact, three readers"; corpus group D | OPEN |
 | U13 | adjacent: the interventions fact lists a failed attempt's "hot snare" (detect.py:5921-5935); "right and left colon" reads as the descending colon (services.py:102, :3713); "the polyp was left in place" leaves the disposition unknown (services.py:6004-6018) | e888f9ce; stage-1 trace | OPEN |
+| U14 | walk finding 3: a coordinated reach after a relative aside ("advanced into the stomach, which was normal ..., and through the pylorus to the second portion of the duodenum") reads the first landmark's incomplete extent; codes stay READY with a false incompleteness warning | c2b; ACCURACY-RESIDUALS.md "The walk round"; two forms of a continuation reader refuted and dropped under the two-cycle rule | OPEN |
 | Q1 | owner question (class (a)): does 43247 cover a food bolus pushed into the stomach? 13 corpus entries wait on it | corpus RULING entries | OWNER |
 | Q2 | owner question: two dilation techniques on one stricture (an NCCI question; NCCI unconnected) | corpus | OWNER |
 | L1 | pypdf 6.21.2's seven denial-of-service advisories: accounted for, not resolved | `docs/cpt-harness/repair3-20261105/pypdf-advisories-accounting.md` | LIMITATION, reported until resolved |
@@ -966,3 +967,20 @@ the progress log below.
     1-7 are in `docs/deploy-reports/20261107-cpt-studio-6f306af1-install-and-walk.md`, each cause read from the live
     records and reproduced offline; findings 1-4 read the same or worse on the installed base (not regressions).
   - Usage: c2 15 runs (+0.145872 Corti credits), c1 19 runs (+0.129748); no unknown outcome left.
+- **2026-11-07T06:30Z The walk round: repaired, refuted three times, ready for its PR.**
+  - Branch `fix/cpt-studio-walk-round-20261107` from `a7d2b517`: findings 1 (the labelled release: P1, P2 installed plus
+    consent/time-out and two preparation statements, P3, N1), 2 (a Savary dilation bound by its upper-tract device),
+    4 (a bolus "brought out through the mouth" as the bolus phrase's own removal), 5 (another polyp's closed-form
+    failure set aside only beside the code's own cited act on a lesion told apart), 6 (the walk's list check) and 7 (the
+    addendum response) repaired in the shared readers and the engine; finding 3 OPEN (U14).
+  - The first form of finding 5 consumed the failure in routing; the full suite's 66 pinned failures showed it reopened
+    the abandoned another-act release, and the approach changed. Refutation round 1 (four lenses, 14 findings) closed
+    every open rule to the installed one plus what the walk needs; round 2 (two lenses, 8 findings) refuted three
+    mechanisms a second time, and the owner's two-cycle rule was applied to each (patch abandoned, approach changed,
+    requirement kept - finding 3 left open rather than shipped a third time); round 3 attacks the changed approaches.
+  - Measured on `f8f72354`: the lenses' 2,821 inputs, re-run with their own probes, lose no READY the installed release
+    reads and drop no incompleteness flag; the 2,763-input scan differs from installed by one READY the base reads; the
+    corpus moves nothing (FALSE READY 35, 0 new); the walk documents offline: c2a 43248, c2b 43239 and 43247, c1b 45385
+    READY; full suite green (6,416 Django tests, ops 524, verification 43, node 135/65/135); freeze holds, the battery
+    has 6 declared movements, the replay differs by its labels alone; the install predictions (on `bf5a815d`) match the
+    installed reading, nothing sent.

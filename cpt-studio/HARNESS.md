@@ -3968,9 +3968,9 @@ sealed 2026-11-07T03:12:06Z and not read until this round's code is frozen.
 | finding | repair |
 |---|---|
 | 1 labelled paragraphs refused | structure: P1 reads an E/M visit only outside plan-kind sections; P2 is the installed rule (the course opens the label's sentence after an allow-listed frame) with the frame "after informed consent and a time-out" and at most two preparation statements before the course (the patient's position, a digital rectal examination: _PREPARATION, an allow-list); P3 reads a procedure section whose content is its heading line as a procedure line that declares; N1 no longer reads "last" before a non-time word, "informed consent", place objects, "on its own" or "<rectal/physical/...> examination" as another time, place or procedure |
-| 2 Savary dilators over a wire | services: the installed binding rule (the first later sentence naming a scope ends a label's binding); a site-less dilation past it whose own clause names a device routing's own intervention vocabulary reads as the upper tract's alone (cues.INTERVENTIONS "dilation (bougie)": a bougie, Savary, Maloney) is the upper endoscopy's (_upper_tract_device), as an act naming its own site binds by it |
+| 2 Savary dilators over a wire | services: the installed binding rule (the first later sentence naming a scope ends a label's binding); past it, inside a released "Upper endoscopy:" paragraph whose text before the act reads as the upper tract alone and names no other family's instrument, a site-less dilation whose own clause names a device routing's intervention vocabulary gives the upper endoscopy (cues.INTERVENTIONS "dilation (bougie)") is the upper endoscopy's (_upper_tract_device) |
 | 3 extent from the first landmark | OPEN: both forms of a continuation reader were refuted (a segment named after a later mention; any words as its route) and dropped under the two-cycle rule; the shape reads as installed (the first landmark's incomplete extent) and is recorded in ACCURACY-RESIDUALS.md |
-| 4 bolus "brought out" | services: a food word as the subject of an impaction is a bolus antecedent only as an anchored plain finding of today; a removal stated "was [captured and] brought out through the mouth" (or via the overtube) is the bolus phrase's own act predicate - for the mention the removal reader adds from it alone, never for another act of its clause, and only where its clause says nothing else |
+| 4 bolus "brought out" | services: a food word as the subject of an impaction is a bolus antecedent only as an anchored plain finding of today; an endoscopic extraction stated "was [then] captured/grasped/netted/snared/secured/trapped/engaged and [then] brought out through the mouth" (or via the overtube), with no "by <agent>" after it, is the bolus phrase's own act predicate - for the mention the removal reader adds from it alone, never for another act of its clause, and only where both clause readings are silent |
 | 5 another polyp's failed attempt held the done removal's code | engine._set_aside_attempts with detect.closed_attempt_failure: the closed attempt form's negated-passive failure (its subject a word of the attempt's own act mention; the services reader reading the attempt as an attempt or its failure) cited beside a cited performed act the code is matched to, on a lesion the reader tells apart (another site or size), with the units not exceeding those acts, is set aside: the code reads as with those passages cited alone. Cited alone the failure keeps the installed hold; routing keeps its installed doubt |
 | 6 the walk's code-list check | ops/verification/verify_browser.cjs lists a code excluded by a member's answer where its code was (U11) |
 | 7 the addendum response | POST /api/encounters/{id}/addenda answers {"revision": <number>}, never an internal id |
@@ -4003,5 +4003,13 @@ sealed 2026-11-07T03:12:06Z and not read until this round's code is frozen.
   (a crash on more act spots than the reader reads; one reading per form, not per cited span; only a cited span holding
   the failure is set aside; the reason quotes at most two). The dated-removal case (attempts 3) reads exactly as the
   installed release reads its twin - the recorded cycle-4 residual - and is ruled parity.
+
+- **Refutation round 3** (one lens on the changed approaches, f8f72354) returned 4 findings (3 HIGH, 1 MEDIUM), all in the
+  two new approaches - their first refutation, so repaired in place: the device binding now only confirms an "Upper
+  endoscopy:" paragraph's own label in a narrative that has not left the upper tract (Savary bougies dilate
+  anastomotic strictures, a Soehendra bougie a bile duct, a Savary guidewire carries a colonic balloon), and the
+  removal reading needs the endoscopic capture and closed adverbs, with no agent after it ("nearly brought out",
+  "regurgitated and brought out", "seemingly", "by the emergency physician"). Its claims on the extent (routing equal
+  to installed over 2,701 suite texts) and the set-aside held.
 
 **Measured on the final head:** FINAL-MEASUREMENTS.

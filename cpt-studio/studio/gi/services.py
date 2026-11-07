@@ -4170,12 +4170,17 @@ _FUNCTION_WORDS = _PREPOSITIONS | _RELATIVES | _AUXILIARIES | _CLAUSE_WORDS
 # out by the patient" as removals.
 _ROUTE_OUT = _rx(r'\b(?:brought|taken|pulled)[ \t\n]+out[ \t\n]+(?:through|via)[ \t\n]+the[ \t\n]+'
                  r'(?:mouth|oropharynx|overtube|oral[ \t\n]+cavity)\b')
-# the completed passive the route-bound removal must close (the walk round's last check: "was to be brought out through
-# the mouth, but it fragmented" states an intention): "was|were [adverb] [<participle> and [adverb]] brought out ..."
-_DONE_ROUTE_OUT = _rx(r'\b(?:was|were)[ \t\n]+(?:(?:then|subsequently|successfully|finally|[a-z]+ly)[ \t\n]+)?'
-                      r'(?:[a-z]+ed[ \t\n]+and[ \t\n]+(?:(?:then|subsequently|successfully|finally|[a-z]+ly)[ \t\n]+)?)?'
-                      r'(?:brought|taken|pulled)[ \t\n]+out[ \t\n]+(?:through|via)[ \t\n]+the[ \t\n]+'
-                      r'(?:mouth|oropharynx|overtube|oral[ \t\n]+cavity)\b')
+# the endoscopic extraction the route-bound removal must close: "was|were [then|...] captured|grasped|netted|snared|
+# secured|trapped|engaged and [then|...] brought|taken|pulled out through|via the <route>" - the device's capture, then
+# the route out (the walk's c2b shape). The round's third refutation found the bare passive open ("was nearly brought
+# out", "regurgitated and brought out", a hedge adverb "seemingly"), so the adverbs are an allow-list and the capture is
+# required; an agent after it ("... by the emergency physician") is never an endoscopic removal (_AGENT_AFTER)
+_ROUTE_ADVERB = r'(?:(?:then|subsequently|successfully|finally|gently|carefully|easily)[ \t\n]+)?'
+_DONE_ROUTE_OUT = _rx(r'\b(?:was|were)[ \t\n]+' + _ROUTE_ADVERB
+                      + r'(?:captured|grasped|netted|snared|secured|trapped|engaged)[ \t\n]+and[ \t\n]+' + _ROUTE_ADVERB
+                      + r'(?:brought|taken|pulled)[ \t\n]+out[ \t\n]+(?:through|via)[ \t\n]+the[ \t\n]+'
+                        r'(?:mouth|oropharynx|overtube|oral[ \t\n]+cavity)\b')
+_AGENT_AFTER = _rx(r'\bby[ \t\n]+(?:the|a|an|his|her|their)\b')
 REMOVAL_PREDICATE = _rx(r'\b(?:removed|retrieved|extracted|(?:brought|taken|pulled)[ \t\n]+out[ \t\n]+(?:through|via)'
                         r'[ \t\n]+the[ \t\n]+(?:mouth|oropharynx|overtube|oral[ \t\n]+cavity))\b')
 # the verb group right before a participle: auxiliaries, modals, negations and adverbs ("was then", "could not be")
@@ -5004,15 +5009,29 @@ def _beyond_note_reach(part, anat) -> bool:
                                      for name, region, _, _ in anat)
 
 
-def _upper_tract_device(text: str, clause, present: Sequence[str]) -> bool:
-    """Whether ``clause`` (start, end) names a dilation device routing's own intervention vocabulary reads as the upper
-    endoscopy's alone (cues.INTERVENTIONS 'dilation (bougie)': a bougie, Savary, Maloney) and that service is documented.
-    The walk round (2026-11-07, finding 2): one reader's device-to-family reading, read by the other."""
+def _upper_tract_device(text: str, pos: int, clause, present: Sequence[str]) -> bool:
+    """The walk round (2026-11-07, finding 2): whether a site-less dilation at ``pos`` past a labelled paragraph's binding
+    is still the upper endoscopy's by its device - its clause names a device routing's intervention vocabulary gives the
+    upper endoscopy alone (cues.INTERVENTIONS 'dilation (bougie)': a bougie, Savary, Maloney), it lies in a released
+    "Upper endoscopy:" paragraph, and that paragraph's text before it names the upper tract's landmarks or route alone
+    and no other family's instrument. The round's third refutation found the device alone open (Savary bougies dilate
+    anastomotic strictures, a Soehendra bougie a bile duct, a Savary guidewire carries a colonic balloon), so the device
+    only confirms the paragraph's own label, in a narrative that has not left its tract."""
     if 'gi.egd' not in present or not clause:
         return False
     pattern = next((p for label, p, families in _cues.INTERVENTIONS
                     if label == 'dilation (bougie)' and tuple(families) == ('gi.egd',)), None)
-    return pattern is not None and pattern.search(text, clause[0], clause[1]) is not None
+    if pattern is None or pattern.search(text, clause[0], clause[1]) is None:
+        return False
+    from studio.gi import structure as gi_structure  # local, as in _labelled_parts
+    original = _ORIGINAL.get()
+    source = original if isinstance(original, str) and len(original) == len(text) else text
+    para = next((p for p in gi_structure.released(source) if p.start <= pos < p.end), None)
+    if para is None or para.family != 'gi.egd':
+        return False
+    if gi_structure._course_tract(source, para.start, pos) != 'upper':
+        return False
+    return not any(_instrument_family(m.group(0)) not in ('', 'gi.egd') for m in INSTRUMENTS.finditer(source, para.start, pos))
 
 
 def _family_for_act(kind: str, region: str, part_family: str, present: Sequence[str],
@@ -6305,7 +6324,7 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     fam = next(f for f, dd in drafts.items() if dd.id == bound.service)
                 else:
                     fam = _family_for_act(kind, region, act_part_family, present_families, binding_families)
-                    if not fam and kind == 'dilation' and _upper_tract_device(text, clause, present_families):
+                    if not fam and kind == 'dilation' and _upper_tract_device(text, ms, clause, present_families):
                         # the walk round (finding 2; the binding's exceptions were refuted twice and dropped): a site-less
                         # dilation whose own clause names a device routing reads as the upper tract's alone ("Savary-
                         # Gilliard dilators of 15, 16 and 17 mm were then passed over the wire") is the upper endoscopy's,
@@ -6337,7 +6356,8 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 route_out = (ms, me) in removal_at and _ROUTE_OUT.search(text, *removal_at[(ms, me)]) is not None \
                     and any(m.end() == removal_at[(ms, me)][1]
                             for m in _DONE_ROUTE_OUT.finditer(text, max(0, removal_at[(ms, me)][0] - 80),
-                                                              removal_at[(ms, me)][1]))
+                                                              removal_at[(ms, me)][1])) \
+                    and not _AGENT_AFTER.search(text, removal_at[(ms, me)][1], _clause_for(cls, removal_at[(ms, me)][0])[1])
                 if route_out and reading.status == 'uncertain' and len(reading.cues) == 1 \
                         and reading.cues[0] in SILENT_READINGS:
                     # the walk round (2026-11-07, finding 4; its participle form was refuted twice and dropped): the
