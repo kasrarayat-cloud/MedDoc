@@ -1411,6 +1411,10 @@ HARNESS_REPAIR_3_SUPERSCRIPT_SHA256 = '9a638ec9cf208ceda0d9d1e85416d2616050f5556
 # HARNESS_REPAIR_3_SUPERSCRIPT_SHA256 exactly with the labels put back to installed fd8040d71e44's
 # (completion_reader_labels), and this at its own labels.
 COMPLETION_SUPERSCRIPT_SHA256 = '640751a967f3028231967f1c9f6f0f84401720fd0e132d1aa470848395a752c7'
+# The walk round (2026-11-07) moved the routing, inventory and engine labels: this head makes
+# COMPLETION_SUPERSCRIPT_SHA256 exactly with the labels put back to installed 6f306af1b030's (walk_round_reader_labels),
+# and this at its own labels.
+WALK_ROUND_SUPERSCRIPT_SHA256 = '4b32e51684a813acdb41be93c02ab0d38d620a5c75d0adf93910bd3a5f247aa9'
 
 
 def installed_reader_labels():
@@ -1458,6 +1462,17 @@ def completion_reader_labels():
     return stack
 
 
+def walk_round_reader_labels():
+    """The reader labels as installed 6f306af1b030 records them (tests.test_gi4_state's map), for the pins that prove the
+    walk round's head reads their inputs exactly as the completion repair does, the labels apart."""
+    from contextlib import ExitStack
+    from tests.test_gi4_state import WALK_ROUND_INSTALLED_LABELS
+    stack = ExitStack()
+    for (module, name), value in WALK_ROUND_INSTALLED_LABELS.items():
+        stack.enter_context(mock.patch.object(module, name, value))
+    return stack
+
+
 def install_endoscopy_pfs():
     """One CMS PFS source covering 2026-10-21 in which 45378 and 45385 have multiple procedure indicator 3 (synthetic
     values, exactly the refutation lens's)."""
@@ -1498,7 +1513,12 @@ class RetrievalFailureTests(OperatorReads, HarnessCase):
             extraction_messages=tuple(revision.messages), second=None, second_scope=None))
 
     def test_a_corti_code_of_superscript_digits_beside_an_endoscopy_is_assessed_as_the_round_4_head_did(self):
-        self.superscript(COMPLETION_SUPERSCRIPT_SHA256)
+        self.superscript(WALK_ROUND_SUPERSCRIPT_SHA256)
+
+    def test_at_the_walk_round_installed_labels_the_superscript_code_is_the_completion_digest_exactly(self):
+        # the walk round (2026-11-07): the labels apart, this head reads it as installed 6f306af1b030 does
+        with walk_round_reader_labels():
+            self.superscript(COMPLETION_SUPERSCRIPT_SHA256)
 
     def test_at_the_completion_installed_labels_the_superscript_code_is_harness_repair_3s_digest_exactly(self):
         # the completion repair (2026-11-06): the labels apart, this head reads it as installed fd8040d71e44 does

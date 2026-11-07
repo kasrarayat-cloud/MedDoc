@@ -427,6 +427,10 @@ HARNESS_REPAIR_3_ROUND_4_SHA256 = '3ff6ec5e45479d45f396b81fda06ec70229f3a49ad270
 # installed fd8040d71e44's (completion_reader_labels) this head makes exactly the two above, and at its own labels these.
 COMPLETION_HEAD_SHA256 = '6a631b87128532ea8b3254e1d8f287428f22378e76ea7c9540692c77dc07e6a1'
 COMPLETION_ROUND_4_SHA256 = 'a850ca98983b71589a6cc1cea3343eeee3fa9e3daee9af540276c7144d6b41b1'
+# The walk round (2026-11-07) moved the routing, inventory and engine labels: with them put back to installed
+# 6f306af1b030's (walk_round_reader_labels) this head makes exactly the two above, and at its own labels these.
+WALK_ROUND_HEAD_SHA256 = '1eb4c2ae20726b6c877dada9c81c342d32daf7de0ceb51b01c5cc756c37e9a1a'
+WALK_ROUND_ROUND_4_SHA256 = '7c05d952dd720e6ecc745e6e6ba4f50d7ba6b0a23d5cbb763fa7d7f8362c893b'
 IMPORTED = ('cms-mue-practitioner-2026q4', 'cms-pfs-rvu26d')
 SELECTIONS = (('45385', SNARE), ('45378', REACHED))
 # What a proposal row and a clarification row hold, compared field by field (every field but its ids and its row).
@@ -476,7 +480,7 @@ class ImportedReferenceParityTests(OperatorReads, ArchiveMixin, TestCase):
 
     def test_with_the_importers_note_it_is_the_declared_head_digest(self):
         assessment = self.assess()
-        self.assertEqual(assessment.sha256, COMPLETION_HEAD_SHA256)
+        self.assertEqual(assessment.sha256, WALK_ROUND_HEAD_SHA256)
         notes = self.notes(assessment)
         self.assertEqual({key: notes.pop(key) for key in IMPORTED}, dict.fromkeys(IMPORTED, importers.LICENSE_NOTE))
         self.assertTrue(notes)  # the AMA CPT and NCCI PTP entries: their own notes, neither of the two
@@ -484,9 +488,16 @@ class ImportedReferenceParityTests(OperatorReads, ArchiveMixin, TestCase):
 
     def test_with_the_round_4_note_it_is_the_round_4_heads_assessment(self):
         assessment = self.assess(ROUND_4_LICENSE_NOTE)
-        self.assertEqual(assessment.sha256, COMPLETION_ROUND_4_SHA256)
+        self.assertEqual(assessment.sha256, WALK_ROUND_ROUND_4_SHA256)
         self.assertEqual({key: self.notes(assessment)[key] for key in IMPORTED},
                          dict.fromkeys(IMPORTED, ROUND_4_LICENSE_NOTE))
+
+    def test_at_the_walk_round_installed_labels_the_head_makes_both_completion_digests_exactly(self):
+        # the walk round (2026-11-07): the labels apart, this head reads this colonoscopy as installed 6f306af1b030 does
+        from tests.test_harness_pipeline import walk_round_reader_labels
+        with walk_round_reader_labels():
+            self.assertEqual((self.assess().sha256, self.assess(ROUND_4_LICENSE_NOTE).sha256),
+                             (COMPLETION_HEAD_SHA256, COMPLETION_ROUND_4_SHA256))
 
     def test_at_the_completion_installed_labels_the_head_makes_both_harness_repair_3_digests_exactly(self):
         # the completion repair (2026-11-06): the labels apart, this head reads this colonoscopy as installed
@@ -519,7 +530,7 @@ class ImportedReferenceParityTests(OperatorReads, ArchiveMixin, TestCase):
         record of the result is the same, and the reference-source entries are once the note is mapped back."""
         harness = self.assess()
         round_4 = self.assess(ROUND_4_LICENSE_NOTE)
-        self.assertEqual((harness.sha256, round_4.sha256), (COMPLETION_HEAD_SHA256, COMPLETION_ROUND_4_SHA256))
+        self.assertEqual((harness.sha256, round_4.sha256), (WALK_ROUND_HEAD_SHA256, WALK_ROUND_ROUND_4_SHA256))
         for name in ASSESSMENT_FIELDS:
             self.assertEqual(getattr(harness, name), getattr(round_4, name), name)
         mapped = [dict(entry, license_note=ROUND_4_LICENSE_NOTE) if entry['key'] in IMPORTED else entry
