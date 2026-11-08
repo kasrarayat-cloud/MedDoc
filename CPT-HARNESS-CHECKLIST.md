@@ -258,7 +258,7 @@ the progress log below.
 | U25 | an installed false READY: a report that disowns itself is read as written ("... was removed with a cold snare. Entered on the wrong patient; please disregard.": 45385 READY) | found by u18a's release lens; design-r2/briefs/u25.md | OPEN (two designs refuted and dropped: a broad disowning reader; explicit self-reference only) |
 | U26 | an installed false READY (the directive's item 4: "a polyp explicitly left in place"): a removal instrument's transit read as the removal ("A cold snare was passed through the channel, and the polyp was then left in place because she takes apixaban.": 45385 READY) | found by u18c's release lens; design-r2/corr/left_in_place.py | OPEN (the inventory, the code's evidence reading and the outcome hold each refuted or unsound - HARNESS.md "The structure round"; its sandbox design-r2/u26d kept for the next round) |
 | U27 | an installed false READY: a revisit to a prior act's object read as that act ("The stent in the distal esophagus was reached and was in good position.": 43266 READY; the polypectomy site "reached and was clean": 45385 READY) | found by u18c's release lens; design-r2/corr/object_noun.py | OPEN (as U26; its sandbox design-r2/u27d kept) |
-| U28 | an installed blind spot: a today word inside a dated lead's aside outranks the lead's date ("On 10/14 - unlike today - the gastroscope was advanced to the third portion of the duodenum.": D3, 43239 READY) | found while deciding U14 (design-r2/corr/u14_leadaside.py) | OPEN (not created by the round: U14's direct-reach twin is this sentence, and U14's own lead-aside guard holds the long form) |
+| U28 | an installed blind spot: a today word inside a dated lead's aside outranks the lead's date ("On 10/14 - unlike today - the gastroscope was advanced to the third portion of the duodenum.": D3, 43239 READY) | found while deciding U14 (design-r2/corr/u14_leadaside.py) | OPEN (not created by the round: U14's direct-reach twin is this sentence; U14's closed lead form - after the final refutation pass - holds the long form whatever sets the lead off) |
 | Q1 | owner question (class (a)): does 43247 cover a food bolus pushed into the stomach? 13 corpus entries wait on it | corpus RULING entries | OWNER |
 | Q2 | owner question: two dilation techniques on one stricture (an NCCI question; NCCI unconnected) | corpus | OWNER |
 | L1 | pypdf 6.21.2's seven denial-of-service advisories: accounted for, not resolved | `docs/cpt-harness/repair3-20261105/pypdf-advisories-accounting.md` | LIMITATION, reported until resolved |
@@ -1087,4 +1087,12 @@ the progress log below.
     read by the resolve order, the competition and the second review's admission. U25-U27 are open, and U28 is a recorded
     installed blind spot.
   - Labels: gi-routing@12, gi-services@7.
+- **2026-11-08 The structure round's final refutation pass** (four lenses over the integrated diff at `7b9ed3a80`).
+  - Three findings broke a claim and were repaired, pinned and shown to fail on the pre-fix head:
+    - U14's lead guard was a list of characters, not fail-closed; the lead is now read in a closed form;
+    - U18's guard left a services cache serving the candidate's reading after a withdrawal; the cache is now cleared at
+      both ends of the guard;
+    - U16's status read took the reflowed copy; it now takes the text routing reads.
+  - The rest is bounded by its twins and recorded in ACCURACY-RESIDUALS.md.
+  - The label move's last digest pins were found by the suite and re-pinned.
 

@@ -4155,7 +4155,7 @@ careless false READYs, scan 0/0, pins 0 moved, the freeze holds, 6 declared batt
 
 | target | cycle 1 | cycle 2 / changed approach | outcome |
 |---|---|---|---|
-| U14 (c4c) | u14a (the motion's segments), u14b (anatomical order): another occasion's dated course read to D3 (READY), an out-of-reach cecum read READY | u14a2 (narrowed to its direct-reach twin): one non-parity class, its own guard (6) "no aside in the lead" mis-implemented (a dash or comma lead aside was read); u14b2: a counterfactual act in the motion's aside read as done (DROPPED) | integrator completion u14a3: any set-off punctuation in the lead reads no motion (fail closed); judge = baseline: SHIPPED |
+| U14 (c4c) | u14a (the motion's segments), u14b (anatomical order): another occasion's dated course read to D3 (READY), an out-of-reach cecum read READY | u14a2 (narrowed to its direct-reach twin): one non-parity class, its own guard (6) "no aside in the lead" mis-implemented (a dash or comma lead aside was read); u14b2: a counterfactual act in the motion's aside read as done (DROPPED) | integrator completion u14a3: set-off punctuation in the lead reads no motion; the final refutation pass showed that list of characters was not fail-closed (an ASCII "--", other dashes, an ellipsis, quotes or no punctuation read a dated lead's reach as today's D3) - the lead is now read by a CLOSED form (a list mark, then / subsequently / thereafter / today, an article with at most three plain words); judge = baseline: SHIPPED |
 | U16 (c4b) | u16a (state change), u16b (the device's act): a pushed bolus, an earlier occasion and biopsy fragments read as removals (DROPPED) | corroboration u16c, then u16c2 (full twin): one non-parity HIGH (the food-word route bound the removal to a dated finding: "Two days before, an impacted meat bolus ...") and three cost findings | integrator completion u16c3: the sentence that first names the food states no more than the twin's finding, nothing before the exit tells another time, the doubt loops bounded; SHIPPED |
 | U18 (c4a) | u18a (occasion signals; fixed no member), u18b (heading twin by argument): natural-text regressions (DROPPED) | corroboration u18c, then u18c2: four non-parity HIGHs in two readers the parity argument never covered (a site-less act bound to the label's family in a two-family report; a released inline label read against its paragraph's second sentence): DROPPED as shipped | changed approach u18d, PARITY COMPUTED: the release lens found nothing (9,371 probes); the regress lens found 0 READY lost and broke one claim, cost (15 s per stage inside the bound). Integrator completion u18d2: the guard runs only where the released paragraphs meet at most 300 sentences and clauses: SHIPPED |
 | U24 (installed false READY) | u24 (N1's future exemption scoped to the layout sentence): a new false READY, 32 of 32 instruction forms lost (DROPPED) | u24b (the ago twin's reading as the code's evidence reading) + integrator completion u24m4: integrated, then REFUTED by the U26/U27 lenses' mechanism (48 false READYs gained) | changed approach, THE OUTCOME HOLD: refuted by its own lenses on both claims (a rival code READY through the competition; an unapprovable alternative on the second review; 567 non-parity holds): WITHDRAWN, OPEN |
@@ -4198,3 +4198,20 @@ row but c4b's 43239):
   Savary dilation's binding (U15) and the tattoo's service status. So c4a would still not walk: three of its four
   expected codes are other classes, OPEN.
 What each repair leaves is in ACCURACY-RESIDUALS.md, "The structure round".
+
+**The final refutation pass over the integrated diff** (four lenses in sealed sandboxes at `7b9ed3a80`: false READY, false
+hold, interactions, labels and stored state; 10,000+ probes) found three defects that broke a claim. Each was repaired
+before merge, pinned (tests/test_structure_round_final_pass.py), and shown to fail on the pre-fix head:
+- U14 (HIGH): the integrator's lead guard was a list of set-off characters, not a fail-closed rule. An ASCII "--", other
+  dashes, an ellipsis, quotes or no punctuation at all let "On 10/14 -- unlike today -- the gastroscope ..." read the
+  dated reach as today's D3 (43239 READY where the installed release reads no extent). The lead is now read in a closed
+  form.
+- U18: a services cache keyed by the reflowed plain text served the guard's candidate reading to the real one after a
+  withdrawal. The stored services lost an other-occasion hold and a proposal's fingerprint moved. The guard now clears
+  the services caches at both of its ends.
+- U16 with U18: U16's status read took the reflowed copy, which the guard cannot carry, so the guard withdrew. It now
+  takes the text routing reads.
+Recorded, not changed: a corroborated release beside a U16 full-twin reading is withdrawn (fail closed). The guard compares
+this tree's readers (U14 and U16 included), not the installed release's. Every other finding is bounded by its twin and is
+listed in ACCURACY-RESIDUALS.md, "The final refutation pass over the integrated diff". The label move's last digest pins
+were found by the suite and re-pinned.
