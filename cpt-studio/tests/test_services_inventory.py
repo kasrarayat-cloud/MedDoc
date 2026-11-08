@@ -200,9 +200,10 @@ class ContextConflictTests(SimpleTestCase):
 
     def test_a_day_month_year_date_is_read(self):
         facts = gi_context.extract_context('Patient X | Service date 9 November 2026 | Clinician Y')
-        # P2DN's fix round, rule N7: read (the member's answer agrees with it) and asked, as the installed revision sent
-        # no day-first date; this pin had it documented
-        self.assertEqual((facts['service_date'].origin, facts['service_date'].value), ('missing', None))
+        # P2DN's fix round, rule N7, had it read and asked (the installed revision sent no day-first date). Owner
+        # decision 2026-11-07 (the date forms): the day-first date is read and sent as the other labelled forms are -
+        # documented again, as this pin had it before rule N7 (the cell bar follows the date: it ends the field)
+        self.assertEqual((facts['service_date'].origin, facts['service_date'].value), ('document', '2026-11-09'))
         self.assertEqual(gi_context._date_readings(facts['service_date'].evidence), {'2026-11-09'})
 
 

@@ -48,6 +48,7 @@ TOO_MANY_SETTINGS_NOTE = ('The document states a care setting more than {limit} 
                           'its setting statements were not read, so the setting is asked.')
 
 _MONTHS = ('jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec')
+_WEEKDAYS = ('mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun')  # date.weekday()'s order (owner decision 2026-11-07)
 _MONTH = (r'(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?'
           r'|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)')
 _FULL_DATE = (r'(?P<iy>\d{4})-(?P<im>\d{2})-(?P<id>\d{2})'
@@ -68,14 +69,25 @@ YEAR = cues.rx(r'(?:\b(?P<lead>in|since|from|during|until|by|circa)[ \t]+|(?P<br
 _DATE_TIME = r'(?:[ \t]*+(?:/|&|and)[ \t]*+time\b)?+'
 # "DOS" names its time the same way ("DOS/Time: 10/20/2026 09:15"; refutation round 3, sk:7: it kept no evidence, so a
 # member's 1998-01-01 became the date and was sent).
+# The owner's labels of 2026-11-07 ("Date of Operation", "Exam date") are no labels of this list: they are read in the
+# document's head only (HEAD_SERVICE_DATE), never by the readers of this pattern.
 _DATE_LABEL = (r'(?:date' + _DATE_TIME + r'[ \t]++of[ \t]++(?:service|procedure|visit|encounter)|DOS' + _DATE_TIME
                + r'|(?:service|procedure|visit|encounter)[ \t]++date' + _DATE_TIME + r')')
 # A clock after a title's or a dated line's date ("GI visit - 10/20/2026 09:15", "Date & Time: 10/20/2026 9:15 AM";
 # refutation round 3, sk:7). Possessive: an optional run that never backtracks into the line's trailing run.
 _CLOCK = r'(?:[ \t]++(?:at[ \t]++)?+\d{1,2}:\d{2}(?::\d{2})?+(?:[ \t]*+[ap]\.?m\.?)?+)?+'
 _DATE_LABEL_SEP = r'\b[ \t]*+(?:\([ \t]*+DOS[ \t]*+\)[ \t]*+)?+[:#=\u2013|-]?+[ \t]*+'
+_WEEKDAY_NAME = r'(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tues?|wed|thu(?:rs?)?|fri|sat|sun)'
+# Owner decision 2026-11-07 (interpretation (a)): a date-of-service label's own date may follow a weekday name, written
+# in the reader's own weekday shape (DATE_SHAPE's: the name, a full stop, a comma, then a space): "Monday, November 9,
+# 2026", "Mon 16-Nov-2026", "Mon., 11/09/2026". The weekday is set aside and the date read only when it names the
+# date's own calendar weekday (date_from_match): a weekday naming another day ("Tuesday, November 9, 2026") leaves one of
+# the two wrong, so that value is read exactly as the installed reading reads it - date text it does not read, asked
+# (_service_dates). The weekday stands only before a date this reader reads (_FULL_DATE): before a two-digit year, an
+# all-numeric date with hyphens or dots, or no date at all ("Monday"), nothing here matches and nothing moves.
+_LABEL_WEEKDAY = r'(?:(?P<wd>' + _WEEKDAY_NAME + r')\.?,?[ \t]++)?'
 SERVICE_DATE = cues.rx(r'(?<![\w/-])(?P<label>' + _DATE_LABEL + r')' + _DATE_LABEL_SEP
-                       + r'(?P<date>' + _FULL_DATE + r')(?![\w/-])')
+                       + r'(?P<date>' + _LABEL_WEEKDAY + r'(?:' + _FULL_DATE + r'))(?![\w/-])')
 # GI round 4 (D1, step 1; package PD): the encounter's own date written with a label outside _DATE_LABEL ("Date seen",
 # "Exam date", "Case date", "Date performed", "Day of procedure"). Read only in the document's head (_head_end), through
 # the installed label reading (_labelled_kind), and never sent by itself: it only asks or narrows (_service_date_fact).
@@ -86,10 +98,31 @@ _WIDE_DATE_LABEL = (r'(?:(?:date|day)[ \t]++of[ \t]++(?:exam(?:ination)?+|case)|
                     r'|encounter)[ \t]++day|date[ \t]++(?:seen|performed))')
 WIDE_SERVICE_DATE = cues.rx(r'(?<![\w/-])(?P<label>' + _WIDE_DATE_LABEL + r')' + _DATE_LABEL_SEP + r'(?P<date>'
                             + _FULL_DATE + r')(?![\w/-])')
+# Owner decision 2026-11-07 (docs/foundation/rulings/2026-10-23-cpt-studio-gi.md, "Owner decision, 2026-11-07", and the
+# session's interpretation (b') after the first refutation): the labels "Date of Operation", "Exam date" and
+# "Examination date" (any case; the separators of a date-of-service label, no time named), read ONLY in the document's
+# head - before _head_end, where the wide labels are read - and never under a title of a note written around a procedure
+# (sections.around_procedure_title). There the label's date, written in any form SERVICE_DATE reads (a weekday before it
+# naming its own day), is read as a date-of-service label's own date and may be SENT, by one rule only
+# (_ruled_head_date): only where the installed reading sends no date, and only when the fact read with it is the
+# document's one date. A value that is blank, no calendar date, or in a form the reader does not read ("11/09/26",
+# "11-09-2026", "TBD") is no candidate at all, exactly as the wide reading drops it. Everywhere else - the body, a note
+# written around a procedure - these labels read exactly as installed: "Exam date" as a wide label of the head,
+# "Date of Operation" not at all. "Operation date", "Date/Time of Operation", "Date of exam" and every other label are
+# not these labels.
+_HEAD_DATE_LABEL = r'(?:date[ \t]++of[ \t]++operation|exam(?:ination)?+[ \t]++date)'
+HEAD_SERVICE_DATE = cues.rx(r'(?<![\w/-])(?P<label>' + _HEAD_DATE_LABEL + r')' + _DATE_LABEL_SEP
+                            + r'(?P<date>' + _LABEL_WEEKDAY + r'(?:' + _FULL_DATE + r'))(?![\w/-])')
+# Such a label stands as a label (_head_label_stands) only where it opens its line - after blanks, a markdown lead or a
+# list mark - or opens a field of its own: after a field break (a tab, two spaces or a cell bar) or as a flattened header
+# row writes one (_opens_field). Inside another field's sentence ("Interval events: Underwent right hemicolectomy. Date
+# of operation: 03/15/2025.") it is prose naming another occurrence's date, never the note's own label.
+_HEAD_LABEL_LEAD = re.compile(r'[ \t]*+[#*_>]*+[ \t]*+(?:(?:[-*\u2022]|\d{1,2}[.)])[ \t]++)?+[*_]*+')
+_HEAD_LABEL_BREAK = re.compile(r'(?:\t| {2}|\|)[ \t*_]*+\Z')
 # Date-shaped text this reader does not read as a date (refutation r1, context-3): a weekday before a date, a
 # two-digit year, dashes, dots or year-first slashes, "20th of October". As a title's date it is documented date text a
-# member value must agree with - never a gap a member value silently fills.
-_WEEKDAY_NAME = r'(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tues?|wed|thu(?:rs?)?|fri|sat|sun)'
+# member value must agree with - never a gap a member value silently fills. (Owner decision 2026-11-07: a weekday before
+# a date is read under a date-of-service label only - SERVICE_DATE; everywhere else it is this unread shape, as before.)
 _WEEKDAY = _WEEKDAY_NAME + r'\.?'
 _FULL_DATE_SHAPE = re.sub(r'\(\?P<\w+>', '(?:', _FULL_DATE)
 DATE_SHAPE = (r'(?:' + _WEEKDAY + r',?[ \t]+(?:' + _FULL_DATE_SHAPE + r')'
@@ -233,7 +266,8 @@ def _month(name: str) -> int:
 
 
 def date_from_match(m: re.Match) -> Optional[date]:
-    """The calendar date of a FULL_DATE / SERVICE_DATE match; None when invalid."""
+    """The calendar date of a FULL_DATE / SERVICE_DATE match; None when invalid - and (owner decision 2026-11-07) when a
+    SERVICE_DATE match's weekday names another day than its date's own: one of the two is wrong, so no date is read."""
     if m.group('iy'):
         parts = (m.group('iy'), m.group('im'), m.group('id'))
     elif m.group('uy'):
@@ -243,9 +277,21 @@ def date_from_match(m: re.Match) -> Optional[date]:
     else:
         parts = (m.group('dy'), _month(m.group('dm')), m.group('dd'))
     try:
-        return date(int(parts[0]), int(parts[1]), int(parts[2]))
+        day = date(int(parts[0]), int(parts[1]), int(parts[2]))
     except ValueError:
         return None
+    weekday = m.group('wd') if 'wd' in m.re.groupindex else None
+    if weekday and _WEEKDAYS.index(weekday[:3].lower()) != day.weekday():
+        return None
+    return day
+
+
+def _weekday_unread(m: re.Match) -> bool:
+    """Owner decision 2026-11-07: whether a SERVICE_DATE match's weekday names another day than its date's own, or
+    stands before no calendar date - date text the reader does not read, which the installed pattern (reading no
+    weekday) left unmatched; every reader of the match leaves it exactly as installed left it (_service_dates,
+    _TimeRuns)."""
+    return bool(m.group('wd')) and date_from_match(m) is None
 
 
 @functools.lru_cache(maxsize=16)
@@ -379,8 +425,11 @@ class _Candidate:
     # plain date-of-service label (no time named), a separator that is no cell bar, a date written year-first,
     # month-first with slashes or with the month's name first (_installed_form). Only such a date is ever the note's own:
     # the known-limit qualifier shapes are a known limit only where the installed revision sends the same date, and in
-    # another form ("3 Sep 2026", "Date/Time of Service:", "| Date of service | 09/03/2026 |") they sent another
-    # occurrence's date where it sent none. Another form is evidence: asked, the member's answer agreeing with its date.
+    # another form ("Date/Time of Service:", "| Date of service | 09/03/2026 |") they sent another occurrence's date
+    # where it sent none. Another form is evidence: asked, the member's answer agreeing with its date. Owner decision
+    # 2026-11-07: the day-first date ("3 Sep 2026") and a weekday before the date are read as the other forms are, so
+    # the known limits the 2026-10-28 ruling left (a status field beside the label, "Recall", another discipline's
+    # undated title) reach them exactly as they reach "09/03/2026".
     installed: bool = True
     # Fix round (dates lens, F1): why an own labelled date is asked though nothing qualifies it (_own_dates_in_doubt):
     # 'birth' - its date is the date the document gives as the patient's date of birth ('beside': never a member's
@@ -1523,7 +1572,7 @@ class _TimeRuns:
         self.run_starts, self.run_ends = tuple(run_starts), tuple(run_ends)
         masked_starts, masked_ends = [], []
         for s, e in sorted([(m.start(), m.end()) for m in DURATION.finditer(text)]
-                           + [(m.start(), m.end()) for m in SERVICE_DATE.finditer(text)]):
+                           + [(m.start(), m.end()) for m in SERVICE_DATE.finditer(text) if not _weekday_unread(m)]):
             if masked_ends and s < masked_ends[-1]:
                 masked_ends[-1] = max(masked_ends[-1], e)
             else:
@@ -1936,9 +1985,13 @@ def _charge_block_asks(text: str, lay: Layout, fact: Fact) -> Fact:
                                         value=fact.value, own=quoted(q if len(q) <= 120 else q[:119] + '\u2026' for q in own)))
 
 
-def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
+def _service_dates(text: str, lay: Layout, head_labels: tuple = ()) -> tuple[_Candidate, ...]:
     """Every date candidate outside a plan or history section (refutation round 2, rule A): the labelled dates of
     service, whatever their reading or form, and the dated titles near the top (_title_candidates).
+
+    Owner decision 2026-11-07 (``head_labels``; given only by _ruled_head_date): the head's "Date of Operation" and
+    "Exam date" labels with a date the reader reads (_head_label_candidates) join the installed candidates, each read
+    exactly as a date-of-service label is read where it stands.
 
     GI round 4 (D1, D2; package PD): then the wide own-date labels in the head and the worded date-of-service fields
     (_pd_wide_candidates), read BESIDE the installed candidates, never among them: the installed candidates are read and
@@ -1952,6 +2005,12 @@ def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
     rows = _Rows(text)
     worded = []  # GI round 4 (D2): date-of-service labels the installed reading drops as prose, read for a worded field
     for m in SERVICE_DATE.finditer(text):
+        if _weekday_unread(m):
+            # owner decision 2026-11-07: a weekday the date does not fall on (or one before no calendar date) - the
+            # value is date text this reader does not read, so the label is left to the DATE_LABEL scan below, which
+            # reads it exactly as the installed reading does ('unread': asked); it never reaches ``read``
+            continue
+        value = date_from_match(m)
         read.add(m.start())
         if lay.section_at(m.start()).kind in NOT_CURRENT_SECTIONS:
             continue
@@ -1959,7 +2018,6 @@ def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
         if joined is not None:  # P2DN's fix round, issue 3: a birth label joined to the label
             found.append(_joined_candidate(text, m.start('label'), m.end('label'), joined))
             continue
-        value = date_from_match(m)
         kind, start = _labelled_kind(text, m.start('label'), m.end('label'), m.start('date'), m.end(), value)
         # rule N5 (refutation phase 2, P2DN): the date is the note's own only when it stands alone in its own field;
         # rule N7 (P2DN's fix round, issue 8): and only when it is written as the installed revision reads one
@@ -2015,6 +2073,7 @@ def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
         else:
             span, extra = _span(text, start, value_end), ()
         found.append(_Candidate(span, None, 'label', _READING[kind], 'unread', extra))
+    found += head_labels
     titles = _title_candidates(text, lay)
     plain = _own_dates_in_doubt(text, lay, _after_another_header(text, lay, tuple(found) + titles))
     wide = _pd_wide_candidates(text, lay, rows, worded)
@@ -2022,6 +2081,62 @@ def _service_dates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
         return plain
     joint = _own_dates_in_doubt(text, lay, _after_another_header(text, lay, tuple(found) + wide + titles))
     return plain + tuple(c for c in joint if c.wide)
+
+
+def _head_label_candidates(text: str, lay: Layout, rows: '_Rows') -> list:
+    """Owner decision 2026-11-07 (HEAD_SERVICE_DATE): the "Date of Operation" / "Exam date" labels of the document's
+    head (before _head_end) whose value is a calendar date the reader reads, each read exactly as the installed loop of
+    _service_dates reads a date-of-service label where it stands - its reading (_labelled_kind), whether its date
+    stands alone in its field (rule N5) and its form (rule N7). None under a title of a note written around a procedure
+    (sections.around_procedure_title: there the planned procedure's date, which installed never sends), none in a plan
+    or history section, none joined to a birth label, and none whose value is no calendar date or a weekday naming
+    another day: dropped, exactly as the wide reading drops such a label (_pd_wide_candidates), so no new candidate
+    ever says that a date is unread or empty."""
+    if around_procedure_title(text):
+        return []
+    out = []
+    for m in HEAD_SERVICE_DATE.finditer(text, 0, _head_end(text, lay)):
+        value = date_from_match(m)
+        if value is None or not _head_label_stands(text, m.start('label'), m.end('label')) \
+                or lay.section_at(m.start()).kind in NOT_CURRENT_SECTIONS \
+                or _joined(text, rows, m.start('label'), m.end('label')) is not None:
+            continue
+        kind, start = _labelled_kind(text, m.start('label'), m.end('label'), m.start('date'), m.end(), value)
+        out.append(_Candidate(_span(text, start, m.end()), value.isoformat(), 'label', _READING[kind], 'read',
+                              alone=_alone_in_field(text, m.end(), rows.line(m.start())[1]),
+                              installed=_installed_form(text, m)))
+    return out
+
+
+def _head_label_stands(text: str, label_start: int, label_end: int) -> bool:
+    """Whether a head label (HEAD_SERVICE_DATE) stands as a label: it opens its line (_HEAD_LABEL_LEAD before it) or a
+    field of its own (a field break before it, _HEAD_LABEL_BREAK, or _opens_field's flattened header row). Bounded: a
+    line start more than 200 characters back is never this label's; a field break is read in the 40 characters before
+    it."""
+    lo = max(0, label_start - 200)
+    nl = text.rfind('\n', lo, label_start)
+    if (nl >= 0 or lo == 0) and _HEAD_LABEL_LEAD.fullmatch(text, nl + 1, label_start):
+        return True
+    return (_HEAD_LABEL_BREAK.search(text, max(lo, label_start - 40), label_start) is not None
+            or _opens_field(text, label_start, label_end))
+
+
+def _ruled_head_date(text: str, lay: Layout, fact: Fact) -> Fact:
+    """Owner decision 2026-11-07 (interpretation (b')): the service date fact with the head's "Date of Operation" and
+    "Exam date" labels read as date-of-service labels - taken ONLY where it sends what ``fact`` (the installed reading,
+    the closing charge block's question applied) does not: ``fact`` sends no date, and the fact read with those labels
+    among the installed candidates (_service_dates with _head_label_candidates, the same rules after it: the doubts, the
+    wide labels' rules, the charge block) is the document's one date. Anything else - a conflict, a question, a date in doubt, a
+    date not alone in its field - returns ``fact`` exactly: these labels never make a question, a conflict, a held
+    answer or a taken one that the installed reading does not, but by the date they send (a member's answer then agrees
+    with it or is held, as with any sent date), and never move a date the installed reading sends."""
+    if fact.origin == 'document':
+        return fact
+    head_labels = tuple(_head_label_candidates(text, lay, _Rows(text)))  # the head only: bounded; none in most texts
+    if not head_labels:
+        return fact
+    ruled = _charge_block_asks(text, lay, _service_date_fact(_service_dates(text, lay, head_labels)))
+    return ruled if ruled.origin == 'document' and ruled.value else fact
 
 
 def _pd_wide_candidates(text: str, lay: Layout, rows: '_Rows', worded: list) -> tuple[_Candidate, ...]:
@@ -2598,10 +2713,13 @@ _TIME_WORD = cues.rx(r'\btime\b')
 
 
 def _installed_form(text: str, m: re.Match) -> bool:
-    """Whether a SERVICE_DATE match is written as the installed revision 057a7d398 reads a labelled date (rule N7): its
-    label names no time, its separator is no cell bar, and its date is no day-first one ("14 Oct 2026",
-    "14-Oct-2026")."""
-    return (m.group('dd') is None and _TIME_WORD.search(text, m.start('label'), m.end('label')) is None
+    """Whether a SERVICE_DATE match is written as a labelled date this reader sends by itself (rule N7): its label names
+    no time and its separator is no cell bar. Owner decision 2026-11-07 (interpretation (a)): a day-first date with a
+    month name and a four-digit year ("14 Oct 2026", "14-Oct-2026", "9 November 2026") and a weekday before the date
+    ("Monday, November 9, 2026") are such forms; until then rule N7 also refused the day-first date, a form the installed
+    revision 057a7d398 did not read. Nothing else rule N7 refuses moved: "Date/Time of Service: 9 November 2026 08:00"
+    and "Date of service | 9 November 2026" are still asked."""
+    return (_TIME_WORD.search(text, m.start('label'), m.end('label')) is None
             and '|' not in text[m.end('label'):m.start('date')])
 
 
@@ -2976,9 +3094,10 @@ EVIDENCE_DATE_NOTE = ('A dated title, a "Date:" line, a dated line naming the se
                       'as evidence; it is never taken as the date of service by itself.')
 FIELD_DATE_NOTE = ('A labelled date of service has other text in its field (a bracket or words after the date), so it is '
                    'not taken as the date of service by itself.')
+# Owner decision 2026-11-07: the day-first date ("14 Oct 2026") is sent by itself now (_installed_form), so it is no
+# example of this note's forms any more: the note said it was not sent
 FORM_DATE_NOTE = ('A labelled date of service is written in a form this release reads but does not send by itself (a '
-                  'day-first date such as "14 Oct 2026", a label naming the time, or a table row), so it is asked; a '
-                  "member's answer with that date is taken.")
+                  "label naming the time, or a table row), so it is asked; a member's answer with that date is taken.")
 EMPTY_DATE_NOTE = ('Dated text states no date of its own (an empty or non-date date-of-service field, or a line whose '
                    "dates are another field's or a date of birth), so a member's date is held until the document "
                    'states it.')
@@ -2991,17 +3110,19 @@ PART_DATE_NOTE = ('A date of service is labelled in a later numbered part of the
 # GI round 4 (D1, D2; package PD): why a wide or worded own label alone is asked, and a member's answer restricted to it
 # Wave 1 repair (PD, cycle 1): said what the narrowing rests on - the note's own sign-off of the same day - instead of
 # "words this service reads as naming the encounter", which the question's "not read as one" contradicted (L5)
+# Owner decision 2026-11-07: "Exam date" in the document's head is sent by itself now (HEAD_SERVICE_DATE), so it is no
+# example of the words this note and WIDE_DATE_QUOTE_NOTE name any more: they said it was never sent or taken by itself
 WIDE_DATE_NOTE = ('A date is labelled with words this service does not send as the date of service by itself (such as '
-                  '"Date seen", "Exam date", "Case date", "Date performed" or "Day of procedure"), and the signature '
-                  "closing the note states the same day, so the date is asked; a member's answer is taken only when it "
-                  'is that date.')
+                  '"Date seen", "Case date", "Date performed" or "Day of procedure"), and the signature closing the '
+                  "note states the same day, so the date is asked; a member's answer is taken only when it is that "
+                  'date.')
 # Wave 1 repair (PD, cycle 1; DS-1 to DS-4): rule (c)'s fact where nothing shows the label's date is the note's own -
 # its lines are quoted, and they limit no answer (_QuotedSpan): every member date is taken, as installed takes it
 WIDE_DATE_QUOTE_NOTE = ('No date of service is read: the document states a date with words this service does not take as '
-                        'the date of service by itself (a label such as "Date seen", "Exam date", "Case date", "Date '
-                        'performed" or "Day of procedure", or a date-of-service label with other words before its '
-                        "date). It may be this encounter's date or another occurrence's (a planned or an earlier one), "
-                        "so it is quoted and limits no answer: a member's date is taken.")
+                        'the date of service by itself (a label such as "Date seen", "Case date", "Date performed" or '
+                        '"Day of procedure", or a date-of-service label with other words before its date). It may be '
+                        "this encounter's date or another occurrence's (a planned or an earlier one), so it is quoted "
+                        "and limits no answer: a member's date is taken.")
 ORDER_DATE_NOTE = ('A labelled date of service is earlier than a date the document gives for an earlier occurrence (a '
                    'prior, last, recent or index one), so the two cannot both be right and it is not taken as '
                    'the date of service by itself.')
@@ -3235,6 +3356,7 @@ def _evidence_spans(c: _Candidate, answers: Optional[set] = None) -> tuple[Span,
 def _context(text: str) -> tuple[Fact, ...]:
     lay = layout(text)
     service_date = _charge_block_asks(text, lay, _service_date_fact(_service_dates(text, lay)))
+    service_date = _ruled_head_date(text, lay, service_date)  # owner decision 2026-11-07: it may only add a send
     settings_found = _settings(text, lay)
     setting = (_fact('setting', settings_found) if settings_found is not None else
                Fact('setting', None, 'missing', (), TOO_MANY_SETTINGS_NOTE.format(limit=SETTING_STATEMENT_LIMIT)))

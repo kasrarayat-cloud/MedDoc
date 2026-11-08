@@ -264,13 +264,19 @@ class InstalledAsksWithEvidenceTests(SimpleTestCase):
     """Rule (b): where the installed reading already asks with evidence, nothing changes."""
 
     def test_unchanged(self):
-        for text in (B + 'Colonoscopy Report\nDate of service: 14 Oct 2026\nDate performed: 10/19/2026\nFindings: x.\n',
+        # Owner decision 2026-11-07 (the date forms): the day-first "Date of service: 14 Oct 2026" this pin used as an
+        # asked installed date is sent now (rule (a) then asks beside "Date performed"), so a label naming the time - a
+        # form still withheld - stands in for it. The second text keeps its head "Exam date": the ruled head reading
+        # (context._ruled_head_date) adds no send there either - the asked installed date speaks against it
+        for text in (B + 'Colonoscopy Report\nDate/Time of Service: 10/14/2026 09:00\nDate performed: 10/19/2026\n'
+                         'Findings: x.\n',
                      B + 'Colonoscopy Report\nDate of service: 10/14/2026 (pending)\nExam date: 10/19/2026\nFindings: x.\n'):
             cands = context._service_dates(text, layout(text))
             self.assertTrue(any(c.wide for c in cands), text)
             plain = tuple(c for c in cands if not c.wide)
             self.assertEqual(context._service_date_fact(cands), context._installed_service_date_fact(plain), text)
             self.assertTrue(context._installed_service_date_fact(plain).evidence, text)
+            self.assertEqual(fact(text), context._installed_service_date_fact(plain), text)  # nothing ruled moves it
 
 
 class NarrowingTests(SimpleTestCase):
@@ -785,13 +791,20 @@ class MustHoldTests(SimpleTestCase):
         self.assertEqual(fact(text).evidence, ())
 
     def test_a_wide_label_is_never_sent(self):
+        # Owner decision 2026-11-07 (the date forms): the third text as this pin wrote it ("Exam date: 10/06/2026" in the
+        # head) is sent now - "Exam date" is read in the head as a date-of-service label where the installed reading
+        # sends nothing (context._ruled_head_date) - so "Date seen", a label still only wide, stands in for it here
         for text in (B + 'New Patient Evaluation\nDate seen: 10/26/2026\nSigned: Synthetic MD, 10/26/2026\n',
                      B + 'Colonoscopy Report\nDay of procedure: Oct 27, 2026\nAttested: Synthetic MD, Oct 27, 2026\n',
-                     B + 'Colonoscopy Report\nExam date: 10/06/2026\nService date logged for this case: 10/06/2026\n'
+                     B + 'Colonoscopy Report\nDate seen: 10/06/2026\nService date logged for this case: 10/06/2026\n'
                          'Signed: Synthetic MD, 10/06/2026\n', report()):
             self.assertNotEqual(fact(text).origin, 'document', text)
             self.assertEqual(sends(text), 'DATELESS', text)
             self.assertIsNone(context.service_date_of(text), text)
+        ruled = (B + 'Colonoscopy Report\nExam date: 10/06/2026\nService date logged for this case: 10/06/2026\n'
+                     'Signed: Synthetic MD, 10/06/2026\n')
+        self.assertEqual((fact(ruled).origin, sends(ruled), context.service_date_of(ruled)),
+                         ('document', '2026-10-06', dt.date(2026, 10, 6)))
 
 
 class DroppedStrongHeadHoldTests(SimpleTestCase):
