@@ -330,3 +330,27 @@ class AsInstalledTests(DateAssertions, SimpleTestCase):
                 self.assert_member_date(text, DAY)
         text = HEAD + 'Colonoscopy Report\nDate of service: 11/09/2026\nLast operation:\nProcedure date: 05/01/2019\n'
         self.assert_conflict(text + COLO_PLAIN, DAY, '2019-05-01')
+
+
+class RetiredContextVersionTests(SimpleTestCase):
+    """The recall round's final refutation (2026-11-08): a context recorded under gi-context@4 asked where @5 reads the
+    document's head date, and a member's answer it then took was sent by it although @5 HOLDS that answer as contradicting
+    the document. Kept current, it made 45385 READY on the member's date through the findings-stated reach. @4 is retired:
+    remade before any stage sends or assesses (jobs.EARLIER_CONTEXT_VERSIONS)."""
+
+    TEXT = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEndoscopy Procedure Report\n'
+            'Date of Operation: 11/05/2026\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Colonoscopy\n'
+            'Indication: Screening.\n\nFindings:\n  1. Terminal ileum normal.\n'
+            '  2. A 6 mm polyp was removed by cold snare from the transverse colon (jar A).\n\nPlan:\n  1. Await pathology.\n'
+            'Electronically signed by Synthetic Endoscopist, MD on 11/05/2026\n')
+
+    def test_gi_context_4_is_retired(self):
+        from studio import jobs
+        self.assertEqual(jobs.CONTEXT_VERSION, 'gi-context@5')
+        self.assertIn('gi-context@4', jobs.EARLIER_CONTEXT_VERSIONS)
+
+    def test_the_current_reading_holds_the_member_date_a_kept_context_would_send(self):
+        fact = context.extract_context(self.TEXT)['service_date']
+        self.assertEqual((fact.origin, fact.value), ('document', '2026-11-05'))
+        self.assertEqual(sends(self.TEXT), '2026-11-05')
+        self.assertEqual(sends(self.TEXT, '2026-11-09'), 'HELD')  # a @4 context had taken it and would send it

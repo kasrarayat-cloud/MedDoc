@@ -4103,3 +4103,10 @@ esophageal ring) - each READY on the installed release's reach-verb twin. Listed
 same-length reading twin given to routing and the assessment only), the template field scope, instrument attribution and
 shorthand, the act vocabulary, the three installed careless false READYs (43236 beside 43255, 45381 for an earlier
 tattoo, 43233 for a 20 mm balloon) and the profile dimensions (diameter, esophagoscopy extent, dilation target).
+
+**The final refutation pass over the integrated diff** (three lenses in sealed sandboxes at `000fb24f6`: interaction,
+regression, and an independent parity audit of 10,347 texts) found one defect of the integration itself: gi-context@4
+contexts had been kept current on a false premise (a @4 context that took a member's answer sends it where @5 holds it;
+through the findings-stated reach a code read READY on that date). gi-context@4 is retired - remade before any stage sends
+or assesses, as @1 to @3 - and pinned (RetiredContextVersionTests). The parity audit found no release beyond the parity bound;
+everything else the pass found is bounded by parity or hold-side and is listed in ACCURACY-RESIDUALS.md.

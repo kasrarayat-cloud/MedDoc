@@ -1039,3 +1039,8 @@ the progress log below.
   (`c3eb64c55`).
 - **Walk tooling for c4, before c4 was read:** the withdrawal wait (`cd5212b9f`); the c4 builder carries Stop and Resume on a
   fresh document and gives each code a family question holds its own details entry.
+- **2026-11-08T02:00-03:30Z The integrated diff, proved and refuted.** The full CI-like suite on `000fb24f6` passed (6,483
+  Django tests, ops 524, verification 43, node 136/65/135); PR #1486 opened as a draft and its CI passed on `eee099ad7`
+  (the cpt-studio job's tests all green, red only on pypdf 6.21.2's seven accounted advisories, L1). The mandatory refutation
+  pass over the finished diff (interaction, regression, parity audit) found one defect of the integration: gi-context@4 had
+  been kept current on a false premise; it is retired and pinned. The rest is bounded by parity or hold-side and recorded.

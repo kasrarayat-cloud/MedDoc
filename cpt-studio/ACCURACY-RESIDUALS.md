@@ -1413,3 +1413,26 @@ the same report states the reach with a verb or a copula (bounded by parity) - a
 | U20: numbered procedure headings | "PROCEDURE 1 - EGD" after HISTORY or INDICATIONS | the narratives read as history; codes held | two mechanisms refuted twice each (the numbered part inside the shared layout: a date sent; a same-length reading twin: correct READYs lost where the installed reading already read the part); OPEN |
 | U18: dictated labelled paragraphs | "Upper endoscopy: With the patient in the left lateral decubitus position, the gastroscope was passed ..." | refused by the release gates; codes held | two variants refuted (word-list leaks, quadratic costs); OPEN |
 | template field scope, instrument shorthand and attribution, act abbreviations, "applied", a "?" on a diagnosis, the part boundary, denial dating | "Prior endoscopy: None." swallowing "Extent of exam:"; "Std gastroscope to D2"; "CSP"; "APC applied" | held | designed and refuted with their gain one corpus hold each; abandoned this round, OPEN |
+
+### The recall round: the date half, and the final refutation pass over the integrated diff (2026-11-08)
+
+The owner's date forms read, at worst, exactly as the installed release reads the same document with its date written in an
+installed form (a "Procedure date:" label, or a month-day-year date) - each row below is READY or sent on that twin too.
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| a head "Exam date" that dates another study | "CT findings: Focal sigmoid wall thickening." then "Examination date: 10/02/2026" in the head | sent as the date of service; the doctor's other date held | bounded by parity ("Procedure date: 10/02/2026" there is sent too) |
+| a head label in a note whose head is the whole note, or in a SOAP head | a short consultation or "Subjective: ... / Exam date: 10/28/2026 / Colonoscopy on 10/28/2026: ..." | the reviewed exam's date sent; its recounted acts read performed | bounded by parity |
+| a head "Date of Operation" naming the surgery in a post-operative or surgery-field note | "Surgery: Low anterior resection" then "Date of operation: 03/16/2025"; "Colorectal Surgery Clinic - Postoperative Visit" with "Date of Operation: 10/12/2026" | the operation's date sent | bounded by parity |
+| a head label in a planning office visit, under a title the around-procedure reader does not know, or after two spaces or a tab inside a sentence | "Exam date: 11/20/2026" above "Office visit"; "Document Type: Consent"; "Underwent right hemicolectomy.  Date of operation: 03/15/2025." | the planned or earlier date sent | bounded by parity |
+| the 2026-10-28 known limits in the decided forms | a status field beside or below the label, "Recall:", another discipline's title, with "3 Sep 2026" | another occurrence's date sent | the installed month-day-year twin reads them so (the 2026-10-28 ruling's accepted limits) |
+| a weekday date the installed reader left unread now asks or holds | "Previous date of service: Tuesday, November 10, 2026" beside "Date of service: 11/09/2026"; a closing charge block's weekday date; a weekday-dated label beside the DOB | asked (a correct READY becomes a question) or a member answer held | hold side only; the H2 gate refuses SEND->ASK, so such a text in a freeze corpus fails the gate; recorded |
+| one decided-form release with no text twin | a flexible sigmoidoscopy with biopsy whose weekday date is now read | READY | equal to the installed reading once the member answers the stated date; no false READY shown |
+| the reach statement's doubt guard reads only its family's sentences | "Duodenal bulb normal; second portion not examined." in a report that also mentions a colonoscopy (the denial attributed to no family) | the bulb statement releases | bounded by parity (the copula twin reads the same there) |
+| more sibling codes a read extent exposes | 43236 / 43243 (injection target), the ablation-kind codes | READY once the extent is read | bounded by parity; the act subtype is a fourth profile dimension beside diameter, examination extent and target |
+| one 400 KB shape crosses 10 s | findings statements with both features over 400 KB | about 11 s, where the installed release takes under 10 s | under 3x; the installed release already exceeds 10 s on sibling 400 KB shapes; every stage deadline holds |
+
+**Repaired by the final pass:** the integration had kept a context recorded under gi-context@4 current, on the premise that
+@4 only asks where @5 sends. Three lenses showed it false: a @4 context that asked and then took a member's answer sends
+that answer, which @5 holds when it contradicts the document's newly read head date - and with the findings-stated reach a
+code read READY on it. gi-context@4 is retired (remade before any stage sends or assesses), as @1 to @3 were.
