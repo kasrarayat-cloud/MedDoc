@@ -12,8 +12,12 @@ the ordinary senses of "back" read nothing; the request side and HISTORICAL_CLAU
 the services reader read every text as installed; and the release shapes the cycle-2 prototypes measured stay held
 (design-r2/u24b): a delayed colonoscopy's own doubt, a site-less act beside another family, a box row's bundled base
 code, a polypectomy the phrase dates (held, never excluded). A held reading is the twin's own, so a code citing today's
-act and the earlier session's sentence reads READY as its ago twin does (integration, 2026-11-08). Synthetic documents
-only; nothing is sent."""
+act and the earlier session's sentence reads READY as its ago twin does (integration, 2026-11-08).
+The changed approach (2026-11-08, OutcomeHoldTests): the twin's reading is no longer the code's evidence reading. Lowered
+there, it let a co-cited plan line decide ahead of a hedge that held the code ("Probable complete colonoscopy." beside
+"Await pathology."), so 45385 read READY where the installed release and the ago twin hold it. The engine now reads the
+code as installed and only holds a code that reading releases (engine._dated_hold). Synthetic documents only; nothing is
+sent."""
 from __future__ import annotations
 
 import time
@@ -293,3 +297,65 @@ class OrdinarySenseTests(SimpleTestCase):
             quote = sentence[:sentence.index('cold snare') + len('cold snare')]
             with self.subTest(sentence[:30]):
                 self.assertEqual(ready(text, [('45385', quote)]), {'45385': True})
+
+
+class OutcomeHoldTests(SimpleTestCase):
+    """The hold is made at the code's outcome, never at its evidence reading (the changed approach, 2026-11-08): a code
+    reads as installed wherever the installed readings do not release it, whatever else it cites."""
+
+    @staticmethod
+    def member(hedge, plan):
+        return (HEAD + IND + 'Procedure: Colonoscopy\nFindings: ' + CO + ' Some months back ' + SNQ + '. ' + PREP
+                + '\nImpression: Clean polypectomy scar; no polyps. ' + hedge + '\nPlan: ' + plan + '.\n')
+
+    @staticmethod
+    def cited(text, quotes, *more):
+        from studio.types import ProviderCode
+        entries = [ProviderCode('selected', 'cpt', '45385', 'UNVERIFIED PROVIDER WORDING',
+                                tuple(span(text, q) for q in quotes))]
+        entries += [ProviderCode('selected', 'cpt', c, 'UNVERIFIED PROVIDER WORDING', (span(text, q),)) for c, q in more]
+        return {p.code: (p.bucket, p.status) for p in run(text, entries).proposals if p.bucket != 'alternative'}
+
+    def test_a_hedge_and_a_plan_cited_beside_the_dated_act_read_as_installed(self):
+        # the integration's first form: the twin's 'uncertain' left 'Await pathology' (planned) deciding ahead of the
+        # hedge, and 45385 read READY in every citation order (design-r2/corr/u24_resolve.py)
+        import itertools
+        for hedge, plan in (('Probable complete colonoscopy.', 'Await pathology'),
+                            ('Complete colonoscopy?', 'Repeat colonoscopy in 3 years')):
+            text = self.member(hedge, plan)
+            parts = (hedge.rstrip('.'), SNQ, plan)
+            for order in itertools.permutations(parts):
+                with self.subTest(hedge=hedge, order=[q[:12] for q in order]):
+                    got = self.cited(text, order)
+                    self.assertEqual(got, self.cited(text.replace(' back', ' bxck'), order))
+                    self.assertNotEqual(got['45385'], ('selected', 'ready'))
+
+    def test_the_dated_act_alone_is_held_and_its_base_stays_bundled(self):
+        text = self.member('Probable complete colonoscopy.', 'Await pathology')
+        self.assertEqual(self.cited(text.replace(' back', ' bxck'), [SNQ])['45385'], ('selected', 'ready'))
+        got = self.cited(text, [SNQ], ('45378', CO[:-1]))
+        self.assertEqual(got['45385'], ('selected', 'needs_clarification'))
+        self.assertNotEqual(got['45378'], ('selected', 'ready'))
+
+    def test_the_code_s_evidence_reading_is_the_installed_one(self):
+        from studio.types import EvidenceSpan
+        from studio.validation import checks
+        text = self.member('Probable complete colonoscopy.', 'Await pathology')
+        at = text.index(SNQ)
+        own = checks.evidence_readings(text, [EvidenceSpan(0, at, at + len(SNQ), SNQ, True)])
+        self.assertEqual([r.status for r in own], ['performed'])
+        dated, replaced = checks.dated_readings(text, own)
+        self.assertEqual([r.status for r in replaced], [detect.status_for_span(text, at, at + len(SNQ), back=True)[0]])
+        self.assertNotIn(replaced[0].status, ('performed', 'incomplete'))
+        self.assertEqual(checks.dated_readings(text.replace(' back', ' bxck'), own), ((), ()))
+
+    def test_todays_banding_beside_an_earlier_session_stays_ready(self):
+        # the first form held today's act where the phrase dated another session inside its sentence
+        for findings in ('Two internal hemorrhoid columns were banded today, after a first session 4 weeks back.',
+                         'First banding was done 4 weeks back, today two internal hemorrhoid columns were banded.'):
+            text = (HEAD + 'Indications: Bleeding internal hemorrhoids.\nProcedure: Anoscopy\nFindings: The anoscope was '
+                    'inserted. ' + findings + '\nImpression: As above.\nPlan: Routine.\n')
+            quote = 'Two internal hemorrhoid columns were banded today' if findings.startswith('Two') \
+                else 'today two internal hemorrhoid columns were banded'
+            with self.subTest(findings[:20]):
+                self.assertEqual(ready(text, [('46221', quote)]), {'46221': True})

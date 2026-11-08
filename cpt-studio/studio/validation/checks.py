@@ -1298,10 +1298,9 @@ def reference_source_entries(sources: Sequence[ReferenceSourceInfo], service_dat
 
 def span_status(text: str, start: int, end: int, service_date: Optional[date] = None):
     """``studio.gi.detect.status_for_span``, resolved at call time: the routing module owns status language.
-    ``service_date`` is the encounter's effective date, so dated history reads the same here as in routing. A code's
-    own evidence is read with ``back`` (U24): a performed reading "<quantity> <time unit>(s) back" dates is held."""
+    ``service_date`` is the encounter's effective date, so dated history reads the same here as in routing."""
     from studio.gi.detect import status_for_span
-    return status_for_span(text, start, end, service_date, back=True)
+    return status_for_span(text, start, end, service_date)
 
 
 def evidence_readings(text: str, spans: Sequence[EvidenceSpan],
@@ -1312,6 +1311,28 @@ def evidence_readings(text: str, spans: Sequence[EvidenceSpan],
         if parsed is not None:
             readings.append(Reading(parsed[0], parsed[1], 'evidence', span.text, span.start, span.end))
     return tuple(readings)
+
+
+def dated_readings(text: str, readings: Sequence[Reading],
+                   service_date: Optional[date] = None) -> tuple[tuple[Reading, ...], tuple[Reading, ...]]:
+    """U24 (the structure round; changed approach 2026-11-08): ``readings`` (a code's own readings, as the engine holds
+    them) with each linked passage that "<quantity> <time unit>(s) back" dates read as its "ago" twin
+    (detect.status_for_span(back=True): the twin's own reading of the span, never a positive one), and the readings so
+    replaced; ((), ()) when the phrase dates none. A reading the engine has already turned into another one (a gi.other
+    or office-visit passage) is left as it is. Read ONLY by the engine's dated hold (engine._dated_hold), which can only
+    hold a code the installed readings release: every other reader reads ``readings`` as they are."""
+    from studio.gi.detect import status_for_span
+    out, replaced = [], []
+    for reading in readings:
+        if reading.origin == 'evidence' and reading.start is not None and reading.end is not None:
+            dated = normalise_span_status(status_for_span(text, reading.start, reading.end, service_date, back=True))
+            if dated is not None and dated != (reading.status, reading.cues) \
+                    and normalise_span_status(span_status(text, reading.start, reading.end, service_date)) \
+                    == (reading.status, reading.cues):
+                reading = replace(reading, status=dated[0], cues=dated[1])
+                replaced.append(reading)
+        out.append(reading)
+    return (tuple(out), tuple(replaced)) if replaced else ((), ())
 
 
 # A procedure's act stated by its participle after an auxiliary, or after "we" / "I" ("Internal hemorrhoids were banded

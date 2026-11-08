@@ -10731,8 +10731,9 @@ def status_for_span(text: str, start: int, end: int,
                     service_date: Optional[date] = None, back: bool = False) -> tuple[str, tuple[str, ...]]:
     """Status of the service mentioned at [start, end), judged from its clause,
     sentence and section, with the cues that decided it. Fail-closed.
-    ``service_date`` as for route(). ``back``: a code's own evidence (validation's evidence readings) - a performed
-    reading that "<quantity> <time unit>(s) back" dates is held (_held_by_back, U24)."""
+    ``service_date`` as for route(). ``back``: the ago twin's reading of a code's own cited passage, for validation's
+    dated hold only (checks.dated_readings, engine._dated_hold) - a performed reading that "<quantity> <time unit>(s)
+    back" dates is read as that twin reads it (_held_by_back, U24)."""
     if not isinstance(text, str):
         raise TypeError('status_for_span() needs the canonical text as str.')
     if not (0 <= start < end <= len(text)):
@@ -10749,9 +10750,12 @@ def status_for_span(text: str, start: int, end: int,
 # any layout, while its ago twin is held in every layout, so a report narrating an earlier polypectomy read it as
 # today's (45385 READY; in a labelled paragraph N1's future exemption let "Surveillance in 3 years." release it too).
 # The phrase (cues.HISTORICAL_BACK) is read here as routing reads its twin - the cue 'ago', historical, with the twin's
-# span - but ONLY in the reading of a code's own cited evidence (status_for_span(back=True): validation's evidence
-# readings), and ONLY to hold: a performed or incomplete reading the phrase dates becomes the twin's own reading of the
-# same span (historical or uncertain, with the twin's cue); any other reading stays as installed. Routing's own analysis
+# span - but ONLY for a code's own cited evidence (status_for_span(back=True), read by validation's dated hold alone:
+# checks.dated_readings, engine._dated_hold), and ONLY to hold: a performed or incomplete reading the phrase dates becomes
+# the twin's own reading of the same span (historical or uncertain, with the twin's cue); any other reading stays as
+# installed. The changed approach (2026-11-08): that reading no longer replaces the code's evidence reading; the engine
+# resolves the code's status with it only to decide whether to hold a code the installed readings release, so a
+# lowered reading never lets another passage decide (engine._dated_hold says why). Routing's own analysis
 # (_route: every family, mention, reference, fact and extent), structure's (N1, N2, N3, P3), the services reader and
 # every other caller of status_for_span read the text exactly as installed. The cycle-2 prototypes measured why
 # (design-r2/u24b): read wherever a document's families or acts are weighed, the phrase RELEASED codes - read by
