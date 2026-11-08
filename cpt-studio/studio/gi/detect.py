@@ -35,6 +35,7 @@ Pure functions over the canonical text; results are cached per text.
 from __future__ import annotations
 
 import bisect
+import contextvars
 import functools
 import re
 from dataclasses import dataclass, field
@@ -51,8 +52,10 @@ from studio.gi import structure as gi_structure
 from studio.gi.sections import Layout, layout
 from studio.types import Fact, FamilyFinding, RoutingResult, ServiceMention, Span
 
-ROUTING_VERSION = 'gi-routing@11'  # @11: the recall round (2026-11-08: a reach stated by findings, U19); @10: the walk
-# round (2026-11-07: the labelled release's gates, the
+ROUTING_VERSION = 'gi-routing@12'  # @12: the structure round (2026-11-08: a long reach read through its direct-reach
+# twin, U14; a held labelled paragraph released where its computed heading twin reads every fact the same, U18 -
+# structure's released set, which routing reads); @11: the recall round (2026-11-08: a reach stated by findings,
+# U19); @10: the walk round (2026-11-07: the labelled release's gates, the
 # closed form's negated passive recognised); @9: the completion repair (U2-U5, U12; @8 is named in harness repair 3's record for
 # a reader it dropped before install, so it is skipped: no record or reader of HARNESS.md can take one for the other)
 PROCEDURE_FAMILIES = tuple(f for f in DETECTED_FAMILIES if PROFILES[f].procedure)
@@ -3767,6 +3770,542 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
     return reached, blocked
 
 
+# --- The structure round (2026-11-08), U14, stance u14a: the motion's segments (cycle 2: narrowed to its twin) --------
+# One reach sentence may carry the endoscope on past its first landmark, naming or describing an earlier one on the way:
+# "The gastroscope was introduced by mouth and advanced through the upper esophageal sphincter and down a normal
+# esophagus to the gastroesophageal junction, where the Z-line lay at 39 cm above a small hiatal hernia, then on through
+# the stomach and the pylorus to the third portion of the duodenum." The installed reach reads a landmark only within 60
+# characters of its verb (cues.REACHED_BEFORE), so such a sentence read no extent at all, and "The scope was advanced into
+# the stomach, which was normal on forward view, and through the pylorus to the second portion of the duodenum." read
+# only its first landmark's incomplete one.
+# The DIRECT-REACH TWIN of such a sentence is the same document with the sentence's body, from its subject's head word to
+# its end, replaced by "<subject> was advanced to <the furthest landmark>." (the lead and the subject as written, every
+# other sentence unchanged). The motion is read EXACTLY as the installed release reads that twin, and never more
+# permissively (_motion_extent):
+# - it is consulted only where the installed reading of the family is open: no documented incompleteness, no doubted,
+#   unread or shorter extent label, and either no extent at all from the installed readers and the findings statements
+#   (U19's ``opened``) or an incomplete one whose landmark is one of this motion's own places in this motion's clause (the
+#   installed reach read the motion's first segment as its end); a complete extent - a reach's or a findings
+#   statement's - is never replaced, deepened or made shallower, and a withheld one stays withheld;
+# - the sentence parses whole as one motion, by its structure (_motion_parse): a verb that moves the endoscope reaches its
+#   first landmark in the installed reach's shape (_MOTION_OPENING, as cues.REACHED_BEFORE: the verb, at most 60
+#   characters with no '.' or ';', no other moving verb and no landmark of the table, a path preposition - REACHED_BEFORE's
+#   own and the path words via, across, down, along, around - and at most three words), and from that
+#   landmark to the sentence's end there is nothing but the motion's own segments (a closed-class path preposition and a
+#   place of the landmark table or of services.ANATOMY in the tract, at most an article and three words before it),
+#   "and"-joined places, joins (a comma, "and", "then", "on") and comma-set-off which/where/whose asides, each aside's
+#   words read once by the installed readers' own tables (_motion_aside_plain);
+# - its own readings are the plain performed reading at the motion's verb, at its subject's head word, at every place it
+#   names or passes and at every landmark of the table its sentence names from the first landmark on (asides included),
+#   and at its furthest landmark (_motion_read_plain: any other reading - another time, uncertain, '?', hedged, attempted,
+#   planned, negated, incomplete, refused, about another procedure - keeps the installed reading); its opening and its
+#   mover's own predicate are undoubted (_pe_reach_doubted, _motion_opening_doubted, _motion_predicate_doubted: the
+#   words the twin drops between the subject and the verb); its mover is the endoscope named as the subject before the
+#   verb (_motion_mover); its sentence states no other time, place, agent or source (_motion_signals) and names no
+#   service and no act from its verb on (the twin drops nothing any act reader counts);
+# - the family's text holds no landmark blocked, denied or doubted at or short of the furthest one, no doubt of a reach
+#   in words the landmark readers may not see (U19's _stated_family_doubts) and no stop short of it
+#   (_motion_stopped_short), and the copy guards hold (_pe_around_procedure, _reach_family_named, _reach_own_part,
+#   in_todays_narrative, the sentence's length);
+# - THE TWIN ITSELF (_motion_twin_reads): the installed release routes the twin (no motion read inside it) and must read
+#   the family performed with exactly the motion's furthest landmark as its extent. A lead, a section, a date, a label
+#   or a later sentence that keeps the twin from its extent keeps the long form from it too, by construction.
+# The extent then goes through the family's own finish() (every withhold of the installed reading applies to it), and an
+# extent read only by a motion is no evidence that the procedure was done today (MOTION_ONLY_EXTENT, as U19's
+# STATED_ONLY_EXTENT). Read for the colonoscopy and the EGD only: a flexible sigmoidoscopy keeps its installed reading,
+# _reached_expected_depth and the request side (sections, context) never read any of it.
+# Bounded: a document longer than _MOTION_TEXT characters is read as installed; a clause longer than _MOTION_CLAUSE is no
+# motion; each clause is parsed once per table (memoised) from at most _MOTION_ANCHORS openings, each position and each
+# place phrase read once, each aside's words once, a motion holding at most _MOTION_PLACES places; at most _MOTION_TRIES
+# motions per family go through the guards, and at most ONE twin is routed per document.
+MOTION_ONLY_EXTENT = 'motion-only-extent'
+_MOTION_TEXT = 60000  # a longer document keeps the installed reading (bounded work: its twin is routed whole)
+_MOTION_CLAUSE = 1200  # a longer clause is read as no motion (bounded work per clause)
+_MOTION_ANCHORS = 8  # openings tried per clause at most
+_MOTION_PLACES = 40  # places one motion holds at most
+_MOTION_ASIDE = 300  # an aside's characters read at most
+_MOTION_TRIES = 4  # motions put through the guards per family at most
+# set while the twin is routed: no motion is read inside it (the twin is read exactly as the installed release reads it)
+_MOTION_OFF = contextvars.ContextVar('gi_motion_off', default=False)
+# The instruments the motion's mover test reads, the same words as PE's reach (_pe_endoscope_moved; copied, so PE's
+# installed body stays byte-identical): an accessory and a scope word.
+_MOTION_ACCESSORY = (r'guide-?wires?|wires?|catheters?|balloons?|dilators?|bougies?|stents?|probes?|cannula[es]?|'
+                     r'sphincterotomes?|papillotomes?|baskets?|overtubes?|tubes?|sheaths?|needles?|clips?|snares?|forceps|'
+                     r'devices?|caps?|lasers?|fib(?:er|re)s?|nets?|endoloops?|loops?|ligators?|bands?|capsules?')
+_MOTION_SCOPE = r'\w*scopes?|instruments?'
+# the words of a wish, a plan, an attempt or a condition PE's doubt reads before its verb (_pe_reach_doubted; copied)
+_MOTION_WISH = re.compile(r'\b(?:hope[ds]?|hoping|plan(?:s|ned|ning)?|intend(?:s|ed|ing)?|expect(?:s|ed|ing)?|'
+                          r'aim(?:s|ed|ing)?|want(?:s|ed|ing)?|wish(?:es|ed|ing)?|tr(?:y|ies|ied|ying)|attempt(?:s|ed|ing)?|'
+                          r'goal|if|unless|whether|once|until|scheduled|booked|recommend(?:s|ed|ing)?)\b', re.A | re.I)
+_MOTION_VERB = r'(?:advanced|passed|inserted|introduced|traversed|steered|navigated)'
+_MOTION_PREPOSITION = (r'(?:to\s+the\s+level\s+of|as\s+far\s+as|up\s+to|into|to|through|past|beyond|via|across|down|along|'
+                       r'around)')
+_MOTION_OPENING = re.compile(r'\b' + _MOTION_VERB + r'\b(?P<gap>(?:(?!\b' + _MOTION_VERB + r'\b)[^.;]){0,60}?)\b'
+                             + _MOTION_PREPOSITION + r'\s+(?:the\s+)?(?:[\w-]+\s+){0,3}$', re.A | re.I)
+_MOTION_JOIN = re.compile(r'\s*+(?:,\s*+)?(?:and\s+)?(?:then\s+)?(?:on\s+)?' + _MOTION_PREPOSITION + r'\s+', re.A | re.I)
+_MOTION_AND = re.compile(r'\s+and\s+', re.A | re.I)
+_MOTION_ARTICLE = re.compile(r'(?:the|a|an)\s+', re.A | re.I)
+# a word of a place's phrase before the place: never a word that opens or joins another phrase (articles, prepositions,
+# coordinators, relative words: closed classes), nor one of the installed negation (cues.DOUBT_TOKEN), hedge
+# (cues._HEDGE_ADVERB) or falling-short (cues._FALLING_SHORT) words
+_MOTION_WORD = re.compile(r'(?!(?:the|a|an|and|or|but|nor|then|which|where|whose|that|who|about|above|across|after|'
+                          r'along|around|as|at|before|behind|below|beneath|beside|between|beyond|by|down|for|from|in|'
+                          r'inside|into|near|of|off|on|onto|out|over|past|through|throughout|to|toward|towards|under|up|'
+                          r'upon|via|with|within|without)\b)[\w-]+\s+', re.A | re.I)
+_MOTION_WORD_DOUBT = re.compile(r'\b(?:' + cues._HEDGE_ADVERB[3:-1] + '|' + '|'.join(cues._FALLING_SHORT) + r')\b',
+                                re.A | re.I)
+_MOTION_ASIDE_OPEN = re.compile(r'\s*+,\s*+(?:which|where|whose)\b', re.A | re.I)
+_MOTION_END = re.compile(r'\s*+[.!]?\s*+', re.A)
+# What makes an aside speak of the motion: an endoscope word (the endoscope vocabulary of cues.REACHED_DEPTH), or a word
+# of the reach readers' own verbs (cues.REACHED_BEFORE, REACHED_BEFORE_ROUTING, REACHED_AFTER's and NOT_REACHED_AFTER's
+# reach and examination participles, INCOMPLETE_CLAUSE's and _STATED_NO_REACH's verbs), with its nouns and its negated
+# forms ("advancement", "passage", "impassable", "unexamined", "inaccessible")
+_MOTION_ITSELF = re.compile(r'\b(?:' + cues._DEPTH_INSTRUMENT + r's?)\b|\b(?:un|in|im|non-?)?(?:advanc|pass|insert|'
+                            r'introduc|intubat|travers|reach|steer|navigat|enter(?:ed|ing|s)?\b|access|cannulat|examin|'
+                            r'evaluat|inspect|visuali[sz]|explor)', re.A | re.I)
+# ... or the installed readers' words of failure or attempt, of a stop, of a qualifier, of a hedge
+_MOTION_QUALIFIER = re.compile(r'\b(?:' + '|'.join(sorted(_QUALIFIERS | _PREDICATIVE_STATES)) + r')\b', re.A | re.I)
+
+
+@functools.lru_cache(maxsize=2)
+def _motion_places(upper: bool) -> tuple:
+    """The places of a motion along the table's tract: (pattern, depth or None, label) - the landmarks of the table
+    (with their depths), then the sites of services.ANATOMY in the tract's lumen (no depth: a site on the way, never the
+    furthest landmark). services imports this module, so its table is read here, once, on first use."""
+    from studio.gi import services as gi_services  # local: services imports detect
+    table = cues.UPPER_LANDMARKS if upper else cues.LOWER_LANDMARKS
+    regions = ('esophagus', 'stomach', 'duodenum', 'small_bowel') if upper else ('colon', 'rectum', 'anus', 'small_bowel')
+    return (tuple((pattern, depth, label) for label, depth, pattern in table)
+            + tuple((pattern, None, name) for name, region, pattern in gi_services.ANATOMY if region in regions))
+
+
+def _motion_place(an: Analysis, pos: int, ce: int, upper: bool) -> tuple:
+    """Every way the place phrase at ``pos`` (after its preposition or "and") can be read: ((start, end, depth, label,
+    free), ...) - at most an article, then at most three words (_MOTION_WORD), then a place (the longest of
+    _motion_places at that word; a landmark before a site of the same length); ``free``: whether any word stands before
+    the place. Memoised per position (cycle 2, cost: each place phrase is read once, never once per path to it)."""
+    key = ('motion-place', pos, ce, upper)
+    if key in an.memo:
+        return an.memo[key]
+    text = an.text
+    places = _motion_places(upper)
+    found = []
+    i = pos
+    article = _MOTION_ARTICLE.match(text, i, ce)
+    if article is not None:
+        i = article.end()
+    for k in range(4):
+        best = None
+        for pattern, depth, label in places:
+            m = pattern.match(text, i, ce)
+            if m is not None and m.end() > i and (best is None or m.end() > best[1]
+                                                  or (m.end() == best[1] and best[2] is None and depth is not None)):
+                best = (m.start(), m.end(), depth, label, k > 0)
+        if best is not None:
+            found.append(best)
+        word = _MOTION_WORD.match(text, i, ce)
+        if word is None or _MOTION_WORD_DOUBT.match(text, word.start(), word.end()) \
+                or cues.DOUBT_TOKEN.match(text, word.start(), word.end()):
+            break
+        i = word.end()
+    an.memo[key] = tuple(found)
+    return an.memo[key]
+
+
+def _motion_aside_plain(an: Analysis, start: int, end: int) -> bool:
+    """Whether the aside [start, end) (from its comma, through its relative word) says nothing of the motion and does not
+    qualify it: no endoscope word or word of the reach readers' verbs (_MOTION_ITSELF); no clause cue of the installed
+    status readers but a performed one (an.cues_in: cancelled, incomplete, historical, planned, uncertain); no date; no
+    failure or attempt (cues.UNDONE_ACT), stop (_P2_UPPER_STOP, cues.PROCEDURE_INCOMPLETE), reason an examination stops
+    short for (cues.INCOMPLETE_REASONS), qualifier (_QUALIFIERS: "impossible", "unable", "later", "elsewhere";
+    _PREDICATIVE_STATES: "unclear"), hedge (cues._HEDGE_MODAL, cues._HEDGE_ADVERB) or falling-short word; and no negation
+    (cues.DOUBT_TOKEN) but a denied finding's, another act's or a complication's (_P2_doubt_is_a_finding: "which showed
+    no varices"). Read once per aside (_motion_parse). Hold-only: False keeps the installed reading."""
+    text = an.text
+    if end - start > _MOTION_ASIDE + 40:
+        return False
+    if _MOTION_ITSELF.search(text, start, end) or _MOTION_QUALIFIER.search(text, start, end) \
+            or _MOTION_WORD_DOUBT.search(text, start, end) or cues.UNDONE_ACT.search(text, start, end) \
+            or _P2_UPPER_STOP.search(text, start, end) or cues.PROCEDURE_INCOMPLETE.search(text, start, end) \
+            or any(pattern.search(text, start, end) for _, pattern in cues.INCOMPLETE_REASONS) \
+            or re.search(cues._HEDGE_MODAL, text[start:end], re.A | re.I) or an.dates_in(start, end):
+        return False
+    if any(cue.status != 'performed' for cue in an.cues_in(start, end)):
+        return False
+    return not cues.DOUBT_TOKEN.search(text, start, end) or _P2_doubt_is_a_finding(an, start, end)
+
+
+def _motion_parse(an: Analysis, cs: int, ce: int, table) -> Optional[tuple]:
+    """The clause [cs, ce) - a sentence's last - read as one motion of the instrument (see the block comment above):
+    (opening start, first landmark start, the motion's places ((start, end, depth, label, free), ...) from its first
+    landmark on, the opening match's verb end), or None when it is no motion. The first opening (_MOTION_OPENING, at a
+    landmark of ``table``, in text order, at most _MOTION_ANCHORS of them) whose landmark the rest of the sentence
+    continues, segment by segment, to its end. Memoised per clause and table; each position, each place phrase and each
+    aside is read at most once (cycle 2, cost: an aside's plainness was read again at every comma of its window)."""
+    upper = table is cues.UPPER_LANDMARKS
+    key = ('motion', cs, ce, upper)
+    if key in an.memo:
+        return an.memo[key]
+    an.memo[key] = None
+    text = an.text
+    if ce - cs > _MOTION_CLAUSE or not _MOTION_JOIN.search(text, cs, ce):
+        return None  # too long to read, or no second segment at all: the installed reading
+    hits = sorted((m.start(), m.end(), depth, label) for label, depth, pattern in table
+                  for m in pattern.finditer(text, cs, ce))
+    memo: dict = {}
+    plain: dict = {}
+
+    def aside_plain(start: int, end: int) -> bool:
+        if (start, end) not in plain:
+            plain[(start, end)] = _motion_aside_plain(an, start, end)
+        return plain[(start, end)]
+
+    def after(pos: int, count: int):
+        """The motion's places from ``pos`` (just after a place) to the sentence's end: a tuple, () where the sentence
+        ends there, None where the rest is not the motion's."""
+        if pos in memo:
+            return memo[pos]
+        memo[pos] = None
+        found = None
+        if count > _MOTION_PLACES:
+            return None
+        if _MOTION_END.fullmatch(text, pos, ce):
+            found = ()
+        if found is None:
+            join = _MOTION_JOIN.match(text, pos, ce)
+            if join is not None:
+                found = phrase(join.end(), count)
+        if found is None:
+            joined = _MOTION_AND.match(text, pos, ce)
+            if joined is not None:
+                found = phrase(joined.end(), count)
+        if found is None:
+            found = aside(pos, count)
+        memo[pos] = found
+        return found
+
+    def phrase(pos: int, count: int):
+        for place in _motion_place(an, pos, ce, upper):
+            rest = after(place[1], count + 1)
+            if rest is not None:
+                return (place,) + rest
+        return None
+
+    def aside(pos: int, count: int):
+        opened = _MOTION_ASIDE_OPEN.match(text, pos, ce)
+        if opened is None:
+            return None
+        limit = min(ce, opened.end() + _MOTION_ASIDE)
+        comma = text.find(',', opened.end(), limit)
+        while comma >= 0:
+            join = _MOTION_JOIN.match(text, comma, ce)
+            if join is not None:
+                found = phrase(join.end(), count)
+                if found is not None:  # the aside ends here: its words read once (a longer aside holds the same words)
+                    return found if aside_plain(pos, comma) else None
+            comma = text.find(',', comma + 1, limit)
+        end = ce
+        while end > opened.end() and text[end - 1] in '.! \t\n':
+            end -= 1
+        if end - opened.end() > _MOTION_ASIDE or not aside_plain(pos, end):
+            return None
+        return ()  # the last aside runs to the sentence's end
+
+    tried = 0
+    for start, end, depth, label in hits:
+        if tried == _MOTION_ANCHORS:
+            break
+        ws = an.lay.window((cs, ce), start, end, CLAUSE_REACH)[0]
+        opening = _MOTION_OPENING.search(text, ws, start)
+        if opening is None or any(pattern.search(text, opening.start('gap'), opening.end('gap'))
+                                  for _, _, pattern in table):
+            continue  # no opening, or the opening's gap names another landmark: it is no first landmark
+        tried += 1
+        rest = after(end, 1)
+        if rest is not None and rest:
+            an.memo[key] = (opening.start(), start, ((start, end, depth, label, False),) + rest, opening.start('gap'))
+            break
+    return an.memo[key]
+
+
+def _motion_read_plain(an: Analysis, start: int, end: int) -> bool:
+    """Whether [start, end) - the motion's verb, its subject's head word, a place or a landmark of its sentence - reads
+    the plain performed reading of the installed status readers (_generic_reading: no other time, no '?', no hedge, no
+    attempt, plan, negation, incompleteness or refusal; no unresolved negation) and is about no other procedure."""
+    return _generic_reading(an, start, end).status == 'performed' and not _about_another_procedure(an, start, end)
+
+
+_MOTION_OPENING_DOUBT = re.compile(r'\b(?:' + cues._HEDGE_ADVERB[3:-1] + '|' + '|'.join(cues._FALLING_SHORT)
+                                   + r'|attempt\w*|tr(?:y|ies|ied|ying)|instead)\b', re.A | re.I)
+# an instrument word governed by a preposition ("passed through the scope", "over the guidewire", "with the
+# gastroscope"): a path or a means, never the mover (_motion_mover); read right before the word
+_MOTION_PATH_OBJECT = re.compile(r'\b(?:through|thru|over|via|with|into|in|inside|within|alongside|beside|along|down|'
+                                 r'from|onto|on|by|to|past|across|of|under|beneath|behind|beyond)\s+(?:(?:the|a|an|its|'
+                                 r'our|his|her|their)\s+)?(?:[\w-]+\s+){0,2}$', re.A | re.I)
+_MOTION_INSTRUMENT = re.compile(r'\b(?:(?P<scope>' + _MOTION_SCOPE + r')|' + _MOTION_ACCESSORY + r')\b', re.A | re.I)
+# the auxiliaries of the mover's own predicate that leave its act done: the past indicative and the perfect ("was then
+# introduced and advanced", "had been passed and advanced"); every other auxiliary of the shared clause reader's closed
+# class - a modal, the present tense, "did" - and its negators doubt it ("would be introduced and advanced", "is
+# introduced and advanced", "was introduced and could not be advanced")
+_MOTION_PLAIN_AUXILIARIES = frozenset(('was', 'were', 'has', 'have', 'had', 'been', 'being', 'be'))
+_MOTION_AUXILIARY_DOUBT = (gi_clauses.AUXILIARIES - _MOTION_PLAIN_AUXILIARIES) | gi_clauses.NEGATORS | frozenset(('no',))
+_MOTION_PREDICATE_WORD = re.compile(r"[A-Za-z][A-Za-z']*", re.A)
+# an aside set off in the words before the mover - a parenthesis or a comma and a relative word ("On 10/14, which was
+# ..., the gastroscope ..."): the twin keeps the lead as written, so a lead holding an aside is not read at all
+# Integration (2026-11-08, u14a2 release 0, the design's own guard (6) completed): ANY set-off punctuation in the
+# lead - a comma, a semicolon, a colon, a bracket, an em or en dash, or a spaced hyphen - is an aside the twin would
+# drop, so the motion is not read (fail-closed: the installed reading stands). The regex had seen only brackets and
+# ', which|where|...': 'On 10/14 \u2014 unlike today \u2014 the gastroscope was introduced ...' and 'On 10/14, unlike
+# today, ...' were read, and the verbatim-lead twin they routed inherits an installed blind spot (a today word in a
+# lead aside outranks the lead's date), where the brief's aside-free twin holds.
+_MOTION_LEAD_ASIDE = re.compile('[()\\[\\],;:\u2014\u2013]|\\s-\\s', re.A | re.I)
+# The final refutation pass (2026-11-08, its labels lens's HIGH): a list of set-off characters is no fail-closed rule. An
+# ASCII "--", another dash, an ellipsis, quotes, a slash, or no punctuation at all ("On 10/14 unlike today the
+# gastroscope was introduced ...") set off a lead it missed, and the dated reach was read as today's D3. So the lead -
+# the words before the mover's scope noun - is read by a CLOSED form: an optional list mark, an optional sequence word of
+# today's narrative (then, subsequently, thereafter, today), and an optional article or "our" with at most three
+# plain words before the noun ("The adult ...", "The Olympus GIF-H190 ..."). Any other lead - an occasion, a date, a
+# source, an agent, a generic or hypothetical frame ("Some time back", "At her first endoscopy", "In my experience",
+# "As usual"), and any set-off punctuation (the character guard above stays) - reads no motion, and the installed
+# reading stands.
+# The focused second pass (2026-11-08): the three words may hold no article or possessive, so a clause ("The daughter
+# says the gastroscope ...", "The textbook has the ...") is no plain lead. The lead is read in the motion's own layout
+# sentence only: a dated fragment or label line BEFORE it ("On 10/14 -- unlike today. The gastroscope ...") is not read
+# here - the direct-reach twin keeps it verbatim and the installed release reads that twin READY (an installed blind spot
+# of the short reach, recorded in ACCURACY-RESIDUALS.md).
+_MOTION_LEAD_DETERMINER = r'(?:the|a|an|our|my|your|his|her|its|their|this|that|these|those)'
+_MOTION_LEAD_PLAIN = re.compile(r'\s*(?:(?:\d{1,2}[.)]|[-*\u2022])\s+)?(?:(?:then|subsequently|thereafter|today)'
+                                r'\s+)?(?:' + _MOTION_LEAD_DETERMINER + r'\s+(?:(?!' + _MOTION_LEAD_DETERMINER
+                                + r'\b)[A-Za-z0-9][A-Za-z0-9-]*\s+){0,3})?', re.A | re.I)
+_MOTION_VERB_WORD = re.compile(r'\b' + _MOTION_VERB + r'\b', re.A | re.I)
+
+
+def _motion_opening_doubted(an: Analysis, verb: int, first: int) -> bool:
+    """Whether the opening's own words - from the verb to the first landmark - doubt the motion: a hedge, a
+    falling-short adverb or an attempt (_MOTION_OPENING_DOUBT: "partially advanced", "advanced in an attempt to"), a wish,
+    a plan or a condition (PE's own words, _MOTION_WISH: "advanced in the hope of reaching"), a failure (cues.UNDONE_ACT:
+    "advanced without success"), or any negation (cues.DOUBT_TOKEN) but a denied complication or difficulty
+    (cues.COMPLICATION_NEGATION, the installed negation reader's own exception: "advanced without difficulty", "without
+    resistance"; never "with no success", "to no avail", "no further than"). Hold-only."""
+    text = an.text
+    if _MOTION_OPENING_DOUBT.search(text, verb, first) or cues.UNDONE_ACT.search(text, verb, first) \
+            or _MOTION_WISH.search(text, verb, first):
+        return True
+    denied = [(m.start(), m.end()) for m in cues.COMPLICATION_NEGATION.finditer(text, verb, first)]
+    return any(not any(s <= t.start() and t.end() <= e for s, e in denied)
+               for t in cues.DOUBT_TOKEN.finditer(text, verb, first))
+
+
+def _motion_predicate_doubted(an: Analysis, ws: int, mover_end: int, verb: int) -> bool:
+    """Whether the mover's own predicate - the words from its head word to the motion's verb, which the direct twin
+    drops - doubts the act: an auxiliary of the shared clause reader's closed class but the past indicative and the
+    perfect (_MOTION_AUXILIARY_DOUBT: "would be introduced through the mouth and advanced", "is introduced and
+    advanced"), an infinitive auxiliary ("was to be introduced and advanced"), a negator, or PE's own doubt of a reach
+    read before every moving verb of the predicate (_pe_reach_doubted: "was reportedly introduced and advanced").
+    Hold-only."""
+    text = an.text
+    words = [m.group(0).lower() for m in _MOTION_PREDICATE_WORD.finditer(text, mover_end, verb)]
+    if any(word in _MOTION_AUXILIARY_DOUBT for word in words) \
+            or any(a == 'to' and b in ('be', 'have') for a, b in zip(words, words[1:])):
+        return True
+    return any(_pe_reach_doubted(text[ws:m.start()], '', '') for m in _MOTION_VERB_WORD.finditer(text, mover_end, verb))
+
+
+def _motion_mover(an: Analysis, ws: int, verb: int, first: int) -> Optional[tuple[int, int]]:
+    """The span of the motion's subject, the endoscope that moves: the nearest instrument word (_MOTION_INSTRUMENT, PE's
+    words) before the verb in its clause window that no preposition governs ("The gastroscope was introduced through
+    the mouth and advanced ..."), when it is a scope word and no accessory stands between the verb and the first
+    landmark; else None. A scope word after a preposition is the path, never the mover ("A guidewire was passed through
+    the gastroscope into the stomach"); a device of no listed name with the scope as its path ("A cytology brush was
+    passed through the scope ...") names no mover, and neither does a verb whose subject is no instrument word ("We advanced the
+    gastroscope ...": cycle 2 reads no object) or a scope word an accessory word names ("The capsule endoscope was
+    advanced ..."). Hold-only: None keeps the installed reading."""
+    text = an.text
+    if re.search(r'\b(?:' + _MOTION_ACCESSORY + r')\b', text[verb:first], re.A | re.I):
+        return None
+    before = text[ws:verb]
+    last = None
+    for found in _MOTION_INSTRUMENT.finditer(before):
+        if not _MOTION_PATH_OBJECT.search(before, 0, found.start()):
+            last = found  # an instrument word no preposition governs: a subject, never a path ("through the scope")
+    if last is None or last.group('scope') is None \
+            or re.search(r'\b(?:' + _MOTION_ACCESSORY + r')[\s-]+$', before[:last.start()], re.A | re.I):
+        return None  # no scope word as the subject, or one an accessory word names ("the capsule endoscope")
+    return ws + last.start(), ws + last.end()
+
+
+# "by" before an insertion route the installed insertion reader knows (_INSERTED_AT's own: the mouth, the oropharynx,
+# the anus, the anal canal, the rectum, the esophagus): the route, never an agent ("introduced by mouth")
+_MOTION_BY_ROUTE = re.compile(r'\bby(?=\s+(?:the\s+)?(?:rectum|anus|anal\s+canal|esophagus|oesophagus|mouth|oropharynx)\b)',
+                              re.A | re.I)
+
+
+def _motion_signals(sentence: str) -> bool:
+    """Whether the motion's own sentence states another time, place, agent or source: the labelled paragraph reader's
+    hold signals (structure._signals: "Per the outside report, ...", "In 2023 ...", "At Mercy Hospital ...", "... by Dr.
+    Other ...", "During her prior admission ..."), read with a "by" before an insertion route as that route
+    (_MOTION_BY_ROUTE: "introduced by mouth" is no agent). Hold-only: True keeps the installed reading."""
+    read = _MOTION_BY_ROUTE.sub('via', sentence)
+    return gi_structure._signals(read, 0, len(read), True, False)
+
+
+def _motion_stopped_short(an: Analysis, sentences, table, depth: int) -> bool:
+    """Whether a clause of the family's sentences states that the examination stopped at or in a landmark of ``table``
+    shallower than ``depth`` (P2 READ-HOLD's reading, _p2_stopped_short, for either tract: "We stopped in the stomach.",
+    "The examination ended at the hepatic flexure."): a motion past it is then never read, and the installed reading
+    stands. Hold-only; a search per clause, the table only in a clause that states a stop."""
+    text = an.text
+    for s, e in sentences:
+        for cs, ce in _clauses_in(an, s, e):
+            stop = _P2_UPPER_STOP.search(text, cs, ce)
+            if stop is None or _P2_UPPER_PAUSE.search(text, cs, ce):
+                continue
+            if any(d < depth and pattern.search(text, stop.end(), ce) for _, d, pattern in table):
+                return True
+    return False
+
+
+def _motion_checked(an: Analysis, family: str, sentences, table, refused: list, labelled: list, furthest, opening: int,
+                    first: int, places, gap: int, sentence: tuple, clause: tuple) -> Optional[tuple]:
+    """One parsed motion under every local guard of the block comment above (fail closed): (depth, label, clause Span,
+    mover end, furthest landmark's (start, end), sentence end, the labels of its places), or None."""
+    text = an.text
+    start, end, depth, label, free = furthest
+    ss, se = sentence
+    cs, ce = clause
+    if free or se - ss > _GI4_SENTENCE_CHARS:
+        return None  # an approximation before the furthest landmark; a sentence too long to read
+    if any(hit[0] <= depth for hit in refused) or any(hit[0] < depth for hit in labelled):
+        return None  # a landmark blocked, denied or doubted at or short of it, or a shorter extent label
+    from studio.gi import services as gi_services  # local: services imports detect
+    if an.services_in(opening, se) or an.interventions_in(opening, se) or gi_services._acts_in(text, opening, se):
+        return None  # the motion's own words name a service or an act (the shared act tables) the twin would drop
+    ws = an.lay.window((cs, ce), first, places[0][1], CLAUSE_REACH)[0]
+    mover = _motion_mover(an, ws, opening, first)
+    if mover is None or _MOTION_LEAD_ASIDE.search(text, ss, mover[0]) \
+            or not _MOTION_LEAD_PLAIN.fullmatch(text, ss, mover[0]):
+        return None  # no mover; or a lead the closed form does not read (the direct twin's lead is aside-free)
+    verb_end = gap  # the opening's verb is the word right before its gap
+    if _pe_reach_doubted(text[ws:opening], '', text[end:ce]) or _motion_opening_doubted(an, opening, first) \
+            or _motion_predicate_doubted(an, ws, mover[1], opening):
+        return None
+    reads = [mover, (opening, verb_end), (start, end)] + [(p[0], p[1]) for p in places] \
+        + [(m.start(), m.end()) for _, _, pattern in table for m in pattern.finditer(text, first, se)]
+    if not all(_motion_read_plain(an, s, e) for s, e in dict.fromkeys(reads)):
+        return None
+    if _motion_signals(text[ss:se]) or not in_todays_narrative(text, opening, an.service_date, sentence) \
+            or not _reach_family_named(an, family, start) or not _reach_own_part(an, family, start):
+        return None
+    key = ('motion-family-doubts', family)
+    if key not in an.memo:  # read once per family, whatever motion asks
+        an.memo[key] = _stated_family_doubts(an, sentences)
+    if an.memo[key] or _motion_stopped_short(an, sentences, table, depth):
+        return None
+    return (depth, label, _span(text, cs, ce), mover[1], (start, end), se,
+            frozenset(p[3] for p in places if p[2] is not None))
+
+
+def _motion_for(an: Analysis, family: str, sentences, table, expected: int, refused: list,
+                labelled: list) -> Optional[tuple]:
+    """The family's deepest motion that passes every local guard (_motion_checked), or None: the family's sentences'
+    last clauses read as motions (_motion_parse), those whose furthest landmark lies at or beyond the depth the family
+    calls for, the deepest first, at most _MOTION_TRIES of them. Memoised per family."""
+    key = ('motion-for', family)
+    if key in an.memo:
+        return an.memo[key]
+    an.memo[key] = None
+    if _pe_around_procedure(an):
+        return None
+    candidates = []
+    for s, e in sentences:
+        clauses = _last_clauses_in(an, s, e, 1)
+        if not clauses or clauses[0][1] != e:
+            continue  # only a sentence's last clause can end a motion
+        cs, ce = clauses[0]
+        found = _motion_parse(an, cs, ce, table)
+        if found is None:
+            continue
+        opening, first, places, gap = found
+        furthest = max((place for place in places if place[2] is not None), key=lambda place: (place[2], place[0]))
+        if furthest[2] >= expected:
+            candidates.append((furthest, opening, first, places, gap, (s, e), (cs, ce)))
+    for candidate in sorted(candidates, key=lambda c: (-c[0][2], c[0][0]))[:_MOTION_TRIES]:
+        motion = _motion_checked(an, family, sentences, table, refused, labelled, *candidate)
+        if motion is not None:
+            an.memo[key] = motion
+            break
+    return an.memo[key]
+
+
+_MOTION_TWIN_ARTICLE = re.compile(r'(?:the|a|an)\s', re.A | re.I)
+
+
+def _motion_twin_reads(an: Analysis, family: str, motion: tuple) -> bool:
+    """Whether the installed release reads the motion's DIRECT-REACH TWIN - this document with the motion's sentence from
+    its subject's head word on replaced by "<subject> was advanced to <the furthest landmark>." - as ``family``
+    performed with exactly that landmark as its extent. The twin is routed with no motion read inside it (_MOTION_OFF),
+    so what it reads is the installed reading of the twin; a twin that cannot be routed reads nothing (fail closed). At
+    most one twin per document (bounded work): a second family's motion keeps the installed reading."""
+    depth, label, _, mover_end, (start, end), se, _ = motion
+    key = ('motion-twin',)
+    if key in an.memo:
+        asked, answer = an.memo[key]
+        return asked == (family, start) and answer
+    an.memo[key] = ((family, start), False)
+    text = an.text
+    words = text[start:end]
+    twin = (text[:mover_end] + ' was advanced to ' + ('' if _MOTION_TWIN_ARTICLE.match(words) else 'the ') + words + '.'
+            + text[se:])
+    token = _MOTION_OFF.set(True)
+    try:
+        routed = _analysis.__wrapped__(twin, an.service_date)[1]
+    except Exception:  # noqa: BLE001 - fail closed: a twin the installed release cannot route reads nothing here
+        return False
+    finally:
+        _MOTION_OFF.reset(token)
+    finding = next((f for f in routed.findings if f.family == family), None)
+    extent = None if finding is None else next((f.value for f in finding.facts if f.name == 'extent'), None)
+    answer = finding is not None and finding.status == 'performed' and extent == label
+    an.memo[key] = ((family, start), answer)
+    return answer
+
+
+def _motion_extent(an: Analysis, family: str, sentences, table, expected: int, fact: Optional[Fact], reached: list,
+                   finish, opened: bool, incomplete: bool, refused: list, doubted: list, unread: list,
+                   labelled: list) -> Optional[Fact]:
+    """The family's extent: the installed reading ``fact`` (its reach readers' and its findings statements', U19),
+    or - only where that reading is open (see the block comment above) - the furthest landmark of one motion of the
+    endoscope that passes every guard and whose direct-reach twin the installed release reads to that landmark, put
+    through the family's own ``finish`` with the installed reached hits. Hold-only beyond that: whatever fails gives
+    back ``fact``."""
+    if incomplete or doubted or unread or not sentences or an.service_date is None or _MOTION_OFF.get() \
+            or len(an.text) > _MOTION_TEXT:
+        return fact
+    if fact is None:
+        if not opened:
+            return fact  # withheld for a doubt (a stop, an unread or refused label, a cut): never consumed here
+    elif not fact.value.startswith('incomplete: ') or an.memo.get((STATED_ONLY_EXTENT, family)):
+        return fact  # a complete extent is never replaced, deepened or made shallower (U19's included)
+    motion = _motion_for(an, family, sentences, table, expected, refused, labelled)
+    if motion is None:
+        return fact
+    depth, label, span = motion[:3]
+    if fact is not None:
+        # an installed incomplete extent is opened only where its landmark is one of this motion's own places in this
+        # motion's clause (the installed reach read the motion's first segment as its end), and nothing reached outside
+        # that clause lies as deep
+        deepest = max(hit[0] for hit in reached)
+        own = [hit for hit in reached if hit[0] == deepest]
+        if not all(hit[2] == span and hit[1] in motion[6] for hit in own):
+            return fact
+    read = finish(reached + [(depth, label, span)])
+    if read is None or read.value != label or not _motion_twin_reads(an, family, motion):
+        return fact
+    if fact is None:
+        an.memo[(MOTION_ONLY_EXTENT, family)] = True  # no evidence that the procedure was done today (_route)
+    return read
+
+
 def _pe_reached_before(an: Analysis, pre: str, depth: int, table, at: int, post: str) -> bool:
     """Whether ``pre``, the clause window before a landmark at ``depth`` of ``table`` starting at ``at`` (``post``: the
     window after it), ends with a reach to it, for _landmarks (GI round 4, package PE: synthesis E2). As installed
@@ -7182,8 +7721,12 @@ def _colon_extent(an: Analysis, sentences, incomplete: bool = False) -> Optional
     deepest = max(reached, key=lambda hit: hit[0]) if reached else None
     opened = not incomplete and (deepest is None or (deepest[0] < cues.CECUM_DEPTH and _insertion_only(
         deepest[0], deepest[2], blocked + denied + doubted, labelled)))
-    return _with_stated(an, 'gi.colonoscopy', reached, finish, opened, lambda: _stated_reaches(
+    fact = _with_stated(an, 'gi.colonoscopy', reached, finish, opened, lambda: _stated_reaches(
         an, 'gi.colonoscopy', sentences, cues.LOWER_LANDMARKS, cues.CECUM_DEPTH, blocked, denied, labelled, doubted))
+    # the structure round (U14): one motion of the endoscope read past its first landmark, only where the installed
+    # reading is open and exactly as the installed release reads its direct-reach twin (_motion_extent)
+    return _motion_extent(an, 'gi.colonoscopy', sentences, cues.LOWER_LANDMARKS, cues.CECUM_DEPTH, fact, reached,
+                          finish, opened, incomplete, blocked + denied, doubted, unread, labelled)
 
 
 # How deep an upper endoscopy is expected to reach (UPPER_LANDMARKS depth): an EGD the
@@ -7243,8 +7786,11 @@ def _upper_extent(an: Analysis, sentences, incomplete: bool) -> Optional[Fact]:
     deepest = max(reached, key=lambda hit: hit[0]) if reached else None
     opened = not incomplete and (deepest is None or (deepest[0] < _expected_upper_depth(an) and _insertion_only(
         deepest[0], deepest[2], blocked + denied + doubted, labelled)))
-    return _with_stated(an, 'gi.egd', reached, finish, opened, lambda: _stated_reaches(
+    fact = _with_stated(an, 'gi.egd', reached, finish, opened, lambda: _stated_reaches(
         an, 'gi.egd', sentences, cues.UPPER_LANDMARKS, _expected_upper_depth(an), blocked, denied, labelled, doubted))
+    # the structure round (U14): one motion of the endoscope read past its first landmark (_motion_extent)
+    return _motion_extent(an, 'gi.egd', sentences, cues.UPPER_LANDMARKS, _expected_upper_depth(an), fact, reached,
+                          finish, opened, incomplete, blocked + denied, doubted, unread, labelled)
 
 
 # P2 READ-HOLD, R8 D13 (reader-repair DESIGN item 4): a statement that the upper examination itself stopped, halted,
@@ -10051,7 +10597,8 @@ def _route(an: Analysis) -> RoutingResult:
         # service was done today; documented extent or interventions are.
         # completion design, reach group (U19): an extent only findings statements read is no evidence (_with_stated)
         evidenced = any(f.name in EVIDENCE_FACTS and f.origin == 'document' and f.value not in (None, 'none documented')
-                        and not (f.name == 'extent' and an.memo.get((STATED_ONLY_EXTENT, family)))
+                        and not (f.name == 'extent' and (an.memo.get((STATED_ONLY_EXTENT, family))
+                                                         or an.memo.get((MOTION_ONLY_EXTENT, family))))
                         for f in facts)
         family_readings = [readings[m] for m in mentions]
         bare = an.bare_negations.get(family, [])

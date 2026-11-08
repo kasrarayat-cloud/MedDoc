@@ -3740,7 +3740,13 @@ test('withdrawalTookEffect waits for the withdrawn answer itself, not for the pa
   // a saved answer of another fact or another code is not this row's
   assert.equal(vb.withdrawalTookEffect({ details_needed: [savedRow, row({ id: 'd2', fact: 'setting', saved: { answer_id: 'ans-1' } })] },
     'setting', null, 'ans-9'), true);
-  assert.equal(vb.withdrawalTookEffect({ details_needed: [savedRow] }, 'extent', '45380', 'ans-1'), true);
-  // nothing served at all reads as taken effect; addAddendum's own open-row count then refuses (expected one open row)
-  assert.equal(vb.withdrawalTookEffect(null, 'extent', '45338', 'ans-1'), true);
+  // no row of THIS code is served (the saved row is another code's): absent, so not yet taken effect
+  assert.equal(vb.withdrawalTookEffect({ details_needed: [savedRow] }, 'extent', '45380', 'ans-1'), false);
+  // nothing served, or no row of the fact and code served, is NOT the target state: the row is briefly absent while the
+  // withdrawal's recompute runs (the recall round's c1c walk, 2026-11-08), and the walk keeps waiting for it to return
+  assert.equal(vb.withdrawalTookEffect(null, 'extent', '45338', 'ans-1'), false);
+  assert.equal(vb.withdrawalTookEffect({ details_needed: [] }, 'extent', '45338', 'ans-1'), false);
+  assert.equal(vb.withdrawalTookEffect({ details_needed: [row({ id: 'd3', affects: ['45380'] })] }, 'extent', '45338', 'ans-1'), false);
+  // the row served again, unsaved and offering the addendum: taken effect
+  assert.equal(vb.withdrawalTookEffect({ details_needed: [row({ id: 'd3', affects: ['45380'] }), row()] }, 'extent', '45338', 'ans-1'), true);
 });

@@ -210,12 +210,15 @@ class CourseContinuationTests(SimpleTestCase):
         return next((f.value for f in finding.facts if f.name == 'extent'), None)
 
     def test_a_coordinated_reach_after_an_aside_is_the_recorded_open_defect(self):
-        """Walk finding 3 stays OPEN (ACCURACY-RESIDUALS.md, the walk round): both forms of the continuation reader were
-        refuted and dropped under the two-cycle rule, so this reads as installed - the first landmark's incomplete extent.
-        A repair must move this pin with its own evidence."""
+        """Walk finding 3 was OPEN (ACCURACY-RESIDUALS.md, the walk round): both forms of the continuation reader were
+        refuted and dropped under the two-cycle rule, and this read as installed - the first landmark's incomplete extent.
+        The structure round (2026-11-08, U14) moves the pin with its own evidence: the sentence is read as one motion of
+        the instrument, segment by segment to its end (detect._motion_parse), and its furthest landmark is the extent
+        exactly where the installed release reads the sentence's direct-reach twin to it (detect._motion_extent,
+        tests.test_completion_motion); every control below still reads as before."""
         self.assertEqual(self.extent('The gastroscope was advanced into the stomach, which was normal on forward view and '
                                      'on retroflexion, and through the pylorus to the second portion of the duodenum.'),
-                         'incomplete: stomach')
+                         'second part of duodenum')
 
     def test_a_course_stopped_or_doubted_does_not(self):
         for sentence in ('The gastroscope was advanced into the stomach but could not be passed through the pylorus to the '

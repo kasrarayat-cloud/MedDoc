@@ -100,8 +100,9 @@ class VersionTests(unittest.TestCase):
         # (2026-11-03) reads differently from installed 41e03656df61's @5 (P1 rule 8's E/M absence, P2's D12/D13); @7:
         # the harness repair (2026-11-05) reads differently from installed b0dc3446c64c's @6 (the repair package's
         # marking-purpose rule, shared with the inventory)
-        # @10: the walk round (2026-11-07); @11: the recall round (2026-11-08: a reach stated by findings)
-        self.assertEqual(detect.ROUTING_VERSION, 'gi-routing@11')
+        # @10: the walk round (2026-11-07); @11: the recall round (2026-11-08: a reach stated by findings); @12: the
+        # structure round (2026-11-08: the direct-reach twin, U14; the computed heading twin's release, U18)
+        self.assertEqual(detect.ROUTING_VERSION, 'gi-routing@12')
 
 
 GI03_LINE = 'Colonoscopy with cold snare polypectomy and cold forceps biopsy.'

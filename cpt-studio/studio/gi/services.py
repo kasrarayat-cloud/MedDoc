@@ -47,7 +47,10 @@ from studio.gi import sections as _sections
 from studio.ingest import symbols as _box_symbols
 from studio.types import Span
 
-INVENTORY_VERSION = 'gi-services@6'  # @6: the completion repair (U1, U2, U5, U6, U12, U13, F1, F5; one subject reading)
+INVENTORY_VERSION = 'gi-services@7'  # @7: the structure round (2026-11-08: a food bolus removal that today's narrative
+# and Impression corroborate read as its full twin reads it, U16; a corroborated label read as its heading twin's
+# procedure line, with the installed parts, U18); @6: the completion repair (U1, U2, U5, U6, U12, U13, F1, F5; one
+# subject reading)
 
 FLAGS = re.A | re.I
 
@@ -1740,7 +1743,12 @@ def _labelled_parts(text: str, plist: Sequence[_Part]) -> tuple[_Part, ...]:
     from studio.gi import structure as gi_structure
     original = _ORIGINAL.get()
     source = original if isinstance(original, str) and len(original) == len(text) else text
-    paragraphs = gi_structure.released(source)
+    # the structure round (u18d): only the paragraphs the INSTALLED conditions release are parts here
+    # (structure.installed_released): a corroborated paragraph (structure's corroborated release, which stands only
+    # where its computed heading twin reads as the document does) is no labelled report part - its lines are read as
+    # this reader reads them when the paragraph is held, as its twin's "PROCEDURE: <label>" line, which opens no part
+    # here, leaves them - so every part reads exactly as installed
+    paragraphs = gi_structure.installed_released(source)
     if not paragraphs:
         return tuple(plist)
     # the Indications each paragraph stood in, as routing's layout has them: their other lines are the indication's to
@@ -1796,6 +1804,25 @@ def _labelled_parts(text: str, plist: Sequence[_Part]) -> tuple[_Part, ...]:
             else:
                 out.append(_Part(a, b, para.family, 'physician', None, 'report', False, '', ''))
     return tuple(out)
+
+
+def _corroborated_labels(source: str) -> tuple:
+    """The structure round (u18d): the paragraphs structure's corroborated release releases in ``source`` (the text
+    routing reads). Such a release stands only where its computed heading twin - the label written "PROCEDURE: <label>"
+    on a line of its own - reads as the document does (structure._twin_parity), so this reader reads each one's label
+    as it reads that line: a sentence of its own (_label_sentences), and a procedure-field listing of its service (pass
+    1). Never a label the installed conditions release: those read as installed."""
+    from studio.gi import structure as gi_structure
+    return tuple(p for p in gi_structure.released(source) if p.corroborated)
+
+
+def _label_sentences(text: str, sentences: list, labels: tuple) -> list:
+    """``sentences`` (_sentences) with the one opening at each corroborated label cut as the label's heading twin cuts
+    it (structure._heading_split: the label alone, then the narrative from its first word)."""
+    if not labels:
+        return sentences
+    from studio.gi import structure as gi_structure
+    return list(gi_structure._heading_split(text, tuple(sentences), list(labels)))
 
 
 def _time_parts(text: str, plist: Sequence[_Part], lay=None) -> tuple[_Part, ...]:
@@ -3866,7 +3893,8 @@ def _act_frame(text: str, service_date: Optional[date], pages: tuple = ()):
     flow = reflow(text, pages)
     dates = gi_context.find_dates(flow)
     plist = parts(flow, service_date=service_date, dates=dates)
-    return flow, dates, plist, [p.start for p in plist], _sentences(flow)
+    return flow, dates, plist, [p.start for p in plist], _label_sentences(flow, _sentences(flow),
+                                                                          _corroborated_labels(text))
 
 
 # How many things the reader reads in one passage for passage_readings (bounds the work per code); past it the passage
@@ -4687,6 +4715,664 @@ def _plain_finding(text: str, clause: tuple[int, int], start: int, end: int) -> 
     return _PLAIN_END.fullmatch(text, at, ce) is not None
 
 
+# --- design round 2, cycle 2 (2026-11-08), U16 / u16c2: a removal two statements of today's report corroborate -------
+# Walk finding 4 (OPEN since the walk round): a food bolus "captured ... and brought out through the mouth", which the
+# report's own Impression states "cleared with a Roth net", reads no foreign-body removal, so its code is held: neither
+# statement is one the installed readers read ("cleared" names no removal alone, owner question Q1; an out-word is no
+# act predicate). Cycle 1 (u16c) read the removal where two statements agree; its lenses refuted the act it built (its
+# site and family taken from the summary sentence, its evidence the summary line), the exits it read ("pulled up into
+# the overtube"; a predicate after the exit) and the doubts it missed. Cycle 2 reads the same two statements, narrower,
+# and adds the act the installed reader reads from the input's FULL TWIN - statement (1)'s sentence replaced by "An
+# impacted <food> bolus was found <site>. The bolus was removed with <device>." - placed as the installed pass 3 places
+# that sentence's removal:
+#  (1) THE NARRATIVE EXIT (a procedure, technique or findings section of a today's report or other part): a sentence
+#      that ENDS with the impacted food's explicit exit from the body - brought, pulled, taken or withdrawn "out", or
+#      out of / through / via the mouth or the oropharynx, out through or via the overtube, out of the patient or the
+#      body - followed by nothing but instrument phrases ("with the scope") and its end: the exit is the material's last
+#      predicate ("... into the overtube", "... and then slipped distally" are no statement). Its subject (the installed
+#      subject reader, read once) is the food itself: a food word ("the meat"), a bolus-class phrase the bolus index
+#      reads as a food bolus, or a bare piece of the food its own sentence split ("captured the food in two pieces, and
+#      each piece ..."); never a partitive of it ("fragments of the meat"), tissue, or another object. Its verb group,
+#      the clauses before its subject and its device are cycle 1's (_out_predicate). The sentence carries no other
+#      reading of the installed readers - no act word, lesion, service or instrument name, site, date, label or check
+#      box - so what the inventory reads around it is what it reads around the twin's sentences.
+#  (2) THE SUMMARY (an Impression section of the same part, after (1)): a food bolus phrase stated removed, retrieved,
+#      extracted or cleared with or using a net - the one retrieval device no installed act kind reads (a snare, a
+#      basket and forceps are act words of their own) - the participle said of that phrase by the installed subject
+#      reader, or its sentence the reduced line "<phrase> [its places], <participle> with <net>." whole.
+# Both statements are undoubted by read_clause and their sentences free of hedge, plan, history, other-source,
+# adversative, negation, "by", possessive and date words (_statement_clean, cycle 1's).
+# THE ACT is the twin's. Its site is the impaction's own as the document states it - the narrative's food finding's site
+# (its own clause's), else the summary phrase's own locative, the two agreeing in region - never a site the summary
+# sentence names for something else (cycle-1 finding REG-0). Its family is the one whose text holds statement (1) - its
+# report part's, or the one procedure the document documents, as the installed pass reads a sentence naming no service
+# - and whose tract holds that site; where none does, or they disagree, there is no act. Its scope is the installed
+# act's (its part, or statement (1)'s sentence), its evidence statement (1)'s clause and never the summary line
+# (REG-5), and its status, cues, technique and detail what read_clause, held_under_denial, _technique and _detail read
+# from the twin's own removal sentence.
+# FAIL-CLOSED (holds only; the installed tables): no act where the installed reader reads a foreign-body act of any
+# status; any failure, attempt, incompleteness, cancellation, other-source or other-time word of the installed tables,
+# or a date but the service date, in today's text; a history word or a person's examination in the narrative up to
+# statement (1); a negated exit or removal anywhere in today's text (NEGATION_WORD, then "out" or REMOVAL_PREDICATE in
+# its clause: "The bolus was not brought out.", "The meat did not come out."); after statement (1), a push (owner
+# question Q1's own verb), the food, a part of it, a bolus-class phrase or a pronoun as the subject of an instrument's
+# course verb (cues._DEPTH_VERB: "The meat was then advanced distally", "The bolus had to be advanced into the stomach",
+# "The bolus passed into the stomach"), or a removal predicate said of a bolus-class phrase later in its part (the
+# twin's anchored finding would bind it and read an act there); and a plan naming a removal.
+# Bounded: one scan for a summary statement stops texts without one; each sentence of today's text is read once by
+# each reading, its subject parsed at most once, every one within SENTENCE_READ_CHARS.
+# statement (1): the out-verbs (the brief's), the exit, and the instrument phrases that may follow it
+_OUT_VERB = _rx(r'\b(?:brought|pulled|taken|withdrawn)\b')
+_EXIT_AT_END = _rx(r'\b(?:brought|pulled|taken|withdrawn)[ \t\n]+out\b'
+                   r'(?:[ \t\n]+(?:(?:of|through|via)[ \t\n]+(?:(?:the|his|her|their)[ \t\n]+)?'
+                   r'(?:mouth|oropharynx|patient|body)|(?:through|via)[ \t\n]+(?:(?:the|an?)[ \t\n]+)?overtube)\b)?'
+                   r'(?:[ \t\n]+(?:with|using)[ \t\n]+(?:(?:the|an?)[ \t\n]+)?(?:[\w-]+[ \t\n]+){0,2}?'
+                   r'(?:scopes?|nets?|overtube)\b)*[ \t\n]*[.!]?[ \t\n]*$')
+EXIT_READ = 240  # characters at a sentence's end read for its exit
+# a coordinated participle before the exit may itself carry the material toward it ("pulled up into the overtube and
+# brought out through the mouth"): cycle 1's out-phrase, read only there
+_TOWARD_EXIT = _rx(r'[ \t\n]+(?:(?:out|up)[ \t\n]+)?(?:through|via|into|out[ \t\n]+of)[ \t\n]+'
+                   r'(?:(?:the|an?|his|her|their)[ \t\n]+)?(?:[\w\'’-]+[ \t\n]+){0,2}?(?:mouth|oropharynx|overtube)\b')
+# a piece of the food its own sentence split: "<food word or food bolus> in <two | several | ...> pieces"
+_SPLIT_IN = _rx(r'[ \t\n]+in(?:to)?[ \t\n]+(?:[\w-]+[ \t\n]+){0,2}?(?:pieces|fragments|parts|portions)\b')
+_PIECE_HEADS = {'piece': 'pieces', 'pieces': 'pieces', 'fragment': 'fragments', 'fragments': 'fragments',
+                'part': 'parts', 'parts': 'parts', 'portion': 'portions', 'portions': 'portions'}
+# every piece, never one or two of them: "each piece", or "the | both | all | these [the] pieces"
+_EVERY_PIECE = (('each',), ('both',), ('all',), ('the',), ('these',), ('all', 'the'), ('both', 'the'))
+# statement (2): REMOVAL_PREDICATE's own words and "cleared", said with a net (clauses.ACCESSORIES' nets)
+_SUMMARY_PARTICIPLE = _rx(r'\b(?:removed|retrieved|extracted|cleared)\b')
+_NETS = ('nets', 'net')
+assert frozenset(_NETS) <= _clauses.ACCESSORIES
+_NET_PHRASE = _rx(r'[ \t\n]+(?:with|using)[ \t\n]+(?:(?:a|an|the)[ \t\n]+)?(?:[\w\'’-]+[ \t\n]+){0,2}?'
+                  r'(?P<device>nets?)\b')
+_NET_NAMED = _rx(r'\bnets?\b')
+_LIST_OPENING = _rx(NEG_OPENING[1:])  # NEG_OPENING's list marks and labels, read at a sentence's start
+_FOOD_WORD = _rx(r'\b(?:' + '|'.join(sorted(FOOD_WORDS)) + r')\b')
+# the fail-closed readings: the failure vocabulary's words as words; adversatives; a passive's agent; a possessive
+_FAILURE_WORD = _rx(r'\b(?:' + '|'.join(_cues.ACT_FAILURE_WORDS) + r')\b')
+_ADVERSATIVE = _rx(r'\b(?:but|however|although|though|yet)\b')
+_BY = _rx(r'\bby\b')
+_POSSESSIVE = _rx(r"\w['’]s\b")
+_CONTRACTED_NOT = _rx(NEG_CONTRACTION + r'\b')  # "wasn't", "couldn't": NEGATION_WORD's "not" contracted
+# the exit's own particle, and the removal's own words: what a negated exit or removal negates
+_OUT_PARTICLE = _rx(r'\bout\b')
+# owner question Q1's own verb: a push is no removal
+_PUSH = _rx(r'\bpush(?:ed|es|ing)?\b')
+# an instrument's course verbs (cues._DEPTH_VERB: advanced, passed, inserted, introduced) said of the material: what moved
+# it deeper ("The meat was then advanced distally", "The bolus had to be advanced into the stomach")
+_MOVED = _rx(r'\b' + _cues._DEPTH_VERB + r'\b')
+_MOVED_PRONOUNS = _clauses.PRONOUNS - frozenset(('that',))  # "that" is a relative or a complementizer as often
+# an examination the narrative gives a person ("Her first endoscopy showed the following."): another occasion's account;
+# its nouns are clauses.EXAMINATIONS and the SERVICES names
+_ANOTHER_EXAMINATION = _rx(r'\b(?:her|his|their)[ \t\n]+(?:[\w-]+[ \t\n]+){0,2}?(?:'
+                           + '|'.join(sorted(_clauses.EXAMINATIONS, key=len, reverse=True)) + r'|'
+                           + '|'.join('(?:' + pattern.pattern + ')' for _, _, pattern in SERVICES) + r')')
+_REMOVAL_STEM = _rx(r'\b(?:remov|retriev|extract)\w*')
+_ACT_VERB_ADVERBS = frozenset(('then', 'also', 'successfully', 'subsequently', 'completely', 'each'))  # ACT_VERB's slot
+_NARRATIVE_KINDS = ('procedure', 'technique', 'findings')
+_TODAYS_PARTS = ('report', 'other')  # today's text: never a history, plan, indication or another role's part
+_SCOPE_ONLY = frozenset(('scope', 'scopes'))  # the one instrument word statement (1) may name (no INSTRUMENTS word)
+
+
+@dataclass(frozen=True)
+class _TwinReading:
+    """What the installed reader reads from the full twin's removal sentence ("The bolus was removed with <device>.")."""
+    status: str
+    cues: tuple
+    technique: str
+    detail: str
+
+
+def _food_bolus(mention: Optional[_BolusMention]) -> bool:
+    """A bolus-class phrase the bolus index reads as a food bolus or impaction (never a coin, an object or a foreign
+    body - the twin is a food bolus - and never a denial)."""
+    return mention is not None and mention.head == 'bolus' and mention.foreign and not mention.negated
+
+
+def _food_bolus_in(index: Sequence[_BolusMention], index_starts: Sequence[int], lo: int, hi: int) -> bool:
+    """Whether a food bolus phrase of the bolus index has its head in [lo, hi): one bisection, then the phrases there."""
+    k = bisect.bisect_left(index_starts, lo)
+    while k < len(index) and index[k].start < hi:
+        if _food_bolus(index[k]):
+            return True
+        k += 1
+    return False
+
+
+def _bolus_in(index: Sequence[_BolusMention], index_starts: Sequence[int], lo: int, hi: int) -> bool:
+    """Whether a bolus-class phrase of the bolus index has its head in [lo, hi): one bisection."""
+    k = bisect.bisect_left(index_starts, lo)
+    return k < len(index) and index[k].start < hi
+
+
+def _moved_material(text: str, start: int, end: int, word: str, index: Sequence[_BolusMention],
+                    index_starts: Sequence[int]) -> bool:
+    """Whether the word at [start, end) (``word``, lower-cased) may name the material a course verb moved: a food word, a
+    part of something (PARTITIVE_HEADS), a pronoun standing for a thing, or the head of a bolus-class phrase."""
+    return word in FOOD_WORDS or word in PARTITIVE_HEADS or word in _MOVED_PRONOUNS \
+        or _bolus_at(index, index_starts, start, end) is not None
+
+
+def _out_material(text: str, ss: int, found: tuple[int, int, str], index: Sequence[_BolusMention],
+                  index_starts: Sequence[int]) -> bool:
+    """Whether statement (1)'s subject (_predicate_subject's (resolved start, resolved end, grammatical head)) is the
+    food itself: its grammatical head the resolved one (no partitive: "fragments of the meat" is part of it), and that a
+    food word, a food bolus phrase of the bolus index, or a bare piece of the food its own sentence split before it, every
+    piece of it ("each piece", "the pieces"; never "one piece")."""
+    start, end, head = found
+    word = text[start:end].lower()
+    if word != head:
+        return False
+    if word in FOOD_WORDS:
+        return True
+    mention = _bolus_at(index, index_starts, start, end)
+    if mention is not None:
+        return _food_bolus(mention) and mention.start == start
+    split_as = _PIECE_HEADS.get(word)
+    if split_as is None:
+        return False
+    lead = tuple(t.group(0).lower() for t in _SUBJECT_TOKEN.finditer(text, _np_phrase_start(text, ss, start), start))
+    if lead not in _EVERY_PIECE or (lead == ('each',)) != (word == split_as[:-1]):
+        return False  # one or two of the pieces, a piece with a modifier, or the number disagreeing
+    for t in _SUBJECT_TOKEN.finditer(text, ss, start):
+        low = t.group(0).lower()
+        food = low in FOOD_WORDS or _food_bolus(_bolus_at(index, index_starts, t.start(), t.end()))
+        if food:
+            split = _SPLIT_IN.match(text, t.end(), start)
+            if split is not None and split.group(0).rstrip().lower().endswith(split_as):
+                return True
+    return False
+
+
+def _out_predicate(text: str, subject_end: int, verb: int, verb_end: int, sentence_end: int) -> bool:
+    """Whether the words from the subject to the out-verb at [verb, verb_end) are the out-verb's own passive verb group:
+    "was" or "were", the adverbs ACT_VERB's predicate takes (then, also, successfully, subsequently, completely, each),
+    and any participles coordinated before it, each carrying the material toward the exit itself ("pulled up into the
+    overtube and brought out ...") or naming the net in its own phrase ("captured with the net and brought out ..."),
+    or the out-verb's own phrase naming it ("captured and brought out through the mouth with the net"). A participle with
+    none of them ("regurgitated and brought out", "captured and brought out" with the net named only before) names no act
+    of the device; an adverb of another class ("nearly", "seemingly") qualifies the act: neither is read (cycle 1)."""
+    own_device = _NET_NAMED.search(text, verb_end, sentence_end) is not None
+    toks = [(t.start(), t.end(), t.group(0).lower()) for t in _SUBJECT_TOKEN.finditer(text, subject_end, verb)]
+    n = len(toks)
+    if not n or toks[0][2] not in ('was', 'were'):
+        return False
+    i = 1
+    while i < n:
+        while i < n and toks[i][2] in _ACT_VERB_ADVERBS:
+            i += 1
+        if i >= n:
+            return True
+        if not re.fullmatch(r'[a-z]+(?:ed|en)', toks[i][2]):
+            return False
+        # the conjunct: its participle, its own phrase, then "and" or a comma (and "then")
+        j = i + 1
+        while j < n and toks[j][2] not in ('and', ','):
+            j += 1
+        if j >= n:
+            return False
+        if not ((_OUT_VERB.fullmatch(text, toks[i][0], toks[i][1]) and _TOWARD_EXIT.match(text, toks[i][1], verb))
+                or _NET_NAMED.search(text, toks[i][1], toks[j][0]) or own_device):
+            return False
+        i = j + 1
+        if i < n and toks[i - 1][2] == ',' and toks[i][2] == 'and':
+            i += 1
+    return True
+
+
+def _reads_nothing_else(text: str, ss: int, se: int) -> bool:
+    """Whether statement (1)'s sentence carries no reading of the installed readers but its own: no act word (ACTS), no
+    lesion, no service name, no instrument name (only the bare "scope"), no site, no distance from the incisors, no
+    label or check box, and no other scope word ("with a rigid esophagoscope") - so the inventory reads around it what it
+    reads around the twin's two sentences, which carry none either; and no check box or bracket on its line, and no
+    label before it on its line ("Procedure: ...")."""
+    line_start, line_end = text.rfind('\n', 0, ss) + 1, text.find('\n', se)
+    line_end = len(text) if line_end < 0 else line_end
+    if _acts_in(text, ss, se) or LESION.search(text, ss, se) or INSTRUMENTS.search(text, ss, se) \
+            or any(pattern.search(text, ss, se) for _, _, pattern in SERVICES) or _anatomy_in(text, ss, se) \
+            or INCISOR_DISTANCE.search(text, ss, se) or any(c in text[ss:se] for c in ':[]') \
+            or BOX_MARK.search(text, line_start, line_end) or '[' in text[line_start:line_end] \
+            or ':' in text[line_start:ss] or any(p.match(text[ss:se]) for _, p in ROLE_LABEL):
+        return False  # (a check box or a bracket on its line, or a label before it on its line: the row, field and
+        # procedure-line readers read a line, and on such a line the twin's sentences would be read as listed)
+    return all(m.group(0).lower() in _SCOPE_ONLY for m in _SCOPE_WORD.finditer(text, ss, se))
+
+
+def _narrative_exit(text: str, ss: int, se: int, cls, index: Sequence[_BolusMention], index_starts: Sequence[int]):
+    """Statement (1) in the sentence [ss, se): (subject head start, its end, its clause) where the sentence ends with the
+    food's own explicit exit from the body (see above), else None. One exit and one subject read per sentence."""
+    m = _EXIT_AT_END.search(text, max(ss, se - EXIT_READ), se)
+    if m is None or (m.start() > ss and text[m.start() - 1].isalnum()):
+        return None
+    verb = _OUT_VERB.match(text, m.start())
+    clause = _clause_for(cls, verb.start())
+    found = _predicate_subject(text, clause[0], verb.start(), verb.end(), se)
+    if found is None or found[1] > verb.start() or not _out_material(text, ss, found, index, index_starts) \
+            or not _out_predicate(text, found[1], verb.start(), verb.end(), se):
+        return None
+    return found[0], found[1], _clause_for(cls, found[0])
+
+
+def _summary_line(text: str, ss: int, se: int, participle: int, device_end: int, index: Sequence[_BolusMention],
+                  index_starts: Sequence[int]) -> Optional[_BolusMention]:
+    """The bolus-class phrase whose sentence [ss, se) is whole the reduced summary line "<phrase> [its places],
+    <participle> with <device>." - the plain finding's own lead, complement and locatives (_PLAIN_LEAD, _PLAIN_COMPLEMENT,
+    _PLAIN_LOCATIVE, each site an anatomical one) - or None (cycle 1)."""
+    if _PLAIN_END.fullmatch(text, device_end, se) is None:
+        return None
+    opening = _LIST_OPENING.match(text, ss, participle)
+    lo = opening.end() if opening is not None else ss
+    i = bisect.bisect_left(index_starts, lo)
+    while i < len(index) and index[i].start < participle:
+        mention = index[i]
+        i += 1
+        lead = _PLAIN_LEAD.fullmatch(text, lo, mention.start)
+        if lead is None or any(w.lower() in _DETERMINERS for w in lead.group('mods').split()):
+            continue
+        at = _phrase_places_end(text, mention.end, participle)
+        if at is None:
+            return None
+        return mention if re.fullmatch(r'[ \t\n]*,[ \t\n]*', text[at:participle]) else None
+    return None
+
+
+def _phrase_places_end(text: str, at: int, limit: int) -> Optional[int]:
+    """Where a summary phrase's own complement and locatives (_PLAIN_COMPLEMENT, _PLAIN_LOCATIVE) end, read from its head's
+    end at ``at`` (within ``limit``); None when a locative names a place no anatomical site is."""
+    complement = _PLAIN_COMPLEMENT.match(text, at, limit)
+    if complement is not None:
+        at = complement.end()
+    while True:
+        loc = _PLAIN_LOCATIVE.match(text, at, limit)
+        if loc is None:
+            return at
+        if loc.group('site') is not None and not _anatomy_in(text, loc.start('site'), loc.end('site')):
+            return None
+        at = loc.end()
+
+
+def _summary_removal(text: str, ss: int, se: int, cls, index: Sequence[_BolusMention], index_starts: Sequence[int]):
+    """Statement (2) in the sentence [ss, se): (the food bolus mention, its clause, the end of its own places, the device
+    phrase's span) where the sentence states that phrase removed, retrieved, extracted or cleared with a net and its net
+    phrase ends the sentence, else None. Only the sentence's first participle with a net is read, its subject once."""
+    if not _food_bolus_in(index, index_starts, ss, se):
+        return None  # no food bolus phrase in the sentence: nothing to read
+    for m in _SUMMARY_PARTICIPLE.finditer(text, ss, se):
+        device = _NET_PHRASE.match(text, m.end(), se)
+        if device is None:
+            continue
+        if _PLAIN_END.fullmatch(text, device.end(), se) is None:
+            return None  # the removal is not the last thing its sentence says ("... cleared with a net into the stomach")
+        clause = _clause_for(cls, m.start())
+        found = _predicate_subject(text, clause[0], m.start(), m.end(), se)
+        mention = _bolus_at(index, index_starts, found[0], found[1]) if found is not None else None
+        if mention is not None and (found[2] != text[found[0]:found[1]].lower() or mention.start != found[0]):
+            mention = None  # a partitive or another word of its phrase ("fragments of the impaction")
+        if mention is None:
+            mention = _summary_line(text, ss, se, m.start(), device.end(), index, index_starts)
+        if not _food_bolus(mention):
+            return None
+        places_end = _phrase_places_end(text, mention.end, m.start())
+        if places_end is None:
+            return None
+        return mention, _clause_for(cls, mention.start), places_end, (device.start(), device.end())
+    return None
+
+
+def _statement_clean(text: str, ss: int, se: int, clause, pos: int, end: int, *, service_date, dates, date_starts,
+                     part: '_Part') -> bool:
+    """Whether a statement at [pos, end) in its clause and sentence [ss, se) is undoubted by the installed readers:
+    read_clause finds nothing against it (performed, or silent), and its whole sentence - never longer than the part
+    pass 3 reads - has no hedge, plan, history, other-source, other-time, adversative or negation word, no possessive, no
+    "by" and no date (cycle 1)."""
+    if se - ss > SENTENCE_READ_CHARS:
+        return False
+    reading = read_clause(text, clause, pos, end, service_date=service_date, dates=dates, part=part,
+                          in_today_report=part.kind == 'report')
+    if not (reading.status == 'performed' or (reading.cues and reading.cues[0] in SILENT_READINGS)):
+        return False
+    if any(pattern.search(text, ss, se) for pattern in (HEDGE_WORDS, PLAN_WORDS, HISTORY_WORDS, OTHER_SOURCE,
+                                                         _ADVERSATIVE, _BY, _POSSESSIVE, NEGATION_WORD, _CONTRACTED_NOT)) \
+            or any(pattern.search(text, ss, se) for _, pattern in _cues.HISTORICAL_CLAUSE):
+        return False
+    k = bisect.bisect_left(date_starts, ss)
+    return not (k < len(dates) and dates[k].start < se)
+
+
+def _food_sites(text: str, cs: int, ce: int, index: Sequence[_BolusMention], index_starts: Sequence[int]) -> tuple:
+    """The sites the clause [cs, ce) states, when it names the food (a food word, or a food bolus phrase of the bolus
+    index): the installed bolus sites of the clause alone (_bolus_sites: its anatomy, or a distance from the incisors);
+    () when it names no food or no site."""
+    named = _FOOD_WORD.search(text, cs, ce) is not None or _food_bolus_in(index, index_starts, cs, ce)
+    return _bolus_sites(text, (cs, ce), (cs, ce)) if named else ()
+
+
+# Integration (2026-11-08; u16c2's release lens, finding 0): the account statement (1) closes is told as TODAY's only
+# where the sentence of its part that first names the food - the INTRODUCTION - states no more than the full twin's own
+# finding ("An impacted <food> bolus was found in <site>."): its lead is plain - the food's own noun phrase, after a
+# findings label and after at most two locative phrases (a distance, from the incisors or not, or an anatomical site the
+# installed readers read: "At 33 cm from the incisors a large piece of meat filled the lumen") - every prepositional
+# phrase in it after the lead is locative too ("of" excepted: "a piece of meat", "passage of the scope"), and it carries
+# no history, plan, hedge or other-source word, no date and no "ago"; and where no sentence of the narrative before
+# statement (1) is read by the installed time reader (detect.status_for_span) as another time or historical, or carries
+# a date or an "ago". Told otherwise - "Two days before, an impacted meat bolus was found ...", "Last night, ...", "...
+# at 34 cm at the first endoscopy.", "... over the weekend." - a follow-up report's account of the emergency removal
+# read as today's (43247 READY), where the installed anchoring (_plain_finding) holds the same account told of "the
+# bolus" and its natural twin is held. The classes are closed and fail on the safe side: an account told any other way
+# reads no removal here (the installed hold); this never reads one.
+_FOOD_LEAD_PLACE = _rx(r'\b\d+(?:\.\d+)?[ \t]*(?:cm|centimet(?:er|re)s?)\b(?:[ \t\n]+from[ \t\n]+the[ \t\n]+'
+                       r'(?:central[ \t\n]+)?(?:incisors|teeth)\b)?')
+_FOOD_LEAD = _rx(r'[ \t\n]*(?:(?:findings?|description(?:[ \t]+of[ \t]+(?:the[ \t]+)?procedure)?'
+                 r'|procedure[ \t]+details?)[ \t]*:[ \t\n]*)?'
+                 r'(?:(?:(?:at|in|within)[ \t\n]+)?(?:the[ \t\n]+)?\x01[ \t\n]*,?[ \t\n]*){0,2}'
+                 r'(?:(?:a|an|the|one|this)[ \t\n]+)?(?P<mods>(?:' + _CONTENT_WORD + r'[ \t\n]+){0,6})'
+                 r'(?:of[ \t\n]+(?:(?:a|an|the)[ \t\n]+)?(?:(?:[A-Za-z]+ly\b|' + _CONTENT_WORD + r')[ \t\n]+){0,3})?')
+# what may stand between a preposition and the place it introduces: a determiner and two modifiers at most
+_FOOD_TO_PLACE = _rx(r'[ \t\n]+(?:(?:a|an|the)[ \t\n]+)?(?:' + _CONTENT_WORD + r'[ \t\n]+){0,2}')
+_FOOD_OCCASION_WORDS = (HISTORY_WORDS, PLAN_WORDS, HEDGE_WORDS, OTHER_SOURCE)
+
+
+def _food_places(text: str, start: int, end: int) -> list[tuple[int, int]]:
+    """The locative spans in [start, end): distances (from the incisors or not) and anatomical sites, merged."""
+    places: list[tuple[int, int]] = []
+    for a, b in sorted([(m.start(), m.end()) for m in _FOOD_LEAD_PLACE.finditer(text, start, end)]
+                       + [(a, b) for _, _, a, b in _anatomy_in(text, start, end)]):
+        if places and a < places[-1][1]:
+            places[-1] = (places[-1][0], max(places[-1][1], b))  # overlapping places are one
+        else:
+            places.append((a, b))
+    return places
+
+
+def _food_introduced_today(text: str, ss: int, se: int, food_at: int, *, dates, date_starts) -> bool:
+    """Whether the introduction [ss, se), which first names the food at ``food_at``, states no more than the full twin's
+    finding (see above): a plain or locative lead, only locative prepositional phrases after it ("of" excepted), and no
+    history, plan, hedge or other-source word, no "ago" and no date."""
+    places = _food_places(text, ss, se)
+    marked, at = [], ss
+    for a, b in places:
+        if b > food_at:
+            break
+        marked.append(text[at:a])
+        marked.append('\x01')
+        at = b
+    marked.append(text[at:food_at])
+    lead = _FOOD_LEAD.fullmatch(''.join(marked))
+    if lead is None or any(w.lower() in _DETERMINERS for w in lead.group('mods').split()):
+        return False
+    starts = [a for a, _ in places]
+    for t in _SUBJECT_TOKEN.finditer(text, food_at, se):
+        word = t.group(0).lower()
+        if word not in _PREPOSITIONS or word == 'of':
+            continue
+        k = bisect.bisect_right(starts, t.start()) - 1
+        if k >= 0 and t.start() < places[k][1]:
+            continue  # inside a place ("from the incisors")
+        gap = _FOOD_TO_PLACE.match(text, t.end(), se)
+        reach = gap.end() if gap is not None else t.end()
+        if not any(a in (t.end(), reach) or t.end() < a <= reach for a in starts):
+            return False  # a prepositional phrase that is no place ("at the first endoscopy", "over the weekend")
+    if any(pattern.search(text, ss, se) for pattern in _FOOD_OCCASION_WORDS) \
+            or any(pattern.search(text, ss, se) for _, pattern in _cues.HISTORICAL_CLAUSE):
+        return False
+    k = bisect.bisect_left(date_starts, ss)
+    return not (k < len(dates) and dates[k].start < se)
+
+
+def _account_sentence_today(text: str, ss: int, se: int, *, service_date: date, dates, date_starts) -> bool:
+    """Whether a narrative sentence [ss, se) of statement (1)'s part before it tells nothing of another time: neither
+    historical nor another time to the installed time reader, and no date and no "ago" in it."""
+    from studio.gi import detect  # local: detect imports context, which this module also imports
+    # Read on this reader's reflowed copy, whose sentences join a page break or a soft wrap inside a time phrase ("last" /
+    # page / "night"): the original text splits it and routing then attaches the time to neither clause. (The final
+    # refutation pass, 2026-11-08, moved this read to _ORIGINAL to spare structure's guard a plain read; its focused
+    # second pass showed that read 43247 READY on a page-joined "last night", where the installed release and this
+    # reading hold - reverted. Inside the guard the plain read withdraws the release: fail closed, recorded.)
+    status, time_cues = detect.status_for_span(text, ss, se, service_date)
+    if status == 'historical' or any(str(c).startswith('uncertain: another time') for c in time_cues):
+        return False
+    if any(pattern.search(text, ss, se) for _, pattern in _cues.HISTORICAL_CLAUSE):
+        return False
+    k = bisect.bisect_left(date_starts, ss)
+    return not (k < len(dates) and dates[k].start < se)
+
+
+def _twin_reading(text: str, n_ss: int, n_se: int, sites: tuple, device: str, *, service_date, dates,
+                  part: '_Part') -> _TwinReading:
+    """What the installed reader reads from the full twin's removal sentence: the text with statement (1)'s sentence
+    [n_ss, n_se) replaced by "An impacted food bolus was found <site>. The bolus was removed with <device>.", every other
+    character unchanged; its removal read as pass 3 reads a removal predicate's bolus there - read_clause in its own
+    clause (with today's dates before it: the twin's sentences carry none), a failure frame before it, held_under_denial
+    - and its technique and detail by _technique and _detail."""
+    where = ' '.join(('at ' if text[a:b][:1].isdigit() else 'in the ') + text[a:b] for _, _, a, b in sites)
+    finding = f'An impacted food bolus was found {where}.'
+    removal = f'The bolus was removed with {device}.'
+    twin = text[:n_ss] + finding + ' ' + removal + text[n_se:]
+    rs = n_ss + len(finding) + 1
+    re_ = rs + len(removal)
+    hs = rs + len('The ')
+    he = hs + len('bolus')
+    clause = _clause_for(clauses(twin, rs, re_), hs)
+    reading = read_clause(twin, clause, hs, he, service_date=service_date, dates=[d for d in dates if d.end <= n_ss],
+                          part=part, in_today_report=part.kind == 'report')
+    bc = _bounded_clause(twin, clause, hs, he)
+    if FAILURE_FRAME.search(twin, max(bc[0], hs - 40), hs) and reading.status not in ('planned', 'historical',
+                                                                                        'cancelled') \
+            and not _attempt_or_failure(reading.cues):
+        reading = Reading('uncertain', ('uncertain: failed',) + reading.cues)
+    reading = held_under_denial(twin, hs, reading, service_date)
+    return _TwinReading(reading.status, reading.cues, _technique(twin, *bc, near=hs), _detail(twin, *bc, 'foreign_body'))
+
+
+# integration (2026-11-08; u16c2's lenses, cost): each loop below reads at most this many structural subjects per
+# sentence; a sentence needing more is not read and holds (fail closed) - real sentences hold one or two
+_DOUBT_READS = 4
+
+
+def _corroboration_doubted(text: str, sentences: Sequence[tuple[int, int]], plist: Sequence['_Part'],
+                           starts: Sequence[int], dates, clauses_of, lay, service_date: date, index, index_starts,
+                           n_sentence: tuple[int, int]) -> bool:
+    """Whether anything in today's text reads against the corroborated removal (the FAIL-CLOSED list above)."""
+    today = [(p.start, p.end) for p in plist if p.kind not in ('history', 'indication')]
+    vocabularies = (_cues.UNDONE_ACT, _cues.FAILED_ACT, _FAILURE_WORD, INCOMPLETE_WORDS, CANCEL_WORDS, OTHER_SOURCE) \
+        + tuple(pattern for _, pattern in _cues.CANCELLED_CLAUSE + _cues.HISTORICAL_CLAUSE)
+    for a, b in today:
+        if any(pattern.search(text, a, b) for pattern in vocabularies):
+            return True
+    for d in dates:
+        if _part_at(plist, starts, d.start).kind not in ('history', 'indication') \
+                and gi_context.compare_to_service(d, service_date) != 0:
+            return True
+    n_ss, n_se = n_sentence
+    part = _part_at(plist, starts, n_ss)
+    # a history word or a person's examination in the narrative up to statement (1): its own section and every
+    # narrative section of its part before it
+    for section in lay.sections:
+        if section.start >= n_se or section.end <= part.start or section.start >= part.end:
+            continue
+        own = section.start <= n_ss < section.end
+        if not own and section.kind not in _NARRATIVE_KINDS:
+            continue
+        lo, hi = max(section.start, part.start), min(section.end, n_se)
+        if HISTORY_WORDS.search(text, lo, hi) or _ANOTHER_EXAMINATION.search(text, lo, hi):
+            return True
+    for ss, se in sentences:
+        kind = _part_at(plist, starts, ss).kind
+        if kind in ('history', 'indication'):
+            continue
+        read_end = min(se, ss + SENTENCE_READ_CHARS)
+        if (kind == 'plan' or lay.section_at(ss).kind == 'plan') and _REMOVAL_STEM.search(text, ss, read_end):
+            return True  # a plan that still schedules a removal ("Repeat EGD tomorrow to remove the remaining bolus.")
+        negated = NEGATION_WORD.search(text, ss, se) or _CONTRACTED_NOT.search(text, ss, se)
+        if negated and (_OUT_PARTICLE.search(text, negated.start(), se)
+                        or REMOVAL_PREDICATE.search(text, negated.start(), se)):
+            # a negated exit or removal: "The bolus was not brought out.", "The meat did not come out.", "never came
+            # out", "was not extracted" - read in each clause, the negation before the exit's particle or the removal
+            if se > read_end:
+                return True
+            for cs, ce in clauses_of(ss, read_end):
+                neg = NEGATION_WORD.search(text, cs, ce) or _CONTRACTED_NOT.search(text, cs, ce)
+                if neg and (_OUT_PARTICLE.search(text, neg.start(), ce) or REMOVAL_PREDICATE.search(text, neg.start(), ce)):
+                    return True
+        if ss < n_se:
+            continue
+        # after statement (1): a push (Q1), or the food the subject of an instrument's course verb ("The meat was then
+        # advanced distally with the scope", "The bolus was passed into the stomach")
+        if _PUSH.search(text, ss, se):
+            return True
+        if se > read_end:
+            return True  # read only in part: what it says of the material is not read
+        if part.start <= ss < part.end and _bolus_in(index, index_starts, ss, read_end):
+            # a removal predicate said of a bolus-class phrase later in statement (1)'s part: the twin's anchored finding
+            # would be that phrase's antecedent, and the installed reader would read it as an act of its own there
+            # ("The bolus was then retrieved yesterday.") - what it says is not read here, so it holds
+            for n_read, m in enumerate(REMOVAL_PREDICATE.finditer(text, ss, read_end)):
+                if n_read >= _DOUBT_READS:
+                    return True  # integration (2026-11-08, cost): more removal predicates than are read - held
+                cs, _ = _clause_for(clauses_of(ss, read_end), m.start())
+                found = _predicate_subject(text, cs, m.start(), m.end(), read_end)
+                if found is not None and _bolus_at(index, index_starts, found[0], found[1]) is not None:
+                    return True
+        first: dict[int, int] = {}  # each clause read once: where its first word that may name the material is
+        reads = 0  # integration (2026-11-08, cost): structural subject reads in this sentence
+        for moved in _MOVED.finditer(text, ss, read_end):
+            cs, ce = _clause_for(clauses_of(ss, read_end), moved.start())
+            if cs not in first:
+                first[cs] = next((t.start() for t in _SUBJECT_TOKEN.finditer(text, cs, ce)
+                                  if _moved_material(text, t.start(), t.end(), t.group(0).lower(), index, index_starts)),
+                                 ce)
+            if first[cs] >= moved.start():
+                continue  # no food, bolus, part of something or pronoun before it: its subject is no material
+            # its predicate from its verb group ("was then", "had to be", "could only be"), else the verb itself (an
+            # active predicate: "The bolus passed into the stomach"); its subject by the structural walk, a pronoun itself
+            reads += 1
+            if reads > _DOUBT_READS:
+                return True  # more course verbs after the material than are read - held (cost bound, fail closed)
+            group = _VERB_GROUP.search(text, max(cs, moved.start() - 60), moved.start())
+            found = _clauses.subject(text, cs, group.start() if group is not None else moved.start())
+            if found is not None and any(_moved_material(text, h.start, h.end, h.word, index, index_starts)
+                                         for h in (found.head, found.resolved)):
+                return True  # the food, a part of it, a bolus-class phrase or a pronoun moved deeper by a course verb
+    return False
+
+
+def _corroborated_removal(text: str, sentences: Sequence[tuple[int, int]], plist: Sequence['_Part'],
+                          starts: Sequence[int], dates, clauses_of, index: Sequence[_BolusMention],
+                          index_starts: Sequence[int], service_date: Optional[date]):
+    """The one food-bolus removal two statements of today's report corroborate (see above), or None: (statement (1)'s
+    part, its sentence, its subject's head span, the subject's clause, the impaction's sites, the twin's reading)."""
+    if service_date is None or not index:
+        return None
+    if not any(_NET_PHRASE.match(text, m.end()) for m in _SUMMARY_PARTICIPLE.finditer(text)):
+        return None  # no summary statement anywhere: one scan, and most texts stop here
+    lay = _clinical_layout(text)
+    date_starts = [d.start for d in dates]
+    summary = None
+    for k, (ss, se) in enumerate(sentences):  # the summary first: statement (1) must precede it in its part
+        if se - ss > SENTENCE_READ_CHARS or lay.section_at(ss).kind != 'impression':
+            continue
+        part = _part_at(plist, starts, ss)
+        if part.kind not in _TODAYS_PARTS:
+            continue
+        found = _summary_removal(text, ss, se, clauses_of(ss, se), index, index_starts)
+        if found is not None and _statement_clean(text, ss, se, found[1], found[0].start, found[0].end,
+                                                  service_date=service_date, dates=dates, date_starts=date_starts,
+                                                  part=part):
+            summary = (found, (ss, se), part)
+            break
+    if summary is None:
+        return None
+    (mention, _, places_end, device_span), s_sentence, s_part = summary
+    narrative = None
+    for k, (ss, se) in enumerate(sentences):
+        if ss >= s_sentence[0]:
+            break
+        if not (s_part.start <= ss < s_part.end) or se - ss > SENTENCE_READ_CHARS \
+                or lay.section_at(ss).kind not in _NARRATIVE_KINDS:
+            continue
+        found = _narrative_exit(text, ss, se, clauses_of(ss, se), index, index_starts)
+        if found is None:
+            continue
+        if not _statement_clean(text, ss, se, found[2], found[0], found[1], service_date=service_date, dates=dates,
+                                date_starts=date_starts, part=s_part) or not _reads_nothing_else(text, ss, se):
+            return None  # the first exit of the food is the one read: a doubted or a mixed one holds
+        narrative = (found, (ss, se), k)
+        break
+    if narrative is None:
+        return None
+    (hs, he, n_clause), n_sentence, k = narrative
+    # the net is named in statement (1)'s sentence or the one before it (cycle 1)
+    before = sentences[k - 1] if k > 0 and s_part.start <= sentences[k - 1][0] else n_sentence
+    if not (_NET_NAMED.search(text, *n_sentence) or _NET_NAMED.search(text, *before)):
+        return None
+    # what its sentence states before the food's own phrase is the same account - each of its clauses names the food
+    # ("I opened a Roth net beside the meat and captured the food in two pieces, and ...") - never another one ("We
+    # called otolaryngology, and the bolus was ...", "I gave the otolaryngologist the net, and ...") (cycle 1)
+    subject_at = _np_phrase_start(text, n_sentence[0], hs)
+    segments = [(c[0], c[1]) for c in clauses_of(*n_sentence) if c[1] <= subject_at]
+    if n_clause[0] < subject_at:
+        segments.append((n_clause[0], subject_at))
+    for cs, ce in segments:
+        words = list(_SUBJECT_TOKEN.finditer(text, cs, ce))
+        if any(_content_word(t.group(0)) for t in words) and not any(
+                t.group(0).lower() in FOOD_WORDS or _food_bolus(_bolus_at(index, index_starts, t.start(), t.end()))
+                for t in words):
+            return None
+    # the impaction's own site as the document names it: the narrative's food finding's (each clause of the part's
+    # narrative before statement (1) that names the food, by its own clause), else the summary phrase's own places -
+    # never another clause's site of the summary's sentence; a distance from the incisors only where neither names an
+    # anatomical site; every site stated, distances too, in one region, and every anatomical site one and the same
+    stated: list = []
+    introduced = False
+    for ss, se in sentences:
+        if ss >= n_sentence[0]:
+            break
+        if ss < s_part.start or lay.section_at(ss).kind not in _NARRATIVE_KINDS:
+            continue
+        # integration (2026-11-08): the account is today's (_food_introduced_today, _account_sentence_today)
+        if se - ss > SENTENCE_READ_CHARS or not _account_sentence_today(text, ss, se, service_date=service_date,
+                                                                         dates=dates, date_starts=date_starts):
+            return None  # a sentence of the account read only in part, or telling another time
+        if not introduced:
+            food = _FOOD_WORD.search(text, ss, se)
+            food_at = food.start() if food is not None else None
+            k = bisect.bisect_left(index_starts, ss)
+            while k < len(index) and index[k].start < se:
+                if _food_bolus(index[k]):
+                    if food_at is None or index[k].start < food_at:
+                        food_at = index[k].start
+                    break
+                k += 1
+            if food_at is not None:
+                if not _food_introduced_today(text, ss, se, food_at, dates=dates, date_starts=date_starts):
+                    return None
+                introduced = True
+        if se - ss > SENTENCE_READ_CHARS:
+            continue
+        for cs, ce in clauses_of(ss, se):
+            sites = _food_sites(text, cs, ce, index, index_starts)
+            if sites:
+                stated.append(sites)
+    own = tuple(sorted(_anatomy_in(text, mention.end, places_end) + [
+        ('esophagus', 'esophagus', m.start(), m.end()) for m in INCISOR_DISTANCE.finditer(text, mention.end, places_end)],
+        key=lambda x: x[2]))
+    if own:
+        stated.append(own)
+    named = [tuple(a for a in sites if not INCISOR_DISTANCE.fullmatch(text, a[2], a[3])) for sites in stated]
+    if not stated or len({a[1] for sites in stated for a in sites}) != 1 \
+            or len({a[0] for sites in named for a in sites}) > 1:
+        return None  # no site stated, or the statements of it disagree (one region; one named site at most)
+    site = next((sites for sites in named if sites), stated[0])
+    if _corroboration_doubted(text, sentences, plist, starts, dates, clauses_of, lay, service_date, index, index_starts,
+                              n_sentence):
+        return None
+    twin = _twin_reading(text, *n_sentence, site, text[device_span[0]:device_span[1]].strip().split(None, 1)[1],
+                         service_date=service_date, dates=dates, part=s_part)
+    if twin.status != 'performed':
+        return None
+    return s_part, n_sentence, (hs, he), n_clause, site, twin
+
+
 # --- completion repair (2026-11-06, U6 and U13; builder A): a lesion's stated disposition --------------------------
 # "The polyp was left in place.", "... could not be removed", "was not resected", "will be removed at a later date": a
 # predicate whose subject (_predicate_subject) is a lesion mention bound to a recorded lesion of today's report sets
@@ -5213,6 +5899,18 @@ def build(text: str, *, service_date: Optional[date], routing=None, context_fact
 
 
 _ORIGINAL: contextvars.ContextVar = contextvars.ContextVar('services_original_text', default=None)
+
+
+def release_reading_caches() -> None:
+    """Clear this module's functools caches. Called at both ends of structure's guard (its computed heading twin): a cache
+    keyed by a reflowed plain text (_occasion_indications, _act_frame, ...) can read _ORIGINAL's released paragraphs,
+    which the guard's readings carry as a candidate release, so an entry made on either side must never serve the other
+    (the final refutation pass, 2026-11-08: a withdrawn release left the candidate's occasion reading in the stored
+    services and moved a proposal's fingerprint)."""
+    for value in list(globals().values()):
+        clear = getattr(value, 'cache_clear', None)
+        if callable(clear) and hasattr(value, 'cache_info'):
+            clear()
 _SOFT_NEXT = re.compile(r'[ \t]*[a-z]')
 # A line ending in a word that cannot end a sentence (an article, a preposition, an auxiliary, a conjunction) is
 # continued by the next line whatever its case ("... provided by the" / "Anesthesia team").
@@ -5694,7 +6392,10 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
     date_starts = [d.start for d in dates]
     plist = parts(text, service_date=service_date, dates=dates)
     starts = [p.start for p in plist]
-    sentences = _sentences(text)
+    original = _ORIGINAL.get()
+    labels = _corroborated_labels(original if isinstance(original, str) and len(original) == len(text) else text)
+    label_words = [(p.label.start, p.label.end - 1) for p in labels]  # u18d: each corroborated label's words
+    sentences = _label_sentences(text, _sentences(text), labels)
     blocks = form_field_blocks(text)
     block_starts = [bs for bs, _ in blocks]
     if len(sentences) > MAX_SENTENCES:
@@ -5810,7 +6511,9 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 line_start = text.rfind('\n', 0, ms) + 1
                 line_end = text.find('\n', ms)
                 if reading.status == 'uncertain' and not hypothetical and not _row_hold(reading) and not another \
-                        and PROCEDURE_FIELD.match(text[line_start:line_end if line_end >= 0 else len(text)]):
+                        and (PROCEDURE_FIELD.match(text[line_start:line_end if line_end >= 0 else len(text)])
+                             or any(a <= ms and me <= b for a, b in label_words)):
+                    # u18d: a corroborated label is read as its heading twin's "PROCEDURE: <label>" line is read
                     reading = Reading('performed', reading.cues + ('performed: listed on the procedure line',))
                 reading = held_under_denial(text, ms, reading, service_date)
             d = draft(family, kind)
@@ -6454,6 +7157,43 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                         last_lesion[f] = lesion
         for sd, second in second_readings:  # R1c-r3 (above): after every act read, so no act's id moves
             sd.acts.append(replace(second, id=f'{sd.id}-A{len(sd.acts) + 1}', service=sd.id))
+        # Design round 2, cycle 2 (2026-11-08), U16 / u16c2: a food-bolus removal two statements of today's report
+        # corroborate (_corroborated_removal). Read only where the installed reader reads no foreign-body act at all - so
+        # its every reading of a foreign body (a removal done, failed, denied, planned, in doubt) stands - and added after
+        # every installed act is read, so no act's id moves; before the encounter's denials are placed (below), so a
+        # foreign-body denial elsewhere is set beside it as a conflict, as beside any act done. The act is the one this
+        # pass reads from the full twin's removal sentence "The bolus was removed with <device>." at statement (1)'s
+        # place, placed as this pass places it: the part's family, else the one procedure documented (that sentence
+        # names no service and no instrument), by _family_for_act with the impaction's own site - here only where that
+        # family's text holds statement (1) and its tract holds the site, and never in a note label's part; its scope
+        # the installed act's (the part, or statement (1)'s sentence); its evidence statement (1)'s clause; its status,
+        # cues, technique and detail the twin's.
+        corroborated = None
+        if not any(a.kind == 'foreign_body' for dd in drafts.values() for a in dd.acts) \
+                and not any(a.kind == 'foreign_body' for a, _ in unplaced):
+            corroborated = _corroborated_removal(text, sentences, plist, starts, dates, clauses_of, bolus_index,
+                                                 bolus_starts, service_date)
+        if corroborated is not None:
+            c_part, (n_ss, n_se), (hs, he), n_clause, c_sites, twin = corroborated
+            c_family = c_part.family if c_part.family in drafts and c_part.kind == 'report' else (
+                procedural[0] if len(procedural) == 1 and c_part.kind not in ('history', 'plan') else '')
+            c_region = c_sites[0][1]
+            fam = _family_for_act('foreign_body', c_region, c_family, present_families, binding_families) \
+                if c_family and not c_part.noted and c_region in FAMILY_REGIONS.get(c_family, ()) else ''
+            if fam and fam == c_family and fam in drafts:
+                d = drafts[fam]
+                act_count += 1
+                if act_count > MAX_ACTS:
+                    raise _Capped(f'More than {MAX_ACTS:,} acts are documented; the rest were not inventoried.')
+                bc = _bounded_clause(text, n_clause, hs, he)
+                act = Act(id=f'{d.id}-A{len(d.acts) + 1}', service=d.id, kind='foreign_body', status=twin.status,
+                          role=c_part.role, anatomy=tuple(dict.fromkeys(a[0] for a in c_sites)), region=c_region,
+                          technique=twin.technique, lesion='', evidence=(_span(text, *bc),), cues=twin.cues,
+                          detail=twin.detail)
+                placements.note(act, _covers_of(text, list(c_sites)), False)
+                d.acts.append(act)
+                d.scopes.append((c_part.start, c_part.end) if c_part.kind == 'report' and c_part.family == fam
+                                else (n_ss, n_se))
         # The encounter's denials (above): each is set beside every service that documents done an act it denies - the
         # two statements are about the same act, and _conflicts keeps them as a conflict there - and beside no other,
         # so a denial of an act no service documents adds nothing, and no service's own scope grows by it. A part whose

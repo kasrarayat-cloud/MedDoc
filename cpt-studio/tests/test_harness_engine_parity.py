@@ -183,7 +183,7 @@ HARNESS_REPAIR_3_PINNED = {
 # computes these. With its labels set back to installed fd8040d71e44's (and the catalogue's to @1, which every release
 # before it carried) every case equals HARNESS_REPAIR_3_PINNED, byte for byte: on these Corti-only cases the repair moves
 # the labels and nothing else (ServedLabelParityCompletionTests; measured on the base tree and the head tree alike).
-PINNED = {
+WALK_ROUND_PINNED = {
     'a-conflict-in-the-record': '04f320d02d9a39362ff01e016f92f2d777e7033764719ac8da0bf8dc14b242e0',
     'member-date-conflict-answered': '514c6a02363eb8d776e7512d04f91e7f8c317af7c0a1c09bba23f36040280e24',
     'member-date-conflict-failed': '167a68ce485009b189c05ba67c9df67593f4992a8fa10e964818b87f45dad7a4',
@@ -197,6 +197,25 @@ PINNED = {
     'visit-beside-a-procedure': 'b504dcf1cff552d21bb3ea2ee05d4a9e6ffe04ee3927e390ce41ea6504ca0e29',
 
 }
+# The structure round (2026-11-08; gi-services@7 and cpt-studio:gi-services@7, gi-routing@12) re-pinned these on its
+# labels alone: with routing, the inventory and its source set back to installed aeae34bebbe5's
+# (STRUCTURE_ROUND_INSTALLED_LABELS) every case equals WALK_ROUND_PINNED, byte for byte, and with this head's labels
+# every case moves (ServedLabelParityStructureTests; measured on the head tree).
+PINNED = {
+    'a-conflict-in-the-record': '6380134d7590246aca7435c1e44beda22278f39e7534a86bbad8626f92539cec',
+    'member-date-conflict-answered': 'b3b60803633a31eebaf25586edab15a29c04b60c42393141569a6f4a20bbb0f6',
+    'member-date-conflict-failed': '7e8f169be7284bfdc6cf2dcb5539cf95ce5928e874fa4a12da392eb5e5a8225c',
+    'polypectomy-and-a-candidate': '1b15b762da8fa7a34267eeed6608b8690c0d75636dc1ade360d6bb4ec80ae487',
+    'provider-failed': '49d0bb6a86033c2ab0ac66a28180c6e79f6f19a536b6acf6a5357e77381c9d6a',
+    'provider-not-run': 'd69ef509f946ce3a12eb94eb132d3c7af92de1054ab87d236df64367ce8522d0',
+    'provider-unknown': '62930a1168a5711c2dd1f93698a75d29aad47f465289df76b47c8189464c1c50',
+    'response-refused': 'a9dec7b137a13fd07240a0b631a844c2a27947ffecc826ca6d551001cc591049',
+    'second-review': '632a9e01e371e6441a35e3b1cce47c2c001ef272fbe6e04285ad0552001b56d4',
+    'two-codes-a-plan-code-and-hcpcs': '67b598bfab21775fc68b8d449084e5403c4a8cc14a52d2c88b12efec2a4136b0',
+    'visit-beside-a-procedure': '5450110af72eebd9e3e6ecd46e50448280292392919c0681817abac8cba06c69',
+}
+
+
 def _earlier_catalogue(stack):
     """Every release before the completion repair reconciled with gi-catalogue@1: the older parity tests set it back."""
     from studio.gi import catalogue
@@ -277,6 +296,24 @@ class ServedLabelParityCompletionTests(SimpleTestCase):
                 self.assertEqual(sha256_json(assess(**kwargs)), HARNESS_REPAIR_3_PINNED[name], name)
         for name, kwargs in cases().items():
             self.assertNotEqual(sha256_json(assess(**kwargs)), HARNESS_REPAIR_3_PINNED[name], name)
+
+class ServedLabelParityStructureTests(SimpleTestCase):
+    """The structure round's I1 declaration (HARNESS.md, "The structure round"): with routing, the inventory and its
+    source set back to installed aeae34bebbe5's, every Corti-only case is byte-identical to the walk round's pin - the
+    direct-reach twin (U14), the full twin's bolus removal (U16) and the computed heading twin's release (U18) move
+    nothing these assessments record but their labels."""
+
+    def test_every_case_is_the_installed_engines_byte_for_byte(self):
+        import contextlib
+        from tests.test_gi4_state import STRUCTURE_ROUND_INSTALLED_LABELS
+        with contextlib.ExitStack() as stack:
+            for (module, name), value in STRUCTURE_ROUND_INSTALLED_LABELS.items():
+                stack.enter_context(mock.patch.object(module, name, value))
+            for name, kwargs in cases().items():
+                self.assertEqual(sha256_json(assess(**kwargs)), WALK_ROUND_PINNED[name], name)
+        for name, kwargs in cases().items():
+            self.assertNotEqual(sha256_json(assess(**kwargs)), WALK_ROUND_PINNED[name], name)
+
 
 class PinnedParityTests(SimpleTestCase):
     def test_every_case_is_pinned(self):

@@ -93,6 +93,12 @@ WALK_ROUND_INSTALLED_LABELS = {(detect, 'ROUTING_VERSION'): 'gi-routing@9',
 # 2026-11-07) read differently from installed 73dcf8b4b40a; the inventory and the engine do not
 RECALL_ROUND_INSTALLED_LABELS = {(detect, 'ROUTING_VERSION'): 'gi-routing@10',
                                  (jobs, 'CONTEXT_VERSION'): 'gi-context@4'}
+# the structure round (2026-11-08): routing (the direct-reach twin, U14; the computed heading twin's release, U18) and
+# the inventory (the full twin's bolus removal, U16; the corroborated label, U18) read differently from installed
+# aeae34bebbe5; the engine, the catalogue and the context do not (U24's hold was withdrawn)
+STRUCTURE_ROUND_INSTALLED_LABELS = {(detect, 'ROUTING_VERSION'): 'gi-routing@11',
+                                    (gi_services, 'INVENTORY_VERSION'): 'gi-services@6',
+                                    (reconcile, 'INVENTORY_SOURCE'): 'cpt-studio:gi-services@6'}
 COMPLETION_INSTALLED_LABELS = {(detect, 'ROUTING_VERSION'): 'gi-routing@7',
                                (gi_services, 'INVENTORY_VERSION'): 'gi-services@5',
                                (reconcile, 'INVENTORY_SOURCE'): 'cpt-studio:gi-services@5',
@@ -372,7 +378,7 @@ class RoundFourLabelTests(SimpleTestCase):
                          ('gi-context@5', ('gi-context@1', 'gi-context@2', 'gi-context@3')))
         self.assertEqual((detect.ROUTING_VERSION, gi_services.INVENTORY_VERSION, reconcile.INVENTORY_SOURCE,
                           engine.ENGINE_VERSION),
-                         ('gi-routing@11', 'gi-services@6', 'cpt-studio:gi-services@6', 'cpt-studio-validation@10'))
+                         ('gi-routing@12', 'gi-services@7', 'cpt-studio:gi-services@7', 'cpt-studio-validation@10'))
         self.assertEqual(reconcile.INVENTORY_SOURCE, f'cpt-studio:{gi_services.INVENTORY_VERSION}')
         for (module, name), installed in INSTALLED_READER_LABELS.items():
             self.assertNotEqual(getattr(module, name), installed, name)
@@ -398,6 +404,9 @@ class RoundFourLabelTests(SimpleTestCase):
         # the recall round (2026-11-08): routing and the context once more beside installed 73dcf8b4b40a (a context @4
         # recorded stays current: jobs.CONTEXT_VERSION's note)
         for (module, name), installed in RECALL_ROUND_INSTALLED_LABELS.items():
+            self.assertNotEqual(getattr(module, name), installed, name)
+        # the structure round (2026-11-08): routing and the inventory once more beside installed aeae34bebbe5
+        for (module, name), installed in STRUCTURE_ROUND_INSTALLED_LABELS.items():
             self.assertNotEqual(getattr(module, name), installed, name)
 
     def labels_and_fingerprints(self):
@@ -427,8 +436,8 @@ class RoundFourLabelTests(SimpleTestCase):
         # the patches applied: every result names installed's labels under them, and these labels without them
         self.assertEqual(installed_labels - {('source', 'cpt-studio:gi-services@1')},
                          {('gi-routing@4', 'gi-services@1', 'cpt-studio-validation@4')})
-        self.assertEqual(current_labels - {('source', 'cpt-studio:gi-services@6')},
-                         {('gi-routing@11', 'gi-services@6', 'cpt-studio-validation@10')})
+        self.assertEqual(current_labels - {('source', 'cpt-studio:gi-services@7')},
+                         {('gi-routing@12', 'gi-services@7', 'cpt-studio-validation@10')})
         self.assertIn(('source', 'cpt-studio:gi-services@1'), installed_labels)
         self.assertGreater(len(current), 50)
         self.assertEqual(installed, current)

@@ -4125,3 +4125,103 @@ context @4 recorded; the other took a restored live copy through the install, a 
 The retirement is reverted, and @4 stays current. The class is bounded by that measurement, repeated on each install's
 pre-app dump as a stop condition, and by structure (nothing records @4 once @5 is installed). It is pinned by
 KeptContextVersionTests. The two pre-existing classes the pass found are open: U22 and U23 in CPT-HARNESS-CHECKLIST.md.
+
+## The structure round (2026-11-08): the blind c4 walk's three holds, and four installed false READYs
+
+**Why.** The recall round's install (`aeae34bebbe5`) walked the blind c4 set 0 of 3, every failure a hold:
+- U18: c4a's dictated labelled paragraphs ("Upper endoscopy: ...", "Colonoscopy: ...") were refused by the release gates
+  (N1's open-world reading, then P4's cascade), so 45385, 45381, 43239 and 43248 were held.
+- U16: c4b's bolus, "captured ... and brought out through the mouth" with an Impression "cleared with a Roth net", read no
+  removal: 43247 held.
+- U14: c4c's long reach, told with asides, read no extent: 43239 held.
+The owner's directive of 2026-11-06 names two of these in its checklist (item 2: "the bolus" against its antecedent, and
+inline-labelled narratives) and the false-READY class "a polyp explicitly left in place" (item 4). This round designed each
+repair against a TWIN-PARITY bar: the installed release's own reading of the same document, written in a form that
+release already reads.
+- U18: the HEADING TWIN. Each released paragraph's inline "<L>: " is written as "PROCEDURE: <L>" and a newline.
+- U16: the FULL TWIN. Statement (1)'s sentence is replaced by "An impacted <food> bolus was found in <site>. The bolus was
+  removed with <device>."
+- U14: the DIRECT-REACH TWIN. "<subject> was advanced to <endpoint>."
+- U24: the AGO TWIN. The same text with "back" written "ago".
+Every design was refuted by fresh lenses in sealed sandboxes, under the two-cycle rule per mechanism. A finding the twin
+shares is PARITY-BOUNDED and recorded. A finding the twin does not share breaks the design's claim.
+
+**The judge.** design-r2/judge-r2.sh (session dir) judges one candidate tree offline against the installed release: the
+development corpus, the 2,568-input differential scan, the corpus pins, the H2 freeze with the owner's date declaration,
+the H4 battery, the H1 replay and the pinned reader modules. The installed figures (BASELINE-r2): 31 of 45 held, 5
+careless false READYs, scan 0/0, pins 0 moved, the freeze holds, 6 declared battery movements, 14 replay differences.
+
+**The designs.**
+
+| target | cycle 1 | cycle 2 / changed approach | outcome |
+|---|---|---|---|
+| U14 (c4c) | u14a (the motion's segments), u14b (anatomical order): another occasion's dated course read to D3 (READY), an out-of-reach cecum read READY | u14a2 (narrowed to its direct-reach twin): one non-parity class, its own guard (6) "no aside in the lead" mis-implemented (a dash or comma lead aside was read); u14b2: a counterfactual act in the motion's aside read as done (DROPPED) | integrator completion u14a3: set-off punctuation in the lead reads no motion; the final refutation pass showed that list of characters was not fail-closed (an ASCII "--", other dashes, an ellipsis, quotes or no punctuation read a dated lead's reach as today's D3) - the lead is now read by a CLOSED form (a list mark, then / subsequently / thereafter / today, an article with at most three plain words); judge = baseline: SHIPPED |
+| U16 (c4b) | u16a (state change), u16b (the device's act): a pushed bolus, an earlier occasion and biopsy fragments read as removals (DROPPED) | corroboration u16c, then u16c2 (full twin): one non-parity HIGH (the food-word route bound the removal to a dated finding: "Two days before, an impacted meat bolus ...") and three cost findings | integrator completion u16c3: the sentence that first names the food states no more than the twin's finding, nothing before the exit tells another time, the doubt loops bounded; SHIPPED |
+| U18 (c4a) | u18a (occasion signals; fixed no member), u18b (heading twin by argument): natural-text regressions (DROPPED) | corroboration u18c, then u18c2: four non-parity HIGHs in two readers the parity argument never covered (a site-less act bound to the label's family in a two-family report; a released inline label read against its paragraph's second sentence): DROPPED as shipped | changed approach u18d, PARITY COMPUTED: the release lens found nothing (9,371 probes); the regress lens found 0 READY lost and broke one claim, cost (15 s per stage inside the bound). Integrator completion u18d2: the guard runs only where the released paragraphs meet at most 300 sentences and clauses: SHIPPED |
+| U24 (installed false READY) | u24 (N1's future exemption scoped to the layout sentence): a new false READY, 32 of 32 instruction forms lost (DROPPED) | u24b (the ago twin's reading as the code's evidence reading) + integrator completion u24m4: integrated, then REFUTED by the U26/U27 lenses' mechanism (48 false READYs gained) | changed approach, THE OUTCOME HOLD: refuted by its own lenses on both claims (a rival code READY through the competition; an unapprovable alternative on the second review; 567 non-parity holds): WITHDRAWN, OPEN |
+| U25 (installed false READY) | u25 (a broad self-reference reader): 10 correct READYs lost, exponential cost (DROPPED) | u25b (explicit self-reference only): four non-parity HIGHs and one cost finding (another document's "this report", a hard-wrapped validity banner, a nursing note in a bundled export, a reversal opening with a sign-off word read as disowning today's report) | DROPPED, OPEN |
+| U26 / U27 (installed false READYs) | u26 (inventory-level reclassification of transit and revisit predicates): NEW false READYs (the base code released beside a real therapeutic act), correct READYs lost (DROPPED) | u26c and u27c (hold-only at the code's own cited evidence, U24's first seam): FALSE READYs gained through the resolve order (77 inputs; an exclusion releasing the base code beside today's stenting) and correct READYs held (nominal outcome lines, page joins; shorthand procedure lines, exam-name subjects, summary headings with "today", capitals): DROPPED | changed approach on the outcome hold (u26d, u27d): the seam itself was refuted (U24's row) while they were being designed, so neither can ship this round: OPEN; their sandboxes (design-r2/u26d, u27d) are kept for the next round |
+
+**The integrator completions, and the deviation they are.** Four designs reached their last cycle with exactly one
+non-parity class left that was the design's own stated claim implemented wrongly (u14a2, u24b), an inconsistency between
+two of its own routes (u16c2), or its own cost claim (u18d). Each completion only narrowed (it holds, refuses or withdraws
+where the design read), was re-judged, had its last-cycle lenses' batteries re-run, and is attacked again by the final
+refutation pass over the integrated diff. One of them was refuted afterwards: u24m4's batteries had never cited a hedge, a
+plan line and the dated act together, and that shape gained 48 false READYs. **A completion inherits the blind spots of the
+batteries it was measured on.** The other three completions are recorded as deviations from the strict reading of the
+two-cycle rule, with that reference case beside them.
+
+**The lesson about holds: a hold is not hold-only because it holds.** Three seams were tried for the false-READY classes,
+and each released something:
+- lowering a code's own evidence reading (U24's first seam; u26c, u27c): `checks.resolve_status` takes the first own
+  NEGATIVE before a hedge, and the second opinion does not hold a 'planned' doubt over a documented act, so a co-cited plan
+  line decided where a hedge had held the code - a READY, or an exclusion that released the base code;
+- holding the code's match inside `_select` (the outcome hold): the participant competition (`_open_items_covered`,
+  `_competition`) and the bounded second review's whole-service admission read that state, so a rival code read READY and a
+  correct code became an unapprovable alternative;
+- mixing the twin's readings with the installed flags and inventory: the other-service flag and the installed match each
+  held codes the twin's own full reading releases (426 and 141 code rows).
+The precondition for the next false-READY repair, recorded with U24 to U27: a FINAL hold applied after competition and
+admission, decided by the installed engine's own reading of the whole twin document (a same-length twin text), designed and
+refuted as its own mechanism before any class is built on it.
+
+**What ships** (branch `fix/cpt-studio-structure-round-20261108`): U14 (detect.py), U16 (services.py), U18 (structure.py,
+services.py), and the labels routing gi-routing@12 and inventory gi-services@7 (with reconcile's source). The engine, the
+catalogue and the context read as installed. Measured: the judge equals the installed figures in every row (31 of 45 held,
+5 careless, scan 0/0, pins 0 moved, the freeze holds, 6 declared battery movements, 14 replay differences). The walked
+documents, each expected READY code citing its own act (design-r2/final/members.py; held on the installed release in every
+row but c4b's 43239):
+- c4b: 43247 READY (the full twin's removal) and 43239 READY - every code its walk expects;
+- c4c: 43239 READY, the extent D3 - every code its walk expects;
+- c4a: 45385 READY (its paragraphs released at computed parity). Its 43239, 43248 and 45381 stay held, each exactly as its
+  heading twin holds it: an organ-list reach no reader reads ("the duodenum to the second portion were normal"), the
+  Savary dilation's binding (U15) and the tattoo's service status. So c4a would still not walk: three of its four
+  expected codes are other classes, OPEN.
+What each repair leaves is in ACCURACY-RESIDUALS.md, "The structure round".
+
+**The final refutation pass over the integrated diff** (four lenses in sealed sandboxes at `7b9ed3a80`: false READY, false
+hold, interactions, labels and stored state; 10,000+ probes) found three defects that broke a claim. Each was repaired
+before merge, pinned (tests/test_structure_round_final_pass.py), and shown to fail on the pre-fix head:
+- U14 (HIGH): the integrator's lead guard was a list of set-off characters, not a fail-closed rule. An ASCII "--", other
+  dashes, an ellipsis, quotes or no punctuation at all let "On 10/14 -- unlike today -- the gastroscope ..." read the
+  dated reach as today's D3 (43239 READY where the installed release reads no extent). The lead is now read in a closed
+  form.
+- U18: a services cache keyed by the reflowed plain text served the guard's candidate reading to the real one after a
+  withdrawal. The stored services lost an other-occasion hold and a proposal's fingerprint moved. The guard now clears
+  the services caches at both of its ends.
+- U16 with U18: U16's status read took the reflowed copy, which the guard cannot carry, so the guard withdrew. It now
+  takes the text routing reads.
+Recorded, not changed: a corroborated release beside a U16 full-twin reading is withdrawn (fail closed). The guard compares
+this tree's readers (U14 and U16 included), not the installed release's. Every other finding is bounded by its twin and is
+listed in ACCURACY-RESIDUALS.md, "The final refutation pass over the integrated diff". The label move's last digest pins
+were found by the suite and re-pinned.
+
+**The focused second pass over those repairs** (two lenses at `ae58a3623`):
+- U16: the final pass had moved U16's time read to the original text. That made a new false READY: the original splits a
+  page-joined "last night", so 43247 read READY on 58 of 180 page-break variants. The move is reverted.
+- U14: the closed form's three words admitted a clause ("The daughter says the gastroscope ..."). No article may stand
+  among them now.
+- U14, recorded rather than closed: a dated fragment in the sentence BEFORE the motion is not read, and U14's direct-reach
+  twin keeps that sentence verbatim (an installed blind spot of the short reach, 152 readings in the lens's batteries).
+- The narrowing's cost: 283 of 378 natural correct long reaches read as installed.
+- The cache repair: nothing found on other caches, on cost or on determinism.
