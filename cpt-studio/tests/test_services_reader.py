@@ -37,10 +37,11 @@ class ServiceDateTests(SimpleTestCase):
     def test_day_month_year_with_hyphens(self):
         facts, _ = read(HEAD + 'Endoscopy unit\nDate of service: 03-Nov-2026\nThe gastroscope was passed to the second '
                                'part of the duodenum.\n')
-        # P2DN's fix round, rule N7: the day-first date is read - the member's answer agrees with it - but a labelled date
-        # is sent only as the installed revision reads one, so it is asked; this pin had it documented
+        # P2DN's fix round, rule N7, had the day-first date read but asked (a form the installed revision did not send).
+        # Owner decision 2026-11-07 (the date forms): a day-first date with a month name and a four-digit year is read
+        # and sent as the other labelled forms are - documented again, as this pin had it before rule N7
         fact = facts['service_date']
-        self.assertEqual((fact.value, fact.origin), (None, 'missing'))
+        self.assertEqual((fact.value, fact.origin), ('2026-11-03', 'document'))
         self.assertEqual(gi_context._date_readings(fact.evidence), {'2026-11-03'})
         # refutation phase 2 (P2DN, rule N1): a bare "Date:" line is evidence, never the date - the date is read (the
         # member's answer agrees with it) and asked; this pin had the "Date:" line documented

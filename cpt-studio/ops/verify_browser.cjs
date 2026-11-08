@@ -110,6 +110,8 @@ const UI_TIMEOUT_MS = 30000;
 // the page itself does (static/studio/app.js api()); a call without it is answered 409 client_outdated.
 const CLIENT_HEADERS = { 'X-CPT-Studio-Client': 'customer-2026-11-03' };
 const POLL_MS = 2000;
+// How long addAddendum waits for a withdrawn answer to read unsaved (the walk round's c1c race).
+const WITHDRAWAL_WAIT_MS = 60000;
 const MAX_POLL_ERRORS = 3;
 const INCOMPLETE_SIGNAL = /incomplete|discontinu|reduced|\b5[23]\b/i;
 const AGENT_LABEL = 'agent-executed synthetic review';
@@ -2649,7 +2651,20 @@ async function addAddendum(page, ctx, op, id, plan, cust, deadlineAt, history) {
     out.record.withdrew = saved.saved.answer_id;
     const settled = await waitForProcessing(page, ctx, id, deadlineAt, history);
     if (settled.timedOut) { out.error = 'the recompute after withdrawing the answer did not finish'; return out; }
-    current = await fetchCustomer(page, ctx, id);
+    // The walk round's c1c (2026-11-07): the withdrawal's recompute finished within a second of the click, before the
+    // page was ever read busy, so the read above returned the snapshot from BEFORE the withdrawal (the row still saved,
+    // no open row) while the row was in fact open. Wait for the withdrawn answer itself to read unsaved - bounded, never
+    // a fixed sleep - and say so when it never does.
+    const until = Math.min(deadlineAt, Date.now() + WITHDRAWAL_WAIT_MS);
+    for (;;) {
+      current = await fetchCustomer(page, ctx, id);
+      if (withdrawalTookEffect(current, plan.fact, plan.code, saved.saved.answer_id)) break;
+      if (Date.now() + POLL_MS > until) {
+        out.error = `the withdrawn ${plan.fact} answer still reads saved ${WITHDRAWAL_WAIT_MS / 1000} s after "Change this answer"`;
+        return out;
+      }
+      await page.waitForTimeout(POLL_MS);
+    }
     out.reopened = { cust: current, op: await fetchOperator(op, ctx, id) };
   }
   const open = rowsOf(current).filter(row => !row.saved && row.addendum_allowed === true);
@@ -2679,6 +2694,13 @@ async function addAddendum(page, ctx, op, id, plan, cust, deadlineAt, history) {
   const rev = r => r && { id: r.id, number: r.number, total: r.revisions_total, kind: r.kind };
   out.record.revision = { before: rev(out.before.op?.revision), after: rev(out.after.op?.revision) };
   return out;
+}
+
+// Whether a withdrawn answer has left the details the API serves: no row of the fact (and of the code, when the plan
+// names one) still shows that answer as saved. Read by addAddendum after "Change this answer" (the c1c race).
+function withdrawalTookEffect(cust, fact, code, answerId) {
+  const rows = (cust?.details_needed || []).filter(row => row.fact === fact && (!code || (row.affects || []).includes(code)));
+  return !rows.some(row => row.saved && row.saved.answer_id === answerId);
 }
 
 function checkAddendum(plan, step) {
@@ -4431,7 +4453,7 @@ module.exports = {
   // the 2026-11-05 acceptance walk's corrections: the compact line, a model-less participant, the upload key, a failed document
   checkCompactProgress, PANEL_PHASES, MODELLESS_PARTICIPANTS, uploadCarriedClientKey, checkFailure, FAILED_STATES, FAILURE_WALKED,
   // the completion repair's physician addendum step (review_plan.addendum)
-  checkAddendum,
+  checkAddendum, withdrawalTookEffect,
 };
 
 if (require.main === module) {

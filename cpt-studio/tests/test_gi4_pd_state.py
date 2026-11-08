@@ -226,7 +226,8 @@ class RecordedInstallConsequenceTests(OperatorReads, TestCase):
         self.assertIn('service date: 2026-10-19 \u2192 asked', invalidation.reason)
         context = models.Encounter.objects.get(pk=encounter_id).current_context
         self.assertEqual((context.facts['service_date']['origin'], context.version), ('conflict', jobs.CONTEXT_VERSION))
-        self.assertEqual(jobs.CONTEXT_VERSION, 'gi-context@4')  # the save read it under this revision's rules and label
+        # the save read it under this revision's rules and label (@5: the recall round's date forms, 2026-11-08)
+        self.assertEqual(jobs.CONTEXT_VERSION, 'gi-context@5')
         self.post(f'/api/encounters/{encounter_id}/context', {'service_date': '2026-10-19'})
         self.drain()
         self.assertEqual(self.provider.sent, [dated, dateless])  # the retained dated run is reused: nothing new

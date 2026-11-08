@@ -4045,3 +4045,83 @@ approach:
   retained encounters read 4/4/2/6 READY with no open question; nothing is sent; the state recompute changes no
   encounter on this revision, on the installed one, after the reassessments or on the rollback read; the planted
   control is caught.
+
+## The recall round (2026-11-07): a development corpus, a held-out corpus, and what survived refutation
+
+**Why the method changed.** The blind c3 walk failed 0 of 3 on holds only, and each blind set had surfaced two to four
+new layouts the readers did not read: narrow repairs of one walk shape per round were not converging. This round
+measured recall first, on many layouts at once:
+- a DEVELOPMENT corpus of 24 synthetic reports by six blind authors, one reporting style each (academic headings with
+  organ lines; a structured template; dictated inline labels; numbered PROCEDURE headings; terse abbreviated notes; complex
+  therapeutics), 45 expected codes with exact quotes: the installed release held 36 of 45;
+- a HELD-OUT corpus of 24 more by six new blind authors (reporting software, PDF-extracted text with page breaks, Word
+  table rows, an inpatient bleed note, a surgeon's operative note, British spellings), read by no designer: the installed
+  release held 25 of 44, and 17 of those 25 holds were in the 10 documents whose date of service it did not read;
+- a judge (design/judge.sh, session dir): the corpus, the 2,568-input differential scan, the corpus pins, the H2 freeze,
+  the H4 battery, the H1 replay and the 734 pinned reader tests, validated to reproduce every installed figure on an
+  unmodified copy.
+
+**The taxonomy.** One analyst per author attributed every held code to its deciding rule with minimal pairs; a synthesis
+clustered the 36 holds into 15 repair clusters plus the two-digit-year date question, and a completeness critic checked
+the counts (two double counts corrected) and measured three false READYs every guarded heading form still made.
+
+**The designs, and the two-cycle rule.** Eight designs were prototyped on scratch copies, each refuted by two fresh lenses
+(release and regress), repaired once by narrowing, and refuted again:
+
+| design | cycle 1 | outcome |
+|---|---|---|
+| numbered PROCEDURE headings and capitals labels (colon-twin parity; U20, C5) | 17 HIGH (a dash title moved the date head: NEW-SEND; numbered indication lists disabled installed service lines) | repaired (36 -> 32), refuted again (an opened part moved the date head: NEW-SEND; releases where the base's colon twin holds): DROPPED, U20 OPEN |
+| one shared service-heading grammar (the competing heading design) | 23 HIGH (changed the installed service-line test; another occasion's date moved out of HISTORY; 17 s per 50 KB) | DROPPED |
+| header-block field scope, sub-labels, the duodenum article | 11 HIGH (copied reports' extents; a NEW-SEND path; an undeclarable cue change) for 1 hold | ABANDONED |
+| instrument shorthand and attribution | 13 HIGH for 1 hold | ABANDONED |
+| abbreviations, "applied", "?", the part boundary, denial dating | 12 HIGH for 1 hold | ABANDONED |
+| hold-only false-READY rules (bundling, balloon diameter, esophagoscopy limit, PEG field, APC, earlier tattoo) | 10 HIGH | repaired, refuted again (a millimetre length read as a diameter; competitions consumed): every rule DROPPED |
+| labelled-paragraph release gates, two variants (U18) | 11 and 12 HIGH, mostly word-list leaks, quadratic costs | DROPPED, U18 OPEN |
+| numbered PROCEDURE headings through a same-length reading twin given to routing and the assessment only (U20, the changed approach) | 2 HIGH regressions (a heading already inside DESCRIPTION OF PROCEDURE rewritten, organ-less acts unbound; an office note's ASSESSMENT) + consent lists, an undated routing date, a 121 s mark scan; its releases parity-bounded | repaired (procedure reports only; indication/'other' hosts; the part's own course; a known date; bounded marks), refuted again: the same regression class (an "Instrument:" head field: parts the installed reading already read as today's rewritten, 43244/45385 lost) and an unbounded walk-back (173 s at 391 KB): DROPPED, U20 OPEN |
+| the owner's date forms of 2026-11-07 (day-first, a weekday, the head labels "Exam date" and "Date of Operation") | 8 HIGH (the new labels read anywhere: a prior surgery's, an imaging study's, a recall and a planned exam's date each sent; a blank "Exam date:" holding the doctor's answer; an "operation" occurrence noun silencing "Previous operations: None") | repaired (the two labels in the head only, only where the installed reader sends no date and only as the document's one date; the occurrence noun dropped; the gate's NEW-HELD / NEW-TAKE only as contradiction / equality with the newly sent date), refuted again with findings ALL bounded by parity (an installed "Procedure date:" twin at the same place is sent by the installed release too): KEPT |
+| a reach stated by findings (U19) | 10 HIGH (the gerund reach; form answers; same-day CT lists; statements overriding a short reach; costs) | repaired (the gerund dropped; statements only where no installed extent, never an incompleteness, sentences under a findings, own or organ label), refuted again with four findings ALL BOUNDED BY PARITY (the base reads the copula or reach-verb twin READY in the same position) and one cost: KEPT, the cost bounded |
+
+**What ships** (branch `fix/cpt-studio-recall-round-20261107`, integrated head `000fb24f6`):
+- the findings-stated reach (U19), its cost bounded - development corpus 36 -> 31 held (the structured-template author's
+  five), the 2,568-input scan and the corpus pins unmoved;
+- the owner's date forms (U21) - the held-out corpus's undated documents 10 -> 0 and its holds 25 -> 20 (five codes held by
+  the date alone now READY), one careless false READY unmasked there (43233 for a balloon under 30 mm: the recorded
+  balloon-size class, which the missing date had masked); the H2 freeze HOLDS under the owner-ruled declaration (176 sends,
+  each a head "Exam date", and 117 held answers, each contradicting the date sent, accepted text by text; NEW-TAKE and
+  SEND->ASK 0; layout, requests and mention counts unmoved);
+- labels gi-routing@11 and gi-context@5 (a context recorded @4 stays current: it only asks where @5 sends);
+- the walk tool's withdrawal wait, and the c4 builder's Stop on a fresh document and one details entry per held code.
+The full CI-like suite on `000fb24f6`: 6,483 Django tests, ops 524, verification 43, node 136/65/135 - all passing.
+
+**Recorded, not changed (bounded by parity).** The reach release reads, at worst, exactly as the installed release reads
+the same report with a reach verb or a copula: a statement under a field-line title such as "Prior colonoscopy report:
+see below.", an occasion one sentence away, a non-bare answer line, and the sibling codes a read extent exposes (the
+esophagoscopy, enteroscopy and stoma colonoscopy codes, a previously placed PEG, 43233 for a small balloon, 43245 for an
+esophageal ring) - each READY on the installed release's reach-verb twin. Listed in ACCURACY-RESIDUALS.md.
+
+**Open, with their evidence:** U18 (labelled release), U20 (numbered headings; next round's changed approach recorded: a
+same-length reading twin given to routing and the assessment only), the template field scope, instrument attribution and
+shorthand, the act vocabulary, the three installed careless false READYs (43236 beside 43255, 45381 for an earlier
+tattoo, 43233 for a 20 mm balloon) and the profile dimensions (diameter, esophagoscopy extent, dilation target).
+
+**The final refutation pass over the integrated diff** (three lenses in sealed sandboxes at `000fb24f6`: interaction,
+regression, and an independent parity audit of 10,347 texts) found one defect of the integration itself: gi-context@4
+contexts had been kept current on a false premise (a @4 context that took a member's answer sends it where @5 holds it;
+through the findings-stated reach a code read READY on that date). gi-context@4 is retired - remade before any stage sends
+or assesses, as @1 to @3 - and pinned (RetiredContextVersionTests). The parity audit found no release beyond the parity bound;
+everything else the pass found is bounded by parity or hold-side and is listed in ACCURACY-RESIDUALS.md.
+
+**The retirement's own refutation (2026-11-08T03:58-04:32Z), and why gi-context@4 stays current.** The repair above was
+refuted in its turn, before merge, by two lenses in sealed sandboxes at `7b4fb3d53`. One drove every stage flow from a
+context @4 recorded; the other took a restored live copy through the install, a member's actions and a rollback.
+- It does not close the class: the participant and peer stages send on an earlier context without remaking it, a gap
+  @1 to @3 share in the installed release.
+- It regressed the encounters @4 read: answers applied with no re-assessment (a false 'reviewed' with an approved export
+  on three live encounters), a withdrawal never applied, a reconciliation's attempt lost, and second reviews withdrawn on
+  two.
+- The class it addressed does not exist on the live data: none of the 31 live contexts @4 recorded reads differently
+  under @5. The measurement detects both its controls, a planted one and one the installed code made.
+
+The retirement is reverted, and @4 stays current. The class is bounded by that measurement, repeated on each install's
+pre-app dump as a stop condition, and by structure (nothing records @4 once @5 is installed). It is pinned by
+KeptContextVersionTests. The two pre-existing classes the pass found are open: U22 and U23 in CPT-HARNESS-CHECKLIST.md.

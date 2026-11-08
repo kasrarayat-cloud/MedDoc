@@ -2646,3 +2646,52 @@ permissions, which are reported separately:
 
 (m) **Funding.** The standing authority for private synthetic testing applies and no ceiling is reintroduced. No
 subscription, credit, agreement, real patient or claim.
+
+## Owner decision, 2026-11-07 — the date reader may read more unambiguous forms of a stated date of service
+
+Asked by session 30a58364 (the integration owner since a12d8fb3 ended on 2026-11-07 ~11:59Z), with the evidence: on a
+held-out corpus of 24 fresh synthetic reports by six blind authors, 10 documents had a date of service the reader does not
+read, and they held 17 of the corpus's 25 held codes. The question, verbatim:
+
+> May CPT Studio's date reader read more ways of writing the date of service? Today a document that writes "16-Nov-2026",
+> "9 November 2026", or the label "Date of Operation:" is treated as undated: every code is held and the doctor is asked
+> for the date. On 24 fresh test reports, 10 were affected, and they hold 17 of the 25 held codes. Reading these dates
+> means the providers' request would carry that stated date (today they get no date), which is why it needs your approval.
+
+The owner's answer, verbatim: **"Yes, unambiguous forms (Recommended)"** - the option worded: *"Read '16-Nov-2026',
+'9 November 2026', a weekday before the date, and the labels 'Date of Operation:' and 'Exam date:'. Two-digit years
+('11/02/26') and '11-09-2026' stay unread and keep asking the doctor."* (The other options offered and not chosen: "Yes,
+plus two-digit years"; "No, keep it as is".)
+
+### Session interpretation, 2026-11-07 (30a58364, on receipt) — recorded, not owner-ruled
+
+(a) **What changes.** The context reader reads, inside the date-of-service labels it already reads and the two new labels
+"Date of Operation:" and "Exam date:" (any case), these additional value forms: a day, a month name (full or abbreviated)
+and a four-digit year written day first ("16-Nov-2026", "9-Nov-2026", "16 Nov 2026", "9 November 2026"); and any form the
+reader already reads, or one of these, after a weekday name ("Monday, November 9, 2026", "Mon 16-Nov-2026"). Nothing else:
+a two-digit year, an all-numeric date with hyphens ("11-09-2026"), and every other form stay unread.
+
+(b) **The request side moves, and only as decided.** The H2 freeze's date channel was "NEW-SEND = NEW-TAKE = 0, always".
+This decision permits NEW-SEND exactly where a document's newly read date of service comes from one of the forms in (a)
+under a date-of-service label; the gate is changed to accept such a movement only when a declaration names this decision
+and every NEW-SEND text's new date fact quotes one of those forms - checked mechanically, never by count alone. NEW-TAKE
+(a member answer the base did not take), NEW-HELD and SEND->ASK stay 0.
+
+(c) **Everything else the date reader decides is unchanged**: which of two dates is the encounter's, a conflict between a
+label and a field, another occurrence's date (ruling 2026-10-28), and the member-answer rules. A newly read date that
+conflicts with another read date is a conflict, as today.
+
+(d) **The same proof burden.** A design, two refutation cycles under the two-cycle rule, the full suite, CI, a declared
+install and a walk.
+
+### Session interpretation, 2026-11-07 (30a58364, after the first refutation of the date design) — appended, not rewritten
+
+(b'), refining (b): the first design read the owner's labels everywhere and its lenses showed why that cannot stand - a
+prior surgery's "Date of operation" in an indication, an imaging study's "Exam date", a recall "Exam date" in 2029, each
+sent as the date of service. The repair reads "Exam date" and "Date of Operation" only in the document's head, where the
+installed reader already reads its wide labels, and sends them there (never under a consent, booking or instructions
+title); a blank or unreadable value reads as before. (b) said NEW-TAKE and NEW-HELD stay 0; that cannot hold while the
+document now states a date: a member answer that CONTRADICTS the newly read document date is held, and one that EQUALS it
+is taken - exactly as for every date the installed reader already reads. The gate accepts NEW-HELD and NEW-TAKE only in
+those two shapes, text by text; SEND->ASK stays refused. The day-first and weekday forms under the installed labels read
+exactly as the installed month-day-year twin, its 2026-10-28 known limits included (recorded as parity).

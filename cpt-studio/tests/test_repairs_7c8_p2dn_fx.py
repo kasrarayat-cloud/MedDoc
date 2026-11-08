@@ -551,12 +551,18 @@ class InstalledFormTests(DateAssertions, SimpleTestCase):
     note's own date; one in another form is read as evidence, asked, and a member's answer with its date is taken."""
 
     def test_the_known_limit_shapes_in_such_a_form_send_no_date(self):
+        # Owner decision 2026-11-07 (the date forms; interpretation (a) and (c)): a day-first date ("3 Sep 2026",
+        # "03-Sep-2026", "3rd September 2026") is read and sent as the other labelled forms are, so in the known-limit
+        # shapes it reads exactly as its installed twin "09/03/2026" reads them (the narrow source rule's cases are asked
+        # either way; the 2026-10-28 ruling's known limits - a status field beside or below the label, "Recall:", another
+        # discipline's undated title - send the twin's date). This assertion had every day-first form send no date there
+        # (rule N7, superseded for the day-first date by the decision): test_a_day_first_date_reads_as_its_installed_twin
+        # now pins the parity. The labels naming the time and the table rows below are unchanged.
         for name, shape in KNOWN_LIMIT_SHAPES.items():
             for form in NOT_INSTALLED_FORMS:
                 for body in (COLO_BODY, OFFICE_BODY):
                     text = HEAD + shape.format(D=form) + body
                     with self.subTest(shape=name, form=form, body=body[:15]):
-                        self.assert_never(text, '2026-09-03')
                         self.assert_member_conflict(text, ELENA_DATE)
         for heading in ('Outside colonoscopy:', 'Outside colonoscopy', 'Prior colonoscopy:', 'Planned colonoscopy:',
                         'Next procedure:'):
@@ -571,9 +577,24 @@ class InstalledFormTests(DateAssertions, SimpleTestCase):
                 with self.subTest(label=label, shape=name):
                     self.assert_never(text, '2026-09-03')
 
+    def test_a_day_first_date_reads_as_its_installed_twin(self):  # owner decision 2026-11-07 (the date forms)
+        for name, shape in KNOWN_LIMIT_SHAPES.items():
+            for body in (COLO_BODY, OFFICE_BODY):
+                twin = HEAD + shape.format(D='09/03/2026') + body
+                for form in NOT_INSTALLED_FORMS + ('Thursday, September 3, 2026', 'Thu 3 Sep 2026'):
+                    text = HEAD + shape.format(D=form) + body
+                    with self.subTest(shape=name, form=form, body=body[:15]):
+                        a, b = date_fact(twin), date_fact(text)
+                        self.assertEqual((b.origin, b.value), (a.origin, a.value))
+                        for answer in (ELENA_DATE, '2026-09-03', '2026-10-14'):
+                            self.assertEqual(context.is_member_conflict(merged_date(text, answer)),
+                                             context.is_member_conflict(merged_date(twin, answer)), answer)
+
     def test_a_header_in_such_a_form_is_asked_and_the_member_s_answer_agrees(self):
-        for line in ('Date of service: 14 Oct 2026', 'Procedure date: 14-Oct-2026', 'Service date 14 October 2026',
-                     'Date of service | 2026-10-14', '| Procedure date | 10/14/2026 |',
+        # Owner decision 2026-11-07 (the date forms): the day-first lines this pin listed ('Date of service: 14 Oct
+        # 2026', 'Procedure date: 14-Oct-2026', 'Service date 14 October 2026') are read and sent now - documented in
+        # the controls below; the table rows and the labels naming the time are asked as before
+        for line in ('Date of service | 2026-10-14', '| Procedure date | 10/14/2026 |',
                      'Date/Time of Service: 10/14/2026 09:15', 'DOS/Time: 10/14/2026 08:30'):
             text = HEAD + 'Colonoscopy report\n' + line + '\n' + COLO_BODY
             with self.subTest(line=line):
@@ -591,15 +612,23 @@ class InstalledFormTests(DateAssertions, SimpleTestCase):
         self.assert_asked(text, 'Date of service | 2026-10-05')
         self.assert_member_date(text, '2026-10-05')
         self.assert_member_conflict(text, '2021-08-17')
-        text = HEAD + 'Date of service: 14 Oct 2026\nRe: Colonoscopy 10/14/2026\n' + COLO_PLAIN
-        self.assert_asked(text, 'Date of service: 14 Oct 2026')
+        # owner decision 2026-11-07 (the date forms): the day-first label this pin used is read now - the Re: line agrees
+        # with it, so it is documented - and a label naming the time is the withheld form that leads the question
+        self.assert_document(HEAD + 'Date of service: 14 Oct 2026\nRe: Colonoscopy 10/14/2026\n' + COLO_PLAIN,
+                             '2026-10-14')
+        text = HEAD + 'Date/Time of Service: 10/14/2026 09:15\nRe: Colonoscopy 10/14/2026\n' + COLO_PLAIN
+        self.assert_asked(text, 'Date/Time of Service: 10/14/2026')
         self.assert_member_date(text, '2026-10-14')
         self.assert_conflict(HEAD + 'Date of service: 14 Oct 2026\nRe: Colonoscopy 10/20/2026\n' + COLO_PLAIN,
                              '2026-10-14', '2026-10-20')
 
     def test_controls_the_installed_forms_are_documented_and_another_form_still_speaks(self):
         for line in ('Date of service: 10/14/2026', 'DOS: 2026-10-14', 'Procedure date: October 14, 2026',
-                     'Date of service: 10/14/2026 09:15', 'Visit date - Oct 14, 2026', 'Date of service (DOS): 10/14/2026'):
+                     'Date of service: 10/14/2026 09:15', 'Visit date - Oct 14, 2026',
+                     'Date of service (DOS): 10/14/2026',
+                     # owner decision 2026-11-07 (the date forms): the day-first date and a weekday before the date
+                     'Date of service: 14 Oct 2026', 'Procedure date: 14-Oct-2026', 'Service date 14 October 2026',
+                     'Date of service: Wednesday, October 14, 2026', 'Procedure date: Wed 14-Oct-2026'):
             with self.subTest(line=line):
                 self.assert_document(HEAD + 'Colonoscopy report\n' + line + '\n' + COLO_BODY, '2026-10-14')
         # beside the note's own date, a labelled date in another form agrees with it or questions it
@@ -614,16 +643,24 @@ class InstalledFormRequestTests(EndToEnd):
         encounter_id = self.finished(OUTSIDE_DMY)
         self.assertEqual(self.dates_sent(encounter_id), [[]])
         self.assert_not_excluded(encounter_id, '45385')
+        # Owner decision 2026-11-07 (the date forms): the day-first date of a clean header is read and sent as the other
+        # labelled forms are, so its request carries the date at once - this pin sent it dateless and then with the
+        # member's answer ([[], ['Date of service: 2026-10-14']]); a time-labelled header is the withheld form now
         clean = self.finished(HEAD + 'Colonoscopy report\nDate of service: 14 Oct 2026\n' + COLO_BODY)
-        self.assertEqual(self.dates_sent(clean), [[]])
-        self.set_context(clean, {'service_date': '2026-10-14'})
-        self.assertEqual(self.dates_sent(clean), [[], ['Date of service: 2026-10-14']])
+        self.assertEqual(self.dates_sent(clean), [['Date of service: 2026-10-14']])
         self.assertEqual(self.bucket(clean, '45385'), 'selected')
+        withheld = self.finished(HEAD + 'Colonoscopy report\nDate/Time of Service: 10/14/2026 09:15\n' + COLO_BODY)
+        self.assertEqual(self.dates_sent(withheld), [[]])
+        self.set_context(withheld, {'service_date': '2026-10-14'})
+        self.assertEqual(self.dates_sent(withheld), [[], ['Date of service: 2026-10-14']])
+        self.assertEqual(self.bucket(withheld, '45385'), 'selected')
 
 
 # --- 1, its follow-up: a dated line whose dates are all other fields' is evidence that reads no date ----------------
 
 NO_DATE_OF_ITS_OWN = (  # the fuzz's own shape ("Exam date" is no label of the closed list), and two plainer ones
+    # owner decision 2026-11-07: a head "Exam date" is read only where it stands as a label (it opens its line or a
+    # field of its own); after "Patient DOB: 01/01/1998 " it does neither, so these two read exactly as installed
     HEAD + 'Exam: Colonoscopy Patient DOB: 01/01/1998 Exam date: 10/14/2026\n' + COLO_BODY,
     HEAD + 'Colonoscopy report\nExam: Colonoscopy Patient DOB: 01/01/1998 Exam date: 2026-10-14\n' + COLO_BODY,
     HEAD + 'Procedure: Colonoscopy    Referral date: 10/13/2026\n' + COLO_BODY,

@@ -1395,3 +1395,69 @@ holds or false incompleteness warnings except U17, which is a false READY the in
 | U18: the labelled release refused on ordinary content | c3a: "biopsies were taken from both" (N1, an unanchored place); the consent sentence before the label, "after a discussion ...", "before each procedure" (N3); a hard-wrapped "(Boston\nscore 8: 2-3-3)" read as a label line (N2); latent: "prior", "in two bites", "the proximal side of a fold" | both paragraphs refused, their narratives read under the Indications: codes held for extent and status | the release's paragraph-level gates fail closed on any of their signals; each walk has met another layer of them |
 | U19: a reach stated by findings, not by a reach verb | "The duodenal bulb and second portion looked normal"; "Duodenum: The bulb and second portion were normal." beside "Stomach: Normal, ..." (an organ-by-organ list); "The stomach and the duodenum to the second portion were normal." | no extent (held), or "incomplete: stomach" with a false incompleteness warning | REACHED_AFTER needs its verb right after the landmark, "second portion" alone is no landmark, and the findings-line form reads only "<organ>: Normal" |
 | U20: numbered procedure headings open no section | c3c: "HISTORY" then "PROCEDURE 1 - EGD" and "PROCEDURE 2 - COLONOSCOPY" | the HISTORY section runs over both narratives; every act reads historical; codes held | the recorded "gap a" (numbered PROCEDURE headings), here with a dash and under HISTORY; sections.py is behind the H2 freeze |
+
+## The recall round (2026-11-07/08): what it leaves
+
+Measured on a development corpus (24 reports, six blind authors) and a held-out corpus (24 more, six new styles, read by no
+designer). Every design was refuted in two cycles; what was dropped is recorded with its requirement in HARNESS.md, "The
+recall round". These are what the SHIPPED findings-stated reach leaves - each read by the installed release the same way when
+the same report states the reach with a verb or a copula (bounded by parity) - and what stays open.
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| a findings statement under a field-line title naming another report | "Prior colonoscopy report: see below." then "Findings:" / "1. Terminal ileum normal." | the terminal ileum read as today's extent; 45385 READY | bounded by parity: the installed release reads "The terminal ileum was normal." in the same place READY |
+| an occasion one sentence away from the statement | "Terminal ileum normal. That was at her colonoscopy two years ago, not today." | today's extent read from it | bounded by parity (the copula twin); the guard reads only the sentence before |
+| a statement answered by a non-bare answer line | "Cecum reached." then "[ ] Yes [x] No (poor preparation)" | cecum read | bounded by parity (the copula twin "The cecum was reached." reads the same) |
+| the sibling codes a read extent exposes | 43202/43198/43220/43214 (esophagoscopy), 44361 (enteroscopy), 44389/44394 (through a stoma), 43246 for a previously placed PEG, 43233 for a balloon under 30 mm, 43245 for an esophageal ring | READY once the extent is read | bounded by parity (each READY on the installed reach-verb twin); the profile dimensions (diameter, examination extent, dilation target) were designed and refuted twice this round |
+| the three installed careless false READYs | 43236 beside 43255 (an injection within hemostasis); 45381 for a tattoo placed at an earlier procedure; 43233 for a 20 mm balloon | READY | the hold-only rules for them were refuted twice and dropped (a millimetre length read as a diameter; competitions consumed); OPEN |
+| U20: numbered procedure headings | "PROCEDURE 1 - EGD" after HISTORY or INDICATIONS | the narratives read as history; codes held | two mechanisms refuted twice each (the numbered part inside the shared layout: a date sent; a same-length reading twin: correct READYs lost where the installed reading already read the part); OPEN |
+| U18: dictated labelled paragraphs | "Upper endoscopy: With the patient in the left lateral decubitus position, the gastroscope was passed ..." | refused by the release gates; codes held | two variants refuted (word-list leaks, quadratic costs); OPEN |
+| template field scope, instrument shorthand and attribution, act abbreviations, "applied", a "?" on a diagnosis, the part boundary, denial dating | "Prior endoscopy: None." swallowing "Extent of exam:"; "Std gastroscope to D2"; "CSP"; "APC applied" | held | designed and refuted with their gain one corpus hold each; abandoned this round, OPEN |
+
+### The recall round: the date half, and the final refutation pass over the integrated diff (2026-11-08)
+
+The owner's date forms read, at worst, exactly as the installed release reads the same document with its date written in an
+installed form (a "Procedure date:" label, or a month-day-year date) - each row below is READY or sent on that twin too.
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| a head "Exam date" that dates another study | "CT findings: Focal sigmoid wall thickening." then "Examination date: 10/02/2026" in the head | sent as the date of service; the doctor's other date held | bounded by parity ("Procedure date: 10/02/2026" there is sent too) |
+| a head label in a note whose head is the whole note, or in a SOAP head | a short consultation or "Subjective: ... / Exam date: 10/28/2026 / Colonoscopy on 10/28/2026: ..." | the reviewed exam's date sent; its recounted acts read performed | bounded by parity |
+| a head "Date of Operation" naming the surgery in a post-operative or surgery-field note | "Surgery: Low anterior resection" then "Date of operation: 03/16/2025"; "Colorectal Surgery Clinic - Postoperative Visit" with "Date of Operation: 10/12/2026" | the operation's date sent | bounded by parity |
+| a head label in a planning office visit, under a title the around-procedure reader does not know, or after two spaces or a tab inside a sentence | "Exam date: 11/20/2026" above "Office visit"; "Document Type: Consent"; "Underwent right hemicolectomy.  Date of operation: 03/15/2025." | the planned or earlier date sent | bounded by parity |
+| the 2026-10-28 known limits in the decided forms | a status field beside or below the label, "Recall:", another discipline's title, with "3 Sep 2026" | another occurrence's date sent | the installed month-day-year twin reads them so (the 2026-10-28 ruling's accepted limits) |
+| a weekday date the installed reader left unread now asks or holds | "Previous date of service: Tuesday, November 10, 2026" beside "Date of service: 11/09/2026"; a closing charge block's weekday date; a weekday-dated label beside the DOB | asked (a correct READY becomes a question) or a member answer held | hold side only; the H2 gate refuses SEND->ASK, so such a text in a freeze corpus fails the gate; recorded |
+| one decided-form release with no text twin | a flexible sigmoidoscopy with biopsy whose weekday date is now read | READY | equal to the installed reading once the member answers the stated date; no false READY shown |
+| the reach statement's doubt guard reads only its family's sentences | "Duodenal bulb normal; second portion not examined." in a report that also mentions a colonoscopy (the denial attributed to no family) | the bulb statement releases | bounded by parity (the copula twin reads the same there) |
+| more sibling codes a read extent exposes | 43236 / 43243 (injection target), the ablation-kind codes | READY once the extent is read | bounded by parity; the act subtype is a fourth profile dimension beside diameter, examination extent and target |
+| one 400 KB shape crosses 10 s | findings statements with both features over 400 KB | about 11 s, where the installed release takes under 10 s | under 3x; the installed release already exceeds 10 s on sibling 400 KB shapes; every stage deadline holds |
+
+**Repaired by the final pass:** the integration had kept a context recorded under gi-context@4 current, on the premise that
+@4 only asks where @5 sends. Three lenses showed it false: a @4 context that asked and then took a member's answer sends
+that answer, which @5 holds when it contradicts the document's newly read head date - and with the findings-stated reach a
+code read READY on it. gi-context@4 is retired (remade before any stage sends or assesses), as @1 to @3 were.
+
+**Then reverted, after the retirement's own refutation (2026-11-08T03:58-04:32Z; two lenses over the repair, a restored
+live copy included).** Retiring gi-context@4 does not close what it was meant to close, and it regresses the encounters @4
+read:
+- the participant and peer stages send on an earlier context without remaking it (a stage queued across an install,
+  resumed after a Stop, or swept), so a @4 context of the class above still sends its participants and peer reviews; the
+  installed release has the same gap for @1 to @3;
+- on the encounters @4 read (31 live), a member's answer was applied to the stored assessment with no re-assessment (on
+  the live copy three encounters read 'reviewed' with an approved export where the current engine reads a code READY), a
+  withdrawal was never applied (a readiness blocker nothing clears), a reconciliation's participant attempt was lost, and
+  two encounters lost their second-review offer.
+
+So gi-context@4 stays current, and the class above is bounded instead:
+- **by measurement:** none of the 31 live contexts @4 recorded reads differently under @5 (facts, and the document date
+  where one is stored). Both controls are detected: a planted value, and a context the installed code made of the class
+  itself. The measurement is repeated on the pre-app dump of each install, and any difference is a stop condition of its
+  declaration;
+- **by structure:** no context is recorded under @4 once @5 is installed.
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| a context @4 recorded whose member date @5 would hold stays current | an upload under 73dcf8b4 with a head "Date of Operation: 11/05/2026" and the member's 11/09 | 11/09 sent; through the findings-stated reach 45385 READY | none on the live copy (measured); none recordable after the install; a stop condition of the install |
+| pre-existing on the installed release: the participant and peer stages send on an earlier context without remaking it | a chain on a context @1 to @3 recorded, queued across an install, resumed after a Stop, or swept | the participants and peer reviews are sent on the old context | reachable only with an in-flight or stopped chain on an earlier context, and the live copy has none; open (U22) |
+| pre-existing on the installed release: a member's answer, withdrawal or reconciliation on an earlier context is applied without a re-assessment | an answer on an encounter whose context @1 to @3 recorded (the live controls a8e50085, fbdd6d27, 30d3f32d and 212ed78d each read 'reassessing': false) | the overlay applies an answer to the stored assessment; a withdrawal leaves a blocker nothing clears; a reconciliation's participant attempt is not made; a Resume of an assess is not counted as the member's request | an unchanged context save or an addendum reads the encounter under the current rules; open (U23) |
+| a rollback reads a @5 document date it cannot honour | a context @5 holds (a member date against a head "Date of Operation"), then a rollback to 73dcf8b4: "Use document date" is offered from the @5 document date | the installed release clears the member value, reads no date and would send a dateless request, then asks the date again | rollback only; declared in the install's rollback limits |

@@ -1006,6 +1006,19 @@ REACHED_BEFORE_ROUTING = rx(r'\b(?:advanced|passed|inserted|introduced|intubated
                             r'visualized|steered|navigated)\b[^.;]{0,60}?\b(?:to|into|through|as\s+far\s+as|up\s+to|'
                             r'to\s+the\s+level\s+of|beyond|past|at)\s+(?:the\s+)?(?:[\w-]+\s+){0,3}$'
                             r'|\b(?:reached|intubated|entered)\s+(?:the\s+)?$')
+# Completion design, reach group (2026-11-07), U19: the parts of the duodenum named without their organ - "Duodenum: The
+# bulb and the second portion were normal.", "The duodenal bulb and second portion looked normal.", "the bulb and the
+# second portion of the duodenum" - with the labels and depths of UPPER_LANDMARKS, whose own spellings need "duodenal
+# bulb" and "... of the duodenum". Read by detect's findings-stated reach only (detect._stated_items), and only where
+# the statement itself names the duodenum: the part is coordinated with a landmark of UPPER_LANDMARKS, its line opens
+# with a "Duodenum:" label, or "of (the) duodenum" follows it, or "duodenum," precedes it. Never a landmark of the
+# table: the request side and every other reader keep UPPER_LANDMARKS as it is.
+DUODENAL_PARTS = (
+    ('duodenal bulb', 3, rx(r'\bbulb\b')),
+    ('second part of duodenum', 5, rx(r'\b(?:second|2nd)[ \t\n]+(?:part|portion)\b')),
+    ('third part of duodenum', 6, rx(r'\b(?:third|3rd)[ \t\n]+(?:part|portion)\b')),
+    ('fourth part of duodenum', 7, rx(r'\b(?:fourth|4th)[ \t\n]+(?:part|portion)\b')),
+)
 # A reach whose object is a depth, then the landmark that depth lies in (session 7c8d38da, GI round 2, extent: ho-03's
 # "The pediatric colonoscope was advanced to 28 cm from the anal verge in the sigmoid colon"): the landmark is where the
 # instrument got to, so it is reached, exactly as "advanced to the sigmoid colon" is. Only straight after the reach verb
