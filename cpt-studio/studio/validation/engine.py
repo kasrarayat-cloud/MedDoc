@@ -973,40 +973,6 @@ def _another_roles_hold(code: str, found: reconcile.Match) -> reconcile.Match:
                                'service?'))
 
 
-def _dated_hold(code: str, found: reconcile.Match, matched: reconcile.Match, own: Sequence[checks.Reading],
-                set_aside: frozenset, finding, legacy: str, text: str, inventory, routing: RoutingResult,
-                day: Optional[date], pages=()) -> reconcile.Match:
-    """U24 (the structure round, 2026-11-08; the changed approach after the integration's refutation): a code the
-    installed readings release (``found`` performed or incomplete), one of whose own cited passages "<quantity> <time
-    unit>(s) back" dates (checks.dated_readings: that passage read as its "ago" twin, never a positive reading), is held
-    where the code's own status, read with those twin readings, is not performed AND the installed second opinion holds
-    the documented service on that status (_second_opinion over ``matched``, the documented service before any passage
-    of the code decided). The result is ``found`` or ``found`` held: hold-only by construction. Exclusion
-    (_agreed_not_done, _stated_not_done), the evidence hold, base bundling and every other reader read the installed
-    readings, so no code is excluded, and no base code released, through the phrase.
-    Why not at the reading (the integration's first form, u24m4, refuted 2026-11-08): read as the code's own evidence
-    reading, the twin's 'uncertain' or 'historical' stopped the passage being the code's only positive reading, so a
-    co-cited plan line - 'planned', which the second opinion does not hold over a documented act - decided ahead of the
-    hedge that held it: 45385 cited with 'Probable complete colonoscopy.' and 'Await pathology.' read READY, held as
-    installed and by its ago twin (design-r2/corr/u24_resolve.py: 48 inputs, every citation order; the mechanism the
-    U26 and U27 lenses found in their own hold-only seams)."""
-    dated, replaced = checks.dated_readings(text, own, day)
-    if set_aside:
-        dated = tuple(r for r in dated if (r.start, r.end) not in set_aside)
-        replaced = tuple(r for r in replaced if (r.start, r.end) not in set_aside)
-    if not replaced:
-        return found
-    outcome = checks.resolve_status(dated + checks.routing_readings(finding), detectable=legacy in DETECTED_FAMILIES)
-    if outcome.state in checks.POSITIVE:
-        return found
-    if _second_opinion(outcome, matched, code, text, inventory, routing, dated, day, pages).state in checks.POSITIVE:
-        return found
-    return replace(found, state='uncertain', reason='readings_disagree', question=(
-        f'Confirm whether {code} was done on the date of service: a passage it cites dates it to an earlier time.'),
-        detail=f'{found.detail} But a passage the code cites is dated "... back", read as "... ago": '
-               f'{checks.cite(replaced[0])}. Held for the reviewer, not excluded.')
-
-
 def _not_done_outcome(found: reconcile.Match, stated: Sequence[tuple]) -> checks.StatusOutcome:
     """The not-performed outcome of a _not_done_match: its deciding reading is the first passage that says so."""
     status, _cue, ev = stated[0]
@@ -1640,7 +1606,6 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
     outcome = checks.resolve_status(own + checks.routing_readings(finding),
                                     detectable=legacy in DETECTED_FAMILIES)
     found = reconcile.match(code, inventory, selection.family) if inventory is not None else None
-    matched = found  # the documented service before any reading of the code's passages decides (U24's dated hold)
     unmatched = found is None  # the inventory documents no service of the code's family (found is reset below too)
     if found is None and READ_DOCUMENTED_SERVICES and inventory is not None and outcome.state == 'not_performed':
         # No documented service of the code's family: the routing-era reading of its own passage decided alone. The
@@ -1697,8 +1662,6 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
         found = _not_done_match(code, found, stated)
     if found is not None:
         found = _another_roles_hold(code, found)
-    if found is not None and found.state in checks.POSITIVE and matched is not None:
-        found = _dated_hold(code, found, matched, own, set_aside, finding, legacy, text, inventory, routing, day, pages)
 
     def today(span):
         return _today_passage(text, span, day)

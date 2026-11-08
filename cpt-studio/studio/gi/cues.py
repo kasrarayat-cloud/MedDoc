@@ -246,13 +246,9 @@ HAD_PRE = _pre(r'had|has\s+had|have\s+had', _HIST_FILLER, 3)
 SYMPTOM_TIME_BEFORE = rx(r'(?:\bsince|\b(?:over|for|in|during|within|throughout)\s+the'
                          r'|\b(?:start|began|begun|beginning|onset|noted|noticed|develop|worsen|occur|recur)\w*)\s+'
                          r'(?:(?:about|approximately|roughly|around|nearly)\s+)?$')
-# The quantities and the time units the 'ago' cue reads before "ago" ("two weeks ago", "a few days ago"); one string,
-# so the 'ago' cue and its "back" twin below never drift (HISTORICAL_CLAUSE's pattern is byte-identical to before).
-_AGO_QUANTITY = r'\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten|several|many|few'
-_AGO_UNIT = r'days?|weeks?|months?|years?'
 HISTORICAL_CLAUSE = (
-    ('ago', rx(r'\b(?:' + _AGO_QUANTITY + r')\s+'
-               r'(?:' + _AGO_UNIT + r')\s+ago\b|\bago\b')),
+    ('ago', rx(r'\b(?:\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten|several|many|few)\s+'
+               r'(?:days?|weeks?|months?|years?)\s+ago\b|\bago\b')),
     # Undated, by relative time or by another provider or place: "performed last month", "earlier this year",
     # "at an outside hospital", "by her previous gastroenterologist", "done elsewhere". "last" is anchored to a
     # time unit ("the last 5 cm" and "at last" are not history).
@@ -267,54 +263,6 @@ HISTORICAL_CLAUSE = (
     ('records reviewed', rx(r'\b(?:reports?|records?|results?|images?)\s+(?:were\s+|was\s+|have\s+been\s+)?reviewed\b'
                             r'|\breview\s+of\s+(?:the\s+)?(?:outside|prior|previous|old)\s+(?:reports?|records?)\b')),
 )
-# U24 (the structure round, cycle 2, 2026-11-08): "<quantity> <time unit>(s) back" is the past time phrase written for
-# "... ago" ("Some months back a 6 mm polyp was removed with a cold snare", "A few days back cold forceps biopsies were
-# obtained", "removed 2 years back."). No installed reader read it, in any layout, while its ago twin - the same text with
-# that "back" written "ago" - is held in every layout, so a report narrating an earlier polypectomy read it as today's
-# (45385 READY). The phrase is read as routing reads its twin: the cue 'ago', historical, with the twin's own span - from
-# the quantity where the 'ago' cue's first form matches the twin ("two weeks back", "a few days back" from "few"), else
-# the word "back" alone, as "\bago\b" takes "some months ago" and "Weeks ago" - so routing's owned-time reading, its
-# symptom-time exemption ("bleeding that began two weeks back") and its other readers of the cue take it as they take
-# "ago". Who reads it, and why only there, is detect's (detect._held_by_back): a code's own cited evidence, to hold.
-#
-# HISTORICAL_CLAUSE itself is unchanged (context.py and sections.py read it: the request side is frozen, H2), and so is
-# every reader of it; this is a tuple of its own. The time units are the 'ago' cue's own (_AGO_UNIT) with OTHER_TIME's
-# plural abbreviations (wks, mos, yrs; wk, mo, yr only after a digit) - a closed table, the units a relative past time
-# is counted in; decades, hours, sessions and visits are not read. The quantities are the 'ago' cue's own; before a
-# plural unit any word leads, as "\bago\b" reads any word before "ago" ("some months back", "a couple of weeks back",
-# "Weeks back"). Where no listed quantity leads, the unit and "back" are one whitespace character apart (a fixed-width
-# look-behind); after one, any whitespace ("two weeks  back").
-#
-# "back" is far wider than "ago" ("back pain", "back to the cecum", "pulled back", "back home", "back at work"), so the
-# phrase is read only where "back" ends the time phrase and cannot be a noun's modifier or a particle (_BACK_AGO_AFTER):
-# (a) a clause mark, a dash, a bracket, a table cell's bar or the text's end follows it, or a line end that the next line
-# does not run on from in lower case ("removed some months back.", "Two weeks back, she ..."); (b) a word that opens a
-# new constituent follows it - a determiner, a pronoun, a relative pronoun or a numeral, a closed grammatical class
-# ("Some months back a 6 mm polyp ...", "2 years back she had ...", "a year back which showed ..."); or (c) a bare noun
-# phrase of at most six words, none a determiner, pronoun, auxiliary or coordinator, follows it as the subject of a done
-# act: "was", "were" or "has/have/had been" and one of the participles a "not" denies when they describe a service or an
-# intervention (_NOT_DONE: "Weeks back cold forceps biopsies were obtained"; not "... biopsies of the antrum were ...").
-# Anything else after "back" - a noun ("two weeks back pain", "back surgery"), an adverb or a particle ("a week back
-# home", "back to work", "back from vacation", "back at work", "back on aspirin"), any preposition ("two years back at an
-# outside hospital": a known miss), a coordinator or a verb - reads nothing, as before. A measure moved back ("the visit
-# was pushed two weeks back.") is read where a clause mark ends it, as its twin "pushed two weeks ago." is: a recorded
-# over-reading, and a hold only. Each condition is a look-ahead of at most eight words: linear in the text.
-_BACK_UNIT_AFTER_ANY = ('days', 'weeks', 'months', 'years', 'wks', 'mos', 'yrs')
-_BACK_UNIT_AFTER_DIGIT = ('wk', 'mo', 'yr', 'wks', 'mos', 'yrs')
-_BACK_STARTER = (r'a|an|the|this|that|these|those|her|his|their|its|our|my|your|she|he|they|we|i|it|you|which|who|'
-                 r'whom|whose|some|several|many|few|both|each|every|all|no|any|one|two|three|four|five|six|seven|'
-                 r'eight|nine|ten|eleven|twelve|\d+')
-_BACK_AGO_PHRASE = (r'\b(?:' + _AGO_QUANTITY + r')\s+(?:' + _AGO_UNIT + r')\s+back\b'
-                    r'|(?=back\b)(?:' + '|'.join([rf'(?<=\b{unit}\s)' for unit in _BACK_UNIT_AFTER_ANY]
-                                                 + [rf'(?<=\d{unit}\s)' for unit in _BACK_UNIT_AFTER_DIGIT]
-                                                 + [rf'(?<=\d\s{unit}\s)' for unit in _BACK_UNIT_AFTER_DIGIT[:3]])
-                    + r')back\b')
-_BACK_AGO_AFTER = (r'[ \t]*+(?:[.,;:!?()\[\]|\u2013\u2014]|-(?!\w)|\Z)'
-                   r'|[ \t]*+\n(?![ \t]*+(?-i:[a-z]))'
-                   r'|[ \t\n]++(?:' + _BACK_STARTER + r')\b'
-                   r'|[ \t\n]++(?:(?!(?:' + _AUX_WORD + r'|' + _BACK_STARTER + r'|and|or|but|nor)\b)[\w/-]++[ \t\n]++){1,6}'
-                   r'(?:was|were|(?:has|have|had)[ \t\n]++been)[ \t\n]++(?:then[ \t\n]++)?(?:' + _NOT_DONE + r')\b')
-HISTORICAL_BACK = (('ago', rx(r'(?:' + _BACK_AGO_PHRASE + r')(?=' + _BACK_AGO_AFTER + r')')),)
 
 # --- one failure vocabulary (refutation cycle 2, outcome O6) ---------------------------------------------------------
 # The words that say an act was stopped, cut short or kept from being done. Routing's subject-tested failure cues read

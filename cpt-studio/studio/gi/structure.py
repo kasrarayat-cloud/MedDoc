@@ -1245,7 +1245,7 @@ CORROBORATED_PARAGRAPH = 6000
 SUMMARY_READ = 8000
 PROCEDURE_LINES_READ = 12
 # Bounds on the guard's own work (integration, 2026-11-08; u18d's REGRESS lens, cost finding 0). The guard reads every
-# sentence and clause that meets a released paragraph with four span readers on each of its two readings, and
+# sentence and clause that meets a released paragraph with three span readers on each of its two readings, and
 # services.passage_readings scans the document's sentences from its start on every call, so the work grows with the
 # product of the two: five labelled paragraphs of short sentences inside CORROBORATED_DOCUMENT took 15 s per stage (22x
 # the installed reading); the profile puts it in the spans read (5,708 passage readings, 11,416 status readings). Where
@@ -1809,9 +1809,10 @@ def _corroborated_release(text: str, lay: Layout, head: _Head, ix: _Index, candi
 #      note, evidence) and mentions (span, sentence, section kind, status, cues) - the label's own mention included;
 #   3. routing's analysis: the family attributed to each sentence, each family's document-level adjustment, the
 #      reading of each reference and of each E/M mention;
-#   4. the span readers validation reads a code's evidence with - detect.status_for_span (also with U24's back
-#      reading), detect.own_status_for_span and services.passage_readings - on every sentence and every clause of the
-#      released paragraphs, and on each label's own words: the spans whose section and sentence the release changes;
+#   4. the span readers validation reads a code's evidence with - detect.status_for_span, detect.own_status_for_span
+#      and services.passage_readings - on every sentence and every clause of the released paragraphs, and on each
+#      label's own words: the spans whose section and sentence the release changes (the design also compared U24's
+#      "back" reading here; U24 is withdrawn from the round, 2026-11-08, so no reader reads one);
 #   5. the documented services (services.build with that routing): every service (family, kind, status, completion,
 #      extent, intent, date, clinician, setting, role, evidence, completion evidence, cues, uncertainty, routing status,
 #      separate E/M, scope, the service it is included in), its lesions and its acts (kind, status, role, sites,
@@ -2091,9 +2092,8 @@ def _reading_facts(reading: '_Reading', day, at, regions: list, label_words: lis
 
     def routed_reading(s, e):
         status, found = detect.status_for_span(reading, s, e, day)
-        back, back_found = detect.status_for_span(reading, s, e, day, back=True)
         own, own_found = detect.own_status_for_span(reading, s, e, day)
-        return status, cues_of(found), back, cues_of(back_found), own, cues_of(own_found)
+        return status, cues_of(found), own, cues_of(own_found)
 
     def read(s, e):
         passages = gi_services.passage_readings(reading, s, e, day)
