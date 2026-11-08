@@ -220,12 +220,12 @@ the progress log below.
 
 | field | value |
 |---|---|
-| owner | session a12d8fb3 (integration and deployment) |
+| owner | session 30a58364 (integration and deployment) since 2026-11-07T15:15Z; a12d8fb3 ended at ~11:59Z with its hold taxonomy half done, and the work was recovered from its records |
 | objective | the installed website assesses an uploaded GI PDF or Word document with Corti, Astra and Fable, supported proposals reach review, decisions persist, and the download matches them |
 | installed | `73dcf8b4b40a` at https://cpt.quillmd.com since 2026-11-07 (app phase 10:13-10:16Z; declaration `docs/foundation/mutations/20261107-cpt-studio-walk-round-install.md`); rollback image `cpt-studio:6f306af1b030` |
-| candidate | none yet: the next round starts from `main` with a change of method (a development corpus by several blind authors, measured offline on every candidate rule) |
-| current stage | 9: installed and walked (`docs/deploy-reports/20261107-cpt-studio-73dcf8b4-install-and-walk.md`). The install matched its declaration and sent nothing; the retained cases read 4/4/2/6 READY live. The blind c3 walk failed 0 of 3 on holds only (U18-U20; Corti, Astra and Fable proposed the expected codes on all three); c1 1 of 3 (both failures the walk tool's timing). Findings 5, 6 and 7 verified live |
-| next action | the next round on U14-U20: a development corpus of fresh shapes by several blind authors, each candidate rule measured on it beside every prior lens input, refuted as before; the walk-tool fixes (the withdrawal wait, Stop on a fresh document, the code in a family-level details entry); then install and walk the sealed c4 (unread) |
+| candidate | branch `fix/cpt-studio-recall-round-20261107` (the recall round): the findings-stated reach (U19) with its cost bound, the walk tool's withdrawal wait, the owner's date decision of 2026-11-07 recorded; the date-form reading in its second refutation cycle |
+| current stage | the recall round: a development corpus (24 reports, six blind authors; installed 36 of 45 held) and a held-out corpus (24 more, six new styles, read by no designer; installed 25 of 44 held, 17 of them in 10 undated documents) measured every candidate; eight designs were refuted in two cycles each and only the findings-stated reach survives (development 36 -> 31 held; held-out unchanged); the owner decided on 2026-11-07 that the date reader may read more unambiguous date forms, and that design is in its second cycle |
+| next action | integrate the date forms if their second cycle leaves them standing; the full suite, CI, a PR and the merge; the declaration (the freeze's owner-ruled movement declared) and the install through the ruled-act door; then the sealed c4 walk (built blind: Stop and Resume on a fresh document, one details entry per held code) |
 
 ### Unresolved defects (each closed only by acceptance evidence)
 
@@ -248,9 +248,10 @@ the progress log below.
 | U15 | walk finding 2: in a report of both examinations a site-less dilation past the binding's cut ("the scope was withdrawn over the wire. Savary-Gilliard dilators ... were then passed over the wire") is held - 43248 needs clarification | c2a; ACCURACY-RESIDUALS.md "The walk round"; the binding's exceptions and the device-tract binding each refuted twice and dropped under the two-cycle rule | OPEN |
 | U16 | walk finding 4: a bolus "captured and brought out through the mouth" states no removal the reader reads - 43247 needs clarification | c2b; ACCURACY-RESIDUALS.md "The walk round"; the out-words as done participles and the route-bound removal each refuted twice and dropped under the two-cycle rule | OPEN |
 | U17 | a guide wire's brand name or a habitual statement read as a dilation done, inside a label's binding (43248 READY on 6f306af1 and 73dcf8b4) | the walk round's fourth lens (parity notes A1_ctl_inside, Aocc_usually_inside); ACCURACY-RESIDUALS.md | OPEN |
-| U18 | the labelled release refused on ordinary content (N1 "from both"; N3 a consent sentence; N2 a hard-wrapped "score 8:"; latent N1 signals) | c3a; ACCURACY-RESIDUALS.md | OPEN |
-| U19 | a reach stated by findings, not by a reach verb (a landmark list with its verb after it; an organ-by-organ findings list; a verbless depth sentence) | c3a, c3b, c3c; ACCURACY-RESIDUALS.md | OPEN |
-| U20 | numbered "PROCEDURE n - X" headings open no section (under HISTORY every act reads historical) | c3c; ACCURACY-RESIDUALS.md (the recorded gap a) | OPEN |
+| U18 | the labelled release refused on ordinary content (N1 "from both"; N3 a consent sentence; N2 a hard-wrapped "score 8:"; latent N1 signals) | c3a; ACCURACY-RESIDUALS.md | OPEN (the recall round: two release-gate variants refuted and dropped) |
+| U19 | a reach stated by findings, not by a reach verb (a landmark list with its verb after it; an organ-by-organ findings list; a verbless depth sentence) | c3a, c3b, c3c; ACCURACY-RESIDUALS.md | IN PROGRESS (the recall round: the findings-stated reach, implemented and verified offline - development 36 -> 31 held, the c3 organ-list shapes still read as installed; parity residuals in ACCURACY-RESIDUALS.md; installs with the round) |
+| U20 | numbered "PROCEDURE n - X" headings open no section (under HISTORY every act reads historical) | c3c; ACCURACY-RESIDUALS.md (the recorded gap a) | OPEN (the recall round: two mechanisms refuted twice each and dropped - the numbered part inside the shared layout, and a same-length reading twin; HARNESS.md "The recall round") |
+| U21 | a stated date of service in a form the reader does not read ("16-Nov-2026", "9 November 2026", a weekday before the date, a head "Date of Operation:", a head "Exam date:" the reader reads but never sends) leaves the document undated: every code held for the date | held-out corpus: 10 of 24 documents, 17 of 25 holds; owner decision 2026-11-07 (read the unambiguous forms; not two-digit years) | IN PROGRESS (designed, refuted once, repaired; second cycle running) |
 | Q1 | owner question (class (a)): does 43247 cover a food bolus pushed into the stomach? 13 corpus entries wait on it | corpus RULING entries | OWNER |
 | Q2 | owner question: two dilation techniques on one stricture (an NCCI question; NCCI unconnected) | corpus | OWNER |
 | L1 | pypdf 6.21.2's seven denial-of-service advisories: accounted for, not resolved | `docs/cpt-harness/repair3-20261105/pypdf-advisories-accounting.md` | LIMITATION, reported until resolved |
@@ -1013,3 +1014,28 @@ the progress log below.
   an identical re-upload (retained results reused, 18 s), c1c's addendum a walk-tool race; findings 5, 6 and 7 verified
   live. Usage: c3 15 runs (Corti 0.186388 credits; Astra 51,002/8,817 and Fable 166,232/19,450 tokens); c1 11 of 15
   runs reused, 4 peer reviews sent. The blind set c4 was sealed at 10:40Z (unread).
+- **2026-11-07T15:15Z Resumed by session 30a58364 (owner and integrator).** Session a12d8fb3 ended at ~11:59Z with its hold
+  taxonomy half done (5 of 6 analysts; the a3 analyst and the clustering lost); nothing else was running, and PR #1485 (the
+  walk record) had merged as `b285e5f0`. Preflight GO. The taxonomy was finished (a3, a clustering into 15 repair clusters,
+  a completeness critic).
+- **2026-11-07 The recall round's method.** A development corpus (24 synthetic reports by six blind authors, one style each;
+  installed 36 of 45 expected codes held, 3 careless false READYs) and a held-out corpus (24 more, six new styles, read by no
+  designer; installed 25 of 44 held, 17 of them in the 10 documents whose date of service the reader does not read). A judge
+  (the corpus, the 2,568-input differential scan, the corpus pins, the freeze, battery and replay gates, 734 pinned reader
+  tests) reproduced every installed figure on an unmodified copy before judging any candidate.
+- **2026-11-07/08 Eight designs, each refuted in two cycles** (two fresh lenses per cycle; a mechanism refuted twice
+  dropped): numbered headings inside the shared layout (a date sent, releases beyond the base's twin) DROPPED; a competing
+  shared heading grammar DROPPED; template field scope, instrument shorthand and attribution, and the act vocabulary
+  ABANDONED (one corpus hold each, every sub-rule refuted); the hold-only false-READY rules DROPPED (a length read as a
+  diameter, competitions consumed); two labelled-release variants DROPPED (word-list leaks, quadratic costs); a same-length
+  reading twin for numbered headings DROPPED (the same regression in both cycles: parts the installed reading already read
+  rewritten, correct READYs lost). KEPT: the findings-stated reach (U19), its second-cycle findings all bounded by parity, its
+  cost bounded - development 36 -> 31 held, the held-out corpus unchanged, the scan and pins unmoved, the freeze holding.
+- **2026-11-07T21:00Z Owner decision (asked with the held-out evidence): the date reader may read more unambiguous date
+  forms** - a day-first date with a month name and a four-digit year, a weekday before a readable date, "Date of
+  Operation:" and "Exam date:"; never a two-digit year or "11-09-2026". Recorded in RULINGS.md and the rulings archive before
+  any dependent code (`ab786b3b0`). The first design read the new labels anywhere (a prior surgery's, an imaging study's and a
+  recall date each sent) and was refuted; the repair reads them in the document's head only; interpretation (b') appended
+  (`c3eb64c55`).
+- **Walk tooling for c4, before c4 was read:** the withdrawal wait (`cd5212b9f`); the c4 builder carries Stop and Resume on a
+  fresh document and gives each code a family question holds its own details entry.
