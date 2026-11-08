@@ -223,9 +223,9 @@ the progress log below.
 | owner | session 30a58364 (integration and deployment) since 2026-11-07T15:15Z; a12d8fb3 ended at ~11:59Z with its hold taxonomy half done, and the work was recovered from its records |
 | objective | the installed website assesses an uploaded GI PDF or Word document with Corti, Astra and Fable, supported proposals reach review, decisions persist, and the download matches them |
 | installed | `aeae34bebbe5` at https://cpt.quillmd.com since 2026-11-08 (app phase 06:54:55-06:57:47Z; declaration `docs/foundation/mutations/20261108-cpt-studio-recall-round-install.md`; record `docs/deploy-reports/20261108-cpt-studio-aeae34be-install-and-walk.md`); rollback image `cpt-studio:73dcf8b4b40a` |
-| candidate | branch `fix/cpt-studio-structure-round-20261108` (the structure round: U14, U16 and U18 repaired at twin parity; labels gi-routing@12, gi-services@7); not yet merged |
-| current stage | the structure round integrated offline: U14 (direct-reach twin), U16 (full twin) and U18 (computed heading twin) each refuted in two cycles and kept, with the integrator's narrowing completions; the judge equals the installed figures in every row; c4b and c4c read every expected code READY offline, c4a 45385 (its other three codes stay held as its twin holds them); U24 withdrawn after both its hold forms were refuted; U25-U27 open; the final refutation pass over the integrated diff next |
-| next action | the final refutation pass over the integrated diff, the full suite on the final head, the PR and its citation, the merge, the install by declaration, then the blind c5 walk |
+| candidate | merged as `c2e53f8e7d33` (PR #1489): the structure round - U14 (the direct-reach twin, a closed lead form), U16 (the full twin's corroborated removal), U18 (the computed heading twin's release, its guard's span bound and cache clearing); labels gi-routing@12, gi-services@7; U24 withdrawn |
+| current stage | the structure round's install: declaration `docs/foundation/mutations/20261108-cpt-studio-structure-round-install.md` (preflight, image, app, verify, and the four retained encounters re-assessed; the gi-context@4 comparison on the pre-app dump is a stop condition); then the sealed c5 walk (blind) and c4 walked again as the repairs' evidence |
+| next action | the install through the ruled-act door; the c5 and c4 walks; the record (docs/deploy-reports, HARNESS.md, this checklist) |
 
 ### Unresolved defects (each closed only by acceptance evidence)
 
@@ -1102,4 +1102,10 @@ the progress log below.
   - Recorded as bounded by U14's twin: a dated fragment in the sentence before the motion. Recorded as open: the
     narrowing's cost, and U16's time phrase cut by a hard wrap.
   - The U18 cache repair: nothing found on other caches, cost or determinism.
+- **2026-11-08 Merged as `c2e53f8e7d33` (PR #1489, merge commit `c2e53f8e7d33732d5badd4ce9b681f274eb5c471`); the
+  declaration.** The citation on the PR head `676ab3525` and on the merge commit is as cited in
+  `docs/foundation/mutations/20261108-cpt-studio-structure-round-install.md`. The declaration names:
+  - the install's phases: preflight, image, app, verify and reassess;
+  - its predictions and baseline;
+  - the gi-context@4 comparison, as a stop condition.
 
