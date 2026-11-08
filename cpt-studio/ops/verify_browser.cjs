@@ -2696,11 +2696,14 @@ async function addAddendum(page, ctx, op, id, plan, cust, deadlineAt, history) {
   return out;
 }
 
-// Whether a withdrawn answer has left the details the API serves: no row of the fact (and of the code, when the plan
-// names one) still shows that answer as saved. Read by addAddendum after "Change this answer" (the c1c race).
+// Whether a withdrawn answer has left the details the API serves: at least one row of the fact (and of the code, when the
+// plan names one) is served again, and none of them still shows that answer as saved. Read by addAddendum after "Change
+// this answer" (the c1c race). The recall round's walk (2026-11-08): the first form read "no row shows it saved", which an
+// ABSENT row satisfies - the row is briefly gone while the withdrawal's recompute runs - so the walk moved on, counted 0
+// open rows and failed while the product re-opened the row moments later. Absence is never taken as the target state.
 function withdrawalTookEffect(cust, fact, code, answerId) {
   const rows = (cust?.details_needed || []).filter(row => row.fact === fact && (!code || (row.affects || []).includes(code)));
-  return !rows.some(row => row.saved && row.saved.answer_id === answerId);
+  return rows.length > 0 && !rows.some(row => row.saved && row.saved.answer_id === answerId);
 }
 
 function checkAddendum(plan, step) {
