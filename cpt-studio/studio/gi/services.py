@@ -5123,7 +5123,10 @@ def _account_sentence_today(text: str, ss: int, se: int, *, service_date: date, 
     """Whether a narrative sentence [ss, se) of statement (1)'s part before it tells nothing of another time: neither
     historical nor another time to the installed time reader, and no date and no "ago" in it."""
     from studio.gi import detect  # local: detect imports context, which this module also imports
-    status, time_cues = detect.status_for_span(text, ss, se, service_date)
+    # the text routing reads (_ORIGINAL), as every installed status read in build() takes it - never the reflowed copy
+    # (the final refutation pass, 2026-11-08: inside structure's guard that plain copy is a text no reading carries, so
+    # the guard withdrew every corroborated release of a document stating a removal)
+    status, time_cues = detect.status_for_span(_ORIGINAL.get() or text, ss, se, service_date)
     if status == 'historical' or any(str(c).startswith('uncertain: another time') for c in time_cues):
         return False
     if any(pattern.search(text, ss, se) for _, pattern in _cues.HISTORICAL_CLAUSE):
@@ -5894,6 +5897,18 @@ def build(text: str, *, service_date: Optional[date], routing=None, context_fact
 
 
 _ORIGINAL: contextvars.ContextVar = contextvars.ContextVar('services_original_text', default=None)
+
+
+def release_reading_caches() -> None:
+    """Clear this module's functools caches. Called at both ends of structure's guard (its computed heading twin): a cache
+    keyed by a reflowed plain text (_occasion_indications, _act_frame, ...) can read _ORIGINAL's released paragraphs,
+    which the guard's readings carry as a candidate release, so an entry made on either side must never serve the other
+    (the final refutation pass, 2026-11-08: a withdrawn release left the candidate's occasion reading in the stored
+    services and moved a proposal's fingerprint)."""
+    for value in list(globals().values()):
+        clear = getattr(value, 'cache_clear', None)
+        if callable(clear) and hasattr(value, 'cache_info'):
+            clear()
 _SOFT_NEXT = re.compile(r'[ \t]*[a-z]')
 # A line ending in a word that cannot end a sentence (an article, a preposition, an auxiliary, a conjunction) is
 # continued by the next line whatever its case ("... provided by the" / "Anesthesia team").

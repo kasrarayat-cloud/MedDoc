@@ -1253,7 +1253,9 @@ PROCEDURE_LINES_READ = 12
 # release is withdrawn and the installed reading stands (the safe side, like every bound here). Counted on the installed
 # layout. Measured: the largest released case of the design's battery, the walked member c4a, meets 50 (the battery's
 # 99th percentile, 22); one paragraph of ordinary sentences at CORROBORATED_PARAGRAPH meets about 250 (the module's own
-# long-paragraph pin, 206). The guard's work at the bound stays within 1.6x of the installed reading.
+# long-paragraph pin, 206). Cost, measured: a document the guard reads takes about 3.5 to 7 times the installed
+# reading's stage time (its two extra whole-document readings: c4a 0.34 s against 0.05 s; at the bound, two paragraphs
+# meeting about 290 spans in 39.9 KB, 2.0-2.7 s per stage); every shape this bound withdraws stays within 1.6x.
 GUARD_SPANS = 300
 
 
@@ -1795,8 +1797,11 @@ def _corroborated_release(text: str, lay: Layout, head: _Head, ix: _Index, candi
 #   than its twin keeps its installed reading.
 # - Both are READ by the readers themselves, never predicted (_reading_facts): the twin with its installed decisions (no
 #   corroboration inside it), the document with the candidate decisions. Each is a _Reading: a text equal only to
-#   itself, so no cache keyed by a text shares an entry between the guard's readings and the real one, and it carries
-#   its decisions, so nothing is decided again inside the guard (no recursion). A reader that asks for any other text's
+#   itself, so no cache keyed by THAT text shares an entry between the guard's readings and the real one, and it carries
+#   its decisions, so nothing is decided again inside the guard (no recursion). A cache keyed by a text DERIVED from it
+#   (services' reflowed copy, a plain str) could: the services module's caches are cleared at both ends of the guard
+#   (services.release_reading_caches; the final refutation pass, 2026-11-08, found _occasion_indications serving the
+#   candidate's reading to the real one after a withdrawal). A reader that asks for any other text's
 #   decisions while the guard reads (a copy of the document) fails it closed (_GuardRead); U14's direct-reach twin is
 #   routed by the installed release in every reading (_mode). The guard runs once per text (the decisions are cached):
 #   the twin is read at most once per document with a corroborated candidate.
@@ -1976,7 +1981,9 @@ def _twin_parity(text: str, candidate: tuple) -> bool:
         day = gi_context.service_date_of(text)
     except Exception:  # noqa: BLE001 - fail closed
         return False
+    from studio.gi import services as gi_services
     refused: list = []
+    gi_services.release_reading_caches()  # no entry the real reading made serves the guard's readings ...
     token = _GUARDING.set(refused)
     try:
         doc_side, twin_side = twin.sides(paragraphs)
@@ -1986,6 +1993,7 @@ def _twin_parity(text: str, candidate: tuple) -> bool:
         return False
     finally:
         _GUARDING.reset(token)
+        gi_services.release_reading_caches()  # ... and none they made serves the real one (the final refutation pass)
     return equal and not refused
 
 
@@ -2006,7 +2014,9 @@ def twin_differences(text: str) -> tuple:
     twin = _HeadingTwin(text, paragraphs)
     from studio.gi import context as gi_context
     day = gi_context.service_date_of(text)
+    from studio.gi import services as gi_services
     refused: list = []
+    gi_services.release_reading_caches()
     token = _GUARDING.set(refused)
     try:
         doc_side, twin_side = twin.sides(paragraphs)
@@ -2016,6 +2026,7 @@ def twin_differences(text: str) -> tuple:
         return ('plain-read',)
     finally:
         _GUARDING.reset(token)
+        gi_services.release_reading_caches()
     return tuple(name for name, x, y in zip(_FACT_NAMES, a, b) if x != y) + (('plain-read',) if refused else ())
 
 

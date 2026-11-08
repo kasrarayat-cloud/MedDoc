@@ -4059,6 +4059,17 @@ _MOTION_PREDICATE_WORD = re.compile(r"[A-Za-z][A-Za-z']*", re.A)
 # today, ...' were read, and the verbatim-lead twin they routed inherits an installed blind spot (a today word in a
 # lead aside outranks the lead's date), where the brief's aside-free twin holds.
 _MOTION_LEAD_ASIDE = re.compile('[()\\[\\],;:\u2014\u2013]|\\s-\\s', re.A | re.I)
+# The final refutation pass (2026-11-08, its labels lens's HIGH): a list of set-off characters is no fail-closed rule. An
+# ASCII "--", another dash, an ellipsis, quotes, a slash, or no punctuation at all ("On 10/14 unlike today the
+# gastroscope was introduced ...") set off a lead it missed, and the dated reach was read as today's D3. So the lead -
+# the words before the mover's scope noun - is read by a CLOSED form: an optional list mark, an optional sequence word of
+# today's narrative (then, subsequently, thereafter, today), and an optional article or "our" with at most three
+# plain words before the noun ("The adult ...", "The Olympus GIF-H190 ..."). Any other lead - an occasion, a date, a
+# source, an agent, a generic or hypothetical frame ("Some time back", "At her first endoscopy", "In my experience",
+# "As usual"), and any set-off punctuation (the character guard above stays) - reads no motion, and the installed
+# reading stands.
+_MOTION_LEAD_PLAIN = re.compile(r'\s*(?:(?:\d{1,2}[.)]|[-*\u2022])\s+)?(?:(?:then|subsequently|thereafter|today)'
+                                r'\s+)?(?:(?:the|a|an|our)\s+(?:[A-Za-z0-9][A-Za-z0-9-]*\s+){0,3})?', re.A | re.I)
 _MOTION_VERB_WORD = re.compile(r'\b' + _MOTION_VERB + r'\b', re.A | re.I)
 
 
@@ -4164,8 +4175,9 @@ def _motion_checked(an: Analysis, family: str, sentences, table, refused: list, 
         return None  # the motion's own words name a service or an act (the shared act tables) the twin would drop
     ws = an.lay.window((cs, ce), first, places[0][1], CLAUSE_REACH)[0]
     mover = _motion_mover(an, ws, opening, first)
-    if mover is None or _MOTION_LEAD_ASIDE.search(text, ss, mover[0]):
-        return None  # no mover; or an aside in the lead the twin keeps (the direct twin's lead is aside-free)
+    if mover is None or _MOTION_LEAD_ASIDE.search(text, ss, mover[0]) \
+            or not _MOTION_LEAD_PLAIN.fullmatch(text, ss, mover[0]):
+        return None  # no mover; or a lead the closed form does not read (the direct twin's lead is aside-free)
     verb_end = gap  # the opening's verb is the word right before its gap
     if _pe_reach_doubted(text[ws:opening], '', text[end:ce]) or _motion_opening_doubted(an, opening, first) \
             or _motion_predicate_doubted(an, ws, mover[1], opening):
