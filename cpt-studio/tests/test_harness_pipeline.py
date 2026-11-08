@@ -1415,6 +1415,10 @@ COMPLETION_SUPERSCRIPT_SHA256 = '640751a967f3028231967f1c9f6f0f84401720fd0e132d1
 # COMPLETION_SUPERSCRIPT_SHA256 exactly with the labels put back to installed 6f306af1b030's (walk_round_reader_labels),
 # and this at its own labels.
 WALK_ROUND_SUPERSCRIPT_SHA256 = '24b73f30172c7e2633cda893c70b9c2e107527fd00ad9a0e89f1b27a85e64a1b'
+# The structure round (2026-11-08) moved the routing and inventory labels (and the inventory's source): this head makes
+# WALK_ROUND_SUPERSCRIPT_SHA256 exactly with them put back to installed aeae34bebbe5's (structure_round_reader_labels),
+# and this at its own labels.
+STRUCTURE_ROUND_SUPERSCRIPT_SHA256 = '4b32e51684a813acdb41be93c02ab0d38d620a5c75d0adf93910bd3a5f247aa9'
 
 
 def installed_reader_labels():
@@ -1463,12 +1467,25 @@ def completion_reader_labels():
 
 
 def walk_round_reader_labels():
-    """The reader labels as installed 6f306af1b030 records them (tests.test_gi4_state's map), for the pins that prove the
-    walk round's head reads their inputs exactly as the completion repair does, the labels apart."""
+    """The reader labels as installed 6f306af1b030 records them (tests.test_gi4_state's maps: the walk round's moves, and
+    the inventory as it stood before the structure round moved it), for the pins that prove the walk round's head reads
+    their inputs exactly as the completion repair does, the labels apart."""
     from contextlib import ExitStack
-    from tests.test_gi4_state import WALK_ROUND_INSTALLED_LABELS
+    from tests.test_gi4_state import STRUCTURE_ROUND_INSTALLED_LABELS, WALK_ROUND_INSTALLED_LABELS
     stack = ExitStack()
-    for (module, name), value in WALK_ROUND_INSTALLED_LABELS.items():
+    for labels in (STRUCTURE_ROUND_INSTALLED_LABELS, WALK_ROUND_INSTALLED_LABELS):
+        for (module, name), value in labels.items():
+            stack.enter_context(mock.patch.object(module, name, value))
+    return stack
+
+
+def structure_round_reader_labels():
+    """The reader labels as installed aeae34bebbe5 records them (tests.test_gi4_state's map), for the pins that prove the
+    structure round's head reads their inputs exactly as the walk round's does, the labels apart."""
+    from contextlib import ExitStack
+    from tests.test_gi4_state import STRUCTURE_ROUND_INSTALLED_LABELS
+    stack = ExitStack()
+    for (module, name), value in STRUCTURE_ROUND_INSTALLED_LABELS.items():
         stack.enter_context(mock.patch.object(module, name, value))
     return stack
 
@@ -1513,7 +1530,12 @@ class RetrievalFailureTests(OperatorReads, HarnessCase):
             extraction_messages=tuple(revision.messages), second=None, second_scope=None))
 
     def test_a_corti_code_of_superscript_digits_beside_an_endoscopy_is_assessed_as_the_round_4_head_did(self):
-        self.superscript(WALK_ROUND_SUPERSCRIPT_SHA256)
+        self.superscript(STRUCTURE_ROUND_SUPERSCRIPT_SHA256)
+
+    def test_at_the_structure_round_installed_labels_the_superscript_code_is_the_walk_round_digest_exactly(self):
+        # the structure round (2026-11-08): the labels apart, this head reads it as installed aeae34bebbe5 does
+        with structure_round_reader_labels():
+            self.superscript(WALK_ROUND_SUPERSCRIPT_SHA256)
 
     def test_at_the_walk_round_installed_labels_the_superscript_code_is_the_completion_digest_exactly(self):
         # the walk round (2026-11-07): the labels apart, this head reads it as installed 6f306af1b030 does

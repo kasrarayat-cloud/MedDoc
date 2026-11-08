@@ -47,7 +47,10 @@ from studio.gi import sections as _sections
 from studio.ingest import symbols as _box_symbols
 from studio.types import Span
 
-INVENTORY_VERSION = 'gi-services@6'  # @6: the completion repair (U1, U2, U5, U6, U12, U13, F1, F5; one subject reading)
+INVENTORY_VERSION = 'gi-services@7'  # @7: the structure round (2026-11-08: a food bolus removal that today's narrative
+# and Impression corroborate read as its full twin reads it, U16; a corroborated label read as its heading twin's
+# procedure line, with the installed parts, U18); @6: the completion repair (U1, U2, U5, U6, U12, U13, F1, F5; one
+# subject reading)
 
 FLAGS = re.A | re.I
 
