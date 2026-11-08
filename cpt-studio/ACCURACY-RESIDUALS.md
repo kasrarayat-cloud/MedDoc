@@ -1461,3 +1461,61 @@ So gi-context@4 stays current, and the class above is bounded instead:
 | pre-existing on the installed release: the participant and peer stages send on an earlier context without remaking it | a chain on a context @1 to @3 recorded, queued across an install, resumed after a Stop, or swept | the participants and peer reviews are sent on the old context | reachable only with an in-flight or stopped chain on an earlier context, and the live copy has none; open (U22) |
 | pre-existing on the installed release: a member's answer, withdrawal or reconciliation on an earlier context is applied without a re-assessment | an answer on an encounter whose context @1 to @3 recorded (the live controls a8e50085, fbdd6d27, 30d3f32d and 212ed78d each read 'reassessing': false) | the overlay applies an answer to the stored assessment; a withdrawal leaves a blocker nothing clears; a reconciliation's participant attempt is not made; a Resume of an assess is not counted as the member's request | an unchanged context save or an addendum reads the encounter under the current rules; open (U23) |
 | a rollback reads a @5 document date it cannot honour | a context @5 holds (a member date against a head "Date of Operation"), then a rollback to 73dcf8b4: "Use document date" is offered from the @5 document date | the installed release clears the member value, reads no date and would send a dateless request, then asks the date again | rollback only; declared in the install's rollback limits |
+
+## The structure round (2026-11-08): what it leaves
+
+The blind c4 walk of the recall round's install walked 0 of 3, every failure a hold (U18 c4a, U16 c4b, U14 c4c). This round
+repaired each against a TWIN-PARITY bar: the installed release's own reading of the same document, written in a form that
+release already reads. It also found installed false READYs (U24 to U27). Every design was refuted by fresh lenses under
+the two-cycle rule. What was dropped is recorded with its requirement in HARNESS.md, "The structure round". The rows below
+are what the shipped repairs leave, each bounded by its twin where the row says so, and what stays open.
+
+### U14: the long reach, read through its direct-reach twin
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| a lead aside set off by punctuation | "On 10/14 - unlike today - the gastroscope was introduced through the mouth and advanced ... to the third portion of the duodenum." (u14a2's release lens, finding 0) | no motion read; held, as installed | fail closed by design (the integrator's completion u14a3): a dash, comma, semicolon, colon, bracket or spaced hyphen in the lead reads no motion |
+| a denial inside the motion's own trailing aside; a hearsay labelled paragraph; an extent field elsewhere | "... and then through the transverse colon to the cecum, which was not identified."; "Her daughter recalls: The gastroscope was introduced ..."; "Extent: uncertain." or "Cecal intubation: uncertain." beside the reach | the reach read, as the direct-reach twin reads it | bounded by parity (u14a2's two lenses: release MEDIUM 1 and 2, regress LOW) |
+| an installed blind spot: a today word inside a dated lead's aside | "On 10/14 - unlike today - the gastroscope was advanced to the third portion of the duodenum." | D3; 43239 READY on the installed release and on the head | not created by this round: the twin itself reads it; OPEN (checklist) |
+
+### U16: the bolus removal, read as its full twin
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| a later negated removal in a nominal form | "not retrievable", "no removal of" after the corroborated statements | the removal read | bounded by parity: the full twin reads it (u16c2's lenses) |
+| the 43215 / 43194 sibling profiles | an esophagoscopy's bolus removal | as the full twin | bounded by parity |
+| another provider's or the emergency department's removal told in today's narrative | a removal the report gives to another provider or to the emergency department | as the full twin | bounded by parity (u16c2's lenses) |
+
+### U18: the dictated labelled paragraph, released at computed parity
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| a field line without a final period directly above the label | "Indications: Surveillance" then "Colonoscopy: The colonoscope was introduced ..." | withdrawn: the installed hold stands (the twin is READY) | the services reader's indication part runs over the label line, so the guard sees a difference and withdraws (15 of 128 lens candidates) |
+| a reach told as U14's motion inside a corroborated paragraph | "Colonoscopy: The colonoscope was advanced to the splenic flexure, which was normal ..., and then to the cecum." | withdrawn (the twin is READY) | U14's direct-reach twin reads the installed decisions inside the guard; fail closed (10) |
+| blanks before the label's colon | "Colonoscopy : ..." | withdrawn (the twin is READY) | an offset-map artifact of the comparison; fail closed (6) |
+| an installed release beside a corroborated paragraph | an installed EGD paragraph above a corroborable colonoscopy paragraph | withdrawn | its own label class differs from its twin's (68 of 960 battery candidates) |
+| the guard's bounds | a document over 40,000 characters, a paragraph over 6,000, or released paragraphs meeting over 300 sentences and clauses | the installed reading | cost (the regress lens's finding: 15 s per stage without the span bound); each bound only withholds |
+| a page join inside or beside a label | a label at a page break | not computed by the guard | recorded by the design |
+
+### U24: "<n> <units> back", withdrawn
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| the installed false READY itself | "Some months back a 6 mm polyp in the sigmoid colon was removed with a cold snare" (45385) | READY, as installed; its "ago" twin is held in every layout | two hold forms integrated and refuted (HARNESS.md "The structure round": the reading form gained 48 false READYs; the outcome hold gained a rival code's READY through the competition, dropped a correct code to an alternative on the second review, and held 567 code rows its twin releases): WITHDRAWN, OPEN; the next approach is a final hold decided by the installed engine's reading of the whole ago twin |
+
+### U25, U26, U27
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| U25: a report that disowns itself | "... A 6 mm polyp in the sigmoid colon was removed with a cold snare. Entered on the wrong patient; please disregard." | 45385 READY, as installed | two designs refuted (a broad disowning reader; explicit self-reference only, whose lenses read another document's "this report", a hard-wrapped validity banner, a nursing note and a sign-off as disowning today's): DROPPED, OPEN |
+| U26: a removal instrument's transit, then the lesion left in place | "A cold snare was passed through the channel, and the polyp was then left in place because she takes apixaban." (45385) | READY, as installed | three approaches: the inventory (released base codes), the code's evidence reading (false READYs through the resolve order; nominal outcome lines and page joins held), the outcome hold (its seam refuted under U24): OPEN, the directive's item 4 class; the u26d sandbox kept for the next round |
+| U27: a revisit to a prior act's object read as that act | "The stent in the distal esophagus was reached and was in good position." (43266); "The polypectomy site in the ascending colon was reached and was clean." (45385) | READY, as installed | the same three approaches (an exclusion that released the base code beside today's stenting; shorthand procedure lines and summary headings with "today" held): OPEN; the u27d sandbox kept for the next round |
+
+### What the walked c4a still holds
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| an organ-list reach no reader reads | c4a: "The rest of the esophagus, the stomach (including retroflexion) and the duodenum to the second portion were normal." | 43239 held for its extent | its heading twin holds it too; a reach stated by an organ list is not U19's findings statement nor U14's motion: OPEN |
+| a site-less dilation past the binding's cut | c4a: "Savary-Gilliard dilators of 15, 16 and 17 mm were passed over the wire" after "The scope was then withdrawn while the wire was held in place" | 43248 held | U15 (two approaches refuted in the walk round): OPEN |
+| the tattoo beside a polypectomy | c4a: "the site was tattooed: a saline bleb was raised ... ink was injected into it at two points" | 45381 held (service status) | its heading twin holds it too: OPEN |
+
