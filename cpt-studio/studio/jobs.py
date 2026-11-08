@@ -46,7 +46,11 @@ from .validation.questions import MemberAnswerInput
 
 log = logging.getLogger(__name__)
 
-CONTEXT_VERSION = 'gi-context@4'
+CONTEXT_VERSION = 'gi-context@5'  # @5: the recall round (2026-11-08): the owner's date forms of 2026-11-07 (a day-first date
+# with a month name, a weekday before the date, a head 'Exam date' / 'Date of Operation'). A context @4 recorded stays
+# current, unlike @1-@3 below: @4 only ever ASKS where @5 sends (the H2 gate refuses every SEND->ASK of this change), so
+# it never sends a date @5 would ask or hold, and the encounters it read keep their readings until a new revision or a
+# member's context save reads them under @5.
 # Context versions recorded under other rules: a stage remakes such a context before it sends or assesses anything
 # (_remade_context), and no second review is offered or sent on one (_second_review_bounds, stage_review2).
 # - gi-context@1 (the installed revision 057a7d39) kept a member's value as plain metadata;

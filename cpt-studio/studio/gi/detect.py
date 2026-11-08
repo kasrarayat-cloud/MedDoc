@@ -51,7 +51,8 @@ from studio.gi import structure as gi_structure
 from studio.gi.sections import Layout, layout
 from studio.types import Fact, FamilyFinding, RoutingResult, ServiceMention, Span
 
-ROUTING_VERSION = 'gi-routing@10'  # @10: the walk round (2026-11-07: the labelled release's gates, the
+ROUTING_VERSION = 'gi-routing@11'  # @11: the recall round (2026-11-08: a reach stated by findings, U19); @10: the walk
+# round (2026-11-07: the labelled release's gates, the
 # closed form's negated passive recognised); @9: the completion repair (U2-U5, U12; @8 is named in harness repair 3's record for
 # a reader it dropped before install, so it is skipped: no record or reader of HARNESS.md can take one for the other)
 PROCEDURE_FAMILIES = tuple(f for f in DETECTED_FAMILIES if PROFILES[f].procedure)
