@@ -4068,8 +4068,15 @@ _MOTION_LEAD_ASIDE = re.compile('[()\\[\\],;:\u2014\u2013]|\\s-\\s', re.A | re.I
 # source, an agent, a generic or hypothetical frame ("Some time back", "At her first endoscopy", "In my experience",
 # "As usual"), and any set-off punctuation (the character guard above stays) - reads no motion, and the installed
 # reading stands.
+# The focused second pass (2026-11-08): the three words may hold no article or possessive, so a clause ("The daughter
+# says the gastroscope ...", "The textbook has the ...") is no plain lead. The lead is read in the motion's own layout
+# sentence only: a dated fragment or label line BEFORE it ("On 10/14 -- unlike today. The gastroscope ...") is not read
+# here - the direct-reach twin keeps it verbatim and the installed release reads that twin READY (an installed blind spot
+# of the short reach, recorded in ACCURACY-RESIDUALS.md).
+_MOTION_LEAD_DETERMINER = r'(?:the|a|an|our|my|your|his|her|its|their|this|that|these|those)'
 _MOTION_LEAD_PLAIN = re.compile(r'\s*(?:(?:\d{1,2}[.)]|[-*\u2022])\s+)?(?:(?:then|subsequently|thereafter|today)'
-                                r'\s+)?(?:(?:the|a|an|our)\s+(?:[A-Za-z0-9][A-Za-z0-9-]*\s+){0,3})?', re.A | re.I)
+                                r'\s+)?(?:' + _MOTION_LEAD_DETERMINER + r'\s+(?:(?!' + _MOTION_LEAD_DETERMINER
+                                + r'\b)[A-Za-z0-9][A-Za-z0-9-]*\s+){0,3})?', re.A | re.I)
 _MOTION_VERB_WORD = re.compile(r'\b' + _MOTION_VERB + r'\b', re.A | re.I)
 
 

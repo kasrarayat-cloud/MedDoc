@@ -5123,10 +5123,12 @@ def _account_sentence_today(text: str, ss: int, se: int, *, service_date: date, 
     """Whether a narrative sentence [ss, se) of statement (1)'s part before it tells nothing of another time: neither
     historical nor another time to the installed time reader, and no date and no "ago" in it."""
     from studio.gi import detect  # local: detect imports context, which this module also imports
-    # the text routing reads (_ORIGINAL), as every installed status read in build() takes it - never the reflowed copy
-    # (the final refutation pass, 2026-11-08: inside structure's guard that plain copy is a text no reading carries, so
-    # the guard withdrew every corroborated release of a document stating a removal)
-    status, time_cues = detect.status_for_span(_ORIGINAL.get() or text, ss, se, service_date)
+    # Read on this reader's reflowed copy, whose sentences join a page break or a soft wrap inside a time phrase ("last" /
+    # page / "night"): the original text splits it and routing then attaches the time to neither clause. (The final
+    # refutation pass, 2026-11-08, moved this read to _ORIGINAL to spare structure's guard a plain read; its focused
+    # second pass showed that read 43247 READY on a page-joined "last night", where the installed release and this
+    # reading hold - reverted. Inside the guard the plain read withdraws the release: fail closed, recorded.)
+    status, time_cues = detect.status_for_span(text, ss, se, service_date)
     if status == 'historical' or any(str(c).startswith('uncertain: another time') for c in time_cues):
         return False
     if any(pattern.search(text, ss, se) for _, pattern in _cues.HISTORICAL_CLAUSE):

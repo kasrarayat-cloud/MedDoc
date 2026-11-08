@@ -1,15 +1,18 @@
-"""The structure round's final refutation pass over the integrated diff (2026-11-08): what broke a claim, repaired and pinned.
+"""The structure round's final refutation pass over the integrated diff (2026-11-08), and its focused second pass: what
+broke a claim, repaired and pinned.
 
 - U14 (the labels lens, HIGH): the lead before the motion's scope noun is read by a CLOSED form, never by a list of set-off
   characters. "On 10/14 -- unlike today -- the gastroscope was introduced ... to the third portion of the duodenum."
   (an ASCII double hyphen, another dash, an ellipsis, quotes, a slash, or no punctuation at all) read the dated long reach
-  as today's D3, where the installed release reads no extent.
+  as today's D3, where the installed release reads no extent. The focused second pass: the form's three words may hold no
+  article ("The daughter says the gastroscope ..."); a dated fragment in the sentence BEFORE the motion is read as the
+  direct-reach twin reads it (that twin keeps it verbatim; recorded as an installed blind spot).
 - U18 (the labels lens): the services module's caches are cleared at both ends of the guard, so a withdrawn release
   stores exactly the installed reading. A cache keyed by the reflowed plain text (_occasion_indications) had served the
   guard's candidate reading to the real one: the acts lost their other-occasion hold and a proposal's fingerprint moved.
-- U16 with U18 (the interactions lens): U16's own status read takes the text routing reads, as every installed status
-  read in build() does, so the guard no longer withdraws every corroborated release of a report that states a bolus
-  removal.
+- U16 with U18: a corroborated release beside U16's full-twin reading is withdrawn and reads as installed (fail closed;
+  recorded). The final pass's move of U16's time read to the original text was reverted by the focused second pass: the
+  original splits a page-joined "last night", which the reflowed copy reads.
 Synthetic documents only; nothing is sent."""
 from __future__ import annotations
 
@@ -37,9 +40,19 @@ class ClosedLeadTests(SimpleTestCase):
 
     def test_occasion_and_generic_leads_read_no_motion(self):
         for lead in ('Some time back ', 'Way back ', 'At her first endoscopy ', 'In my experience ', 'As usual ',
-                     'Unlike today ', 'In theory ', 'Next time ', 'Next, '):
+                     'Unlike today ', 'In theory ', 'Next time ', 'Next, ', 'The daughter says ', 'The textbook has ',
+                     'The first time ', 'The patient recalls '):
             with self.subTest(lead=lead):
                 self.assertIsNone(extent(UPPER + lead + LONG + ' ' + BIOPSY + '\n', 'gi.egd'))
+
+    def test_a_fragment_before_the_motions_sentence_reads_as_the_direct_reach_twin(self):
+        # recorded, not repaired: the twin keeps the fragment verbatim, and the installed release reads that twin
+        short = 'The gastroscope was advanced to the third portion of the duodenum.'
+        for fragment in ('On 10/14 -- unlike today. ', 'Some time back. ', 'Two weeks ago:\n'):
+            long_form = UPPER + fragment + 'The' + LONG[len('the'):] + ' ' + BIOPSY + '\n'
+            twin = UPPER + fragment + short + ' ' + BIOPSY + '\n'
+            with self.subTest(fragment=fragment):
+                self.assertEqual(extent(long_form, 'gi.egd'), extent(twin, 'gi.egd'))
 
     def test_the_closed_forms_read_the_reach(self):
         for lead in ('The', 'Then the', 'Subsequently the', 'Thereafter the', 'Today the', '1. The', '- The'):
@@ -87,28 +100,8 @@ class WithdrawnReleaseTests(SimpleTestCase):
 
 
 class BolusBesideTheReleaseTests(SimpleTestCase):
-    """U16 with U18: U16's own status read takes the text routing reads (the repair); a release beside U16's full twin is
-    still withdrawn, fail closed (recorded: the full twin is a derived text the guard cannot carry)."""
-
-    def test_u16s_status_read_takes_the_text_routing_reads(self):
-        from datetime import date
-        from unittest import mock
-        from studio.gi import detect
-        seen = []
-
-        def spy(text, *args, **kwargs):
-            seen.append(text)
-            return 'performed', ()
-        original, reflowed = 'X' * 40, 'Y' * 40
-        with mock.patch.object(detect, 'status_for_span', spy):
-            token = services._ORIGINAL.set(original)
-            try:
-                services._account_sentence_today(reflowed, 0, 10, service_date=date(2026, 10, 14), dates=[],
-                                                 date_starts=[])
-            finally:
-                services._ORIGINAL.reset(token)
-            services._account_sentence_today(reflowed, 0, 10, service_date=date(2026, 10, 14), dates=[], date_starts=[])
-        self.assertEqual(seen, [original, reflowed])
+    """U16 with U18: a release beside U16's full-twin reading is withdrawn, fail closed (recorded: the full twin and the
+    reflowed copy are derived texts the guard cannot carry)."""
 
     def test_a_release_beside_the_full_twins_reading_is_withdrawn_and_reads_as_installed(self):
         from tests.test_completion_corroboration import EGD, IMPRESSION, N1, P4, REPORT
