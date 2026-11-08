@@ -94,16 +94,73 @@ content: sections._bare_label), whichever comes first; a blank line inside it is
 it are read by N1 and the tract rule like the rest), and what follows its end must be the report's own structure (N2). The released set is a pure function of the text:
 it never reads the service date.
 
+The corroborated release (the structure round, 2026-11-08, U18). Two of N1's readings are open-world: a place
+preposition whose object no allow-list anchors (_unanchored_place: "the wire mark was noted at the bite block") and a
+temporal adjunct no step of today's anchors (_TEMPORAL_LEAD: "while the wire was held in place"). They hold on a word the
+allow-lists do not know, and the refuted repairs measured that no reading of the words themselves can tell "at the bite
+block" from "at the army base" (lexical twins). So they are never read better here; instead, a paragraph they alone hold
+(no other reading of N1, every other condition as installed) is released when the REPORT ITSELF states the paragraph's
+acts as today's, independently of the paragraph, by its own structure (_corroborated):
+- C1, the declaration: one of the report's procedure lines (P3's reading: a procedure heading with a colon and no other
+  time, place, agent or source on it) lists, in an item naming the paragraph's family alone and stating no doubt, an
+  act kind (services.ACTS) the paragraph states ("Procedures: EGD with dilation and biopsies; colonoscopy with
+  polypectomy");
+- C2, the summary: an impression or assessment sentence bound to the family (the sites it names lie in the family's
+  reach, or it names the family's service, or the report declares that family alone), read on its own text as today's
+  and undoubted (no hold signal by N1's own narrative reading, no word of the services reader's negation, hedge,
+  cancellation, plan, history, incompleteness, hypothetical or failure tables), restates that same act kind; and the
+  paragraph states it in a plain statement of its own (an act predicate in the act's clause, no such doubt word, no
+  open-world reading in the sentence) - the act is stated three times by the report, never only named or denied;
+- C3, the coverage: every act kind the paragraph states (but one its own "not <participle>" denies) is listed for the
+  family or restated by such a summary sentence, so no act the report does not itself declare is read as today's
+  through the release; each sentence carrying an open-world reading states today's procedure content (the scope, an
+  act, a site in the family's reach) and is otherwise a plain statement - a sentence that says nothing of the procedure
+  ("Everything was done on the cruise ship.") can only frame the whole account, and holds; and where the paragraph has
+  a future word, each sentence is read on its own words for a closed signal (one sentence's future word never exempts
+  another's time words);
+- C4, one occasion: P3's sole narrative of the family, N2 and N3 hold as installed, and no section before the
+  paragraph's own names an undated other occasion of the family by routing's own reading;
+- C5, the twin's section (u18c cycle 2): the paragraph's procedure section is exactly its heading twin's - no layout
+  section starts inside it, and it ends at the end of the text, at a line opening a layout section with a heading, or
+  at the label line of a paragraph released with it (_ends_as_its_twin); and the twin's own layout (sections.layout of
+  the twin text) opens exactly that section (_twin_disagrees: computed, never predicted - a layout rule that reads a line
+  by the section in force is the twin's own). A report field or any other line after it ("Retroflexion: ...",
+  "Withdrawal time: ...", which N2 accepts) would lie inside the twin's procedure section and outside the paragraph,
+  where the twin reads it as today's procedure ("The procedure was aborted.") and the release would not: such a
+  paragraph is not corroborated.
+A paragraph after one released this way passes P4 only by its own C1-C5 (a release never lifts another paragraph by
+itself), and P4 is read again after every withdrawal. A tract misfit returns the installed decisions.
+Every closed reading keeps holding exactly as installed - dates, months, time and past words, other places, agents and
+"by", sources, proper places, reported speech, examination subjects, the negative quantifier, another family - and so
+do P1-P3, N2 and N3: a paragraph this release does not release keeps its installed reason. Its work is bounded
+(CORROBORATED_DOCUMENT, CORROBORATED_PARAGRAPH, SUMMARY_READ, PROCEDURE_LINES_READ; each bound only withholds a release)
+and linear: one predicate search per clause.
+
+The computed heading twin (u18d, U18's changed approach; the block comment before _twin_parity). C1-C5 only PROPOSE: the
+corroborated release's candidates stand only where the installed readers, run on the document's heading twin (every
+released paragraph's "<L>: " written "PROCEDURE: <L>" and a newline), read every compared fact - the clinical layout,
+routing's families, mentions, facts and analysis, the span readers on the released paragraphs, the documented services
+with their acts and parts, the decisions of the paragraphs held - exactly as they read the document with the release;
+on any difference every corroborated release of the document is withdrawn and it reads as installed. Corroboration's two
+refuted cycles had reasoned that parity reader by reader and leaked at the readers nobody reasoned about; here it is
+computed, never predicted. A corroborated paragraph is read as its twin's heading line reads, by three structural
+choices the comparison then checks: the services reader's parts are the installed ones (installed_released: the
+paragraph is no labelled report part of its family, as the twin's "PROCEDURE: <L>" line opens none - so a site-less act
+in it binds as its twin binds it), the clinical layout cuts the label's words off as a sentence of their own
+(_heading_split: routing reads the label against the narrative's first sentence, as the twin reads its heading), and
+the services reader reads the label as it reads the twin's line (services._corroborated_labels).
+
 Cost: one pass over the lines; every per-paragraph question is answered by bisection over positions found once per
 text (signals, mentions, sentences), so the work is linear in the text whatever the number of labels.
 """
 from __future__ import annotations
 
 import bisect
+import contextvars
 import functools
 import itertools
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Optional
 
 from studio.gi import cues
@@ -413,11 +470,14 @@ _EM_LABELS = frozenset(('chief complaint', 'cc', 'reason for visit', 'history of
 @dataclass(frozen=True)
 class LabelledParagraph:
     """A released labelled procedure paragraph: [start, end) runs from its label line's start to the start of the line
-    that ends it; ``label`` is the label as written with its colon; ``family`` the label's routing family."""
+    that ends it; ``label`` is the label as written with its colon; ``family`` the label's routing family.
+    ``corroborated``: released by the corroborated release (the module docstring), never by the installed conditions -
+    services._labelled_parts reads it, so such a paragraph changes the kind of no part outside itself."""
     start: int
     end: int
     family: str
     label: Span
+    corroborated: bool = False
 
 
 @dataclass(frozen=True)
@@ -475,22 +535,26 @@ def _course_tract(text: str, start: int, end: int) -> str:
     return 'upper' if upper and not lower else 'lower' if lower and not upper else ''
 
 
-def _signals(text: str, start: int, end: int, time: bool = True, narrative: bool = False) -> bool:
+def _signals(text: str, start: int, end: int, time: bool = True, narrative: bool = False,
+             open_world: bool = True) -> bool:
     """Whether [start, end) states another time (``time``), place, agent or source (the hold signals above); a time
     unit in a future form, or any time in a future clause, is the plan's and does not count. ``narrative`` reads a
     labelled paragraph's own account (N1), or a summary sentence about the procedure (N2): every place adjunct anchors
-    to today's anatomy or handling, and no person's reported speech."""
+    to today's anatomy or handling, and no person's reported speech. ``open_world`` False sets aside the two open-world
+    readings - the narrative place object no allow-list anchors and the temporal adjunct no step of today's anchors - and
+    nothing else; only the corroborated release asks (the structure round, U18): every caller keeps the default."""
     if _NOT_TIME_SIGNALS.search(text, start, end) or _BY_AGENT.search(text, start, end) \
             or _PROPER_PLACE.search(text, start, end):
         return True
-    if narrative and (_REPORTED_SPEECH.search(text, start, end) or _unanchored_place(text, start, end)):
+    if narrative and (_REPORTED_SPEECH.search(text, start, end)
+                      or (open_world and _unanchored_place(text, start, end))):
         return True
     if not time:
         return False
     from studio.gi import context as gi_context  # local: the date reader's own date mentions (read only)
     if gi_context.find_dates(text[start:end]) or _MONTH.search(text, start, end):
         return True
-    for m in _TEMPORAL_LEAD.finditer(text, start, end):
+    for m in (_TEMPORAL_LEAD.finditer(text, start, end) if open_world else ()):
         if _TODAYS_STEP.match(text, m.end(), end) is None:
             return True  # "during her pregnancy", "after her surgery": a time no step of today's procedure anchors
     future = _FUTURE_CLAUSE.search(text, start, end) is not None
@@ -539,9 +603,16 @@ def _object_end(text: str, pos: int, stop: int, anchors: list, anchor_starts: li
 
 def _unanchored_place(text: str, start: int, end: int) -> bool:
     """Whether a place preposition in [start, end) takes an object the allow-lists above do not anchor (N1), or a
-    coordinated object they do not anchor. The object is read up to a clause mark, at most 60 characters and the end of
-    the word there (40 more at most); one pass of the anatomy and landmark tables over the paragraph, bisection per
-    object (linear)."""
+    coordinated object they do not anchor (the first of _unanchored_places)."""
+    return next(_unanchored_places(text, start, end), None) is not None
+
+
+def _unanchored_places(text: str, start: int, end: int):
+    """The position of each place preposition in [start, end) whose object, or a coordinated object, the allow-lists
+    above do not anchor, in order. The object is read up to a clause mark, at most 60 characters and the end of the word
+    there (40 more at most); one pass of the anatomy and landmark tables over the paragraph, bisection per object
+    (linear). The structure round: a generator, so the corroborated release can place each one in its sentence;
+    _unanchored_place reads its first, exactly as before."""
     from studio.gi import services as gi_services
     anchors: Optional[list] = None
     anchor_starts: list = []
@@ -555,7 +626,8 @@ def _unanchored_place(text: str, start: int, end: int) -> bool:
         elif stop < end:
             stop = _PP_HEAD_WORD.match(text, stop, min(end, stop + 40)).end()  # never a cut word: "base|ment"
             if stop < end and _PP_HEAD_WORD.match(text, stop, stop + 1).end() > stop:
-                return True  # a word runs on past the window: the object cannot be read (the safe side)
+                yield m.start()  # a word runs on past the window: the object cannot be read (the safe side)
+                continue
         lead = _PP_LEAD.match(text, m.end(), stop).end()
         head = _PP_HEAD_WORD.match(text, lead, stop).end()
         if any(m.start() <= t.start() < max(head, m.end() + 1)
@@ -573,8 +645,7 @@ def _unanchored_place(text: str, start: int, end: int) -> bool:
                 break
             at = _object_end(text, coordinated.end(), stop, anchors, anchor_starts)
         if at is None:
-            return True
-    return False
+            yield m.start()
 
 
 def _exam_subject_holds(text: str, s: int, e: int, sentence_start: bool) -> bool:
@@ -913,12 +984,13 @@ def _first_sentence_ok(text: str, c: _Candidate, ix: _Index) -> bool:
     return False
 
 
-def _paragraph_holds(text: str, c: _Candidate, ix: _Index, frames: tuple = ()) -> bool:
+def _paragraph_holds(text: str, c: _Candidate, ix: _Index, frames: tuple = (), open_world: bool = True) -> bool:
     """N1: another time, place, agent or source anywhere in the paragraph, an examination subject saying what the
     allow-list does not, or another family's service named in it outside its frame of today's steps (the derived layout
     reads the paragraph as the label's procedure section, which would read that service as performed too: "Sigmoidoscopy
-    showed diverticula." inside a colonoscopy paragraph). Linear in the paragraph."""
-    if _signals(text, c.start, c.end, narrative=True):
+    showed diverticula." inside a colonoscopy paragraph). Linear in the paragraph. ``open_world`` False: every reading
+    but the two open-world ones (_signals), for the corroborated release."""
+    if _signals(text, c.start, c.end, narrative=True, open_world=open_world):
         return True
     for family, pattern in cues.SERVICE_PATTERNS:
         if family == c.family:
@@ -1155,21 +1227,343 @@ def _heading_has_content(text: str, section: Section) -> bool:
     return bool(text[section.heading.end:line_end].strip())
 
 
-@functools.lru_cache(maxsize=16)
+# --- The corroborated release (the structure round, 2026-11-08, U18; the module docstring) ------------------------------
+# What a corroborating statement - a procedure line's item, an impression or assessment sentence - may not carry: the
+# services reader's own tables of a statement that is not a plain one (negation, hedge, cancellation, plan, history,
+# incompleteness, a hypothetical, a failure frame) and routing's act failure words (cues.ACT_FAILURE_WORDS, the words both
+# readers read as an act's own failure). Closed: they are those readers' tables, reused; any of them doubts the statement,
+# which then corroborates nothing (the safe side).
+CORROBORATION_READ = 400  # a corroborating sentence is read in its first characters, as _index reads one
+# Bounds (u18c cycle 2; the cycle-1 REGRESS lens's cost finding): the corroborated release is a reading of an ordinary
+# procedure report, and every bound below only withholds a release, so the installed reading stands (the safe side). A
+# document longer than CORROBORATED_DOCUMENT characters, or a paragraph longer than CORROBORATED_PARAGRAPH, is never read
+# again (the installed gates' whole-document readers - N2, N3, the tract rule - and routing's reading of a released
+# paragraph are then never run on its behalf); a summary is read in its first SUMMARY_READ characters, the procedure
+# lines in their first PROCEDURE_LINES_READ. So its work is bounded whatever the text's size.
+CORROBORATED_DOCUMENT = 40000
+CORROBORATED_PARAGRAPH = 6000
+SUMMARY_READ = 8000
+PROCEDURE_LINES_READ = 12
+# Bounds on the guard's own work (integration, 2026-11-08; u18d's REGRESS lens, cost finding 0). The guard reads every
+# sentence and clause that meets a released paragraph with four span readers on each of its two readings, and
+# services.passage_readings scans the document's sentences from its start on every call, so the work grows with the
+# product of the two: five labelled paragraphs of short sentences inside CORROBORATED_DOCUMENT took 15 s per stage (22x
+# the installed reading); the profile puts it in the spans read (5,708 passage readings, 11,416 status readings). Where
+# the released paragraphs meet more than GUARD_SPANS sentences and clauses, the guard does not run: every corroborated
+# release is withdrawn and the installed reading stands (the safe side, like every bound here). Counted on the installed
+# layout. Measured: the largest released case of the design's battery, the walked member c4a, meets 50 (the battery's
+# 99th percentile, 22); one paragraph of ordinary sentences at CORROBORATED_PARAGRAPH meets about 250 (the module's own
+# long-paragraph pin, 206). The guard's work at the bound stays within 1.6x of the installed reading.
+GUARD_SPANS = 300
+
+
+@functools.lru_cache(maxsize=1)
+def _corroboration_doubt() -> tuple:
+    from studio.gi import services as gi_services  # local: the services reader's own tables
+    failure = re.compile(r'\b(?:' + '|'.join(re.escape(word) for word in cues.ACT_FAILURE_WORDS) + r')\b', FLAGS)
+    return (gi_services.NEGATION_WORD, re.compile(gi_services.NEG_CONTRACTION, FLAGS), gi_services.HEDGE_WORDS,
+            gi_services.CANCEL_WORDS, gi_services.PLAN_WORDS, gi_services.HISTORY_WORDS, gi_services.INCOMPLETE_WORDS,
+            gi_services.HYPOTHETICAL, re.compile(gi_services.FAILURE_FRAME.pattern.rstrip('$'), FLAGS), failure)
+
+
+def _doubted(text: str, lo: int, hi: int) -> bool:
+    """Whether the statement [lo, hi) is not a plain one by the services reader's tables (_corroboration_doubt)."""
+    return any(pattern.search(text, lo, hi) for pattern in _corroboration_doubt())
+
+
+def _act_kinds(text: str, lo: int, hi: int, denials: bool = False, fragments: bool = False) -> frozenset:
+    """The act kinds (services.ACTS) named in [lo, hi) (_act_mentions). ``fragments`` (a corroborating statement): a
+    fragment participle names every kind the services reader groups under it (services.FRAGMENT_KINDS: "site tattooed"
+    restates the tattoo and its injection)."""
+    from studio.gi import services as gi_services
+    kinds = {kind for kind, _, _ in _act_mentions(text, lo, hi, denials)}
+    for word, grouped in (gi_services.FRAGMENT_KINDS.items() if fragments else ()):
+        if re.compile(r'\b' + word + r'\b', FLAGS).search(text, lo, hi):
+            kinds.update(grouped)
+    return frozenset(kinds)
+
+
+def _act_mentions(text: str, lo: int, hi: int, denials: bool = False) -> list:
+    """(kind, start, end) of each act mention (services.ACTS) in [lo, hi), each span claimed by the first kind that
+    matches it, as the services reader claims its text ("hot biopsy forceps" is a hot biopsy, not also a biopsy).
+    ``denials`` (a paragraph's own acts): a mention that services.NOT_VERB's own "not <participle>" ends on ("it was not
+    sampled") is no act stated. Linear: one pass of each pattern, a claimed-character map."""
+    from studio.gi import services as gi_services
+    claimed = bytearray(max(hi - lo, 0))
+    found = []
+    for kind, pattern in gi_services.ACTS:
+        for m in pattern.finditer(text, lo, hi):
+            s, e = m.start() - lo, m.end() - lo
+            if claimed.find(1, s, e) >= 0:
+                continue
+            claimed[s:e] = b'\x01' * (e - s)
+            if denials:
+                lead = _NOT_BEFORE.search(text, max(lo, m.start() - 12), m.start())
+                denial = gi_services.NOT_VERB.match(text, lead.start(), m.end()) if lead is not None else None
+                if denial is not None and denial.end() == m.end():
+                    continue  # "it was not sampled": denied in its own words
+            found.append((kind, m.start(), m.end()))
+    return found
+
+
+_NOT_BEFORE = re.compile(r'\bnot[ \t\n]++\Z', FLAGS)  # the "not" of NOT_VERB's own "not <participle>" before a mention
+_ITEM_MARK = re.compile(r'[;,]')
+
+
+def _listed_acts(text: str, lay: Layout) -> dict:
+    """C1: family -> the act kinds the report's procedure lines list for it. A procedure line (_procedure_lines' lines,
+    each read in its first PROCEDURE_LINE_READ characters) is read item by item (cut at ';' and ','): an item naming one
+    family lists its acts for that family, and so does each item after it that names none ("Colonoscopy with cold snare
+    polypectomy, biopsies and tattoo"); an item naming two families lists nothing for either, and an item that is not a
+    plain statement (_doubted: "colonoscopy without polypectomy", "planned polypectomy") lists nothing and ends the run.
+    Bounded: the first PROCEDURE_LINES_READ lines, each in its first PROCEDURE_LINE_READ characters."""
+    listed: dict[str, set] = {}
+    lines = 0
+    for section in lay.sections:
+        if section.kind != 'procedure' or section.heading is None or ':' not in section.heading.text:
+            continue
+        lines += 1
+        if lines > PROCEDURE_LINES_READ:
+            break  # a later line lists nothing (the safe side: fewer acts declared, fewer releases)
+        line_end = text.find('\n', section.heading.start)
+        line_end = len(text) if line_end < 0 else line_end
+        lo, hi = section.heading.start, min(line_end, section.heading.start + PROCEDURE_LINE_READ)
+        family, pos = None, lo
+        for cut in itertools.chain((m.start() for m in _ITEM_MARK.finditer(text, lo, hi)), (hi,)):
+            a, b, pos = pos, cut, cut + 1
+            named = {f for f, pattern in cues.SERVICE_PATTERNS if pattern.search(text, a, b)}
+            if len(named) > 1 or _doubted(text, a, b):
+                family = None
+                continue
+            family = next(iter(named)) if named else family
+            if family is not None:
+                listed.setdefault(family, set()).update(_act_kinds(text, a, b, fragments=True))
+    return listed
+
+
+def _bound_families(text: str, lo: int, hi: int, families: frozenset, sole: Optional[str]) -> set:
+    """The families of ``families`` a summary statement [lo, hi) is about: it names no other family's service or
+    instrument, and the sites it names (services.ANATOMY's regions) all lie in the family's reach - or it names none and
+    names the family's service or instrument, or the report declares that family alone (``sole``)."""
+    named = {f for f, pattern in cues.SERVICE_PATTERNS if pattern.search(text, lo, hi)}
+    from studio.gi import services as gi_services
+    named |= {_instrument_family(m.group(0)) for m in gi_services.INSTRUMENTS.finditer(text, lo, hi)} - {''}
+    regions = _regions_in(text, lo, hi)
+    out = set()
+    for family in families:
+        if named - {family}:
+            continue
+        if regions:
+            if regions <= _family_regions(family):
+                out.add(family)
+        elif family in named or family == sole:
+            out.add(family)
+    return out
+
+
+def _restated_acts(text: str, lay: Layout, families: frozenset, sole: Optional[str]) -> dict:
+    """C2: family -> the act kinds the report's summary restates for it as today's: each sentence of an impression or
+    assessment section (read in its first CORROBORATION_READ characters) that states no hold signal by N1's own
+    narrative reading (_signals) and is a plain statement (_doubted) restates its act kinds for the families it is bound
+    to (_bound_families); a sentence bound to none (it names two families' sites) is bound clause by clause. Bounded:
+    the summary's first SUMMARY_READ characters of sentences read (a restatement after them restates nothing: the safe
+    side)."""
+    restated: dict[str, set] = {}
+    sentence_starts: Optional[list] = None
+    clause_starts: list = []
+    read = 0
+    for section in lay.sections:
+        if section.kind not in ('impression', 'assessment'):
+            continue
+        if sentence_starts is None:
+            sentence_starts, clause_starts = [s for s, _ in lay.sentences], [s for s, _ in lay.clauses]
+        k = bisect.bisect_left(sentence_starts, section.start)
+        for s, e in lay.sentences[k:]:
+            if s >= section.end or read >= SUMMARY_READ:
+                break
+            e = min(e, section.end, s + CORROBORATION_READ)
+            read += e - s
+            if _signals(text, s, e, narrative=True) or _doubted(text, s, e):
+                continue
+            kinds = _act_kinds(text, s, e, fragments=True)
+            if not kinds:
+                continue
+            bound = _bound_families(text, s, e, families, sole)
+            if bound:
+                for family in bound:
+                    restated.setdefault(family, set()).update(kinds)
+                continue
+            j = bisect.bisect_left(clause_starts, s)
+            for cs, ce in lay.clauses[j:]:
+                if cs >= e:
+                    break
+                ce = min(ce, e)
+                for family in _bound_families(text, cs, ce, families, sole):
+                    restated.setdefault(family, set()).update(_act_kinds(text, cs, ce, fragments=True))
+    return restated
+
+
+def _another_occasion_before(text: str, lay: Layout, c: _Candidate) -> bool:
+    """C4: whether a section before the paragraph's own (never a positive one: the report's own declarations) names
+    another occasion of its family by routing's own reading (detect.named_as_another_occasion), other than an earlier
+    occasion its own clause dates (detect.dated_earlier_occasions_only, N3's dated-history reading)."""
+    from studio.gi import detect  # local: detect imports this module
+    for section in lay.sections[:c.section]:
+        if section.kind in gi_sections.POSITIVE_KINDS or section.end <= section.start:
+            continue
+        if detect.named_as_another_occasion(text, c.family, section.start, section.end) \
+                and not detect.dated_earlier_occasions_only(text, c.family, section.start, section.end):
+            return True
+    return False
+
+
+# Today's procedure content a sentence may state (C3): the scope by its name or generically (P2's own generic
+# instrument), an act kind, or a site in the family's reach.
+_SCOPE_NAMED = re.compile(r'\b(?:' + _GENERIC_INSTRUMENT + r')s?\b', FLAGS)
+
+
+def _states_procedure(text: str, lo: int, hi: int, family: str) -> bool:
+    """Whether the sentence [lo, hi) states today's procedure content: an instrument (services.INSTRUMENTS, or a bare
+    "scope"/"endoscope"), an act kind (services.ACTS), or a site in the family's reach (services.ANATOMY's regions)."""
+    from studio.gi import services as gi_services
+    return bool(gi_services.INSTRUMENTS.search(text, lo, hi) or _SCOPE_NAMED.search(text, lo, hi)
+                or _act_kinds(text, lo, hi) or _regions_in(text, lo, hi) & _family_regions(family))
+
+
+def _paragraph_sentences(c: _Candidate, ix: _Index) -> list:
+    """The paragraph's sentences (the layout's), each cut to the paragraph."""
+    out = []
+    for k in range(max(bisect.bisect_right(ix.sentence_starts, c.start) - 1, 0), len(ix.sentences)):
+        s, e = ix.sentences[k]
+        if s >= c.end:
+            break
+        if e > c.start:
+            out.append((max(s, c.start), min(e, c.end)))
+    return out
+
+
+def _open_world_at(text: str, start: int, end: int):
+    """The positions of N1's two open-world readings in [start, end), as N1 reads the whole paragraph: each place
+    preposition whose object no allow-list anchors (_unanchored_places) and each temporal adjunct no step of today's
+    anchors (_TEMPORAL_LEAD, _TODAYS_STEP)."""
+    yield from _unanchored_places(text, start, end)
+    for m in _TEMPORAL_LEAD.finditer(text, start, end):
+        if _TODAYS_STEP.match(text, m.end(), end) is None:
+            yield m.start()
+
+
+def _corroborated(text: str, lay: Layout, c: _Candidate, ix: _Index, listed: dict, restated: dict) -> bool:
+    """C1-C4 for one paragraph (the module docstring). C1/C2: an act kind it states is listed for its family on a
+    procedure line and restated for it by the summary, and the paragraph states it in a sentence that carries no
+    open-world reading (the statement the report's two others agree with is itself undoubted). C3: every act kind it
+    states is listed or restated; where the paragraph has a future word, each sentence is read on its own words for a
+    closed signal (one sentence's future word never exempts another's time words, as the whole paragraph's reading lets
+    it; with none, the whole paragraph's closed reading already read every sentence's); and each sentence carrying an
+    open-world reading states today's procedure content (_states_procedure) - a sentence that says nothing of the
+    procedure ("Everything was done on the cruise ship.") can only frame the whole account, and holds - and is otherwise
+    a plain statement (_doubted: the corroboration answers the open-world doubt, never a history, plan, negation, hedge
+    or failure word beside it: "..., where the polyp had been removed."). C4: no section before it names an undated other
+    occasion of the family. Linear in the paragraph."""
+    own_listed, own_restated = listed.get(c.family, set()), restated.get(c.family, set())
+    kinds = _act_kinds(text, c.body, c.end, denials=True)
+    triple = kinds & own_listed & own_restated
+    if not triple:
+        return False  # C1/C2: no act the report itself states three times
+    if kinds - own_listed - own_restated:
+        return False  # C3: an act the report does not itself declare as today's
+    sentences = _paragraph_sentences(c, ix)
+    if _FUTURE_CLAUSE.search(text, c.start, c.end) is not None \
+            and any(_signals(text, s, e, narrative=True, open_world=False) for s, e in sentences):
+        return False  # C3: a closed signal read on a sentence's own words
+    starts = [s for s, _ in sentences]
+    doubtful = {bisect.bisect_right(starts, pos) - 1 for pos in _open_world_at(text, c.start, c.end)}
+    undoubted = False
+    predicated: dict = {}  # (clause start, end) -> whether it carries an act predicate: each clause searched once
+    for k, (s, e) in enumerate(sentences):
+        if k in doubtful:
+            if not _states_procedure(text, s, e, c.family) or _doubted(text, s, e):
+                return False  # C3: an open-world adjunct in a sentence that only frames the account, or doubts more
+        elif not undoubted and _plain_act_statement(text, max(s, c.body), e, triple, ix, predicated):
+            undoubted = True
+    return undoubted and not _another_occasion_before(text, lay, c)  # C1/C2, C4
+
+
+def _plain_act_statement(text: str, lo: int, hi: int, kinds: frozenset, ix: _Index, predicated: dict) -> bool:
+    """C1/C2: whether the sentence [lo, hi) states one of ``kinds`` done, plainly - as the procedure line and the
+    summary must: no word of the services reader's doubt tables in it (_doubted: "No polyp was removed ...", "...
+    was attempted but failed"), and the act's own clause carries an act predicate (services.ACT_VERB or
+    BARE_PARTICIPLE: "was removed", "were taken"), so a mention that only names the act ("the cold snare polypectomy
+    scar was clean", "a cold snare was opened, and the polyp was left in place") states none.
+    Cost (u18c cycle 2; the cycle-1 REGRESS lens): the predicate is searched once per clause, never once per mention -
+    ``predicated`` memoises each clause's answer for the paragraph, so a clause holding many act mentions (a long
+    comma-joined list, which the layout keeps as one clause) costs its length once: linear in the paragraph."""
+    from studio.gi import services as gi_services
+    if _doubted(text, lo, hi):
+        return False
+    for kind, ms, _ in _act_mentions(text, lo, hi, denials=True):
+        if kind not in kinds:
+            continue
+        k = bisect.bisect_right(ix.clause_starts, ms) - 1
+        cs, ce = ix.clauses[k] if k >= 0 else (lo, hi)
+        cs, ce = max(cs, lo), min(ce, hi)
+        found = predicated.get((cs, ce))
+        if found is None:
+            found = predicated[(cs, ce)] = bool(gi_services.ACT_VERB.search(text, cs, ce)
+                                                or gi_services.BARE_PARTICIPLE.search(text, cs, ce))
+        if found:
+            return True
+    return False
+
+
+def _held_later(text: str, lay: Layout, c: _Candidate, ix: _Index, stray: dict, frames: tuple,
+                candidate_starts: set) -> bool:
+    """N2 as installed: a later sentence refers back to the paragraph, its family is named again outside the report's
+    summary, a later mention reads as another occasion, or the report's own structure does not resume after it."""
+    return _referred_back(c, ix) or _any_between(stray.get(c.family, []), c.end, 1 << 62) \
+        or _later_occasion(text, c, frames) or not _structure_resumes(text, lay, c, candidate_starts)
+
+
+HELD_BY_N1 = 'N1: the paragraph states another time, place, agent or source'
+HELD_AFTER_HELD = 'P4: it follows a labelled paragraph that is not released'
+TRACT_MISFIT = 'P3: the report narrates a site no labelled or declared family reaches'
+
+
 def decisions(text: str) -> tuple[tuple[LabelledParagraph, str], ...]:
     """Every labelled paragraph candidate of the text, in order, with '' when it is released or the first condition
     that holds it ('P1' to 'P4', 'N1' to 'N3', with a word of detail). For the tests and the probes; ``released`` reads
-    it."""
+    it. The installed conditions decide first; the corroborated release (the module docstring) then reads only the
+    paragraphs they hold by N1 or by P4's cascade, and a paragraph it does not release keeps its installed reason; a
+    corroborated release stands only where the computed heading twin reads as the document does (_twin_parity).
+    Which decisions a text reads is its reading's mode (_mode): a _Reading carries its own, U14's direct-reach twin
+    reads the installed ones, every other text the guarded ones; each mode has caches of its own."""
     if not isinstance(text, str) or ':' not in text:
         return ()
+    return _decided(text, _mode(text))
+
+
+def _decided(text: str, mode: str) -> tuple:
+    if mode == _CARRIED:
+        return text.carried
+    if mode == _INSTALLED:
+        return _installed_state(text)[0]
+    return _guarded_decisions(text)
+
+
+@functools.lru_cache(maxsize=16)
+def _installed_state(text: str) -> tuple:
+    """(the installed conditions' decisions, what the corroborated release reads of the text beside them - None when
+    there is nothing it could read): the labelled release exactly as installed. A pure function of the text, so every
+    reading mode shares it."""
+    if not isinstance(text, str) or ':' not in text:
+        return (), None
     lay = gi_sections.layout(text)
     candidates = _candidates(text, lay)
     if not candidates:
-        return ()
+        return (), None
     head = _head(text)
     if not head.procedure_report:  # P1: every candidate keeps the base reading
         return tuple((LabelledParagraph(c.start, c.end, c.family, c.label), 'P1: not a procedure report')
-                     for c in candidates)
+                     for c in candidates), None
     ix = _index(text, lay)
     declared, declared_doubted = _procedure_lines(text, lay)
     per_family: dict[str, int] = {}
@@ -1203,15 +1597,14 @@ def decisions(text: str) -> tuple[tuple[LabelledParagraph, str], ...]:
         elif positive - {c.section} and c.family not in declared:
             why = 'P3: the report has a procedure section of its own that no procedure line declares the family for'
         elif previous is not None and previous.section == c.section and not previous_released:
-            why = 'P4: it follows a labelled paragraph that is not released'
+            why = HELD_AFTER_HELD
         elif section.kind not in gi_sections.POSITIVE_KINDS and not (
                 section.kind == 'indication' and (_heading_has_content(text, section) or (follows and previous_released))):
             why = f'P4: it stands in a {section.kind} section' if section.kind != 'indication' \
                 else 'P4: an empty indication heading introduces it'
         elif _paragraph_holds(text, c, ix, frames):
-            why = 'N1: the paragraph states another time, place, agent or source'
-        elif _referred_back(c, ix) or _any_between(stray.get(c.family, []), c.end, 1 << 62) \
-                or _later_occasion(text, c, frames) or not _structure_resumes(text, lay, c, candidate_starts):
+            why = HELD_BY_N1
+        elif _held_later(text, lay, c, ix, stray, frames, candidate_starts):
             why = 'N2: a later sentence refers back to it'
         elif _announced(text, lay, c, first_in_section[c.section], ix):
             why = 'N3: the containing section announces it'
@@ -1220,21 +1613,565 @@ def decisions(text: str) -> tuple[tuple[LabelledParagraph, str], ...]:
     out = _frames_released(text, candidates, out, ix)
     kept = [c for c, (_, why) in zip(candidates, out) if not why]
     if kept and _tract_misfit(text, lay, kept, declared | head.title_families):
-        out = [(p, why or 'P3: the report narrates a site no labelled or declared family reaches') for p, why in out]
-    return tuple(out)
+        return tuple((p, why or TRACT_MISFIT) for p, why in out), None
+    return tuple(out), (lay, head, ix, candidates, declared, stray, frames, candidate_starts)
 
 
 @functools.lru_cache(maxsize=16)
+def _guarded_decisions(text: str) -> tuple:
+    """The decisions a text reads (decisions' guarded mode): the installed ones, and over them the corroborated
+    release's candidates (_corroborated_release) where the computed heading twin reads every compared fact as the
+    document reads with them (_twin_parity) - otherwise the installed ones, whole."""
+    installed, read = _installed_state(text)
+    if read is None or len(text) > CORROBORATED_DOCUMENT \
+            or not any(why in (HELD_BY_N1, HELD_AFTER_HELD) for _, why in installed):
+        return installed
+    lay, head, ix, candidates, declared, stray, frames, candidate_starts = read
+    listed = _listed_acts(text, lay)
+    if not listed:
+        return installed  # C1: no procedure line lists an act, so nothing can be corroborated
+    candidate = _corroborated_release(text, lay, head, ix, candidates, installed, declared, listed, stray, frames,
+                                      candidate_starts)
+    if candidate is installed or not _guard_bounded(lay, candidate):
+        return installed
+    return candidate if _twin_parity(text, candidate) else installed
+
+
+def _guard_bounded(lay, candidate: tuple) -> bool:
+    """Whether the guard's work over ``candidate``'s released paragraphs stays within GUARD_SPANS, counted on the
+    installed layout ``lay``."""
+    regions = [(p.start, p.end) for p, why in candidate if not why]
+    met = sum(1 for spans in (lay.sentences, lay.clauses) for s, e in spans
+              if any(rs < e and s < re_ for rs, re_ in regions))
+    return met <= GUARD_SPANS
+
+
+def _p4_passes(text: str, lay: Layout, candidates: list, state: list, n: int) -> bool:
+    """P4 for candidate ``n`` against the release ``state`` of the candidate before it, as the installed loop reads it:
+    never after a held paragraph of its own section; in a positive section, or in an indication whose heading line
+    carries content, or directly after a released paragraph of its own section."""
+    c = candidates[n]
+    here = candidates[n - 1] if n else None
+    before = state[n - 1] if n else ''
+    same = here is not None and here.section == c.section
+    if same and not before:
+        return False
+    section = lay.sections[c.section]
+    return section.kind in gi_sections.POSITIVE_KINDS or (section.kind == 'indication' and (
+        _heading_has_content(text, section) or (same and here.end == c.start and bool(before))))
+
+
+def _ends_as_its_twin(text: str, lay: Layout, c: _Candidate, released_starts: set) -> bool:
+    """C5 (u18c cycle 2): whether the paragraph's procedure section is exactly its heading twin's - the section its
+    label opens when written "PROCEDURE: <label>" on a line of its own, which runs to the next layout section or to the
+    next label written as a heading. So: no layout section starts inside it, and it ends at the end of the text, at a
+    line that opens a layout section with a heading ("IMPRESSION:"), or at the label line of a paragraph that is
+    released too. A report field or any other line after it ("Retroflexion: ...", "Withdrawal time: ...", which N2
+    accepts as the report's own structure) would lie inside the twin's procedure section and outside the paragraph:
+    such a paragraph is not corroborated (the installed reading stands), so what its twin reads with the paragraph and
+    what the release reads outside it can never differ. Structure only: the layout's section starts and the released
+    set; bisection."""
+    if _any_between(lay.section_starts, c.start + 1, c.end):
+        return False
+    if c.end >= len(text) or c.end in released_starts:
+        return True
+    section = lay.section_at(c.end)
+    return section.start == c.end and section.heading is not None
+
+
+TWIN_HEADING = 'PROCEDURE: '
+
+
+def _twin_disagrees(text: str, candidates: list, state: list) -> set:
+    """C5, computed (never predicted): the indexes of the corroborated paragraphs whose heading twin's own procedure
+    section is not exactly the paragraph. The twin is the text with every released paragraph's inline label "<L>: "
+    written "PROCEDURE: <L>" and a newline, every other character unchanged; its section is read by sections.layout
+    itself, so a layout rule that reads a line by the section in force (a held line, a phrase line, a service line before
+    a procedure heading) is the twin's own. Linear: one twin text, one layout."""
+    released = sorted((c for c, how in zip(candidates, state) if how), key=lambda c: c.label.start)
+    pieces, shifts, pos, delta = [], [], 0, 0
+    for c in released:
+        a, colon = c.label.start, c.label.end
+        b = colon
+        while b < len(text) and text[b] in ' \t':
+            b += 1
+        heading = TWIN_HEADING + text[a:colon - 1] + '\n'
+        pieces += [text[pos:a], heading]
+        delta += len(heading) - (b - a)
+        shifts.append((a, delta))  # positions after this label move by ``delta`` in the twin
+        pos = b
+    twin = ''.join(pieces) + text[pos:]
+    starts = [a for a, _ in shifts]
+
+    def mapped(at: int) -> int:
+        k = bisect.bisect_left(starts, at) - 1  # the labels strictly before ``at``
+        return at + (shifts[k][1] if k >= 0 else 0)
+    lay = gi_sections.layout(twin)
+    out = set()
+    for n, (c, how) in enumerate(zip(candidates, state)):
+        if how != 'corroborated':
+            continue
+        start = mapped(c.start)
+        section = lay.section_at(start)
+        if section.start != start or section.kind != 'procedure' or section.end != mapped(c.end):
+            out.add(n)
+    return out
+
+
+def _corroborated_release(text: str, lay: Layout, head: _Head, ix: _Index, candidates: list, installed: tuple,
+                          declared: frozenset, listed: dict, stray: dict, frames: tuple, candidate_starts: set) -> tuple:
+    """The corroborated release over the installed decisions (the module docstring). A paragraph the installed reading
+    holds by N1, or by P4's cascade, is read again: P4 against the paragraphs released so far, N1 with its two
+    open-world readings set aside, N2 and N3 as installed; and it is released only when it is corroborated itself
+    (_corroborated) - whether N1 held it or P4's cascade did, so a paragraph after one released this way is never
+    lifted by that release alone. Then, until nothing changes (each step only withdraws): the frames
+    (_frames_released), P4 again against the releases that remain (a paragraph released after one that is withdrawn is
+    withdrawn), C5 (_ends_as_its_twin), and once those are stable C5 on the twin's own layout (_twin_disagrees). A
+    tract misfit the installed decisions did not have returns the installed
+    decisions. Every corroborated release is marked (LabelledParagraph.corroborated) for services._labelled_parts, and
+    no installed decision changes. Linear: each paragraph read once more, the summary and the procedure lines once."""
+    families = frozenset(c.family for c in candidates)
+    titled = declared | head.title_families
+    sole = next(iter(titled)) if len(titled) == 1 else None
+    restated: Optional[dict] = None
+    state = ['installed' if not why else '' for _, why in installed]  # how each candidate is released, if it is
+    out = list(installed)
+    first_in_section: dict[int, _Candidate] = {}
+    for n, c in enumerate(candidates):
+        first_in_section.setdefault(c.section, c)
+        if installed[n][1] not in (HELD_BY_N1, HELD_AFTER_HELD):
+            continue
+        if not _p4_passes(text, lay, candidates, state, n):
+            continue  # P4 as installed, against the paragraphs released so far
+        if c.end - c.start > CORROBORATED_PARAGRAPH or not listed.get(c.family):
+            continue  # beyond the bound; or C1: nothing listed for the family
+        if _paragraph_holds(text, c, ix, frames, open_world=False):
+            continue  # N1 holds by a closed reading
+        if restated is None:
+            restated = _restated_acts(text, lay, families, sole)
+        if not _corroborated(text, lay, c, ix, listed, restated):
+            continue  # C1-C4
+        if _held_later(text, lay, c, ix, stray, frames, candidate_starts) \
+                or _announced(text, lay, c, first_in_section[c.section], ix):
+            continue  # N2, N3 as installed (read last: they read the whole document)
+        out[n] = (replace(out[n][0], corroborated=True), '')
+        state[n] = 'corroborated'
+    if 'corroborated' not in state:
+        return installed
+    for _ in range(len(candidates) + 1):
+        changed = False
+        for n, (_, why) in enumerate(_frames_released(text, candidates, list(out), ix)):
+            if why and state[n] == 'corroborated':
+                out[n], state[n], changed = installed[n], '', True
+        released_starts = {c.start for c, how in zip(candidates, state) if how}
+        for n, c in enumerate(candidates):
+            if state[n] == 'corroborated' and not (_p4_passes(text, lay, candidates, state, n)
+                                                   and _ends_as_its_twin(text, lay, c, released_starts)):
+                out[n], state[n], changed = installed[n], '', True
+        if not changed and 'corroborated' in state:
+            for n in _twin_disagrees(text, candidates, state):  # C5 computed on the twin itself, once stable
+                out[n], state[n], changed = installed[n], '', True
+        if not changed:
+            break
+    if 'corroborated' not in state:
+        return installed
+    kept = [c for c, (_, why) in zip(candidates, out) if not why]
+    if _tract_misfit(text, lay, kept, declared | head.title_families):
+        return installed
+    return tuple(out)
+
+
+# --- The computed heading twin (the structure round, u18d: U18's changed approach) --------------------------------------
+# The corroborated release (C1-C5 above) only PROPOSES. A corroborated release stands only where the INSTALLED readers,
+# run on the document's heading twin, read every compared fact exactly as they read the document with the release; on
+# any difference every corroborated release of the document is withdrawn, and it reads as installed. Parity is
+# computed, never argued: corroboration's two refuted cycles reasoned that a released paragraph reads as its heading
+# twin, and leaked at the readers nobody reasoned about - the services reader binding a site-less act to the label's
+# family where the twin's "PROCEDURE: <L>" line binds it to none (a report declaring two families), and routing reading
+# a released label against its paragraph's second sentence where the twin's heading reads only the first.
+# - The twin (_HeadingTwin): the text with EVERY released paragraph's inline label "<L>: " written "PROCEDURE: <L>" and a
+#   newline (TWIN_HEADING), every other character unchanged - the installed ones too, so an installed release's own
+#   reader classes (its label binding) are compared as well, and a document whose installed release reads otherwise
+#   than its twin keeps its installed reading.
+# - Both are READ by the readers themselves, never predicted (_reading_facts): the twin with its installed decisions (no
+#   corroboration inside it), the document with the candidate decisions. Each is a _Reading: a text equal only to
+#   itself, so no cache keyed by a text shares an entry between the guard's readings and the real one, and it carries
+#   its decisions, so nothing is decided again inside the guard (no recursion). A reader that asks for any other text's
+#   decisions while the guard reads (a copy of the document) fails it closed (_GuardRead); U14's direct-reach twin is
+#   routed by the installed release in every reading (_mode). The guard runs once per text (the decisions are cached):
+#   the twin is read at most once per document with a corroborated candidate.
+# - What is compared (_reading_facts), every span in CONTENT coordinates - the characters both texts write alike: the
+#   label's colon and the blanks after it, and the twin's "PROCEDURE: " and newline, are no content; the label's words
+#   are, in both:
+#   1. the clinical layout (routing's, the engine's and reconcile's section reads): each section's kind over the text,
+#      every sentence and every clause;
+#   2. routing (detect.route): the document kind; each family's status, missing facts, facts (name, value, origin,
+#      note, evidence) and mentions (span, sentence, section kind, status, cues) - the label's own mention included;
+#   3. routing's analysis: the family attributed to each sentence, each family's document-level adjustment, the
+#      reading of each reference and of each E/M mention;
+#   4. the span readers validation reads a code's evidence with - detect.status_for_span (also with U24's back
+#      reading), detect.own_status_for_span and services.passage_readings - on every sentence and every clause of the
+#      released paragraphs, and on each label's own words: the spans whose section and sentence the release changes;
+#   5. the documented services (services.build with that routing): every service (family, kind, status, completion,
+#      extent, intent, date, clinician, setting, role, evidence, completion evidence, cues, uncertainty, routing status,
+#      separate E/M, scope, the service it is included in), its lesions and its acts (kind, status, role, sites,
+#      technique, detail, evidence, cues, lesion), every conflict, attribution and problem, the sedation reading;
+#   6. the services reader's parts (services.parts): each part's family, role, kind, combined, noted and host over the
+#      text, and the title spans;
+#   7. the decision of every labelled paragraph the document holds (the twin's own decisions at its label).
+#   A cue that quotes a released paragraph's own section heading ("section: procedure (Colonoscopy)", the twin's
+#   "section: procedure (PROCEDURE)") is compared without the quote (_section_cue): the one word the twin writes
+#   otherwise by construction, read by validation only into a reason's wording. Every other word of every cue is
+#   compared.
+#   Why 1-7 cover what the engine reads for a code: a code is read through routing's family finding (2, 3), the span
+#   readers on its evidence (4; a span outside the released paragraphs reads its own characters, clause and section -
+#   1 - with the family judgement - 2, 3), the documented services and reconcile's matching on them - acts, sites,
+#   families, evidence, scope (5, 6) - and the clinical layout's section at a position and reconcile's held section (1).
+# - How a corroborated paragraph comes to read as its twin (structural choices, each checked by the comparison, never
+#   assumed): the clinical layout cuts its label's words off as a sentence of their own (_heading_split: routing reads
+#   the label against the narrative's first sentence, as the twin reads its heading line); the services reader's parts
+#   are the installed ones (installed_released: no labelled report part of its family, as the twin's line opens none, so
+#   a site-less act binds as the twin binds it); and the services reader reads the label as it reads the twin's line -
+#   a sentence of its own, a procedure-field listing of its service (services._corroborated_labels).
+# - Withdrawal: ALL of the document's corroborated releases at once. The twin is read once, for the candidate set as a
+#   whole; a smaller set is a different twin, never read, so its parity is never claimed. P4's cascade goes with its
+#   anchor.
+# - Bounded as the corroborated release is (CORROBORATED_DOCUMENT): two readings of a text of at most that length.
+# - The guard reads at the document's own date of service (decisions never read a request's date) and without the
+#   revision's page spans: the two readings it compares are read alike.
+_CARRIED, _INSTALLED, _GUARDED = 'carried', 'installed', 'guarded'
+TWIN_PREFIX = TWIN_HEADING  # "PROCEDURE: " - the twin's heading line is TWIN_PREFIX + the label's words + a newline
+# set while the guard reads: the list of the texts a reader asked about that are no _Reading (each fails the guard)
+_GUARDING: contextvars.ContextVar = contextvars.ContextVar('structure_twin_guard', default=None)
+
+
+class _GuardRead(Exception):
+    """A reader asked for a plain text's labelled paragraphs while the guard read: the guard cannot tell which release
+    that text would read in the real reading, so it fails closed (the document reads as installed)."""
+
+
+class _Reading(str):
+    """A text read by the guard (_twin_parity): the document with its candidate release, or its heading twin. Equal only
+    to itself and hashed by identity, so no functools cache keyed by a text - routing's analysis, the layouts, the
+    services reader's own - shares an entry between it and any other reading of the same characters; ``carried`` is
+    the decisions it reads (decisions returns them: nothing is decided again inside the guard)."""
+    __hash__ = object.__hash__
+
+    def __new__(cls, text: str, carried: tuple):
+        reading = str.__new__(cls, text)
+        reading.carried = carried
+        return reading
+
+    def __eq__(self, other):
+        return self is other
+
+    def __ne__(self, other):
+        return self is not other
+
+
+def _mode(text: str) -> str:
+    """Which decisions ``text`` reads: its own (a _Reading), the installed ones (U14's direct-reach twin, routed by the
+    installed release in every reading: detect._MOTION_OFF), or the guarded ones. While the guard reads, any other
+    text fails the guard (_GuardRead)."""
+    if isinstance(text, _Reading):
+        return _CARRIED
+    from studio.gi import detect  # local: detect imports this module
+    if detect._MOTION_OFF.get():
+        return _INSTALLED
+    guarding = _GUARDING.get()
+    if guarding is not None:
+        guarding.append(len(text))
+        raise _GuardRead(f'a plain text of {len(text)} characters was read while the guard read')
+    return _GUARDED
+
+
+class _HeadingTwin:
+    """The heading twin of ``text`` over ``paragraphs`` (released, in order), and the content coordinate of a position in
+    either text: the characters the two write differently - the label's colon and the blanks after it, the twin's
+    "PROCEDURE: " and its newline - are no content; the label's words are, in both. Linear in the paragraphs; each
+    position by bisection."""
+
+    def __init__(self, text: str, paragraphs: list):
+        pieces, pos, delta = [], 0, 0
+        self.text = text
+        self.labels = []  # (a, colon, b, the twin's heading start, the heading line's length with its newline)
+        for p in paragraphs:
+            a, colon = p.label.start, p.label.end
+            b = colon
+            while b < len(text) and text[b] in ' \t':
+                b += 1
+            heading = TWIN_PREFIX + text[a:colon - 1] + '\n'
+            pieces += [text[pos:a], heading]
+            self.labels.append((a, colon, b, a + delta, len(heading)))
+            delta += len(heading) - (b - a)
+            pos = b
+        self.twin = ''.join(pieces) + text[pos:]
+        self.gaps = [colon - 1 for _, colon, _, _, _ in self.labels]  # each label's colon and blanks: [colon - 1, b)
+        self.removed = list(itertools.accumulate(b - colon + 1 for _, colon, b, _, _ in self.labels))
+        self.twin_starts = [t for _, _, _, t, _ in self.labels]
+
+    def content(self, pos: int) -> int:
+        """A position of the document in content coordinates (one in a label's colon and blanks reads as their start)."""
+        k = bisect.bisect_right(self.gaps, pos) - 1
+        if k < 0:
+            return pos
+        _, colon, b, _, _ = self.labels[k]
+        return colon - 1 - (self.removed[k - 1] if k else 0) if pos < b else pos - self.removed[k]
+
+    def twin_content(self, pos: int) -> int:
+        """A position of the twin in content coordinates: its "PROCEDURE: " reads as the label's first word, its newline
+        as the label's colon."""
+        k = bisect.bisect_right(self.twin_starts, pos) - 1
+        if k < 0:
+            return self.content(pos)
+        a, colon, b, t, length = self.labels[k]
+        word = t + len(TWIN_PREFIX)
+        if pos < word:
+            return self.content(a)
+        if pos < t + length - 1:
+            return self.content(a + pos - word)
+        if pos == t + length - 1:
+            return self.content(colon - 1)
+        return self.content(b + pos - t - length)
+
+    def twin_position(self, pos: int) -> int:
+        """A position of the document outside every released label, in the twin."""
+        k = bisect.bisect_right(self.gaps, pos) - 1
+        if k < 0:
+            return pos
+        a, _, b, t, length = self.labels[k]
+        return t + length + pos - b
+
+    def sides(self, paragraphs: list) -> tuple:
+        """(the document's side, the twin's side) of the comparison's per-reading inputs: the released paragraphs'
+        regions (label to end) and the labels' words ("Colonoscopy" of "Colonoscopy: " and of "PROCEDURE: Colonoscopy"),
+        and the heading words a section cue quotes for them."""
+        doc_regions = [(p.start, p.end) for p in paragraphs]
+        twin_regions = [(t, self.twin_position(p.end)) for p, (_, _, _, t, _) in zip(paragraphs, self.labels)]
+        doc_words = [(a, colon - 1) for a, colon, _, _, _ in self.labels]
+        twin_words = [(t + len(TWIN_PREFIX), t + len(TWIN_PREFIX) + colon - 1 - a) for a, colon, _, t, _ in self.labels]
+        headings = {self.text[a:colon - 1].strip() for a, colon, _, _, _ in self.labels}
+        return (doc_regions, doc_words, headings), (twin_regions, twin_words, {TWIN_PREFIX.rstrip(': ')})
+
+
+def _section_cue(cue: str, quoted: tuple) -> str:
+    """``cue`` without the quote of a released paragraph's own section heading ("section: procedure (Colonoscopy)" and
+    the twin's "section: procedure (PROCEDURE)" read "section: procedure"): the one word the twin writes otherwise by
+    construction, read by validation only into a reason's wording. Every other cue, and every other quote, as it is."""
+    for heading in quoted:
+        cue = cue.replace('section: procedure' + heading, 'section: procedure')
+    return cue
+
+
+def _twin_parity(text: str, candidate: tuple) -> bool:
+    """Whether the heading twin of ``text`` over the released paragraphs of ``candidate`` (the installed ones and the
+    corroborated ones) reads every compared fact exactly as ``text`` reads with ``candidate`` (the block comment above).
+    Fail closed: any error, and any read of a text no _Reading carries, withdraws."""
+    paragraphs = sorted((p for p, why in candidate if not why), key=lambda p: p.label.start)
+    twin = _HeadingTwin(text, paragraphs)
+    try:
+        twin_decisions = _installed_state(twin.twin)[0]  # the installed release reads the twin: nothing corroborated
+        from studio.gi import context as gi_context  # local: the date reader's own date of service (read only)
+        day = gi_context.service_date_of(text)
+    except Exception:  # noqa: BLE001 - fail closed
+        return False
+    refused: list = []
+    token = _GUARDING.set(refused)
+    try:
+        doc_side, twin_side = twin.sides(paragraphs)
+        equal = _reading_facts(_Reading(twin.twin, twin_decisions), day, twin.twin_content, *twin_side) \
+            == _reading_facts(_Reading(text, candidate), day, twin.content, *doc_side)
+    except Exception:  # noqa: BLE001 - fail closed: a reading the guard cannot complete never releases
+        return False
+    finally:
+        _GUARDING.reset(token)
+    return equal and not refused
+
+
+def twin_differences(text: str) -> tuple:
+    """For the tests and the probes: the names of the compared facts (_reading_facts) in which the heading twin of
+    ``text`` reads otherwise than ``text`` reads with its corroborated release's candidates, before the guard decides;
+    () when there is no candidate or none differs. Reads both texts, whatever the guard decided."""
+    installed, read = _installed_state(text)
+    if read is None or len(text) > CORROBORATED_DOCUMENT:
+        return ()
+    lay, head, ix, candidates, declared, stray, frames, candidate_starts = read
+    listed = _listed_acts(text, lay)
+    candidate = _corroborated_release(text, lay, head, ix, candidates, installed, declared, listed, stray, frames,
+                                      candidate_starts) if listed else installed
+    if candidate is installed:
+        return ()
+    paragraphs = sorted((p for p, why in candidate if not why), key=lambda p: p.label.start)
+    twin = _HeadingTwin(text, paragraphs)
+    from studio.gi import context as gi_context
+    day = gi_context.service_date_of(text)
+    refused: list = []
+    token = _GUARDING.set(refused)
+    try:
+        doc_side, twin_side = twin.sides(paragraphs)
+        a = _reading_facts(_Reading(twin.twin, _installed_state(twin.twin)[0]), day, twin.twin_content, *twin_side)
+        b = _reading_facts(_Reading(text, candidate), day, twin.content, *doc_side)
+    except _GuardRead:
+        return ('plain-read',)
+    finally:
+        _GUARDING.reset(token)
+    return tuple(name for name, x, y in zip(_FACT_NAMES, a, b) if x != y) + (('plain-read',) if refused else ())
+
+
+_FACT_NAMES = ('layout', 'routing', 'analysis', 'span-readings', 'services', 'parts', 'decisions')
+
+
+def _merged(spans) -> tuple:
+    out: list = []
+    for s, e in sorted(spans):
+        if e <= s:
+            continue
+        if out and s <= out[-1][1]:
+            out[-1] = (out[-1][0], max(out[-1][1], e))
+        else:
+            out.append((s, e))
+    return tuple(out)
+
+
+def _runs(items, at) -> tuple:
+    """[(start, end, value)] in text order -> the maximal runs of each value over content coordinates."""
+    out: list = []
+    for s, e, value in items:
+        cs, ce = at(s), at(e)
+        if ce <= cs:
+            continue
+        if out and out[-1][2] == value and out[-1][1] == cs:
+            out[-1] = (out[-1][0], ce, value)
+        else:
+            out.append((cs, ce, value))
+    return tuple(out)
+
+
+def _reading_facts(reading: '_Reading', day, at, regions: list, label_words: list, headings: set) -> tuple:
+    """The compared facts of one reading (the block comment above: 1-7, in _FACT_NAMES' order), every span in content
+    coordinates (``at``); ``regions`` are the released paragraphs in this reading (label to end), ``label_words`` their
+    labels' words, in order, and ``headings`` the words its section cues quote for them. Read by the readers
+    themselves: routing, its span readers, the services reader."""
+    from studio.gi import detect
+    from studio.gi import services as gi_services
+
+    def span(s, e):
+        return at(s), at(e)
+
+    def spans(evidence):
+        return _merged(span(x.start, x.end) for x in evidence)
+
+    quoted = tuple(f' ({heading})' for heading in headings)
+
+    def cues_of(found):
+        return tuple(_section_cue(c, quoted) for c in found)
+
+    routed = detect.route(reading, day)
+    an = detect._analysis(reading, day)[0]
+    lay = an.lay
+    sentences = [(k, s, e) for k, (s, e) in enumerate(lay.sentences) if at(e) > at(s)]
+    clauses = [(s, e) for s, e in lay.clauses if at(e) > at(s)]
+    layout = (_runs(((x.start, x.end, x.kind) for x in lay.sections), at), tuple(span(s, e) for _, s, e in sentences),
+              tuple(span(s, e) for s, e in clauses))
+    routing = (routed.document_kind, tuple(sorted((
+        (f.family, f.status, tuple(f.missing),
+         tuple(sorted(((x.name, x.value, x.origin, x.note, spans(x.evidence)) for x in f.facts), key=repr)),
+         tuple(sorted(((span(m.span.start, m.span.end), span(m.sentence.start, m.sentence.end), m.section, m.status,
+                        cues_of(m.cues)) for m in f.mentions), key=repr)))
+        for f in routed.findings), key=repr)))
+
+    def reading_of(r):
+        return None if r is None else (r.status, cues_of(r.cues), getattr(r, 'doubt', None))
+    analysis = (tuple((span(s, e), an.attributed[k] if k < len(an.attributed) else None) for k, s, e in sentences),
+                tuple(sorted(((family, None if adj is None else repr(cues_of(adj) if isinstance(adj, tuple) else adj))
+                              for family, adj in an.adjustments.items()), key=repr)),
+                tuple(sorted(((span(m.start, m.end), m.family, reading_of(r)) for m, r in an.references.items()),
+                             key=repr)),
+                tuple(sorted(((span(m.start, m.end), reading_of(r)) for m, r in an.em_readings.items()), key=repr)))
+
+    def routed_reading(s, e):
+        status, found = detect.status_for_span(reading, s, e, day)
+        back, back_found = detect.status_for_span(reading, s, e, day, back=True)
+        own, own_found = detect.own_status_for_span(reading, s, e, day)
+        return status, cues_of(found), back, cues_of(back_found), own, cues_of(own_found)
+
+    def read(s, e):
+        passages = gi_services.passage_readings(reading, s, e, day)
+        return (span(s, e), routed_reading(s, e),
+                None if passages is None else tuple((r.status, cues_of(r.cues), span(c.start, c.end)) for r, c in passages))
+    def inside(s, e):  # a span that meets a released paragraph (a handful of them)
+        return any(rs < e and s < re_ for rs, re_ in regions)
+    readings = (tuple(read(s, e) for _, s, e in sentences if inside(s, e)),
+                tuple(read(s, e) for s, e in clauses if inside(s, e)),
+                tuple(read(s, e) for s, e in label_words))
+    inventory = gi_services.build(reading, service_date=day, routing=routed)
+    by_id = {s.id: s for s in inventory.services}
+    lesions_by_id = {}
+    for s in inventory.services:
+        for lesion in s.lesions:
+            lesions_by_id[lesion.id] = (lesion.noun, lesion.size, lesion.morphology, lesion.anatomy, lesion.region,
+                                        lesion.specimen, lesion.disposition, spans(lesion.evidence))
+
+    def service_of(service_id):
+        found = by_id.get(service_id)
+        return (found.family, found.kind) if found is not None else service_id
+
+    documented = []
+    for s in inventory.services:
+        acts = tuple(sorted(((a.kind, a.status, a.role, tuple(a.anatomy), a.region, a.technique, a.detail,
+                              spans(a.evidence), cues_of(a.cues), lesions_by_id.get(a.lesion, a.lesion))
+                             for a in s.acts), key=repr))
+        documented.append((s.family, s.kind, s.status, s.completion, s.extent, s.intent, s.service_date, s.clinician,
+                           s.setting, s.role, spans(s.evidence), spans(s.completion_evidence), cues_of(s.cues),
+                           cues_of(s.uncertainty), s.routing_status, s.separate_em, span(s.scope_start, s.scope_end),
+                           service_of(s.included_in) if s.included_in else '',
+                           tuple(sorted((lesions_by_id[x.id] for x in s.lesions), key=repr)), acts))
+    services_read = (tuple(sorted(documented, key=repr)),
+                     tuple(sorted(((c.subject, service_of(c.service), lesions_by_id.get(c.lesion, c.lesion),
+                                    tuple((x.status, x.role, spans(x.evidence)) for x in c.sides), c.note)
+                                   for c in inventory.conflicts), key=repr)),
+                     tuple(sorted(((a.role, spans(a.evidence)) for a in inventory.attributions), key=repr)),
+                     tuple(inventory.problems), inventory.sedation_by_endoscopist)
+    flow = gi_services.reflow(reading)
+    token = gi_services._ORIGINAL.set(reading)
+    try:
+        plist = gi_services.parts(flow, service_date=day)
+    finally:
+        gi_services._ORIGINAL.reset(token)
+    parts = (_runs(((p.start, p.end, (p.family, p.role, p.kind, p.combined, p.noted, p.host)) for p in plist), at),
+             tuple(sorted(span(p.title.start, p.title.end) for p in plist if p.title is not None)))
+    held = tuple(sorted((at(p.label.start), why) for p, why in decisions(reading) if why))
+    return layout, routing, analysis, readings, services_read, parts, held
+
+
 def released(text: str) -> tuple[LabelledParagraph, ...]:
     """The text's released labelled procedure paragraphs, in order (see the module's docstring for P1-P4, N1-N3)."""
-    return tuple(p for p, why in decisions(text) if not why)
+    if not isinstance(text, str) or ':' not in text:
+        return ()
+    return _released(text, _mode(text))
+
+
+@functools.lru_cache(maxsize=16)
+def _released(text: str, mode: str) -> tuple[LabelledParagraph, ...]:
+    return tuple(p for p, why in _decided(text, mode) if not why)
+
+
+def installed_released(text: str) -> tuple[LabelledParagraph, ...]:
+    """The text's paragraphs the INSTALLED conditions release (P1-P4, N1-N3), in order: never a corroborated one, and
+    never read through the guard - the services reader's parts read these (services._labelled_parts), so its parts are
+    the installed ones whatever the corroborated release releases (u18d). A pure function of the text."""
+    if not isinstance(text, str) or ':' not in text:
+        return ()
+    decided = text.carried if isinstance(text, _Reading) else _installed_state(text)[0]
+    return tuple(p for p, why in decided if not why and not p.corroborated)
 
 
 def overlay(lay: Layout, paragraphs: tuple) -> Layout:
     """``lay`` with each of ``paragraphs`` read as a procedure section of its own (label: the service's name; heading:
     the label as written), cut out of whatever sections it overlaps; the pieces of a section a paragraph stood in keep
-    that section's kind, label and heading. The sentences and clauses are ``lay``'s own. With no paragraphs it is
-    ``lay`` itself. Linear in the sections and the paragraphs."""
+    that section's kind, label and heading. The sentences and clauses are ``lay``'s own, but for a corroborated
+    paragraph's label (_heading_split). With no paragraphs it is ``lay`` itself. Linear in the sections and the
+    paragraphs."""
     if not paragraphs:
         return lay
     cuts = sorted({b for p in paragraphs for b in (p.start, p.end)})
@@ -1256,21 +2193,59 @@ def overlay(lay: Layout, paragraphs: tuple) -> Layout:
                 out.append(Section('procedure', last.label, p.label, last.start, b))
             else:
                 out.append(Section('procedure', gi_sections.normalize_label(p.label.text), p.label, a, b))
-    return Layout(lay.text, tuple(out), lay.sentences, lay.clauses, tuple(s.start for s in out))
+    sentences, clauses = lay.sentences, lay.clauses
+    corroborated = [p for p in paragraphs if p.corroborated]
+    if corroborated:
+        sentences, clauses = _heading_split(lay.text, sentences, corroborated), _heading_split(lay.text, clauses,
+                                                                                               corroborated)
+    return Layout(lay.text, tuple(out), sentences, clauses, tuple(s.start for s in out))
 
 
-@functools.lru_cache(maxsize=16)
+def _heading_split(text: str, spans: tuple, paragraphs: list) -> tuple:
+    """``spans`` (a layout's sentences or clauses) with the one opening at each corroborated paragraph's label cut as
+    its heading twin cuts it (u18d): the label's words alone ("Colonoscopy"), then the narrative from its first word on
+    - the twin writes them "PROCEDURE: Colonoscopy" and a newline, and its layout reads the heading's words as a
+    sentence of their own and the narrative's first sentence from its first word. So every reader that reads a
+    sentence or a clause - routing's reading of the label against the sentence after its own, the services reader's
+    evidence of the service the label names - reads the label as the twin reads its heading line. The blanks after the
+    colon lie in no span, as the twin's newline lies in none. A label whose span does not open at it is left
+    as it is (the guard then compares what it reads). The label's span keeps its colon, so the released label routing
+    reads (detect._released_label_at) lies inside it. Bisection per paragraph."""
+    out = list(spans)
+    for p in sorted(paragraphs, key=lambda p: -p.label.start):
+        k = bisect.bisect_left(out, (p.label.start, -1))
+        if k >= len(out) or out[k][0] != p.label.start:
+            continue
+        s, e = out[k]
+        colon, b = p.label.end, p.label.end
+        while b < len(text) and text[b] in ' \t':
+            b += 1
+        if not s < colon - 1 < b < e:
+            continue
+        out[k:k + 1] = [(s, colon), (b, e)]
+    return tuple(out)
+
+
 def clinical_layout(text: str) -> Layout:
     """sections.layout(text) with the text's released labelled paragraphs read as procedure sections of their own
     (overlay). With nothing released it is sections.layout(text) itself."""
-    return overlay(gi_sections.layout(text), released(text))
+    return _clinical_layout(text, _mode(text) if isinstance(text, str) and ':' in text else _GUARDED)
 
 
 @functools.lru_cache(maxsize=16)
+def _clinical_layout(text: str, mode: str) -> Layout:
+    return overlay(gi_sections.layout(text), _released(text, mode) if ':' in text else ())
+
+
 def reader_layout(text: str, original: str) -> Layout:
     """For a reader of a same-length view of ``original`` (the services reader's reflowed text, a soft line break read
     as a space): its own sections.layout(text) with ``original``'s released paragraphs overlaid, so it reads the same
     section fact as routing, which reads ``original``. With nothing released it is sections.layout(text) itself."""
     if original == text or len(original) != len(text):
         return clinical_layout(text)
-    return overlay(gi_sections.layout(text), released(original))
+    return _reader_layout(text, original, _mode(original) if ':' in original else _GUARDED)
+
+
+@functools.lru_cache(maxsize=16)
+def _reader_layout(text: str, original: str, mode: str) -> Layout:
+    return overlay(gi_sections.layout(text), _released(original, mode) if ':' in original else ())

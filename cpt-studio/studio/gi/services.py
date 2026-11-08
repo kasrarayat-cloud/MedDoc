@@ -1740,7 +1740,12 @@ def _labelled_parts(text: str, plist: Sequence[_Part]) -> tuple[_Part, ...]:
     from studio.gi import structure as gi_structure
     original = _ORIGINAL.get()
     source = original if isinstance(original, str) and len(original) == len(text) else text
-    paragraphs = gi_structure.released(source)
+    # the structure round (u18d): only the paragraphs the INSTALLED conditions release are parts here
+    # (structure.installed_released): a corroborated paragraph (structure's corroborated release, which stands only
+    # where its computed heading twin reads as the document does) is no labelled report part - its lines are read as
+    # this reader reads them when the paragraph is held, as its twin's "PROCEDURE: <label>" line, which opens no part
+    # here, leaves them - so every part reads exactly as installed
+    paragraphs = gi_structure.installed_released(source)
     if not paragraphs:
         return tuple(plist)
     # the Indications each paragraph stood in, as routing's layout has them: their other lines are the indication's to
@@ -1796,6 +1801,25 @@ def _labelled_parts(text: str, plist: Sequence[_Part]) -> tuple[_Part, ...]:
             else:
                 out.append(_Part(a, b, para.family, 'physician', None, 'report', False, '', ''))
     return tuple(out)
+
+
+def _corroborated_labels(source: str) -> tuple:
+    """The structure round (u18d): the paragraphs structure's corroborated release releases in ``source`` (the text
+    routing reads). Such a release stands only where its computed heading twin - the label written "PROCEDURE: <label>"
+    on a line of its own - reads as the document does (structure._twin_parity), so this reader reads each one's label
+    as it reads that line: a sentence of its own (_label_sentences), and a procedure-field listing of its service (pass
+    1). Never a label the installed conditions release: those read as installed."""
+    from studio.gi import structure as gi_structure
+    return tuple(p for p in gi_structure.released(source) if p.corroborated)
+
+
+def _label_sentences(text: str, sentences: list, labels: tuple) -> list:
+    """``sentences`` (_sentences) with the one opening at each corroborated label cut as the label's heading twin cuts
+    it (structure._heading_split: the label alone, then the narrative from its first word)."""
+    if not labels:
+        return sentences
+    from studio.gi import structure as gi_structure
+    return list(gi_structure._heading_split(text, tuple(sentences), list(labels)))
 
 
 def _time_parts(text: str, plist: Sequence[_Part], lay=None) -> tuple[_Part, ...]:
@@ -3866,7 +3890,8 @@ def _act_frame(text: str, service_date: Optional[date], pages: tuple = ()):
     flow = reflow(text, pages)
     dates = gi_context.find_dates(flow)
     plist = parts(flow, service_date=service_date, dates=dates)
-    return flow, dates, plist, [p.start for p in plist], _sentences(flow)
+    return flow, dates, plist, [p.start for p in plist], _label_sentences(flow, _sentences(flow),
+                                                                          _corroborated_labels(text))
 
 
 # How many things the reader reads in one passage for passage_readings (bounds the work per code); past it the passage
@@ -6347,7 +6372,10 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
     date_starts = [d.start for d in dates]
     plist = parts(text, service_date=service_date, dates=dates)
     starts = [p.start for p in plist]
-    sentences = _sentences(text)
+    original = _ORIGINAL.get()
+    labels = _corroborated_labels(original if isinstance(original, str) and len(original) == len(text) else text)
+    label_words = [(p.label.start, p.label.end - 1) for p in labels]  # u18d: each corroborated label's words
+    sentences = _label_sentences(text, _sentences(text), labels)
     blocks = form_field_blocks(text)
     block_starts = [bs for bs, _ in blocks]
     if len(sentences) > MAX_SENTENCES:
@@ -6463,7 +6491,9 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 line_start = text.rfind('\n', 0, ms) + 1
                 line_end = text.find('\n', ms)
                 if reading.status == 'uncertain' and not hypothetical and not _row_hold(reading) and not another \
-                        and PROCEDURE_FIELD.match(text[line_start:line_end if line_end >= 0 else len(text)]):
+                        and (PROCEDURE_FIELD.match(text[line_start:line_end if line_end >= 0 else len(text)])
+                             or any(a <= ms and me <= b for a, b in label_words)):
+                    # u18d: a corroborated label is read as its heading twin's "PROCEDURE: <label>" line is read
                     reading = Reading('performed', reading.cues + ('performed: listed on the procedure line',))
                 reading = held_under_denial(text, ms, reading, service_date)
             d = draft(family, kind)
