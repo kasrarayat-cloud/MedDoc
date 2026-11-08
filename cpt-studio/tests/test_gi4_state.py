@@ -250,12 +250,9 @@ class StateBatteryTests(OperatorReads, TestCase):
         self.assertNotEqual(now.fingerprint, again.proposal_fingerprint)
 
     def test_an_earlier_context_version_is_remade_and_the_upgrades_predict_never_sends(self):
-        # the round-4 install's upgrade (@3 to @4), named rather than taken as the last earlier version: the recall round
-        # (2026-11-08) retired @4 too, so the last earlier version is no longer round 4's
-        earlier = INSTALLED_LABELS['CONTEXT_VERSION']
-        labels = dict(INSTALLED_LABELS)
-        self.assertEqual(labels, {'CONTEXT_VERSION': 'gi-context@3', 'EARLIER_CONTEXT_VERSIONS': ('gi-context@1', 'gi-context@2')})
-        self.assertIn(earlier, jobs.EARLIER_CONTEXT_VERSIONS)  # still remade by this revision
+        earlier = jobs.EARLIER_CONTEXT_VERSIONS[-1]
+        labels = {'CONTEXT_VERSION': earlier, 'EARLIER_CONTEXT_VERSIONS': jobs.EARLIER_CONTEXT_VERSIONS[:-1]}
+        self.assertEqual(labels, INSTALLED_LABELS)  # the round-4 install: the earlier labels are installed's own
         dated = {name: fact for name, fact in __import__('studio.gi.context', fromlist=['x']).extract_context(
             H404['text']).items()}
         from studio.types import Fact
@@ -372,7 +369,7 @@ class RoundFourLabelTests(SimpleTestCase):
 
     def test_the_labels(self):
         self.assertEqual((jobs.CONTEXT_VERSION, jobs.EARLIER_CONTEXT_VERSIONS),
-                         ('gi-context@5', ('gi-context@1', 'gi-context@2', 'gi-context@3', 'gi-context@4')))
+                         ('gi-context@5', ('gi-context@1', 'gi-context@2', 'gi-context@3')))
         self.assertEqual((detect.ROUTING_VERSION, gi_services.INVENTORY_VERSION, reconcile.INVENTORY_SOURCE,
                           engine.ENGINE_VERSION),
                          ('gi-routing@11', 'gi-services@6', 'cpt-studio:gi-services@6', 'cpt-studio-validation@10'))
@@ -398,8 +395,8 @@ class RoundFourLabelTests(SimpleTestCase):
         # the walk round (2026-11-07): every reader that reads differently, once more beside installed 6f306af1b030
         for (module, name), installed in WALK_ROUND_INSTALLED_LABELS.items():
             self.assertNotEqual(getattr(module, name), installed, name)
-        # the recall round (2026-11-08): routing and the context once more beside installed 73dcf8b4b40a; a context @4
-        # recorded is remade before a stage sends or assesses (jobs.EARLIER_CONTEXT_VERSIONS' note)
+        # the recall round (2026-11-08): routing and the context once more beside installed 73dcf8b4b40a (a context @4
+        # recorded stays current: jobs.CONTEXT_VERSION's note)
         for (module, name), installed in RECALL_ROUND_INSTALLED_LABELS.items():
             self.assertNotEqual(getattr(module, name), installed, name)
 

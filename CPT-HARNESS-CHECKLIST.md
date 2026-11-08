@@ -252,6 +252,8 @@ the progress log below.
 | U19 | a reach stated by findings, not by a reach verb (a landmark list with its verb after it; an organ-by-organ findings list; a verbless depth sentence) | c3a, c3b, c3c; ACCURACY-RESIDUALS.md | IN PROGRESS (the recall round: the findings-stated reach, implemented and verified offline - development 36 -> 31 held, the c3 organ-list shapes still read as installed; parity residuals in ACCURACY-RESIDUALS.md; installs with the round) |
 | U20 | numbered "PROCEDURE n - X" headings open no section (under HISTORY every act reads historical) | c3c; ACCURACY-RESIDUALS.md (the recorded gap a) | OPEN (the recall round: two mechanisms refuted twice each and dropped - the numbered part inside the shared layout, and a same-length reading twin; HARNESS.md "The recall round") |
 | U21 | a stated date of service in a form the reader does not read ("16-Nov-2026", "9 November 2026", a weekday before the date, a head "Date of Operation:", a head "Exam date:" the reader reads but never sends) leaves the document undated: every code held for the date | held-out corpus: 10 of 24 documents, 17 of 25 holds; owner decision 2026-11-07 (read the unambiguous forms; not two-digit years) | IN PROGRESS (designed, refuted once, repaired; second cycle running) |
+| U22 | the participant and peer stages send on a context an earlier version recorded without remaking it (a chain queued across an install, resumed after a Stop, or swept) | the recall round's refutation of the gi-context@4 retirement (refute/retire: flows #0 and #1, data #0); pre-existing on the installed release for @1 to @3 | OPEN (unreachable on the live copy: no in-flight or stopped chain on an earlier context) |
+| U23 | a member's answer, withdrawal or reconciliation on an encounter whose context an earlier version recorded is applied without a re-assessment: the overlay applies an answer to the stored assessment (a false 'reviewed' with an approved export where the current engine reads differently), a withdrawal leaves a blocker nothing clears, a reconciliation's participant attempt is not made | the same refutation (flows #2 and #3, data #1 and #2); the live controls a8e50085, fbdd6d27, 30d3f32d and 212ed78d ('reassessing': false); an unchanged context save or an addendum reads the encounter under the current rules | OPEN (43 live encounters' contexts are @1 to @3) |
 | Q1 | owner question (class (a)): does 43247 cover a food bolus pushed into the stomach? 13 corpus entries wait on it | corpus RULING entries | OWNER |
 | Q2 | owner question: two dilation techniques on one stricture (an NCCI question; NCCI unconnected) | corpus | OWNER |
 | L1 | pypdf 6.21.2's seven denial-of-service advisories: accounted for, not resolved | `docs/cpt-harness/repair3-20261105/pypdf-advisories-accounting.md` | LIMITATION, reported until resolved |
@@ -1044,3 +1046,14 @@ the progress log below.
   (the cpt-studio job's tests all green, red only on pypdf 6.21.2's seven accounted advisories, L1). The mandatory refutation
   pass over the finished diff (interaction, regression, parity audit) found one defect of the integration: gi-context@4 had
   been kept current on a false premise; it is retired and pinned. The rest is bounded by parity or hold-side and recorded.
+- **2026-11-08T03:51-05:00Z The retirement refuted before merge, and reverted.** PR CI on `7b4fb3d53` passed (6,485
+  Django tests, ops 524, verification 43, node 136; red only on L1). The final pass had not seen the retirement, so a
+  refutation pass ran over it before merge (two lenses: stage flows, and a restored live copy through install, member
+  actions and rollback).
+  - It found two HIGH send-door gaps the retirement does not close (pre-existing for @1 to @3) and five MEDIUM
+    regressions it causes on live encounters.
+  - The class it addressed is absent from the live data: none of 31 contexts reads differently under @5, and both controls
+    are detected.
+  - gi-context@4 stays current. The class is bounded by that measurement (repeated at each install, a stop condition)
+    and by structure.
+  - New open defects: U22 and U23 (pre-existing on the installed release).

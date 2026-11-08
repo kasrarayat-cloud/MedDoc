@@ -1436,3 +1436,28 @@ installed form (a "Procedure date:" label, or a month-day-year date) - each row 
 @4 only asks where @5 sends. Three lenses showed it false: a @4 context that asked and then took a member's answer sends
 that answer, which @5 holds when it contradicts the document's newly read head date - and with the findings-stated reach a
 code read READY on it. gi-context@4 is retired (remade before any stage sends or assesses), as @1 to @3 were.
+
+**Then reverted, after the retirement's own refutation (2026-11-08T03:58-04:32Z; two lenses over the repair, a restored
+live copy included).** Retiring gi-context@4 does not close what it was meant to close, and it regresses the encounters @4
+read:
+- the participant and peer stages send on an earlier context without remaking it (a stage queued across an install,
+  resumed after a Stop, or swept), so a @4 context of the class above still sends its participants and peer reviews; the
+  installed release has the same gap for @1 to @3;
+- on the encounters @4 read (31 live), a member's answer was applied to the stored assessment with no re-assessment (on
+  the live copy three encounters read 'reviewed' with an approved export where the current engine reads a code READY), a
+  withdrawal was never applied (a readiness blocker nothing clears), a reconciliation's participant attempt was lost, and
+  two encounters lost their second-review offer.
+
+So gi-context@4 stays current, and the class above is bounded instead:
+- **by measurement:** none of the 31 live contexts @4 recorded reads differently under @5 (facts, and the document date
+  where one is stored). Both controls are detected: a planted value, and a context the installed code made of the class
+  itself. The measurement is repeated on the pre-app dump of each install, and any difference is a stop condition of its
+  declaration;
+- **by structure:** no context is recorded under @4 once @5 is installed.
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| a context @4 recorded whose member date @5 would hold stays current | an upload under 73dcf8b4 with a head "Date of Operation: 11/05/2026" and the member's 11/09 | 11/09 sent; through the findings-stated reach 45385 READY | none on the live copy (measured); none recordable after the install; a stop condition of the install |
+| pre-existing on the installed release: the participant and peer stages send on an earlier context without remaking it | a chain on a context @1 to @3 recorded, queued across an install, resumed after a Stop, or swept | the participants and peer reviews are sent on the old context | reachable only with an in-flight or stopped chain on an earlier context, and the live copy has none; open (U22) |
+| pre-existing on the installed release: a member's answer, withdrawal or reconciliation on an earlier context is applied without a re-assessment | an answer on an encounter whose context @1 to @3 recorded (the live controls a8e50085, fbdd6d27, 30d3f32d and 212ed78d each read 'reassessing': false) | the overlay applies an answer to the stored assessment; a withdrawal leaves a blocker nothing clears; a reconciliation's participant attempt is not made; a Resume of an assess is not counted as the member's request | an unchanged context save or an addendum reads the encounter under the current rules; open (U23) |
+| a rollback reads a @5 document date it cannot honour | a context @5 holds (a member date against a head "Date of Operation"), then a rollback to 73dcf8b4: "Use document date" is offered from the @5 document date | the installed release clears the member value, reads no date and would send a dateless request, then asks the date again | rollback only; declared in the install's rollback limits |

@@ -48,6 +48,16 @@ log = logging.getLogger(__name__)
 
 CONTEXT_VERSION = 'gi-context@5'  # @5: the recall round (2026-11-08): the owner's date forms of 2026-11-07 (a day-first date
 # with a month name, a weekday before the date, a head 'Exam date' / 'Date of Operation').
+# A context gi-context@4 recorded (installed 41e03656df61 to 73dcf8b4b40a) stays CURRENT, unlike @1-@3 below. Not because
+# @4 never says what @5 would not: a @4 context that asked, then took a member's date answer, sends that answer where @5
+# HOLDS it as contradicting a newly read head date (the recall round's final refutation; through the findings-stated
+# reach 45385 read READY on it). It stays current because retiring it was refuted in its turn (2026-11-08): the
+# participant and peer stages send on an earlier context queued, resumed or swept across an install without remaking
+# it (a gap @1-@3 share), and on the encounters @4 read the retirement itself regressed - a member's answer applied to
+# the stored assessment with no recompute (a false 'reviewed' with an approved export), a withdrawal never applied, a
+# reconciliation's attempt lost, second reviews withdrawn - while no live context @4 recorded reads differently under
+# @5 (facts and document date, measured on the live copy before the install, a stop condition of its declaration),
+# and no context can be recorded under @4 once this revision is installed.
 # Context versions recorded under other rules: a stage remakes such a context before it sends or assesses anything
 # (_remade_context), and no second review is offered or sent on one (_second_review_bounds, stage_review2).
 # - gi-context@1 (the installed revision 057a7d39) kept a member's value as plain metadata;
@@ -60,13 +70,7 @@ CONTEXT_VERSION = 'gi-context@5'  # @5: the recall round (2026-11-08): the owner
 #   note's own sign-off states (rule (c)) and places headings by PS's section reach, so a context @3 recorded can say a
 #   date the current rules ask or hold, and a stage would send and assess it as documented (interpretation 49;
 #   pd.json integration_20261101_cycle2).
-# - gi-context@4 (installed 41e03656df61 to 73dcf8b4b40a) read no day-first date, no weekday before a date and no head
-#   'Exam date' / 'Date of Operation' as the date of service, so it ASKED where @5 reads the document's date - and a member's
-#   answer it then took is sent by it although @5 HOLDS that answer as contradicting the document (the recall round's final
-#   refutation: a head 'Date of Operation: 11/05/2026' with a same-day sign-off, the member's 11/09 taken under @4 and
-#   kept current, made 45385 READY on 11/09 through the findings-stated reach, where a fresh @5 context holds it). The
-#   first integration kept @4 current on the premise that @4 only asks where @5 sends; that premise was false.
-EARLIER_CONTEXT_VERSIONS = ('gi-context@1', 'gi-context@2', 'gi-context@3', 'gi-context@4')
+EARLIER_CONTEXT_VERSIONS = ('gi-context@1', 'gi-context@2', 'gi-context@3')
 MEMBER_DATE_CONFLICT_MESSAGE = ('Nothing was sent: the service date entered as encounter metadata differs from the '
                                 'documented one. Correct or clear the metadata (or add an addendum), and the request is '
                                 'made for the agreed date.')

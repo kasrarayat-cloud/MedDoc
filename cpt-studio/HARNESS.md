@@ -4110,3 +4110,18 @@ contexts had been kept current on a false premise (a @4 context that took a memb
 through the findings-stated reach a code read READY on that date). gi-context@4 is retired - remade before any stage sends
 or assesses, as @1 to @3 - and pinned (RetiredContextVersionTests). The parity audit found no release beyond the parity bound;
 everything else the pass found is bounded by parity or hold-side and is listed in ACCURACY-RESIDUALS.md.
+
+**The retirement's own refutation (2026-11-08T03:58-04:32Z), and why gi-context@4 stays current.** The repair above was
+refuted in its turn, before merge, by two lenses in sealed sandboxes at `7b4fb3d53`. One drove every stage flow from a
+context @4 recorded; the other took a restored live copy through the install, a member's actions and a rollback.
+- It does not close the class: the participant and peer stages send on an earlier context without remaking it, a gap
+  @1 to @3 share in the installed release.
+- It regressed the encounters @4 read: answers applied with no re-assessment (a false 'reviewed' with an approved export
+  on three live encounters), a withdrawal never applied, a reconciliation's attempt lost, and second reviews withdrawn on
+  two.
+- The class it addressed does not exist on the live data: none of the 31 live contexts @4 recorded reads differently
+  under @5. The measurement detects both its controls, a planted one and one the installed code made.
+
+The retirement is reverted, and @4 stays current. The class is bounded by that measurement, repeated on each install's
+pre-app dump as a stop condition, and by structure (nothing records @4 once @5 is installed). It is pinned by
+KeptContextVersionTests. The two pre-existing classes the pass found are open: U22 and U23 in CPT-HARNESS-CHECKLIST.md.

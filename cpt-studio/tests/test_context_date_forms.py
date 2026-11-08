@@ -332,11 +332,15 @@ class AsInstalledTests(DateAssertions, SimpleTestCase):
         self.assert_conflict(text + COLO_PLAIN, DAY, '2019-05-01')
 
 
-class RetiredContextVersionTests(SimpleTestCase):
-    """The recall round's final refutation (2026-11-08): a context recorded under gi-context@4 asked where @5 reads the
-    document's head date, and a member's answer it then took was sent by it although @5 HOLDS that answer as contradicting
-    the document. Kept current, it made 45385 READY on the member's date through the findings-stated reach. @4 is retired:
-    remade before any stage sends or assesses (jobs.EARLIER_CONTEXT_VERSIONS)."""
+class KeptContextVersionTests(SimpleTestCase):
+    """The recall round (2026-11-08): a context recorded under gi-context@4 stays CURRENT (jobs.CONTEXT_VERSION's note).
+    The final refutation showed what that keeps: a @4 context that asked where @5 reads the document's head date, then
+    took a member's answer, sends that answer although @5 HOLDS it as contradicting the document (through the
+    findings-stated reach 45385 read READY on it). Retiring @4 was refuted in its turn: the participant and peer stages
+    send on an earlier context without remaking it, and answers, withdrawals, reconciliations and second reviews
+    regressed on the encounters @4 read. The class is bounded by measurement - no live context @4 recorded reads
+    differently under @5, a stop condition of the install's declaration - and by structure: once @5 is installed no
+    context is recorded under @4."""
 
     TEXT = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEndoscopy Procedure Report\n'
             'Date of Operation: 11/05/2026\nEndoscopist: Synthetic Endoscopist, MD (fictional)\nProcedure: Colonoscopy\n'
@@ -344,10 +348,10 @@ class RetiredContextVersionTests(SimpleTestCase):
             '  2. A 6 mm polyp was removed by cold snare from the transverse colon (jar A).\n\nPlan:\n  1. Await pathology.\n'
             'Electronically signed by Synthetic Endoscopist, MD on 11/05/2026\n')
 
-    def test_gi_context_4_is_retired(self):
+    def test_gi_context_4_stays_current(self):
         from studio import jobs
         self.assertEqual(jobs.CONTEXT_VERSION, 'gi-context@5')
-        self.assertIn('gi-context@4', jobs.EARLIER_CONTEXT_VERSIONS)
+        self.assertEqual(jobs.EARLIER_CONTEXT_VERSIONS, ('gi-context@1', 'gi-context@2', 'gi-context@3'))
 
     def test_the_current_reading_holds_the_member_date_a_kept_context_would_send(self):
         fact = context.extract_context(self.TEXT)['service_date']
