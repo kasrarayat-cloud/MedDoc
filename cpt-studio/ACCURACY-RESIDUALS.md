@@ -1474,7 +1474,7 @@ are what the shipped repairs leave, each bounded by its twin where the row says 
 
 | residual | example | reads | why left |
 |---|---|---|---|
-| a lead the closed form does not read | "On 10/14 -- unlike today -- the gastroscope was introduced ... to the third portion of the duodenum." (any separator, or none); "After informed consent was obtained, the gastroscope ..."; "Some time back the gastroscope ..." | no motion read; held where the installed release holds | fail closed by design: the lead before the scope noun is read by a closed form (u14a3, completed by the final refutation pass after a list of set-off characters let a dated lead's reach through as today's D3) |
+| a lead the closed form does not read, in the motion's own sentence | "On 10/14 -- unlike today -- the gastroscope was introduced ... to the third portion of the duodenum." (any separator inside the sentence, or none); "After informed consent was obtained, the gastroscope ..."; "Some time back the gastroscope ..."; "The daughter says the gastroscope ..." | no motion read; held where the installed release holds | fail closed by design: the lead before the scope noun is read in a closed form (u14a3, completed by the final refutation pass and its focused second pass) |
 | a denial inside the motion's own trailing aside; a hearsay labelled paragraph; an extent field elsewhere | "... and then through the transverse colon to the cecum, which was not identified."; "Her daughter recalls: The gastroscope was introduced ..."; "Extent: uncertain." or "Cecal intubation: uncertain." beside the reach | the reach read, as the direct-reach twin reads it | bounded by parity (u14a2's two lenses: release MEDIUM 1 and 2, regress LOW) |
 | an installed blind spot: a today word inside a dated lead's aside | "On 10/14 - unlike today - the gastroscope was advanced to the third portion of the duodenum." | D3; 43239 READY on the installed release and on the head | not created by this round: the twin itself reads it; OPEN (checklist) |
 
@@ -1535,4 +1535,17 @@ These are what remain, each bounded by its twin unless the row says otherwise.
 | U16 beside U18: a corroborated release beside a U16 full-twin reading | a labelled report with both paragraphs corroborable and a bolus removal its narrative and Impression corroborate | the release withdrawn, the installed reading stands | U16's full twin is a derived text the guard cannot carry, so it fails closed; pinned (BolusBesideTheReleaseTests) |
 | a stored answer asked differently after the install | a member's answer that excluded c4a's 43248 under the installed release | kept as an earlier answer; the code back to needs clarification | the question's own wording changes with the release (inherent to any reading that changes the question) |
 | cost of a guarded document | c4a | 0.34 s against 0.05 s per stage (3.5-7x); at the bound 2.0-2.7 s | the twin's two whole-document readings; every bound only withholds |
+
+### The focused second pass over the final pass's repairs (2026-11-08): what it leaves
+
+Two lenses at `ae58a3623`. The U16 time read the final pass had moved to the original text made a new false READY (a
+page-joined "last night", 58 of 180 page-break variants): it was reverted, and the sweeps then read as before it. The
+closed lead form's clause leads were closed. The rest:
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| U14: a dated, hearsay or generic fragment in the sentence BEFORE the motion | "On 10/14 -- unlike today. The gastroscope was introduced ... to the third portion of the duodenum."; "Two weeks ago:\nThe gastroscope ..."; "Next time. The ..." (152 readings in the lens's batteries; present since U14's integration) | 43239 READY, extent from the motion | bounded by U14's twin: the direct-reach twin keeps the fragment as its own sentence, and the installed release reads that twin READY - an installed blind spot of the short reach, which U14 extends to long reaches (the aside-free twin holds); pinned as parity |
+| U14: the narrowing's cost | 283 of 378 natural correct long reaches, among them "Under MAC the gastroscope ...", "With the patient in the left lateral position the ...", "Next / First / Finally / Afterwards / Again the ...", "After informed consent was obtained the ..." | read as installed (EGD 43239 held for its extent; colonoscopy READY with the incompleteness warning) | the closed lead form fails closed; never worse than the installed release; OPEN for a refuted widening |
+| U14 in the colonoscopy: a dated or hearsay motion | "Two weeks ago. The colonoscope was advanced to the splenic flexure, ..., and then through the transverse colon to the cecum." | 45385 READY as installed, now without the service.incomplete warning | bounded by the strict twin; no colonoscopy code moves from held to READY |
+| U16: a time phrase cut by a hard wrap or a capitalised next page | "... under direct vision last" / "Tuesday. Pooled saliva ..." (every width that breaks between "last" and "Tuesday") | 43247 READY (held unwrapped) | present since u16c3: the full twin reads it READY on the installed release, the natural twin holds it - so u16c3's claim that no READY stands where the natural twin is held is false for this class; OPEN (a time phrase across a line break the clause reader does not attach) |
 

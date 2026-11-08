@@ -258,7 +258,7 @@ the progress log below.
 | U25 | an installed false READY: a report that disowns itself is read as written ("... was removed with a cold snare. Entered on the wrong patient; please disregard.": 45385 READY) | found by u18a's release lens; design-r2/briefs/u25.md | OPEN (two designs refuted and dropped: a broad disowning reader; explicit self-reference only) |
 | U26 | an installed false READY (the directive's item 4: "a polyp explicitly left in place"): a removal instrument's transit read as the removal ("A cold snare was passed through the channel, and the polyp was then left in place because she takes apixaban.": 45385 READY) | found by u18c's release lens; design-r2/corr/left_in_place.py | OPEN (the inventory, the code's evidence reading and the outcome hold each refuted or unsound - HARNESS.md "The structure round"; its sandbox design-r2/u26d kept for the next round) |
 | U27 | an installed false READY: a revisit to a prior act's object read as that act ("The stent in the distal esophagus was reached and was in good position.": 43266 READY; the polypectomy site "reached and was clean": 45385 READY) | found by u18c's release lens; design-r2/corr/object_noun.py | OPEN (as U26; its sandbox design-r2/u27d kept) |
-| U28 | an installed blind spot: a today word inside a dated lead's aside outranks the lead's date ("On 10/14 - unlike today - the gastroscope was advanced to the third portion of the duodenum.": D3, 43239 READY) | found while deciding U14 (design-r2/corr/u14_leadaside.py) | OPEN (not created by the round: U14's direct-reach twin is this sentence; U14's closed lead form - after the final refutation pass - holds the long form whatever sets the lead off) |
+| U28 | an installed blind spot: a today word inside a dated lead's aside outranks the lead's date ("On 10/14 - unlike today - the gastroscope was advanced to the third portion of the duodenum.": D3, 43239 READY) | found while deciding U14 (design-r2/corr/u14_leadaside.py) | OPEN (not created by the round: U14's direct-reach twin is this sentence; U14's closed lead form holds the long form whatever sets the lead off inside the motion's sentence; a dated fragment in the sentence before it reads as the direct-reach twin reads it, the same blind spot - recorded) |
 | Q1 | owner question (class (a)): does 43247 cover a food bolus pushed into the stomach? 13 corpus entries wait on it | corpus RULING entries | OWNER |
 | Q2 | owner question: two dilation techniques on one stricture (an NCCI question; NCCI unconnected) | corpus | OWNER |
 | L1 | pypdf 6.21.2's seven denial-of-service advisories: accounted for, not resolved | `docs/cpt-harness/repair3-20261105/pypdf-advisories-accounting.md` | LIMITATION, reported until resolved |
@@ -1095,4 +1095,11 @@ the progress log below.
     - U16's status read took the reflowed copy; it now takes the text routing reads.
   - The rest is bounded by its twins and recorded in ACCURACY-RESIDUALS.md.
   - The label move's last digest pins were found by the suite and re-pinned.
+- **2026-11-08 The focused second pass over the final pass's repairs** (two lenses at `ae58a3623`).
+  - U16: the final pass had moved U16's time read to the original text. That made a new false READY on a page-joined
+    "last night", so the move was reverted.
+  - U14: a clause in the lead is no longer read.
+  - Recorded as bounded by U14's twin: a dated fragment in the sentence before the motion. Recorded as open: the
+    narrowing's cost, and U16's time phrase cut by a hard wrap.
+  - The U18 cache repair: nothing found on other caches, cost or determinism.
 

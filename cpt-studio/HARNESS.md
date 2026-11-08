@@ -4215,3 +4215,13 @@ Recorded, not changed: a corroborated release beside a U16 full-twin reading is 
 this tree's readers (U14 and U16 included), not the installed release's. Every other finding is bounded by its twin and is
 listed in ACCURACY-RESIDUALS.md, "The final refutation pass over the integrated diff". The label move's last digest pins
 were found by the suite and re-pinned.
+
+**The focused second pass over those repairs** (two lenses at `ae58a3623`):
+- U16: the final pass had moved U16's time read to the original text. That made a new false READY: the original splits a
+  page-joined "last night", so 43247 read READY on 58 of 180 page-break variants. The move is reverted.
+- U14: the closed form's three words admitted a clause ("The daughter says the gastroscope ..."). No article may stand
+  among them now.
+- U14, recorded rather than closed: a dated fragment in the sentence BEFORE the motion is not read, and U14's direct-reach
+  twin keeps that sentence verbatim (an installed blind spot of the short reach, 152 readings in the lens's batteries).
+- The narrowing's cost: 283 of 378 natural correct long reaches read as installed.
+- The cache repair: nothing found on other caches, on cost or on determinism.
