@@ -38,7 +38,7 @@ import bisect
 import contextvars
 import functools
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace as _dc_replace
 from datetime import date
 from typing import Optional
 
@@ -1738,12 +1738,17 @@ def _owned_time_cue(an: Analysis, cue: Cue, members: list[tuple[int, int]], wind
     if owner == 'other':
         if cue.name in _ROUND_2B_TIME_CUES:
             return None
-        return 'uncertain', f"uncertain: '{cue.text}' dates another thing named before it"
+        return 'uncertain', f"uncertain: '{cue.text}' {ANOTHER_THINGS_TIME}"
     if owner == 'service' and not today:
         return 'historical', f'historical: {cue.text}'
     if owner == 'service':
         return 'uncertain', f"{ANOTHER_TIME_PREFIX}: '{cue.text}' beside today in one clause"
     return 'uncertain', f"{ANOTHER_TIME_PREFIX}: '{cue.text}' may date it or another thing in its clause"
+
+
+# The tail of an owned time cue's label when the time trails a test, a result or a diagnosis named before it (owner
+# 'other'): that thing's time, held for 'ago' only because the reading fails closed (read by _held_by_back, U24).
+ANOTHER_THINGS_TIME = 'dates another thing named before it'
 
 
 # --- another time (routing:8, routing:10): a time no listed cue reads holds a reading that would be performed --------
@@ -10723,16 +10728,76 @@ def route(text: str, service_date: Optional[date] = None) -> RoutingResult:
 
 
 def status_for_span(text: str, start: int, end: int,
-                    service_date: Optional[date] = None) -> tuple[str, tuple[str, ...]]:
+                    service_date: Optional[date] = None, back: bool = False) -> tuple[str, tuple[str, ...]]:
     """Status of the service mentioned at [start, end), judged from its clause,
     sentence and section, with the cues that decided it. Fail-closed.
-    ``service_date`` as for route()."""
+    ``service_date`` as for route(). ``back``: a code's own evidence (validation's evidence readings) - a performed
+    reading that "<quantity> <time unit>(s) back" dates is held (_held_by_back, U24)."""
     if not isinstance(text, str):
         raise TypeError('status_for_span() needs the canonical text as str.')
     if not (0 <= start < end <= len(text)):
         raise ValueError(f'span [{start}, {end}) is not a non-empty range inside the text (length {len(text)}).')
-    reading = _read_span(_analysis(text, _checked_date(service_date, 'status_for_span()'))[0], start, end)
+    an = _analysis(text, _checked_date(service_date, 'status_for_span()'))[0]
+    reading = _read_span(an, start, end)
+    if back:
+        reading = _held_by_back(an, start, end, reading)
     return reading.status, reading.cues
+
+
+# --- U24 (the structure round, cycle 2): "<quantity> <time unit>(s) back" ------------------------------------------
+# "Some months back a 6 mm polyp was removed with a cold snare" is "Some months ago ...": no installed reader read it, in
+# any layout, while its ago twin is held in every layout, so a report narrating an earlier polypectomy read it as
+# today's (45385 READY; in a labelled paragraph N1's future exemption let "Surveillance in 3 years." release it too).
+# The phrase (cues.HISTORICAL_BACK) is read here as routing reads its twin - the cue 'ago', historical, with the twin's
+# span - but ONLY in the reading of a code's own cited evidence (status_for_span(back=True): validation's evidence
+# readings), and ONLY to hold: a performed or incomplete reading the phrase dates becomes the twin's own reading of the
+# same span (historical or uncertain, with the twin's cue); any other reading stays as installed. Routing's own analysis
+# (_route: every family, mention, reference, fact and extent), structure's (N1, N2, N3, P3), the services reader and
+# every other caller of status_for_span read the text exactly as installed. The cycle-2 prototypes measured why
+# (design-r2/u24b): read wherever a document's families or acts are weighed, the phrase RELEASED codes - read by
+# structure, the paragraph N1 held left the other family the only one performed and a site-less act in the Impression
+# bound to it (43239, 43247, 45385 READY); read by routing's own analysis, a historical reading replaced the doubt a
+# delayed or rescheduled colonoscopy's own sentence carries ("This colonoscopy had been pushed two weeks back."), so the
+# family read performed (45385 READY); read by every caller of this function, the services reader dropped a box row's
+# dated polypectomy and freed the base code it bundles (45378 READY). A held reading is the twin's own, so a code that
+# cites today's act as well reads as its ago twin reads: a historical passage is named in a warn beside today's (READY),
+# an uncertain one contests it (held). Integration (2026-11-08, u24b's regress lens, finding 0): converting every held
+# reading to 'uncertain' held where the twin is READY - a code citing today's banding and the earlier session's 'EVL was
+# done 2 weeks back.' - so the twin's own reading is returned, the design's stated claim.
+_POSITIVE_READINGS = ('performed', 'incomplete')
+
+
+def _back_analysis(an: Analysis) -> Optional[Analysis]:
+    """``an`` with the phrase's cues added (cues.HISTORICAL_BACK, read as routing reads "ago"), every routing result
+    of ``an`` kept and a memo of its own; None when the text holds no such phrase. One pass of the phrase, memoised."""
+    key = ('u24-back-analysis',)
+    if key not in an.memo:
+        found = tuple(Cue(m.start(), m.end(), 'historical', name, m.group(0))
+                      for name, pattern in cues.HISTORICAL_BACK for m in pattern.finditer(an.text))
+        twin = None
+        if found:
+            twin = _dc_replace(an, clause_cues=tuple(sorted(an.clause_cues + found, key=lambda c: (c.start, c.end))))
+            if _B2_COORDINATED_KEY in an.memo:
+                twin.memo[_B2_COORDINATED_KEY] = an.memo[_B2_COORDINATED_KEY]  # set by _route, read by its readers
+        an.memo[key] = twin
+    return an.memo[key]
+
+
+def _held_by_back(an: Analysis, start: int, end: int, reading: Reading) -> Reading:
+    """``reading`` (of [start, end) on ``an``), held when it is performed or incomplete and the same span read with the
+    phrase's cues is neither (see above): that reading, the ago twin's own, with its cues. Hold-only by construction.
+    Not held where that reading says only that the phrase dates another thing named before it (ANOTHER_THINGS_TIME: "A 6
+    mm polyp, first seen two years back, was removed ...", "... removed after a positive FIT two months back"): a
+    narrower hold than the ago twin's, whose fail-closed hold there is the installed release's own."""
+    if reading.status not in _POSITIVE_READINGS:
+        return reading
+    twin = _back_analysis(an)
+    if twin is None:
+        return reading
+    dated = _read_span(twin, start, end)
+    if dated.status in _POSITIVE_READINGS or (dated.cues and all(c.endswith(ANOTHER_THINGS_TIME) for c in dated.cues)):
+        return reading  # never where routing's own owner reading gives the time to a test, result or diagnosis
+    return dated  # the ago twin's own reading of the span (historical or uncertain), never a positive one
 
 
 def denying_label_over(text: str, pos: int, service_date: Optional[date] = None) -> Optional[str]:

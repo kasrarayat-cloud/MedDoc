@@ -1298,9 +1298,10 @@ def reference_source_entries(sources: Sequence[ReferenceSourceInfo], service_dat
 
 def span_status(text: str, start: int, end: int, service_date: Optional[date] = None):
     """``studio.gi.detect.status_for_span``, resolved at call time: the routing module owns status language.
-    ``service_date`` is the encounter's effective date, so dated history reads the same here as in routing."""
+    ``service_date`` is the encounter's effective date, so dated history reads the same here as in routing. A code's
+    own evidence is read with ``back`` (U24): a performed reading "<quantity> <time unit>(s) back" dates is held."""
     from studio.gi.detect import status_for_span
-    return status_for_span(text, start, end, service_date)
+    return status_for_span(text, start, end, service_date, back=True)
 
 
 def evidence_readings(text: str, spans: Sequence[EvidenceSpan],
