@@ -361,13 +361,18 @@ review-agent (the customer page) and ops-agent (the operator views).
       acceptance/tools/build_c5_manifest.py (C5_SEALED_AT=2026-11-08T08:07:40Z), which verifies the four sha256 values
       first.
     - A question the author expects is answered "Not documented" through the details panel, naming its code.
-  - **c4, walked again as the repairs' evidence.** The same bytes reuse the retained Corti, Astra and Fable results for
-    the first revision (duplicate prevention), so nothing is sent for them: the walk reads them under this revision's
-    readers. Offline, c4b and c4c read every code their walk expects; c4a's 45385 reads READY and its 43239, 43248 and
+  - **c4, walked again as the repairs' evidence.** The same bytes reuse the retained Corti run and the Astra and Fable
+    first readings for the first revision (duplicate prevention: their requests are identical), so nothing is sent for
+    those. The walk reads them under this revision's readers. Each participant's peer review is sent again, because its
+    request carries CPT Studio's own reading after the first assessment (studio/jobs.py _cpt_studio_reading: its held
+    and excluded proposals and open questions), and this revision changes that reading for these documents. So the
+    c4 walk sends up to two peer reviews per document (Astra and Fable), as the recall round's identical c1c re-upload
+    sent its two. A bounded second review is sent only where the engine owes one and no identical retained request
+    exists. Offline, c4b and c4c read every code their walk expects; c4a's 45385 reads READY and its 43239, 43248 and
     45381 stay held (other open classes), so c4a is expected to fail again on those three.
-- **What it sends:** real requests to Corti, Astra and Fable for c5 through the existing authorized accounts, one document
-  at a time (concurrency one), with the product's own deadlines, Stop and duplicate prevention. Its usage and cost are
-  recorded from the provider runs it creates.
+- **What it sends:** real requests to Corti, Astra and Fable for c5, and the c4 peer reviews above, through the existing
+  authorized accounts, one document at a time (concurrency one), with the product's own deadlines, Stop and duplicate
+  prevention. Its usage and cost are recorded from the provider runs it creates.
 - **What it claims:** every approval is labelled an agent-executed synthetic review, and no human clinical review is
   claimed. A c5 document that carries the shape of an open finding fails the walk all the same; it is reported as that
   open finding, not hidden.
