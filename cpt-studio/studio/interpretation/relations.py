@@ -28,13 +28,18 @@ UNRESOLVED(status)); then N not_performed gives CONTRADICTION and N uncertain gi
 MODEL CLAIMS (6.4; C-11). Each contradicts[] entry normalize handed over is judged by the same table (a planned statement
 judged as a statement, giving DOUBT). A claim the table finds INDEPENDENT is a ``dismissed_claim`` only when a HARD literal
 establishes the difference - disjoint places, distances or specimen labels (identity.HARD), a time with a date literal,
-a performer named with a title or credential, two devices with surface forms, verified different families, different
-verified kinds; otherwise it is UNRESOLVED on the attribute of the difference (C-11: a size-only distinctness never
-dismisses Gemini's own claim). UNRESOLVED, DOUBT and CONTRADICTION stand as computed, marked as claimed. A claim between
-two positive events matters only where a code depends on what they disagree on: a hard difference of place, time,
-performer or family dismisses it (two acts); different kinds give UNRESOLVED(kind), different statuses UNRESOLVED(status),
-two devices UNRESOLVED(technique) where a code depends on the technique (and dismiss it otherwise), any other difference
-or unknown UNRESOLVED on its attribute - recorded once for each side, so each is the positive side of one.
+a performer named with a title or credential (or two other clinicians whose names share no token), two devices with
+surface forms, two families each named by the procedure-name check; otherwise it is UNRESOLVED on the attribute of the
+difference (C-11: a size-only distinctness never dismisses Gemini's own claim; nor does a time read by its marker alone,
+another clinician named by no name, an "other" device, or a family verified by its binding alone). A claim whose
+statement does not concern the act - two kinds - is dismissed only by a hard row of the same table: a kind is verified
+by its binding alone (contract 5.6), never a literal, so otherwise it is UNRESOLVED(kind) (review finding 2: an EMR
+denial of the very lesion a snare removed had been dismissed as "another act"). UNRESOLVED, DOUBT and CONTRADICTION stand
+as computed, marked as claimed. A claim between two positive events matters only where a code depends on what they
+disagree on: a hard difference of place, time, performer or family dismisses it (two acts); different kinds give
+UNRESOLVED(kind), different statuses UNRESOLVED(status), two devices UNRESOLVED(technique) where a code depends on the
+technique (and dismiss it otherwise), any other difference or unknown UNRESOLVED on its attribute - recorded once for each
+side, so each is the positive side of one.
 
 STEPS (6.6): every verified ``part_of`` is a ``step`` relation (statement: the whole act; event: the step), named by the
 catalogue rule it carries: ``lift_injection`` (an injection or tattoo in an EMR or ESD), ``resection_technique`` (a snare
@@ -45,14 +50,19 @@ depends on whether they are on one lesion - a biopsy beside a removal (``biopsy_
 biopsy beside an EMR or ESD (``resection_technique``), an injection (never a tattoo, never one whose hemostasis purpose is
 verified) beside an EMR or ESD (``lift_injection``) - get a ``bundling_identity`` relation (statement: the removal or
 resection; event: the act whose code it makes depend on identity) when that identity is in doubt and their places do not
-set them apart. Places are compared only when both are known (a verified target landmark, a verified lesion's site, or
-the site of a lesion named but not verified to be): known places that are not compatible - disjoint, or not comparable,
-such as an anastomosis beside a segment - ask nothing (6.6: "at compatible landmarks"; FINAL 5.6: the E15 biopsy is
-unaffected). In doubt: both verified to lesions possibly the same; a biopsy and a removal of one verified group lesion
-that cite no common passage (C-2); one names a lesion it is not verified to be, at compatible places, or with a place
-unknown where they name one lesion or two possibly the same; an injection whose lesion is not verified or whose place, or
-the resection's, is not known (C-5). On one verified single lesion the engine bundles and nothing is asked; with no
-lesion named the acts are each their own, as reconcile._bundled reads them.
+set them apart. Places are each act's OWN verified places (Context.places: its verified target landmark, its verified
+lesion's site), compared only when both acts have one: verified places that are not compatible - disjoint, or not
+comparable, such as an anastomosis beside a segment - ask nothing (6.6: "at compatible landmarks"; FINAL 5.6: the E15
+biopsy is unaffected). The site of a lesion an act names but is not verified to be is no place of that act's: an
+unverified identifier never sets two acts apart (P3; review finding 6), whether through that site or through that
+lesion's distinctness. In doubt, at compatible or unknown places: both verified to lesions possibly the same; a biopsy
+and a removal of one verified group lesion that cite no common passage (C-2); either names a lesion it is not verified to
+be; an injection whose lesion is not verified or whose place, or the resection's, is not known (C-5); and neither names a
+lesion while both are stated in one passage (an own kind, status or target passage in common) - legacy's one-clause rule
+(reconcile._one_resection, reconcile.py:714-724), asked instead of decided, because a missing identifier never makes a
+non-match (P3; review finding 4). On one verified single lesion the engine bundles and nothing is asked. Each act is its
+own where neither names a lesion and they are stated apart (random biopsies told in their own sentence), and where one is
+verified to a lesion and the other names none (Gemini's own reading ties only that act to it).
 
 Pure and Django-free; imports nothing from studio.gi but through mapping's reference tables (FINAL 3.1).
 """
@@ -77,7 +87,7 @@ ATTRIBUTES = ('procedure', 'time', 'performer', 'technique', 'target', 'scope', 
 REASONS = (
     # INDEPENDENT, and a dismissed claim's reason
     'another_procedure', 'another_time', 'another_performer', 'another_technique', 'another_lesion', 'another_site',
-    'exceptive', 'another_act', 'no_act',
+    'exceptive', 'no_act',
     # UNRESOLVED
     'procedure_unresolved', 'session_unresolved', 'time_unresolved', 'performer_unresolved', 'technique_unresolved',
     'scope_unresolved', 'identity_unresolved', 'possibly_same_lesion', 'site_unresolved', 'site_overlap',
@@ -178,10 +188,20 @@ def _name_tokens(attribute: Mapping) -> frozenset:
 
 # --- the rows ----------------------------------------------------------------------------------------------------------
 
+def named_family(procedure: Mapping) -> bool:
+    """Whether a procedure attribute's family rests on a literal: usable, with its words through the procedure-name
+    check (several current families; contract 5.3). A family verified by its located words alone (one family) or by
+    the single-family default is Gemini's reading, never a literal (C-11)."""
+    return verify.usable(procedure) and 'procedure_name' in (procedure.get('checks') or ())
+
+
 def procedure_row(context: Context, statement: Mapping, act: Mapping) -> Row:
     first, second = statement['family'], act['family']
     if verify.usable(statement['procedure']) and verify.usable(act['procedure']) and first and second:
-        return Row('procedure', SAME) if first == second else Row('procedure', DIFFERENT, 'another_procedure', True)
+        if first == second:
+            return Row('procedure', SAME)
+        hard = named_family(statement['procedure']) and named_family(act['procedure'])
+        return Row('procedure', DIFFERENT, 'another_procedure', hard)
     if not context.multi_family and len({family for family in (first, second) if family}) <= 1:
         return Row('procedure', SAME)
     return Row('procedure', UNKNOWN, 'procedure_unresolved')
@@ -294,11 +314,16 @@ def target_row(context: Context, statement: Mapping, act: Mapping) -> Row:
 
 # --- one pair ----------------------------------------------------------------------------------------------------------
 
+def rows_of(context: Context, statement: Mapping, act: Mapping) -> tuple:
+    """The pairing table's rows for ``statement`` against ``act``, in order (module docstring)."""
+    return (procedure_row(context, statement, act), time_row(statement, act), performer_row(statement, act),
+            technique_row(statement, act), target_row(context, statement, act))
+
+
 def pair(context: Context, statement: Mapping, act: Mapping) -> Verdict:
     """The pairing table's verdict for ``statement`` (not_performed, uncertain or - for a claim - planned) against the
     positive ``act`` (module docstring)."""
-    rows = (procedure_row(context, statement, act), time_row(statement, act), performer_row(statement, act),
-            technique_row(statement, act), target_row(context, statement, act))
+    rows = rows_of(context, statement, act)
     different = [row for row in rows if row.result == DIFFERENT]
     if different:
         return Verdict(INDEPENDENT, different[0].attribute, different[0].reason, any(row.hard for row in different), rows)
@@ -316,11 +341,16 @@ def pair(context: Context, statement: Mapping, act: Mapping) -> Verdict:
 
 def judge_claim(context: Context, statement: Mapping, act: Mapping) -> Verdict:
     """A model's claim that ``statement`` contradicts the positive ``act`` (C-11): the table's verdict, an INDEPENDENT
-    that rests on no hard literal becoming UNRESOLVED on the attribute of the difference."""
+    that rests on no hard literal becoming UNRESOLVED on the attribute of the difference. A statement of another kind
+    is set apart only by a hard row of the table; otherwise the claim asks whether it concerns the act."""
     if not concerns(context, statement, act):
+        rows = rows_of(context, statement, act)
+        hard = [row for row in rows if row.result == DIFFERENT and row.hard]
+        if hard:
+            return Verdict(INDEPENDENT, hard[0].attribute, hard[0].reason, True, rows)
         if verify.usable(statement['kind']) and verify.usable(act['kind']):
-            return Verdict(INDEPENDENT, 'kind', 'another_act', True)
-        return Verdict(UNRESOLVED, 'scope', 'kind_unresolved')
+            return Verdict(UNRESOLVED, 'kind', 'claim_kind', rows=rows)
+        return Verdict(UNRESOLVED, 'scope', 'kind_unresolved', rows=rows)
     verdict = pair(context, statement, act)
     if verdict.type == INDEPENDENT and not verdict.hard:
         return Verdict(UNRESOLVED, verdict.attribute, 'claim_soft_difference', rows=verdict.rows)
@@ -492,27 +522,16 @@ def _own_passages(event: Mapping) -> set:
     return {pid for name in ('kind', 'status', 'target') for pid in event[name].get('passages') or ()}
 
 
-def bundling_places(context: Context, event: Mapping) -> frozenset:
-    """The places a bundling identity compares: the event's verified places (Context.places), and the verified site of
-    a lesion it names but is not verified to be - the place it claims, which can only set the two acts apart."""
-    places = set(context.places(event))
-    target = event['target']
-    if target['identity'] == identity.UNRESOLVED and target['lesion'] in context.facts:
-        site = context.facts[target['lesion']].landmark
-        if site:
-            places.add(site)
-    return frozenset(places)
-
-
 def _compatible(first, second) -> bool:
     return bool(first) and bool(second) and all(lexicon.compatible(one, two) for one in first for two in second)
 
 
-def identity_in_doubt(draft, context: Context, rule: str, whole: Mapping, part: Mapping) -> bool:
+def identity_in_doubt(context: Context, rule: str, whole: Mapping, part: Mapping) -> bool:
     """Whether the bundling of ``part`` beside ``whole`` under ``rule`` depends on an identity not established (module
-    docstring). Known places that are not compatible - disjoint, or not comparable (an anastomosis beside a segment) -
-    ask nothing (contract 6.6: "at compatible landmarks"; FINAL 5.6: the E15 biopsy is unaffected)."""
-    places, part_places = bundling_places(context, whole), bundling_places(context, part)
+    docstring). Each act's OWN verified places (Context.places) that are not compatible - disjoint, or not comparable
+    (an anastomosis beside a segment) - ask nothing (contract 6.6: "at compatible landmarks"; FINAL 5.6: the E15 biopsy
+    is unaffected); an unverified link sets nothing apart (P3)."""
+    places, part_places = context.places(whole), context.places(part)
     known = bool(places) and bool(part_places)
     if known and not _compatible(places, part_places):
         return False
@@ -525,14 +544,11 @@ def identity_in_doubt(draft, context: Context, rule: str, whole: Mapping, part: 
     identities = (whole['target']['identity'], part['target']['identity'])
     if rule == 'lift_injection':  # C-5: its lesion or its site unresolved
         return identity.UNRESOLVED in identities or not known
-    if identity.UNRESOLVED not in identities:
-        return False  # no lesion named, or one verified and none named: each act is its own (reconcile._bundled)
-    if known:
-        return True  # compatible places
-    named = list(dict.fromkeys(event['target']['lesion'] for event in (whole, part) if event['target']['lesion']))
-    if len(named) == 2:
-        return identity.same_or_possibly_same(draft, named[0], named[1])
-    return len(named) == 1
+    if identity.UNRESOLVED in identities:
+        return True  # a lesion named but not established, at compatible or unknown places
+    if lesion or other:
+        return False  # one verified to a lesion, the other naming none: Gemini's reading ties only that act to it
+    return bool(_own_passages(whole) & _own_passages(part))  # neither names a lesion: one statement asks (P3)
 
 
 def _bundling(draft, context: Context) -> None:
@@ -548,6 +564,6 @@ def _bundling(draft, context: Context) -> None:
             step = part['part_of']
             if isinstance(step, Mapping) and step.get('state') == 'verified' and step.get('value') == whole['id']:
                 continue  # a verified step of it: bundled by its part_of
-            if identity_in_doubt(draft, context, rule, whole, part):
+            if identity_in_doubt(context, rule, whole, part):
                 draft.relation(BUNDLING, statement=whole['id'], event=part['id'], attribute='target', reason=rule,
                                passages=_passages(whole, part, 'target'))

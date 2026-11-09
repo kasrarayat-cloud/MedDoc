@@ -10,7 +10,10 @@ linked steps - then stored and read back by the store. Nothing is sent.
   as such, with the structural fact the engine reads beside it: two current examinations of one family leave that
   session unresolved (FINAL 7.8).
 - S2, E15: merged target words locate nowhere; a link to the erosions by the biopsy's own words has no lexical tie; erosion
-  words taken from the erosions' sentence fail the statement tie; the biopsy code is untouched by any bundling question.
+  words taken from the erosions' sentence fail the statement tie. No bundling question where the biopsy names no lesion,
+  or where its own verified place (the anastomosis) cannot be compared with the removal's; where it has no verified place
+  and its link is unverified (S2c), nothing sets it apart from the removed polyp, so its code gets the one bundling
+  question - asked, never READY and never bundled (P3; S03 review finding 6: an unverified link's site sets nothing apart).
 - S3, E13: an extent invented for a digital examination is discarded and never attached or stored.
 - S4, v5: strings cut before their closing parenthesis bind, the passages are extended to the document's own ")", names
   compare equal, and nothing reads as another performer."""
@@ -196,8 +199,14 @@ class S2MergedTarget(SimpleTestCase):
         target = ev(inventory, 'E2')['target']
         self.assertEqual((target['lesion'], target['identity'], target['identity_by']['reasons']),
                          ('L1', 'unresolved', ['identity_not_in_statement']))
+        self.assertEqual((target['value'], target['state'], target['reasons']),
+                         ('anastomosis', 'unverified', ['landmark_missing']))  # its words name no place
         self.assert_snare_link_verified(inventory)
-        self.assert_no_bundling_question(inventory)
+        # the biopsy has no verified place, and the erosions' site reaches it only through a link that failed: nothing
+        # sets it apart from the removed polyp, so its code asks whether it was taken from that lesion (P3)
+        self.assertEqual([(item['statement'], item['event'], item['attribute'], item['reason'])
+                          for item in inventory.events['relations'] if item['type'] == 'bundling_identity'],
+                         [('E3', 'E2', 'target', 'biopsy_of_removed_lesion')])
 
     def test_the_twin_stays_verified(self):
         inventory = inventory_of('s2-twin-correct-targets')

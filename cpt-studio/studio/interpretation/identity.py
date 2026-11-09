@@ -15,8 +15,10 @@ a literal shows it, in this order:
 - ``distances``: both state distances (cm) and none is shared;
 - ``specimens``: both carry specimen labels ("specimen A", "jar 2") and none is shared;
 - ``sizes``: the sizes differ beyond the tolerance - more than 2 mm AND more than 20% of the larger - and no shared
-  literal says "same": no shared distance, and not one verified site on both (C-11: a lesion registered twice with a
-  9 mm and a 1 cm measurement at one place must not hide a contradiction behind two ids);
+  literal says "same": no shared distance, and no site literal of one compatible with a site literal of the other (one
+  place, or one holding the other: the sigmoid colon and the left colon), each lesion's site literals read where its
+  distances are - its verified site, and the landmarks its site's and its description's own words name (C-11: a lesion
+  registered twice with a 9 mm and a 1 cm measurement at one place must not hide a contradiction behind two ids);
 - ``passage``: both are single lesions whose descriptions sit, apart, in one passage (the registry split one passage
   into two entries), neither description being only reference words.
 Otherwise they are ``possibly_same_as`` each other. ``landmarks``, ``distances`` and ``specimens`` are HARD literals: only
@@ -124,14 +126,16 @@ def _text(span: Optional[Mapping]) -> str:
 @dataclass(frozen=True)
 class LesionFacts:
     """What the identity and distinctness rules read of one lesion: whether it is verified, its verified and placed site
-    landmark, the landmarks its literal check compares (that site's and those its description names), its sizes (mm)
-    and distances (cm) from its own located words, its specimen labels, its description span and those of its OWN
-    passages that hold it, and its description's content tokens."""
+    landmark, the landmarks its literal check compares (that site's and those its description names), the site literals
+    C-11's "says same" reads (``sites``: those and the landmarks its site's own located words name, read where its
+    distances are), its sizes (mm) and distances (cm) from its own located words, its specimen labels, its description
+    span and those of its OWN passages that hold it, and its description's content tokens."""
     id: str
     verified: bool
     single: bool
     landmark: str
     landmarks: tuple
+    sites: tuple
     sizes: tuple
     distances: tuple
     specimens: tuple
@@ -149,9 +153,11 @@ def lesion_facts(draft) -> dict:
         text, site_text = _text(words), _text(site['words'])
         landmark = site['value'] if verify.usable(site) and site['value'] not in lexicon.UNPLACED_LANDMARKS else ''
         named = tuple(name for name in lexicon.landmarks_named(text) if name != landmark)
+        landmarks = ((landmark,) if landmark else ()) + named
         facts[lid] = LesionFacts(
             id=lid, verified=lesion['state'] == VERIFIED, single=lesion['multiplicity'] == 'single',
-            landmark=landmark, landmarks=((landmark,) if landmark else ()) + named,
+            landmark=landmark, landmarks=landmarks,
+            sites=tuple(dict.fromkeys(landmarks + lexicon.landmarks_named(site_text))),
             sizes=tuple(lesion['size']['mm']) + literals.sizes_mm(text),
             distances=tuple((site['literals'] or {}).get('distances_cm', ())) + literals.distances_cm(text),
             specimens=tuple(dict.fromkeys(specimen_labels(text) + specimen_labels(site_text))),
@@ -194,6 +200,12 @@ def _apart(first: Optional[Mapping], second: Optional[Mapping]) -> bool:
     return first['end'] <= second['start'] or second['end'] <= first['start']
 
 
+def same_place(first: LesionFacts, second: LesionFacts) -> bool:
+    """Whether a site literal says the two lesions may be at one place (C-11): a site literal of one is one place with,
+    or holds or lies in, a site literal of the other (lexicon.compatible), read over every site literal of each."""
+    return any(lexicon.compatible(one, two) for one in first.sites for two in second.sites)
+
+
 def distinct_reason(first: LesionFacts, second: LesionFacts) -> str:
     """Why two lesions are distinct (DISTINCT_BY, in its order), or '' when no literal establishes it."""
     if first.landmark and second.landmark and lexicon.disjoint(first.landmark, second.landmark):
@@ -203,8 +215,7 @@ def distinct_reason(first: LesionFacts, second: LesionFacts) -> str:
         return DISTANCES
     if first.specimens and second.specimens and not set(first.specimens) & set(second.specimens):
         return SPECIMENS
-    same_site = bool(first.landmark) and first.landmark == second.landmark
-    if sizes_apart(first.sizes, second.sizes) and not shared_distance and not same_site:
+    if sizes_apart(first.sizes, second.sizes) and not shared_distance and not same_place(first, second):
         return SIZES
     if (first.single and second.single and first.words and second.words and not first.reference_only
             and not second.reference_only and set(first.passages) & set(second.passages)

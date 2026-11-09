@@ -219,6 +219,44 @@ class Distinctness(SimpleTestCase):
         self.assert_pair(DISTINCT, les('L1', '3 mm polyp', 'P1', size_words='3 mm'),
                          les('L2', '9 mm polyp', 'P2', size_words='9 mm'), lines, 'sizes')  # the twin: no distance read
 
+    def test_c11_a_site_named_in_both_descriptions_says_same(self):
+        # review finding 3, probe B2: no site attribute on either lesion, but each description names the sigmoid colon;
+        # a site literal is read where a distance is (the site's words and the description's), so it says "same"
+        lines = {'P1': 'A 6 mm sessile polyp in the sigmoid colon was removed with a cold snare.',
+                 'P2': 'Impression: 1 cm sessile polyp in the sigmoid colon, not removed.'}
+        self.assert_pair(SAME, les('L1', '6 mm sessile polyp in the sigmoid colon', 'P1', size_words='6 mm'),
+                         les('L2', '1 cm sessile polyp in the sigmoid colon', 'P2', size_words='1 cm'), lines)
+        # one lesion's verified site and the other's description name it: the same
+        self.assert_pair(SAME, les('L1', '6 mm sessile polyp', 'P1', landmark='sigmoid_colon', site_words='sigmoid colon',
+                                   size_words='6 mm'),
+                         les('L2', '1 cm sessile polyp in the sigmoid colon', 'P2', size_words='1 cm'), lines)
+        # the twin: descriptions naming places set apart say nothing is the same - the sizes decide
+        lines = {'P1': 'A 6 mm sessile polyp in the sigmoid colon was removed.', 'P2': 'A 1 cm sessile polyp in the cecum.'}
+        self.assert_pair(DISTINCT, les('L1', '6 mm sessile polyp in the sigmoid colon', 'P1', size_words='6 mm'),
+                         les('L2', '1 cm sessile polyp in the cecum', 'P2', size_words='1 cm'), lines, 'sizes')
+
+    def test_c11_compatible_sites_say_same(self):
+        # review finding 3, probe B1: the left colon holds the sigmoid colon, so the two places can be one
+        lines = {'P1': 'A 6 mm sessile polyp in the sigmoid colon was removed with a cold snare.',
+                 'P2': 'Impression: 1 cm sessile polyp in the left colon, not removed.'}
+        self.assert_pair(SAME, les('L1', '6 mm sessile polyp', 'P1', landmark='sigmoid_colon', site_words='sigmoid colon',
+                                   size_words='6 mm'),
+                         les('L2', '1 cm sessile polyp', 'P2', landmark='left_colon', site_words='left colon',
+                             size_words='1 cm'), lines)
+
+    def test_partly_shared_distances_or_specimen_labels_are_no_difference(self):
+        # review finding 5, mutant (e): only lists that share NOTHING establish distinctness
+        lines = {'P1': 'A flat polyp was seen at 25 cm and again at 30 cm.',
+                 'P2': 'A pale polyp was seen at 30 cm and at 35 cm.'}
+        self.assert_pair(SAME, les('L1', 'flat polyp was seen at 25 cm and again at 30 cm', 'P1'),
+                         les('L2', 'pale polyp was seen at 30 cm and at 35 cm', 'P2'), lines)
+        lines = {'P1': 'A flat polyp (specimen A, specimen B) was seen.', 'P2': 'A pale polyp (specimen B, specimen C).'}
+        self.assert_pair(SAME, les('L1', 'flat polyp (specimen A, specimen B)', 'P1'),
+                         les('L2', 'pale polyp (specimen B, specimen C)', 'P2'), lines)
+        lines = {'P1': 'A flat polyp (specimen A, specimen B) was seen.', 'P2': 'A pale polyp (specimen C, specimen D).'}
+        self.assert_pair(DISTINCT, les('L1', 'flat polyp (specimen A, specimen B)', 'P1'),
+                         les('L2', 'pale polyp (specimen C, specimen D)', 'P2'), lines, 'specimens')
+
     def test_size_ranges_compare_by_their_nearest_ends(self):
         lines = {'P1': 'A 5-7 mm polyp was seen.', 'P2': 'An 8 mm polyp was seen.', 'P3': 'A 10 mm polyp was seen.'}
         self.assert_pair(SAME, les('L1', '5-7 mm polyp', 'P1', size_words='5-7 mm'),
@@ -413,6 +451,30 @@ class Discrimination(SimpleTestCase):
         self.assertEqual(ev(draft, 'E1')['target']['identity_by']['by']['discrimination'], 'literal')
         self.assertEqual(identity_of(draft, 'E2'), ('verified', []))
         self.assertEqual(ev(draft, 'E2')['target']['identity_by']['by']['discrimination'], 'content_word')
+
+    def test_every_tied_lesion_must_be_told_apart(self):
+        # review finding 5, mutant (b): a content word sets the target apart from the sessile polyp, but not from a
+        # second pedunculated polyp, which is the nearer description: ambiguous
+        lines = {'P1': 'A pedunculated polyp was seen in the cecum.', 'P2': 'A sessile polyp was also seen.',
+                 'P3': 'A second pedunculated polyp was seen.', 'P4': 'The pedunculated polyp was removed with a cold snare.'}
+        lesions = [les('L1', 'pedunculated polyp', 'P1', landmark='cecum', site_words='cecum'),
+                   les('L2', 'sessile polyp', 'P2'), les('L3', 'pedunculated polyp', 'P3')]
+        draft = linked(lines, [snare(passage='P4', target=tg('L1', 'not_stated', 'The pedunculated polyp', ['P4']))],
+                       lesions)
+        self.assertEqual(identity_of(draft), ('unresolved', ['identity_ambiguous']))
+        draft = linked(lines, [snare(passage='P4', target=tg('L3', 'not_stated', 'The pedunculated polyp', ['P4']))],
+                       lesions)
+        self.assertEqual(identity_of(draft), ('verified', []))  # the twin: the nearest description is adjacency's
+        self.assertEqual(ev(draft, 'E1')['target']['identity_by']['by']['discrimination'], 'adjacency')
+
+    def test_adjacency_is_never_a_tie(self):
+        # review finding 5, mutant (c): the target words overlap both descriptions - both are nearest, neither alone
+        lines = {'P1': 'The sessile polyp and a second sessile polyp were removed with a cold snare.'}
+        lesions = [les('L1', 'sessile polyp', 'P1'), les('L2', 'second sessile polyp', 'P1')]
+        both = snare(status_words='were removed with a cold snare',
+                     target=tg('L1', 'not_stated', 'The sessile polyp and a second sessile polyp', ['P1']))
+        draft = linked(lines, [both], lesions)
+        self.assertEqual(identity_of(draft), ('unresolved', ['identity_ambiguous']))
 
     def test_adjacency_needs_located_passages(self):
         lines = {'P1': 'A flat polyp was seen in the cecum.', 'P2': 'A flat polyp was seen in the rectum.',

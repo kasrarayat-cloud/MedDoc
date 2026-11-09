@@ -11,8 +11,8 @@ import sys
 from django.test import SimpleTestCase
 
 from studio import context_facts
-from studio.interpretation import dates
-from tests.test_interpretation_identity import normalized
+from studio.interpretation import dates, normalize
+from tests.test_interpretation_identity import accepted, answer, normalized
 
 WORDS = {'start': 17, 'end': 27, 'text': '11/09/2026', 'match': 'exact'}
 
@@ -97,13 +97,43 @@ class Rows(SimpleTestCase):
         self.assertEqual(row(record, '2026-11-09'), ('settles', False, '2026-11-09', 'user'))
         self.assertEqual(row(record, '2026-11-10'), ('conflict_unverifiable', True, None, 'conflict'))
 
-    def test_refinement_no_own_evidence_limits_no_answer(self):
+    def test_an_unverified_date_holds_whether_or_not_anything_is_quotable(self):
+        # contract 8.2: a stated, unverified (or opened) date holds every member value outside its readings. Whether a
+        # span of it can be quoted decides only the evidence and the note, never the hold (review finding 1: a date
+        # with nothing quotable had let the member's date supply it and go to Corti - the 2026-10-27 incident class).
         quotable = dos('stated', passages=['P1'])  # words did not bind, the passage located
         self.assertEqual(row(quotable, '2026-11-10'), ('conflict_unverifiable', True, None, 'conflict'))
         self.assertEqual(dates.member_date_state(quotable, '2026-11-10', PASSAGES).evidence,
                          ({'start': 0, 'end': 27, 'text': 'Date of service: 11/09/2026'},))
-        nothing = dos('stated', passages=['P2'])  # its only passage did not locate: nothing to compare with
-        self.assertEqual(row(nothing, '2026-11-10'), ('supplies', False, '2026-11-10', 'user'))
+        for name, record in (('its only passage unlocated', dos('stated', passages=['P2'])),
+                             ('no passage at all', dos('stated')),
+                             ('several, no candidate, nothing located', dos('several', passages=['P2']))):
+            found = dates.member_date_state(record, '1998-01-01', PASSAGES)
+            with self.subTest(name):
+                self.assertEqual((found.state, found.hold, found.effective, found.origin, found.corti_date),
+                                 ('conflict_unverifiable', True, None, 'conflict', None))
+                self.assertEqual(found.evidence, ())
+                self.assertEqual(found.note, dates.USER_CONFLICT_NOTE.format(
+                    user='1998-01-01', document=dates.UNCHECKED_DOCUMENT_DATE))
+                self.assertFalse(found.offer_document_date)
+
+    def test_the_published_two_argument_call_holds_as_the_three_argument_call_does(self):
+        # FINAL and the contract publish member_date_state(date_of_service, member_value): leaving the passages out may
+        # change what is quoted, never whether the encounter is held or which date is taken
+        records = [STATED, dos('stated', passages=['P1']), dos('stated', passages=['P1'], readings=['2026-11-09']),
+                   dos('stated', words=WORDS, passages=['P1']), dos('stated', passages=['P2']), dos('stated'),
+                   dos('several', candidates=['2026-11-08', '2026-11-09'], passages=['P1']),
+                   dos('several', passages=['P1'], readings=['2026-11-09']), dos('several'), dos('not_stated'),
+                   dos('not_stated', birth=[other('1960-01-02', 'DOB: 01/02/1960')])]
+        for index, record in enumerate(records):
+            for member in ('', '2026-11-09', '2026-11-08', '1998-01-01', '1960-01-02'):
+                three = dates.member_date_state(record, member, PASSAGES)
+                two = dates.member_date_state(record, member)
+                with self.subTest(index=index, member=member):
+                    self.assertEqual((two.state, two.hold, two.effective, two.corti_date, two.origin),
+                                     (three.state, three.hold, three.effective, three.corti_date, three.origin))
+        two = dates.member_date_state(dos('stated', passages=['P1']), '1998-01-01')
+        self.assertEqual((two.state, two.hold, two.corti_date), ('conflict_unverifiable', True, None))
 
     def test_refinement_several_with_no_verified_candidate_reads_its_readings(self):
         record = dos('several', passages=['P1'], readings=['2026-11-09'])
@@ -225,6 +255,21 @@ class LegacyNotes(SimpleTestCase):
         self.assertEqual((theirs.origin, mine.origin), ('user', 'document'))  # the trace's provenance defect, fixed
         self.assertEqual(theirs.value, mine.effective)
 
+    def test_the_note_of_a_date_with_nothing_quotable_holds_in_both_images(self):
+        # merge_user_values has no such row (a fact with no evidence limits no answer there), so the note is written
+        # with USER_CONFLICT_NOTE and a fixed phrase: the one shared is_member_conflict - and the rollback image's
+        # copy - holds the encounter by its prefix
+        from studio.gi import context as legacy  # test-only
+        from studio.types import Fact
+        found = dates.member_date_state(dos('stated', passages=['P2']), '1998-01-01', PASSAGES)
+        self.assertEqual(found.note, 'Encounter metadata entered by a workspace member gives 1998-01-01; the document '
+                                     'gives a date of service this service could not check. Both are kept and neither '
+                                     'is used until they agree: correct the metadata, clear it, or add an addendum to '
+                                     'the document.')
+        self.assertTrue(context_facts.is_member_conflict({'origin': found.origin, 'note': found.note}))
+        self.assertTrue(legacy.is_member_conflict(Fact('service_date', None, found.origin, (), found.note)))
+        self.assertEqual(context_facts.documented_values(Fact('service_date', None, found.origin, (), found.note)), ())
+
     def test_the_document_conflict_note_reads_back_its_candidates(self):
         from studio.types import Fact
         note = dates.member_date_state(dos('several', candidates=['2026-11-08', '2026-11-09']), '').note
@@ -248,6 +293,43 @@ class FromAnInventory(SimpleTestCase):
             {'start': 17, 'end': 27, 'text': '11/09/2026'},)))
         self.assertTrue(found.note.startswith('Encounter metadata entered by a workspace member gives 2026-11-08; '
                                               'the document gives 2026-11-09.'))
+
+    def test_a_stated_date_whose_words_bind_nowhere_holds_a_members_other_date(self):
+        # review finding 1's probes: Gemini states the date, but nothing of it binds - its quote differs from the
+        # document in case (the Locator folds none), its words cite no passage, or its passage id is undefined. The
+        # member's 1998-01-01 is held, never taken nor sent to Corti; the date its readings hold would still settle it
+        def inventory(change) -> tuple:
+            value, text = answer({'P1': 'Cold forceps biopsies were taken from the cecum.'})
+            change(value)
+            found = normalize.normalize(accepted(value), text)
+            return found.encounter_facts['date_of_service'], found.events['passages']
+
+        def case_differs(value):
+            value['passages'][0]['text'] = 'Date of Service: 11/09/2026.'
+
+        def no_passage(value):
+            value['encounter']['date_of_service']['passages'] = []
+
+        def undefined_passage(value):
+            value['encounter']['date_of_service']['passages'] = ['P7']
+
+        for change, reason in ((case_differs, 'passage_unlocated'), (no_passage, 'words_unlocated'),
+                               (undefined_passage, 'passage_unknown')):
+            record, passages = inventory(change)
+            with self.subTest(reason):
+                self.assertEqual((record['state'], record['verified'], record['words'], record['reasons'],
+                                  record['readings']), ('stated', False, None, [reason], []))
+                for found in (dates.member_date_state(record, '1998-01-01', passages),
+                              dates.member_date_state(record, '1998-01-01')):
+                    self.assertEqual((found.state, found.hold, found.effective, found.corti_date),
+                                     ('conflict_unverifiable', True, None, None))
+                self.assertEqual(dates.corti_date(record, '1998-01-01', passages), None)
+                self.assertEqual(dates.effective_date(record, '1998-01-01'), None)
+        # the positive twin: the date's words bind, though not to the date Gemini gave - its reading settles it
+        record, passages = inventory(lambda value: value['encounter']['date_of_service'].update(value='2026-11-08'))
+        self.assertEqual((record['verified'], record['readings']), (False, ['2026-11-09']))
+        self.assertEqual(row(record, '2026-11-09', passages), ('settles', False, '2026-11-09', 'user'))
+        self.assertEqual(row(record, '1998-01-01', passages), ('conflict_unverifiable', True, None, 'conflict'))
 
 
 if __name__ == '__main__':  # pragma: no cover

@@ -267,6 +267,65 @@ class Target(SimpleTestCase):
                          lesions=lesions, extra=lines)
         self.assertEqual(verdict(listed), CONTRADICTION)
 
+    def test_listed_targets_one_distinct_and_one_possibly_the_same(self):
+        # review finding 5, mutant (d): a lesion distinct from SOME listed lesions is not distinct from the list
+        lines = {'P3': 'A 4 mm flat polyp was seen in the cecum.', 'P4': 'A pale polyp was also seen.'}
+        lesions = (L1, les('L2', '4 mm flat polyp', 'P3', landmark='cecum', site_words='cecum'),
+                   les('L3', 'pale polyp', 'P4'))
+        inventory = pairing('Neither the flat nor the pale polyp was removed.', removed(),
+                            denial(status_words='Neither the flat nor the pale polyp was removed',
+                                   scope=sc('listed_targets', 'Neither the flat nor the pale polyp', ['P2'], ['L2', 'L3'])),
+                            lesions=lesions, extra=lines)
+        self.assertEqual(verdict(inventory), ('unresolved', 'target', 'possibly_same_lesion'))
+
+    def test_listed_targets_at_places_disjoint_from_an_acts_own(self):
+        # review finding 5, the listed another_site arm: an act verified to no lesion, at a verified place disjoint
+        # from every listed lesion's verified site
+        lines = {'P3': 'A 4 mm flat polyp was seen in the cecum.', 'P4': 'A 3 mm pale polyp was seen in the rectum.'}
+        lesions = (les('L2', '4 mm flat polyp', 'P3', landmark='cecum', site_words='cecum'),
+                   les('L3', '3 mm pale polyp', 'P4', landmark='rectum', site_words='rectum'))
+        statement = denial(status_words='Neither the flat nor the pale polyp was removed',
+                           scope=sc('listed_targets', 'Neither the flat nor the pale polyp', ['P2'], ['L2', 'L3']))
+        line = 'Neither the flat nor the pale polyp was removed.'
+        inventory = pairing(line, snare('E1', 'P1', target=tg('', 'sigmoid_colon', 'sigmoid colon', ['P1'])), statement,
+                            lesions=lesions, extra=lines)
+        self.assertEqual(verdict(inventory), ('independent', 'target', 'another_site'))
+        inventory = pairing(line, snare('E1', 'P1'), statement, lesions=lesions, extra=lines)  # no place: unknown
+        self.assertEqual(verdict(inventory), ('unresolved', 'target', 'identity_unresolved'))
+
+    def test_a_named_lesion_whose_identity_is_unresolved_at_a_disjoint_site(self):
+        # contract 6.5 (review finding 5): an unresolved identity at a site disjoint from the act's is still INDEPENDENT
+        lines = {'P3': 'A 4 mm flat polyp was seen in the rectum.'}
+        lesions = (L1, les('L2', '4 mm flat polyp', 'P3', landmark='rectum', site_words='rectum'))
+        inventory = pairing('No polyp was removed from the rectum.', removed(),
+                            denial(scope=sc('single_target', 'from the rectum', ['P2']),
+                                   target=tg('L2', 'rectum', 'rectum', ['P3'])),  # its words are not in its statement
+                            lesions=lesions, extra=lines)
+        self.assertEqual(inventory.events['events'][1]['target']['identity_by']['reasons'],
+                         ['identity_not_in_statement'])
+        self.assertEqual(verdict(inventory), ('independent', 'target', 'another_site'))
+        inventory = pairing('No polyp was removed from the colon.', removed(),  # the twin: a place holding the act's
+                            denial(scope=sc('single_target', 'from the colon', ['P2']),
+                                   target=tg('L2', 'colon', 'colon', ['P3'])),
+                            lesions=(L1, les('L2', '4 mm flat polyp', 'P3', landmark='colon', site_words='colon')),
+                            extra={'P3': 'A 4 mm flat polyp was seen in the colon.'})
+        self.assertEqual(inventory.events['events'][1]['target']['identity_by']['reasons'],
+                         ['identity_not_in_statement'])
+        self.assertEqual(verdict(inventory), ('unresolved', 'target', 'identity_unresolved'))
+
+    def test_c11_review_b2_sizes_beside_one_site_named_in_both_descriptions(self):
+        # review finding 3, probe B2: the descriptions both name the sigmoid colon - a site literal saying "same" - so
+        # a 6 mm and a 1 cm polyp are possibly one lesion and the denial of one is a question on the other's removal
+        lines = {'P1': POLYP, 'P2': 'Impression: 1 cm sessile polyp in the sigmoid colon, not removed.'}
+        first = les('L1', '6 mm sessile polyp in the sigmoid colon', 'P1', size_words='6 mm')
+        second = les('L2', '1 cm sessile polyp in the sigmoid colon', 'P2', size_words='1 cm')
+        inventory = normalized(lines, lesions=[first, second], events=[
+            snare('E1', 'P1', target=tg('L1', 'not_stated', '6 mm sessile polyp in the sigmoid colon', ['P1'])),
+            denial(status_words='not removed', scope=sc('single_target', '1 cm sessile polyp in the sigmoid colon', ['P2']),
+                   target=tg('L2', 'not_stated', '1 cm sessile polyp in the sigmoid colon', ['P2']))])
+        self.assertEqual([item['target']['identity'] for item in inventory.events['events']], ['verified', 'verified'])
+        self.assertEqual(verdict(inventory), ('unresolved', 'target', 'possibly_same_lesion'))
+
 
 class Scope(SimpleTestCase):
     def test_c7_an_exceptive_statement_never_pairs(self):
@@ -353,12 +412,103 @@ class Claims(SimpleTestCase):
         found = relations_of(inventory, 'E2', 'E1')
         self.assertEqual([(item['type'], item['claimed_by_model']) for item in found], [('contradiction', True)])
 
-    def test_a_claim_about_another_act(self):
+    def test_a_claim_about_another_kind_stands_unless_a_hard_literal_sets_the_acts_apart(self):
+        # C-11 (review finding 2): a kind is verified by its binding alone (contract 5.6) - no literal - so two kinds
+        # never dismiss Gemini's own claim; it asks whether the statement concerns the act
         inventory = pairing('No biopsies were taken.', removed(),
                             denial('biopsies', 'No biopsies were taken', kind='biopsy',
                                    contradicts=[{'event': 'E1', 'passages': ['P2']}]))
-        self.assertEqual([(item['type'], item['attribute'], item['reason']) for item in relations_of(inventory, 'E2')],
-                         [('dismissed_claim', 'kind', 'another_act')])
+        self.assertEqual([(item['type'], item['attribute'], item['reason'], item['claimed_by_model'])
+                          for item in relations_of(inventory, 'E2')], [('unresolved', 'kind', 'claim_kind', True)])
+        # the twin: another kind at a disjoint place is set apart by the places, a hard literal
+        inventory = pairing('No biopsies were taken from the rectum.', removed(),
+                            denial('biopsies', 'No biopsies were taken from the rectum', kind='biopsy',
+                                   scope=sc('single_target', 'from the rectum', ['P2']),
+                                   target=tg('', 'rectum', 'the rectum', ['P2']),
+                                   contradicts=[{'event': 'E1', 'passages': ['P2']}]))
+        self.assertEqual([(item['type'], item['attribute'], item['reason'], item['claimed_by_model'])
+                          for item in relations_of(inventory, 'E2')],
+                         [('dismissed_claim', 'target', 'another_site', True)])
+
+    def test_review_a_an_emr_denial_of_the_lesion_the_snare_removed(self):
+        # review finding 2, probe A: both sides name the same verified lesion at the same landmark; only the kinds
+        # differ, so the claim is a question on the snare's code, never dismissed
+        lines = {'P1': 'A 15 mm polyp in the ascending colon was removed with a hot snare.',
+                 'P2': 'Impression: the 15 mm ascending colon polyp could not be removed; EMR was not performed.'}
+        lesion = les('L1', '15 mm polyp', 'P1', landmark='ascending_colon', site_words='ascending colon',
+                     size_words='15 mm')
+        inventory = normalized(lines, lesions=[lesion], events=[
+            act('E1', 'P1', 'snare', 'removed', status_words='was removed with a hot snare',
+                technique=a('hot_snare', 'hot snare', ['P1']),
+                target=tg('L1', 'ascending_colon', '15 mm polyp in the ascending colon', ['P1'])),
+            act('E2', 'P2', 'emr', 'EMR', status='not_performed', status_words='EMR was not performed',
+                scope=sc('single_target', 'the 15 mm ascending colon polyp', ['P2']),
+                target=tg('L1', 'ascending_colon', 'the 15 mm ascending colon polyp', ['P2']),
+                contradicts=[{'event': 'E1', 'passages': ['P1', 'P2']}])])
+        self.assertEqual([item['target']['identity'] for item in inventory.events['events']], ['verified', 'verified'])
+        self.assertEqual([(item['type'], item['statement'], item['event'], item['attribute'], item['reason'],
+                           item['claimed_by_model']) for item in relations_of(inventory)],
+                         [('unresolved', 'E2', 'E1', 'kind', 'claim_kind', True)])
+
+    def test_review_a2_a_family_verified_by_its_binding_alone_never_dismisses_a_claim(self):
+        # review finding 2, probe A2: in a single-family encounter a stated procedure is verified by its located words,
+        # with no name check, so "another procedure" there is no literal
+        lines = {'P1': POLYP, 'P2': 'No polyp was removed.'}
+        inventory = normalized(lines, lesions=[L1], events=[
+            removed(), denial(procedure=a('egd', 'No polyp', ['P2']), contradicts=[{'event': 'E1', 'passages': ['P2']}])])
+        self.assertEqual(inventory.events['events'][1]['procedure']['checks'], ['passages_located', 'words_in_own_passage'])
+        self.assertEqual([(item['type'], item['attribute'], item['reason']) for item in relations_of(inventory)],
+                         [('unresolved', 'procedure', 'claim_soft_difference')])
+
+    def test_named_families_in_a_multi_family_encounter_dismiss_a_claim(self):
+        # the twin: each family named by the procedure-name check (several current families) is a literal
+        inventory = normalized(Procedure.LINES, events=[
+            act('E0', 'P1', 'examination', 'gastroscope', status_words='was advanced', procedure=a('egd', 'EGD', ['P1'])),
+            act('E1', 'P3', 'examination', 'colonoscope', status_words='was advanced to the cecum',
+                procedure=a('colonoscopy', 'Colonoscopy', ['P3'])),
+            act('E2', 'P2', 'biopsy', 'biopsies', status_words='were taken', procedure=a('egd', 'EGD', ['P2']),
+                technique=a('cold_forceps', 'cold forceps', ['P2']), target=tg('', 'duodenum', 'duodenum', ['P2'])),
+            act('E3', 'P4', 'biopsy', 'biopsies', status='not_performed', status_words='no biopsies were taken',
+                procedure=a('colonoscopy', 'Colonoscopy', ['P4']), scope=sc('all_of_kind', 'no', ['P4']),
+                contradicts=[{'event': 'E2', 'passages': ['P2', 'P4']}])])
+        self.assertIn('procedure_name', inventory.events['events'][3]['procedure']['checks'])
+        self.assertEqual([(item['type'], item['attribute'], item['reason'], item['claimed_by_model'])
+                          for item in relations_of(inventory, 'E3', 'E2')],
+                         [('dismissed_claim', 'procedure', 'another_procedure', True)])
+
+    def soft_or_hard(self, line: str, **changes) -> list:
+        inventory = normalized({'P1': POLYP, 'P2': line, **ENDOSCOPIST}, lesions=[L1], events=[
+            removed(), denial(contradicts=[{'event': 'E1', 'passages': ['P1', 'P2']}], **changes)], **NAMED)
+        return [(item['type'], item['attribute'], item['reason']) for item in relations_of(inventory, 'E2', 'E1')]
+
+    def test_review_a_soft_time_performer_or_device_never_dismisses_a_claim(self):
+        # review finding 5, mutant (a): a time read by its marker alone, another clinician named by no name, and a
+        # device with no surface form ("other") are each a difference the table records, never a hard literal
+        soft = 'claim_soft_difference'
+        self.assertEqual(self.soft_or_hard('No polyp was previously removed.',
+                                           status_words='No polyp was previously removed',
+                                           time=a('earlier_encounter', 'previously', ['P2'])),
+                         [('unresolved', 'time', soft)])
+        self.assertEqual(self.soft_or_hard('No polyp was removed by another physician.',
+                                           performer=a('other_clinician', 'another physician', ['P2'])),
+                         [('unresolved', 'performer', soft)])
+        self.assertEqual(self.soft_or_hard('No Captivator snare was used.', kind_words='snare', kind='snare',
+                                           status_words='No Captivator snare was used',
+                                           technique=a('other', 'Captivator', ['P2'])),
+                         [('unresolved', 'technique', soft)])
+
+    def test_a_dated_time_a_titled_name_or_two_named_devices_dismiss_a_claim(self):
+        # the twins: each difference rests on a literal - a date, a titled name, two devices' surface forms
+        self.assertEqual(self.soft_or_hard('No polyp was removed in 2024.',
+                                           time=a('earlier_encounter', 'in 2024', ['P2'])),
+                         [('dismissed_claim', 'time', 'another_time')])
+        self.assertEqual(self.soft_or_hard('No polyp was removed by Dr. Lena Ortiz.',
+                                           performer=a('other_clinician', 'Dr. Lena Ortiz', ['P2'])),
+                         [('dismissed_claim', 'performer', 'another_performer')])
+        self.assertEqual(self.soft_or_hard('No hot snare was used.', kind_words='hot snare', kind='snare',
+                                           status_words='No hot snare was used',
+                                           technique=a('hot_snare', 'hot snare', ['P2'])),
+                         [('dismissed_claim', 'technique', 'another_technique')])
 
     def test_a_claim_between_two_statements(self):
         lines = {'P1': 'No polyp was removed.', 'P2': 'No biopsies were taken.'}
@@ -526,6 +676,88 @@ class BundlingIdentity(SimpleTestCase):
                                            target=tg('L1', 'cecum', 'cecum', ['P1']))])
         self.assertEqual([(item['statement'], item['event'], item['reason']) for item in relations_of(inventory)
                           if item['type'] == 'bundling_identity'], [('E1', 'E2', 'resection_technique')])
+
+    @staticmethod
+    def asked(inventory) -> list:
+        return [(item['statement'], item['event'], item['reason']) for item in relations_of(inventory)
+                if item['type'] == 'bundling_identity']
+
+    def test_review_no_lesion_named_one_statement_asks(self):
+        # review finding 4 (P3): neither act names a lesion, both are stated in one passage at one place (or none): the
+        # identity is a missing identifier, so the bundling is asked - legacy _one_resection's one-clause rule, asked
+        # instead of decided - never left as two acts each READY
+        lines = {'P1': 'A 20 mm flat polyp in the cecum was resected by EMR using a hot snare.'}
+        for place in (tg('', 'cecum', 'cecum', ['P1']), tg()):
+            inventory = normalized(lines, events=[
+                act('E1', 'P1', 'emr', 'EMR', status_words='was resected by EMR', target=place),
+                act('E2', 'P1', 'snare', 'hot snare', status_words='was resected',
+                    technique=a('hot_snare', 'hot snare', ['P1']), target=place)])
+            with self.subTest(place=place['landmark']):
+                self.assertEqual(self.asked(inventory), [('E1', 'E2', 'resection_technique')])
+        lines = {'P1': 'A 6 mm polyp in the cecum was biopsied and then removed with a cold snare.'}
+        inventory = normalized(lines, events=[
+            snare('E1', 'P1', status_words='removed with a cold snare', target=tg('', 'cecum', 'cecum', ['P1'])),
+            act('E2', 'P1', 'biopsy', 'biopsied', status_words='was biopsied', target=tg('', 'cecum', 'cecum', ['P1']))])
+        self.assertEqual(self.asked(inventory), [('E1', 'E2', 'biopsy_of_removed_lesion')])
+
+    def test_no_lesion_named_in_separate_statements_or_at_disjoint_places_asks_nothing(self):
+        # the twins: random biopsies told in their own statement are their own act; so are acts of one statement at
+        # places set apart by their verified landmarks
+        lines = {'P1': 'A 6 mm polyp in the cecum was removed with a cold snare.',
+                 'P2': 'Random biopsies were taken from the colon.'}
+        inventory = normalized(lines, events=[
+            snare('E1', 'P1', status_words='was removed with a cold snare', target=tg('', 'cecum', 'cecum', ['P1'])),
+            act('E2', 'P2', 'biopsy', 'biopsies', status_words='were taken', target=tg('', 'colon', 'colon', ['P2']))])
+        self.assertEqual(self.asked(inventory), [])
+        lines = {'P1': 'A polyp in the cecum was removed with a cold snare and biopsies were taken from the rectum.'}
+        inventory = normalized(lines, events=[
+            snare('E1', 'P1', status_words='was removed with a cold snare', target=tg('', 'cecum', 'cecum', ['P1'])),
+            act('E2', 'P1', 'biopsy', 'biopsies', status_words='were taken', target=tg('', 'rectum', 'rectum', ['P1']))])
+        self.assertEqual(self.asked(inventory), [])
+
+    def test_one_act_verified_to_a_lesion_and_one_naming_none_are_each_their_own(self):
+        # Gemini tied the removal to the polyp and left the biopsy's lesion "" - its reading that the document does not
+        # tie the biopsy to that listed lesion (the prompt's target rule) - so even in one statement nothing is asked
+        lines = {'P1': 'A 6 mm polyp in the cecum was removed with a cold snare and biopsies were taken from the colon.'}
+        inventory = normalized(lines, lesions=[les('L1', '6 mm polyp', 'P1', landmark='cecum', site_words='cecum')],
+                               events=[snare('E1', 'P1', status_words='was removed with a cold snare',
+                                             target=tg('L1', 'cecum', '6 mm polyp in the cecum', ['P1'])),
+                                       act('E2', 'P1', 'biopsy', 'biopsies', status_words='were taken',
+                                           target=tg('', 'colon', 'colon', ['P1']))])
+        self.assertEqual([item['target']['identity'] for item in inventory.events['events']], ['verified', 'none'])
+        self.assertEqual(self.asked(inventory), [])
+
+    def test_review_an_unverified_link_never_sets_two_acts_apart(self):
+        # review finding 6: the biopsy's own verified place is the removed polyp's; Gemini links it to the rectal polyp,
+        # a link the literal check fails. That link's site is no place of the biopsy's, so it cannot set the acts apart
+        lines = {'P1': 'A 6 mm polyp in the sigmoid colon was seen.', 'P2': 'It was removed with a cold snare.',
+                 'P3': 'A 4 mm polyp was seen in the rectum.', 'P4': 'Biopsies were taken in the sigmoid colon.'}
+        lesions = [les('L1', '6 mm polyp', 'P1', landmark='sigmoid_colon', site_words='sigmoid colon', size_words='6 mm'),
+                   les('L2', '4 mm polyp', 'P3', landmark='rectum', site_words='rectum', size_words='4 mm')]
+
+        def biopsy(line: str, target: dict):
+            inventory = normalized({**lines, 'P4': line}, lesions=lesions, events=[
+                snare('E1', 'P2', target=tg('L1', 'not_stated', 'It', ['P2'])),
+                act('E2', 'P4', 'biopsy', 'Biopsies', status_words='were taken', target=target)])
+            return inventory.events['events'][1]['target'], self.asked(inventory)
+
+        target, asked = biopsy('Biopsies were taken in the sigmoid colon.',
+                               tg('L2', 'sigmoid_colon', 'sigmoid colon', ['P4']))
+        self.assertEqual((target['identity'], target['identity_by']['reasons']),
+                         ('unresolved', ['identity_literal_conflict']))
+        self.assertEqual(asked, [('E1', 'E2', 'biopsy_of_removed_lesion')])
+        # nor through the lesion it names: with no place of its own, its unverified link to a lesion distinct from the
+        # removed one establishes no difference either (P3)
+        target, asked = biopsy('Biopsies were taken.', tg('L2', 'not_stated', '4 mm polyp', ['P3']))
+        self.assertEqual((target['identity'], target['identity_by']['reasons']),
+                         ('unresolved', ['identity_not_in_statement']))
+        self.assertEqual(asked, [('E1', 'E2', 'biopsy_of_removed_lesion')])
+        # the twin: the biopsy's OWN verified place is disjoint from the removal's - nothing is asked, even though it
+        # names (unverified) the removed lesion
+        target, asked = biopsy('Biopsies were taken in the rectum.', tg('L1', 'rectum', 'rectum', ['P4']))
+        self.assertEqual((target['identity'], target['identity_by']['reasons']),
+                         ('unresolved', ['identity_literal_conflict']))
+        self.assertEqual(asked, [])
 
 
 def stored_scenarios() -> list:

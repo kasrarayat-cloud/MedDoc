@@ -14,24 +14,27 @@ The precedence, top to bottom; the first row that applies decides (contract 8.2)
 | several, verified candidates | M among them | settles | no | M (origin user) |
 | several, verified candidates | M not among them | conflict_listed | YES | none |
 | stated unverified or opened; several with no verified candidate | M among the readings | settles | no | M |
-| the same | otherwise, the document side quotable | conflict_unverifiable | YES | none |
-| the same, with no own words or located passage | otherwise | supplies | no | M (origin user) |
+| the same | otherwise | conflict_unverifiable | YES | none |
 | not_stated | M | supplies | no | M (origin user) |
 
-Two refinements of the contract's table, each toward the member's answer standing only where the document gives nothing
-to compare it with, as merge_user_values does (gi/context.py:3436-3437: a documented fact with no evidence limits no
-answer): a ``several`` date with no verified candidate is judged by its readings as an unverified stated date is (with
-no candidate to choose, conflict_listed could never be settled); and an unverified date with no words or located
-passage of its own holds nothing a member's date could be compared with or settled by, so the member's date supplies it.
-Only VERIFIED other dates take part (contract 8.1: an unverified other date is kept with its reason and used in no
-comparison).
+One refinement of the contract's table: a ``several`` date with no verified candidate is judged by its readings as an
+unverified stated date is (with no candidate to choose, conflict_listed could never be settled), and so holds every
+other date as conflict_unverifiable. Whether a span of the date can be quoted never decides a row: a stated or several
+date that nothing of locates (its quote differs from the document, its words cite no passage or an undefined one) holds
+a member's date outside its readings all the same, because Gemini's reading says the document states one - unlike
+merge_user_values, where a fact with no evidence limits no answer (gi/context.py:3436-3437) - and its note names it with
+a fixed phrase (UNCHECKED_DOCUMENT_DATE). ``passages`` therefore changes only what a row quotes, so the published
+two-argument call holds and takes exactly as the three-argument one does (review finding 1: a date with nothing
+quotable had let a member's date decades off be taken and sent to Corti, the 2026-10-27 incident class). Only VERIFIED
+other dates take part (contract 8.1: an unverified other date is kept with its reason and used in no comparison).
 
 What each row writes (FINAL 4.3; contract 8.2), so the gemini-context@1 record's service_date carries the legacy Fact shape
 plus its ``state``:
 - the held rows write the legacy note text - USER_BIRTH_NOTE, USER_ELSEWHERE_NOTE or USER_CONFLICT_NOTE, formatted as
   merge_user_values formats them (the documented value; the candidates joined by " or "; up to three quoted spans,
-  whitespace collapsed, cut at 60 characters) - so the one shared is_member_conflict holds the encounter in both images,
-  and a rollback keeps every hold. The constants are studio.context_facts' own objects (the re-homed legacy constants);
+  whitespace collapsed, cut at 60 characters; for a date nothing of which can be quoted, UNCHECKED_DOCUMENT_DATE) - so
+  the one shared is_member_conflict holds the encounter in both images, and a rollback keeps every hold. The constants
+  are studio.context_facts' own objects (the re-homed legacy constants);
 - a member's date that is taken (supplies, settles) is the legacy user Fact: origin ``user``, no evidence, USER_NOTE;
 - agrees keeps the document's own origin (the trace's provenance defect, a document date recorded as the member's, is not
   repeated); several with no member value is the document conflict (DOCUMENT_CONFLICT_NOTE listing the candidates, so
@@ -74,6 +77,8 @@ DOCUMENT, USER, CONFLICT, MISSING = 'document', 'user', 'conflict', 'missing'
 USER_NOTE = 'Supplied by a workspace member as encounter metadata; not clinical documentation.'
 MISSING_NOTE = 'No labelled date of service is documented.'
 ELSEWHERE_ROLES = ('other_occurrence', 'other_document')
+# What a held note says the document gives when nothing of its date can be quoted (USER_CONFLICT_NOTE's {document}).
+UNCHECKED_DOCUMENT_DATE = 'a date of service this service could not check'
 QUOTED = 3  # spans quoted in a note (merge_user_values)
 QUOTE_CHARS = 60  # characters of each
 
@@ -142,9 +147,9 @@ def _passage_map(passages) -> dict:
 def member_date_state(date_of_service: Mapping, member_value, passages=()) -> MemberDate:
     """The member_date_state row (module docstring) of the inventory's ``date_of_service`` (encounter_facts, contract
     8.1) and the member's entered date (a YYYY-MM-DD string; None or blank for none). ``passages`` are the inventory's
-    passages (a list of records, or {id: record}), read only to quote the date's own located passages and to tell
-    whether it has any. TypeError for a member value that is no string, ValueError for one that is no date (as
-    merge_user_values refuses it)."""
+    passages (a list of records, or {id: record}), read only to quote the date's own located passages: they change the
+    evidence and the note, never the row. TypeError for a member value that is no string, ValueError for one that is no
+    date (as merge_user_values refuses it)."""
     if member_value is not None and not isinstance(member_value, str):
         raise TypeError('A member value is a string.')
     member = (member_value or '').strip()
@@ -192,9 +197,8 @@ def member_date_state(date_of_service: Mapping, member_value, passages=()) -> Me
     if state in ('stated', 'several'):
         if member in (date_of_service.get('readings') or ()):
             return row(SETTLES, effective=member, origin=USER, note=USER_NOTE)
-        if own:
-            return row(CONFLICT_UNVERIFIABLE, origin=CONFLICT, evidence=own,
-                       note=USER_CONFLICT_NOTE.format(user=member, document=quoted(own)))
+        return row(CONFLICT_UNVERIFIABLE, origin=CONFLICT, evidence=own, note=USER_CONFLICT_NOTE.format(
+            user=member, document=quoted(own) if own else UNCHECKED_DOCUMENT_DATE))
     return row(SUPPLIES, effective=member, origin=USER, note=USER_NOTE)
 
 
