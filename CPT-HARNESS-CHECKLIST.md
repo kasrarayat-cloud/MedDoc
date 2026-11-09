@@ -345,6 +345,21 @@ and U13, U30, U19/U14, U21 and U10/U11 related. Each item is ticked only when it
   false READY counterexamples resolved; each code's target, technique, time, performer and extent verified, not only its READY label;
   an independent review of the integrated result; no parity-only justification for an unresolved failure in the changed behaviour.
 
+## Gemini interpretation trial 1, 2026-11-09 (the owner's request; isolated; evidence: the session directory's gemini-trial/REPORT.md)
+
+- [x] **Authentication and model access verified; errors distinguished.** models.get returned HTTP 200: gemini-4-argon, version 3.0.
+  Every generateContent was refused (HTTP 429 RESOURCE_EXHAUSTED: free tier, limit 0). That is an access (quota/billing) error, not a
+  malformed response or an interpretation failure.
+- [x] **Note #8 located and hashed.** Encounter 9dbe9fc4; extracted text sha256 25ef61e4...; PDF sha256 6d934c17... PDF/OCR
+  understanding is labelled untested.
+- [x] **Expected event facts established independently before any call.** They were sealed at 05:48:00Z with sha256 b2c9dea3... and never
+  sent.
+- [ ] **Gemini's structured event interpretation of the complete source.** Blocked: generation was refused for quota.
+- [ ] **The fixed variant set run.** The six cases are written and hashed; they are not run (the same refusal).
+- [ ] **Outputs frozen before comparison with Astra and Fable.** There is no output.
+- [ ] **Meaning evaluated independently.** There is no output.
+- **Next:** the owner's decision on a paid tier (or a key with quota) for gemini-4-argon. The trial then re-runs unchanged.
+
 ## Progress log (append only)
 
 - **2026-11-01T21:10Z** Checklist created before any harness change. Carried in from round 4, as context and not as
@@ -1186,3 +1201,6 @@ and U13, U30, U19/U14, U21 and U10/U11 related. Each item is ticked only when it
   candidate's held-to-READY change is a regression; a four-result counterexample registry; the six paired denial-timing cases;
   time and performer read in full context with targeted unresolved states. The session's parity decision (HARNESS.md "The design,
   stage A") is withdrawn; the c3 workflow (wf_ad9e3752-1b5), whose verifier used it, was stopped at its first agent.
+- **2026-11-09 Gemini trial 1** (the owner's request): the key authenticates and gemini-4-argon (version 3.0) is visible, but every
+  generation was refused (HTTP 429: free tier, quota limit 0). No interpretation was produced, no model was substituted and nothing was
+  billed. The client now stops a batch at the first access error. A paid tier is the owner's decision.

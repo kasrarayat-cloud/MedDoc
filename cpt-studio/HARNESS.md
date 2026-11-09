@@ -4361,3 +4361,26 @@ as an existing defect. Every counterexample is now kept in a registry with four 
 candidate on the same input; the ordinary-heading comparison; the expected outcome the complete document supports). The time stage
 is redesigned to interpret time and performer statements in full context, and the denial-timing approach is tested on the six paired
 cases the owner named before it is accepted.
+
+### The Gemini interpretation trial (2026-11-09, the owner's request): blocked by quota, no interpretation produced
+
+The owner asked for one bounded trial of Google's `gemini-4-argon` as an evidence-linked event interpreter on Note #8 and six
+fixed variants (two lesions at one site; two techniques on one lesion; a historical denial beside a current act; "This time as
+well."; two performers; altered anatomy with guidewire versus scope passage).
+- **Isolation.** It ran as a one-off container. The process was root only long enough to read the credential, then uid 1000;
+  capabilities were dropped, the root filesystem was read-only, and docker logging was off. The key was held in memory only. The
+  live site, provider routing and saved approvals were not touched.
+- **Established before any call.** The expected event facts for all seven cases, sealed with sha256 b2c9dea3... at 05:48:00Z, were
+  never sent. The prompt carries no code, no earlier answer and no bug conclusion. Note #8 was sent as its extracted text (sha256
+  25ef61e4..., equal to the live revision's), so PDF/OCR understanding is untested.
+- **Result.** Authentication and model access succeeded: models.get returned HTTP 200 in 0.151 s, for `models/gemini-4-argon`
+  version 3.0 ("Gemini 4 Argon", 1,048,576 input tokens, generateContent supported). Every generation was REFUSED: HTTP 429
+  RESOURCE_EXHAUSTED, 7 of 7, in 0.14-0.21 s. The key's project is on the free tier, and each free-tier quota for this model is
+  limit 0 (requests and input tokens, per day and per minute).
+  - This is an ACCESS error, not a malformed response or an interpretation failure.
+  - No usage was reported, nothing was billed, no model was substituted, and no outcome is unknown.
+- **The trial client's flaw.** After the first refusal, the client sent the remaining six requests; it now stops a batch at the first
+  access error.
+- **Suitability: undetermined.** Enabling a paid tier is the owner's decision. The trial re-runs unchanged once quota exists.
+- **The evidence.** The session directory's `gemini-trial/` (REPORT.md, the cases, the sealed expectations, the raw refusals and the
+  request ledger).
