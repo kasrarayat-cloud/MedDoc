@@ -224,8 +224,8 @@ the progress log below.
 | objective | the installed website assesses an uploaded GI PDF or Word document with Corti, Astra and Fable, supported proposals reach review, decisions persist, and the download matches them |
 | installed | `c2e53f8e7d33` at https://cpt.quillmd.com since 2026-11-08 (app phase 22:53:32-22:56:31Z; declaration `docs/foundation/mutations/20261108-cpt-studio-structure-round-install.md`; record `docs/deploy-reports/20261108-cpt-studio-c2e53f8e-install-and-walk.md`); rollback image `cpt-studio:aeae34bebbe5` |
 | candidate | none: the next round (U29, U30 and U31, with U20) is not built yet |
-| current stage | the structure round is installed and walked: the blind c5 walk 0 of 3 on holds, no false READY (U29, U30, U31); c4 walked again: c4c passes every product check, c4b 43239 READY and approved, c4a routed as performed with its codes held (U30, U15/U17, U19) |
-| next action | land this record; commission a fresh blind set c6, sealed before any design reads it; plan the next round against the development corpus with retained provider citations on extracted text (U30 is the largest class live) |
+| current stage | the next round on fix/cpt-studio-c5-round-20261109: wave 1 (U30, U29, U31 designs and lenses) running; the owner's 2026-11-09 requirement (the shared evidence model, GI Note #8, U32) added: Note #8 located and reproduced, traced; a fresh blind set c6 sealed for the next walk |
+| next action | the Note #8 trace's synthesis; then the shared evidence model's design (association before contradiction), with U30's wave-1 designs and wave 2 (U19, the unread acts) folded in; refutation; integration; install; the retained re-assessment (Note #8 and the walk members); a fresh synthetic acceptance check written blind |
 
 ### Unresolved defects (each closed only by acceptance evidence)
 
@@ -262,6 +262,7 @@ the progress log below.
 | U29 | a title whose aside the title rules do not list ("UPPER ENDOSCOPY (EGD) - URGENT ADD-ON", "ENDOSCOPY NOTE - EGD AND COLONOSCOPY, SAME SESSION") is an unsafe title (I7: the instrument reader stops below it) and no procedure title (I9), and the title reads uncertain: a plain procedure narrative under "Procedure:" reads no mention, every code held | the blind c5 walk (c5a, c5c), read offline on c2e53f8e (c5diag/instruments.py) | OPEN |
 | U30 | a cited passage that hedges holds the code: a provider's citation set that includes another act's or lesion's negation ("it was not sampled", "was not sent to pathology", "without submucosal injection") holds a code whose own act the inventory reads as performed; and a denied accessory injection holds the tattoo's 45381 (same act kind) | c4a 45385 and c4b 43247 on the live c4 walk again; c5b 45385 and 45381 on the blind c5 walk; engine._negation_resolved (main's rule; the narrower exception refuted three times and dropped, the harness repair's round 3) | OPEN |
 | U31 | the section structure: a hard-wrapped label at a line start ("Past\nhistory: ERCP ...") is read as a heading, and the section it opens swallows bare family-name headings ("EGD", "COLONOSCOPY") that open no section (U20's class): both narratives read as history | the blind c5 walk (c5c), read offline on c2e53f8e (c5diag/layout.py) | OPEN |
+| U32 | the shared evidence association (owner requirement 2026-11-09): an assertion - an act done, an act denied, a history, a plan - is compared with another by its act kind alone, before it is tied to its target or lesion, technique, time and outcome. GI Note #8: four "performed and not performed" conflicts pair a completed act with a denial about another lesion ("on this splenic-flexure lesion"), another technique on the same polyp ("Neither the dilation balloon nor the EMR electrosurgical snare was used to treat this polyp") or another time ("No dilation was carried out in 2024"); the completed tattoo "For future localization" is read as planned and against "No carbon-particle tattoo was placed into the transverse-colon resection bed"; the altered anatomy (no cecum; the neo-terminal ileum reached after dilating the anastomosis) reads no extent; the stated "Date of service: November 8, 2026" is not read | encounter 9dbe9fc4 (owner upload 2026-11-08T23:48Z), reproduced from its retained responses on c2e53f8e with and without the owner's answers; related: U12 (parent), U13, U30, U19/U14, U21, U10/U11 | OPEN (traced 2026-11-09) |
 | Q1 | owner question (class (a)): does 43247 cover a food bolus pushed into the stomach? 13 corpus entries wait on it | corpus RULING entries | OWNER |
 | Q2 | owner question: two dilation techniques on one stricture (an NCCI question; NCCI unconnected) | corpus | OWNER |
 | L1 | pypdf 6.21.2's seven denial-of-service advisories: accounted for, not resolved | `docs/cpt-harness/repair3-20261105/pypdf-advisories-accounting.md` | LIMITATION, reported until resolved |
@@ -297,6 +298,97 @@ the progress log below.
     to harness repair 3's pins once the labels are set back), the installer suites (350 OK).
 - **Provider runs and usage in this repair:** none sent.
 - **Deployment receipts:** none yet. Earlier receipts are in /home/claude/cpt-studio-install-20261023.
+
+## The shared evidence model, 2026-11-09 (owner requirement of 2026-11-09)
+
+> **SUPERSEDED IN ITS MEANS, 2026-11-09T07:10Z, by the owner's directive to replace the legacy semantic reader with
+> Gemini.** The keyword-reader repair below (stages A-D) is stopped and its work preserved. The migration checklist lives in
+> cpt-studio/HARNESS.md ("The Gemini interpretation migration"). The outcome conditions carry over where that checklist restates
+> them. The items below are kept as written, as the record of what was being attempted.
+
+The requirement is recorded verbatim, with the session's interpretation on receipt, in
+`docs/foundation/rulings/2026-10-23-cpt-studio-gi.md` ("Owner requirement, 2026-11-09"). It adds to the 2026-11-06 directive and
+replaces none of its unfinished requirements. Its case is GI Note #8 (encounter 9dbe9fc4); its class is U32, with U12 its parent
+and U13, U30, U19/U14, U21 and U10/U11 related. Each item is ticked only when its acceptance evidence passes.
+
+- [x] **Reproduce and trace the actual failure.** Located: the owner's upload of 2026-11-08T23:48Z (PDF, 19,398 extracted
+  characters), its Corti, Astra and Fable runs, its six assessments and its ten stored questions. Reproduced offline from the
+  retained responses on c2e53f8e, with the owner's answers (five excluded) and without them (the same ten questions). Traced
+  (2026-11-09, wf_1565b84f-fef; cpt-studio/HARNESS.md "The trace"): all five candidates and six questions, each cause verified
+  by probe on c2e53f8e; the earliest wrong link is the section stage, and the denials' time, target and device association
+  is wrong at the clause and act stage regardless. The active branch was compared: its 16 runtime files are byte-identical
+  to c2e53f8e, so no repair is duplicated. The wave-1 designs in flight in their sandboxes (U30's pairing, U31's derived
+  layout) overlap U32 and are folded into its design, not built twice.
+- [ ] **Repair the shared evidence model** (association of each assertion with procedure, target or lesion, intervention,
+  technique, encounter/time, performer, outcome and exact spans, before contradictions; lesion identity from context, uncertain
+  identity preserved). Amended 2026-11-09 by the owner: statements that assign a procedure to another time or performer are read in
+  full context (referents, the patient's age, the document's endoscopist, explicit dates, local overrides, cross-sentence
+  references); uncertainty keeps a targeted unresolved state, never invented performance and never an unnecessary whole-document hold.
+- [ ] **The counterexample registry** (owner amendment 2026-11-09): every recorded counterexample with four separate results -
+  installed on the exact input, candidate on the same input, the ordinary-heading comparison (diagnostic only), the expected outcome the
+  complete document supports; held-to-READY against that outcome is a regression; a shared failure is an existing defect; the
+  within-scope material false READY and false-hold cases resolved before PASS, out-of-scope limitations recorded separately.
+- [ ] **The six paired denial-timing cases** (owner amendment 2026-11-09), each a unit and integration test with wording, order and
+  PDF/Word variation, passing before the approach is accepted: a historical denial then a clearly documented current intervention; a
+  historical denial explicitly extended to the current encounter; historical and current services mixed in one section; a previous
+  and the current performer in one narrative; a failed attempt then successful completion of the same intervention; an unrelated
+  target's denial beside a completed current intervention.
+- [ ] **Evaluate genuine contradictions correctly** (compatible events only; the same target with another technique; a broad
+  denial against a specific completed act on the same target; a failed attempt followed by a completed one; genuine
+  contradictions still reviewed).
+- [ ] **Repair temporal, injection and extent interpretation** (historical non-performance; the procedure's own date; a
+  completed tattoo for future localization against a planned one; the lift kept apart from the tattoo; altered anatomy).
+- [ ] **Keep documentation and billing decisions separate** (documentation statuses against bundling, modifier, payer and
+  reference rules; the same standard for Corti, Astra and Fable; provenance kept; agreement never approves; questions only where
+  the report leaves the fact open).
+- [ ] **Prove generalization** (unit and integration tests for each case named; wording, order and PDF/Word variation; negative
+  controls; the shared validator's other consumers traced).
+- [ ] **Verify every question and persisted outcome** (the six-question before/after table; the retained re-assessment first;
+  then a fresh synthetic acceptance check with decisions, recomputation, reload and downloads).
+- [ ] **Install and close with evidence** (the authorized repair, regression tests, an independent adversarial review, the
+  install, served verification, the record). Before PASS (owner amendment 2026-11-09): Note #8's false holds and the retained material
+  false READY counterexamples resolved; each code's target, technique, time, performer and extent verified, not only its READY label;
+  an independent review of the integrated result; no parity-only justification for an unresolved failure in the changed behaviour.
+
+## Gemini interpretation trial 1, 2026-11-09 (the owner's request; isolated; evidence: the session directory's gemini-trial/REPORT.md)
+
+- [x] **Authentication and model access verified; errors distinguished.** models.get returned HTTP 200: gemini-4-argon, version 3.0.
+  Every generateContent was refused (HTTP 429 RESOURCE_EXHAUSTED: free tier, limit 0). That is an access (quota/billing) error, not a
+  malformed response or an interpretation failure.
+- [x] **Note #8 located and hashed.** Encounter 9dbe9fc4; extracted text sha256 25ef61e4...; PDF sha256 6d934c17... PDF/OCR
+  understanding is labelled untested.
+- [x] **Expected event facts established independently before any call.** They were sealed at 05:48:00Z with sha256 b2c9dea3... and never
+  sent.
+- [x] **Gemini's structured event interpretation of the complete source.** After billing: Note #8 returned HTTP 200 with 33 events
+  (parsed/note8.json, frozen sha256 791ec240...).
+- [x] **The fixed variant set run.** All six returned HTTP 200, run sequentially 06:21:35Z-06:23:26Z (ledger rows 17-28).
+- [x] **Outputs frozen before comparison with Astra and Fable.** Frozen 06:23:48Z; the manifest was committed in 0dfb1b2a
+  (06:24:05Z), before any evaluator started.
+- [x] **Meaning evaluated independently.** Evaluators A (coverage) and B (refutation), plus my own reading: 32 of 32 sealed items
+  correct, no material error (eval/evaluator-A, eval/evaluator-B, eval/EVAL.sha256).
+- **Next (attempt 1):** the owner's decision on a paid tier. *Done: the owner enabled billing the same morning.*
+
+### The retry after billing (the owner's checklist, 2026-11-09)
+
+- [x] **The seven cases, sealed expectations, prompt, schema and input hashes recovered and unchanged; the seven 429s preserved.**
+  All 7 recomputed request hashes equal the ledger's. The 429s were archived read-only in archive/attempt1-20261109T0549Z
+  (11-file MANIFEST.sha256), and the client was made unable to overwrite them.
+- [x] **The first case run once with the requested model.** Note #8: 06:19:26Z, HTTP 200, modelVersion `gemini-4-argon`, service
+  tier standard, responseId 7mXxao6QI43oz7IPxvDGwAk.
+- [x] **The other six completed; case one not rerun.** The six were sent in one sequential invocation without Note #8; each 200.
+- [x] **Access, billing or quota failure: stop, inspect, never substitute.** Not triggered: 7 succeeded, 0 failed, 0 unknown
+  (ledger rows 15-28).
+- [x] **Every response frozen and hashed before evaluation; expectations and prior answers kept out of Gemini's input.**
+  eval/FREEZE.sha256 committed in 0dfb1b2a. The request bodies are attempt 1's, byte-identical: no expectation, code or earlier
+  answer.
+- [x] **All seven evaluated independently against the sealed expectations.** 32 of 32 correct. Corrected false holds, missed
+  events, incorrect completed procedures, missed contradictions and unresolved ambiguity are reported in REPORT.md B. No material
+  error; four minor.
+- [x] **Compared with the current reader and the retained Astra and Fable.** eval/comparison.md: Note #8 on identical inputs; the
+  variants by the installed reader offline. Astra and Fable on the variants: NON-COMPARABLE, labelled.
+- [x] **HARNESS.md and the trial report updated** with evidence links, usage, latency, estimated cost ($0.185) and limitations.
+- [ ] **U32: register the reader's v5 false READY** (a WRONG 45385 citing "polypectomy scar" is READY) and the v1/v2/v3/v6
+  readings as counterexamples. This waits for the c4 workflow's registry, whose files an agent is writing.
 
 ## Progress log (append only)
 
@@ -1124,3 +1216,33 @@ the progress log below.
   - The declaration's offline predictions cited hand-picked passages on the source text. The live engine reads the
     retained provider citation on the extracted text, so c4a's 45385 and c4b's 43247 did not read READY live. A
     re-walk is predicted with the retained responses on the extracted text.
+- **2026-11-09 The owner's requirement: the shared evidence model (GI Note #8).** Recorded verbatim in the rulings file with the
+  session's interpretation; U32 added (U12 its parent; U13, U30, U19/U14, U21, U10/U11 related). Note #8 located (encounter
+  9dbe9fc4) and reproduced from its retained responses on c2e53f8e, with and without the owner's answers; the trace is running.
+- **2026-11-09 The Note #8 trace** (wf_1565b84f-fef; cpt-studio/HARNESS.md "The trace"). The earliest wrong link is the section
+  stage: a colon-less "Clinical indication and interval history" heading opens a history section that no body heading
+  closes, so the whole narrative reads historical in both readers. The denials are tied to the wrong time or target at
+  the clause and act stage regardless (negation read before time; the 17 mm lesion and "splenic-flexure" unread; device
+  nouns read as acts; "this polyp" unresolved; a denial with no target paired with every act of its kind). All six
+  questions are resolved by the document; what remains is billing and reference. CORRECTION to U32 as recorded on
+  receipt (the row is kept): the stated date of service IS read; only its provenance is replaced when a member enters the
+  same date (context.py:3541). No single-stage fix converges (measured): the stages must land together.
+- **2026-11-09 ~05:25Z The owner's amendment** (verbatim in the rulings file): ordinary-heading parity is diagnostic, not proof; a
+  candidate's held-to-READY change is a regression; a four-result counterexample registry; the six paired denial-timing cases;
+  time and performer read in full context with targeted unresolved states. The session's parity decision (HARNESS.md "The design,
+  stage A") is withdrawn; the c3 workflow (wf_ad9e3752-1b5), whose verifier used it, was stopped at its first agent.
+- **2026-11-09 Gemini trial 1** (the owner's request): the key authenticates and gemini-4-argon (version 3.0) is visible, but every
+  generation was refused (HTTP 429: free tier, quota limit 0). No interpretation was produced, no model was substituted and nothing was
+  billed. The client now stops a batch at the first access error. A paid tier is the owner's decision.
+- **2026-11-09 Gemini trial 1, the retry after billing** (the owner enabled billing):
+  - 7 of 7 answered HTTP 200 from gemini-4-argon (standard tier), with the requests byte-identical to attempt 1.
+  - Frozen 06:23:48Z and committed before evaluation.
+  - 32 of 32 sealed items correct by two independent evaluators and my own reading. No material error; four minor.
+  - Every fact behind the installed reader's ten Note #8 false holds, and the v1-v6 reader errors, is read correctly.
+  - $0.185 in all. Not integrated.
+  - New: the installed reader itself makes a wrong 45385 READY on v5 (U32).
+- **2026-11-09T07:10Z Owner directive: replace the legacy semantic reader with Gemini.**
+  - Recorded verbatim in the rulings file, with index rows. The 2026-11-09 requirement and amendment rows, and the two Gemini trial
+    messages, were missing and are added late.
+  - The U32 c4 workflow was stopped (07:12Z) after hashing its 6,413 files; its registry is kept as a corpus.
+  - The migration checklist is in HARNESS.md. Preflight 20261109T071128Z: FIX-AND-GO (an image-reclaim report only).

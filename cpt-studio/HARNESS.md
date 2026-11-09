@@ -4225,3 +4225,319 @@ were found by the suite and re-pinned.
   twin keeps that sentence verbatim (an installed blind spot of the short reach, 152 readings in the lens's batteries).
 - The narrowing's cost: 283 of 378 natural correct long reaches read as installed.
 - The cache repair: nothing found on other caches, on cost or on determinism.
+
+## The shared evidence model (2026-11-09): GI Note #8, and association before contradiction
+
+The owner's requirement of 2026-11-09 (verbatim, with the session's interpretation, in
+`docs/foundation/rulings/2026-10-23-cpt-studio-gi.md`) adds to the completion contract: repair the shared association of
+evidence with procedures, targets, techniques and encounters, so that a contradiction is judged only between assertions about
+compatible events. Its case is GI Note #8; its class is U32 (CPT-HARNESS-CHECKLIST.md), whose parent is U12 ("one fact, three
+readers"), with U13, U30, U19/U14, U21 and U10/U11 related. This section records the work as it happens; the trace, the
+design, the refutations and the install are appended below, never rewritten.
+
+### The case, located and reproduced (2026-11-09)
+
+- **The record.** Encounter `9dbe9fc4-0cef-48a5-85a7-34d873f92963`, "GI_Advanced_IBD_Colonoscopy_Procedure_Note_08", uploaded
+  by the owner account at 2026-11-08T23:48Z as a PDF; 19,398 extracted characters (text sha256 prefix `25ef61e4bf743b70`).
+  Assessed by the installed release `c2e53f8e` (gi-routing@12, cpt-studio-validation@10). Corti, Astra and Fable answered, and
+  both peer reviews were made.
+- **What it read.** All five candidates held - 45385, 45381, 45390, 45386, 45380 - with ten stored questions, which the page
+  shows as six:
+  - four "performed and not performed" conflicts, each pairing a completed act with a denial about something else:
+    - 45385 (snare): the cold-snared descending polyp, against "No biopsy, snare resection, ablation, or balloon dilation was
+      performed on this splenic-flexure lesion" - another lesion;
+    - 45390 (EMR): the transverse-colon resection, against "Neither the dilation balloon nor the EMR electrosurgical snare was
+      used to treat this polyp" - the cold-snared polyp, another target and another technique;
+    - 45386 (dilation): the anastomotic dilation, against "No dilation was carried out in 2024." - another time;
+    - 45380 (biopsy): the targeted biopsies, against the splenic-flexure denial - another lesion;
+  - 45381's performed status: the completed carbon-particle tattoo, written "For future localization, ... was placed", read as
+    planned, and read against "No carbon-particle tattoo was placed into the transverse-colon resection bed" - another target;
+  - one extent question, on all five: the ileocecal resection leaves no cecum, and the neo-terminal ileum, reached after the
+    anastomosis was dilated and traversed, is read as no extent.
+  The stated "Date of service: November 8, 2026" was not read either: the date in use is the one the owner entered at upload.
+- **The owner's answers.** "Cannot confirm" to all ten at 23:57:49Z, three revoked: every code reads excluded, and the
+  encounter reads reviewed. Every original response, assessment, answer and revocation is kept.
+- **Reproduced offline** from the retained responses on a restored copy (`rjudge.sh`, nothing sent): with the owner's answers,
+  five excluded; without them, the same ten questions. The trace of every candidate and question, with the earliest stage of
+  wrong association, follows.
+
+### The trace (2026-11-09, workflow wf_1565b84f-fef: five tracers and a verifying synthesis, read-only on c2e53f8e)
+
+The full result, with every FILE:LINE and probe, is kept in the session directory (`note8/trace-result.json`; the probes in
+`note8/trace-*/`). The synthesis re-ran a read-only verification probe on c2e53f8e and confirmed every link below.
+
+**One shared cause.** CPT Studio compares statements by act kind before it has tied each statement to its time, its target
+(lesion or site) and its technique or device.
+- **The first wrong link, in pipeline order, is the section stage.** sections.layout reads the colon-less line "Clinical
+  indication and interval history" (offset 699) as a history section (sections.py:298-317, :1148, :1170-1175). None of the
+  twelve body headings opens a section: "Procedure technique and chronological findings" (5809) and the eleven after it,
+  down to "Technical outcome and immediate complications" (14538), are not in HEADINGS (sections.py:87-156). So 699-15375,
+  three quarters of the note and the whole procedure narrative, is one history section in both readers.
+  structure.clinical_layout releases nothing here and returns that layout (structure.py:2240-2249). services.parts and
+  _time_parts let a layout history override the titled report (services.py:1359, :1838, :1971-1972). Routing turns
+  performed cues inside a history section into historical (detect.py:2206-2209). Every narrative act reads historical,
+  every narrative lesion goes unrecorded (services.py:6792), and no reach is read. Only the Impression's four
+  restatements read as performed.
+- **The denials are tied to the wrong time or target at the clause and act stage, whatever the layout does.**
+  - read_clause returns "negated" (services.py:3008-3021) before it reads the clause's own date or section (:3120-3176),
+    and the Act record has no field for when an act happened (:1066-1078). So "No dilation was carried out in 2024." -
+    which sits in a genuinely historical paragraph - becomes a denial of today's dilation.
+  - The 17 mm splenic-flexure lesion is never recorded: LESION reads "a separate 17 mm non-granular flat lesion" only as
+    "flat lesion" (services.py:926-931). The site "splenic-flexure" is not read either, because ANATOMY needs a space
+    (:107). Its denial therefore has no target.
+  - Device nouns ("the EMR electrosurgical snare", "the dilation balloon") are read as acts (ACTS, :232-253) and take the
+    nearest technique word in the clause (_technique, :4130-4141). "this polyp" cannot resolve (:7566-7574).
+  - _merge_acts fuses denials about different targets and times (:8032, :8042).
+  - _same_subject's fall-through `return True` pairs a denial that has no target with every act of its kind (:8186).
+  - reconcile.match picks a conflict or a denial by service and kind alone (reconcile.py:246-249, :293-296).
+- **The tattoo.** Both readers read the fronted purpose "For future localization" as the act's time, through a closed,
+  wording-dependent purpose rule (services.py:2927-2941; purpose.py:37-46, :149-217; detect.py:1881-1918). The one
+  tattoo told in six places is never one event. A denial about another target, the EMR resection bed, decides 45381.
+- **The extent.** It is hidden behind the section stage. Once that is fixed, the altered-anatomy gaps surface. There is
+  no anastomosis landmark (cues.py:964-975). "Surgically absent" must not be read as an endpoint seen. The guidewire's
+  passage must not count as the scope's. The failed-then-completed passage must be read in sequence.
+
+**Corrections to what was recorded on receipt (appended, not rewritten).**
+- The stated "Date of service: November 8, 2026" IS read. context.py returns origin "document", 2026-11-08, with the
+  evidence at 287-320. A member value that agrees with it replaces only its provenance (context.merge_user_values,
+  context.py:3541): the stored fact then says "entered by a workspace member". The date is correct everywhere and causes
+  none of the six questions; the provenance is a separate, minor defect.
+- The extent is not missing because of the anatomy alone: the section stage hides it, as above.
+
+**The six questions** (before; the cause confirmed by probe; the result the document supports):
+
+| question | original reason | confirmed cause | the document's reading | remaining uncertainty |
+|---|---|---|---|---|
+| conflict:snare (45385) | the cold-snare removal vs "No biopsy, snare resection, ablation, or balloon dilation was performed on this splenic-flexure lesion" | the denial has no target (LESION, ANATOMY); "this polyp" unresolved (the layout); the device denial "the EMR electrosurgical snare ... to treat this polyp" read as a snare act; merged; paired by the fall-through (services.py:8186) | one cold-snare polypectomy today, on the separate 9 mm descending-colon polyp (Specimen E, the outcome, Impression 5, the attestation); the denials concern another lesion, and another device on the same polyp | none in the documentation; 45385 beside 45390 on another lesion is a billing consideration (59/XS; NCCI not connected) |
+| conflict:emr (45390) | the transverse-colon EMR vs "Neither the dilation balloon nor the EMR electrosurgical snare was used to treat this polyp" | "EMR" in the device noun read as an EMR act; technique lent from the other conjunct; "this polyp" unresolved; paired by the fall-through; chosen by kind | EMR of the 23 mm granular LST at about 58 cm, with its own saline/methylene-blue lift, a 15 mm electrocautery snare in two pieces, snare-tip coagulation and clips (all components of the EMR) | none in the documentation; with the conflicts removed alone, 45390 is still held by the time hold (engine._passages_elsewhere), because its passages lie in the misdated narrative - the section repair must remove that too |
+| conflict:dilation (45386) | the anastomotic dilation vs "No dilation was carried out in 2024." | read_clause returns "negated" before reading the clause's own date (2024 < 2026-11-08) | today's wire-guided TTS balloon dilation of the anastomotic stricture to 12, 13.5 and 15 mm, then traversed; the denials concern 2024, the splenic-flexure lesion and the polyp | none in the documentation |
+| conflict:biopsy (45380) | the targeted biopsies vs the splenic-flexure denial | the 17 mm lesion is never recorded and "splenic-flexure" reads no site, so the denial has no target; paired by the fall-through | cold-forceps biopsies today at four sites (anastomotic rim, neo-terminal ileum, proximal transverse colon, rectosigmoid), "not taken from any subsequently resected polyp or the unresected suspicious lesion" | none in the documentation |
+| performed_status (45381) | "the document states the submucosal injection or submucosal tattoo was not performed: No carbon-particle tattoo was placed into the transverse-colon resection bed" | no tattoo reads performed (the layout; the fronted purpose read as time), so reconcile.match takes a denial of the code's kinds anywhere in the service - one about another target | one carbon-particle tattoo today: two submucosal injections about 4 cm distal to the unresected splenic-flexure lesion, photographed; "for future localization" is its purpose | none in the documentation; whether 45381 is separately reportable beside 45390 is billing (the EMR's lift supports no 45381; the tattoo marks a distinct lesion at a distinct site) |
+| extent (all five) | "CPT Studio could not find how far the examination reached" | the reach readers need performed readings, and every narrative mention reads historical by section; the altered-anatomy gaps lie behind it | ileocecal resection 2017 (cecum and ileocecal valve absent); the scope reached the anastomosis, could not pass at first, passed after dilation to 15 mm, and examined about 15 cm of the neo-terminal ileum | none in the documentation; whether the anastomosis counts as the colonoscopy's endpoint for completeness or a modifier is a reference reading, never a documentation question |
+
+**Convergence, measured.** No single-stage fix converges.
+- The layout fix alone makes 45390 READY with a false "incomplete" and a 52/53 consideration, and with the EMR on the wrong
+  lesion. It reshapes the conflicts (up to seven, four of them from the equipment list) and adds a false conflict:tattoo.
+- Comparing only compatible events, alone, moves the holds into _second_opinion and _passages_elsewhere.
+- So time, target identity, device and technique, purpose and the pairing rule must land together, with the shared
+  derived layout. sections.layout itself stays unchanged: it is the date reader's frozen input (H2).
+
+### The design, stage A (2026-11-09): section time kept under the parity standard; dating a denial dropped
+
+The repair is built as a staged chain (time; identity and device; pairing, consumption and purpose; anatomy and sequence), two competing
+designs per stage, each judged on the R-judge (every walked encounter and Note #8 re-assessed from their retained responses) and on the
+offline judge. Stage A (time) took two cycles:
+
+- **Cycle 1** (designs a1, a2): both read c5c's 43239 and Note #8's 45390 READY. Note #8's open rows fell from 10 to 4. The stage judge
+  disqualified both on its own probes, for two shared classes:
+  - an undated prior narrative under HISTORY was released when today's summary restates one act kind;
+  - "No polypectomy was performed in 2024. None was performed today." The dated denial became historical, and the conflict vanished.
+- **Cycle 2** (grafts a3, a4): the shared classes closed, and the same members read READY. The judge disqualified both again:
+  - **SECTION TIME:** open-vocabulary statements that place the narrative with another age, time or person ("She had this done at the
+    age of 50.", "Both done by her previous gastroenterologist.");
+  - **CLAUSE TIME:** an anaphoric today-statement after a dated denial ("No polypectomy was performed in 2024. This time as well."). The
+    dating made the conflict disappear.
+- **The parity check** (session 30a58364, design-r3/u32c2/parity-check). The installed release reads the heading twin of every
+  section-time input READY: the same text with the wrapped label rejoined and "PROCEDURE: EGD" / "PROCEDURE: COLONOSCOPY" headings. Those
+  findings are therefore installed blind spots of the readers' time vocabulary (the U24 family). a4's release reproduces them; it does not
+  create them. The programme's established standard for a release guarded by a computed twin (the structure round's U18) records such
+  parity-bounded findings as residuals. The cycle-2 brief had demanded that every attack input hold, which was stricter than that
+  standard. The clause-time findings are not parity-bounded: the dating rule itself creates them.
+- **Decision, recorded (the session's, not the owner's; the owner may overrule):**
+  - a4's SECTION TIME is kept under the parity standard. Its open-vocabulary other-time and agent statements are a recorded residual.
+  - DATING A DENIAL BY ITS OWN DATE is dropped under the two-cycle rule.
+  - The requirement's "historical non-performance must not invalidate a current intervention" moves to the pairing stage, with a changed
+    approach. A denial's time for pairing comes from the derived section it stands in: Note #8's 2024 denial stands in the genuinely
+    historical "Pertinent records reviewed" part. The sentence guard and a fail-closed rule for history parts that say today also apply.
+    A denial in today's sections pairs exactly as installed, and no denial's own reading is rewritten.
+  - Every later judge and lens reports parity and plausibility for each finding (a severity rubric).
+
+**Superseded the same day by the owner's amendment (2026-11-09, verbatim in the rulings file).** Ordinary-heading parity is diagnostic
+evidence, not proof of correctness. A candidate that turns the exact original input from held to READY against the document's
+supported outcome has a REGRESSION, whatever the installed release does on a rewritten input; a failure both share is an existing
+defect. The decision above to keep a4's section time on parity grounds is therefore withdrawn: its open-vocabulary other-age and
+other-performer findings are regressions to resolve, and the installed release's READY on their ordinary-heading rewrites is recorded
+as an existing defect. Every counterexample is now kept in a registry with four separate results (installed on the exact input;
+candidate on the same input; the ordinary-heading comparison; the expected outcome the complete document supports). The time stage
+is redesigned to interpret time and performer statements in full context, and the denial-timing approach is tested on the six paired
+cases the owner named before it is accepted.
+
+### The Gemini interpretation trial (2026-11-09, the owner's request): attempt 1 refused for quota; after billing, 7 of 7 answered, evaluated, not integrated
+
+The owner asked for one bounded trial of Google's `gemini-4-argon` as an evidence-linked event interpreter on Note #8 and six
+fixed variants (two lesions at one site; two techniques on one lesion; a historical denial beside a current act; "This time as
+well."; two performers; altered anatomy with guidewire versus scope passage).
+- **Isolation.** It ran as a one-off container. The process was root only long enough to read the credential, then uid 1000;
+  capabilities were dropped, the root filesystem was read-only, and docker logging was off. The key was held in memory only. The
+  live site, provider routing and saved approvals were not touched.
+- **Established before any call.** The expected event facts for all seven cases, sealed with sha256 b2c9dea3... at 05:48:00Z, were
+  never sent. The prompt carries no code, no earlier answer and no bug conclusion. Note #8 was sent as its extracted text (sha256
+  25ef61e4..., equal to the live revision's), so PDF/OCR understanding is untested.
+- **Result.** Authentication and model access succeeded: models.get returned HTTP 200 in 0.151 s, for `models/gemini-4-argon`
+  version 3.0 ("Gemini 4 Argon", 1,048,576 input tokens, generateContent supported). Every generation was REFUSED: HTTP 429
+  RESOURCE_EXHAUSTED, 7 of 7, in 0.14-0.21 s. The key's project is on the free tier, and each free-tier quota for this model is
+  limit 0 (requests and input tokens, per day and per minute).
+  - This is an ACCESS error, not a malformed response or an interpretation failure.
+  - No usage was reported, nothing was billed, no model was substituted, and no outcome is unknown.
+- **The trial client's flaw.** After the first refusal, the client sent the remaining six requests; it now stops a batch at the first
+  access error.
+- **The credential stayed out of every artifact.** A scan run the same way read 3,626 files (777 MB): the trial directory, the
+  scratchpad, the session transcript with every subagent and workflow record, and these docs. None contains the key, and none
+  was unreadable. Note #8's case text hash equals the revision hash frozen into the live assessment's Astra and Fable inputs.
+- **Suitability (attempt 1): undetermined.** Enabling a paid tier is the owner's decision. The trial re-runs unchanged once quota exists.
+  *Superseded the same morning: the owner enabled billing, and the retry and its evaluation are below.*
+- **The evidence.** The session directory's `gemini-trial/` (REPORT.md, the cases, the sealed expectations, the raw refusals and the
+  request ledger).
+
+#### Trial 1, retry after billing (the owner enabled billing, 2026-11-09): the responses, frozen BEFORE any evaluation
+
+All seven requests were resent byte-identical: every request hash equals the 05:49Z ledger row. The seven 429 refusals were
+archived first, read-only and outside the container's mount, under an 11-file manifest. The client now writes
+attempt-stamped raw files that cannot overwrite (hard-link create).
+- Note #8 was sent alone first, then the six variants in one sequential invocation. Each answered HTTP 200 with modelVersion
+  `gemini-4-argon`, finishReason STOP, and output that parses against the schema.
+- The responses were frozen (hashed and made read-only) at 2026-11-09T06:23:48Z, before anyone read their content. The manifest's sha256 is
+  `9cea10826dc76c868881f1116e5e3d25f3755aadc00c50181c538f9224717b66`. Its entries:
+
+```
+791ec2402c943a660bb1e2179cd5b6114f53a24c8ecf6ab50c536d037117e26a  parsed/note8.json
+cd9a82b84d6de822b70d3a95383d01baebfd780dce8433f5f4df2f4df41a42fb  parsed/v1_two_lesions_one_site.json
+6a3292a8d4b9e6c57059342373a1046c383b1cc050d49184290c4689586e20e7  parsed/v2_two_techniques_one_lesion.json
+e20deb85fa211b511a61631a96ce8edc56832b46178bf673429734594b8a1d64  parsed/v3_historical_denial_current_act.json
+268d759542e2146d467dc384cbf355678c9fe0f4050408e30218318fea0e288e  parsed/v4_this_time_as_well.json
+5a4b44d80e56e25c6874435c16cc1dcf923f71e698c0eb112db5b6aefec29ccd  parsed/v5_two_performers.json
+ae2f3b80a87486402b301ca643710a577f66c4c7c168deb61104438706ae7cc7  parsed/v6_altered_anatomy_guidewire.json
+e8ada14f869f67cbe56e167dabdbb28ec95fcb282a8e42b0d8777b91cdf1f2b7  raw/note8.4e985614a943.20261109T062031Z.json
+f2e5c0d4283f88bd864cc0c2871d130e2accb9628ee7685e23408ceb46a7cbfd  raw/v1_two_lesions_one_site.86413c843e1a.20261109T062216Z.json
+46e799ec1d48cdd7a1769cf18fc152c284cc3504fbe68cb0fec50fde11f91cfe  raw/v2_two_techniques_one_lesion.83ba8c08a111.20261109T062231Z.json
+128afa3a1722a331731a4d1c36ccc82e4369752946a3c09a37c90a92024d375c  raw/v3_historical_denial_current_act.753f6b411cc5.20261109T062248Z.json
+c68bc34ba53d9c788b775e080514af1a682b2fe032460d35bdbb90f541d9f9ba  raw/v4_this_time_as_well.5ab1ade668d4.20261109T062301Z.json
+9a6c194a8a0bfa564fd73ec0b8412e89cdc644fccfc7bebd9148e2894732f9cd  raw/v5_two_performers.e94d411ef7ce.20261109T062311Z.json
+ba7e9373a8d96f982ecfdece0dad62d2f5b5ccdaa0821b5da3b569c4411e3666  raw/v6_altered_anatomy_guidewire.5e5f5dca4b4d.20261109T062325Z.json
+970b32aa9040378a8fa6433f8aaa34ca33fa1fadeed91cef85d72db333937a0e  ledger.jsonl
+451dafddc1f2f7b9c069e4d97de376f2e9176b575e4e18c74b72b18175fe2eac  run2-note8.jsonl
+b12c4bf66a6dd5437e5cd96679a32818a6a5be4dc4aa7d33a647b166dfc1e9da  run3-six.jsonl
+```
+
+#### Trial 1, the evaluation and the result (final; the session directory's gemini-trial/REPORT.md)
+
+**API access.**
+- After billing, 7 of 7 generateContent calls answered HTTP 200, each with modelVersion `gemini-4-argon` and service tier
+  `standard`. finishReason was STOP, the output parsed against the schema, and every response ID is in the ledger.
+- No other model was used; nothing was retried and no outcome was unknown.
+- Google's pricing page says the model "is not available on the Free tier", which is consistent with attempt 1's 429s.
+
+**Interpretation performance.**
+- The evaluation ran AFTER the freeze commit (06:24:05Z). Evaluator A (coverage) started 06:25:48Z and B (refutation) 06:26:03Z.
+  Neither saw the reader, Astra, Fable or any desired outcome. I read every decision point and every variant against its source.
+- **32 of 32 sealed items correct**, with 0 disagreements between A and B. All six Note #8 decision points were right:
+  - D1: today's dilation stays performed; the 2024 sentence is historical non-performance.
+  - D2: the balloon/EMR-snare denial stays on the 9 mm polyp, as technique evidence.
+  - D3: no denial is attached to the EMR.
+  - D4: four biopsy targets are kept apart.
+  - D5: the tattoo was performed today; "for future localization" is its purpose, and the resection-bed denial is another target.
+  - D6: the scope reached the neo-terminal ileum ~15 cm beyond the anastomosis; the guidewire is used only for the dilation.
+- The variants: no false completed procedure, no false contradiction, and v4's genuine contradiction surfaced (`uncertain`,
+  "This time as well." cited as contradicting, plus a targeted question).
+- **No material error. Four minor ones:**
+  - E5 gives the 2024 colonoscopy an extent the source does not state.
+  - E15 equates the rim's erosions with the biopsied portion.
+  - E13 adds a rectal-exam extent label.
+  - v5 lost a closing parenthesis in six string values.
+- 116 of 116 quotations occur in their source; 50 differ only in whitespace.
+- The evaluators also found defects in MY sealed expectations (the source governs). N7 is too narrow about the future plan;
+  v6.2's "wire-guided" is not stated; six supported events are omitted. None changes a verdict.
+
+**Comparison** (identical inputs; `eval/comparison.md`).
+- On Note #8 the installed reader's retained live assessment held all five codes on ten false questions:
+  - four association conflicts: a historical denial, two other-lesion denials, and an other-polyp device denial;
+  - the tattoo's purpose read as future time;
+  - five extent questions in the altered anatomy.
+- Gemini states every fact behind those ten correctly.
+- Astra and Fable (retained) proposed all five acts and claimed no contradiction. They are code-level, so not comparable on
+  target, time or extent.
+- The variants: the installed reader, run offline (positive control: it reproduced Note #8's live result exactly):
+  - FALSE HOLDS: v1 (target), v2 (technique) and v3 (time).
+  - v4: holds for the wrong reason, pairing the 2024 sentence; "This time as well." is unread.
+  - v6: takes the extent from the guidewire sentence.
+  - v5: **a false READY in the reader itself.** "polypectomy scar" is read as a polypectomy today and "No polyp was removed today."
+    is unread, so a WRONG 45385 citing the scar sentence is READY. This is a new counterexample for U32's registry.
+- Gemini is correct on all six. Astra and Fable have no retained result on the variants: NON-COMPARABLE.
+
+**Cost.**
+- 14,542 input and 15,573 output tokens; about **$0.185** in all at $2 / $10 per 1M; Note #8 alone $0.10.
+- No thinking tokens were reported.
+- Latency was 9.9-65.4 s (median 14.7 s).
+
+**Readiness.**
+- There is enough evidence for a SHADOW integration trial only: Gemini's event list recorded beside the reader through an
+  event-level reconciler, on synthetic documents, deciding nothing.
+- Not enough for any deciding role: seven synthetic cases, one run each, cases written by this session around known defect
+  classes, and PDF/OCR untested.
+
+**The required shared change** (REPORT.md section E). Replace keyword-by-kind validation with one evidence-linked event model.
+- The reader and the AI emit the same event structure.
+- A conflict requires the same target, technique, time and performer.
+- AI events are verified (passages in the source; attributes anchored in their spans), not vetoed.
+- The two lists are reconciled attribute by attribute: genuine contradictions become a question quoting both passages, and what
+  cannot be verified becomes a targeted unresolved state.
+- A code is READY only from a verified, performed, current, target-specific event. Model agreement never sets READY alone.
+
+**Safety.**
+- The live CPT Studio containers had identical ids, images, start times and restart counts before and after, HTTP 302 both times.
+- The trial had no mount or connection to the site.
+- A repeated key scan (3,694 files, 788 MB, 0 unreadable) found the key in none.
+
+
+## The Gemini interpretation migration (owner directive, 2026-11-09): Gemini replaces the legacy semantic reader
+
+The owner's directive is in `docs/foundation/rulings/2026-10-23-cpt-studio-gi.md` ("Owner directive, 2026-11-09 — replace the legacy
+semantic interpretation engine with Gemini"), verbatim, with the session's interpretation (a)-(h). **One integration and deployment
+owner:** session 30a58364. Every agent works under it; no other actor installs.
+
+**Work stopped and preserved before the change, at 2026-11-09T07:11-07:12Z.**
+- The U32 c4 workflow (`wf_797a9eb3-a98`, task `wcvdtwf1e`), a stage-by-stage repair of the keyword reader, was stopped. Its files
+  were hashed first: 6,413 before the stop and 6,417 after (the session directory's `gemini-migration/c4-preserved-*.sha256`).
+  - Its counterexample registry is complete and KEPT as a regression corpus for the replacement: `design-r3/registry/`, 1,374
+    entries and 2,448 code rows, each with four results.
+  - On those inputs the installed release has 444 material false holds, 46 false READYs and 7 READYs on the wrong facts.
+  - Its two stage-A redesigns (A-t1, A-t2) were unfinished and are kept as they stood; they will not be continued.
+- Open branches of the keyword-reader era, with commits not on main, are all preserved on origin and none is deleted:
+  - `fix/cpt-studio-gi-binding-20261029` (76 commits);
+  - `wip/7c8-p2dates` (9);
+  - `fix/cpt-studio-pypdf-6.21.4-20261031` and its `prep/` branch (16 and 1): a deferred dependency move, not a reader repair.
+- No CPT Studio pull request is open. `fix/cpt-studio-c5-round-20261109` (documents only) lands through a PR.
+
+### The migration checklist (the owner's, verbatim; an item is ticked only when its stated outcome is verified, with the evidence linked)
+
+- [ ] Record the installed baseline, rollback image, active work and all locations where semantic interpretation influences routing,
+  matching, contradictions, completeness, clarification, review, saving and export.
+- [ ] Implement the production Gemini adapter using the existing protected credential. Include finite deadlines, Stop/resume,
+  duplicate prevention, usage recording and reconciliation of unknown outcomes. Authentication/quota failures must stop requests. No
+  silent model substitution or fallback to the old reader.
+- [ ] Introduce one versioned, persisted event inventory containing event identity, procedure, target/lesion, technique, time,
+  performer, status, anatomy/extent and attribute-level source evidence. Bind it to the exact document revision and interpretation
+  version. Preserve distinctions that the old Act structure or merge rules could erase.
+- [ ] Make all downstream consumers use that same inventory. Remove legacy semantic rereads from the new execution path—including those
+  triggered by save, reload, review and export. Keeping archived legacy code for rollback is acceptable; retaining its hidden veto is
+  not.
+- [ ] Preserve schema checks, source integrity, evidence binding, tenant isolation, applicable reference rules and approval controls. A
+  quotation appearing in the document does not by itself establish that it supports an attribute.
+- [ ] Handle contradictions by their documented scope. Distinguish targets, techniques, times and performers, while also respecting
+  broad statements such as "No polyp was removed today." Missing identifiers must not manufacture either a match or a non-match. Ask a
+  focused question when necessary. An unresolved required attribute must still block the dependent code; unrelated supported codes can
+  proceed.
+- [ ] Cover the original seven cases and the four reported Gemini slips, particularly unsupported historical extent and biopsy-site
+  conflation. Include the scar example, historical/current acts, different lesions at one site, technique-specific denials, different
+  performers, future purpose and guidewire-versus-scope extent. Preserve genuine contradictions.
+- [ ] Test independently authored PDF and Word inputs through actual ingestion, with repeated runs and source-grounded expectations.
+  Label replay, text-only tests and fresh provider calls separately. Do not hardcode Note #8, its five codes, or expected answers.
+- [ ] Complete the actual website workflow with Gemini driving interpretation: upload, truthful progress, code review, explicitly
+  labelled synthetic approval, save, reload and downloaded reports. Verify that saved decisions and downloaded content match. Keep
+  provider/model names and traces out of customer screens and downloads.
+- [ ] Install the replacement through the established deployment process. Verify the served release and operator-side execution
+  evidence showing Gemini is the active interpreter and legacy semantic vetoes are unused. Verify availability, preservation and
+  rollback compatibility.
+
+**Completion** means the INSTALLED application actually uses the replacement successfully. A working adapter or a passed seven-case
+trial is not completion. Clinical-accuracy claims stay separate from functional completion.
