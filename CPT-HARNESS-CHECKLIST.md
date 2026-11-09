@@ -354,11 +354,36 @@ and U13, U30, U19/U14, U21 and U10/U11 related. Each item is ticked only when it
   understanding is labelled untested.
 - [x] **Expected event facts established independently before any call.** They were sealed at 05:48:00Z with sha256 b2c9dea3... and never
   sent.
-- [ ] **Gemini's structured event interpretation of the complete source.** Blocked: generation was refused for quota.
-- [ ] **The fixed variant set run.** The six cases are written and hashed; they are not run (the same refusal).
-- [ ] **Outputs frozen before comparison with Astra and Fable.** There is no output.
-- [ ] **Meaning evaluated independently.** There is no output.
-- **Next:** the owner's decision on a paid tier (or a key with quota) for gemini-4-argon. The trial then re-runs unchanged.
+- [x] **Gemini's structured event interpretation of the complete source.** After billing: Note #8 returned HTTP 200 with 33 events
+  (parsed/note8.json, frozen sha256 791ec240...).
+- [x] **The fixed variant set run.** All six returned HTTP 200, run sequentially 06:21:35Z-06:23:26Z (ledger rows 17-28).
+- [x] **Outputs frozen before comparison with Astra and Fable.** Frozen 06:23:48Z; the manifest was committed in 0dfb1b2a
+  (06:24:05Z), before any evaluator started.
+- [x] **Meaning evaluated independently.** Evaluators A (coverage) and B (refutation), plus my own reading: 32 of 32 sealed items
+  correct, no material error (eval/evaluator-A, eval/evaluator-B, eval/EVAL.sha256).
+- **Next (attempt 1):** the owner's decision on a paid tier. *Done: the owner enabled billing the same morning.*
+
+### The retry after billing (the owner's checklist, 2026-11-09)
+
+- [x] **The seven cases, sealed expectations, prompt, schema and input hashes recovered and unchanged; the seven 429s preserved.**
+  All 7 recomputed request hashes equal the ledger's. The 429s were archived read-only in archive/attempt1-20261109T0549Z
+  (11-file MANIFEST.sha256), and the client was made unable to overwrite them.
+- [x] **The first case run once with the requested model.** Note #8: 06:19:26Z, HTTP 200, modelVersion `gemini-4-argon`, service
+  tier standard, responseId 7mXxao6QI43oz7IPxvDGwAk.
+- [x] **The other six completed; case one not rerun.** The six were sent in one sequential invocation without Note #8; each 200.
+- [x] **Access, billing or quota failure: stop, inspect, never substitute.** Not triggered: 7 succeeded, 0 failed, 0 unknown
+  (ledger rows 15-28).
+- [x] **Every response frozen and hashed before evaluation; expectations and prior answers kept out of Gemini's input.**
+  eval/FREEZE.sha256 committed in 0dfb1b2a. The request bodies are attempt 1's, byte-identical: no expectation, code or earlier
+  answer.
+- [x] **All seven evaluated independently against the sealed expectations.** 32 of 32 correct. Corrected false holds, missed
+  events, incorrect completed procedures, missed contradictions and unresolved ambiguity are reported in REPORT.md B. No material
+  error; four minor.
+- [x] **Compared with the current reader and the retained Astra and Fable.** eval/comparison.md: Note #8 on identical inputs; the
+  variants by the installed reader offline. Astra and Fable on the variants: NON-COMPARABLE, labelled.
+- [x] **HARNESS.md and the trial report updated** with evidence links, usage, latency, estimated cost ($0.185) and limitations.
+- [ ] **U32: register the reader's v5 false READY** (a WRONG 45385 citing "polypectomy scar" is READY) and the v1/v2/v3/v6
+  readings as counterexamples. This waits for the c4 workflow's registry, whose files an agent is writing.
 
 ## Progress log (append only)
 
@@ -1204,3 +1229,10 @@ and U13, U30, U19/U14, U21 and U10/U11 related. Each item is ticked only when it
 - **2026-11-09 Gemini trial 1** (the owner's request): the key authenticates and gemini-4-argon (version 3.0) is visible, but every
   generation was refused (HTTP 429: free tier, quota limit 0). No interpretation was produced, no model was substituted and nothing was
   billed. The client now stops a batch at the first access error. A paid tier is the owner's decision.
+- **2026-11-09 Gemini trial 1, the retry after billing** (the owner enabled billing):
+  - 7 of 7 answered HTTP 200 from gemini-4-argon (standard tier), with the requests byte-identical to attempt 1.
+  - Frozen 06:23:48Z and committed before evaluation.
+  - 32 of 32 sealed items correct by two independent evaluators and my own reading. No material error; four minor.
+  - Every fact behind the installed reader's ten Note #8 false holds, and the v1-v6 reader errors, is read correctly.
+  - $0.185 in all. Not integrated.
+  - New: the installed reader itself makes a wrong 45385 READY on v5 (U32).

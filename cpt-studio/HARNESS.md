@@ -4362,7 +4362,7 @@ candidate on the same input; the ordinary-heading comparison; the expected outco
 is redesigned to interpret time and performer statements in full context, and the denial-timing approach is tested on the six paired
 cases the owner named before it is accepted.
 
-### The Gemini interpretation trial (2026-11-09, the owner's request): blocked by quota, no interpretation produced
+### The Gemini interpretation trial (2026-11-09, the owner's request): attempt 1 refused for quota; after billing, 7 of 7 answered, evaluated, not integrated
 
 The owner asked for one bounded trial of Google's `gemini-4-argon` as an evidence-linked event interpreter on Note #8 and six
 fixed variants (two lesions at one site; two techniques on one lesion; a historical denial beside a current act; "This time as
@@ -4384,7 +4384,8 @@ well."; two performers; altered anatomy with guidewire versus scope passage).
 - **The credential stayed out of every artifact.** A scan run the same way read 3,626 files (777 MB): the trial directory, the
   scratchpad, the session transcript with every subagent and workflow record, and these docs. None contains the key, and none
   was unreadable. Note #8's case text hash equals the revision hash frozen into the live assessment's Astra and Fable inputs.
-- **Suitability: undetermined.** Enabling a paid tier is the owner's decision. The trial re-runs unchanged once quota exists.
+- **Suitability (attempt 1): undetermined.** Enabling a paid tier is the owner's decision. The trial re-runs unchanged once quota exists.
+  *Superseded the same morning: the owner enabled billing, and the retry and its evaluation are below.*
 - **The evidence.** The session directory's `gemini-trial/` (REPORT.md, the cases, the sealed expectations, the raw refusals and the
   request ledger).
 
@@ -4417,3 +4418,72 @@ ba7e9373a8d96f982ecfdece0dad62d2f5b5ccdaa0821b5da3b569c4411e3666  raw/v6_altered
 451dafddc1f2f7b9c069e4d97de376f2e9176b575e4e18c74b72b18175fe2eac  run2-note8.jsonl
 b12c4bf66a6dd5437e5cd96679a32818a6a5be4dc4aa7d33a647b166dfc1e9da  run3-six.jsonl
 ```
+
+#### Trial 1, the evaluation and the result (final; the session directory's gemini-trial/REPORT.md)
+
+**API access.**
+- After billing, 7 of 7 generateContent calls answered HTTP 200, each with modelVersion `gemini-4-argon` and service tier
+  `standard`. finishReason was STOP, the output parsed against the schema, and every response ID is in the ledger.
+- No other model was used; nothing was retried and no outcome was unknown.
+- Google's pricing page says the model "is not available on the Free tier", which is consistent with attempt 1's 429s.
+
+**Interpretation performance.**
+- The evaluation ran AFTER the freeze commit (06:24:05Z). Evaluator A (coverage) started 06:25:48Z and B (refutation) 06:26:03Z.
+  Neither saw the reader, Astra, Fable or any desired outcome. I read every decision point and every variant against its source.
+- **32 of 32 sealed items correct**, with 0 disagreements between A and B. All six Note #8 decision points were right:
+  - D1: today's dilation stays performed; the 2024 sentence is historical non-performance.
+  - D2: the balloon/EMR-snare denial stays on the 9 mm polyp, as technique evidence.
+  - D3: no denial is attached to the EMR.
+  - D4: four biopsy targets are kept apart.
+  - D5: the tattoo was performed today; "for future localization" is its purpose, and the resection-bed denial is another target.
+  - D6: the scope reached the neo-terminal ileum ~15 cm beyond the anastomosis; the guidewire is used only for the dilation.
+- The variants: no false completed procedure, no false contradiction, and v4's genuine contradiction surfaced (`uncertain`,
+  "This time as well." cited as contradicting, plus a targeted question).
+- **No material error. Four minor ones:**
+  - E5 gives the 2024 colonoscopy an extent the source does not state.
+  - E15 equates the rim's erosions with the biopsied portion.
+  - E13 adds a rectal-exam extent label.
+  - v5 lost a closing parenthesis in six string values.
+- 116 of 116 quotations occur in their source; 50 differ only in whitespace.
+- The evaluators also found defects in MY sealed expectations (the source governs). N7 is too narrow about the future plan;
+  v6.2's "wire-guided" is not stated; six supported events are omitted. None changes a verdict.
+
+**Comparison** (identical inputs; `eval/comparison.md`).
+- On Note #8 the installed reader's retained live assessment held all five codes on ten false questions:
+  - four association conflicts: a historical denial, two other-lesion denials, and an other-polyp device denial;
+  - the tattoo's purpose read as future time;
+  - five extent questions in the altered anatomy.
+- Gemini states every fact behind those ten correctly.
+- Astra and Fable (retained) proposed all five acts and claimed no contradiction. They are code-level, so not comparable on
+  target, time or extent.
+- The variants: the installed reader, run offline (positive control: it reproduced Note #8's live result exactly):
+  - FALSE HOLDS: v1 (target), v2 (technique) and v3 (time).
+  - v4: holds for the wrong reason, pairing the 2024 sentence; "This time as well." is unread.
+  - v6: takes the extent from the guidewire sentence.
+  - v5: **a false READY in the reader itself.** "polypectomy scar" is read as a polypectomy today and "No polyp was removed today."
+    is unread, so a WRONG 45385 citing the scar sentence is READY. This is a new counterexample for U32's registry.
+- Gemini is correct on all six. Astra and Fable have no retained result on the variants: NON-COMPARABLE.
+
+**Cost.**
+- 14,542 input and 15,573 output tokens; about **$0.185** in all at $2 / $10 per 1M; Note #8 alone $0.10.
+- No thinking tokens were reported.
+- Latency was 9.9-65.4 s (median 14.7 s).
+
+**Readiness.**
+- There is enough evidence for a SHADOW integration trial only: Gemini's event list recorded beside the reader through an
+  event-level reconciler, on synthetic documents, deciding nothing.
+- Not enough for any deciding role: seven synthetic cases, one run each, cases written by this session around known defect
+  classes, and PDF/OCR untested.
+
+**The required shared change** (REPORT.md section E). Replace keyword-by-kind validation with one evidence-linked event model.
+- The reader and the AI emit the same event structure.
+- A conflict requires the same target, technique, time and performer.
+- AI events are verified (passages in the source; attributes anchored in their spans), not vetoed.
+- The two lists are reconciled attribute by attribute: genuine contradictions become a question quoting both passages, and what
+  cannot be verified becomes a targeted unresolved state.
+- A code is READY only from a verified, performed, current, target-specific event. Model agreement never sets READY alone.
+
+**Safety.**
+- The live CPT Studio containers had identical ids, images, start times and restart counts before and after, HTTP 302 both times.
+- The trial had no mount or connection to the site.
+- A repeated key scan (3,694 files, 788 MB, 0 unreadable) found the key in none.
