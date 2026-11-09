@@ -4321,3 +4321,33 @@ The full result, with every FILE:LINE and probe, is kept in the session director
 - Comparing only compatible events, alone, moves the holds into _second_opinion and _passages_elsewhere.
 - So time, target identity, device and technique, purpose and the pairing rule must land together, with the shared
   derived layout. sections.layout itself stays unchanged: it is the date reader's frozen input (H2).
+
+### The design, stage A (2026-11-09): section time kept under the parity standard; dating a denial dropped
+
+The repair is built as a staged chain (time; identity and device; pairing, consumption and purpose; anatomy and sequence), two competing
+designs per stage, each judged on the R-judge (every walked encounter and Note #8 re-assessed from their retained responses) and on the
+offline judge. Stage A (time) took two cycles:
+
+- **Cycle 1** (designs a1, a2): both read c5c's 43239 and Note #8's 45390 READY. Note #8's open rows fell from 10 to 4. The stage judge
+  disqualified both on its own probes, for two shared classes:
+  - an undated prior narrative under HISTORY was released when today's summary restates one act kind;
+  - "No polypectomy was performed in 2024. None was performed today." The dated denial became historical, and the conflict vanished.
+- **Cycle 2** (grafts a3, a4): the shared classes closed, and the same members read READY. The judge disqualified both again:
+  - **SECTION TIME:** open-vocabulary statements that place the narrative with another age, time or person ("She had this done at the
+    age of 50.", "Both done by her previous gastroenterologist.");
+  - **CLAUSE TIME:** an anaphoric today-statement after a dated denial ("No polypectomy was performed in 2024. This time as well."). The
+    dating made the conflict disappear.
+- **The parity check** (session 30a58364, design-r3/u32c2/parity-check). The installed release reads the heading twin of every
+  section-time input READY: the same text with the wrapped label rejoined and "PROCEDURE: EGD" / "PROCEDURE: COLONOSCOPY" headings. Those
+  findings are therefore installed blind spots of the readers' time vocabulary (the U24 family). a4's release reproduces them; it does not
+  create them. The programme's established standard for a release guarded by a computed twin (the structure round's U18) records such
+  parity-bounded findings as residuals. The cycle-2 brief had demanded that every attack input hold, which was stricter than that
+  standard. The clause-time findings are not parity-bounded: the dating rule itself creates them.
+- **Decision, recorded (the session's, not the owner's; the owner may overrule):**
+  - a4's SECTION TIME is kept under the parity standard. Its open-vocabulary other-time and agent statements are a recorded residual.
+  - DATING A DENIAL BY ITS OWN DATE is dropped under the two-cycle rule.
+  - The requirement's "historical non-performance must not invalidate a current intervention" moves to the pairing stage, with a changed
+    approach. A denial's time for pairing comes from the derived section it stands in: Note #8's 2024 denial stands in the genuinely
+    historical "Pertinent records reviewed" part. The sentence guard and a fail-closed rule for history parts that say today also apply.
+    A denial in today's sections pairs exactly as installed, and no denial's own reading is rewritten.
+  - Every later judge and lens reports parity and plausibility for each finding (a severity rubric).
