@@ -4387,3 +4387,33 @@ well."; two performers; altered anatomy with guidewire versus scope passage).
 - **Suitability: undetermined.** Enabling a paid tier is the owner's decision. The trial re-runs unchanged once quota exists.
 - **The evidence.** The session directory's `gemini-trial/` (REPORT.md, the cases, the sealed expectations, the raw refusals and the
   request ledger).
+
+#### Trial 1, retry after billing (the owner enabled billing, 2026-11-09): the responses, frozen BEFORE any evaluation
+
+All seven requests were resent byte-identical: every request hash equals the 05:49Z ledger row. The seven 429 refusals were
+archived first, read-only and outside the container's mount, under an 11-file manifest. The client now writes
+attempt-stamped raw files that cannot overwrite (hard-link create).
+- Note #8 was sent alone first, then the six variants in one sequential invocation. Each answered HTTP 200 with modelVersion
+  `gemini-4-argon`, finishReason STOP, and output that parses against the schema.
+- The responses were frozen (hashed and made read-only) at 2026-11-09T06:23:48Z, before anyone read their content. The manifest's sha256 is
+  `9cea10826dc76c868881f1116e5e3d25f3755aadc00c50181c538f9224717b66`. Its entries:
+
+```
+791ec2402c943a660bb1e2179cd5b6114f53a24c8ecf6ab50c536d037117e26a  parsed/note8.json
+cd9a82b84d6de822b70d3a95383d01baebfd780dce8433f5f4df2f4df41a42fb  parsed/v1_two_lesions_one_site.json
+6a3292a8d4b9e6c57059342373a1046c383b1cc050d49184290c4689586e20e7  parsed/v2_two_techniques_one_lesion.json
+e20deb85fa211b511a61631a96ce8edc56832b46178bf673429734594b8a1d64  parsed/v3_historical_denial_current_act.json
+268d759542e2146d467dc384cbf355678c9fe0f4050408e30218318fea0e288e  parsed/v4_this_time_as_well.json
+5a4b44d80e56e25c6874435c16cc1dcf923f71e698c0eb112db5b6aefec29ccd  parsed/v5_two_performers.json
+ae2f3b80a87486402b301ca643710a577f66c4c7c168deb61104438706ae7cc7  parsed/v6_altered_anatomy_guidewire.json
+e8ada14f869f67cbe56e167dabdbb28ec95fcb282a8e42b0d8777b91cdf1f2b7  raw/note8.4e985614a943.20261109T062031Z.json
+f2e5c0d4283f88bd864cc0c2871d130e2accb9628ee7685e23408ceb46a7cbfd  raw/v1_two_lesions_one_site.86413c843e1a.20261109T062216Z.json
+46e799ec1d48cdd7a1769cf18fc152c284cc3504fbe68cb0fec50fde11f91cfe  raw/v2_two_techniques_one_lesion.83ba8c08a111.20261109T062231Z.json
+128afa3a1722a331731a4d1c36ccc82e4369752946a3c09a37c90a92024d375c  raw/v3_historical_denial_current_act.753f6b411cc5.20261109T062248Z.json
+c68bc34ba53d9c788b775e080514af1a682b2fe032460d35bdbb90f541d9f9ba  raw/v4_this_time_as_well.5ab1ade668d4.20261109T062301Z.json
+9a6c194a8a0bfa564fd73ec0b8412e89cdc644fccfc7bebd9148e2894732f9cd  raw/v5_two_performers.e94d411ef7ce.20261109T062311Z.json
+ba7e9373a8d96f982ecfdece0dad62d2f5b5ccdaa0821b5da3b569c4411e3666  raw/v6_altered_anatomy_guidewire.5e5f5dca4b4d.20261109T062325Z.json
+970b32aa9040378a8fa6433f8aaa34ca33fa1fadeed91cef85d72db333937a0e  ledger.jsonl
+451dafddc1f2f7b9c069e4d97de376f2e9176b575e4e18c74b72b18175fe2eac  run2-note8.jsonl
+b12c4bf66a6dd5437e5cd96679a32818a6a5be4dc4aa7d33a647b166dfc1e9da  run3-six.jsonl
+```
