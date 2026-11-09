@@ -1169,7 +1169,7 @@ class RollbackParticipantTests(TemporaryDirectoryTest):
         names = {install.SERVICES[role]: role for role in ('web', 'worker')}
         def counted(image_id, env_bytes, body, params, **kwargs):  # ADJUDICATION P-1's note, read in this image
             self.assertEqual((image_id, body), (IMAGE, install.INTERPRETATION_MADE))
-            return {'interpretation': {'assessments': 0, 'encounters': []}}
+            return {'interpretation': {'assessments': 0, 'encounters': [], 'context_only': []}}
         with mock.patch.object(install, 'inspect', side_effect=lambda kind, name: live.get(names.get(name))), \
                 mock.patch.object(install, 'docker', fake_docker), \
                 mock.patch.object(install, 'read_protected_env', return_value=b''), \

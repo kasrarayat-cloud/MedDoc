@@ -391,8 +391,9 @@ def parse_args(argv=None):
     parser.add_argument('--astra-mode', choices=('disabled', 'live'), help='Astra (OpenAI); disabled when not given')
     parser.add_argument('--fable-mode', choices=('disabled', 'live'), help='Fable (Anthropic); disabled when not given')
     parser.add_argument('--interpreter-mode', choices=INTERPRETER_MODES,
-                        help='the interpreter (Gemini; design/FINAL.md 13): disabled when not given; live sends under '
-                             '--authorization-ref; replay reads the recordings the image ships and sends nothing')
+                        help='the interpreter (Gemini; design/FINAL.md 13): disabled when not given, which pauses '
+                             "every upload's reading (verify reports an app phase that did not give it); live sends "
+                             'under --authorization-ref; replay reads the recordings the image ships and sends nothing')
     parser.add_argument('--access-check', action='store_true', default=None,
                         help='after the app phase, check each live participant with real requests: one coding '
                              'request for Corti, and for Astra and for Fable one run of the tool loop, one request '
@@ -413,7 +414,9 @@ def parse_args(argv=None):
         parser.error(problem)
     args.astra_mode = args.astra_mode or 'disabled'
     args.fable_mode = args.fable_mode or 'disabled'
-    args.interpreter_mode = args.interpreter_mode or 'disabled'
+    # --interpreter-mode stays None when it is not given (interpreter_mode reads that as disabled), so the app receipt
+    # can say whether it was given: verify does not call an interpreter left disabled by default verified (the review of
+    # S14, finding 2; design/FINAL.md 13: the install uses live)
     args.agent_username = args.agent_username or 'review-agent'
     args.agent_display_name = args.agent_display_name or 'CPT Studio review agent'
     args.owner_display_name = args.owner_display_name or ''
@@ -2315,12 +2318,19 @@ for encounter in rows:
         changed[str(encounter.pk)] = [read, derived]
 print(ANSWER + json.dumps({'encounters': rows.count(), 'changed': changed}))
 '''
-# ADJUDICATION P-1 (design/FINAL.md 12.3 as amended): the assessments made from event inventories - every one the
-# events engine made (an engine_version of the cpt-studio-events@ family, interpretation.is_new_assessment's rule) or
-# that names an inventory - and their encounters. An earlier image reads them fail-closed: its overlay cannot read their
-# records, so it keeps every stored hold and releases none (FINAL 12.1-12.2). It is NEVER a refusing reason (not an
-# UNDO_HAZARDS or SHOWN_HAZARDS one): switch-back and rollback-app write it as a declared note in their receipts and go
-# on. Read in this revision's own image; an image with no event inventories answers None. Nothing is written or sent.
+# ADJUDICATION P-1 (design/FINAL.md 12.3 as amended): the new-path encounters an earlier image is handed - the
+# assessments made from event inventories (every one the events engine made, an engine_version of the
+# cpt-studio-events@ family, interpretation.is_new_assessment's rule, or that names an inventory) and their encounters;
+# and the encounters that hold a context derived from an inventory (a version of the gemini-context@ family,
+# interpretation.is_new_context's rule, or one that names an inventory) and no such assessment, 'context_only' - one
+# stopped between analyze and assess, whose gemini context is current (the review of S14, finding 1: FINAL 12.1's row
+# "declared by the hazard", which this note replaced). An earlier image reads the assessments fail-closed: its overlay
+# cannot read their records, so it keeps every stored hold and releases none (FINAL 12.1-12.2). It reads such a context
+# as current and keeps its holds (its held rows carry the legacy notes, FINAL 4.3), and an explicit act reads the
+# document again with its own reader (12.1). An inventory alone is not named: no earlier image reads one (12.1), nor a
+# routing stand-in (its operator console only shows it). None of it is EVER a refusing reason (not an UNDO_HAZARDS or
+# SHOWN_HAZARDS one): switch-back and rollback-app write it as a declared note in their receipts and go on. Read in
+# this revision's own image; an image with no event inventories answers None. Nothing is written or sent.
 INTERPRETATION_MADE = '''
 from django.db.models import Q
 from studio import models
@@ -2329,12 +2339,20 @@ try:
 except ImportError:
     interpretation = None
 made = None
-if interpretation is not None and any(f.name == 'event_inventory' for f in models.Assessment._meta.get_fields()):
+if interpretation is not None and all(any(f.name == 'event_inventory' for f in model._meta.get_fields())
+                                      for model in (models.Assessment, models.EncounterContext)):
     family = interpretation.ENGINE_VERSION.partition('@')[0] + '@'
     encounters = list(models.Assessment.objects.filter(Q(event_inventory__isnull=False)
                                                        | Q(engine_version__startswith=family))
                       .values_list('encounter_id', flat=True))
-    made = {'assessments': len(encounters), 'encounters': sorted({str(pk) for pk in encounters})}
+    derived = interpretation.CONTEXT_VERSION.partition('@')[0] + '@'
+    holding = (models.EncounterContext.objects.filter(Q(event_inventory__isnull=False)
+                                                      | Q(version__startswith=derived))
+               .order_by().values_list('encounter_id', flat=True).distinct())
+    assessed = {str(pk) for pk in encounters}
+    context_only = {str(pk) for pk in holding} - assessed
+    made = {'assessments': len(encounters), 'encounters': sorted(assessed | context_only),
+            'context_only': sorted(context_only)}
 print(ANSWER + json.dumps({'interpretation': made}))
 '''
 # The list state the installed revision 057a7d39 derives for each encounter of P['encounters'], written where it differs
@@ -2672,31 +2690,46 @@ def undo_hazards(image_id, env_bytes, revision) -> dict:
 
 def interpretation_note(image_id, env_bytes, revision) -> dict:
     """ADJUDICATION P-1: the declared, NON-REFUSING note a switch-back or rollback-app receipt carries - the assessments
-    ``revision`` made from event inventories and their encounters (INTERPRETATION_MADE, read with ``image_id``, this
-    revision's own image), which the earlier image reads fail-closed. {'assessments', 'encounters', 'note'}. It never
-    stops an undo: a read that fails, or an answer that says nothing it read, is recorded as not counted (an interrupt
-    is never swallowed)."""
+    ``revision`` made from event inventories, and the new-path encounters (INTERPRETATION_MADE, read with ``image_id``,
+    this revision's own image): those with such an assessment, which the earlier image reads fail-closed, and those that
+    hold only a context derived from an inventory ('context_only'; the review of S14, finding 1), which it reads as
+    current, keeping its holds. {'assessments', 'encounters', 'context_only', 'note'}. It never stops an undo: a read
+    that fails, or an answer that says nothing it read, is recorded as not counted (an interrupt is never
+    swallowed)."""
     def uncounted(why):
-        return {'assessments': None, 'encounters': None,
-                'note': f'the assessments made from event inventories were not counted ({why}); the earlier image '
-                        'reads any of them fail-closed'}
+        return {'assessments': None, 'encounters': None, 'context_only': None,
+                'note': f'the assessments made from event inventories and the contexts derived from them were not '
+                        f'counted ({why}); the earlier image reads any such assessment fail-closed and any such '
+                        'context as current, keeping its holds'}
     try:
         answer = app_script(image_id, env_bytes, INTERPRETATION_MADE, {},
-                            what=f'Counting the assessments revision {revision[:12]} made from event inventories')
+                            what=f'Counting the assessments and contexts revision {revision[:12]} made from event '
+                                 'inventories')
     except Exception as error:  # noqa: BLE001 — a declared note never stops an undo; it says it was not read
         return uncounted(str(error) or type(error).__name__)
     made = answer.get('interpretation', _UNREAD) if isinstance(answer, dict) else _UNREAD
     if made is None:
-        return {'assessments': 0, 'encounters': [], 'note': 'this image keeps no event inventory, so no assessment was '
-                                                           'made from one'}
+        return {'assessments': 0, 'encounters': [], 'context_only': [],
+                'note': 'this image keeps no event inventory, so no assessment or context was made from one'}
+    named = made.get('encounters') if isinstance(made, dict) else None
+    context_only = made.get('context_only') if isinstance(made, dict) else None
+    # what it read, said consistently: every id once, the context-only encounters among those named, and an assessment
+    # for each other named encounter - at least one, and no more encounters than assessments
     if not (isinstance(made, dict) and type(made.get('assessments')) is int and made['assessments'] >= 0
-            and isinstance(made.get('encounters'), list) and all(isinstance(pk, str) for pk in made['encounters'])
-            and len(made['encounters']) <= made['assessments']):
+            and isinstance(named, list) and all(isinstance(pk, str) for pk in named) and len(set(named)) == len(named)
+            and isinstance(context_only, list) and all(isinstance(pk, str) for pk in context_only)
+            and len(set(context_only)) == len(context_only) and set(context_only) <= set(named)
+            and (len(named) - len(context_only) == 0) == (made['assessments'] == 0)
+            and len(named) - len(context_only) <= made['assessments']):
         return uncounted('the count did not say what it read')
-    count = made['assessments']
-    return {'assessments': count, 'encounters': list(made['encounters']),
-            'note': f'{count} {"assessment was" if count == 1 else "assessments were"} made from event inventories; '
-                    'the earlier image reads them fail-closed'}
+    count, held = made['assessments'], len(context_only)
+    note = (f'{count} {"assessment was" if count == 1 else "assessments were"} made from event inventories; the '
+            'earlier image reads them fail-closed')
+    if held:
+        note += (f'; {held} {"encounter holds" if held == 1 else "encounters hold"} a context derived from an event '
+                 'inventory and no assessment made from one: the earlier image reads that context as current, keeping '
+                 'its holds, and an explicit act reads the document again with the earlier reader')
+    return {'assessments': count, 'encounters': list(named), 'context_only': list(context_only), 'note': note}
 
 
 def hazard_summary(hazards) -> str:
@@ -4646,8 +4679,12 @@ def phase_app(ctx) -> dict:
                                 **({'interpreter': interpreter} if interpreter != 'disabled' else {}))
     # ADJUDICATION P-7: the verify one-shot counts legacy-engine assessments made since the NEW WORKER started - S4 of a
     # blue/green switch, the worker's start of a swap - never since the install began (until S2 the old worker runs).
+    # 'given': whether --interpreter-mode was given at all - verify reports an interpreter left disabled only because it
+    # was not (the review of S14, finding 2: FINAL 13's install is live, and a disabled mode pauses every upload's
+    # reading, 11.2).
     steps = services.get('steps') if isinstance(services.get('steps'), dict) else {}
-    interpreting = {'mode': interpreter, 'credentials_loaded': interpreter == 'live',
+    interpreting = {'mode': interpreter, 'given': getattr(ctx.args, 'interpreter_mode', None) is not None,
+                    'credentials_loaded': interpreter == 'live',
                     'worker_started_at': steps.get('S4') or services.get('worker_started_at')}
     # Refutation p1, migrate-2: the stored list states are recomputed with this revision's derivation (RECOMPUTE_STATES)
     # - once this pair has replaced the old one, never before, so a failure path restores the old pair over the states
@@ -5685,11 +5722,11 @@ def interpretation_evidence(ctx, image_id, worker) -> tuple:
     """(evidence, problems) of verify's D22 one-shot. Its window starts at the newest successful app receipt's
     new-worker start (ADJUDICATION P-7: S4 of a blue/green switch, the worker's start of a swap - never the install's
     start: the old worker runs until S2, and its legacy assessments are not this revision's). The worker's interpreter
-    mode must be the one that receipt installed; a live one's worker must hold its key, and no other worker may. A
-    worker that names no interpreter mode and holds no key, with no app receipt of this revision beside it, is no pair
-    this installer started (every pair it starts names one): there is nothing of the interpreter to read, and the
-    evidence says so. With an app receipt, or a worker that names a mode or holds the key, every missing piece is a
-    problem."""
+    mode must be the one that receipt installed, which is disabled only where --interpreter-mode said so (FINAL 13: the
+    install uses live); a live one's worker must hold its key, and no other worker may. A worker that names no
+    interpreter mode and holds no key, with no app receipt of this revision beside it, is no pair this installer
+    started (every pair it starts names one): there is nothing of the interpreter to read, and the evidence says so.
+    With an app receipt, or a worker that names a mode or holds the key, every missing piece is a problem."""
     app = latest_receipt(ctx.receipts, 'app', ctx.revision)
     mode = worker_interpreter_mode(worker)
     evidence = {'worker_mode': mode, 'worker_holds_key': holds_interpreter_key(worker)}
@@ -5703,11 +5740,20 @@ def interpretation_evidence(ctx, image_id, worker) -> tuple:
                  'self-test was not read (ADJUDICATION P-7)'])
     installed = (app.get('details') or {}).get('interpreter') or {}
     since = installed.get('worker_started_at')
-    evidence.update(app_mode=installed.get('mode'), since=since)
+    evidence.update(app_mode=installed.get('mode'), app_mode_given=installed.get('given'), since=since)
     problems = []
     if mode != installed.get('mode'):
         problems.append(f"the worker's interpreter mode is {mode or 'not named'}, but the app phase installed "
                         f"{installed.get('mode') or 'none'}")
+    # The review of S14, finding 2: FINAL 13's install is live, and its D22 evidence shows "mode live". Disabled is the
+    # default when --interpreter-mode is not given - as in the app command ops/INSTALL.md documents - and it pauses
+    # every upload's reading (FINAL 11.2), so an installation left so by default is not verified; one given disabled
+    # is the operator's choice. A receipt that does not say whether it was given is read as not given.
+    if installed.get('mode') == 'disabled' and installed.get('given') is not True:
+        problems.append('the app phase installed the interpreter disabled only because --interpreter-mode was not '
+                        "given, so every upload's reading is paused (design/FINAL.md 11.2; the install uses live, "
+                        'FINAL 13): rerun --phase app with --interpreter-mode live, or with --interpreter-mode '
+                        'disabled to keep it paused')
     if mode == 'live' and not evidence['worker_holds_key']:
         problems.append(f"the live interpreter's worker does not hold {INTERPRETER['target']} read-only")
     if mode != 'live' and evidence['worker_holds_key']:

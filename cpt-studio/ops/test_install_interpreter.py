@@ -51,6 +51,13 @@ APP_ROOT = Path(__file__).resolve().parents[1]
 GEMINI = install.INTERPRETER
 GEMINI_MOUNT = f'type=bind,src={GEMINI["target"]},dst={GEMINI["mounted"]},readonly'
 NOTE_3 = '3 assessments were made from event inventories; the earlier image reads them fail-closed'
+# The review of S14 (finding 1): an encounter stopped between analyze and assess holds a gemini context, current, and no
+# assessment made from an inventory - FINAL 12.1's row the hazard declared, which ADJUDICATION P-1's note replaced.
+CONTEXT_1 = ('1 encounter holds a context derived from an event inventory and no assessment made from one: the earlier '
+             'image reads that context as current, keeping its holds, and an explicit act reads the document again '
+             'with the earlier reader')
+CONTEXT_2 = CONTEXT_1.replace('1 encounter holds', '2 encounters hold')
+NOTE_3_1 = f'{NOTE_3}; {CONTEXT_1}'
 
 
 def module_literal(path, name):
@@ -141,11 +148,16 @@ class InterpreterSpecTests(unittest.TestCase):
         self.assertNotIn('INTERPRETATION_MADE', install.UNDO_HAZARDS + install.CLOSE_STAGES)
         compile(install.INTERPRETATION_MADE, 'interpretation-made', 'exec')
         # it counts both shapes of a new-path assessment: the engine's label family (interpretation.is_new_assessment)
-        # and the inventory it names
-        self.assertIn('Q(event_inventory__isnull=False)', install.INTERPRETATION_MADE)
+        # and the inventory it names; and names, as well, both shapes of a context derived from an inventory
+        # (interpretation.is_new_context's family, and the inventory it names: the review of S14, finding 1)
+        self.assertEqual(install.INTERPRETATION_MADE.count('Q(event_inventory__isnull=False)'), 2)
         self.assertIn("interpretation.ENGINE_VERSION.partition('@')[0] + '@'", install.INTERPRETATION_MADE)
+        self.assertIn("interpretation.CONTEXT_VERSION.partition('@')[0] + '@'", install.INTERPRETATION_MADE)
+        self.assertIn('models.EncounterContext.objects.filter(', install.INTERPRETATION_MADE)
+        self.assertIn('Q(version__startswith=', install.INTERPRETATION_MADE)
         source = (APP_ROOT / 'studio' / 'interpretation' / '__init__.py').read_text(encoding='utf-8')
         self.assertIn("return version.partition('@')[0] + '@'", source)  # _family, the same prefix
+        self.assertIn("return isinstance(version, str) and version.startswith(_family(CONTEXT_VERSION))", source)
 
     def test_the_self_test_checks_verify_requires_are_the_reports_own(self):
         self.assertEqual(install.INTERPRETATION_SELF_TEST,
@@ -173,8 +185,13 @@ class InterpreterArgumentTests(unittest.TestCase):
         return stderr.getvalue()
 
     def test_the_mode_is_disabled_unless_given_and_any_of_the_three_may_be(self):
-        self.assertEqual(self.parse('--phase', 'app', '--provider-mode', 'disabled').interpreter_mode, 'disabled')
-        self.assertEqual(self.parse('--phase', 'preflight').interpreter_mode, 'disabled')
+        # not given, it stays unnamed, so the app receipt can say it was not given (the review of S14, finding 2); every
+        # reader resolves it to disabled
+        for argv in (('--phase', 'app', '--provider-mode', 'disabled'), ('--phase', 'preflight')):
+            with self.subTest(argv=argv):
+                args = self.parse(*argv)
+                self.assertIsNone(args.interpreter_mode)
+                self.assertEqual(install.interpreter_mode(args), 'disabled')
         for phase in ('app', 'switch-back'):
             for mode in ('disabled', 'replay'):
                 with self.subTest(phase=phase, mode=mode):
@@ -542,7 +559,7 @@ class AppPhaseInterpreterTests(TemporaryDirectoryTest):
                          [['manage', 'shell', '-c', install.INTERPRETER_CREDENTIALS_CHECK], ['migrate']])
         self.assertEqual(commands[0][3], {'network': 'none', 'interpreter_file': True, 'timeout': 120})
         self.assertEqual(self.world.interpreter, 'live')  # the pair is started with it
-        self.assertEqual(details['interpreter'], {'mode': 'live', 'credentials_loaded': True,
+        self.assertEqual(details['interpreter'], {'mode': 'live', 'given': True, 'credentials_loaded': True,
                                                   'worker_started_at': '2026-11-09T10:00:00.000Z'})
         self.assertIn('(provider disabled, astra disabled, fable disabled, interpreter live)', details['summary'])
         self.assertEqual(details['access_checks'], 'not run (no --access-check)')  # it has none of its own
@@ -576,8 +593,27 @@ class AppPhaseInterpreterTests(TemporaryDirectoryTest):
                                authorization_ref='')
         details = self.app(args)
         self.assertEqual(details['interpreter']['mode'], 'disabled')
+        self.assertIs(details['interpreter']['given'], False)
         self.assertIsNone(self.world.interpreter)
         self.assertEqual([event[1] for event in self.world.timeline if event[0] == 'oneshot'], [('migrate',)])
+
+    def test_the_receipt_says_whether_the_mode_was_given(self):
+        # The review of S14, finding 2: the app command ops/INSTALL.md documents names no --interpreter-mode, so it
+        # installs the interpreter disabled; the receipt says the mode was not given, and verify reads that
+        documented = install.parse_args(['--phase', 'app', '--revision', REVISION, '--receipts', str(self.tmp),
+                                         '--provider-mode', 'disabled'])
+        bare = SimpleNamespace(phase='app', revision=REVISION, receipts=str(self.tmp), provider_mode='disabled',
+                               authorization_ref='')
+        for args, mode, given in ((documented, 'disabled', False), (bare, 'disabled', False),
+                                  (app_args(self.tmp, astra='disabled', fable='disabled', interpreter='disabled'),
+                                   'disabled', True),
+                                  (app_args(self.tmp, astra='disabled', fable='disabled', interpreter='replay'),
+                                   'replay', True),
+                                  (self.live(), 'live', True)):
+            with self.subTest(mode=mode, given=given, parsed=args is documented):
+                details = self.app(args)
+                self.assertEqual(details['interpreter']['mode'], mode)
+                self.assertIs(details['interpreter']['given'], given)
 
 
 # --- ADJUDICATION P-1: the declared note, never a refusal -------------------------------------------------------------
@@ -593,25 +629,60 @@ class InterpretationNoteTests(unittest.TestCase):
             return install.interpretation_note(IMAGE, b'', REVISION)
 
     def test_the_count_and_the_encounters_with_the_sentence_p1_gives(self):
-        self.assertEqual(self.note({'interpretation': {'assessments': 3, 'encounters': ['e1', 'e2']}}),
-                         {'assessments': 3, 'encounters': ['e1', 'e2'], 'note': NOTE_3})
-        self.assertEqual(self.note({'interpretation': {'assessments': 1, 'encounters': ['e1']}})['note'],
+        self.assertEqual(self.note({'interpretation': {'assessments': 3, 'encounters': ['e1', 'e2'],
+                                                       'context_only': []}}),
+                         {'assessments': 3, 'encounters': ['e1', 'e2'], 'context_only': [], 'note': NOTE_3})
+        self.assertEqual(self.note({'interpretation': {'assessments': 1, 'encounters': ['e1'],
+                                                       'context_only': []}})['note'],
                          '1 assessment was made from event inventories; the earlier image reads them fail-closed')
-        self.assertEqual(self.note({'interpretation': {'assessments': 0, 'encounters': []}})['assessments'], 0)
+        self.assertEqual(self.note({'interpretation': {'assessments': 0, 'encounters': [], 'context_only': []}}),
+                         {'assessments': 0, 'encounters': [], 'context_only': [],
+                          'note': '0 assessments were made from event inventories; the earlier image reads them '
+                                  'fail-closed'})
         self.assertEqual(self.note({'interpretation': None}),
-                         {'assessments': 0, 'encounters': [],
-                          'note': 'this image keeps no event inventory, so no assessment was made from one'})
+                         {'assessments': 0, 'encounters': [], 'context_only': [],
+                          'note': 'this image keeps no event inventory, so no assessment or context was made from '
+                                  'one'})
+
+    def test_an_encounter_holding_only_a_context_derived_from_an_inventory_is_named_too(self):
+        # the review of S14, finding 1: the note names exactly the new-path encounters (ADJUDICATION P-1), and an
+        # encounter stopped between analyze and assess holds a current gemini context and no assessment made from one
+        self.assertEqual(self.note({'interpretation': {'assessments': 3, 'encounters': ['e1', 'e2', 'e3'],
+                                                       'context_only': ['e3']}}),
+                         {'assessments': 3, 'encounters': ['e1', 'e2', 'e3'], 'context_only': ['e3'],
+                          'note': NOTE_3_1})
+        # no assessment yet made from one: still counted, never "not counted" (encounters outnumber assessments)
+        self.assertEqual(self.note({'interpretation': {'assessments': 0, 'encounters': ['e1', 'e2'],
+                                                       'context_only': ['e1', 'e2']}}),
+                         {'assessments': 0, 'encounters': ['e1', 'e2'], 'context_only': ['e1', 'e2'],
+                          'note': '0 assessments were made from event inventories; the earlier image reads them '
+                                  f'fail-closed; {CONTEXT_2}'})
 
     def test_a_read_that_fails_or_says_nothing_is_recorded_as_not_counted_and_never_stops_an_undo(self):
+        def made(assessments, encounters, context_only):
+            return {'interpretation': {'assessments': assessments, 'encounters': encounters,
+                                       'context_only': context_only}}
         for answer in (install.InstallError('Counting ... failed (exit 1).'), {}, {'interpretation': 'three'},
-                       {'interpretation': {'assessments': -1, 'encounters': []}},
-                       {'interpretation': {'assessments': 1, 'encounters': ['e1', 'e2']}},
-                       {'interpretation': {'assessments': True, 'encounters': []}}, ['not', 'a', 'dict']):
+                       made(-1, [], []), made(True, [], []), ['not', 'a', 'dict'],
+                       made(1, ['e1', 'e2'], []),             # two encounters with an assessment, one assessment
+                       made(0, ['e1'], []),                   # an encounter with an assessment, and none counted
+                       made(3, ['e1'], ['e1']),               # three assessments, and no encounter with one
+                       made(1, ['e1'], ['e2']),               # a context-only encounter that is not named
+                       made(2, ['e1', 'e2'], ['e3']),         # likewise, beside one named with its assessments
+                       made(2, ['e1', 'e1'], []),             # an encounter named twice
+                       made(1, ['e1', 'e2', 'e3'], ['e2', 'e2']),  # a context-only encounter named twice
+                       made(1, ['e1'], 'e1'), made(1, ['e1'], None), made(1, ['e1', 'e2'], ['e2', 2]),
+                       {'interpretation': {'assessments': 1, 'encounters': ['e1']}}):  # not this script's answer
             with self.subTest(answer=answer):
                 found = self.note(answer)
-                self.assertEqual((found['assessments'], found['encounters']), (None, None))
-                self.assertTrue(found['note'].startswith('the assessments made from event inventories were not '
-                                                         'counted ('), found['note'])
+                self.assertEqual((found['assessments'], found['encounters'], found['context_only']),
+                                 (None, None, None))
+                self.assertTrue(found['note'].startswith('the assessments made from event inventories and the '
+                                                         'contexts derived from them were not counted ('),
+                                found['note'])
+                self.assertTrue(found['note'].endswith('; the earlier image reads any such assessment fail-closed '
+                                                       'and any such context as current, keeping its holds'),
+                                found['note'])
 
     def test_an_interrupt_is_never_swallowed(self):
         with self.assertRaises(KeyboardInterrupt):
@@ -623,13 +694,15 @@ class RollbackNoteTests(TemporaryDirectoryTest):
 
     def test_the_keep_layout_switches_back_and_declares_the_note(self):
         world = keep_world(self.tmp)
-        world.interpretation_answer = {'interpretation': {'assessments': 3, 'encounters': ['e1', 'e2']}}
+        world.interpretation_answer = {'interpretation': {'assessments': 3, 'encounters': ['e1', 'e2', 'e3'],
+                                                          'context_only': ['e3']}}
         details, failure = run_rollback_app(world)
         self.assertIsNone(failure, failure and str(failure))
         self.assertEqual(world.violations, [])
         self.assertEqual(details['outcome'], 'switched')
-        self.assertEqual(details['interpretation'], {'assessments': 3, 'encounters': ['e1', 'e2'], 'note': NOTE_3})
-        self.assertTrue(details['summary'].endswith('; ' + NOTE_3), details['summary'])
+        self.assertEqual(details['interpretation'], {'assessments': 3, 'encounters': ['e1', 'e2', 'e3'],
+                                                     'context_only': ['e3'], 'note': NOTE_3_1})
+        self.assertTrue(details['summary'].endswith('; ' + NOTE_3_1), details['summary'])
         # read in this revision's image, once its worker is stopped, before the switch back
         read = world.events.index(('interpretation', IMAGE))
         self.assertLess(world.events.index(('close', IMAGE, tuple(KINDS_OLD))), read)
@@ -637,7 +710,8 @@ class RollbackNoteTests(TemporaryDirectoryTest):
 
     def test_the_back_layout_finishes_the_way_back_and_declares_the_note(self):
         world = halfway_world(self.tmp)
-        world.interpretation_answer = {'interpretation': {'assessments': 3, 'encounters': ['e1', 'e2']}}
+        world.interpretation_answer = {'interpretation': {'assessments': 3, 'encounters': ['e1', 'e2'],
+                                                          'context_only': []}}
         mark = len(world.events)
         details, failure = run_rollback_app(world)
         self.assertIsNone(failure, failure and str(failure))
@@ -653,6 +727,7 @@ class RollbackNoteTests(TemporaryDirectoryTest):
         self.assertIsNone(failure, failure and str(failure))
         self.assertEqual(details['outcome'], 'switched')
         self.assertIsNone(details['interpretation']['assessments'])
+        self.assertIsNone(details['interpretation']['context_only'])
         self.assertIn('were not counted (Counting the assessments failed (exit 1).)', details['interpretation']['note'])
 
 
@@ -699,7 +774,8 @@ class VerifyInterpretationTests(TemporaryDirectoryTest):
         install.write_receipt(self.tmp, phase, {'phase': phase, 'ok': True, 'revision': REVISION,
                                                 'details': details or {}})
 
-    def verify(self, *, worker=None, answer=None, interpreter=('live', S4), app=True):
+    def verify(self, *, worker=None, answer=None, interpreter=('live', S4), app=True, given=True):
+        """``given``: what the app receipt says of --interpreter-mode (None: a receipt that does not say)."""
         files = {'available': {'quillmd': install.QUILLMD_VHOST_SHA256, install.VHOST_NAME: '1' * 64},
                  'enabled': {'quillmd': 'quillmd', install.VHOST_NAME: install.VHOST_LINK_TARGET},
                  'nginx_conf_sha256': '2' * 64, 'conf_d': {}}
@@ -709,7 +785,8 @@ class VerifyInterpretationTests(TemporaryDirectoryTest):
         if app:
             mode, start = interpreter
             self.receipt('app', {'interpreter': {'mode': mode, 'credentials_loaded': mode == 'live',
-                                                 'worker_started_at': start}})
+                                                 'worker_started_at': start,
+                                                 **({} if given is None else {'given': given})}})
         vhost = rendered(9151)['https']
         current = {**files, 'available': {**files['available'], install.VHOST_NAME: sha(vhost)}}
         running = {WEB: container_on(9151), WORKER: worker if worker is not None else worker_container(),
@@ -812,12 +889,61 @@ class VerifyInterpretationTests(TemporaryDirectoryTest):
                 details, error = self.verify(**arguments)
                 self.assertIsInstance(error, install.InstallError)
                 self.assertIn(words, str(error))
-        # a disabled interpreter installed disabled passes: verify judges the install it was given, never the mode
+        # a disabled interpreter installed disabled as given passes: verify judges the install it was given
         for path in self.tmp.glob('*.json'):
             path.unlink()
         details, error = self.verify(worker=worker_container('disabled'), interpreter=('disabled', S4))
         self.assertIsNone(error, error and str(error))
         self.assertIn('interpreter disabled: self-test passed', details['summary'])
+
+    LEFT_DISABLED = ('the app phase installed the interpreter disabled only because --interpreter-mode was not given, '
+                     "so every upload's reading is paused (design/FINAL.md 11.2; the install uses live, FINAL 13): "
+                     'rerun --phase app with --interpreter-mode live, or with --interpreter-mode disabled to keep it '
+                     'paused')
+
+    def test_an_interpreter_left_disabled_only_because_its_mode_was_not_given_fails_verify(self):
+        # The review of S14, finding 2: FINAL 13's install is live, and its D22 evidence shows "mode live"; a mode
+        # nobody gave pauses every upload's reading (11.2), and verify must not call that installation verified
+        for given in (False, None):  # None: an app receipt that does not say, read as not given
+            with self.subTest(given=given):
+                for path in self.tmp.glob('*.json'):
+                    path.unlink()
+                details, error = self.verify(worker=worker_container('disabled'), interpreter=('disabled', S4),
+                                             given=given)
+                self.assertIsInstance(error, install.InstallError)
+                self.assertEqual(error.details['problems'], [self.LEFT_DISABLED])
+                self.assertEqual(len(self.oneshots), 1)  # the self-test is still read and recorded beside it
+                self.assertIn('interpreter disabled: self-test passed', error.details['interpretation']['summary'])
+        # a mode given is the operator's choice; live is the install's, given or not
+        for mode, given in (('disabled', True), ('replay', True), ('live', None)):
+            with self.subTest(mode=mode, given=given):
+                for path in self.tmp.glob('*.json'):
+                    path.unlink()
+                details, error = self.verify(worker=worker_container(mode), interpreter=(mode, S4), given=given)
+                self.assertIsNone(error, error and str(error))
+
+    def test_the_documented_app_command_then_verify_does_not_call_the_paused_interpreter_verified(self):
+        # end to end: the app command ops/INSTALL.md row 5 documents (its providers-disabled form) through the REAL
+        # parse_args and phase_app (test_install_harness's AppWorld), its receipt as main writes it, then the REAL
+        # phase_verify, with the worker as that phase started it
+        args = install.parse_args(['--phase', 'app', '--revision', REVISION, '--receipts', str(self.tmp),
+                                   '--provider-mode', 'disabled'])
+        world = AppWorld(self.tmp)
+        patches = world.patches()
+        for patcher in patches:
+            patcher.start()
+        try:
+            installed = install.phase_app(install.Context(args, self.tmp))
+        finally:
+            for patcher in reversed(patches):
+                patcher.stop()
+        self.receipt('app', installed)
+        started = installed['interpreter']['worker_started_at']
+        details, error = self.verify(worker=worker_container('disabled'), app=False,
+                                     answer=answered(d22_report(since=started)))
+        self.assertIsInstance(error, install.InstallError)
+        self.assertEqual(error.details['problems'], [self.LEFT_DISABLED])
+        self.assertEqual(self.oneshots[0][1][3], started)
 
     def test_without_an_app_receipt_a_worker_that_names_a_mode_fails_and_one_that_names_none_is_not_read(self):
         details, error = self.verify(app=False)
@@ -905,19 +1031,22 @@ class InterpretationOnTheDatabaseTests(DatabaseTest):
                                                    state=exchange, http_status=200 if exchange == 'succeeded' else None)
         return run
 
+    def inventory(self, encounter):
+        """A read EventInventory of ``encounter``'s current revision, from a succeeded Gemini run. Synthetic."""
+        from studio import models
+        return models.EventInventory.objects.create(
+            encounter=encounter, revision=encounter.current_revision, provider_run=self.gemini_run(encounter),
+            interpretation_version='gemini-events@1', inventory_version='gemini-inventory@1',
+            text_sha256='a' * 64, request_sha256='e' * 64, response_sha256='b' * 64, state='read',
+            events={'passages': [], 'lesions': [], 'events': [], 'relations': []}, encounter_facts={},
+            open_questions=[], verification={}, sha256='c' * 64)
+
     def assessment(self, encounter, *, engine_version, inventory=False):
         """A context, a routing stand-in and an assessment of ``encounter``'s revision (new-path rows when asked), made
         current. Synthetic."""
         from studio import models
         revision = encounter.current_revision
-        made = None
-        if inventory:
-            made = models.EventInventory.objects.create(
-                encounter=encounter, revision=revision, provider_run=self.gemini_run(encounter),
-                interpretation_version='gemini-events@1', inventory_version='gemini-inventory@1',
-                text_sha256='a' * 64, request_sha256='e' * 64, response_sha256='b' * 64, state='read',
-                events={'passages': [], 'lesions': [], 'events': [], 'relations': []}, encounter_facts={},
-                open_questions=[], verification={}, sha256='c' * 64)
+        made = self.inventory(encounter) if inventory else None
         context = models.EncounterContext.objects.create(
             encounter=encounter, revision=revision, facts={}, sha256='d' * 64, event_inventory=made,
             version='gemini-context@1' if inventory else 'gi-context@5')
@@ -946,7 +1075,8 @@ class InterpretationOnTheDatabaseTests(DatabaseTest):
         self.assessment(legacy, engine_version='cpt-studio-validation@10')
         answer = run_in_image(install.INTERPRETATION_MADE, {})
         self.assertEqual(answer, {'interpretation': {'assessments': 3,
-                                                     'encounters': sorted([str(events.pk), str(later.pk)])}})
+                                                     'encounters': sorted([str(events.pk), str(later.pk)]),
+                                                     'context_only': []}})
         # P-1: none of them is a reason to refuse an undo
         self.assertEqual(run_in_image(install.UNDO_HAZARDS_READ, {}), {'hazards': {}})
         from django.utils import timezone
@@ -962,6 +1092,50 @@ class InterpretationOnTheDatabaseTests(DatabaseTest):
         self.assertEqual(note['note'], '3 assessments were made from event inventories; the earlier image reads them '
                                        'fail-closed')
         self.assertEqual(note['encounters'], sorted([str(events.pk), str(later.pk)]))
+
+    def test_an_encounter_stopped_between_analyze_and_assess_is_named_by_its_context(self):
+        # The review of S14, finding 1. FINAL 12.1: the earlier image reads a gemini context as current, a row "declared
+        # by the hazard" that ADJUDICATION P-1 replaced with this note, which names exactly the new-path encounters.
+        # Here analyze derived the context and its routing stand-in and made it current, Astra ran, Fable is queued,
+        # and no assessment was made from the inventory yet: an undo now hands the earlier image that current context.
+        from django.utils import timezone
+        from studio import models
+        stopped = self.encounter('mid-chain')
+        read = self.inventory(stopped)
+        context = models.EncounterContext.objects.create(
+            encounter=stopped, revision=stopped.current_revision, facts={}, sha256='d' * 64, event_inventory=read,
+            version='gemini-context@1')
+        models.RoutingRun.objects.create(revision=stopped.current_revision, version='gemini-routing@1',
+                                         result={'inventory': str(read.pk)}, sha256='2' * 64)
+        models.Encounter.objects.filter(pk=stopped.pk).update(current_context=context)
+        self.job(stopped, 'fable', models.Job.QUEUED)
+        later = self.encounter('later-context')  # a later gemini-context version (interpretation.is_new_context's rule)
+        models.EncounterContext.objects.create(encounter=later, revision=later.current_revision, facts={},
+                                               sha256='d' * 64, version='gemini-context@2')
+        unread = self.encounter('inventory-only')  # interpret ran, analyze did not: no earlier image reads an inventory
+        self.inventory(unread)
+        events = self.encounter('events')  # an assessment and the context it was made with: named once
+        self.assessment(events, engine_version='cpt-studio-events@1', inventory=True)
+        legacy = self.encounter('legacy')
+        self.assessment(legacy, engine_version='cpt-studio-validation@10')
+        answer = run_in_image(install.INTERPRETATION_MADE, {})
+        self.assertEqual(answer, {'interpretation': {
+            'assessments': 1, 'encounters': sorted(str(item.pk) for item in (stopped, later, events)),
+            'context_only': sorted([str(stopped.pk), str(later.pk)])}})
+        # never a hazard (P-1): an undo's close - here with the fewest kinds, as when no next worker can be asked -
+        # fails the queued Fable stage and names nothing
+        self.assertEqual(run_in_image(install.UNDO_HAZARDS_READ, {}), {'hazards': {}})
+        closed = run_in_image(install.CLOSE_STAGES, {'since': timezone.now().isoformat(), 'note': self.NOTE,
+                                                     'kinds': list(install.COMMON_STAGE_KINDS)})
+        self.assertEqual((closed['closed'], closed['kinds'], closed['hazards']), (1, ['fable'], {}))
+
+        def in_this_image(image, env, body, params, **kwargs):
+            return run_in_image(body, params)
+        with mock.patch.object(install, 'app_script', in_this_image):
+            note = install.interpretation_note(IMAGE, b'', REVISION)
+        self.assertEqual(note, {**answer['interpretation'],
+                                'note': '1 assessment was made from event inventories; the earlier image reads them '
+                                        f'fail-closed; {CONTEXT_2}'})
 
     def test_an_interpret_stage_is_closed_by_an_undo_whose_next_worker_does_not_run_it(self):
         from django.utils import timezone

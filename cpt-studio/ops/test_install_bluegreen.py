@@ -99,7 +99,7 @@ class BlueGreenWorld:
         self.runs = {}              # container name -> the docker run arguments it was last started with
         self.oneshots = []          # (image, command, keyword arguments) of every one-shot, in order
         # ADJUDICATION P-1: what INTERPRETATION_MADE answers in this revision's image (an exception: it raises that)
-        self.interpretation_answer = {'interpretation': {'assessments': 0, 'encounters': []}}
+        self.interpretation_answer = {'interpretation': {'assessments': 0, 'encounters': [], 'context_only': []}}
         self.next_id = 0
         revision, image = serving
         self.add(WEB, 'web', image, revision, port=live)
@@ -1936,6 +1936,10 @@ GEMINI = install.INTERPRETER
 GEMINI_MOUNT = f'type=bind,src={GEMINI["target"]},dst={GEMINI["mounted"]},readonly'
 INSTALLED_COPY = {'exists': True, 'kind': 'file', 'uid': install.APP_UID, 'gid': install.APP_UID, 'mode': '0o400'}
 NOTE_3 = '3 assessments were made from event inventories; the earlier image reads them fail-closed'
+# the review of S14, finding 1: an encounter stopped between analyze and assess, named by its current gemini context
+NOTE_3_1 = (f'{NOTE_3}; 1 encounter holds a context derived from an event inventory and no assessment made from '
+            'one: the earlier image reads that context as current, keeping its holds, and an explicit act reads '
+            'the document again with the earlier reader')
 
 
 def holding_the_key(world):
@@ -2003,7 +2007,7 @@ class InterpreterBlueGreenTests(TemporaryDirectoryTest):
         self.assertLess(world.events.index(('oneshot', ('manage', 'shell'))),
                         world.events.index(('run', 'web', NEXT, 9151, IMAGE)))
         # P-7: verify's window starts where the new worker did (S4), never where the install began (S1)
-        self.assertEqual(details['interpreter'], {'mode': 'live', 'credentials_loaded': True,
+        self.assertEqual(details['interpreter'], {'mode': 'live', 'given': True, 'credentials_loaded': True,
                                                   'worker_started_at': details['steps']['S4']})
         self.assertGreater(details['steps']['S4'], details['steps']['S1'])
         self.assertIn('(provider disabled, astra disabled, fable disabled, interpreter live)', details['summary'])
@@ -2061,12 +2065,14 @@ class InterpreterBlueGreenTests(TemporaryDirectoryTest):
 
     def test_the_switch_back_proceeds_and_declares_what_was_made_from_event_inventories(self):
         world = self.switched_in()
-        world.interpretation_answer = {'interpretation': {'assessments': 3, 'encounters': ['e1', 'e2']}}
+        world.interpretation_answer = {'interpretation': {'assessments': 3, 'encounters': ['e1', 'e2', 'e3'],
+                                                          'context_only': ['e3']}}
         details, error = run_holding_the_key(world, install.phase_switch_back, switch_back_args(self.tmp))
         self.assertIsNone(error, error and str(error))
         self.assertEqual(world.names(), {WEB: (OLD_IMAGE, 9150, True), WORKER: (OLD_IMAGE, None, True)})
-        self.assertEqual(details['interpretation'], {'assessments': 3, 'encounters': ['e1', 'e2'], 'note': NOTE_3})
-        self.assertTrue(details['summary'].endswith('; ' + NOTE_3), details['summary'])
+        self.assertEqual(details['interpretation'], {'assessments': 3, 'encounters': ['e1', 'e2', 'e3'],
+                                                     'context_only': ['e3'], 'note': NOTE_3_1})
+        self.assertTrue(details['summary'].endswith('; ' + NOTE_3_1), details['summary'])
         self.assertEqual(details['interpreter_mode'], 'disabled')
         # counted with this revision's image once its worker is parked and its stages closed, before the switch (B4)
         read = world.events.index(('interpretation', IMAGE))
@@ -2087,8 +2093,8 @@ class InterpreterBlueGreenTests(TemporaryDirectoryTest):
         details, error = run_holding_the_key(world, install.phase_switch_back, switch_back_args(self.tmp))
         self.assertIsNone(error, error and str(error))
         self.assertEqual(world.names(), {WEB: (OLD_IMAGE, 9150, True), WORKER: (OLD_IMAGE, None, True)})
-        self.assertEqual((details['interpretation']['assessments'], details['interpretation']['encounters']),
-                         (None, None))
+        self.assertEqual((details['interpretation']['assessments'], details['interpretation']['encounters'],
+                          details['interpretation']['context_only']), (None, None, None))
         self.assertIn('were not counted (Counting the assessments failed (exit 1).)', details['summary'])
 
     def test_a_ctrl_c_while_counting_resumes_this_revision_with_nothing_switched(self):
