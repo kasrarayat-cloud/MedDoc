@@ -4260,3 +4260,64 @@ design, the refutations and the install are appended below, never rewritten.
 - **Reproduced offline** from the retained responses on a restored copy (`rjudge.sh`, nothing sent): with the owner's answers,
   five excluded; without them, the same ten questions. The trace of every candidate and question, with the earliest stage of
   wrong association, follows.
+
+### The trace (2026-11-09, workflow wf_1565b84f-fef: five tracers and a verifying synthesis, read-only on c2e53f8e)
+
+The full result, with every FILE:LINE and probe, is kept in the session directory (`note8/trace-result.json`; the probes in
+`note8/trace-*/`). The synthesis re-ran a read-only verification probe on c2e53f8e and confirmed every link below.
+
+**One shared cause.** CPT Studio compares statements by act kind before it has tied each statement to its time, its target
+(lesion or site) and its technique or device.
+- **The first wrong link, in pipeline order, is the section stage.** sections.layout reads the colon-less line "Clinical
+  indication and interval history" (offset 699) as a history section (sections.py:298-317, :1148, :1170-1175). None of the
+  twelve body headings opens a section: "Procedure technique and chronological findings" (5809) and the eleven after it,
+  down to "Technical outcome and immediate complications" (14538), are not in HEADINGS (sections.py:87-156). So 699-15375,
+  three quarters of the note and the whole procedure narrative, is one history section in both readers.
+  structure.clinical_layout releases nothing here and returns that layout (structure.py:2240-2249). services.parts and
+  _time_parts let a layout history override the titled report (services.py:1359, :1838, :1971-1972). Routing turns
+  performed cues inside a history section into historical (detect.py:2206-2209). Every narrative act reads historical,
+  every narrative lesion goes unrecorded (services.py:6792), and no reach is read. Only the Impression's four
+  restatements read as performed.
+- **The denials are tied to the wrong time or target at the clause and act stage, whatever the layout does.**
+  - read_clause returns "negated" (services.py:3008-3021) before it reads the clause's own date or section (:3120-3176),
+    and the Act record has no field for when an act happened (:1066-1078). So "No dilation was carried out in 2024." -
+    which sits in a genuinely historical paragraph - becomes a denial of today's dilation.
+  - The 17 mm splenic-flexure lesion is never recorded: LESION reads "a separate 17 mm non-granular flat lesion" only as
+    "flat lesion" (services.py:926-931). The site "splenic-flexure" is not read either, because ANATOMY needs a space
+    (:107). Its denial therefore has no target.
+  - Device nouns ("the EMR electrosurgical snare", "the dilation balloon") are read as acts (ACTS, :232-253) and take the
+    nearest technique word in the clause (_technique, :4130-4141). "this polyp" cannot resolve (:7566-7574).
+  - _merge_acts fuses denials about different targets and times (:8032, :8042).
+  - _same_subject's fall-through `return True` pairs a denial that has no target with every act of its kind (:8186).
+  - reconcile.match picks a conflict or a denial by service and kind alone (reconcile.py:246-249, :293-296).
+- **The tattoo.** Both readers read the fronted purpose "For future localization" as the act's time, through a closed,
+  wording-dependent purpose rule (services.py:2927-2941; purpose.py:37-46, :149-217; detect.py:1881-1918). The one
+  tattoo told in six places is never one event. A denial about another target, the EMR resection bed, decides 45381.
+- **The extent.** It is hidden behind the section stage. Once that is fixed, the altered-anatomy gaps surface. There is
+  no anastomosis landmark (cues.py:964-975). "Surgically absent" must not be read as an endpoint seen. The guidewire's
+  passage must not count as the scope's. The failed-then-completed passage must be read in sequence.
+
+**Corrections to what was recorded on receipt (appended, not rewritten).**
+- The stated "Date of service: November 8, 2026" IS read. context.py returns origin "document", 2026-11-08, with the
+  evidence at 287-320. A member value that agrees with it replaces only its provenance (context.merge_user_values,
+  context.py:3541): the stored fact then says "entered by a workspace member". The date is correct everywhere and causes
+  none of the six questions; the provenance is a separate, minor defect.
+- The extent is not missing because of the anatomy alone: the section stage hides it, as above.
+
+**The six questions** (before; the cause confirmed by probe; the result the document supports):
+
+| question | original reason | confirmed cause | the document's reading | remaining uncertainty |
+|---|---|---|---|---|
+| conflict:snare (45385) | the cold-snare removal vs "No biopsy, snare resection, ablation, or balloon dilation was performed on this splenic-flexure lesion" | the denial has no target (LESION, ANATOMY); "this polyp" unresolved (the layout); the device denial "the EMR electrosurgical snare ... to treat this polyp" read as a snare act; merged; paired by the fall-through (services.py:8186) | one cold-snare polypectomy today, on the separate 9 mm descending-colon polyp (Specimen E, the outcome, Impression 5, the attestation); the denials concern another lesion, and another device on the same polyp | none in the documentation; 45385 beside 45390 on another lesion is a billing consideration (59/XS; NCCI not connected) |
+| conflict:emr (45390) | the transverse-colon EMR vs "Neither the dilation balloon nor the EMR electrosurgical snare was used to treat this polyp" | "EMR" in the device noun read as an EMR act; technique lent from the other conjunct; "this polyp" unresolved; paired by the fall-through; chosen by kind | EMR of the 23 mm granular LST at about 58 cm, with its own saline/methylene-blue lift, a 15 mm electrocautery snare in two pieces, snare-tip coagulation and clips (all components of the EMR) | none in the documentation; with the conflicts removed alone, 45390 is still held by the time hold (engine._passages_elsewhere), because its passages lie in the misdated narrative - the section repair must remove that too |
+| conflict:dilation (45386) | the anastomotic dilation vs "No dilation was carried out in 2024." | read_clause returns "negated" before reading the clause's own date (2024 < 2026-11-08) | today's wire-guided TTS balloon dilation of the anastomotic stricture to 12, 13.5 and 15 mm, then traversed; the denials concern 2024, the splenic-flexure lesion and the polyp | none in the documentation |
+| conflict:biopsy (45380) | the targeted biopsies vs the splenic-flexure denial | the 17 mm lesion is never recorded and "splenic-flexure" reads no site, so the denial has no target; paired by the fall-through | cold-forceps biopsies today at four sites (anastomotic rim, neo-terminal ileum, proximal transverse colon, rectosigmoid), "not taken from any subsequently resected polyp or the unresected suspicious lesion" | none in the documentation |
+| performed_status (45381) | "the document states the submucosal injection or submucosal tattoo was not performed: No carbon-particle tattoo was placed into the transverse-colon resection bed" | no tattoo reads performed (the layout; the fronted purpose read as time), so reconcile.match takes a denial of the code's kinds anywhere in the service - one about another target | one carbon-particle tattoo today: two submucosal injections about 4 cm distal to the unresected splenic-flexure lesion, photographed; "for future localization" is its purpose | none in the documentation; whether 45381 is separately reportable beside 45390 is billing (the EMR's lift supports no 45381; the tattoo marks a distinct lesion at a distinct site) |
+| extent (all five) | "CPT Studio could not find how far the examination reached" | the reach readers need performed readings, and every narrative mention reads historical by section; the altered-anatomy gaps lie behind it | ileocecal resection 2017 (cecum and ileocecal valve absent); the scope reached the anastomosis, could not pass at first, passed after dilation to 15 mm, and examined about 15 cm of the neo-terminal ileum | none in the documentation; whether the anastomosis counts as the colonoscopy's endpoint for completeness or a modifier is a reference reading, never a documentation question |
+
+**Convergence, measured.** No single-stage fix converges.
+- The layout fix alone makes 45390 READY with a false "incomplete" and a 52/53 consideration, and with the EMR on the wrong
+  lesion. It reshapes the conflicts (up to seven, four of them from the equipment list) and adds a false conflict:tattoo.
+- Comparing only compatible events, alone, moves the holds into _second_opinion and _passages_elsewhere.
+- So time, target identity, device and technique, purpose and the pairing rule must land together, with the shared
+  derived layout. sections.layout itself stays unchanged: it is the date reader's frozen input (H2).

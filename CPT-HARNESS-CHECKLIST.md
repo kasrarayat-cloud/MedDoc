@@ -306,10 +306,14 @@ The requirement is recorded verbatim, with the session's interpretation on recei
 replaces none of its unfinished requirements. Its case is GI Note #8 (encounter 9dbe9fc4); its class is U32, with U12 its parent
 and U13, U30, U19/U14, U21 and U10/U11 related. Each item is ticked only when its acceptance evidence passes.
 
-- [ ] **Reproduce and trace the actual failure.** Located: the owner's upload of 2026-11-08T23:48Z (PDF, 19,398 extracted
+- [x] **Reproduce and trace the actual failure.** Located: the owner's upload of 2026-11-08T23:48Z (PDF, 19,398 extracted
   characters), its Corti, Astra and Fable runs, its six assessments and its ten stored questions. Reproduced offline from the
-  retained responses on c2e53f8e, with the owner's answers (five excluded) and without them (the same ten questions). The trace
-  of all five candidates and six questions, with the earliest stage of wrong association, is running.
+  retained responses on c2e53f8e, with the owner's answers (five excluded) and without them (the same ten questions). Traced
+  (2026-11-09, wf_1565b84f-fef; cpt-studio/HARNESS.md "The trace"): all five candidates and six questions, each cause verified
+  by probe on c2e53f8e; the earliest wrong link is the section stage, and the denials' time, target and device association
+  is wrong at the clause and act stage regardless. The active branch was compared: its 16 runtime files are byte-identical
+  to c2e53f8e, so no repair is duplicated. The wave-1 designs in flight in their sandboxes (U30's pairing, U31's derived
+  layout) overlap U32 and are folded into its design, not built twice.
 - [ ] **Repair the shared evidence model** (association of each assertion with procedure, target or lesion, intervention,
   technique, encounter/time, performer, outcome and exact spans, before contradictions; lesion identity from context, uncertain
   identity preserved).
@@ -1157,3 +1161,11 @@ and U13, U30, U19/U14, U21 and U10/U11 related. Each item is ticked only when it
 - **2026-11-09 The owner's requirement: the shared evidence model (GI Note #8).** Recorded verbatim in the rulings file with the
   session's interpretation; U32 added (U12 its parent; U13, U30, U19/U14, U21, U10/U11 related). Note #8 located (encounter
   9dbe9fc4) and reproduced from its retained responses on c2e53f8e, with and without the owner's answers; the trace is running.
+- **2026-11-09 The Note #8 trace** (wf_1565b84f-fef; cpt-studio/HARNESS.md "The trace"). The earliest wrong link is the section
+  stage: a colon-less "Clinical indication and interval history" heading opens a history section that no body heading
+  closes, so the whole narrative reads historical in both readers. The denials are tied to the wrong time or target at
+  the clause and act stage regardless (negation read before time; the 17 mm lesion and "splenic-flexure" unread; device
+  nouns read as acts; "this polyp" unresolved; a denial with no target paired with every act of its kind). All six
+  questions are resolved by the document; what remains is billing and reference. CORRECTION to U32 as recorded on
+  receipt (the row is kept): the stated date of service IS read; only its provenance is replaced when a member enters the
+  same date (context.py:3541). No single-stage fix converges (measured): the stages must land together.
