@@ -117,6 +117,23 @@ PARTICIPANTS = {
               'required': ('ANTHROPIC_API_KEY',), 'optional': ('ANTHROPIC_WORKSPACE_ID',)},
 }
 PARTICIPANT_FILE_LIMIT = 32_000  # the size the application's loaders accept (HARNESS.md 8)
+# The interpreter's credential (the Gemini migration: design/FINAL.md 13, DECISIONS D14), beside the participants' and
+# never one of them: it has its own mode (--interpreter-mode, CPT_STUDIO_GEMINI_MODE) and no access check. The owner's
+# source is root 0600, one line GEMINI_API_KEY=<key>; it is copied unread, by the participants' own helper and rules
+# (H_PARTICIPANT_SECRETS: key NAMES only), to /etc/cpt-studio/gemini.env (10150:10150 0400), and mounted read-only into
+# the WORKER alone when the interpreter is live. The web is given the mode and the path and no file, as for Corti and
+# the participants (a web that builds what the worker would send needs the worker's configuration, and only the worker
+# sends; service_problems refuses any bind in a web). A missing source leaves the interpreter installable only disabled
+# or replayed. Replay reads the recordings the image ships (tests/fixtures/interpretation/gemini/, kept in the image by
+# deploy/.dockerignore) and sends nothing. The model and the endpoint are the adapter's constants, never the
+# installer's.
+INTERPRETER = {'name': 'gemini', 'source': f'{PROVIDER_SOURCES}/gemini.env', 'target': f'{ETC_DIR}/gemini.env',
+               'mounted': '/run/cpt-studio/gemini.env', 'file_env': 'CPT_STUDIO_GEMINI_CREDENTIALS_FILE',
+               'mode_env': 'CPT_STUDIO_GEMINI_MODE', 'replay_env': 'CPT_STUDIO_GEMINI_REPLAY_DIR',
+               'replay_dir': '/app/tests/fixtures/interpretation', 'module': 'studio.interpretation.adapter',
+               'loader': 'load_gemini_credentials', 'setting': 'GEMINI_CREDENTIALS_FILE',
+               'required': ('GEMINI_API_KEY',), 'optional': ()}
+INTERPRETER_MODES = ('disabled', 'live', 'replay')  # FINAL 13: --interpreter-mode live|replay|disabled
 # An access check sends one coding request (Corti, after the OAuth token request its adapter sends first) or one run of
 # the pipeline's tool loop, one request per exchange and at most PARTICIPANT_MAX_EXCHANGES (Astra, Fable): its deadline is the participant send deadline (330 s), plus the container's
 # start.
@@ -352,6 +369,7 @@ PHASE_ARGUMENTS = {
     'pfs_retrieved_at': {'reference'}, 'mue_retrieved_at': {'reference'},
     'provider_mode': {'app', 'switch-back'}, 'authorization_ref': {'app', 'switch-back'},
     'astra_mode': {'app', 'switch-back'}, 'fable_mode': {'app', 'switch-back'}, 'access_check': {'app'},
+    'interpreter_mode': {'app', 'switch-back'},
     'owner_username': {'provision'}, 'owner_display_name': {'provision'}, 'agent_username': {'provision'},
     'agent_display_name': {'provision'}, 'workspace_name': {'provision'},
     'reset_passwords': {'provision', 'operators'},
@@ -372,6 +390,9 @@ def parse_args(argv=None):
     parser.add_argument('--authorization-ref')
     parser.add_argument('--astra-mode', choices=('disabled', 'live'), help='Astra (OpenAI); disabled when not given')
     parser.add_argument('--fable-mode', choices=('disabled', 'live'), help='Fable (Anthropic); disabled when not given')
+    parser.add_argument('--interpreter-mode', choices=INTERPRETER_MODES,
+                        help='the interpreter (Gemini; design/FINAL.md 13): disabled when not given; live sends under '
+                             '--authorization-ref; replay reads the recordings the image ships and sends nothing')
     parser.add_argument('--access-check', action='store_true', default=None,
                         help='after the app phase, check each live participant with real requests: one coding '
                              'request for Corti, and for Astra and for Fable one run of the tool loop, one request '
@@ -392,6 +413,7 @@ def parse_args(argv=None):
         parser.error(problem)
     args.astra_mode = args.astra_mode or 'disabled'
     args.fable_mode = args.fable_mode or 'disabled'
+    args.interpreter_mode = args.interpreter_mode or 'disabled'
     args.agent_username = args.agent_username or 'review-agent'
     args.agent_display_name = args.agent_display_name or 'CPT Studio review agent'
     args.owner_display_name = args.owner_display_name or ''
@@ -433,8 +455,13 @@ def argument_problem(args) -> str:
         for name in participants:
             if not args.authorization_ref:
                 return f'--{name}-mode live needs --authorization-ref (a ruling file tracked at the revision).'
-        if args.authorization_ref and args.provider_mode == 'disabled' and not participants:
-            return '--authorization-ref only applies to --provider-mode live, --astra-mode live or --fable-mode live.'
+        # The interpreter sends under the same recorded authority (jobs._live_gate; design/FINAL.md 6.3).
+        interpreting = getattr(args, 'interpreter_mode', None) == 'live'
+        if interpreting and not args.authorization_ref:
+            return '--interpreter-mode live needs --authorization-ref (a ruling file tracked at the revision).'
+        if args.authorization_ref and args.provider_mode == 'disabled' and not participants and not interpreting:
+            return ('--authorization-ref only applies to --provider-mode live, --astra-mode live, --fable-mode live or '
+                    '--interpreter-mode live.')
         if args.access_check and args.provider_mode != 'live' and not participants:
             return ('--access-check checks each live participant: give --provider-mode live, --astra-mode live or '
                     '--fable-mode live.')
@@ -1128,10 +1155,23 @@ def participant_secrets() -> dict:
     /etc/cpt-studio (10150:10150 0400), checked by key name only; a missing source leaves its participant 'not
     provided'. The sources directory is mounted only once it is seen to be a root-owned 0700 directory (and the helper
     looks again); anything else refuses with nothing written. {participant: {state, source, key_names}}."""
+    return copied_credentials(PARTICIPANTS, 'participant')
+
+
+def interpreter_secrets() -> dict:
+    """The interpreter's credential (design/FINAL.md 13, D14), copied by the same helper and rules as the participants'
+    - unread, checked by key name only, 10150:10150 0400 - in a run of its own, so the participants' set is exactly as
+    it was and a refusal of either writes nothing for it. {'gemini': {state, source, key_names}}."""
+    return copied_credentials({INTERPRETER['name']: INTERPRETER}, 'interpreter')
+
+
+def copied_credentials(specs, what) -> dict:
+    """H_PARTICIPANT_SECRETS over ``specs`` ({name: spec with source, target, required and optional}); ``what`` names
+    them in a refusal. {name: {state, source, key_names}}."""
     folder = helper_stat([PROVIDER_SOURCES])[PROVIDER_SOURCES]
     mounted = bool(folder.get('exists'))
     if mounted and folder != {'exists': True, 'kind': 'dir', 'uid': 0, 'gid': 0, 'mode': '0o700'}:
-        raise InstallError(f'{PROVIDER_SOURCES} is not a root-owned 0700 directory; no participant credentials file '
+        raise InstallError(f'{PROVIDER_SOURCES} is not a root-owned 0700 directory; no {what} credentials file '
                            'was copied.', details={'sources': folder})
     mounts = [f'type=bind,src={ETC_DIR},dst=/target']
     if mounted:
@@ -1140,13 +1180,15 @@ def participant_secrets() -> dict:
               'participants': [{'name': name, 'source': PurePosixPath(spec['source']).name,
                                 'source_path': spec['source'], 'target': PurePosixPath(spec['target']).name,
                                 'target_path': spec['target'], 'required': list(spec['required']),
-                                'optional': list(spec['optional'])} for name, spec in PARTICIPANTS.items()]}
+                                'optional': list(spec['optional'])} for name, spec in specs.items()]}
     return run_helper(H_PARTICIPANT_SECRETS, params, mounts=mounts, sensitive=True)['participants']
 
 
 def credentials_target(name) -> str:
-    """The installed credentials file of 'corti' or of a harness participant."""
-    return CORTI_TARGET if name == 'corti' else PARTICIPANTS[name]['target']
+    """The installed credentials file of 'corti', of a harness participant, or of the interpreter ('gemini')."""
+    if name == 'corti':
+        return CORTI_TARGET
+    return INTERPRETER['target'] if name == INTERPRETER['name'] else PARTICIPANTS[name]['target']
 
 
 def credential_free(outputs, participants) -> bool:
@@ -1782,15 +1824,32 @@ def participant_modes(args) -> dict:
     return {name: getattr(args, f'{name}_mode', None) or 'disabled' for name in PARTICIPANTS}
 
 
+def interpreter_mode(args) -> str:
+    """The interpreter's mode from --interpreter-mode; 'disabled' when not given (or for an args object that does not
+    name it), as every one-shot runs it (design/FINAL.md 13)."""
+    mode = getattr(args, 'interpreter_mode', None) or 'disabled'
+    if mode not in INTERPRETER_MODES:
+        raise InstallError(f'The interpreter mode must be one of {", ".join(INTERPRETER_MODES)}, not {mode!r}.')
+    return mode
+
+
 def participant_mount(name) -> str:
     """A participant's credentials file, read-only at the worker's path (HARNESS.md 8)."""
     spec = PARTICIPANTS[name]
     return f'type=bind,src={spec["target"]},dst={spec["mounted"]},readonly'
 
 
-def runtime_env(provider_mode, authorization_ref, *, credentials=False, participants=None, files=()):
+def interpreter_mount() -> str:
+    """The interpreter's credentials file, read-only at the worker's path (design/FINAL.md 13, D14)."""
+    return f'type=bind,src={INTERPRETER["target"]},dst={INTERPRETER["mounted"]},readonly'
+
+
+def runtime_env(provider_mode, authorization_ref, *, credentials=False, participants=None, files=(), interpreter=None,
+                interpreter_file=False):
     """-e flags. Each harness participant is named with its mode - ``participants`` maps them; one not given is
-    disabled, as in every one-shot - and a live one (or one in ``files``) with its credentials path."""
+    disabled, as in every one-shot - and a live one (or one in ``files``) with its credentials path. The interpreter is
+    named with its mode (``interpreter``; disabled when not given, as in every one-shot), its credentials path when it
+    is live (or ``interpreter_file``), and the recordings the image ships when it replays."""
     values = {'CPT_STUDIO_DB_HOST': DB_CONTAINER, 'CPT_STUDIO_DB_PORT': '5432', 'CPT_STUDIO_DB_NAME': DB_NAME,
               'CPT_STUDIO_DB_USER': DB_USER, 'CPT_STUDIO_HTTPS': '1', 'CPT_STUDIO_TRUST_PROXY': '1',
               'CPT_STUDIO_PROVIDER_MODE': provider_mode, 'CPT_STUDIO_AUTHORIZATION_REF': authorization_ref}
@@ -1801,6 +1860,14 @@ def runtime_env(provider_mode, authorization_ref, *, credentials=False, particip
         values[spec['mode_env']] = mode
         if mode == 'live' or name in files:
             values[spec['file_env']] = spec['mounted']
+    interpreting = interpreter or 'disabled'
+    if interpreting not in INTERPRETER_MODES:
+        raise InstallError(f'The interpreter mode must be one of {", ".join(INTERPRETER_MODES)}, not {interpreting!r}.')
+    values[INTERPRETER['mode_env']] = interpreting
+    if interpreting == 'live' or interpreter_file:
+        values[INTERPRETER['file_env']] = INTERPRETER['mounted']
+    if interpreting == 'replay':
+        values[INTERPRETER['replay_env']] = INTERPRETER['replay_dir']
     flags = []
     for name, value in values.items():
         flags += ['-e', f'{name}={value}']
@@ -1808,12 +1875,14 @@ def runtime_env(provider_mode, authorization_ref, *, credentials=False, particip
 
 
 def service_args(role, image_id, revision, provider_mode, authorization_ref, participants=None, *, name=None,
-                 port=WEB_PORT):
+                 port=WEB_PORT, interpreter=None):
     """docker run arguments for a long-running role; secrets arrive on stdin as an env-file. ``participants`` maps each
-    harness participant to its mode (disabled when not given). A web is named ``name`` (the incoming web of a
-    blue/green install: INCOMING_WEB) and publishes 127.0.0.1:``port``; every other argument is the same."""
+    harness participant to its mode (disabled when not given), and ``interpreter`` is the interpreter's (disabled when
+    not given). A web is named ``name`` (the incoming web of a blue/green install: INCOMING_WEB) and publishes
+    127.0.0.1:``port``; every other argument is the same."""
     live = provider_mode == 'live'
     modes = {name: (participants or {}).get(name) or 'disabled' for name in PARTICIPANTS}
+    interpreting = interpreter or 'disabled'
     container = name or SERVICES[role]
     if container not in ((SERVICES['web'], INCOMING_WEB) if role == 'web' else (SERVICES['worker'],)):
         raise InstallError(f'{container} is not a name a CPT Studio {role} is started under.')
@@ -1822,19 +1891,23 @@ def service_args(role, image_id, revision, provider_mode, authorization_ref, par
               '--label', f'{LABEL}=1', '--label', f'{ROLE_LABEL}={role}', '--label', f'{REVISION_LABEL}={revision}',
               '--log-opt', 'max-size=10m', '--log-opt', 'max-file=5', '--stop-timeout', str(STOP_SECONDS[role]),
               '--mount', f'type=volume,src={FILES_VOLUME},dst={STATE_DIR}', '--env-file', '/dev/stdin']
-    environment = runtime_env(provider_mode, authorization_ref, credentials=live, participants=modes)
+    environment = runtime_env(provider_mode, authorization_ref, credentials=live, participants=modes,
+                              interpreter=interpreting)
     if role == 'web':
         # The path, never the file. A context change in the web builds the request it would send to tell a
         # re-check from a re-send (jobs._run_answers); building a request opens nothing, and only the worker
         # sends. Without the path, live mode had no provider in the web, so every setting or billing save
         # re-predicted and the worker re-sent a failed or not-sent request (pre-install review, 2026-10-26).
-        # A live harness participant alike: its adapter builds requests without credentials (HARNESS.md 8).
+        # A live harness participant alike: its adapter builds requests without credentials (HARNESS.md 8). And the
+        # interpreter alike (design/FINAL.md 13; its adapter reads the key only to send, interpretation.adapter).
         return [*common, *hardening('768m', 128, '256m'), '-p', f'127.0.0.1:{port}:8000', *environment,
                 image_id, 'web']
     extra = ['--mount', f'type=bind,src={CORTI_TARGET},dst={CREDENTIALS_IN_CONTAINER},readonly'] if live else []
     for name, mode in modes.items():
         if mode == 'live':
             extra += ['--mount', participant_mount(name)]
+    if interpreting == 'live':  # the worker alone holds the interpreter's key (D14)
+        extra += ['--mount', interpreter_mount()]
     return [*common, *hardening('1536m', 256, '1g'), '--no-healthcheck', *extra, *environment, image_id, 'worker']
 
 
@@ -1850,16 +1923,20 @@ def db_args() -> list:
 
 
 def oneshot(image_id, command, env_bytes, *, mounts=(), user=f'{APP_UID}:{APP_UID}', timeout=600,
-            network=None, credentials=False, participant_files=(), environment=None):
-    """A --rm container of the app image with provider calls disabled - Corti's and every participant's - unless
-    ``environment`` gives its -e flags; returns the completed process. ``credentials`` and ``participant_files``
-    (participant names) mount those credentials files read-only at the worker's paths."""
+            network=None, credentials=False, participant_files=(), environment=None, interpreter_file=False):
+    """A --rm container of the app image with provider calls disabled - Corti's, every participant's and the
+    interpreter's (design/FINAL.md 13) - unless ``environment`` gives its -e flags; returns the completed process.
+    ``credentials``, ``participant_files`` (participant names) and ``interpreter_file`` mount those credentials files
+    read-only at the worker's paths."""
     name = f'cpt-studio-oneshot-{secrets.token_hex(8)}'
     if credentials:
         mounts = [*mounts, f'type=bind,src={CORTI_TARGET},dst={CREDENTIALS_IN_CONTAINER},readonly']
     mounts = [*mounts, *(participant_mount(participant) for participant in participant_files)]
+    if interpreter_file:
+        mounts = [*mounts, interpreter_mount()]
     if environment is None:
-        environment = runtime_env('disabled', '', credentials=credentials, files=participant_files)
+        environment = runtime_env('disabled', '', credentials=credentials, files=participant_files,
+                                  interpreter_file=interpreter_file)
     argv = [DOCKER, 'run', '--rm', '--name', name, '--pull=never', '--network', network or NETWORK,
             '--no-healthcheck', '--log-driver=none', '--label', f'{LABEL}=1', '--label', f'{ROLE_LABEL}=oneshot',
             *hardening('768m', 128, '256m', user=user), '--env-file', '/dev/stdin', *environment,
@@ -1884,6 +1961,13 @@ PARTICIPANT_CREDENTIALS_CHECKS = {
            f'{spec["loader"]}(settings.{spec["setting"]})\n'
            f"print('{name}-credentials-parse-ok')\n")
     for name, spec in PARTICIPANTS.items()}
+# The interpreter's, likewise (design/FINAL.md 13: "the offline loader check follows the existing pattern"): its own
+# loader (interpretation.adapter.load_gemini_credentials, by the participants' rules with GEMINI_API_KEY its one key),
+# in the worker's mount layout, offline, with the interpreter itself disabled.
+INTERPRETER_CREDENTIALS_CHECK = ('from django.conf import settings\n'
+                                 f'from {INTERPRETER["module"]} import {INTERPRETER["loader"]}\n'
+                                 f'{INTERPRETER["loader"]}(settings.{INTERPRETER["setting"]})\n'
+                                 f"print('{INTERPRETER['name']}-credentials-parse-ok')\n")
 
 # Run by `manage shell -c` in an image of the app (APP_SCRIPT_PRELUDE gives it P, the parameters, and ANSWER); each
 # prints one ANSWER line. UNRUNNABLE_STAGES uses only what every revision's models have (057a7d39's included): it is
@@ -1894,6 +1978,10 @@ APP_SCRIPT_PRELUDE = 'import base64, json\nP = json.loads(base64.b64decode({payl
 # the kinds the next worker runs - read from that worker's own image (stage_kinds_of) - and only these when it has no
 # image to ask (refutation p1, security-0).
 COMMON_STAGE_KINDS = ('analyze', 'assess', 'extract', 'predict')
+# The Gemini migration's stage kind 'interpret' (interpretation.JOB_KIND) is not among them (design/FINAL.md 12.1,
+# 13): no worker before it runs one, so CLOSE_STAGES closes an open interpret stage on every undo whose next worker
+# lacks it, settling the Gemini run it had in flight as any other (sending: unknown, reserved: not sent), and an older
+# revision's app phase refuses while one is open (UNRUNNABLE_STAGES), as for the participants' stages.
 # What this revision recorded that an older revision's web and worker would act on under their own rules (refutation
 # p1, migrate-0/-1), read in this revision's image as the installed revision 057a7d39 reads the rows - the oldest a
 # rollback goes back to. {encounter id: reasons}:
@@ -2227,6 +2315,28 @@ for encounter in rows:
         changed[str(encounter.pk)] = [read, derived]
 print(ANSWER + json.dumps({'encounters': rows.count(), 'changed': changed}))
 '''
+# ADJUDICATION P-1 (design/FINAL.md 12.3 as amended): the assessments made from event inventories - every one the
+# events engine made (an engine_version of the cpt-studio-events@ family, interpretation.is_new_assessment's rule) or
+# that names an inventory - and their encounters. An earlier image reads them fail-closed: its overlay cannot read their
+# records, so it keeps every stored hold and releases none (FINAL 12.1-12.2). It is NEVER a refusing reason (not an
+# UNDO_HAZARDS or SHOWN_HAZARDS one): switch-back and rollback-app write it as a declared note in their receipts and go
+# on. Read in this revision's own image; an image with no event inventories answers None. Nothing is written or sent.
+INTERPRETATION_MADE = '''
+from django.db.models import Q
+from studio import models
+try:
+    from studio import interpretation
+except ImportError:
+    interpretation = None
+made = None
+if interpretation is not None and any(f.name == 'event_inventory' for f in models.Assessment._meta.get_fields()):
+    family = interpretation.ENGINE_VERSION.partition('@')[0] + '@'
+    encounters = list(models.Assessment.objects.filter(Q(event_inventory__isnull=False)
+                                                       | Q(engine_version__startswith=family))
+                      .values_list('encounter_id', flat=True))
+    made = {'assessments': len(encounters), 'encounters': sorted({str(pk) for pk in encounters})}
+print(ANSWER + json.dumps({'interpretation': made}))
+'''
 # The list state the installed revision 057a7d39 derives for each encounter of P['encounters'], written where it differs
 # (refutation p2, install2:1), for an undo with no older image to ask: rollback-app with no pair parked, after which the
 # older revision is installed by its own installer - 057a7d39's never recomputes a stored state, so it shows what it is
@@ -2432,11 +2542,12 @@ def service_problems(container, role, image_id, port=None) -> list:
                 else [{}])
     if bindings not in expected:
         problems.append('unexpected published ports')
-    # Only the worker holds a credentials file, read-only (HARNESS.md 8): Corti's and a live participant's.
+    # Only the worker holds a credentials file, read-only (HARNESS.md 8): Corti's, a live participant's and the live
+    # interpreter's (design/FINAL.md 13, D14). A web holds none, whatever it is configured for.
     binds = [(mount.get('Source'), mount.get('Destination'), mount.get('RW'))
              for mount in container.get('Mounts') or [] if mount.get('Type') == 'bind']
-    allowed = {(CORTI_TARGET, CREDENTIALS_IN_CONTAINER)} | {(spec['target'], spec['mounted'])
-                                                          for spec in PARTICIPANTS.values()}
+    allowed = ({(CORTI_TARGET, CREDENTIALS_IN_CONTAINER), (INTERPRETER['target'], INTERPRETER['mounted'])}
+               | {(spec['target'], spec['mounted']) for spec in PARTICIPANTS.values()})
     if role == 'web' and binds:
         problems.append('the web holds a bind-mounted file (only the worker holds credentials)')
     if role == 'worker' and any((source, destination) not in allowed or writable is not False
@@ -2559,6 +2670,35 @@ def undo_hazards(image_id, env_bytes, revision) -> dict:
                       what=f'Reading what an older revision would act on wrongly (revision {revision[:12]})')['hazards']
 
 
+def interpretation_note(image_id, env_bytes, revision) -> dict:
+    """ADJUDICATION P-1: the declared, NON-REFUSING note a switch-back or rollback-app receipt carries - the assessments
+    ``revision`` made from event inventories and their encounters (INTERPRETATION_MADE, read with ``image_id``, this
+    revision's own image), which the earlier image reads fail-closed. {'assessments', 'encounters', 'note'}. It never
+    stops an undo: a read that fails, or an answer that says nothing it read, is recorded as not counted (an interrupt
+    is never swallowed)."""
+    def uncounted(why):
+        return {'assessments': None, 'encounters': None,
+                'note': f'the assessments made from event inventories were not counted ({why}); the earlier image '
+                        'reads any of them fail-closed'}
+    try:
+        answer = app_script(image_id, env_bytes, INTERPRETATION_MADE, {},
+                            what=f'Counting the assessments revision {revision[:12]} made from event inventories')
+    except Exception as error:  # noqa: BLE001 — a declared note never stops an undo; it says it was not read
+        return uncounted(str(error) or type(error).__name__)
+    made = answer.get('interpretation', _UNREAD) if isinstance(answer, dict) else _UNREAD
+    if made is None:
+        return {'assessments': 0, 'encounters': [], 'note': 'this image keeps no event inventory, so no assessment was '
+                                                           'made from one'}
+    if not (isinstance(made, dict) and type(made.get('assessments')) is int and made['assessments'] >= 0
+            and isinstance(made.get('encounters'), list) and all(isinstance(pk, str) for pk in made['encounters'])
+            and len(made['encounters']) <= made['assessments']):
+        return uncounted('the count did not say what it read')
+    count = made['assessments']
+    return {'assessments': count, 'encounters': list(made['encounters']),
+            'note': f'{count} {"assessment was" if count == 1 else "assessments were"} made from event inventories; '
+                    'the earlier image reads them fail-closed'}
+
+
 def hazard_summary(hazards) -> str:
     counts = {}
     for reasons in hazards.values():
@@ -2575,6 +2715,10 @@ def hazard_summary(hazards) -> str:
 # The core repair (2026-11-03): a member's answer that stands, and a chosen modifier, are two more (the older web reads
 # neither: it asks the answered question again, and shows the approval without its modifier).
 SHOWN_HAZARDS = ('second_review_refused', 'second_review_unread', 'participant', 'member_answer', 'modifier')
+# The Gemini migration (ADJUDICATION P-1, which governs design/FINAL.md 13): an assessment made from an event inventory
+# is NOT a hazard of either kind - not here and not in UNDO_HAZARDS. An earlier image reads it fail-closed (it keeps
+# every stored hold and releases none), so naming it would only make switch-back and rollback-app refuse. They write it
+# as a declared note in their receipts instead (INTERPRETATION_MADE, interpretation_note) and go on.
 
 
 def hazards_by_kind(hazards):
@@ -2627,8 +2771,10 @@ def put_back_states(closed, older_image, image_id, env_bytes) -> dict:
                       what='Putting back the list states the installed revision 057a7d39 derives')
 
 
-def replace_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, participants=None) -> dict:
-    """Replace the web and worker (``participants``: each harness participant's mode, disabled when not given) the way
+def replace_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, participants=None, *,
+                     interpreter=None) -> dict:
+    """Replace the web and worker (``participants``: each harness participant's mode, disabled when not given;
+    ``interpreter``: the interpreter's, disabled when not given) the way
     replacement_plan reads the host - after migrate, as before, and right before anything is started or stopped (a
     refusal starts and stops nothing; preflight has refused the same states before the install began): a served site
     is switched blue/green (switch_services, which never stops its web; it needs this install's preflight receipt, the
@@ -2636,18 +2782,20 @@ def replace_services(ctx, image_id, env_bytes, provider_mode, authorization_ref,
     was (swap_services). The receipt's 'replacement' says which, and why."""
     plan = replacement_plan(ctx)
     summary = {key: plan[key] for key in ('mode', 'why', 'vhost', 'vhost_sha256', 'live', 'idle', 'port') if key in plan}
+    # named only when it is not the default, so a stand-in of either keeps the arguments it always had
+    interpreting = {'interpreter': interpreter} if (interpreter or 'disabled') != 'disabled' else {}
     if plan['mode'] == 'blue-green':
         preflight = require_receipt(ctx, 'preflight')
         services = switch_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, participants,
-                                   preflight=preflight, plan=plan)
+                                   preflight=preflight, plan=plan, **interpreting)
     else:
         services = swap_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, participants,
-                                 port=plan['port'])
+                                 port=plan['port'], **interpreting)
     return {**services, 'replacement': summary}
 
 
 def swap_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, participants=None, *,
-                  port=WEB_PORT) -> dict:
+                  port=WEB_PORT, interpreter=None) -> dict:
     """The swap of a host where nothing is served through the vhost (replacement_plan's 'fresh'). Park
     the old pair, start the new pair, its web on 127.0.0.1:``port`` (``participants``: each harness participant's
     mode, disabled when not given); on any failure stop what was started, close every stage it left open
@@ -2657,17 +2805,20 @@ def swap_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, pa
     closed, whose states cannot be put back, or whose web would show a state wrongly whatever it is handed (the close
     names it for a SHOWN_HAZARDS reason, and the old pair is not this same revision) is never restored over them: the
     new pair is left stopped and the old one parked, for rollback-app. On success the old pair is left parked: phase_app
-    removes it (retire_parked) once the stored list states are recomputed."""
+    removes it (retire_parked) once the stored list states are recomputed. 'worker_started_at' is when the new worker
+    was started (ADJUDICATION P-7: the verify one-shot's window begins there, as blue/green's begins at S4)."""
     parked, launched, started = {}, [], {}
-    swapped_at = None
+    swapped_at = worker_started_at = None
     try:
         for role in ('worker', 'web'):  # the worker first, so no stage runs across the switch
             parked[role] = park(role)
         swapped_at = dt.datetime.now(dt.timezone.utc)  # every stage created from here on is the new pair's
         for role in ('web', 'worker'):
             launched.append(role)
+            if role == 'worker':
+                worker_started_at = utc_now_ms()
             docker('run', '-d', *service_args(role, image_id, ctx.revision, provider_mode, authorization_ref,
-                                              participants, port=port),
+                                              participants, port=port, interpreter=interpreter),
                    input=env_bytes, quiet=True)
             # WEB_PORT is wait_service's own default, and is left to it (callers' stand-ins keep its three arguments)
             started[role] = wait_service(role, ctx.revision, image_id, **({'port': port} if port != WEB_PORT else {}))
@@ -2743,7 +2894,7 @@ def swap_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, pa
                 'reads them under its own rules.', details={'hazards': hazards, 'stages_closed': closed,
                                                             'states_put_back': put_back}) from failure
         raise
-    return {'started': started, 'replaced': parked}
+    return {'started': started, 'replaced': parked, 'worker_started_at': worker_started_at}
 
 
 def retire_parked(parked):
@@ -3273,7 +3424,7 @@ def stop_incoming_web() -> str:
 
 
 def switch_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, participants=None, *, preflight,
-                    plan) -> dict:
+                    plan, interpreter=None) -> dict:
     """The blue/green replacement (replacement_plan's 'blue-green'): the serving web is never stopped before the switch
     is verified and drained.
 
@@ -3309,7 +3460,8 @@ def switch_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, 
     try:
         step('S1')
         docker('run', '-d', *service_args('web', image_id, ctx.revision, provider_mode, authorization_ref, participants,
-                                          name=INCOMING_WEB, port=idle), input=env_bytes, quiet=True)
+                                          name=INCOMING_WEB, port=idle, interpreter=interpreter),
+               input=env_bytes, quiet=True)
         started['web'] = wait_service('web', ctx.revision, image_id, name=INCOMING_WEB, port=idle)
         record['smoke'] = smoke_web(idle)
         step('S2')
@@ -3319,7 +3471,7 @@ def switch_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, 
                                            from_revision=plan['web']['revision'])
         step('S4')
         docker('run', '-d', *service_args('worker', image_id, ctx.revision, provider_mode, authorization_ref,
-                                          participants), input=env_bytes, quiet=True)
+                                          participants, interpreter=interpreter), input=env_bytes, quiet=True)
         started['worker'] = wait_service('worker', ctx.revision, image_id)
         step('S5')
         record['drain'] = drain_web(live)
@@ -3834,6 +3986,17 @@ def participant_source_problems(paths) -> list:
     return problems
 
 
+def interpreter_source_problems(paths) -> list:
+    """The interpreter's source (design/FINAL.md 13), read as a participant's: optional here - preflight does not know
+    the mode the app phase will be given, and the app phase refuses --interpreter-mode live without its copy - but one
+    that is there must be a root-owned 0600 regular file, or the secrets phase refuses it. ``paths``: helper_stat's
+    answer, the source included (its directory is participant_source_problems')."""
+    found = paths[INTERPRETER['source']]
+    if found.get('exists') and found != {'exists': True, 'kind': 'file', 'uid': 0, 'gid': 0, 'mode': '0o600'}:
+        return [f'{INTERPRETER["source"]} is not a root-owned 0600 regular file']
+    return []
+
+
 def phase_preflight(ctx) -> dict:
     problems, details = [], {'docker_server': docker_positive_control()}
     files = nginx_file_state()
@@ -3879,12 +4042,14 @@ def phase_preflight(ctx) -> dict:
         problems.append('a pinned image (helper or postgres) is not present locally')
     participant_paths = [path for spec in PARTICIPANTS.values() for path in (spec['source'], spec['target'])]
     details['paths'] = helper_stat([CORTI_SOURCE, ETC_DIR, *LE_DIRS, ACME_CHALLENGE_DIR, PROVIDER_SOURCES,
-                                    *participant_paths])
+                                    *participant_paths, INTERPRETER['source'], INTERPRETER['target']])
     if not details['paths'][CORTI_SOURCE].get('exists'):
         problems.append(f'{CORTI_SOURCE} is missing')
     problems += participant_source_problems(details['paths'])
+    problems += interpreter_source_problems(details['paths'])
     details['participant_sources'] = {name: 'present' if details['paths'][spec['source']].get('exists') else 'absent'
                                       for name, spec in PARTICIPANTS.items()}
+    details['interpreter_source'] = 'present' if details['paths'][INTERPRETER['source']].get('exists') else 'absent'
     details['letsencrypt'] = le_state()
     if not all(details['letsencrypt']['dirs'].values()):
         problems.append('a Let\'s Encrypt or webroot directory is missing')
@@ -3922,8 +4087,13 @@ def phase_secrets(ctx) -> dict:
     # The harness participants' credentials, after the set above and never part of it (HARNESS.md 8).
     participants = participant_secrets()
     states = ', '.join(f'{name} {entry["state"]}' for name, entry in participants.items())
+    # Then the interpreter's (design/FINAL.md 13, D14), in a run of its own: copied unread, by key name only.
+    interpreter = interpreter_secrets()
+    copied = ', '.join(f'{name} {entry["state"]}' for name, entry in interpreter.items())
     return {'etc_dir': etc['etc_dir'], **result, 'participant_credentials': participants,
-            'summary': f'secrets {result["state"]}; participant credentials: {states}; values never left the helper'}
+            'interpreter_credentials': interpreter,
+            'summary': f'secrets {result["state"]}; participant credentials: {states}; interpreter credentials: '
+                       f'{copied}; values never left the helper'}
 
 
 # --- migrations ----------------------------------------------------------------------
@@ -4263,17 +4433,19 @@ def phase_db(ctx) -> dict:
     return details
 
 
-def pair_modes(mode, participants=None) -> str:
-    """'provider live, astra disabled, fable live': how the pair was started."""
+def pair_modes(mode, participants=None, interpreter=None) -> str:
+    """'provider live, astra disabled, fable live': how the pair was started; ', interpreter live' follows when the
+    caller names the interpreter's mode (``interpreter``)."""
     return ', '.join([f'provider {mode}'] + [f'{name} {(participants or {}).get(name) or "disabled"}'
-                                             for name in PARTICIPANTS])
+                                             for name in PARTICIPANTS]
+                     + ([f'interpreter {interpreter}'] if interpreter is not None else []))
 
 
-def after_swap_failure(image_id, mode, states, error, parked, participants=None) -> str:
+def after_swap_failure(image_id, mode, states, error, parked, participants=None, interpreter=None) -> str:
     """The receipt of an app phase stopped once its new pair runs (refutation p2, install2:2): whether the stored list
     states were recomputed (``states``, RECOMPUTE_STATES' answer, or None), what stopped it, and what is left to do."""
     cause = str(error) or type(error).__name__
-    running = f'web and worker running {image_id[:19]} ({pair_modes(mode, participants)}), but '
+    running = f'web and worker running {image_id[:19]} ({pair_modes(mode, participants, interpreter)}), but '
     back = 'or, to go back, run --phase rollback-app, then rename the parked pair back.'
     if states is None:
         if any((parked or {}).values()):
@@ -4384,10 +4556,12 @@ def access_check_failure(image_id, mode, participants, states, checks, error=Non
               'that participant disabled.')
 
 
-def check_credential_files(mode, live):
-    """Every credentials file a live provider or participant needs, before anything changes: a missing participant
-    source leaves no file, and that participant is installed disabled or not at all (HARNESS.md 8)."""
-    wanted = ([CORTI_TARGET] if mode == 'live' else []) + [PARTICIPANTS[name]['target'] for name in live]
+def check_credential_files(mode, live, interpreter='disabled'):
+    """Every credentials file a live provider, participant or interpreter needs, before anything changes: a missing
+    participant source leaves no file, and that participant is installed disabled or not at all (HARNESS.md 8); a live
+    interpreter needs the file the secrets phase copied (design/FINAL.md 13)."""
+    wanted = (([CORTI_TARGET] if mode == 'live' else []) + [PARTICIPANTS[name]['target'] for name in live]
+              + ([INTERPRETER['target']] if interpreter == 'live' else []))
     found = helper_stat(wanted) if wanted else {}
     if mode == 'live':
         target = found[CORTI_TARGET]
@@ -4399,9 +4573,14 @@ def check_credential_files(mode, live):
             raise InstallError(f'--{name}-mode live: {spec["target"]} is not the {APP_UID}:{APP_UID} 0400 file the '
                                f'secrets phase copies from {spec["source"]}; nothing was changed. Place the source and '
                                f'run --phase secrets, or install with --{name}-mode disabled.')
+    if interpreter == 'live' and found[INTERPRETER['target']] != {'exists': True, 'kind': 'file', 'uid': APP_UID,
+                                                                  'gid': APP_UID, 'mode': '0o400'}:
+        raise InstallError(f'--interpreter-mode live: {INTERPRETER["target"]} is not the {APP_UID}:{APP_UID} 0400 file '
+                           f'the secrets phase copies from {INTERPRETER["source"]}; nothing was changed. Place the '
+                           'source and run --phase secrets first.')
 
 
-def check_credential_parsing(image_id, env, mode, live):
+def check_credential_parsing(image_id, env, mode, live, interpreter='disabled'):
     """The application's own loaders read each live credentials file in ``image_id``, in the worker's mount layout,
     with no network: format and permissions only, before anything changes."""
     if mode == 'live':
@@ -4421,21 +4600,32 @@ def check_credential_parsing(image_id, env, mode, live):
             raise InstallError(f'The application cannot load {PARTICIPANTS[name]["target"]} as mounted for the worker '
                                f'(--{name}-mode live; format and permissions only; nothing was sent or changed).',
                                output=output if credential_free([output], [name]) else b'')
+    if interpreter == 'live':
+        # And the live interpreter's (design/FINAL.md 13): its own loader, the interpreter itself disabled; its error is
+        # kept only once a root helper found no value from the file in it.
+        parsed = oneshot(image_id, ['manage', 'shell', '-c', INTERPRETER_CREDENTIALS_CHECK], env, network='none',
+                         interpreter_file=True, timeout=120)
+        if parsed.returncode or f'{INTERPRETER["name"]}-credentials-parse-ok'.encode() not in parsed.stdout:
+            output = parsed.stderr[-2048:]
+            raise InstallError(f'The application cannot load {INTERPRETER["target"]} as mounted for the worker '
+                               '(--interpreter-mode live; format and permissions only; nothing was sent or changed).',
+                               output=output if credential_free([output], [INTERPRETER['name']]) else b'')
 
 
 def phase_app(ctx) -> dict:
     mode, reference = ctx.args.provider_mode, ctx.args.authorization_ref or ''
     modes = participant_modes(ctx.args)
     live = [name for name in PARTICIPANTS if modes[name] == 'live']
+    interpreter = interpreter_mode(ctx.args)  # design/FINAL.md 13: --interpreter-mode; disabled when not given
     access = bool(getattr(ctx.args, 'access_check', None))
     if reference and run(['git', '-C', str(ROOT), 'cat-file', '-e', f'{ctx.revision}:{reference}'],
                          check=False).returncode:
         raise InstallError('--authorization-ref is not a file tracked at the revision.')
     image_id = installed_image(ctx)
     require_db()
-    check_credential_files(mode, live)
+    check_credential_files(mode, live, interpreter)
     env = read_protected_env(APP_ENV, APP_ENV_KEYS)
-    check_credential_parsing(image_id, env, mode, live)
+    check_credential_parsing(image_id, env, mode, live, interpreter)
     migrate = oneshot(image_id, ['migrate'], env)
     migrate_log = ctx.log('migrate', migrate.stdout + migrate.stderr)
     if migrate.returncode:
@@ -4450,7 +4640,15 @@ def phase_app(ctx) -> dict:
                            f'({", ".join(unrunnable["kinds"])}) are queued, running or resumable; nothing was '
                            'replaced. Close them with the newer revision\'s --phase rollback-app first.',
                            details=unrunnable)
-    services = replace_services(ctx, image_id, env, mode, reference, modes)
+    # The interpreter's mode is named only when it is not the default, as swap_services leaves WEB_PORT to
+    # wait_service: a stand-in of replace_services keeps the six arguments it always had.
+    services = replace_services(ctx, image_id, env, mode, reference, modes,
+                                **({'interpreter': interpreter} if interpreter != 'disabled' else {}))
+    # ADJUDICATION P-7: the verify one-shot counts legacy-engine assessments made since the NEW WORKER started - S4 of a
+    # blue/green switch, the worker's start of a swap - never since the install began (until S2 the old worker runs).
+    steps = services.get('steps') if isinstance(services.get('steps'), dict) else {}
+    interpreting = {'mode': interpreter, 'credentials_loaded': interpreter == 'live',
+                    'worker_started_at': steps.get('S4') or services.get('worker_started_at')}
     # Refutation p1, migrate-2: the stored list states are recomputed with this revision's derivation (RECOMPUTE_STATES)
     # - once this pair has replaced the old one, never before, so a failure path restores the old pair over the states
     # it derived. Blue/green (I-state): only once the drained old web has stopped too (switch_services' S5). Nothing is refused for it (round-7c8 skeptic, sk:2: refusing while an outcome was unknown also refused
@@ -4468,8 +4666,8 @@ def phase_app(ctx) -> dict:
         states = app_script(image_id, env, RECOMPUTE_STATES, {}, what='Recomputing the stored list states')
         retire_parked(parked)
     except BaseException as error:  # noqa: BLE001 — the pair is installed: the receipt says what is left to do
-        raise InstallError(after_swap_failure(image_id, mode, states, error, parked, modes),
-                           details={**services, 'states_recomputed': states}) from error
+        raise InstallError(after_swap_failure(image_id, mode, states, error, parked, modes, interpreter),
+                           details={**services, 'states_recomputed': states, 'interpreter': interpreting}) from error
     # Opt-in, last: each live participant - Corti too, when the provider is live (checklist 1.3: all three) - is
     # checked once with real requests (participant_access_check), never without the flag.
     checks, checked = None, (['corti'] if mode == 'live' else []) + live
@@ -4487,8 +4685,8 @@ def phase_app(ctx) -> dict:
     return {'image_id': image_id, 'provider_mode': mode, 'authorization_ref': reference, 'participants': modes,
             'participant_credentials_loaded': live, 'migrate_log': migrate_log, 'unrunnable_stages': unrunnable,
             'states_recomputed': states, 'access_checks': checks if access else 'not run (no --access-check)',
-            **services,
-            'summary': f'web and worker running {image_id[:19]} ({pair_modes(mode, modes)})'
+            **services, 'interpreter': interpreting,
+            'summary': f'web and worker running {image_id[:19]} ({pair_modes(mode, modes, interpreter)})'
                        + switched_summary(services)
                        + (f'; access checked: {", ".join(checked)}' if access else '')}
 
@@ -4506,11 +4704,15 @@ def phase_switch_back(ctx) -> dict:
     """Post-success rollback without interruption (ops/INSTALL.md, switch-back): back to the pair this revision's last
     successful app phase replaced (its receipt's 'replaced': the previous web's image and revision - images are never
     removed), by the blue/green switch in reverse. rollback-app's checks run first and refuse, stopping nothing, while
-    this revision recorded what an older revision would act on, or show, wrongly (undo_hazards). ``--provider-mode``
-    and the participant modes are the previous pair's, as its own app phase was given them."""
+    this revision recorded what an older revision would act on, or show, wrongly (undo_hazards). ``--provider-mode``,
+    the participant modes and ``--interpreter-mode`` are the previous pair's, as its own app phase was given them (a
+    revision before the Gemini migration has no interpreter: leave it disabled). What this revision made from event
+    inventories is never a refusing reason: the receipt declares it in a note and the switch goes on (ADJUDICATION
+    P-1)."""
     mode, reference = ctx.args.provider_mode, ctx.args.authorization_ref or ''
     modes = participant_modes(ctx.args)
     live = [name for name in PARTICIPANTS if modes[name] == 'live']
+    interpreter = interpreter_mode(ctx.args)
     app = require_receipt(ctx, 'app')
     previous = ((app.get('details') or {}).get('replaced') or {}).get('web') or {}
     prev_image, prev_revision = previous.get('image'), previous.get('revision')
@@ -4534,9 +4736,9 @@ def phase_switch_back(ctx) -> dict:
         raise InstallError(f'The site is not served by this revision\'s web through its HTTPS stage, so there is '
                            'nothing to switch back from; nothing was changed.', details={'plan': plan})
     preflight = require_receipt(ctx, 'preflight')
-    check_credential_files(mode, live)
+    check_credential_files(mode, live, interpreter)
     env = read_protected_env(APP_ENV, APP_ENV_KEYS)
-    check_credential_parsing(prev_image, env, mode, live)
+    check_credential_parsing(prev_image, env, mode, live, interpreter)
     hazards = undo_hazards(image_id, env, ctx.revision)
     if hazards:
         raise InstallError(f'{hazard_summary(hazards)} hold records an older revision would act on, or show, wrongly '
@@ -4544,17 +4746,19 @@ def phase_switch_back(ctx) -> dict:
                            '(ops/INSTALL.md, Reinstalling an older revision), then rerun --phase switch-back.',
                            details={'hazards': hazards})
     services = switch_back_services(ctx, image_id, env, prev_image, prev_revision, mode, reference, modes,
-                                    preflight=preflight, plan=plan)
+                                    preflight=preflight, plan=plan, interpreter=interpreter)
     availability = services.get('availability') or {}
+    note = (services.get('interpretation') or {}).get('note')
     return {'image_id': image_id, 'previous': {'image': prev_image, 'revision': prev_revision},
-            'provider_mode': mode, 'authorization_ref': reference, 'participants': modes, **services,
-            'summary': f'switched back to {prev_revision[:12]} ({pair_modes(mode, modes)}) on {plan["idle"]}: '
-                       f'{availability.get("samples", 0)} availability samples, '
-                       f'{availability.get("non_200_count", 0)} not 200'}
+            'provider_mode': mode, 'authorization_ref': reference, 'participants': modes,
+            'interpreter_mode': interpreter, **services,
+            'summary': f'switched back to {prev_revision[:12]} ({pair_modes(mode, modes, interpreter)}) on '
+                       f'{plan["idle"]}: {availability.get("samples", 0)} availability samples, '
+                       f'{availability.get("non_200_count", 0)} not 200' + (f'; {note}' if note else '')}
 
 
 def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, provider_mode, authorization_ref,
-                         participants, *, preflight, plan) -> dict:
+                         participants, *, preflight, plan, interpreter=None) -> dict:
     """The switch in reverse, never stopping the serving web first:
 
       B2  start the previous revision's web, INCOMING_WEB, on the idle port; health_ok for ITS revision; smoke_web
@@ -4564,7 +4768,8 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
           nothing is closed for a switch that cannot pass (refutation r2, L6-4) - then close every stage this
           revision's pair queued, ran or left resumable since it was created, and every open stage of a kind the
           previous worker does not run (close_undone_stages, rollback-app's rule); refuse to go on while the close
-          names a record; put back the list states the previous revision labels otherwise
+          names a record; put back the list states the previous revision labels otherwise; count what this revision
+          made from event inventories, the receipt's declared note, which never refuses (ADJUDICATION P-1)
       B5  switch the vhost's upstream to the idle port (/health/ = the previous revision through the public path)
       B6  drain this revision's web, stop it and park it; the previous web takes the canonical name
       B7  close again what this revision's web started between B4 and the end of its drain (requests it accepted
@@ -4610,7 +4815,8 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
     try:
         step('B2')
         docker('run', '-d', *service_args('web', prev_image, prev_revision, provider_mode, authorization_ref,
-                                          participants, name=INCOMING_WEB, port=idle), input=env_bytes, quiet=True)
+                                          participants, name=INCOMING_WEB, port=idle, interpreter=interpreter),
+               input=env_bytes, quiet=True)
         started['web'] = wait_service('web', prev_revision, prev_image, name=INCOMING_WEB, port=idle)
         record['smoke'] = smoke_web(idle)
         step('B3')
@@ -4632,6 +4838,8 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
         closes['first'] = close_undone_stages(image_id, env_bytes, since, ctx.revision, reason, kinds)
         refuse_on_hazards(closes['first'], 'after this revision\'s worker stopped and its stages were closed', checked)
         put_back.append(put_back_states(closes['first'], prev_image, image_id, env_bytes))
+        # ADJUDICATION P-1: no worker of this revision runs from B3 on, so this is what the previous image is handed
+        record['interpretation'] = interpretation_note(image_id, env_bytes, ctx.revision)
         step('B5')
         record['switch'] = switch_upstream(ctx, preflight, live, idle, revision=prev_revision, progress=progress,
                                            from_revision=ctx.revision)
@@ -4644,7 +4852,7 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
         put_back.append(put_back_states(closes['second'], prev_image, image_id, env_bytes))
         step('B8')
         docker('run', '-d', *service_args('worker', prev_image, prev_revision, provider_mode, authorization_ref,
-                                          participants), input=env_bytes, quiet=True)
+                                          participants, interpreter=interpreter), input=env_bytes, quiet=True)
         started['worker'] = wait_service('worker', prev_revision, prev_image)
         step('B9')
         retire_parked(parked)
@@ -5432,6 +5640,128 @@ def other_lineages(le: dict) -> tuple:
             set(le['live']) - {DOMAIN})
 
 
+# Verify's one-shot of the D22 report (design/FINAL.md 13; DECISIONS D22; ADJUDICATION P-7): `manage
+# interpretation_report --since <the new worker's start> --self-test --json` in this revision's image, the interpreter
+# disabled as in every one-shot (a one-shot's mode is its own, so the worker's is read from the worker's configuration).
+# Nothing is written or sent. Every check of its self-test named here must have run and passed - one that ran fewer
+# checks proves less than it says - and the hold state is reported beside it, never judged here (a standing hold is the
+# operator's to release, with `manage interpreter_hold --release`).
+INTERPRETATION_SELF_TEST = ('sentinel installed', 'deny set as pinned', 'positive control', 'positive control trips',
+                            'model constant', 'no new-path legacy execution recorded',
+                            'every new-path assessment carries its record', 'no sentinel trip',
+                            'no legacy-engine assessment')
+INTERPRETATION_REPORT_SECONDS = 180
+INTERPRETATION_REPORT_LIMIT = 1024 * 1024  # bytes of the report's JSON that are read; more is refused, never cut
+
+
+def worker_interpreter_mode(container):
+    """The interpreter mode ``container`` was started with: its one CPT_STUDIO_GEMINI_MODE, read from Docker's record
+    of its environment, and nothing else of that record is read out (the env-file's values are there too). None when it
+    names none, or more than one."""
+    env = ((container or {}).get('Config') or {}).get('Env') or []
+    found = [entry.split('=', 1)[1] for entry in env
+             if isinstance(entry, str) and entry.startswith(INTERPRETER['mode_env'] + '=')]
+    return found[0] if len(found) == 1 else None
+
+
+def holds_interpreter_key(container) -> bool:
+    """Whether ``container`` holds the interpreter's credentials file, read-only, at the worker's path."""
+    return any(mount.get('Type') == 'bind'
+               and (mount.get('Source'), mount.get('Destination'), mount.get('RW'))
+               == (INTERPRETER['target'], INTERPRETER['mounted'], False)
+               for mount in (container or {}).get('Mounts') or [])
+
+
+def utc_moment(value):
+    """An ISO 8601 date and time with its offset ('Z' or '+00:00') as an aware datetime; None otherwise."""
+    try:
+        moment = dt.datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+    except ValueError:
+        return None
+    return moment if moment.tzinfo is not None and moment.utcoffset() is not None else None
+
+
+def interpretation_evidence(ctx, image_id, worker) -> tuple:
+    """(evidence, problems) of verify's D22 one-shot. Its window starts at the newest successful app receipt's
+    new-worker start (ADJUDICATION P-7: S4 of a blue/green switch, the worker's start of a swap - never the install's
+    start: the old worker runs until S2, and its legacy assessments are not this revision's). The worker's interpreter
+    mode must be the one that receipt installed; a live one's worker must hold its key, and no other worker may. A
+    worker that names no interpreter mode and holds no key, with no app receipt of this revision beside it, is no pair
+    this installer started (every pair it starts names one): there is nothing of the interpreter to read, and the
+    evidence says so. With an app receipt, or a worker that names a mode or holds the key, every missing piece is a
+    problem."""
+    app = latest_receipt(ctx.receipts, 'app', ctx.revision)
+    mode = worker_interpreter_mode(worker)
+    evidence = {'worker_mode': mode, 'worker_holds_key': holds_interpreter_key(worker)}
+    if app is None:
+        if mode is None and not evidence['worker_holds_key']:
+            return ({**evidence, 'self_test': 'not run',
+                     'summary': 'interpretation self-test not run: the worker names no interpreter mode and no app '
+                                'receipt of this revision names its new worker'}, [])
+        return ({**evidence, 'self_test': 'not run', 'summary': 'interpretation self-test not run'},
+                ["no successful app receipt of this revision names its new worker's start, so the interpretation "
+                 'self-test was not read (ADJUDICATION P-7)'])
+    installed = (app.get('details') or {}).get('interpreter') or {}
+    since = installed.get('worker_started_at')
+    evidence.update(app_mode=installed.get('mode'), since=since)
+    problems = []
+    if mode != installed.get('mode'):
+        problems.append(f"the worker's interpreter mode is {mode or 'not named'}, but the app phase installed "
+                        f"{installed.get('mode') or 'none'}")
+    if mode == 'live' and not evidence['worker_holds_key']:
+        problems.append(f"the live interpreter's worker does not hold {INTERPRETER['target']} read-only")
+    if mode != 'live' and evidence['worker_holds_key']:
+        problems.append(f'the worker holds {INTERPRETER["target"]}, but its interpreter is not live')
+    asked = utc_moment(since) if isinstance(since, str) else None
+    if asked is None:
+        problems.append("the app receipt names no new worker's start, so the interpretation self-test was not read "
+                        '(ADJUDICATION P-7)')
+        return {**evidence, 'self_test': 'not run', 'summary': f'interpreter {mode}: self-test not run'}, problems
+    result = oneshot(image_id, ['manage', 'interpretation_report', '--since', since, '--self-test', '--json'],
+                     read_protected_env(APP_ENV, APP_ENV_KEYS), timeout=INTERPRETATION_REPORT_SECONDS)
+    evidence.update(exit=result.returncode, log=ctx.log('interpretation-report', result.stdout + result.stderr[-8192:]))
+    parsed = None
+    if len(result.stdout) <= INTERPRETATION_REPORT_LIMIT:
+        try:
+            parsed = json.loads(result.stdout.decode('utf-8'))
+        except (UnicodeDecodeError, ValueError):
+            parsed = None
+    report = parsed.get('report') if isinstance(parsed, dict) else None
+    test = parsed.get('self_test') if isinstance(parsed, dict) else None
+    checks = test.get('checks') if isinstance(test, dict) else None
+    if not (isinstance(report, dict) and isinstance(checks, list)
+            and all(isinstance(check, dict) and isinstance(check.get('name'), str) for check in checks)):
+        problems.append(f'the interpretation report did not answer its JSON report and self-test (exit '
+                        f'{result.returncode}); see {evidence["log"]}')
+        return {**evidence, 'self_test': 'unread', 'summary': f'interpreter {mode}: self-test unread'}, problems
+    evidence.update(self_test=test, report=report)
+    named = {check['name']: check for check in checks}
+    missing = [name for name in INTERPRETATION_SELF_TEST if name not in named]
+    failed = [check for check in checks if check.get('ok') is not True]
+    if missing:
+        problems.append('the interpretation self-test did not run: ' + ', '.join(missing))
+    if failed:
+        problems.append('the interpretation self-test failed: ' + '; '.join(
+            f'{check["name"]} ({check.get("detail")})' for check in failed))
+    if test.get('passed') is not True and not failed:
+        problems.append('the interpretation self-test did not say it passed')
+    if result.returncode and not failed:
+        problems.append(f'the interpretation report exited {result.returncode}; see {evidence["log"]}')
+    window = utc_moment((report.get('window') or {}).get('since'))
+    if window != asked:
+        problems.append(f'the interpretation report read from {window.isoformat() if window else "an unnamed time"}, '
+                        f'not from the new worker\'s start ({since})')
+    hold = report.get('hold') if isinstance(report.get('hold'), dict) else {}
+    standing = [item.get('reason') for item in hold.get('standing') or [] if isinstance(item, dict)]
+    held = (f'standing ({", ".join(sorted(set(map(str, standing))))})' if hold.get('held') else
+            'none standing' if hold.get('held') is False else 'not read')
+    passed = not (missing or failed or result.returncode) and test.get('passed') is True
+    evidence['summary'] = (f'interpreter {mode}: self-test {"passed" if passed else "FAILED"} '
+                           f'({len(INTERPRETATION_SELF_TEST) - len(missing)} of {len(INTERPRETATION_SELF_TEST)} checks '
+                           f'run) since the new worker started ({since}); interpreter hold {held}')
+    return evidence, problems
+
+
 def phase_verify(ctx) -> dict:
     preflight = require_receipt(ctx, 'preflight')['details']
     image_id = installed_image(ctx)
@@ -5473,8 +5803,9 @@ def phase_verify(ctx) -> dict:
     db = inspect('container', DB_CONTAINER)
     if db is None or db_container_problems(db, postgres.get('Id')) or not db['State'].get('Running'):
         problems.append(f'{DB_CONTAINER} is not the running, labelled, loopback-only database')
+    pair = {}
     for role, name in SERVICES.items():
-        container = inspect('container', name)
+        container = pair[role] = inspect('container', name)
         if container is None or not container['State'].get('Running'):
             problems.append(f'{name} is not running')
         else:
@@ -5490,12 +5821,17 @@ def phase_verify(ctx) -> dict:
     if foreign:
         problems.append(f'uid {APP_UID} now runs {foreign} task(s) outside CPT Studio')
     appeared = sorted(set(now) - set(preflight['containers']) - {DB_CONTAINER, *SERVICES.values()})
+    # The D22 evidence (design/FINAL.md 13; ADJUDICATION P-7): the interpreter's mode as the worker was started with it,
+    # and the interpretation report's self-test since the new worker started.
+    interpreting, interpretation_problems = interpretation_evidence(ctx, image_id, pair.get('worker'))
+    problems += interpretation_problems
     details = {'evidence': evidence, 'containers_appeared_elsewhere': appeared, 'image_id': image_id,
-               'web_port': port}
+               'web_port': port, 'interpretation': interpreting}
     if problems:
         raise InstallError(f'verify found {len(problems)} difference(s): ' + '; '.join(problems) + '.',
                            details={**details, 'problems': problems})
-    return {**details, 'summary': f'installed {ctx.revision[:12]} verified; co-tenants and app.quillmd.com unchanged'}
+    return {**details, 'summary': f'installed {ctx.revision[:12]} verified; co-tenants and app.quillmd.com unchanged; '
+                                  + interpreting['summary']}
 
 
 def keep_layout(ctx):
@@ -5639,6 +5975,8 @@ def rollback_from_keep(ctx, keep) -> dict:
                                 f'show, wrongly under its own rules, so nothing more was done: {keep_note(live, idle)}. '
                                 'Clear them on this revision\'s web, then rerun --phase rollback-app.'), 'kept'
         else:
+            # ADJUDICATION P-1: this revision's worker is stopped, so this is what the old pair is handed
+            record['interpretation'] = interpretation_note(image_id, env, ctx.revision)
             message, _, outcome = return_to_old_web(
                 ctx, cause, image_id=image_id, env_bytes=env, preflight=baseline, live=live, idle=idle,
                 old_revision=old_revision, previous=previous, parked_worker=parked, kinds=kinds, reason=reason,
@@ -5652,11 +5990,12 @@ def rollback_from_keep(ctx, keep) -> dict:
     if outcome != 'switched' or record.get('incoming_left'):
         raise InstallError(message, details={**record, 'outcome': outcome, 'left': left_summary()})
     availability = record['availability']
+    note = (record.get('interpretation') or {}).get('note')
     return {**record, 'outcome': outcome, 'message': message,
             'summary': f'switched back to {old_revision[:12]} on {live} (the S4 keep layout): '
                        f'{availability.get("samples", 0)} availability samples, '
                        f'{availability.get("non_200_count", 0)} not 200; {removal_summary(record, keep)}; database, '
-                       'volumes, images and secrets kept'}
+                       'volumes, images and secrets kept' + (f'; {note}' if note else '')}
 
 
 def rollback_back(ctx, keep) -> dict:
@@ -5692,6 +6031,8 @@ def rollback_back(ctx, keep) -> dict:
                                 'Rerun --phase rollback-app once nginx answers (ops/INSTALL.md, Recovery notes); never '
                                 'start the old worker by hand.'), 'halfway'
         else:
+            # ADJUDICATION P-1: no worker of this revision runs in this layout, so this is what the old pair is handed
+            record['interpretation'] = interpretation_note(image_id, env, ctx.revision)
             done = finish_back(ctx, image_id=image_id, env_bytes=env, idle=idle, previous=previous,
                                parked_worker=parked_of(parked_worker), kinds=kinds, reason=reason, since=since,
                                closes=[], details=record, worker=True,
@@ -5715,11 +6056,12 @@ def rollback_back(ctx, keep) -> dict:
     if outcome != 'switched' or record.get('incoming_left'):
         raise InstallError(message, details={**record, 'outcome': outcome, 'left': left_summary()})
     availability = record['availability']
+    note = (record.get('interpretation') or {}).get('note')
     return {**record, 'outcome': outcome, 'message': message,
             'summary': f'went back to {old_revision[:12]} on {live} (the back layout): '
                        f'{availability.get("samples", 0)} availability samples, '
                        f'{availability.get("non_200_count", 0)} not 200; {removal_summary(record, keep)}; database, '
-                       'volumes, images and secrets kept'}
+                       'volumes, images and secrets kept' + (f'; {note}' if note else '')}
 
 
 def phase_rollback_app(ctx) -> dict:
@@ -5739,7 +6081,9 @@ def phase_rollback_app(ctx) -> dict:
     other layout, or a web and a worker of different images, it refuses, stopping nothing: which web serves, and whose
     records to read, cannot be told from the names. Refutation r3 (the recovery notes send undos here): it removes only
     this revision's own pair - a web or worker under the canonical names that carries another revision is refused,
-    stopping nothing (it would stop the old web an undo had just put back in service)."""
+    stopping nothing (it would stop the old web an undo had just put back in service). ADJUDICATION P-1: what this
+    revision made from event inventories is never a reason to refuse; every arm that hands the rows to an older pair
+    declares it in its receipt ('interpretation': interpretation_note) and goes on."""
     keep = keep_layout(ctx)
     if keep is not None:
         return rollback_from_keep(ctx, keep)
@@ -5818,6 +6162,11 @@ def phase_rollback_app(ctx) -> dict:
             raise InstallError(f'Web and worker stopped, not removed: the list states an older revision labels '
                                f'otherwise could not be put back ({error}). Rerun --phase rollback-app once that is '
                                'resolved.', details={'stages_closed': closed}) from error
+        # ADJUDICATION P-1: the pair is stopped, so this is what the next pair is handed - a declared note, never a
+        # refusal
+        made = interpretation_note(first['Image'], env, revision)
+    else:
+        made = None
     removed = {}
     try:
         for role in ('worker', 'web'):
@@ -5831,11 +6180,13 @@ def phase_rollback_app(ctx) -> dict:
                            f'{len(put_back["changed"])} encounter(s) were put back to what the older revision derives, '
                            'which this revision labels otherwise: rerun --phase rollback-app; or, to keep this '
                            'revision, rerun --phase app, which recomputes them.',
-                           details={'stages_closed': closed, 'states_put_back': put_back}) from error
+                           details={'stages_closed': closed, 'states_put_back': put_back,
+                                    'interpretation': made}) from error
     parked = [name + '-previous' for name in SERVICES.values() if inspect('container', name + '-previous')]
     return {'removed': removed, 'stages_closed': closed, 'states_put_back': put_back, 'parked_left_in_place': parked,
+            'interpretation': made,
             'summary': 'web and worker removed after closing their open stages; database, volumes, images and '
-                       'secrets kept'}
+                       'secrets kept' + (f'; {made["note"]}' if made else '')}
 
 
 def recorded_vhosts(ctx) -> dict:

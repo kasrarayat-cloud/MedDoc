@@ -96,6 +96,10 @@ class BlueGreenWorld:
         self.baseline_failure = None  # an exception rollback-app's own baseline read raises (refute-r3 D-1), else none
         self.inflight = {}          # port -> requests old nginx workers still hold to it
         self.availability = None    # the recorder's model: every invariant point it saw, served or not
+        self.runs = {}              # container name -> the docker run arguments it was last started with
+        self.oneshots = []          # (image, command, keyword arguments) of every one-shot, in order
+        # ADJUDICATION P-1: what INTERPRETATION_MADE answers in this revision's image (an exception: it raises that)
+        self.interpretation_answer = {'interpretation': {'assessments': 0, 'encounters': []}}
         self.next_id = 0
         revision, image = serving
         self.add(WEB, 'web', image, revision, port=live)
@@ -191,6 +195,7 @@ class BlueGreenWorld:
                 assert not [n for n, c in self.containers.items() if c['role'] == 'worker' and c['running']], \
                     'I-worker: a worker was started while another ran'
             self.add(name, role, image, revision, port=port)
+            self.runs[name] = list(args)
         elif verb == 'stop':
             name, seconds = args[-1], args[args.index('--time') + 1]
             self.act('stop', name, seconds)
@@ -335,10 +340,18 @@ class BlueGreenWorld:
         if body == install.UNRUNNABLE_STAGES:
             self.act('unrunnable', image_id)
             return self.done({'known': self.stage_kinds.get(image_id, KINDS_OLD), 'stuck': 0, 'kinds': []})
+        if body == install.INTERPRETATION_MADE:
+            self.act('interpretation', image_id)
+            if isinstance(self.interpretation_answer, BaseException):
+                raise self.interpretation_answer
+            return self.done(json.loads(json.dumps(self.interpretation_answer)))
         raise AssertionError('unexpected in-image script')
 
     def oneshot(self, image_id, command, env_bytes, **kwargs):
         self.act('oneshot', tuple(command[:2]))
+        self.oneshots.append((image_id, list(command), dict(kwargs)))
+        if command[:2] == ['manage', 'shell'] and command[-1] == install.INTERPRETER_CREDENTIALS_CHECK:
+            return self.done(SimpleNamespace(returncode=0, stdout=b'gemini-credentials-parse-ok\n', stderr=b''))
         return self.done(SimpleNamespace(returncode=0, stdout=b'corti-credentials-parse-ok\n', stderr=b''))
 
     def rendered_vhosts(self, revision, port=install.WEB_PORT):
@@ -1915,3 +1928,190 @@ class InstallDocTests(unittest.TestCase):
                                (9, 'An installer older than this one knows only port 9150'), (10, 'cannot ride the switch')):
             self.says(f'{number}. ', limits)
             self.says(phrase, limits)
+
+
+# --- the interpreter (the Gemini migration: design/FINAL.md 13; ADJUDICATION P-1 and P-7): the fake-host blue/green run
+
+GEMINI = install.INTERPRETER
+GEMINI_MOUNT = f'type=bind,src={GEMINI["target"]},dst={GEMINI["mounted"]},readonly'
+INSTALLED_COPY = {'exists': True, 'kind': 'file', 'uid': install.APP_UID, 'gid': install.APP_UID, 'mode': '0o400'}
+NOTE_3 = '3 assessments were made from event inventories; the earlier image reads them fail-closed'
+
+
+def holding_the_key(world):
+    """The world's patches, its host holding the interpreter's installed copy (the file --phase secrets copies)."""
+    return world.patches() + [mock.patch.object(install, 'helper_stat', side_effect=lambda paths: {
+        path: INSTALLED_COPY if path == GEMINI['target'] else {'exists': False} for path in paths})]
+
+
+def run_holding_the_key(world, phase, args):
+    """The REAL ``phase`` (phase_app or phase_switch_back) in ``world``; (details or None, the InstallError or None)."""
+    patches = holding_the_key(world)
+    for patcher in patches:
+        patcher.start()
+    try:
+        return phase(install.Context(args, world.tmp)), None
+    except install.InstallError as error:
+        return None, error
+    finally:
+        for patcher in reversed(patches):
+            patcher.stop()
+
+
+def live_app_args(tmp):
+    return app_args(tmp, interpreter_mode='live', authorization_ref=RULING)
+
+
+def webs_never_hold_the_key(test, world):
+    for name, argv in world.runs.items():
+        if argv[-1] == 'web':
+            test.assertNotIn(GEMINI_MOUNT, flags(argv, '--mount'), name)
+
+
+class InterpreterBlueGreenTests(TemporaryDirectoryTest):
+    """The REAL phase_app and phase_switch_back with the interpreter, on the fake host: its key reaches the new worker
+    alone, the switch is the one without it, the receipt names the new worker's start (P-7), and a switch-back declares
+    what was made from event inventories and goes on (P-1). The world's invariants held after every call, or the test
+    would have failed inside the fake."""
+
+    def test_a_live_interpreter_is_switched_in_with_its_key_in_the_new_worker_alone(self):
+        world = BlueGreenWorld(self.tmp)
+        details, error = run_holding_the_key(world, install.phase_app, live_app_args(self.tmp))
+        self.assertIsNone(error, error and str(error))
+        self.assertEqual(world.acts(*ACTS), [  # the switch is exactly the one without the interpreter
+            ('recorder', 'start'),
+            ('run', 'web', NEXT, 9151, IMAGE), ('wait', 'web', NEXT, 9151), ('smoke', 9151),          # S1
+            ('stop', WORKER, '600'), ('rename', WORKER, WORKER + '-previous'),                           # S2
+            ('vhost', 'replace', 9151), ('reload', 9151), ('https', 9151, REVISION),                     # S3
+            ('run', 'worker', WORKER, None, IMAGE), ('wait', 'worker', WORKER, None),                    # S4
+            ('drain', 9150), ('stop', WEB, '30'), ('rename', WEB, WEB + '-previous'), ('rename', NEXT, WEB),  # S5
+            ('recorder', 'stop'),
+            ('recompute', IMAGE, 'all'), ('rm', WORKER + '-previous'), ('rm', WEB + '-previous')])     # S6
+        self.assertEqual(world.names(), {WEB: (IMAGE, 9151, True), WORKER: (IMAGE, None, True)})
+        worker, web = world.runs[WORKER], world.runs[NEXT]
+        self.assertEqual(flags(worker, '--mount')[-1], GEMINI_MOUNT)  # read-only, at the worker's path
+        webs_never_hold_the_key(self, world)
+        for argv in (worker, web):  # the web is given the mode and the path, and no file
+            self.assertIn('CPT_STUDIO_GEMINI_MODE=live', flags(argv, '-e'))
+            self.assertIn(f'CPT_STUDIO_GEMINI_CREDENTIALS_FILE={GEMINI["mounted"]}', flags(argv, '-e'))
+        # the loader read the copy offline in this revision's image, before migrate and before anything started
+        image, command, kwargs = world.oneshots[0]
+        self.assertEqual((image, command, kwargs),
+                         (IMAGE, ['manage', 'shell', '-c', install.INTERPRETER_CREDENTIALS_CHECK],
+                          {'network': 'none', 'interpreter_file': True, 'timeout': 120}))
+        self.assertEqual(world.oneshots[1][1], ['migrate'])
+        self.assertLess(world.events.index(('oneshot', ('manage', 'shell'))),
+                        world.events.index(('run', 'web', NEXT, 9151, IMAGE)))
+        # P-7: verify's window starts where the new worker did (S4), never where the install began (S1)
+        self.assertEqual(details['interpreter'], {'mode': 'live', 'credentials_loaded': True,
+                                                  'worker_started_at': details['steps']['S4']})
+        self.assertGreater(details['steps']['S4'], details['steps']['S1'])
+        self.assertIn('(provider disabled, astra disabled, fable disabled, interpreter live)', details['summary'])
+
+    def test_without_its_installed_copy_the_install_refuses_before_anything_starts(self):
+        world = BlueGreenWorld(self.tmp)
+        patches = world.patches() + [mock.patch.object(install, 'helper_stat', side_effect=lambda paths: {
+            path: {'exists': False} for path in paths})]  # the secrets phase copied nothing: no source was placed
+        for patcher in patches:
+            patcher.start()
+        try:
+            with self.assertRaises(install.InstallError) as caught:
+                install.phase_app(install.Context(live_app_args(self.tmp), self.tmp))
+        finally:
+            for patcher in reversed(patches):
+                patcher.stop()
+        self.assertIn(f'--interpreter-mode live: {GEMINI["target"]} is not the', str(caught.exception))
+        self.assertEqual(world.acts('run', 'stop', 'rename', 'vhost', 'oneshot', 'recorder'), [])
+        self.assertEqual(world.names(), {WEB: (OLD_IMAGE, 9150, True), WORKER: (OLD_IMAGE, None, True)})
+
+    def test_ctrl_c_at_any_call_of_a_live_interpreters_install_is_never_swallowed_and_no_web_holds_the_key(self):
+        clean = BlueGreenWorld(self.tmp)
+        self.assertIsNone(run_holding_the_key(clean, install.phase_app, live_app_args(self.tmp))[1])
+        total = clean.calls
+        self.assertGreater(total, 40)
+        reported = 0
+        for k in range(1, total + 1):
+            for path in [*self.tmp.glob('*.json'), *self.tmp.glob('*.log')]:
+                path.unlink()
+            world = BlueGreenWorld(self.tmp)
+            world.interrupt_at = k
+            with self.subTest(call=k):
+                try:
+                    details, error = run_holding_the_key(world, install.phase_app, live_app_args(self.tmp))
+                except KeyboardInterrupt:
+                    self.assertFalse(world.acts('run'), world.events[-3:])  # only before anything acted
+                    world.invariant()
+                    continue
+                world.invariant()
+                self.assertIsNone(details, f'a Ctrl-C at call {k} ended the install as a success')
+                self.assertIsNotNone(error)
+                webs_never_hold_the_key(self, world)
+                reported += 1
+        self.assertGreater(reported, 20)
+
+    def switched_in(self):
+        """This revision, with the interpreter, serving on 9151 after a successful app that replaced the OLD pair (a
+        revision before the interpreter, whose worker runs no interpret stage)."""
+        world = BlueGreenWorld(self.tmp, live=9151, serving=(REVISION, IMAGE))
+        world.stage_kinds[IMAGE] = KINDS_OLD + ['interpret']
+        install.write_receipt(self.tmp, 'app', {'phase': 'app', 'ok': True, 'revision': REVISION, 'details': {
+            'replaced': {'web': {'id': 'web-old', 'image': OLD_IMAGE, 'revision': OLD},
+                         'worker': {'id': 'worker-old', 'image': OLD_IMAGE, 'revision': OLD}}}})
+        return world
+
+    def test_the_switch_back_proceeds_and_declares_what_was_made_from_event_inventories(self):
+        world = self.switched_in()
+        world.interpretation_answer = {'interpretation': {'assessments': 3, 'encounters': ['e1', 'e2']}}
+        details, error = run_holding_the_key(world, install.phase_switch_back, switch_back_args(self.tmp))
+        self.assertIsNone(error, error and str(error))
+        self.assertEqual(world.names(), {WEB: (OLD_IMAGE, 9150, True), WORKER: (OLD_IMAGE, None, True)})
+        self.assertEqual(details['interpretation'], {'assessments': 3, 'encounters': ['e1', 'e2'], 'note': NOTE_3})
+        self.assertTrue(details['summary'].endswith('; ' + NOTE_3), details['summary'])
+        self.assertEqual(details['interpreter_mode'], 'disabled')
+        # counted with this revision's image once its worker is parked and its stages closed, before the switch (B4)
+        read = world.events.index(('interpretation', IMAGE))
+        self.assertLess(world.events.index(('rename', WORKER, WORKER + '-previous')), read)
+        self.assertLess(world.events.index(('put_back', OLD_IMAGE)), read)
+        self.assertLess(read, world.events.index(('vhost', 'replace', 9150)))
+        # the closes keep only the previous worker's kinds, so every interpret stage is closed before it runs
+        self.assertEqual([close['kinds'] for close in world.closes], [KINDS_OLD, KINDS_OLD])
+        # the previous pair, a revision before the interpreter, starts with it disabled and without its key
+        for argv in (world.runs[NEXT], world.runs[WORKER]):
+            self.assertIn('CPT_STUDIO_GEMINI_MODE=disabled', flags(argv, '-e'))
+            self.assertNotIn(GEMINI_MOUNT, flags(argv, '--mount'))
+        self.assertEqual(world.acts('hazards'), [('hazards', IMAGE), ('hazards', IMAGE)])  # refusals as they were
+
+    def test_a_note_that_cannot_be_read_never_stops_the_switch_back(self):
+        world = self.switched_in()
+        world.interpretation_answer = install.InstallError('Counting the assessments failed (exit 1).')
+        details, error = run_holding_the_key(world, install.phase_switch_back, switch_back_args(self.tmp))
+        self.assertIsNone(error, error and str(error))
+        self.assertEqual(world.names(), {WEB: (OLD_IMAGE, 9150, True), WORKER: (OLD_IMAGE, None, True)})
+        self.assertEqual((details['interpretation']['assessments'], details['interpretation']['encounters']),
+                         (None, None))
+        self.assertIn('were not counted (Counting the assessments failed (exit 1).)', details['summary'])
+
+    def test_a_ctrl_c_while_counting_resumes_this_revision_with_nothing_switched(self):
+        world = self.switched_in()
+        world.interpretation_answer = KeyboardInterrupt()
+        details, error = run_holding_the_key(world, install.phase_switch_back, switch_back_args(self.tmp))
+        self.assertIsInstance(error, install.InstallError)
+        self.assertIn('nothing was switched', str(error))
+        self.assertEqual(world.names(), {WEB: (IMAGE, 9151, True), WORKER: (IMAGE, None, True)})
+        self.assertEqual(world.acts('reload'), [])
+
+    def test_a_previous_pair_that_runs_the_interpreter_is_started_with_the_mode_it_is_given(self):
+        world = self.switched_in()
+        args = switch_back_args(self.tmp, interpreter_mode='live', authorization_ref=RULING)
+        details, error = run_holding_the_key(world, install.phase_switch_back, args)
+        self.assertIsNone(error, error and str(error))
+        self.assertEqual(flags(world.runs[WORKER], '--mount')[-1], GEMINI_MOUNT)
+        webs_never_hold_the_key(self, world)
+        self.assertIn('CPT_STUDIO_GEMINI_MODE=live', flags(world.runs[NEXT], '-e'))
+        # its loader check ran in the PREVIOUS pair's image, before anything was started
+        (image, command, kwargs), = [shot for shot in world.oneshots
+                                     if shot[1][-1] == install.INTERPRETER_CREDENTIALS_CHECK]
+        self.assertEqual((image, kwargs), (OLD_IMAGE, {'network': 'none', 'interpreter_file': True, 'timeout': 120}))
+        self.assertLess(world.events.index(('oneshot', ('manage', 'shell'))),
+                        world.events.index(('run', 'web', NEXT, 9150, OLD_IMAGE)))
+        self.assertIn('interpreter live) on 9150', details['summary'])

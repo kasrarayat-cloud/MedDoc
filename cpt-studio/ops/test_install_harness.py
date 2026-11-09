@@ -50,6 +50,10 @@ ANTHROPIC_FILE = f'export ANTHROPIC_API_KEY="{ANTHROPIC_VALUE}"  # synthetic\n'.
 CORTI_VALUE = 'synthetic-corti-client-secret-0123456789'
 CORTI_FILE = (f'CORTI_CLIENT_ID=synthetic-client\nCORTI_CLIENT_SECRET={CORTI_VALUE}\nCORTI_ENVIRONMENT=eu\n'
               'CORTI_TENANT_NAME=synthetic-tenant\n').encode()
+# The interpreter's (DECISIONS D14: one line GEMINI_API_KEY=<53 characters>, 69 bytes), synthetic and in that shape.
+GEMINI_VALUE = 'synthetic-gemini-key-' + '0123456789abcdefghijklmnopqrstuvwxyz'[:32]
+GEMINI_FILE = f'GEMINI_API_KEY={GEMINI_VALUE}\n'.encode()
+GEMINI = install.INTERPRETER
 
 
 def flags(argv, flag):
@@ -461,7 +465,7 @@ class ParticipantSecretsHelperTests(TemporaryDirectoryTest):
         self.assertIn('is not the 10150:10150 0400 regular file', self.refused())
 
     def test_phase_secrets_runs_the_participant_step_only_after_the_three_file_set(self):
-        order = []
+        order, copied = [], []
 
         def helper(body, params, **kwargs):
             order.append(body)
@@ -469,13 +473,21 @@ class ParticipantSecretsHelperTests(TemporaryDirectoryTest):
                 return {'etc_dir': 'present'}
             if body is install.H_SECRETS:
                 return {'state': 'present', 'files': {}}
+            names = [entry['name'] for entry in params['participants']]
+            copied.append(names)
+            if names == ['gemini']:  # the interpreter's own run, after the participants' (design/FINAL.md 13)
+                return {'participants': {'gemini': {'state': 'created'}}}
             return {'participants': {'astra': {'state': 'created'}, 'fable': {'state': 'not provided'}}}
         stat = {install.PROVIDER_SOURCES: {'exists': True, 'kind': 'dir', 'uid': 0, 'gid': 0, 'mode': '0o700'}}
         with mock.patch.object(install, 'run_helper', helper), mock.patch.object(install, 'helper_stat',
                                                                                  return_value=stat):
             result = install.phase_secrets(SimpleNamespace())
-        self.assertEqual(order, [install.H_ETC_DIR, install.H_SECRETS, install.H_PARTICIPANT_SECRETS])
+        self.assertEqual(order, [install.H_ETC_DIR, install.H_SECRETS, install.H_PARTICIPANT_SECRETS,
+                                 install.H_PARTICIPANT_SECRETS])
+        self.assertEqual(copied, [['astra', 'fable'], ['gemini']])  # the participants' set exactly as it was
         self.assertIn('participant credentials: astra created, fable not provided', result['summary'])
+        self.assertIn('interpreter credentials: gemini created', result['summary'])
+        self.assertEqual(result['interpreter_credentials'], {'gemini': {'state': 'created'}})
 
         def refusing(body, params, **kwargs):
             order.append(body)
@@ -551,11 +563,17 @@ class AppWorld:
         (self.scan_dir / 'astra').write_bytes(OPENAI_FILE)
         (self.scan_dir / 'fable').write_bytes(ANTHROPIC_FILE)
         (self.scan_dir / 'corti').write_bytes(CORTI_FILE)
-        self.stat = {ASTRA['target']: INSTALLED, FABLE['target']: INSTALLED, install.CORTI_TARGET: INSTALLED}
+        (self.scan_dir / 'gemini').write_bytes(GEMINI_FILE)
+        self.stat = {ASTRA['target']: INSTALLED, FABLE['target']: INSTALLED, install.CORTI_TARGET: INSTALLED,
+                     GEMINI['target']: INSTALLED}
+        self.interpreter = None  # the interpreter mode replace_services was named with (None: not named)
 
     def respond(self, command, kwargs):
         if command[:2] == ['manage', 'shell'] and command[-1] == install.CREDENTIALS_CHECK:
             return SimpleNamespace(returncode=0, stdout=b'corti-credentials-parse-ok\n', stderr=b'')
+        if command[:2] == ['manage', 'shell'] and command[-1] == install.INTERPRETER_CREDENTIALS_CHECK:
+            return self.answers.get(('parse', 'gemini')) or SimpleNamespace(
+                returncode=0, stdout=b'gemini-credentials-parse-ok\n', stderr=b'')
         if command[:2] == ['manage', 'shell']:
             name = next(name for name, body in install.PARTICIPANT_CREDENTIALS_CHECKS.items() if body == command[-1])
             return self.answers.get(('parse', name)) or SimpleNamespace(
@@ -578,9 +596,11 @@ class AppWorld:
                     'kinds': []}
         return {'encounters': 0, 'changed': {}}
 
-    def replace(self, ctx, image_id, env_bytes, mode, reference, participants=None):
+    def replace(self, ctx, image_id, env_bytes, mode, reference, participants=None, **named):
         self.timeline.append(('replace', mode, reference, participants))
-        return {'started': {}, 'replaced': {}}
+        self.interpreter = named.pop('interpreter', None)
+        assert not named, named  # replace_services takes nothing else by name
+        return {'started': {}, 'replaced': {}, 'worker_started_at': '2026-11-09T10:00:00.000Z'}
 
     def helper(self, body, params, *, mounts, sensitive=False, **kwargs):
         """run_helper for H_CREDENTIAL_SCAN, its body run here on the synthetic credentials files."""
@@ -602,10 +622,12 @@ class AppWorld:
                 mock.patch.object(install, 'run_helper', self.helper)]
 
 
-def app_args(tmp, *, provider='disabled', astra='live', fable='live', access=None):
-    reference = RULING if 'live' in (provider, astra, fable) else ''
+def app_args(tmp, *, provider='disabled', astra='live', fable='live', access=None, interpreter=None):
+    reference = RULING if 'live' in (provider, astra, fable, interpreter) else ''
+    named = {} if interpreter is None else {'interpreter_mode': interpreter}  # as the earlier tests built args
     return SimpleNamespace(phase='app', revision=REVISION, receipts=str(tmp), provider_mode=provider,
-                           authorization_ref=reference, astra_mode=astra, fable_mode=fable, access_check=access)
+                           authorization_ref=reference, astra_mode=astra, fable_mode=fable, access_check=access,
+                           **named)
 
 
 class AppPhaseParticipantTests(TemporaryDirectoryTest):
@@ -1145,15 +1167,21 @@ class RollbackParticipantTests(TemporaryDirectoryTest):
             closed.update(kinds=kinds, reason=reason)
             return {'closed': 2, 'kinds': ['astra', 'fable'], 'hazards': {}, 'relabel': []}
         names = {install.SERVICES[role]: role for role in ('web', 'worker')}
+        def counted(image_id, env_bytes, body, params, **kwargs):  # ADJUDICATION P-1's note, read in this image
+            self.assertEqual((image_id, body), (IMAGE, install.INTERPRETATION_MADE))
+            return {'interpretation': {'assessments': 0, 'encounters': []}}
         with mock.patch.object(install, 'inspect', side_effect=lambda kind, name: live.get(names.get(name))), \
                 mock.patch.object(install, 'docker', fake_docker), \
                 mock.patch.object(install, 'read_protected_env', return_value=b''), \
                 mock.patch.object(install, 'require_db'), \
                 mock.patch.object(install, 'undo_hazards', return_value={}), \
                 mock.patch.object(install, 'close_undone_stages', close), \
+                mock.patch.object(install, 'app_script', counted), \
                 mock.patch.object(install, 'put_back_states', return_value={'encounters': 0, 'changed': {}}):
             details = install.phase_rollback_app(install.Context(SimpleNamespace(phase='rollback-app',
                                                                                  revision=REVISION), self.tmp))
+        self.assertEqual(details['interpretation']['note'],
+                         '0 assessments were made from event inventories; the earlier image reads them fail-closed')
         self.assertEqual(closed['kinds'], list(install.COMMON_STAGE_KINDS))
         self.assertEqual(closed['reason'], 'its web and worker were removed (rollback-app)')
         self.assertEqual(details['stages_closed']['kinds'], ['astra', 'fable'])
