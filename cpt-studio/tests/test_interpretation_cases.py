@@ -1,9 +1,10 @@
-"""The seven trial cases, the owner's classes and the slips (Gemini migration slice S08; design/FINAL.md 7.12 and 5.6),
-as SYNTHETIC inventories asserted as STRUCTURE: which event supports which code, which relation decides and why, what is
-held, excluded or left for completeness - never a list of expected codes for a real document. Each case is a synthetic
-document of the case's shape, written here (no sealed set, no trial document, no recorded response is read). The four
-slips run through the engine from slice S03's synthetic slip fixtures (tests/fixtures/interpretation/synthetic), each
-beside its correct twin: contained means the slip changes no decision a twin would not make.
+"""The seven trial cases, the owner's classes and the slips (Gemini migration slice S08; design/FINAL.md 7.12 and 5.6,
+with design/ADJUDICATION.md C-7 governing the v5 row), as SYNTHETIC inventories asserted as STRUCTURE: which event
+supports which code, which relation decides and why, what is held, excluded or left for completeness - never a list
+of expected codes for a real document. Each case is a synthetic document of the case's shape, written here (no
+sealed set, no trial document, no recorded response is read). The four slips run through the engine from slice
+S03's synthetic slip fixtures (tests/fixtures/interpretation/synthetic), each beside its correct twin: contained
+means the slip changes no decision a twin would not make.
 
 | case | decided by | expected structure |
 |---|---|---|
@@ -18,7 +19,8 @@ beside its correct twin: contained means the slip changes no decision a twin wou
 | v2 | technique DIFFERENT | snare supports |
 | v3 | time DIFFERENT | dilation supports |
 | v4 | CONTRADICTION (an extension statement at the current encounter) | held with the conflict question |
-| v5 | broad current denial | a removal code citing the scar is EXCLUDED, reinstatable; the biopsy of the scar supports |
+| v5 | broad current denial (C-7: no cover | a removal code citing the scar is asked statement_scope (held, never |
+|  | of its own) | excluded); one citing the denial is EXCLUDED, reinstatable; the biopsy of the scar supports |
 | E5, E13, E15, the v5 truncations | table 5.6 | contained |
 """
 from __future__ import annotations
@@ -269,15 +271,24 @@ class SlipsContained(SimpleTestCase):
         self.assertNotEqual(proposal(no_tie, '45380').status, 'excluded')
 
     def test_v5_the_scar_the_outside_hospital_and_the_broad_denial_cut_or_whole(self):
+        """ADJUDICATION C-7 governs FINAL 7.12's v5 row: the broad current denial has no cover of its own, so a removal
+        code citing the scar is asked whether "No polyp was removed" applies to it - held, never excluded - while a
+        removal code citing the denial itself is EXCLUDED (basis literal), reinstatable."""
         scar = 'Cold forceps biopsies were taken from the transverse colon polypectomy scar'
+        denial = 'No polyp was removed today.'
         decisions = []
         for name in ('s4-twin-whole-strings', 's4-v5-cut-strings'):
             _, result = self.assessed(name, [('45380', scar), ('45385', scar)])
             removal, biopsy = proposal(result, '45385'), proposal(result, '45380')
-            self.assertEqual((removal.bucket, removal.reinstatable, removal.support['exclusion']['cover'],
-                              removal.support['exclusion']['basis']), ('excluded', True, 'broad', 'literal'))
+            self.assertEqual((removal.bucket, removal.status, asked(removal), removal.support['reason']),
+                             ('selected', 'needs_clarification', ['statement_scope'], events.STATEMENT_SCOPE))
+            self.assertIn('Does “No polyp was removed” apply to the snare removal', removal.clarifications[0].question)
             self.assertEqual((biopsy.status, acts_of(biopsy)), ('ready', ['E3']))
+            _, cited = self.assessed(name, [('45385', denial)])
+            excluded = proposal(cited, '45385')
+            self.assertEqual((excluded.bucket, excluded.reinstatable, excluded.support['exclusion']['cover'],
+                              excluded.support['exclusion']['basis']), ('excluded', True, 'citation', 'literal'))
             decisions.append([(p.key, p.code, p.bucket, p.status, [c.id for c in p.checks],
-                               [spec.fact for spec in p.clarifications]) for p in result.proposals])
+                               [spec.fact for spec in p.clarifications]) for p in result.proposals + cited.proposals])
         self.assertEqual(decisions[0], decisions[1])  # the cut strings change no decision (D7: another interpretation's
         # anchors are its own words, so a decision on one never carries to the other through the fingerprint)

@@ -17,8 +17,8 @@ BUNDLING (7.7; COMMON_BUNDLED, catalogue.py:163-175):
   bleeding control (its catalogue kind). Each family entry's own bundled kinds as the catalogue states them (the ERCP's
   contrast injection).
 
-SESSIONS (7.8): a family's session is its current examination event (an endoscopic family's: an examination whose device
-is not verified as another than the endoscope - FINAL 5.6, E13); two current examinations of one family leave it
+SESSIONS (7.8): a family's session is its current examination event (an endoscopic family's: any examination but a
+digital one, whose device is verified as manual - FINAL 5.6, E13); two current examinations of one family leave it
 unresolved for every rule that reads it. A session's examination ``part_of`` an examination of another family is that
 session's included portion (C3), and - structurally (C-4) - a current performed EGD examination in an encounter with a
 current performed upper-tract EUS examination is the EUS's endoscopic portion.

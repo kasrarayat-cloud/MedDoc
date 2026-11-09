@@ -1,8 +1,8 @@
-"""The per-code rule of the events engine (design/FINAL.md 7.2-7.6, as design/ADJUDICATION.md C-1, C-6, C-9 and C-10 amend
-it): one proposed code against the persisted event inventory - its candidates, its supporting events, its dependencies,
-the relations that decide it, its exclusion, and the ONE focused question that holds it. Pure: it reads the inventory's
-stored attributes (values, states, the literals of their own words) and the code's kept evidence spans, never the
-revision text for meaning (P6), and it produces no value (P2).
+"""The per-code rule of the events engine (design/FINAL.md 7.2-7.6, as design/ADJUDICATION.md C-1, C-6, C-7, C-9 and
+C-10 amend it): one proposed code against the persisted event inventory - its candidates, its supporting events, its
+dependencies, the relations that decide it, its exclusion, and the ONE focused question that holds it. Pure: it reads
+the inventory's stored attributes (values, states, the literals of their own words) and the code's kept evidence
+spans, never the revision text for meaning (P6), and it produces no value (P2).
 
 THE RULE, in order (7.2): R1 (scope and exact evidence) is the caller's - a code failing it is never evaluated. Then:
 - R2 a link route (mapping.code_link): (a) the catalogue, (b) an unreconciled act; route (c) is REMOVED (C-6), so a code
@@ -36,16 +36,19 @@ or an umbrella covering it, its kind and family usable; (2) D's deciding attribu
 (verify.exclusion_basis: status not_performed by a negator, planned by a planning marker; time earlier or future by a
 compared date literal or a time marker; performer another clinician by a titled or credentialed name, another facility
 by a name or a facility marker) - the exclusion records ``basis``; an exceptive statement never excludes (C-7), and an
-act begun and not completed never does (C-9); (3) D covers the code: D is a BROAD statement (not_performed, all_of_kind
-usable, current_encounter usable, its family's session resolved), or the code's kept spans that overlap D's own passages
-lie within the union of D's own attribute word spans (C-10's kind, status, time and target, with its performer and its
-scope: COVERING) - a kept span that overlaps D's
-passages but reaches words no D word covers gives a statement_scope question instead; (4) nothing doubts the code's
-kinds (no uncertain candidate, no DOUBT relation on a candidate or from a statement of its kinds).
+act begun and not completed never does (C-9); (3) D covers the code BY CITATION ONLY (coverage_of): a kept span of the
+code overlaps D's own passages and EVERY kept span lies within the union of D's own attribute word spans - exactly
+C-10's kind, status, time and target (COVERING). A citation that overlaps D but reaches words no D word covers, in
+that span or in another span of the code, gives a statement_scope question instead (C-10); and a BROAD statement
+(not_performed, all_of_kind usable, current_encounter usable, its family's session resolved) has no cover of its own:
+one the code does not cite gives the statement_scope question, never an exclusion (C-7, which governs FINAL 7.5 (3)
+and the 7.12 v5 row); (4) nothing doubts the code's kinds (no uncertain candidate, no DOUBT relation on a candidate or
+from a statement of its kinds).
 
 THE OMISSION CASE (P4): Gemini drops a current act and the proposer cites that act's own passage; only a historical or
-denied statement of the kind exists elsewhere, or in the same sentence. Coverage fails (the citation reaches words the
-statement's own words do not cover), so the code is held, never excluded.
+denied statement of the kind exists elsewhere, in the same sentence, or cited beside the act in a second span of the
+code, or a broad current denial stands elsewhere. Coverage fails (no citation of the statement, or a citation reaching
+words the statement's own words do not cover), so the code is held, never excluded.
 
 Imports nothing from studio.gi but the reference tables, through mapping (FINAL 3.1).
 """
@@ -59,10 +62,10 @@ from studio.interpretation import identity, mapping, relations, verify, wording
 
 ATTRIBUTES = ('procedure', 'kind', 'technique', 'target', 'time', 'performer', 'status', 'scope', 'purpose')
 BLOCKING = (relations.CONTRADICTION, relations.DOUBT, relations.UNRESOLVED)
-# The attributes an exclusion's coverage reads the words of: C-10's kind, status, time and target, with the two other
-# attributes a statement's own words state - its performer (the deciding attribute of an exclusion by another
-# performer) and its scope (a broad statement's quantifier).
-COVERING = ('kind', 'status', 'time', 'target', 'performer', 'scope')
+# The attributes whose words an exclusion's coverage reads: exactly ADJUDICATION C-10's list - the deciding event's kind,
+# status, time and target. A kept span reaching any other word (a performer's name, a facility, a quantifier outside the
+# status words) gives the statement_scope question, never an exclusion.
+COVERING = ('kind', 'status', 'time', 'target')
 # The event's own statement: the passages of the act itself (what a question quotes and a support shows).
 OWN = ('kind', 'status', 'target')
 
@@ -293,14 +296,18 @@ def is_candidate(link: mapping.CodeLink, group: Sequence[str], event: Mapping) -
     return any(mapping.covers(kind, wanted) for wanted in group)
 
 
+DIGITAL = 'manual'  # the device of a digital examination (FINAL 5.6, E13): the one examination that is no session
+
+
 def endoscopic_examination(event: Mapping) -> bool:
     """Whether an examination event can be its endoscopic family's session (FINAL 5.6, E13: "the session's examination is
-    the colonoscopy"): any examination but one of an endoscopic family whose device is VERIFIED as another than the
-    endoscope - a digital rectal examination read as the family's examination (technique ``manual``) is no session and
-    supports no base code. An unstated or unverified device never sets an examination apart (fail toward the hold)."""
+    the colonoscopy"): any examination but one of an endoscopic family whose device is VERIFIED as ``manual`` - a digital
+    rectal examination read as the family's examination is no session and supports no base code. E13 names that
+    technique only: an examination whose verified device is any other class (an echoendoscope read as ``other``, a
+    balloon enteroscope) is its family's session, and an unstated or unverified device never sets one apart."""
     if event.get('family') not in mapping.ENDOSCOPIC_FAMILIES:
         return True
-    return not (usable(event, 'technique') and value(event, 'technique') != 'endoscope')
+    return not (usable(event, 'technique') and value(event, 'technique') == DIGITAL)
 
 
 def supports(reading: Reading, link: mapping.CodeLink, group: Sequence[str], event: Mapping) -> bool:
@@ -344,7 +351,7 @@ class Exclusion:
     basis: str
     words: Optional[dict]
     reason: str
-    cover: str  # 'broad' or 'citation'
+    cover: str  # 'citation': the code's kept spans lie within the statement's own words (C-7, C-10; no other cover)
 
 
 @dataclass(frozen=True)
@@ -692,7 +699,8 @@ def deciding(event: Mapping) -> tuple:
 
 
 def broad(reading: Reading, event: Mapping) -> bool:
-    """7.5 (3), the broad arm: a current denial of every act of its kind in its own session (C-8)."""
+    """A broad statement: a current denial of every act of its kind in its own session (C-8). As ADJUDICATION C-7
+    decides it, it covers no code its kept spans do not cite: uncited, it is asked about (statement_scope)."""
     return (usable(event, 'status') and value(event, 'status') == 'not_performed'
             and usable(event, 'scope') and value(event, 'scope') == 'all_of_kind'
             and usable(event, 'time') and value(event, 'time') == 'current_encounter'
@@ -715,18 +723,21 @@ def within_words(span: Mapping, words: Sequence[Mapping]) -> bool:
 
 
 def coverage_of(reading: Reading, event: Mapping, kept: Sequence[Mapping]) -> str:
-    """7.5 (3) as C-10 amends it: 'broad', 'citation' (every kept span that overlaps the statement's own passages lies
-    within its own attribute words), 'partial' (one reaches words the statement's words do not cover: a statement_scope
-    question) or '' (the code was not cited for the statement)."""
-    if broad(reading, event):
-        return 'broad'
+    """7.5 (3) as ADJUDICATION C-7 and C-10 amend it: whether the statement covers the code its kept spans cite.
+    - 'citation': a kept span overlaps the statement's own passages and EVERY kept span lies within the union of its own
+      attribute words (COVERING: kind, status, time, target) - the code is cited for that statement and for nothing
+      else (C-10);
+    - 'partial', the statement_scope question: a kept span overlaps its passages but some kept span - that one or
+      another - reaches words no word of it covers (C-10: the code may cite an act Gemini omitted); or the statement is
+      a BROAD one (a current denial of every act of its kind) that no kept span overlaps (C-7: a broad statement has no
+      cover of its own);
+    - '': no kept span overlaps it, and it is no broad statement: the code was not cited for it (7.6)."""
     places = reading.places(all_passages(event))
-    overlapping = [span for span in kept if any(_overlaps(span, place) for place in places)]
-    if not overlapping:
-        return ''
+    if not any(_overlaps(span, place) for span in kept for place in places):
+        return 'partial' if broad(reading, event) else ''
     words = [event[name]['words'] for name in COVERING
              if isinstance(event.get(name), Mapping) and isinstance(event[name].get('words'), Mapping)]
-    return 'citation' if all(within_words(span, words) for span in overlapping) else 'partial'
+    return 'citation' if all(within_words(span, words) for span in kept) else 'partial'
 
 
 def _doubted(reading: Reading, link: mapping.CodeLink, group: Sequence[str], candidates: Sequence) -> bool:
@@ -758,7 +769,7 @@ def _exclusion(code: str, link: mapping.CodeLink, group: Sequence[str], candidat
         if not basis:
             continue
         cover = coverage_of(reading, event, places)
-        if cover in ('broad', 'citation'):
+        if cover == 'citation':
             words = (event[name].get('words') if isinstance(event.get(name), Mapping) else None) \
                 or words_of(event, 'status', 'kind')
             text = words['text'] if words else statement_text(reading, event)

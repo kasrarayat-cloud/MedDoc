@@ -183,6 +183,14 @@ class Sentinel(SimpleTestCase):
                         procedure=a('egd', 'upper endoscopy', ['P1']), time=a('unknown'))
         inv9, text9 = office(undatable, lines={'P1': 'An upper endoscopy with duodenal biopsies was performed.'})
         yield lambda: run(inv9, text9, [('99213', VISIT_LINE), ('45999', VISIT_LINE)], user_values=MEMBER)
+        # C-7 and C-10's statement_scope questions (a broad denial beside an omitted act; a code citing the act beside a
+        # historical denial), and an examination-only EUS code held as its family's base beside the FNA code
+        omitted = act('E3', 'P3', 'removal', 'removed', status='not_performed', status_words='No polyp was removed',
+                      scope=sc('all_of_kind', 'No', ['P3']), time=a('current_encounter', 'today', ['P3']))
+        inv10, text10 = inventory({'P1': COLONOSCOPE, 'P2': POLYP, 'P3': 'No polyp was removed today.'},
+                                  events=[exam(), omitted], reach=[reached()])
+        yield lambda: run(inv10, text10, [('45385', POLYP), ('45390', (POLYP, 'No polyp was removed today.'))])
+        yield lambda: run(inv6, text6, [('43242', EUS_LINES['P3']), ('43259', EUS_LINES['P1'])])
 
     def test_strict_mode_shows_zero_denied_executions_on_every_path(self):
         for index, work in enumerate(self.assessments()):
@@ -450,6 +458,79 @@ class WordingPinned(SimpleTestCase):
                              ((source, source), date(2026, 11, 9)), ((source,), date(2027, 1, 9))):
             self.assertEqual(wording.unavailable_reason('CMS Physician Fee Schedule', sources, 'cms-pfs', day),
                              checks.unavailable_reason('cms-pfs', sources, day))
+
+    def test_the_reconcile_holds_are_the_legacy_sentences(self):
+        """The reconcile.match sentences the engine copies (FINAL 7.2 R5, 7.4 h6 and h1), each built by the legacy
+        reconcile.match itself over a minimal documented-service reading (a test-only import) and compared with the
+        copy for the same inputs: the "part of another documented act" detail and question (reconcile.py:268-289), the
+        dilation of another technique (reconcile.py:307-316) and the conflict question (reconcile.py:252-258). The
+        conflict's detail is CPT Studio's own sentence over two events (wording.conflict_reason), not a copy."""
+        from studio.gi import services as gi_services
+        text = ('A 25 mm flat lesion in the cecum was lifted with a submucosal injection and resected by EMR. '
+                'The rectal stricture was dilated with Savary dilators over a guide wire to 15 mm. '
+                'A 6 mm polyp was removed with a cold snare. No polyp was removed.')
+
+        def span(phrase):
+            start = text.index(phrase)
+            return Span(start, start + len(phrase), phrase)
+
+        def legacy(code, acts, conflicts=()):
+            service = gi_services.DocumentedService(id='S1', family='gi.colonoscopy', kind='colonoscopy',
+                                                    status='performed', acts=tuple(acts))
+            reading = gi_services.ServiceInventory(version='test', services=(service,), conflicts=tuple(conflicts))
+            return service, reconcile.match(code, reading, 'gi.colonoscopy')
+
+        def done(aid, kind, phrase, anatomy=()):
+            return gi_services.Act(id=aid, service='S1', kind=kind, status='performed', role='physician',
+                                   anatomy=tuple(anatomy), evidence=(span(phrase),))
+
+        lift = 'lifted with a submucosal injection'
+        service, match = legacy('45381', [done('A1', 'injection', lift, ['cecum']),
+                                          done('A2', 'emr', 'resected by EMR', ['cecum'])])
+        self.assertEqual(match.reason, 'act_included')
+        listed = '; '.join(reconcile.describe_act(service, item) for item in match.acts[:4])
+        what = ' or '.join(reconcile.act_label(kind) for kind in ('injection', 'tattoo'))
+        self.assertEqual(wording.act_included('colonoscopy', 'performed', listed,
+                                              reconcile._bundled(service, match.acts[0]), what, lift),
+                         (match.detail, match.question))
+        savary = 'dilated with Savary dilators over a guide wire to 15 mm'
+        _, match = legacy('45386', [done('A1', 'dilation', savary, ['rectum'])])
+        self.assertTrue(match.detail.startswith('The colonoscopy is documented as performed with a dilation with'))
+        self.assertEqual(wording.another_technique('colonoscopy', wording.TECHNIQUE_WORDS['wire_bougie'],
+                                                   wording.TECHNIQUE_WORDS['balloon'], savary),
+                         (match.detail, match.question))
+        removed = 'A 6 mm polyp was removed with a cold snare'
+        sides = (gi_services.ConflictSide('performed', 'physician', (span(removed),)),
+                 gi_services.ConflictSide('negated', 'physician', (span('No polyp was removed'),)))
+        _, match = legacy('45385', [done('A1', 'snare', removed)],
+                          [gi_services.Conflict(id='C1', service='S1', subject='snare', lesion='', sides=sides)])
+        self.assertEqual(match.reason, 'conflict')
+        self.assertEqual(wording.conflict_question(reconcile.act_label('snare')), match.question)
+
+    def test_the_performed_question_is_the_engines_inline_sentence(self):
+        """wording.performed_question copies an f-string the legacy engine writes inline (engine._proposal's fallback
+        question, engine.py:3327), so it is pinned against that function's own source."""
+        import inspect
+        self.assertIn("f'" + wording.performed_question('{s.code}') + "'", inspect.getsource(engine._proposal))
+
+    def test_the_member_answers_exclusion_is_the_engines(self):
+        """The member answer's exclusion (its reason sentence, the member.answer check, support['answered'] and the
+        answered fingerprint) built by the legacy engine's own _MemberAnswers._excluded (a test-only import) over the
+        same proposal and answer: a required fact and a conflict."""
+        inv, text = colonoscopy(reach=False)
+        denial = act('E3', 'P3', 'removal', 'removed', status='not_performed', status_words='No polyp was removed',
+                     scope=sc('all_of_kind', 'No', ['P3']))
+        conflicted, conflict_text = colonoscopy(denial, lines={'P3': 'No polyp was removed today.'})
+        for fact, (inventory_, text_) in (('extent', (inv, text)), ('conflict:snare', (conflicted, conflict_text))):
+            with self.subTest(fact=fact):
+                p = proposal(run(inventory_, text_, [('45385', POLYP)]), '45385')
+                self.assertIn(fact, asked(p))
+                answer = questions.MemberAnswerInput('45385', 'gi.colonoscopy', fact, 'cannot_confirm', 'f', 'a-1')
+                answer_of = {questions.member_key('45385', 'gi.colonoscopy', fact): answer}
+                ours = assess._MemberAnswers((), text_)._excluded(p, fact, answer_of)
+                theirs = engine._MemberAnswers((), text_)._excluded(p, SimpleNamespace(answered=fact), answer_of)
+                self.assertEqual(ours, theirs)
+                self.assertTrue(ours.exclusion_reason.startswith('The member answered "Cannot confirm" to '))
 
     def test_the_incomplete_check_is_worded_from_its_own_words(self):
         """R-4: checks.incomplete_check reads a legacy status outcome and is not allowed; the copy keeps its id, label,

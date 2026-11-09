@@ -5,7 +5,9 @@ a reviewer's counted set - one implementation each, so the two cannot drift (eng
 
 Copied from engine.py:3045-3175 with the two cue predicates (gi.services.listed_in_doubt and listed_contradicted)
 replaced by event states (event_coding's ``doubted``: an uncertain status, a CONTRADICTION, DOUBT or UNRESOLVED relation,
-an unusable attribute of the act's own statement - fail-closed). The holds' wording is the engine builders' own,
+an unusable attribute of the act's own statement - fail-closed), and with the examination-only EUS codes read as
+their family's base codes (``_base``: the events engine supports them by the EUS examination itself, FINAL 7.3, which
+the legacy reader never did). The holds' wording is the engine builders' own,
 copied, with a session's label in place of a documented service's; tests/test_interpretation_combination.py pins each
 builder equal to its legacy original for equivalent inputs.
 
@@ -39,10 +41,16 @@ def _session(coding: Mapping, session_id: str) -> Optional[Mapping]:
 
 
 def _base(code: str) -> bool:
-    """A base code (CodeProfile.base): an endoscopic family's diagnostic examination, or an office visit code (the
-    legacy rule reads E/M profiles as base codes that cover the visit, so two E/M codes of one visit hold each other)."""
+    """A base code: a base profile (CodeProfile.base: an endoscopic family's diagnostic examination, or an office visit
+    code - the legacy rule reads E/M profiles as base codes that cover the visit, so two E/M codes of one visit hold each
+    other), or a code whose covers are all examination kinds: an examination-only EUS code (43231, 43237, 43259, 45341,
+    45391, 44406 cover only ``eus_exam``). FINAL 7.3 makes the EUS examination such a code's act (``eus_exam`` for EUS),
+    so the base rules hold it beside a code of its session that accounts for an act and beside its session's reportable
+    acts, and the EUS examination is never accounted for twice. An E/M add-on (99417, prolonged visit time) is neither."""
     profile = catalogue.code_profile(code)
-    return profile is not None and profile.base
+    if profile is None:
+        return False
+    return profile.base or (bool(profile.covers) and all(kind in mapping.EXAMINATION_KINDS for kind in profile.covers))
 
 
 # --- base (engine.base_included) ---------------------------------------------------------------------------------------

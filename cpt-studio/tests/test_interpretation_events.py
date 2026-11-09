@@ -1,8 +1,10 @@
 """The per-code rule of the events engine (Gemini migration slice S08; design/FINAL.md 7.2-7.6, as design/ADJUDICATION.md
-C-1, C-6, C-9 and C-10 amend it), SYNTHETIC: one test per row of 7.2 (R1-R9), per rule of 7.4 (h1-h6 and C-9), per arm
-of 7.5 (the deciding attributes and their bases, the broad statement, the citation within the statement's own words,
-C-10's partial citation, the omission case of P4, the exceptive statement of C-7, the doubt of condition 4), and 7.6.
-C-1's examination-as-session is tested on every EUS code, on an examination-only document and with the act.
+C-1, C-6, C-7, C-9 and C-10 amend it), SYNTHETIC: one test per row of 7.2 (R1-R9), per rule of 7.4 (h1-h6 and C-9, and
+their order), per arm of 7.5 (the deciding attributes and their bases; the broad statement, which excludes only the code
+citing it and otherwise asks its scope, C-7; the citation within the statement's own kind, status, time and target
+words, C-10; C-10's partial citation, one span or two; the omission case of P4, the broad denial beside an omitted act;
+the exceptive statement of C-7; the doubt of condition 4), and 7.6. C-1's examination-as-session is tested on every EUS
+code, on an examination-only document and with the act.
 
 Each fixture is a synthetic Gemini answer over a synthetic document, read by read.read and normalized with the real
 linked steps (slices S01-S03), then assessed through assess.assess with a synthetic Corti response whose spans are the
@@ -72,14 +74,16 @@ def colonoscopy(*more, lines=None, lesions=(L1,), reach=True, polyp=None, **opti
 
 
 def response(text: str, codes, provider: str = 'corti') -> NormalizedResponse:
-    """A synthetic Corti response: (code, the document's phrase it cites[, role]) each."""
+    """A synthetic Corti response: (code, the document's phrase it cites - or a tuple of phrases, one span each[,
+    role]) each."""
     out = []
     for item in codes:
-        code, phrase = item[0], item[1]
+        code, cited = item[0], item[1]
         role = item[2] if len(item) > 2 else 'selected'
-        start = text.index(phrase)
-        out.append(ProviderCode(role, 'cpt', code, 'UNVERIFIED PROVIDER WORDING',
-                                (EvidenceSpan(0, start, start + len(phrase), phrase, True),)))
+        phrases = (cited,) if isinstance(cited, str) else tuple(cited)
+        spans = tuple(EvidenceSpan(0, text.index(phrase), text.index(phrase) + len(phrase), phrase, True)
+                      for phrase in phrases)
+        out.append(ProviderCode(role, 'cpt', code, 'UNVERIFIED PROVIDER WORDING', spans))
     return NormalizedResponse(provider, 'test@1', tuple(out))
 
 
@@ -440,12 +444,27 @@ class Focused(SimpleTestCase):
         self.assertTrue(any('modifier 52 or 53' in text_ for text_ in p.modifier_considerations))
 
     def test_rule_order_a_contradiction_wins_over_an_unusable_attribute(self):
-        denial = act('E3', 'P3', 'removal', 'removed', status='not_performed', status_words='No polyp was removed',
-                     scope=sc('all_of_kind', 'No', ['P3']))
-        inv, text = colonoscopy(denial, polyp=removed(performer=a('unknown')), lines={'P3': 'No polyp was removed.'})
+        """7.4's order is by RULE, then by candidate: h1 over every positive candidate before h4 over any. The first
+        candidate in document order (the sigmoid snare, E2) has only an unusable time (h4; the rectal denial is of
+        another lesion, so it is independent of E2); the second (the rectal snare, E4) is the positive side of a
+        CONTRADICTION (h1). The one question is the conflict, quoting the rectal statements - never E2's time."""
+        lines = {'P3': 'A 4 mm polyp in the rectum was removed with a cold snare.',
+                 'P4': 'The rectal polyp was not removed.'}
+        rectal = les('L2', '4 mm polyp', 'P3', landmark='rectum', site_words='rectum', size_words='4 mm')
+        second = snare('E4', 'P3', target=tg('L2', 'rectum', '4 mm polyp in the rectum', ['P3']))
+        denial = act('E5', 'P4', 'removal', 'not removed', status='not_performed', status_words='was not removed',
+                     scope=sc('single_target', 'The rectal polyp', ['P4']),
+                     target=tg('L2', 'rectum', 'The rectal polyp', ['P4']))
+        inv, text = colonoscopy(second, denial, polyp=removed(time=a('unknown')), lesions=(L1, rectal), lines=lines)
+        reading = events.Reading.of(inv)  # the fixture is what the test says it is:
+        self.assertEqual([item['type'] for item in reading.relations_of('E4')], ['contradiction'])  # h1 on E4
+        self.assertEqual(reading.relations_of('E2'), [])  # no blocking relation on E2 (the denial is independent of it)
+        self.assertFalse(events.usable(reading.events['E2'], 'time'))  # so only h4 applies to E2
+        self.assertLess(reading.order['E2'], reading.order['E4'])  # and E2 comes first in document order
         p = proposal(run(inv, text, [('45385', POLYP)]), '45385')
-        self.assertEqual(len(p.clarifications), 1)  # exactly one question per code
-        self.assertIn(asked(p)[0], ('conflict:snare', 'event_performer'))
+        self.assertEqual(asked(p), ['conflict:snare'])  # exactly one question, and it is h1's
+        self.assertEqual(p.support['reason'], events.CONFLICT)
+        self.assertEqual({span['text'] for span in p.support['source']}, {lines['P3'], lines['P4']})
 
 
 # --- 7.5: exclusion, and 7.6: not documented ---------------------------------------------------------------------------
@@ -491,33 +510,60 @@ class Exclusion(SimpleTestCase):
         p = proposal(run(inv, text, [('45385', line)]), '45385')
         self.excluded(p, 'time', 'marker')
 
+    def assert_scope_question(self, p, statement: str):
+        self.assertEqual((p.bucket, p.status, asked(p)), ('selected', 'needs_clarification', ['statement_scope']))
+        self.assertEqual(p.support['reason'], events.STATEMENT_SCOPE)
+        self.assertIsNone(p.support.get('exclusion'))
+        self.assertIn(f'Does “{statement}” apply to the', p.clarifications[0].question)
+
     def test_performer_another_clinician_by_a_titled_name(self):
+        """The code cites the statement's own act words (its kind and status words): excluded by the verified other
+        clinician. C-10's union is the deciding event's kind, status, time and target words, so a citation reaching
+        the performer's name gives the statement_scope question instead - never an exclusion."""
         line = 'Dr. Lena Ortiz snared the polyp.'
         other = act('E3', 'P3', 'snare', 'snared', status_words='snared',
                     performer=a('other_clinician', 'Dr. Lena Ortiz', ['P3']))
         inv, text = colonoscopy(other, lines={'P3': line}, polyp=act('E2', 'P2', 'biopsy', 'removed'), named=True)
-        p = proposal(run(inv, text, [('45385', 'Dr. Lena Ortiz snared')]), '45385')
+        p = proposal(run(inv, text, [('45385', 'snared')]), '45385')
         self.excluded(p, 'performer', 'literal')
         self.assertIn('by another clinician', p.exclusion_reason)
+        self.assert_scope_question(proposal(run(inv, text, [('45385', 'Dr. Lena Ortiz snared')]), '45385'), 'snared')
 
     def test_performer_another_facility_by_a_facility_marker(self):
         line = 'The polyp was snared at an outside hospital.'
         other = act('E3', 'P3', 'snare', 'snared', status_words='was snared',
                     performer=a('other_facility', 'at an outside hospital', ['P3']))
         inv, text = colonoscopy(other, lines={'P3': line}, polyp=act('E2', 'P2', 'biopsy', 'removed'), named=True)
-        p = proposal(run(inv, text, [('45385', 'snared at an outside hospital')]), '45385')
+        p = proposal(run(inv, text, [('45385', 'was snared')]), '45385')
         self.excluded(p, 'performer', 'marker')
+        self.assert_scope_question(proposal(run(inv, text, [('45385', 'snared at an outside hospital')]), '45385'),
+                                   'was snared')
 
-    def test_a_broad_current_denial_covers_a_code_citing_another_passage(self):
-        """The v5 class: a broad current denial of removal (verified quantifier and negator) excludes a removal code
-        whatever passage it cites."""
+    def test_c7_a_broad_current_denial_excludes_only_the_code_citing_it(self):
+        """The v5 class, as ADJUDICATION C-7 decides it: a broad current denial of removal (verified quantifier and
+        negator) has no cover of its own. A removal code citing another passage (the scar) is asked whether the
+        statement applies - held, never excluded; a removal code citing the denial itself, within its own words, is
+        excluded."""
         lines = {'P2': 'A scar from an earlier polypectomy was seen in the rectum.', 'P3': 'No polyp was removed today.'}
         denial = act('E3', 'P3', 'removal', 'removed', status='not_performed', status_words='No polyp was removed',
                      scope=sc('all_of_kind', 'No', ['P3']), time=a('current_encounter', 'today', ['P3']))
         inv, text = colonoscopy(denial, lines=lines, lesions=(), polyp=act('E2', 'P2', 'other', 'scar'))
-        p = proposal(run(inv, text, [('45385', lines['P2'])]), '45385')
+        held = proposal(run(inv, text, [('45385', lines['P2'])]), '45385')
+        self.assert_scope_question(held, 'No polyp was removed')
+        self.assertIn(lines['P3'], [span['text'] for span in held.support['source']])  # both sides are quoted
+        p = proposal(run(inv, text, [('45385', lines['P3'])]), '45385')
         self.excluded(p, 'status', 'literal')
-        self.assertEqual(p.support['exclusion']['cover'], 'broad')
+        self.assertEqual(p.support['exclusion']['cover'], 'citation')
+
+    def test_c7_a_broad_denial_beside_an_omitted_act_asks_its_scope(self):
+        """C-7 (c), the omission path it closed: Gemini drops the snare of P2 and records only the broad current denial
+        of P3; the proposer cites the snare's own sentence. The code is held with the statement_scope question, never
+        excluded by a statement it does not cite."""
+        lines = {'P2': POLYP, 'P3': 'No polyp was removed today.'}
+        denial = act('E3', 'P3', 'removal', 'removed', status='not_performed', status_words='No polyp was removed',
+                     scope=sc('all_of_kind', 'No', ['P3']), time=a('current_encounter', 'today', ['P3']))
+        inv, text = inventory({'P1': COLONOSCOPE, **lines}, events=[exam(), denial], reach=[reached()])
+        self.assert_scope_question(proposal(run(inv, text, [('45385', POLYP)]), '45385'), 'No polyp was removed')
 
     def test_c10_a_citation_reaching_beyond_the_statements_words_asks_its_scope(self):
         """The shared-sentence omission (C-10): Gemini dropped today's dilation; the only dilation statement is the
@@ -536,7 +582,9 @@ class Exclusion(SimpleTestCase):
 
     def test_p4_the_omission_case_is_held_never_excluded(self):
         """P4: Gemini drops a current act; the proposer cites that act's own passage; only a historical denial of the
-        kind exists, in another sentence. Coverage fails: held by 7.6."""
+        kind exists, in another sentence. Coverage fails: held by 7.6. Cited beside the historical denial (two spans of
+        one code, the shape of Note #8), the act's span reaches words no word of the denial covers: held with the
+        statement_scope question (C-10), never excluded by the one span that lies within the denial's words."""
         lines = {'P3': 'The stricture was dilated to 15 mm with a balloon.',
                  'P4': 'No dilation was carried out in 2024.'}
         historical = act('E3', 'P4', 'dilation', 'dilation', status='not_performed',
@@ -548,6 +596,11 @@ class Exclusion(SimpleTestCase):
         self.assertEqual(p.support['reason'], events.NOT_DOCUMENTED)
         self.assertIn("CPT Studio's reading of the document records no dilation documented as done",
                       p.clarifications[0].reason)
+        both = proposal(run(inv, text, [('45386', (lines['P3'], lines['P4']))]), '45386')
+        self.assertEqual(len(both.evidence), 2)
+        self.assert_scope_question(both, 'No dilation was carried out')
+        alone = proposal(run(inv, text, [('45386', lines['P4'])]), '45386')  # the control: the denial alone is cited
+        self.excluded(alone, 'status', 'literal')  # the first deciding attribute with a basis: its negator
 
     def test_c7_an_exceptive_statement_never_excludes(self):
         line = 'No further intervention was performed.'
@@ -595,6 +648,20 @@ class Helpers(SimpleTestCase):
         span = {'start': 10, 'end': 25, 'text': 'No polyp, today'}
         self.assertTrue(events.within_words(span, [{'start': 10, 'end': 18}, {'start': 20, 'end': 25}]))
         self.assertFalse(events.within_words(span, [{'start': 10, 'end': 18}]))
+
+    def test_only_a_digital_examination_is_set_apart_from_its_familys_session(self):
+        """FINAL 5.6 E13 names the digital examination (technique ``manual``) only: an examination of an endoscopic
+        family whose device is verified as anything else (an echoendoscope read as ``other``, a balloon enteroscope)
+        is its session; an unverified device never sets one apart."""
+        def examination(device: str, state: str = 'verified', family: str = 'gi.eus') -> dict:
+            return {'family': family, 'technique': {'value': device, 'state': state, 'open': False}}
+
+        for device in ('endoscope', 'other', 'balloon', 'catheter'):
+            with self.subTest(device=device):
+                self.assertTrue(events.endoscopic_examination(examination(device)))
+        self.assertTrue(events.endoscopic_examination(examination('not_stated', 'absent')))  # as normalize stores it
+        self.assertFalse(events.endoscopic_examination(examination('manual', family='gi.colonoscopy')))
+        self.assertTrue(events.endoscopic_examination(examination('manual', 'unverified', 'gi.colonoscopy')))
 
     def test_evaluate_reads_a_stored_row_shape(self):
         inv, text = colonoscopy()

@@ -3,12 +3,18 @@ and lesion labels, the new facts' questions, the exclusion and hold sentences, t
 
 Copied, never called. The legacy words this engine keeps - the act and service labels (reconcile.py:46-82), the incomplete
 consideration, the separate-E/M consideration, the dated-check note and the code-count sentences (checks.py), the member
-answer's check and reason and its fingerprint (engine.py:5278-5300), the "part of another documented act" hold
-(reconcile.py:268-289), the dilation-technique hold (reconcile.py:307-316) and the alternatives' notes (rationale.py) -
-are copied here, because the modules that hold them are denied on the new path (FINAL 10.1) or are denied by function
-(checks.py, R-5). tests/test_interpretation_assess.py pins every copy equal to its original through a test-only import, so
-a drift in either is seen. ``service.incomplete`` is worded here from the event's own failure-marker words (R-4):
-checks.incomplete_check reads a legacy status outcome and is not allowed on the new path.
+answer's check and reason and its fingerprint (engine.py:5278-5300, 5438), the fallback performed question
+(engine.py:3327), the "part of another documented act" hold (reconcile.py:268-289), the dilation-technique hold
+(reconcile.py:307-316), the conflict question (reconcile.py:252-258) and the alternatives' notes (rationale.py) - are
+copied here, because the modules that hold them are denied on the new path (FINAL 10.1) or are denied by function
+(checks.py, R-5). tests/test_interpretation_assess.py (WordingPinned) pins every copy equal to its original through a
+test-only import - the three reconcile sentences by building them with the legacy reconcile.match itself, the member
+answer's exclusion with the legacy engine's own _MemberAnswers, the inline fallback question against
+engine._proposal's source - so a drift in either is seen. The other sentences here are CPT Studio's own wording, not
+copies (the conflict's reason over two events, the new facts' questions, the exclusion reasons).
+``service.incomplete`` is worded here from the event's own failure-marker words (R-4): checks.incomplete_check reads
+a legacy status outcome and is not allowed on the new path, so only its id, label, status, source and closing
+sentence are kept and pinned.
 
 Every sentence names no provider, model, vendor or reader (P10; customer_api.FORBIDDEN): what CPT Studio could not
 confirm is CPT Studio's reading, never a statement that the document leaves it out. Quotes are the document's own slices.

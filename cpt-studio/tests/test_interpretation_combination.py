@@ -1,23 +1,30 @@
 """The combination rules (Gemini migration slice S08; design/FINAL.md 7.9, as design/ADJUDICATION.md C-3 and C-4 amend it),
 SYNTHETIC: one test per row - base (beside a code of its session, beside a reportable act no code accounts for, beside a
-doubted act, and two E/M codes of one visit), base-within (C-4's structural EGD inside an upper EUS, C3's part_of, a
-lower EUS, an uncoded EUS), competing (P-ADMIT2), the same-day E/M by date of service (C-3: a procedure done today, one
-done "earlier today", a separately identifiable visit stated, an undatable procedure, a procedure of another date), the
-separate-lesion modifier review (distinct lesions only) and the endoscopic rows - with every hold's wording pinned equal
-to the legacy builder for equivalent inputs. Nothing is sent."""
+doubted act, two E/M codes of one visit, and the examination-only EUS codes as their family's base: beside an FNA
+code, beside an uncovered FNA), base-within (C-4's structural EGD inside an upper EUS, whatever the EUS device but the
+digital one, C3's part_of, a lower EUS, an uncoded EUS), competing (P-ADMIT2), the same-day E/M by date of service
+(C-3: a procedure done today, one done "earlier today", a separately identifiable visit stated, an undatable
+procedure, a procedure of another date), the separate-lesion modifier review (distinct lesions only) and the
+endoscopic rows - with every hold's wording pinned equal to the legacy builder for equivalent inputs. Nothing is
+sent."""
 from __future__ import annotations
 
 from types import SimpleNamespace
 
 from django.test import SimpleTestCase
 
-from studio.interpretation import combination, events
+from studio.gi import catalogue
+from studio.interpretation import combination, coverage, events
 from studio.validation import checks, engine
-from tests.test_interpretation_events import (COLONOSCOPE, L1, POLYP, asked, check, colonoscopy, exam, inventory,
-                                              proposal, reached, removed, run)
+from tests.test_interpretation_events import (COLONOSCOPE, EUS_LINES, FNA, L1, POLYP, asked, check, colonoscopy, eus,
+                                              exam, inventory, proposal, reached, removed, run)
 from tests.test_interpretation_identity import a, act, les, sc, tg
 
 MEMBER = {'setting': 'office', 'patient_status': 'established'}
+# The examination-only EUS codes (their profile covers only the EUS examination): 43231, 43237, 43259, 45341, 45391
+# and 44406.
+EXAM_ONLY = tuple(code for code, profile in catalogue.CODES.items()
+                  if profile.family == 'gi.eus' and profile.covers == ('eus_exam',))
 VISIT_LINE = 'Office visit: established patient seen this afternoon for iron-deficiency anemia.'
 TIME_LINE = 'Total time on the date of the encounter: 30 minutes.'
 
@@ -65,6 +72,45 @@ class Base(SimpleTestCase):
         inv, text = colonoscopy(polyp=act('E2', 'P2', 'other', 'polyp'))
         self.assertEqual(proposal(run(inv, text, [('45378', COLONOSCOPE)]), '45378').status, 'ready')
 
+    def test_an_examination_only_eus_code_beside_an_fna_code_of_its_session_is_held(self):
+        """Base rule (a) over an examination-only EUS code (covers only eus_exam: FINAL 7.3 makes the EUS examination its
+        act, so it is its family's base): beside the FNA code of its session it is held, so the EUS examination is
+        never accounted for twice. Each origin: both Corti's, or the examination code a participant's."""
+        inv, text = eus(FNA)
+        result = run(inv, text, [('43242', EUS_LINES['P3']), ('43259', EUS_LINES['P1'])])
+        p = proposal(result, '43259')
+        self.assertEqual((p.status, asked(p)), ('needs_clarification', ['base_included']))
+        held, question = combination.base_hold('43259', 'gi.eus', p.key, ('43242',), 'endoscopic ultrasound')
+        self.assertEqual((check(p, 'services.base_included'), p.clarifications[0]), (held, question))
+        self.assertEqual(proposal(result, '43242').status, 'ready')
+        from tests.test_interpretation_assess import participant
+        admitted = run(inv, text, [('43242', EUS_LINES['P3'])],
+                       participants=(participant('astra', text, [('43259', EUS_LINES['P1'])]),))
+        p = proposal(admitted, '43259')
+        self.assertEqual((p.support['origin'], asked(p)), ('participant', ['base_included']))
+
+    def test_every_examination_only_eus_code_beside_an_uncovered_fna_is_held(self):
+        """Base rule (b): the session's reportable FNA, which no counted code accounts for, holds every
+        examination-only EUS code, as a colonoscopy's snare holds 45378; on an examination-only document each is
+        ready (the control)."""
+        self.assertEqual(len(EXAM_ONLY), 6)
+        with_fna, fna_text = eus(FNA)
+        alone, alone_text = eus()
+        for code in EXAM_ONLY:
+            with self.subTest(code=code):
+                p = proposal(run(with_fna, fna_text, [(code, EUS_LINES['P1'])]), code)
+                self.assertEqual(asked(p), ['base_included'])
+                self.assertIn('The documented endoscopic ultrasound includes fine-needle aspiration or biopsy, which '
+                              'this diagnostic code does not account for', check(p, 'services.base_included').detail)
+                control = proposal(run(alone, alone_text, [(code, EUS_LINES['P1'])]), code)
+                self.assertIsNone(check(control, 'services.base_included'))
+
+    def test_an_em_add_on_is_no_base_code(self):
+        """Only a base profile and an examination-only profile are base codes: 99417 (prolonged visit time, an add-on)
+        is neither, so it holds nothing as a base would."""
+        self.assertEqual([code for code in ('99213', '99417', '43259', '43242', '45378', '45385')
+                          if combination._base(code)], ['99213', '43259', '45378'])
+
     def test_two_em_codes_of_one_visit_hold_each_other(self):
         """The legacy base rule reads E/M profiles as base codes that cover the visit (R3 Q7), and an office visit's own
         event is never an act beside itself."""
@@ -81,12 +127,15 @@ EGD_EUS = {'P1': 'A standard gastroscope was advanced to the second portion of t
                  'needle.'}
 
 
-def egd_eus(eus_target=('pancreas', 'pancreatic head'), part_of=''):
+def egd_eus(eus_target=('pancreas', 'pancreatic head'), part_of='', eus_technique=None):
+    """An EGD (E1) and an upper EUS (E2) with its FNA (E3); ``eus_technique`` the EUS examination's device
+    (the echoendoscope as an endoscope by default)."""
     target = tg('', eus_target[0], eus_target[1], ['P2'])
+    technique = eus_technique or a('endoscope', 'echoendoscope', ['P2'])
     return inventory(EGD_EUS, events=[
         exam('E1', 'P1', words='gastroscope', procedure=a('egd', 'gastroscope', ['P1']), part_of=part_of),
-        exam('E2', 'P2', words='echoendoscope', status_words='was then introduced',
-             procedure=a('eus', 'echoendoscope', ['P2']), target=target),
+        act('E2', 'P2', 'examination', 'echoendoscope', status_words='was then introduced',
+            procedure=a('eus', 'echoendoscope', ['P2']), target=target, technique=technique),
         act('E3', 'P2', 'fna', 'sampled', status_words='was sampled', procedure=a('eus', 'echoendoscope', ['P2']),
             technique=a('needle', '22-gauge needle', ['P2']), target=target)],
         reach=[reached('E1', 'second_portion_duodenum', 'second portion of the duodenum', 'P1')])
@@ -105,6 +154,19 @@ class BaseWithin(SimpleTestCase):
         inv, text = egd_eus()
         p = proposal(run(inv, text, [('43235', EGD_EUS['P1'])]), '43235')
         self.assertIn('Is 43235 reported separately from the endoscopic ultrasound', p.clarifications[0].question)
+
+    def test_c4_an_eus_examination_whose_device_is_not_the_endoscope_is_still_the_session(self):
+        """FINAL 5.6 E13 sets apart only a digital examination (technique manual): an EUS examination whose device
+        is verified as another class (the echoendoscope read as ``other``) is still the EUS session, so C-4's
+        structural inclusion holds the EGD base code beside the EUS code, as with the endoscope."""
+        inv, text = egd_eus(eus_technique=a('other', 'linear echoendoscope', ['P2']))
+        self.assertEqual(inv.events['events'][1]['technique']['state'], 'verified')
+        sessions = coverage.sessions(events.Reading.of(inv))
+        self.assertEqual((sessions['gi.eus'].event, sessions['gi.egd'].part_of), ('E2', 'gi.eus'))
+        result = run(inv, text, [('43235', EGD_EUS['P1']), ('43242', EGD_EUS['P2'])])
+        self.assertEqual(asked(proposal(result, '43235')), ['base_included'])
+        p = proposal(run(inv, text, [('43259', EGD_EUS['P2'])]), '43259')
+        self.assertEqual(([item['id'] for item in p.support['acts']], asked(p)), (['E2'], ['base_included']))
 
     def test_c3_part_of_names_the_endoscopic_portion_too(self):
         inv, text = egd_eus(part_of='E2')

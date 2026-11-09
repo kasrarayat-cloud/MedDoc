@@ -391,10 +391,10 @@ def _events_check(selection: _Selection, reading: events.Reading) -> list:
         out.append(Check('events.relation', 'Statements that decide this code', 'warn', evaluation.detail,
                          wording.EVENTS_SOURCE))
     if evaluation.exclusion is not None:
-        exclusion = evaluation.exclusion
-        how = 'a broad statement' if exclusion.cover == 'broad' else 'the statement the code cites'
+        exclusion = evaluation.exclusion  # by citation only: no statement excludes a code that does not cite it (C-7)
         out.append(Check('events.relation', 'Statements that decide this code', 'fail',
-                         f'{exclusion.reason} ({how}; basis: {exclusion.basis}).', wording.EVENTS_SOURCE))
+                         f'{exclusion.reason} (the statement the code cites; basis: {exclusion.basis}).',
+                         wording.EVENTS_SOURCE))
     return out
 
 
