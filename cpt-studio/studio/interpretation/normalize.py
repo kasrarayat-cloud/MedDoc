@@ -11,7 +11,8 @@ The steps, in the order their inputs require (contract 4.1 lists them by subject
    the document's own closers to a span that already located.
 2. The open questions are read first (step 7 of the contract), so every attribute an open question names is built
    ``open`` and every later rule sees it (an open attribute is treated as an unverified one, contract 5.5).
-3. The documenting endoscopist and the team: their words bound like an attribute's, their names read (literals.names).
+3. The documenting endoscopist and the team: their words bound like an attribute's, their names read (literals.names);
+   each entry is one member of the team the performer check reads (verify.performer_words).
 4. The date of service and every other date, each verified by its own date literal (contract 8.1).
 5. Lesions: the description, the site (landmark words) and the size (size literal), each in the lesion's own passages.
 6. Events: every attribute bound to its OWN passages by its OWN words (5.2, below), its literal check run on those
@@ -35,8 +36,9 @@ in a passage the attribute does not cite never count. The basis is ``stated`` (w
 and a frame default: time current_encounter, performer documenting_team - EB2, accepted with no guard - or a procedure
 the single-family guard settles) or ``absent`` (the not-stated value). A default value whose words fail to locate falls
 back to the default, the problem recorded - unless those words hold a date that is not the service date (time) or a
-name that is not the team's (performer): EB2 reads given words whether or not they locate, and nothing of them is
-stored. Any other value with no words, or words that do not locate, is unverified.
+name that is not a team member's (performer): EB2 reads given words whether or not they locate, for that literal only
+(the procedure default falls back whatever its unlocated words lack), and nothing of them is stored. Any other value
+with no words, or words that do not locate, is unverified.
 
 Normalization never merges, splits, renumbers or drops an event or a lesion; an event every check fails stays, with its
 states and reasons. No model-written string is stored: every value is an enumeration value, a defined id, an ISO date or
@@ -112,13 +114,14 @@ class Inventory:
 @dataclass(frozen=True)
 class _Default:
     """Whether a value with no words (or unlocated words) may be accepted as a frame default, with the guard's checks
-    and, when it may not, why."""
+    and, when it may not, why. ``deny`` reads the words Gemini gave for a default value that do not locate, for the one
+    literal EB2 lets deny the default: a date in a time's words that is not the service date, a name in a performer's
+    words that is not a team member's. None where no given word denies the default (the procedure default, contract
+    5.2)."""
     allowed: bool
     checks: tuple = ()
     reasons: tuple = ()
-
-
-_ACCEPTED = _Default(True)
+    deny: Optional[Callable[[str], verify.Verdict]] = None
 
 
 def normalize(parsed: Mapping, revision_text: str, pages: Sequence = ()) -> Inventory:
@@ -274,10 +277,10 @@ class Draft:
             failure = (['passage_unknown'] if len(known) < len(ids) else []) + (
                 ['passage_unlocated'] if len(usable) < len(known) else [])
             failure = failure or ['words_unlocated']
-            return self._fall_back(record, where, failure, default, check, words)
+            return self._fall_back(record, where, failure, default, words)
         span = self._locate_words(words, usable)
         if span is None:
-            return self._fall_back(record, where, ['words_unlocated'], default, check, words)
+            return self._fall_back(record, where, ['words_unlocated'], default, words)
         record.update(basis='stated', words=span)
         record['checks'] = ['passages_located', 'words_in_own_passage']
         if check is not None:
@@ -298,15 +301,16 @@ class Draft:
         record.update(state='unverified', checks=list(checks), reasons=verify.ordered(reasons))
         return record
 
-    def _fall_back(self, record: dict, where: str, failure: list, default: Optional[_Default],
-                   check: Optional[Callable[[str], verify.Verdict]] = None, words: str = '') -> dict:
-        """Words that do not bind: a default value falls back to its default, the problem recorded (5.2) - unless the
-        words Gemini gave state, by their own literal, what the default denies (EB2, which governs: "where Gemini DID
-        give time words, a date literal in those words that differs from the service date leaves the time unverified",
-        and so for a name in performer words). The check reads the given words for that literal only; nothing of them
-        is stored. Anything else is unverified with the failure."""
+    def _fall_back(self, record: dict, where: str, failure: list, default: Optional[_Default], words: str) -> dict:
+        """Words that do not bind: a default value falls back to its default, the problem recorded (5.2), because it
+        would have been accepted with no words at all - unless the words Gemini gave state, by their own literal, what
+        the default denies (EB2, which governs: "where Gemini DID give time words, a date literal in those words that
+        differs from the service date leaves the time unverified", and so for a name in performer words that is not a
+        team member's). Only that literal is read (``default.deny``), never the attribute's other checks: the procedure
+        default an E/M visit's kind settles falls back whatever its unlocated words lack. Nothing of the words is
+        stored. Anything else is unverified with the failure."""
         if default is not None and default.allowed:
-            verdict = check(words) if check is not None else verify.Verdict()
+            verdict = default.deny(words) if default.deny is not None else verify.Verdict()
             if verdict.reasons:
                 return self._failed(record, failure + list(verdict.reasons), verdict.checks)
             self.problems.append(f'{where}: its words were not found in its own passages, so the frame default was '
@@ -348,7 +352,8 @@ class Draft:
         for where, raw in entries:
             bound = self._bind(where, raw, None, absent=not has_words(raw['words']))
             names = literals.names(bound['words']['text']) if bound['state'] == 'verified' else ()
-            team += list(names)
+            if names:  # one member per entry, whatever number of names the parser reads in it (verify.performer_words)
+                team.append(names)
             records.append({'state': bound['state'], 'words': bound['words'], 'passages': bound['passages'],
                             'checks': bound['checks'], 'reasons': bound['reasons'],
                             'names': [name.as_record() for name in names]})
@@ -489,6 +494,13 @@ class Draft:
         performer, status = raw['performer']['value'], raw['status']['value']
         scope, purpose = raw['scope']['value'], raw['purpose']['value']
         settled = verify.single_family(kind, procedure, families)
+
+        def time_check(text: str) -> verify.Verdict:
+            return verify.time_words(time, text, self.service_date)
+
+        def performer_check(text: str) -> verify.Verdict:
+            return verify.performer_words(performer, text, self._team)
+
         record = {
             'id': eid,
             'family': lexicon.family_of(procedure),
@@ -500,11 +512,11 @@ class Draft:
                               check=lambda text: verify.device_words(technique, text)),
             'target': self._target(where, raw['target'], opened('target')),
             'time': bind('time', time, absent=time == 'unknown',
-                         default=_ACCEPTED if time == 'current_encounter' else None,
-                         check=lambda text: verify.time_words(time, text, self.service_date)),
+                         default=_Default(True, deny=time_check) if time == 'current_encounter' else None,
+                         check=time_check),
             'performer': bind('performer', performer, absent=performer == 'unknown',
-                              default=_ACCEPTED if performer == 'documenting_team' else None,
-                              check=lambda text: verify.performer_words(performer, text, self._team)),
+                              default=_Default(True, deny=performer_check) if performer == 'documenting_team' else None,
+                              check=performer_check),
             'status': bind('status', status, check=lambda text: verify.status_words(status, text)),
             'scope': bind('scope', scope, absent=scope in ('not_applicable', 'unknown'),
                           check=lambda text: verify.scope_words(scope, text)),
@@ -558,9 +570,8 @@ class Draft:
                                  'scope is unknown.')
         elif scope['state'] != 'absent' and scope['value'] in ('single_target', 'listed_targets', 'all_of_kind'):
             scope['checks'].append('scope_target')
-            target = record['target']
-            if not verify.scope_fits(scope['value'], bool(target['lesion']), raw['target']['landmark'],
-                                     len(scope['targets'])):
+            if not verify.scope_fits(scope['value'], raw['target']['lesion'], bool(record['target']['lesion']),
+                                     raw['target']['landmark'], len(scope['targets'])):
                 _fail(scope, 'scope_target_mismatch')
         if kind['value'] == 'intervention':
             kind['checks'].append('umbrella')

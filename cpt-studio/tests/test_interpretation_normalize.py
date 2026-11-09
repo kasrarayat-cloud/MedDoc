@@ -348,6 +348,15 @@ class Bases(SimpleTestCase):
             with self.subTest(name=name, raw=raw):
                 self.assertEqual(state(record), ('unverified', 'absent', reasons))
 
+    def test_eb1_a_target_landmark_given_with_no_words_is_never_read_from_its_passage(self):
+        # EB1: the landmark row's "with empty w, a form in an own passage" is removed. P2 names the transverse colon;
+        # the target gives no words, so nothing confirms its landmark (the lesion site's twin: Lesions, site and size).
+        value = answer(events=[examination(), event(target=target('L1', 'transverse_colon', '', ['P2'])), denial()])
+        record = ev(run(value), 'E1')['target']
+        self.assertIn('transverse colon', LINES['P2'])
+        self.assertEqual(state(record), ('unverified', 'absent', ['words_missing']))
+        self.assertEqual((record['words'], record['literals']), (None, {}))
+
     def test_words_of_punctuation_alone_are_no_words(self):
         # S02's refinement of 5.2: "." holds no word, so it binds nothing (else it would bind any value).
         for words in ('.', ' \u2014 ', '()'):
@@ -456,6 +465,40 @@ class EB(SimpleTestCase):
         biopsy = ev(run(*self.patel(True, performer=attr('documenting_team', 'Dr. Patel', ['P1']))), 'E1')
         self.assertEqual(state(biopsy['performer']), ('unverified', 'stated', ['name_mismatch']))
 
+    def performed_by(self, words: str, endoscopist: str = 'Grace Okafor, MD', team=()):
+        """A cold snare removal whose sentence (P1) names ``words`` as its performer, given as documenting_team; the
+        documenting endoscopist written as ``endoscopist`` (P2) and each of ``team`` a team member (P3, ...)."""
+        lines = {'P1': f'{words} removed the polyp with a cold snare.', 'P2': f'Endoscopist: {endoscopist}.'}
+        lines.update({f'P{index}': f'Fellow: {member}.' for index, member in enumerate(team, 3)})
+        value, _ = one_line(lines['P1'], performer=attr('documenting_team', words, ['P1']))
+        value['passages'] = [{'id': pid, 'text': line} for pid, line in lines.items()]
+        value['encounter']['documenting_endoscopist'] = {'words': endoscopist, 'passages': ['P2']}
+        value['encounter']['team'] = [{'words': member, 'passages': [f'P{index}']}
+                                      for index, member in enumerate(team, 3)]
+        return ev(run(value, doc(*lines.values())), 'E1')['performer']
+
+    def test_eb2_a_name_is_a_team_members_only_when_every_token_is_that_members(self):
+        # EB2: "a name in those words that is not the documenting endoscopist or a listed team member leaves the
+        # performer unverified". A token shared with the team is not enough: Dr. Michael Grace shares only Grace
+        # Okafor's given name, and Dr. Grace Lee joins her given name to the fellow Robin Lee's surname.
+        lee = ('Robin Lee, MD',)
+        mismatch = ('unverified', 'stated', ['name_mismatch'])
+        for words, team in (('Dr. Michael Grace', ()), ('Dr. Grace Lee', lee), ('Dr. Okafor and Dr. Grace Lee', lee)):
+            with self.subTest(words):
+                self.assertEqual(state(self.performed_by(words, team=team)), mismatch)
+        for words, team in (('Dr. Okafor', ()), ('Grace Okafor', ()), ('Dr. Lee', lee),
+                            ('Dr. Okafor and Dr. Lee', lee)):
+            with self.subTest(words):
+                self.assertEqual(state(self.performed_by(words, team=team)), ('verified', 'stated', []))
+
+    def test_eb2_a_member_is_one_entry_so_a_surname_first_entry_stays_one_person(self):
+        # The parser reads "Okafor, Grace, MD" as two names (it splits at commas); the entry is still one member, so her
+        # full name in the act's words is hers, and a name joining her surname to another given name is not.
+        self.assertEqual(state(self.performed_by('Grace Okafor', endoscopist='Okafor, Grace, MD')),
+                         ('verified', 'stated', []))
+        self.assertEqual(state(self.performed_by('Dr. Robin Okafor', endoscopist='Okafor, Grace, MD')),
+                         ('unverified', 'stated', ['name_mismatch']))
+
     def test_no_inventory_ever_carries_a_removed_reason(self):
         for value, text in (self.tattoo(), self.dated(self.ANASTOMOSIS), self.patel(True), self.patel(False)):
             dumped = json.dumps(run(value, text).__dict__)
@@ -509,6 +552,25 @@ class Procedure(SimpleTestCase):
                       purpose=attr('not_stated'))
         self.assertEqual(state(ev(self.two_families(visit), 'E3')['procedure']), ('verified', 'default', []))
 
+    def visit(self, words: str):
+        return event('E3', procedure=attr('office_em', words, ['P1']), kind=attr('em_visit', 'EGD', ['P1']),
+                     technique=attr('not_stated'), target=target(), status=attr('performed', 'normal', ['P1']),
+                     purpose=attr('not_stated'))
+
+    def test_an_em_visits_unlocated_words_fall_back_to_the_default_its_kind_settles(self):
+        # Contract 5.2: a default value whose words do not locate falls back to the default, the problem recorded,
+        # because it would have been accepted with no words at all. Only EB2's literals (a time's date, a performer's
+        # names) deny a default through unlocated words; the procedure name check never reads them.
+        inventory = self.two_families(self.visit('the encounter today'))
+        record = ev(inventory, 'E3')['procedure']
+        self.assertEqual(state(record), ('verified', 'default', []))
+        self.assertEqual(record['checks'], ['default', 'default_after_unlocated_words', 'single_family'])
+        self.assertIn('events[2].procedure: its words were not found in its own passages, so the frame default was '
+                      'accepted.', inventory.verification['problems'])
+        # Words that DO locate are the visit's stated evidence, and with two families they must name its family.
+        located = ev(self.two_families(self.visit('normal')), 'E3')['procedure']
+        self.assertEqual(state(located), ('unverified', 'stated', ['procedure_name_missing']))
+
 
 class Structure(SimpleTestCase):
     """Contract 5.4, rule by rule."""
@@ -539,7 +601,13 @@ class Structure(SimpleTestCase):
                  (scope('listed_targets', 'No other', ['P3'], ['L1']), target(), True),
                  (scope('listed_targets', 'No other', ['P3'], ['L1', 'L2']), target(), False),
                  (scope('all_of_kind', 'No other', ['P3']), target('L1', 'not_stated', 'polyp', ['P3']), True),
-                 (scope('all_of_kind', 'No other', ['P3']), target(), False))
+                 (scope('all_of_kind', 'No other', ['P3']), target(), False),
+                 # a lesion id the answer never defines is still a lesion the statement is tied to (5.4:
+                 # all_of_kind needs NO lesion), with or without words; single_target reads only a defined one, the
+                 # conservative way
+                 (scope('all_of_kind', 'No other', ['P3']), target('L9'), True),
+                 (scope('all_of_kind', 'No other', ['P3']), target('L9', 'not_stated', 'polyp', ['P3']), True),
+                 (scope('single_target', 'No other', ['P3']), target('L9', 'not_stated', 'polyp', ['P3']), True))
         for index, (raw_scope, raw_target, mismatch) in enumerate(cases):
             value = answer(lesions=[lesion(), lesion('L2', words='polyp', size_words='', site_words='',
                                                      landmark='not_stated', passages=['P3'])],
@@ -662,15 +730,29 @@ class Reach(SimpleTestCase):
             {'event': 'E0', 'family': 'gi.colonoscopy', 'landmark': 'cecum', 'state': 'verified', 'reasons': [],
              'attached': True}])
 
-    def refused(self, exam, reach=None):
-        value = answer(events=[exam, event(), denial()])
+    def refused(self, exam, reach=None, p5=None):
+        """The base answer with ``exam`` as E0 (and ``reach`` as its only reach), over the base text with P5 read as
+        ``p5`` when given."""
+        lines, text = (LINES, TEXT) if p5 is None else (dict(LINES, P5=p5), TEXT.replace(LINES['P5'], p5))
+        value = answer(lines, events=[exam, event(), denial()])
         if reach is not None:
             value['encounter']['reach'] = [reach]
-        inventory = run(value)
+        inventory = run(value, text)
         return inventory, ev(inventory, 'E0')
 
+    EARLIER = 'Previously, the colonoscope was advanced to the cecum.'
+
+    def earlier(self, reach=None):
+        """The E5 slip: a VERIFIED earlier examination - its time words "Previously" locate in its own passage and
+        carry an earlier-time marker - so a reach is refused by the time's value, never by an unusable time."""
+        inventory, exam = self.refused(examination(time=attr('earlier_encounter', 'Previously', ['P5'])), reach,
+                                       p5=self.EARLIER)
+        self.assertEqual(state(exam['time']), ('verified', 'stated', []))
+        self.assertEqual((exam['time']['literals'], exam['current']), ({'markers': ['previously']}, 'no'))
+        return inventory, exam
+
     def test_slip_e5_a_reach_on_an_earlier_examination_is_discarded(self):
-        inventory, exam = self.refused(examination(time=attr('earlier_encounter', 'previously', ['P5'])))
+        inventory, exam = self.earlier()
         self.assertIsNone(exam['extent'])
         self.assertEqual(inventory.encounter_facts['reach'][0]['state'], 'discarded')
         self.assertIn({'where': 'encounter.reach[0]', 'reason': 'reach_not_permitted'},
@@ -683,8 +765,7 @@ class Reach(SimpleTestCase):
                 self.assertIsNone(exam['extent'])
 
     def test_a_refused_reach_keeps_an_absent_completion_absent(self):
-        inventory, exam = self.refused(examination(time=attr('earlier_encounter', 'previously', ['P5'])),
-                                       {'event': 'E0', 'landmark': 'cecum', 'words': 'advanced to the cecum',
+        inventory, exam = self.earlier({'event': 'E0', 'landmark': 'cecum', 'words': 'advanced to the cecum',
                                         'passages': ['P5'], 'completion': attr('not_stated')})
         self.assertEqual(inventory.verification['counts']['completion']['absent'], 1)
         self.assertEqual(inventory.verification['counts']['completion']['discarded'], 0)
@@ -720,6 +801,22 @@ class Reach(SimpleTestCase):
         value['encounter']['reach'][0]['words'] = 'The guidewire was advanced to the cecum'
         record = ev(run(value, text), 'E0')['extent']
         self.assertEqual(state(record), ('unverified', 'stated', ['device_reach']))
+
+    def test_eb1_the_reach_guard_reads_only_the_reach_words(self):
+        # EB1: the guard reads the reach's own words, never the rest of its passage. P5 names a guidewire; the reach's
+        # words do not, so the reach is Gemini's reading of the endoscope's and stays verified.
+        p5 = 'The guidewire was passed and the cecum was reached.'
+        exam = examination(technique=attr('endoscope', 'colonoscopy', ['P1']),
+                           kind=attr('examination', 'colonoscopy', ['P1']),
+                           status=attr('performed', 'the cecum was reached', ['P5']))
+        reach = {'event': 'E0', 'landmark': 'cecum', 'words': 'the cecum was reached', 'passages': ['P5'],
+                 'completion': attr('not_stated')}
+        _, record = self.refused(exam, reach, p5=p5)
+        self.assertEqual(state(record['extent']), ('verified', 'stated', []))
+        self.assertIn('reach_device', record['extent']['checks'])
+        # The same reach whose own words name the guidewire is a device's reach.
+        _, record = self.refused(exam, dict(reach, words='The guidewire was passed and the cecum was reached'), p5=p5)
+        self.assertEqual(state(record['extent']), ('unverified', 'stated', ['device_reach']))
 
     def test_an_unknown_event_and_a_second_reach(self):
         value = answer()

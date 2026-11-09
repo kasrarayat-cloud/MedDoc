@@ -14,7 +14,8 @@ from django.test import SimpleTestCase
 from studio.interpretation import literals, verify
 
 SERVICE = date(2026, 11, 9)
-TEAM = literals.names('Grace Okafor, MD') + literals.names('Robin Fellow-Synthetic')
+# One entry per member - the documenting endoscopist, then a team member - each the names read in its own words.
+TEAM = (literals.names('Grace Okafor, MD'), literals.names('Robin Fellow-Synthetic'))
 
 
 def reasons(verdict) -> tuple:
@@ -127,15 +128,33 @@ class Time(SimpleTestCase):
 class Performer(SimpleTestCase):
     def test_documenting_team_pass(self):
         for text in ('Dr. Okafor', 'Grace Okafor, MD (fictional', 'Okafor, Grace', 'the fellow, Dr. Fellow-Synthetic',
-                     'the endoscopist', 'I', 'Dr. Okafor and Dr. Synthetic'):
+                     'the endoscopist', 'I', 'Dr. Okafor and Dr. Synthetic', 'Dr. Robin Synthetic'):
             with self.subTest(text):
                 self.assertEqual(reasons(verify.performer_words('documenting_team', text, TEAM)), ())
 
+    def test_a_member_is_one_entry_whatever_number_of_names_it_reads_as(self):
+        # "Okafor, Grace, MD" reads as two names, split at its comma; it is one member, so her full name is hers.
+        surname_first = (literals.names('Okafor, Grace, MD'),)
+        self.assertEqual([name.tokens for name in surname_first[0]], [('okafor',), ('grace',)])
+        for text in ('Grace Okafor', 'Dr. Grace Okafor', 'Okafor, Grace', 'Dr. Okafor'):
+            with self.subTest(text):
+                self.assertEqual(reasons(verify.performer_words('documenting_team', text, surname_first)), ())
+        self.assertEqual(reasons(verify.performer_words('documenting_team', 'Dr. Robin Okafor', surname_first)),
+                         ('name_mismatch',))
+
     def test_documenting_team_fail_name_mismatch(self):
-        # EB2: a name in given performer words that is not the endoscopist's or a listed team member's.
-        for text in ('Dr. Patel', 'Dr. Okafor and Dr. Patel', 'Dr. Grace Lee'):
+        # EB2: a name in given performer words that is not the endoscopist's or a listed team member's. A token shared
+        # with the team is not enough: every token of the name must be ONE member's.
+        for text in ('Dr. Patel', 'Dr. Okafor and Dr. Patel', 'Dr. Grace Lee', 'Dr. Michael Grace',
+                     'Dr. Grace Synthetic', 'Dr. Robin Okafor'):
             with self.subTest(text):
                 self.assertEqual(reasons(verify.performer_words('documenting_team', text, TEAM)), ('name_mismatch',))
+        with_lee = (literals.names('Grace Okafor, MD'), literals.names('Robin Lee, MD'))
+        for text in ('Dr. Grace Lee', 'Dr. Okafor and Dr. Grace Lee'):
+            with self.subTest(text, team='Okafor and Lee'):
+                self.assertEqual(reasons(verify.performer_words('documenting_team', text, with_lee)),
+                                 ('name_mismatch',))
+        self.assertEqual(reasons(verify.performer_words('documenting_team', 'Dr. Lee', with_lee)), ())
         self.assertEqual(reasons(verify.performer_words('documenting_team', 'Dr. Okafor', ())), ('name_mismatch',),
                          'with no verified team name, a name cannot be confirmed')
 
@@ -297,15 +316,20 @@ class Structural(SimpleTestCase):
             self.assertFalse(verify.scope_permitted(status))
 
     def test_scope_fits_its_target(self):
-        self.assertTrue(verify.scope_fits('single_target', True, 'not_stated', 0))
-        self.assertTrue(verify.scope_fits('single_target', False, 'rectum', 0))
-        self.assertFalse(verify.scope_fits('single_target', False, 'not_stated', 0))
-        self.assertTrue(verify.scope_fits('listed_targets', False, 'not_stated', 2))
-        self.assertFalse(verify.scope_fits('listed_targets', False, 'not_stated', 1))
-        self.assertTrue(verify.scope_fits('all_of_kind', False, 'not_stated', 0))
-        self.assertFalse(verify.scope_fits('all_of_kind', False, 'rectum', 0))
-        self.assertFalse(verify.scope_fits('all_of_kind', True, 'not_stated', 0))
-        self.assertTrue(verify.scope_fits('exceptive', True, 'rectum', 0))
+        # (scope, the target's lesion id as given, whether the answer defines it, its landmark, defined ids listed)
+        self.assertTrue(verify.scope_fits('single_target', 'L1', True, 'not_stated', 0))
+        self.assertTrue(verify.scope_fits('single_target', '', False, 'rectum', 0))
+        self.assertFalse(verify.scope_fits('single_target', '', False, 'not_stated', 0))
+        self.assertFalse(verify.scope_fits('single_target', 'L9', False, 'not_stated', 0),
+                         'single_target reads only a defined lesion')
+        self.assertTrue(verify.scope_fits('listed_targets', '', False, 'not_stated', 2))
+        self.assertFalse(verify.scope_fits('listed_targets', '', False, 'not_stated', 1))
+        self.assertTrue(verify.scope_fits('all_of_kind', '', False, 'not_stated', 0))
+        self.assertFalse(verify.scope_fits('all_of_kind', '', False, 'rectum', 0))
+        self.assertFalse(verify.scope_fits('all_of_kind', 'L1', True, 'not_stated', 0))
+        self.assertFalse(verify.scope_fits('all_of_kind', 'L9', False, 'not_stated', 0),
+                         'all_of_kind needs NO lesion id: one the answer does not define is still a target')
+        self.assertTrue(verify.scope_fits('exceptive', 'L1', True, 'rectum', 0))
 
     def test_umbrella_and_status_time(self):
         self.assertFalse(verify.umbrella_fits('intervention', 'performed'))

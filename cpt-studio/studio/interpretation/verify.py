@@ -137,20 +137,25 @@ def _date_reasons(value: str, records: Sequence[Mapping], service_date: Optional
     return ()
 
 
-def performer_words(value: str, text: str, team: Sequence[literals.Name]) -> Verdict:
-    """performer, stated (contract 5.3; EB2). ``team`` is the names of the documenting endoscopist and the team members,
-    from their own verified words.
-    - documenting_team: every name in the words has its surname among the team's name tokens, else name_mismatch
-      (also when the team has no verified name: a name cannot be confirmed). Words naming no one pass.
-    - other_clinician, other_facility: no name in the words shares a token with the team, else name_not_other (also
+def performer_words(value: str, text: str, team: Sequence[Sequence[literals.Name]]) -> Verdict:
+    """performer, stated (contract 5.3; EB2). ``team`` holds one entry per member - the documenting endoscopist, then
+    each team member - and each entry is the names read in that member's own verified words. A member is its entry,
+    not one parsed name: "Okafor, Grace, MD" reads as two names (literals.names splits at commas) and is one person.
+    - documenting_team: every name in the words is a member's name - ALL of its tokens are tokens of ONE member - else
+      name_mismatch (also when the team has no verified name: a name cannot be confirmed). Words naming no one pass.
+      A token shared with the team is not enough (EB2: a name "that is not the documenting endoscopist or a listed
+      team member leaves the performer unverified"): "Dr. Michael Grace" is not Grace Okafor, and "Dr. Grace Lee" is
+      neither Grace Okafor nor Robin Lee.
+    - other_clinician, other_facility: no name in the words shares a token with any member, else name_not_other (also
       when the team has no verified name: "another" cannot be established, contract 8.3). other_facility with no
       person name (titled or credentialed) needs a facility marker (facility_marker_missing; C1, EB3)."""
     names = literals.names(text)
-    tokens = literals.name_tokens(tuple(team))
+    members = [tokens for tokens in (literals.name_tokens(tuple(member)) for member in team) if tokens]
+    tokens = frozenset().union(*members)
     found = {'names': [name.as_record() for name in names]}
     reasons, checks = [], ['name_tokens']
     if value == 'documenting_team':
-        if names and (not tokens or any(name.surname not in tokens for name in names)):
+        if names and not all(any(set(name.tokens) <= member for member in members) for name in names):
             reasons.append('name_mismatch')
     elif value in ('other_clinician', 'other_facility'):
         if names and (not tokens or any(set(name.tokens) & tokens for name in names)):
@@ -271,15 +276,21 @@ def scope_permitted(status: str) -> bool:
     return status in NEGATIVE
 
 
-def scope_fits(scope: str, lesion_defined: bool, landmark: str, listed: int) -> bool:
-    """single_target needs a target lesion or landmark; listed_targets two or more defined lesion ids; all_of_kind an
-    empty target (no lesion, landmark not_stated). Other scopes have no target rule."""
+def scope_fits(scope: str, lesion: str, defined: bool, landmark: str, listed: int) -> bool:
+    """A scope's target rule (contract 5.4). ``lesion`` is the target's lesion id as the answer gives it, ``defined``
+    whether the answer defines that id, ``landmark`` the target's landmark and ``listed`` how many defined lesion ids
+    the scope lists. Each arm reads the target the way that leaves a doubtful scope unverified:
+    - single_target needs a defined target lesion or a landmark;
+    - listed_targets needs two or more defined lesion ids;
+    - all_of_kind needs an empty target: no lesion id at all - an id the answer does not define still ties the statement
+      to a lesion, so it is not about every act of its kind - and landmark not_stated.
+    Other scopes have no target rule."""
     if scope == 'single_target':
-        return lesion_defined or landmark != 'not_stated'
+        return defined or landmark != 'not_stated'
     if scope == 'listed_targets':
         return listed >= 2
     if scope == 'all_of_kind':
-        return not lesion_defined and landmark == 'not_stated'
+        return not lesion and landmark == 'not_stated'
     return True
 
 
