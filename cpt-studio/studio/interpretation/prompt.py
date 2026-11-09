@@ -1,15 +1,19 @@
-"""What Gemini is asked (design/contract.md 2, design/FINAL.md 5.3, as design/ADJUDICATION.md EB4 and C-7 amend it): the
-production instructions of gemini-events@1, the framing of the revision text, and the request body this contract owns.
+"""What Gemini is asked (design/contract.md 2, design/FINAL.md 5.3, as design/ADJUDICATION.md EB4, C-7 and C-8 amend
+it): the production instructions of gemini-events@1, the framing of the revision text, and the request body this
+contract owns.
 
 INSTRUCTIONS travel as the system instruction and the framed document alone as the user turn, which keeps instructions
 apart from data. They name no code, no case and no expected answer, and ask for no setting, billing context or patient
-status (D3). Against FINAL 5.3 they change in two places only, both adjudicated:
+status (D3). Against FINAL 5.3 they change in three places only, each adjudicated:
 - the ``time`` line asks for time words whenever the document gives any sign of when the act was done - a date, a word
   such as "prior", "previous" or "at that time", or a heading such as "History:" - whatever time is given (EB4: the
   residual risk of a history-section act read as current is asked about and measured, never patched with a word list);
-- the ``scope`` line adds ``exceptive`` and asks for the words that set the exception (C-7).
-tests/test_interpretation_prompt.py proves the lineage: undoing those two edits gives FINAL 5.3 byte for byte, and undoing
-FINAL's four changes then gives the contract's 2.1.
+- the ``scope`` line adds ``exceptive`` and asks for the words that set the exception (C-7);
+- the ``scope`` line's ``all_of_kind`` covers every act of its kind in the statement's own examination or session, not
+  in the whole encounter (C-8, which gives all_of_kind that one meaning for the pairing too, so Gemini is asked the
+  meaning the engine reads).
+tests/test_interpretation_prompt.py proves the lineage: undoing those three edits gives FINAL 5.3 byte for byte, and
+undoing FINAL's four changes then gives the contract's 2.1.
 
 The request carries the revision text only (D1): framed takes nothing but the text, its pages and its kind, and
 request_parts nothing but the framed text, so no member value, filename, title, participant output or reading of CPT
@@ -107,11 +111,11 @@ EVENTS
   uncertain (the document leaves it in doubt). words: the words that state it, including the word that says the act was
   not done, is planned, or was not completed.
 - scope, for not_performed and uncertain only (not_applicable otherwise): single_target (the statement is about one lesion
-  or site, given as target); all_of_kind (the statement covers every act of this kind in its encounter and names no
-  particular target); listed_targets (give the lesion ids in targets); exceptive (the statement covers only acts of this
-  kind beyond those the document reports as done, such as "no further", "no other" or "no additional"); unknown. words:
-  the words that set the scope, including for exceptive the word that makes the exception, such as "further", "other" or
-  "additional".
+  or site, given as target); all_of_kind (the statement covers every act of this kind in its own examination or session
+  and names no particular target); listed_targets (give the lesion ids in targets); exceptive (the statement covers only
+  acts of this kind beyond those the document reports as done, such as "no further", "no other" or "no additional");
+  unknown. words: the words that set the scope, including for exceptive the word that makes the exception, such as
+  "further", "other" or "additional".
 - purpose: why the act was done, when the document states it.
 - part_of: the id of another event when the document makes this act a step of that act on the same target, or when this
   examination is the endoscopic portion of that examination (for example an upper endoscopy done as part of an endoscopic

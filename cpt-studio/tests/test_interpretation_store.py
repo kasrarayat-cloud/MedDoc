@@ -1,11 +1,13 @@
-"""The persisted event inventory (Gemini migration slice S01; design/contract.md 4.2-4.5 and 8.1, design/FINAL.md 4.1),
-TEXT-ONLY: the fields of a read row and of a refused row, their sha256 over every field and binding, a round trip
+"""The persisted event inventory (Gemini migration slice S01; design/contract.md 4.2-4.5, 8.1 and 8.3, design/FINAL.md
+4.1), TEXT-ONLY: the fields of a read row and of a refused row, their sha256 over every field and binding, a round trip
 through JSON and through model-like objects, and the versioned reader that RAISES - on an unknown version pair, an
-unknown shape anywhere in the stored content, a refused row carrying content, a report that names another label,
-request or response, a changed row, a row bound to another text or response - and never answers with None or an empty
-inventory: a refused row's events cannot be read at all. Every quote stored is the revision text's own slice, checked
-against the text when the row is written, never the model's string; an unlocated passage keeps its length only.
-Synthetic content built in code; no database but the one round trip."""
+unknown shape anywhere in the stored content (a value of a closed enumeration it does not know included, in an event,
+a reach, visit or anatomy entry, or the report's relation counts), a refused row carrying content, a report that names
+another label, request or response, a changed row, a row bound to another text or response - and never answers with
+None or an empty inventory: a refused row's events cannot be read at all. Every quote stored is the revision text's own
+slice, checked against the text when the row is written, never the model's string; an unlocated passage keeps its
+length only, and an ambiguous one is located at 2 to 8 different places. Synthetic content built in code; no database
+but the one round trip."""
 from __future__ import annotations
 
 import copy
@@ -31,13 +33,14 @@ RESPONSE_SHA256 = '3' * 64
 DOCUMENT_TEXT = 'SYNTHETIC-DOCUMENT-TEXT-0001'  # a stored slice of the revision text: never repeated in an error
 # The synthetic revision text the stored content quotes (no real patient; written for this test). P2 occurs twice (the
 # impression restates it), so it is ambiguous; P3 is a quote the model gave that is nowhere in it, so it is unlocated;
-# P5's quote ended before its ')', which the closing-bracket rule restored.
+# P5's quote ended before its ')', which the closing-bracket rule restored; P6 states an altered structure (anatomy).
 P1 = 'Synthetic colonoscopy note. Date of service: 03/14/2026.'
 P2 = 'A 7 mm sessile polyp (transverse colon) was removed with a cold snare.'
 P3_CHARS = 27
 P4 = 'No other polyp was removed.'
 P5 = 'The cecum was reached (landmarks photographed)'
-TEXT = (f'{P1}\n{P2}\n{P5}. {P4}\nImpression: {P2}\nFellow: Synthetic Fellow.\n')
+P6 = 'The ileocolic anastomosis was patent.'
+TEXT = (f'{P1}\n{P2}\n{P5}. {P4}\n{P6}\nImpression: {P2}\nFellow: Synthetic Fellow.\n')
 TEXT_SHA256 = hashlib.sha256(TEXT.encode('utf-8')).hexdigest()
 
 
@@ -93,8 +96,9 @@ def event(id: str, **changes) -> dict:
 def content() -> dict:
     """Synthetic stored content in every shape the contract gives: located, ambiguous and unlocated passages (one
     located through the closing-bracket rule); a lesion; an examination with its extent and completion, a performed
-    removal, an exceptive denial and a visit whose basis cites the unlocated passage; relations; the encounter facts; an
-    open question; and the verification report as normalization gives it. Every quote is TEXT's own slice."""
+    removal, an exceptive denial and a visit whose basis cites the unlocated passage; relations; the encounter facts,
+    their reach, visit and anatomy entries in the shapes normalization (slice S02) writes; an open question; and the
+    verification report as normalization gives it. Every quote is TEXT's own slice."""
     return {
         'events': {
             'passages': [
@@ -106,6 +110,7 @@ def content() -> dict:
                 {'id': 'P4', 'state': 'located', 'spans': [span(P4)], 'reason': '', 'chars': len(P4), 'extended': ''},
                 {'id': 'P5', 'state': 'located', 'spans': [span(P5)], 'reason': '', 'chars': len(P5) - 1,
                  'extended': 'closing_bracket'},
+                {'id': 'P6', 'state': 'located', 'spans': [span(P6)], 'reason': '', 'chars': len(P6), 'extended': ''},
             ],
             'lesions': [{
                 'id': 'L1', 'words': words('7 mm sessile polyp', P2), 'landmark': 'transverse_colon',
@@ -149,9 +154,17 @@ def content() -> dict:
             },
             'documenting_endoscopist': {'span': None, 'tokens': []},
             'team': [{'span': span('Synthetic Fellow'), 'tokens': ['synthetic', 'fellow']}],
-            'anatomy': [],
-            'reach': [{'event': 'E0', 'family': 'gi.colonoscopy', 'landmark': 'cecum', 'state': 'verified'}],
-            'visits': [{'event': 'E3', 'basis': 'total_time'}],
+            # the attribute record over LANDMARKS, plus the structure's anatomy state (contract 8.3)
+            'anatomy': [attribute('anastomosis', words=words('ileocolic anastomosis', P6), passages=['P6'],
+                                  checks=['passages_located', 'words_in_own_passage', 'landmark_words'],
+                                  literals={'landmarks': ['anastomosis']}, anatomy='altered')],
+            # contract 4.3's event id, family, landmark and state, plus the reasons and whether it was attached
+            'reach': [{'event': 'E0', 'family': 'gi.colonoscopy', 'landmark': 'cecum', 'state': 'verified',
+                       'reasons': [], 'attached': True}],
+            # E3's visit facts (the basis cites the unlocated P3), each value with its state, and whether attached
+            'visits': [{'event': 'E3', 'basis': 'total_time', 'basis_state': 'unverified',
+                        'separately_identifiable': 'not_stated', 'separately_identifiable_state': 'absent',
+                        'attached': True}],
             'derived': {'current_families': ['gi.colonoscopy'],
                         'procedure_day': {'performed': ['gi.colonoscopy'], 'possible': []}, 'absent': []},
         },
@@ -453,6 +466,29 @@ class ShapeTests(SimpleTestCase):
             'others with this encounter': lambda f: f['encounter_facts']['date_of_service']['others'].update(
                 this_encounter=[]),
             'a team entry that is text': lambda f: f['encounter_facts'].update(team=['Synthetic Fellow']),
+            # the reach, visit and anatomy entries (contract 4.3 and 8.3), closed to their enumerations
+            'a reach state misspelled': lambda f: f['encounter_facts']['reach'][0].update(state='verifed'),
+            'a reach landmark in words': lambda f: f['encounter_facts']['reach'][0].update(landmark='Cecum reached'),
+            'a reach without its state': lambda f: f['encounter_facts']['reach'][0].pop('state'),
+            'a reach without attached': lambda f: f['encounter_facts']['reach'][0].pop('attached'),
+            'a reach attached as text': lambda f: f['encounter_facts']['reach'][0].update(attached='true'),
+            'a reach with a field it does not know': lambda f: f['encounter_facts']['reach'][0].update(score=1),
+            'a reach entry that is text': lambda f: f['encounter_facts'].update(reach=['cecum']),
+            'a visit basis outside its enumeration': lambda f: f['encounter_facts']['visits'][0].update(basis='time'),
+            'a visit separate identifiability outside its enumeration': lambda f: f['encounter_facts']['visits'][
+                0].update(separately_identifiable='yes'),
+            'a visit basis state': lambda f: f['encounter_facts']['visits'][0].update(basis_state='maybe'),
+            'a visit without its separate identifiability state': lambda f: f['encounter_facts']['visits'][0].pop(
+                'separately_identifiable_state'),
+            'a visit without its event': lambda f: f['encounter_facts']['visits'][0].pop('event'),
+            'an anatomy landmark outside its enumeration': lambda f: f['encounter_facts']['anatomy'][0].update(
+                value='NOT A LANDMARK'),
+            'an anatomy state outside its enumeration': lambda f: f['encounter_facts']['anatomy'][0].update(
+                anatomy='removed'),
+            'an anatomy entry without its anatomy state': lambda f: f['encounter_facts']['anatomy'][0].pop('anatomy'),
+            'an anatomy attribute state': lambda f: f['encounter_facts']['anatomy'][0].update(state='maybe'),
+            'an anatomy entry that is a name': lambda f: f['encounter_facts'].update(anatomy=[{'landmark': 'cecum',
+                                                                                              'state': 'absent'}]),
             'procedure day without possible': lambda f: f['encounter_facts']['derived']['procedure_day'].pop('possible'),
             'an open question about billing': lambda f: f['open_questions'][0].update(about='billing'),
             'an open question without attached_to': lambda f: f['open_questions'][0].pop('attached_to'),
@@ -460,12 +496,68 @@ class ShapeTests(SimpleTestCase):
             'a report without problems': lambda f: f['verification'].pop('problems'),
             'a count without open': lambda f: f['verification']['counts']['time'].pop('open'),
             'a reason count as text': lambda f: f['verification']['reasons'].update(passage_unlocated='1'),
+            # contract 4.3: relations are {type: count}, by the relation types
+            'a relation count of a type it does not know': lambda f: f['verification']['relations'].update(veto=3),
+            'a relation count by a type in other words': lambda f: f['verification'].update(
+                relations={'Independent': 1}),
+            'a relation count as text': lambda f: f['verification']['relations'].update(independent='1'),
             'a report sha256 that is no sha256': lambda f: f['verification'].update(request_sha256='x'),
             'a read report with a stage': lambda f: f['verification'].update(stage='bounds'),
         }
         for name, edit in rows.items():
             with self.subTest(content=name):
                 self.assert_unknown(edit)
+
+    def test_closed_values_of_the_encounter_facts_and_the_report_are_never_written(self):
+        # store.row reads its row back with load, so none of these is written; each error names the place only
+        rows = {
+            'encounter_facts.reach[0]': edited(lambda c: c['encounter_facts'].update(reach=[
+                {'event': 'E0', 'family': 'gi.colonoscopy', 'landmark': 'Cecum reached', 'state': 'verifed'}])),
+            'encounter_facts.reach[0].state': edited(lambda c: c['encounter_facts']['reach'][0].update(
+                state='verifed')),
+            'verification.relations': edited(lambda c: c['verification'].update(relations={'veto': 3})),
+            # a passage located once is never stored as ambiguous: contract 4.3, located at 2 to 8 places
+            'events.passages[1]': edited(lambda c: c['events']['passages'][1].update(spans=[span(P2), span(P2)])),
+            'encounter_facts.visits[0].basis': edited(lambda c: c['encounter_facts']['visits'][0].update(
+                basis='time')),
+            'encounter_facts.anatomy[0].anatomy': edited(lambda c: c['encounter_facts']['anatomy'][0].update(
+                anatomy='removed')),
+        }
+        for place, changed in rows.items():
+            with self.subTest(row=place):
+                with self.assertRaises(store.UnknownShape) as raised:
+                    read_row(**changed)
+                self.assertIn(place, str(raised.exception))
+                for stored in ('Cecum reached', 'verifed', P2):
+                    self.assertNotIn(stored, str(raised.exception))
+        read_row()  # the positive control: the fixture itself is written
+
+    def test_each_closed_entry_takes_every_value_of_its_enumeration(self):
+        # the positive control of the closures above: nothing the enumerations hold is refused
+        values = [('reach landmark', lambda f, v: f['encounter_facts']['reach'][0].update(landmark=v), schema.LANDMARKS),
+                  ('reach state', lambda f, v: f['encounter_facts']['reach'][0].update(state=v), store.ATTRIBUTE_STATES),
+                  ('visit basis', lambda f, v: f['encounter_facts']['visits'][0].update(basis=v), schema.EM_BASES),
+                  ('visit basis state', lambda f, v: f['encounter_facts']['visits'][0].update(basis_state=v),
+                   store.ATTRIBUTE_STATES),
+                  ('separately identifiable', lambda f, v: f['encounter_facts']['visits'][0].update(
+                      separately_identifiable=v), schema.SEPARATE),
+                  ('separately identifiable state', lambda f, v: f['encounter_facts']['visits'][0].update(
+                      separately_identifiable_state=v), store.ATTRIBUTE_STATES),
+                  ('anatomy landmark', lambda f, v: f['encounter_facts']['anatomy'][0].update(value=v),
+                   schema.LANDMARKS),
+                  ('anatomy state', lambda f, v: f['encounter_facts']['anatomy'][0].update(anatomy=v),
+                   schema.ANATOMY_STATES),
+                  ('relation type', lambda f, v: f['verification'].update(relations={v: 1}), store.RELATION_TYPES)]
+        for name, edit, enumeration in values:
+            for value in enumeration:
+                with self.subTest(entry=name, value=value):
+                    load(variant(read_row(), lambda f, edit=edit, value=value: edit(f, value)))
+        everything = variant(read_row(), lambda f: f['verification'].update(
+            relations={kind: 1 for kind in store.RELATION_TYPES}))
+        self.assertEqual(set(load(everything).verification['relations']), set(store.RELATION_TYPES))
+        for entries in ('reach', 'visits', 'anatomy'):  # and an encounter may have none of them
+            with self.subTest(empty=entries):
+                load(variant(read_row(), lambda f, entries=entries: f['encounter_facts'].update({entries: []})))
 
     def test_a_target_is_a_landmark(self):
         # The target's value is its landmark (contract 4.3 and 5.3), closed to LANDMARKS like every enumerated value, the
@@ -498,12 +590,13 @@ class QuoteTests(SimpleTestCase):
 
     def test_the_fixture_quotes_only_the_document(self):
         found = quotes(content())
-        self.assertEqual(len(found), 27)  # every quote the tests below can reach, counted
+        self.assertEqual(len(found), 29)  # every quote the tests below can reach, counted
         for path, quote in found:
             with self.subTest(quote=path):
                 self.assertEqual(TEXT[quote['start']:quote['end']], quote['text'])
         self.assertEqual([(p['state'], len(p['spans'])) for p in content()['events']['passages']],
-                         [('located', 1), ('ambiguous', 2), ('unlocated', 0), ('located', 1), ('located', 1)])
+                         [('located', 1), ('ambiguous', 2), ('unlocated', 0), ('located', 1), ('located', 1),
+                          ('located', 1)])
         self.assertEqual(quotes(load(read_row()).events), quotes(content()['events']))  # stored as given
 
     def test_a_quote_that_is_not_the_documents_is_never_written(self):
@@ -620,29 +713,42 @@ class QuoteTests(SimpleTestCase):
         self.assertEqual(dict(store.SPANS), {'located': (1, 1), 'ambiguous': (2, 8), 'unlocated': (0, 0)})
         self.assertEqual(tuple(store.SPANS), store.PASSAGE_STATES)  # every state has its rule, so none is a KeyError
         self.assertEqual(store.SPANS['ambiguous'][1], reading.MAX_SPANS)  # the Locator's own cap (contract 5.1)
-        one = span(P2)
+        one, again = span(P2), span(P2, 'Impression')  # P2's two places in TEXT
+        shorter = {**one, 'end': one['end'] - 1, 'text': one['text'][:-1]}  # the same place, one character shorter
+        places = [{'start': start, 'end': start + 8, 'text': TEXT[start:start + 8]} for start in range(0, 81, 9)]
         model = {'start': 0, 'end': len(self.MODEL_TEXT), 'text': self.MODEL_TEXT}  # self-consistent model text
-        rows = [  # (state, spans, stored): each bound at its limit and one past
-            ('located', [], False), ('located', [one], True), ('located', [one, one], False),
-            ('ambiguous', [one], False), ('ambiguous', [one] * 2, True), ('ambiguous', [one] * 8, True),
-            ('ambiguous', [one] * 9, False),
-            ('unlocated', [], True), ('unlocated', [one], False), ('unlocated', [model], False),
+        count, repeated = 'passages have', 'two spans at one place'
+        rows = [  # (state, spans, the problem or ''): each bound at its limit and one past, then the places themselves
+            ('located', [], count), ('located', [one], ''), ('located', [one, again], count),
+            ('ambiguous', [one], count), ('ambiguous', [one, again], ''), ('ambiguous', places[:8], ''),
+            ('ambiguous', places[:9], count),
+            ('unlocated', [], ''), ('unlocated', [one], count), ('unlocated', [model], count),
+            # located at one place is not ambiguous, however its spans repeat it
+            ('ambiguous', [one, one], repeated), ('ambiguous', [one, shorter], repeated),
+            ('ambiguous', [one, again, one], repeated), ('ambiguous', places[:7] + places[:1], repeated),
         ]
-        for state, spans, stored in rows:
+        self.assertEqual(len({item['start'] for item in places}), 9)
+        for row, (state, spans, problem) in enumerate(rows):
             def edit(f, state=state, spans=spans):
                 f['events']['passages'][1].update(state=state, spans=copy.deepcopy(spans))
-            with self.subTest(state=state, spans=len(spans)):
+            with self.subTest(row=row, state=state, spans=len(spans), problem=problem):
                 changed = variant(read_row(), edit)
-                if stored:
+                if not problem:
                     self.assertEqual(load(changed).events['passages'][1]['state'], state)
                 else:
                     with self.assertRaises(store.UnknownShape) as raised:
                         load(changed)
-                    self.assertIn(f'{state} passages have', str(raised.exception))
+                    self.assertIn(problem, str(raised.exception))
+                    self.assertIn('events.passages[1]', str(raised.exception))
                     self.assertNotIn(self.MODEL_TEXT, str(raised.exception))
-        # the finding's row: an unlocated passage carrying a span of model text is never written either
+                    self.assertNotIn(P2, str(raised.exception))
+        # an unlocated passage carrying a span of model text is never written either
         with self.assertRaises(store.UnknownShape):
             read_row(**edited(lambda c: c['events']['passages'][2].update(spans=[model])))
+        # nor a passage located once as an ambiguous one; P2's two real places are
+        with self.assertRaisesRegex(store.UnknownShape, repeated):
+            read_row(**edited(lambda c: c['events']['passages'][1].update(spans=[span(P2), span(P2)])))
+        read_row(**edited(lambda c: c['events']['passages'][1].update(spans=[span(P2), span(P2, 'Impression')])))
 
 
 class MismatchTests(SimpleTestCase):
@@ -792,7 +898,7 @@ class DatabaseRoundTripTests(TestCase):
                     self.assertEqual(loaded.events, content()['events'])
                     self.assertEqual(loaded.encounter_facts, content()['encounter_facts'])
                     found = quotes(loaded.events) + quotes(loaded.encounter_facts)
-                    self.assertEqual(len(found), 27)
+                    self.assertEqual(len(found), 29)
                     for path, quote in found:  # through jsonb, each quote is still the stored text's own slice
                         self.assertEqual(stored.revision.text[quote['start']:quote['end']], quote['text'], path)
                 with self.assertRaises(store.Mismatch):  # bound to that run's bytes, not another's

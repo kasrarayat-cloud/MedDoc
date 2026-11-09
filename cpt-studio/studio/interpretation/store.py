@@ -1,31 +1,38 @@
-"""The persisted event inventory (design/contract.md 4.2, 4.3, 4.5 and 8.1; design/FINAL.md 4.1): the fields of one
+"""The persisted event inventory (design/contract.md 4.2, 4.3, 4.5, 8.1 and 8.3; design/FINAL.md 4.1): the fields of one
 EventInventory row, built for an answer that was read (row) or refused (refused_row), and the versioned reader that
 gives them back (load).
 
 load RAISES on anything it does not know, and never answers with None or an empty inventory: an unknown version pair,
 an unknown state, a field missing, added or of the wrong type, a closed value it does not know, a quote whose offsets
-are not its own text's, a passage whose spans do not fit its state, a verification report that names another label,
-request or response, a refused row that carries content, a sha256 that no longer matches, a row bound to another
-revision text or another response. The legacy review_view._inventory returned None for a record it could not read and
-so silently stopped the base rules (contract 1); a new-path consumer gets a StoreError instead, and a refused row's
-events cannot be read as an empty list by mistake (StoredInventory.events raises).
+are not its own text's, a passage whose spans do not fit its state or repeat a place, a verification report that names
+another label, request or response, a refused row that carries content, a sha256 that no longer matches, a row bound
+to another revision text or another response. The legacy review_view._inventory returned None for a record it could
+not read and so silently stopped the base rules (contract 1); a new-path consumer gets a StoreError instead, and a
+refused row's events cannot be read as an empty list by mistake (StoredInventory.events raises).
 
 Every quote is the document's, never the model's (contract 4.2-4.4, P9). A quote is a record with a start, an end and a
 text: a passage span, the words of an attribute or a lesion, a size span, the date's words, or one inside a record the
 contract leaves open (a team member's name span). row is given the revision text, checks it against text_sha256, and
 writes nothing unless every quote's text IS that text's slice at [start, end) (Mismatch). load, which has no text, keeps
 the parts that need none: start at least 0 and end exactly start plus the text's length; a located passage has one span,
-an ambiguous one 2 to 8 (reading.MAX_SPANS) and an unlocated one none, so it keeps its length only, never its text. The
-row's sha256 and text_sha256 then bind what row checked to the text it was checked against.
+an ambiguous one 2 to 8 (reading.MAX_SPANS), each at a place of its own, and an unlocated one none, so it keeps its
+length only, never its text. The row's sha256 and text_sha256 then bind what row checked to the text it was checked
+against.
 
 The shapes are the contract's: the attribute record of 4.2 (with FINAL C2's ``occurrences`` on a words span), the
-passages, lesions, events and relations of 4.3, the date of service of 8.1, the derived facts, the open questions and
-the verification report. They are versioned by the (INTERPRETATION_VERSION, INVENTORY_VERSION) pair: a later shape is a
-later version, and this reader refuses a pair it does not know. Every enumerated value is closed to its enumeration,
-an event's target landmark included (schema.LANDMARKS). Where the contract leaves a record's inside open (an event's
-``key``, an attribute's ``literals``, a team or reach entry, ``identity_by``) the reader asks for JSON data of the
-stated container type and nothing more; an attribute's ``checks`` and ``reasons`` are strings until normalization's
-closed lists exist (slice S02).
+passages, lesions, events and relations of 4.3, the date of service of 8.1, the reach, visit and anatomy entries of 4.3
+and 8.3 in the shapes normalization writes (slice S02), the derived facts, the open questions and the verification
+report. They are versioned by the (INTERPRETATION_VERSION, INVENTORY_VERSION) pair: a later shape is a later version,
+and this reader refuses a pair it does not know. A field whose value the contract draws from an enumeration (the
+schema's, or its own: BASES, ATTRIBUTE_STATES, PASSAGE_STATES, MATCHES, EXTENDED, IDENTITIES, CURRENT, RELATION_TYPES)
+is closed to it, in an attribute (an event's target landmark included, schema.LANDMARKS), a passage, a lesion, an
+event, a relation, the date of service, a reach, visit or anatomy entry and an open question; the report's relation
+counts are keyed by relation type. Left open, as the contract leaves them, and read as JSON data of the stated
+container type and nothing more: an event's ``key``, an attribute's ``literals``, a target's ``identity_by``, the
+documenting endoscopist and team records (name spans and tokens, 8.3), the date's other-date entries and an open
+question's ``attached_to``. The names of checks and reasons - an attribute's ``checks`` and ``reasons``, a relation's
+and a discarded entry's ``reason``, the report's ``reasons`` and ``counts`` keys - are strings: their closed lists are
+normalization's (verify.REASONS and CHECKS, normalize.COUNTED), which this module does not import.
 
 ``sha256`` is types.sha256_json over every field but itself (FINAL 4.1: everything but ``id`` and ``created_at``), the
 bindings included, so a row's hash binds its content to its encounter, revision and Gemini run. Pure and Django-free;
@@ -160,15 +167,18 @@ class _List(_Spec):
 
 
 class _Map(_Spec):
-    """An object whose keys the contract leaves open: string keys, each value of one spec."""
+    """An object of string keys, each value of one spec. Its keys are closed to ``keys`` when given (the report's
+    relation counts, by relation type); without them they are left open, as the contract leaves them."""
 
-    def __init__(self, value: _Spec):
-        self.value = value
+    def __init__(self, value: _Spec, keys=None):
+        self.value, self.keys = value, None if keys is None else frozenset(keys)
 
     def problem(self, value, path: str) -> str:
         if not isinstance(value, dict) or not all(isinstance(key, str) for key in value):
             return f'{path} is not an object'
         for key, item in value.items():
+            if self.keys is not None and key not in self.keys:
+                return f'{path} has a key this release does not know ({_named(key)})'
             problem = self.value.problem(item, f'{path}[{_named(key)}]')
             if problem:
                 return problem
@@ -217,7 +227,9 @@ class _Quote(_Spec):
 
 class _Passage(_Spec):
     """A passage (contract 4.3) whose spans fit its state (SPANS): one when located, 2 to 8 when ambiguous, none when
-    unlocated."""
+    unlocated - each span at a place of its own, so a passage located once is never stored as ambiguous. A place is
+    where a span starts: the Locator finds each occurrence once, from its own start (occurrences may overlap), and the
+    closing-bracket rule moves an end only."""
 
     def __init__(self, shape: _Spec):
         self.shape = shape
@@ -228,10 +240,12 @@ class _Passage(_Spec):
             return problem
         least, most = SPANS[value['state']]
         count = len(value['spans'])
-        if least <= count <= most:
-            return ''
-        wanted = 'none' if most == 0 else 'exactly one' if least == most == 1 else f'{least} to {most}'
-        return f'{path} has {count:,} span{"" if count == 1 else "s"}; {value["state"]} passages have {wanted}'
+        if not least <= count <= most:
+            wanted = 'none' if most == 0 else 'exactly one' if least == most == 1 else f'{least} to {most}'
+            return f'{path} has {count:,} span{"" if count == 1 else "s"}; {value["state"]} passages have {wanted}'
+        if len({item['start'] for item in value['spans']}) != count:
+            return f'{path} has two spans at one place; a passage is located at places that differ'
+        return ''
 
 
 class _Json(_Spec):
@@ -336,13 +350,24 @@ _DATE_OF_SERVICE = _Obj({
     'readings': _List(_ISO),
     'others': _Obj({role: _List(_Map(_JSON)) for role in schema.DATE_ROLES if role != 'this_encounter'}),
 })
+# The reach, visit and anatomy entries (contract 4.3 and 8.3) in the shapes normalization writes (slice S02:
+# normalize.Draft._attach_reach, _attach_visits and _bind_anatomy), every value closed to its enumeration. A reach entry
+# is contract 4.3's event id, family, landmark and state, plus its reasons and whether it was attached to its
+# examination; a visit entry gives its basis and its separate identifiability, each with its state, and whether it was
+# attached to its visit; an anatomy entry is the attribute record over LANDMARKS plus the structure's anatomy state.
+_REACH = _Obj({'event': _STR, 'family': _STR, 'landmark': _Enum(schema.LANDMARKS), 'state': _Enum(ATTRIBUTE_STATES),
+               'reasons': _List(_STR), 'attached': _BOOL})
+_VISIT = _Obj({'event': _STR, 'basis': _Enum(schema.EM_BASES), 'basis_state': _Enum(ATTRIBUTE_STATES),
+               'separately_identifiable': _Enum(schema.SEPARATE),
+               'separately_identifiable_state': _Enum(ATTRIBUTE_STATES), 'attached': _BOOL})
+_ANATOMY = _attribute(schema.LANDMARKS, extra={'anatomy': _Enum(schema.ANATOMY_STATES)})
 _ENCOUNTER_FACTS = _Obj({
     'date_of_service': _DATE_OF_SERVICE,
     'documenting_endoscopist': _Map(_JSON),
     'team': _List(_Map(_JSON)),
-    'anatomy': _List(_Map(_JSON)),
-    'reach': _List(_Map(_JSON)),
-    'visits': _List(_Map(_JSON)),
+    'anatomy': _List(_ANATOMY),
+    'reach': _List(_REACH),
+    'visits': _List(_VISIT),
     'derived': _Obj({'current_families': _IDS,
                      'procedure_day': _Obj({'performed': _IDS, 'possible': _IDS}),
                      'absent': _IDS}),
@@ -355,7 +380,7 @@ _VERIFICATION = {
     'response_sha256': _SHA,
     'counts': _Map(_Obj({name: _INT for name in COUNTS})),
     'reasons': _Map(_INT),
-    'relations': _Map(_INT),
+    'relations': _Map(_INT, keys=RELATION_TYPES),  # {type: count} (contract 4.3)
     'discarded': _List(_Obj({'where': _STR, 'reason': _STR})),
     'problems': _List(_STR),
     'refused': _BOOL,

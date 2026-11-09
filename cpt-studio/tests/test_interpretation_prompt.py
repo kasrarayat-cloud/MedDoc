@@ -1,10 +1,10 @@
 """The interpretation contract, part I (Gemini migration slice S01; design/contract.md 1-2, design/FINAL.md 5.1-5.3, as
-design/ADJUDICATION.md EB4, C-7 and C-15 amend them), TEXT-ONLY: the labels; the sha256 pins of INSTRUCTIONS, LOCAL_SCHEMA
-and RESPONSE_SCHEMA beside INTERPRETATION_VERSION, and their check whenever a request is built; the instructions' lineage
-(FINAL 5.3 plus the two adjudicated edits, and the contract's 2.1 under FINAL's four); the enumerations and the generated
-schema with its measured size; the framing per kind and the PDF first-line guard; a request body of exactly three keys
-that carries no member value, filename, title or reading; and an AST scan, plus a fresh-interpreter import, showing that
-no module of the slice imports studio.gi. Offline: nothing is sent."""
+design/ADJUDICATION.md EB4, C-7, C-8 and C-15 amend them), TEXT-ONLY: the labels; the sha256 pins of INSTRUCTIONS,
+LOCAL_SCHEMA and RESPONSE_SCHEMA beside INTERPRETATION_VERSION, and their check whenever a request is built; the
+instructions' lineage (FINAL 5.3 plus the three adjudicated edits, and the contract's 2.1 under FINAL's four); the
+enumerations and the generated schema with its measured size; the framing per kind and the PDF first-line guard; a
+request body of exactly three keys that carries no member value, filename, title or reading; and an AST scan, plus a
+fresh-interpreter import, showing that no module of the slice imports studio.gi. Offline: nothing is sent."""
 from __future__ import annotations
 
 import ast
@@ -38,7 +38,7 @@ SLICE_MODULES = ('__init__', 'prompt', 'schema', 'read', 'store')
 # without its own pins fails too (KeyError). BOUNDS is pinned as well: it is part of what gemini-events@1 reads.
 PINS = {
     'gemini-events@1': {
-        'INSTRUCTIONS': 'dd6c7c052721c1b9d88ad6384986801c55d31ba8e0daed0cd2507145284a5c06',
+        'INSTRUCTIONS': '7bdaae793599415f9d60bb16b66e0a07c8dece5e2a5485f94d8777f3152c1bad',
         'LOCAL_SCHEMA': '93574cacb4dc3d9fb0c3ed7789a8c2f7c708bf94176b53f1dd850fcd0214ccc3',
         'RESPONSE_SCHEMA': '7bb3057d724012910b4210272c31480eacb6fc6fe6dbacbce4415c61592d2537',
         'BOUNDS': '80c4244370fbacf0f5c7919e094bc169a58063a8b1c85eca20e5c97038c1cc72',
@@ -56,7 +56,9 @@ COLON_REGIONS = ('right_colon', 'left_colon', 'proximal_colon', 'distal_colon')
 # one, have these sha256 (design files of 2026-11-09: FINAL.md c3d7bd86..., contract.md 8288dea7...).
 FINAL_5_3_SHA256 = '0a0abadef5a2849743f4db1e3ae68dc2398e1dae72c8ef1584366d4666a5f1d0'
 CONTRACT_2_1_SHA256 = '478cbdeeafb8c5460ec99787e3f40f0ed3dd28d6f478908e9afa3321ed5d96b4'
-# (FINAL 5.3's text, the adjudicated text): EB4's time words and C-7's exceptive scope.
+# (the text before, the text after) of each adjudicated edit, in the order they apply to FINAL 5.3's text: EB4's time
+# words; C-7's exceptive scope; and C-8's all_of_kind, which covers the acts of its kind in the statement's own
+# examination or session, never the whole encounter (on the scope line as C-7 left it, so it is undone first).
 ADJUDICATED_EDITS = (
     ('''- time: current_encounter for acts of this encounter; earlier_encounter; future; unknown. words: the words that place the
   act in time, or "" when the act is told as part of this encounter without time words of its own. A purpose is not a
@@ -81,6 +83,19 @@ ADJUDICATED_EDITS = (
   kind beyond those the document reports as done, such as "no further", "no other" or "no additional"); unknown. words:
   the words that set the scope, including for exceptive the word that makes the exception, such as "further", "other" or
   "additional".
+'''),
+    ('''- scope, for not_performed and uncertain only (not_applicable otherwise): single_target (the statement is about one lesion
+  or site, given as target); all_of_kind (the statement covers every act of this kind in its encounter and names no
+  particular target); listed_targets (give the lesion ids in targets); exceptive (the statement covers only acts of this
+  kind beyond those the document reports as done, such as "no further", "no other" or "no additional"); unknown. words:
+  the words that set the scope, including for exceptive the word that makes the exception, such as "further", "other" or
+  "additional".
+''', '''- scope, for not_performed and uncertain only (not_applicable otherwise): single_target (the statement is about one lesion
+  or site, given as target); all_of_kind (the statement covers every act of this kind in its own examination or session
+  and names no particular target); listed_targets (give the lesion ids in targets); exceptive (the statement covers only
+  acts of this kind beyond those the document reports as done, such as "no further", "no other" or "no additional");
+  unknown. words: the words that set the scope, including for exceptive the word that makes the exception, such as
+  "further", "other" or "additional".
 '''),
 )
 # (the contract's 2.1 text, FINAL 5.3's): C1's three sentences and C3's part_of line (FINAL 5.3, "Changed against").
@@ -109,7 +124,7 @@ BREAK = NOTE.index('Page two')
 PAGES = (PageSpan(page=1, start=0, end=BREAK), PageSpan(page=2, start=BREAK, end=len(NOTE)))
 # The request sha256 of NOTE framed as a PDF: the replay key a recording of it would carry. It moves with any byte of
 # the instructions, the schema, the framing or the body's shape.
-NOTE_PDF_REQUEST_SHA256 = '85c9482216b64e9671d35f103928cb9df6bd2dc643d9171b0aaf37db75036b1b'
+NOTE_PDF_REQUEST_SHA256 = 'ef3b7b530735e8a9a540dbf111cc8672c3242b83eeec525b588bb0aeb25bfa10'
 
 
 def sha256_text(text: str) -> str:
@@ -376,10 +391,10 @@ class SchemaTests(SimpleTestCase):
 class InstructionTests(SimpleTestCase):
     def test_the_lineage_final_5_3_then_the_adjudication(self):
         text = prompt.INSTRUCTIONS
-        for old, new in ADJUDICATED_EDITS:
+        for old, new in reversed(ADJUDICATED_EDITS):  # the last edit applied is undone first
             text = replaced(text, new, old)
         self.assertEqual(sha256_text(text), FINAL_5_3_SHA256)  # FINAL 5.3, byte for byte
-        for old, new in FINAL_EDITS:
+        for old, new in reversed(FINAL_EDITS):
             text = replaced(text, new, old)
         self.assertEqual(sha256_text(text), CONTRACT_2_1_SHA256)  # and under it the contract's 2.1
 
@@ -403,9 +418,14 @@ class InstructionTests(SimpleTestCase):
         scope = line_of(prompt.INSTRUCTIONS, '- scope,')
         for asked in ('exceptive (the statement covers only acts of this kind beyond those the document reports as done',
                       '"no further", "no other" or "no additional"',
-                      'including for exceptive the word that makes the exception'):
+                      'including for exceptive the word that makes the exception',
+                      # C-8: all_of_kind means every act of that kind in the statement's own examination or session
+                      'all_of_kind (the statement covers every act of this kind in its own examination or session and '
+                      'names no particular target)'):
             with self.subTest(scope=asked):
                 self.assertIn(asked, ' '.join(scope.split()))
+        # C-8: the encounter-wide meaning FINAL 5.3 gave all_of_kind is asked nowhere
+        self.assertNotIn('in its encounter', ' '.join(prompt.INSTRUCTIONS.split()))
 
     def test_the_instructions_name_the_values_each_attribute_takes(self):
         text = ' '.join(prompt.INSTRUCTIONS.split())
