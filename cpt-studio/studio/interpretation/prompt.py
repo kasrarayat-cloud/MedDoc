@@ -146,6 +146,11 @@ lesions, sites, techniques, times and performers are different events. Answer wi
 # D12: the extracted text only. framed_document's first line for a PDF says the original is attached, which is true of a
 # participant's first reading only.
 PDF_LINE = 'Document: a PDF; only its extracted text is given.'
+# The first lines ``framed`` gives, and so the only ones request_parts sends: PDF_LINE for a PDF, framed_document's own
+# line for every other kind. The participants' PDF line (the original is attached) and peer_framed_document's are not
+# among them, so a PDF framed by either is refused rather than sent saying something about an original (D12).
+FIRST_LINES = frozenset({PDF_LINE} | {f'Document: {label}.' for kind, label in participant_prompt.KINDS.items()
+                                      if kind != 'pdf'})
 TEMPERATURE = 0
 MAX_OUTPUT_TOKENS = 32768  # the model's stated output limit (contract 2.2)
 RESPONSE_MIME_TYPE = 'application/json'
@@ -174,7 +179,9 @@ def request_parts(framed_text: str) -> dict:
     ``framed_text`` and nothing else) and generationConfig (temperature 0, maxOutputTokens 32768, responseMimeType
     application/json, responseSchema RESPONSE_SCHEMA). Pure; the schema is copied, so the body shares nothing with this
     module. ``framed_text`` must be a document framed by ``framed``: TypeError or ValueError otherwise, so the revision's
-    raw text is never sent unframed. RuntimeError when INSTRUCTIONS or RESPONSE_SCHEMA no longer match their pins."""
+    raw text is never sent unframed, and a PDF framed by the participants' framed_document or peer_framed_document is
+    never sent saying an original is attached (its first line is not one of FIRST_LINES). RuntimeError when INSTRUCTIONS
+    or RESPONSE_SCHEMA no longer match their pins."""
     if not isinstance(framed_text, str):
         raise TypeError('The framed document must be a string.')
     if not _is_framed(framed_text):
@@ -201,10 +208,10 @@ def check_pins() -> None:
 
 
 def _is_framed(document: str) -> bool:
-    """Whether ``document`` has framed_document's form: a 'Document: ...' line, its second line, the BEGIN marker, a
+    """Whether ``document`` has the form ``framed`` gives: one of FIRST_LINES, a second line, the BEGIN marker, a
     [Page N] line, and last the END marker of the same mark."""
     lines = document.split('\n')
-    if len(lines) < 5 or not lines[0].startswith('Document: ') or not lines[3].startswith('[Page '):
+    if len(lines) < 5 or lines[0] not in FIRST_LINES or not lines[3].startswith('[Page '):
         return False
     begin = _BEGIN.fullmatch(lines[2])
     return begin is not None and lines[-1] == f'<<<{begin.group(1)} END>>>'

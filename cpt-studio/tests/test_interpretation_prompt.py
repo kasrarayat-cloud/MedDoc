@@ -544,6 +544,29 @@ class BodyTests(SimpleTestCase):
             with self.subTest(kind=kind):
                 prompt.request_parts(prompt.framed(NOTE, PAGES, kind))
                 prompt.request_parts(prompt.framed(NOTE, (), kind))
+        # A PDF framed for a participant (whose first line says the original file is attached) or for a peer review is
+        # framed in form, and still refused: this request attaches no original, and its first line must say so (D12).
+        rest = self.framed.split('\n', 1)[1]
+        for name, framed in (('participants.prompt.framed_document', participant_prompt.framed_document(NOTE, PAGES, 'pdf')),
+                             ('participants.prompt.peer_framed_document',
+                              participant_prompt.peer_framed_document(NOTE, PAGES, 'pdf')),
+                             ('an unknown kind', f'Document: an image.\n{rest}'),
+                             ('a first line with a space after it', f'{prompt.PDF_LINE} \n{rest}')):
+            with self.subTest(framed_by=name):
+                self.assertEqual(framed.split('\n')[1:], self.framed.split('\n')[1:])  # only the first line differs
+                with self.assertRaises(ValueError):
+                    prompt.request_parts(framed)
+
+    def test_the_first_lines_are_the_ones_framed_gives(self):
+        self.assertEqual(prompt.FIRST_LINES, frozenset({
+            'Document: a PDF; only its extracted text is given.',
+            'Document: a Word document; only its extracted text is given.',
+            'Document: pasted text.',
+            'Document: a plain-text file.',
+            'Document: a document with an addendum appended to its text; only the text is given.'}))
+        self.assertEqual({prompt.framed(NOTE, PAGES, kind).split('\n')[0] for kind in participant_prompt.KINDS},
+                         prompt.FIRST_LINES)
+        self.assertEqual([line for line in prompt.FIRST_LINES if 'attached' in line or 'review' in line], [])
 
     def test_the_body_shares_nothing_with_the_module(self):
         before = schema.canonical(schema.RESPONSE_SCHEMA)

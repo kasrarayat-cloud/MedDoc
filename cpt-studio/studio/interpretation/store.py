@@ -3,18 +3,29 @@ EventInventory row, built for an answer that was read (row) or refused (refused_
 gives them back (load).
 
 load RAISES on anything it does not know, and never answers with None or an empty inventory: an unknown version pair,
-an unknown state, a field missing, added or of the wrong type, a closed value it does not know, a verification report
-that names another label, request or response, a refused row that carries content, a sha256 that no longer matches, a
-row bound to another revision text or another response. The legacy review_view._inventory returned None for a record it
-could not read and so silently stopped the base rules (contract 1); a new-path consumer gets a StoreError instead, and a
-refused row's events cannot be read as an empty list by mistake (StoredInventory.events raises).
+an unknown state, a field missing, added or of the wrong type, a closed value it does not know, a quote whose offsets
+are not its own text's, a passage whose spans do not fit its state, a verification report that names another label,
+request or response, a refused row that carries content, a sha256 that no longer matches, a row bound to another
+revision text or another response. The legacy review_view._inventory returned None for a record it could not read and
+so silently stopped the base rules (contract 1); a new-path consumer gets a StoreError instead, and a refused row's
+events cannot be read as an empty list by mistake (StoredInventory.events raises).
+
+Every quote is the document's, never the model's (contract 4.2-4.4, P9). A quote is a record with a start, an end and a
+text: a passage span, the words of an attribute or a lesion, a size span, the date's words, or one inside a record the
+contract leaves open (a team member's name span). row is given the revision text, checks it against text_sha256, and
+writes nothing unless every quote's text IS that text's slice at [start, end) (Mismatch). load, which has no text, keeps
+the parts that need none: start at least 0 and end exactly start plus the text's length; a located passage has one span,
+an ambiguous one 2 to 8 (reading.MAX_SPANS) and an unlocated one none, so it keeps its length only, never its text. The
+row's sha256 and text_sha256 then bind what row checked to the text it was checked against.
 
 The shapes are the contract's: the attribute record of 4.2 (with FINAL C2's ``occurrences`` on a words span), the
 passages, lesions, events and relations of 4.3, the date of service of 8.1, the derived facts, the open questions and
 the verification report. They are versioned by the (INTERPRETATION_VERSION, INVENTORY_VERSION) pair: a later shape is a
-later version, and this reader refuses a pair it does not know. Where the contract leaves a record's inside open (an
-event's ``key``, an attribute's ``literals``, a team or reach entry, ``identity_by``) the reader asks for JSON data of
-the stated container type and nothing more.
+later version, and this reader refuses a pair it does not know. Every enumerated value is closed to its enumeration,
+an event's target landmark included (schema.LANDMARKS). Where the contract leaves a record's inside open (an event's
+``key``, an attribute's ``literals``, a team or reach entry, ``identity_by``) the reader asks for JSON data of the
+stated container type and nothing more; an attribute's ``checks`` and ``reasons`` are strings until normalization's
+closed lists exist (slice S02).
 
 ``sha256`` is types.sha256_json over every field but itself (FINAL 4.1: everything but ``id`` and ``created_at``), the
 bindings included, so a row's hash binds its content to its encounter, revision and Gemini run. Pure and Django-free;
@@ -23,11 +34,13 @@ the persistence code maps FIELDS onto the model (the bindings are its foreign ke
 from __future__ import annotations
 
 import copy
+import hashlib
 import math
 import re
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import Optional
 
 from studio.interpretation import INTERPRETATION_VERSION, INVENTORY_VERSION, LABEL, schema
@@ -46,6 +59,10 @@ EMPTY_EVENTS = {'passages': [], 'lesions': [], 'events': [], 'relations': []}
 BASES = ('stated', 'default', 'absent')
 ATTRIBUTE_STATES = ('verified', 'unverified', 'absent', 'discarded')
 PASSAGE_STATES = ('located', 'ambiguous', 'unlocated')
+# The spans each passage state has (contract 4.3): one place; 2 to 8 places (the Locator keeps at most
+# reading.MAX_SPANS = 8 occurrences, contract 5.1); none, so an unlocated passage keeps its length only.
+SPANS = MappingProxyType({'located': (1, 1), 'ambiguous': (2, 8), 'unlocated': (0, 0)})
+QUOTE_KEYS = frozenset({'start', 'end', 'text'})  # a record holding all three is a quote of the revision text
 MATCHES = ('exact', 'normalized')
 EXTENDED = ('', 'closing_bracket')
 IDENTITIES = ('verified', 'unresolved', 'none')
@@ -181,6 +198,42 @@ class _Obj(_Spec):
         return ''
 
 
+class _Quote(_Spec):
+    """A quote of the revision text (contract 4.2): the record ``shape`` gives, whose offsets are its own text's - start
+    at least 0, end exactly start plus the text's length. Whether the text IS the revision text's slice there needs the
+    text, so row checks it (_quotes); a stored row keeps that check through its sha256 and text_sha256."""
+
+    def __init__(self, shape: _Spec):
+        self.shape = shape
+
+    def problem(self, value, path: str) -> str:
+        problem = self.shape.problem(value, path)
+        if problem:
+            return problem
+        if value['start'] < 0 or value['end'] - value['start'] != len(value['text']):
+            return f'{path} has offsets that are not those of its own text'
+        return ''
+
+
+class _Passage(_Spec):
+    """A passage (contract 4.3) whose spans fit its state (SPANS): one when located, 2 to 8 when ambiguous, none when
+    unlocated."""
+
+    def __init__(self, shape: _Spec):
+        self.shape = shape
+
+    def problem(self, value, path: str) -> str:
+        problem = self.shape.problem(value, path)
+        if problem:
+            return problem
+        least, most = SPANS[value['state']]
+        count = len(value['spans'])
+        if least <= count <= most:
+            return ''
+        wanted = 'none' if most == 0 else 'exactly one' if least == most == 1 else f'{least} to {most}'
+        return f'{path} has {count:,} span{"" if count == 1 else "s"}; {value["state"]} passages have {wanted}'
+
+
 class _Json(_Spec):
     """Any JSON data: objects with string keys, lists, strings, integers, finite numbers, true, false, null."""
 
@@ -208,8 +261,8 @@ def _named(key) -> str:
 
 _JSON = _Json()
 _IDS = _List(_STR)
-_SPAN = _Obj({'start': _INT, 'end': _INT, 'text': _STR})
-_WORDS = _Obj({'start': _INT, 'end': _INT, 'text': _STR, 'match': _Enum(MATCHES)}, {'occurrences': _INT})
+_SPAN = _Quote(_Obj({'start': _INT, 'end': _INT, 'text': _STR}))
+_WORDS = _Quote(_Obj({'start': _INT, 'end': _INT, 'text': _STR, 'match': _Enum(MATCHES)}, {'occurrences': _INT}))
 
 
 def _attribute(values: Optional[tuple] = None, extra: Optional[dict] = None,
@@ -229,8 +282,8 @@ def _attribute(values: Optional[tuple] = None, extra: Optional[dict] = None,
     }, optional)
 
 
-_PASSAGE = _Obj({'id': _STR, 'state': _Enum(PASSAGE_STATES), 'spans': _List(_SPAN), 'reason': _STR, 'chars': _INT,
-                 'extended': _Enum(EXTENDED)})
+_PASSAGE = _Passage(_Obj({'id': _STR, 'state': _Enum(PASSAGE_STATES), 'spans': _List(_SPAN), 'reason': _STR,
+                           'chars': _INT, 'extended': _Enum(EXTENDED)}))
 _LESION = _Obj({
     'id': _STR,
     'words': _Either(_WORDS, _NULL),
@@ -250,7 +303,7 @@ _EVENT = _Obj({
     'procedure': _attribute(schema.PROCEDURES),
     'kind': _attribute(schema.KINDS),
     'technique': _attribute(schema.DEVICES),
-    'target': _attribute(extra={'lesion': _STR, 'identity': _Enum(IDENTITIES), 'identity_by': _JSON}),
+    'target': _attribute(schema.LANDMARKS, extra={'lesion': _STR, 'identity': _Enum(IDENTITIES), 'identity_by': _JSON}),
     'time': _attribute(schema.TIMES),
     'performer': _attribute(schema.PERFORMERS),
     'status': _attribute(schema.STATUSES),
@@ -378,13 +431,17 @@ class StoredInventory:
 
 # --- writing -----------------------------------------------------------------------------------------------------------
 
-def row(*, encounter_id, revision_id, provider_run_id, text_sha256: str, request_sha256: str, response_sha256: str,
-        events, encounter_facts, open_questions, verification) -> dict:
+def row(*, encounter_id, revision_id, provider_run_id, revision_text: str, text_sha256: str, request_sha256: str,
+        response_sha256: str, events, encounter_facts, open_questions, verification) -> dict:
     """The FIELDS of the row for an answer that was read and normalized, at the current versions, with its sha256.
-    The content is converted to JSON data (types.to_jsonable). The verification report gets the label and the run's
-    request and response sha256 where it does not carry them, and ``refused`` False; a value it carries must already
-    be right. The row is then read back by load, so nothing is written that the reader would refuse: StoreError
-    otherwise."""
+    ``revision_text`` is the text the answer was read against; its sha256 must be ``text_sha256`` (Mismatch), and it is
+    not stored. The content is converted to JSON data (types.to_jsonable). The verification report gets the label and
+    the run's request and response sha256 where it does not carry them, and ``refused`` False; a value it carries must
+    already be right. The row is then read back by load, so nothing is written that the reader would refuse, and last
+    every quote in it is checked against ``revision_text`` (contract 4.2, re-checked on store): Mismatch unless each is
+    that text's own slice at its offsets. StoreError otherwise; TypeError when ``revision_text`` is not a string."""
+    if not isinstance(revision_text, str):
+        raise TypeError('The revision text must be a string.')
     report = to_jsonable(verification)
     if not isinstance(report, dict):
         raise UnknownShape('verification is not an object')
@@ -393,9 +450,13 @@ def row(*, encounter_id, revision_id, provider_run_id, text_sha256: str, request
         if key in report and report[key] != value:
             raise Mismatch(f'The verification report names another {key.replace("_", " ")} than this row.')
         report[key] = value
-    return _finished(_bound(encounter_id, revision_id, provider_run_id), READ, text_sha256, request_sha256,
-                     response_sha256, {'events': to_jsonable(events), 'encounter_facts': to_jsonable(encounter_facts),
-                                       'open_questions': to_jsonable(open_questions), 'verification': report})
+    fields = _finished(_bound(encounter_id, revision_id, provider_run_id), READ, text_sha256, request_sha256,
+                       response_sha256, {'events': to_jsonable(events), 'encounter_facts': to_jsonable(encounter_facts),
+                                         'open_questions': to_jsonable(open_questions), 'verification': report})
+    if _text_sha256(revision_text) != fields['text_sha256']:
+        raise Mismatch('The revision text given is not the text this row names (text_sha256).')
+    _quotes(fields, revision_text)
+    return fields
 
 
 def refused_row(refusal: Refusal, *, encounter_id, revision_id, provider_run_id, text_sha256: str,
@@ -428,6 +489,37 @@ def _finished(bindings: dict, state: str, text_sha256: str, request_sha256: str,
         raise UnknownShape('The interpretation to store is not JSON data.') from None
     load(fields, text_sha256=text_sha256, response_sha256=response_sha256)
     return fields
+
+
+def _text_sha256(text: str) -> str:
+    """SourceRevision.text_sha256's value for ``text``: the sha256 of its UTF-8 bytes (jobs.stage_extract). '' for a text
+    UTF-8 cannot encode (a lone surrogate), which no revision's text_sha256 can name."""
+    try:
+        return hashlib.sha256(text.encode('utf-8')).hexdigest()
+    except UnicodeEncodeError:
+        return ''
+
+
+def _quotes(fields: Mapping, revision_text: str) -> None:
+    """Mismatch unless every quote in the content (a record holding QUOTE_KEYS, wherever it sits: in a shape this module
+    knows or inside a record the contract leaves open) is ``revision_text``'s own slice at its offsets, never the
+    model's string (contract 4.2-4.4, P9). UnknownShape for such a record whose offsets are not integers or whose text is
+    not a string. A problem names the place, never the text."""
+    pending = [(fields[name], name) for name in reversed(CONTENT)]
+    while pending:
+        value, path = pending.pop()
+        if isinstance(value, dict):
+            if QUOTE_KEYS.issubset(value):
+                start, end, text = value['start'], value['end'], value['text']
+                if type(start) is not int or type(end) is not int or not isinstance(text, str):
+                    raise UnknownShape(f'The interpretation to store is not readable: {path} is a quote whose offsets '
+                                       'are not integers or whose text is not a string.')
+                if not 0 <= start <= end <= len(revision_text) or revision_text[start:end] != text:
+                    raise Mismatch(f'The interpretation to store quotes at {path} what the revision text does not hold '
+                                   'at those offsets.')
+            pending.extend((item, f'{path}.{_named(key)}') for key, item in reversed(list(value.items())))
+        elif isinstance(value, list):
+            pending.extend((item, f'{path}[{index}]') for index, item in reversed(list(enumerate(value))))
 
 
 def content_sha256(fields: Mapping) -> str:
