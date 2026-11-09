@@ -18,9 +18,16 @@ The interpreter (Gemini migration, FINAL 3.2; studio/interpretation/adapter.py),
   date, or a timezone-aware datetime read in UTC) and has no estimate without one - never one at a guessed rate.
   usageMetadata's ``promptTokenCount`` is the input; the output is ``candidatesTokenCount`` plus
   ``thoughtsTokenCount``, since thinking is billed as output (each absent or null count is zero, as the API omits a zero).
-  CPT Studio asks for no cached content and offers no tool, and no rate is recorded here for either, so a usage that
-  reports cached-content or tool-use prompt tokens has no estimate; nor has one whose ``totalTokenCount`` is not its
-  input and output added up (some tokens would be unpriced).
+  CPT Studio creates no cached content, but Google's implicit caching, on by default, may serve the prefix every
+  interpretation request repeats - its instructions and its response schema - from a cache without being asked, and
+  report those tokens as ``cachedContentTokenCount``, which ``promptTokenCount`` already includes. The source records
+  no cached-input rate, so they are priced with the rest of the prompt at the full input rate: an estimate that reports
+  any is an upper bound, on the premise that a cache hit is never billed above the input rate (Google's caching bills
+  cache hits at a reduced rate and implicit caching has no storage charge; whether gemini-4-argon caches implicitly at
+  all was not observable in the trial), and it says how many there were (``cached_tokens``) and what that makes it
+  (GEMINI_BASIS). A usage stating more cached tokens than prompt tokens has no estimate. CPT Studio offers no tool, and
+  no rate is recorded for tool-use prompt tokens, so a usage reporting any has no estimate; nor has one whose
+  ``totalTokenCount`` is not its input and output added up (some tokens would be unpriced).
 
 Corti reports credits, not tokens, and has no estimate here. An answer whose usage lacks a token count, or states one
 that is not a whole number of tokens, has no estimate (None) rather than a guessed one.
@@ -48,7 +55,8 @@ ASTRA_LONG_MULTIPLIERS = {'input': Decimal('2'), 'output': Decimal('1.5')}
 
 GEMINI = 'gemini-4-argon'  # the interpreter's model (studio.interpretation.MODEL; a test pins the two equal)
 GEMINI_RATES_AS_OF = '2026-11-09'
-GEMINI_BASIS = 'estimated from published rates as of 2026-11-09; not reconciled to an invoice'
+GEMINI_BASIS = ('estimated from published rates as of 2026-11-09; prompt tokens served from a cache are priced at the '
+                'full input rate, so an estimate that reports any is an upper bound; not reconciled to an invoice')
 GEMINI_SOURCE = ("Google's Gemini API pricing page, read 2026-11-09 (gemini-trial REPORT.md section D): gemini-4-argon, "
                  'Standard tier, $2.00 per million input tokens and $10.00 per million output tokens (thinking '
                  'included) through 2026-11-30; $4.00 and $20.00 from 2026-12-01.')
@@ -108,6 +116,7 @@ def estimate_loop(model: str, usages, *, on=None) -> Optional[dict]:
         extra['long_context_exchanges'] = sum(1 for _, _, details, _ in priced if details['long_context'])
     if model == GEMINI:
         extra['thinking_tokens'] = sum(details['thinking_tokens'] for _, _, details, _ in priced)
+        extra['cached_tokens'] = sum(details['cached_tokens'] for _, _, details, _ in priced)
     return _result(model, sum(cost for cost, _, _, _ in priced), tokens, extra, priced[0][3])
 
 
@@ -166,18 +175,21 @@ def _gemini(usage: dict, on) -> tuple:
     prompt = _count(usage, 'promptTokenCount')
     candidates = _count(usage, 'candidatesTokenCount', optional=True)
     thoughts = _count(usage, 'thoughtsTokenCount', optional=True)
-    if _count(usage, 'cachedContentTokenCount', optional=True) or _count(usage, 'toolUsePromptTokenCount',
-                                                                          optional=True):
-        raise _Invalid  # never asked for, and no rate for them is recorded here
+    cached = _count(usage, 'cachedContentTokenCount', optional=True)
+    if cached > prompt:
+        raise _Invalid  # the cached tokens are counted inside the prompt's: more of them states no usage that adds up
+    if _count(usage, 'toolUsePromptTokenCount', optional=True):
+        raise _Invalid  # no tool is offered, and no rate for tool-use prompt tokens is recorded here
     total = usage.get('totalTokenCount')
     if total is not None and (type(total) is not int or total != prompt + candidates + thoughts):
         raise _Invalid  # tokens this estimate would leave unpriced
+    # the prompt is priced whole at the input rate, its cached tokens included: an upper bound (GEMINI_BASIS)
     tokens = {'input': prompt, 'output': candidates + thoughts}
     cost = (tokens['input'] * rates['input'] + tokens['output'] * rates['output']) / _MILLION
     effective = f'through {last.isoformat()}' if first is None else f'from {first.isoformat()}'
     terms = _Terms(rates, GEMINI_RATES_AS_OF, GEMINI_BASIS,
                    {'priced_on': day.isoformat(), 'effective': effective, 'source': GEMINI_SOURCE})
-    return cost, tokens, {'thinking_tokens': thoughts}, terms
+    return cost, tokens, {'thinking_tokens': thoughts, 'cached_tokens': cached}, terms
 
 
 def _day(on) -> Optional[date]:

@@ -107,10 +107,20 @@ def quota_failure(*violations) -> dict:
     return {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': list(violations)}
 
 
-def violation(quota_id, metric='generativelanguage.googleapis.com/generate_content_paid_tier_requests', **extra):
+PAID_REQUESTS = 'generativelanguage.googleapis.com/generate_content_paid_tier_requests'
+PAID_INPUT_TOKENS = 'generativelanguage.googleapis.com/generate_content_paid_tier_input_token_count'
+
+
+def violation(quota_id, metric=PAID_REQUESTS, *, limit='1000', **extra):
+    """A google.rpc.QuotaFailure violation as Google's JSON gives one. Its limit, quotaValue, is an int64, so it is a
+    string of digits ("1000"); proto3's JSON leaves a 0 out, so a limit of 0 has no quotaValue at all - the trial's
+    recorded 429 says "limit: 0" four times and none of its violations carries one. ``limit=None`` leaves it out; a
+    quotaValue given among ``extra`` is kept as given."""
     found = {'quotaMetric': metric, 'quotaDimensions': {'location': 'global', 'model': 'gemini-4-argon'}, **extra}
     if quota_id is not None:
         found['quotaId'] = quota_id
+    if limit is not None and 'quotaValue' not in extra:
+        found['quotaValue'] = limit
     return found
 
 
@@ -865,24 +875,81 @@ class ClassificationTests(SimpleTestCase):
                          (429, 'RESOURCE_EXHAUSTED', (), '7824s'))
         self.assertEqual(result.why, 'A daily, zero or unbilled quota was exhausted (HTTP 429, RESOURCE_EXHAUSTED): '
                                      'every request would be refused until an operator acts.')
+        # the form a limit of 0 takes in Google's JSON: stated in the message, and no quotaValue on any violation
+        self.assertEqual(error['message'].count('limit: 0,'), 4)
+        self.assertEqual([item for item in result.violations if 'quotaValue' in item], [])
 
     def test_a_per_minute_rate_refusal_fails_the_attempt_and_keeps_its_retry_info(self):
+        # paid-tier per-minute quotas, each stating a limit above 0: as int64's JSON string, or as a plain number
         raw = error_body(429, 'RESOURCE_EXHAUSTED',
-                         quota_failure(violation(PER_MINUTE, quotaValue='1000'),
-                                       violation('GenerateContentPaidTierInputTokensPerModelPerMinute')),
+                         quota_failure(violation(PER_MINUTE, limit='1000'),
+                                       violation('GenerateContentPaidTierInputTokensPerModelPerMinute',
+                                                 metric=PAID_INPUT_TOKENS, limit='2000000'),
+                                       violation(PER_MINUTE, limit=150)),
                          retry_info('17s'))
         result = self.assertKind(adapter.classify('failed', 429, raw), adapter.FAILED)
         self.assertEqual((result.retry_delay, len(result.violations), result.vendor_status),
-                         ('17s', 2, 'RESOURCE_EXHAUSTED'))
+                         ('17s', 3, 'RESOURCE_EXHAUSTED'))
         self.assertEqual(result.why, 'A rate limit refused this attempt (HTTP 429, RESOURCE_EXHAUSTED). It may be tried '
                                      'again after 17s.')
 
+    def test_a_per_minute_quota_whose_limit_is_left_out_0_or_unreadable_is_a_hold(self):
+        # A paid project whose per-minute quota is 0 (an operator's override, say) is answered with a violation that
+        # has no quotaValue, as proto3's JSON omits a 0, and a RetryInfo: retrying it can never succeed (P-4: a hold).
+        raw = error_body(429, 'RESOURCE_EXHAUSTED', quota_failure(violation(PER_MINUTE, limit=None)), retry_info('31s'))
+        result = self.assertKind(adapter.classify('failed', 429, raw), adapter.HOLD, adapter.QUOTA)
+        self.assertEqual((result.retry_delay, result.violations), ('31s', (violation(PER_MINUTE, limit=None),)))
+        self.assertEqual(result.why, 'A daily, zero or unbilled quota was exhausted (HTTP 429, RESOURCE_EXHAUSTED): '
+                                     'every request would be refused until an operator acts.')
+        unreadable = ('0', 0, '00', '', ' 5', '5 ', '+5', '-5', -5, '1.5', 1.5, 5.0, '1e3', 'five', '٥', True,
+                      False, [5], {'value': 5}, str(2 ** 63), 2 ** 63)
+        for limit in (None, *unreadable):
+            with self.subTest(limit=limit):
+                found = violation(PER_MINUTE, limit=None)
+                found.update({} if limit is None else {'quotaValue': limit})
+                raw = error_body(429, 'RESOURCE_EXHAUSTED', quota_failure(found))
+                self.assertKind(adapter.classify('failed', 429, raw), adapter.HOLD, adapter.QUOTA)
+        raw = error_body(429, 'RESOURCE_EXHAUSTED', quota_failure(dict(violation(PER_MINUTE), quotaValue=None)))
+        self.assertKind(adapter.classify('failed', 429, raw), adapter.HOLD, adapter.QUOTA)  # null, as a null
+        for limit in ('1', 1, '0001', str(2 ** 63 - 1), 2 ** 63 - 1):  # the controls: a stated limit above 0
+            with self.subTest(limit=limit):
+                raw = error_body(429, 'RESOURCE_EXHAUSTED', quota_failure(violation(PER_MINUTE, limit=limit)))
+                self.assertKind(adapter.classify('failed', 429, raw), adapter.FAILED)
+        # one violation whose limit is left out decides, whatever the others state
+        raw = error_body(429, 'RESOURCE_EXHAUSTED',
+                         quota_failure(violation(PER_MINUTE), violation(PER_MINUTE, limit=None)))
+        self.assertKind(adapter.classify('failed', 429, raw), adapter.HOLD, adapter.QUOTA)
+
+    def test_the_window_and_the_tier_are_read_from_the_quota_id_or_the_metric(self):
+        # P-4 classifies by quotaId or quotaMetric; a metric names its window and tier in snake_case
+        per_minute = 'generativelanguage.googleapis.com/generate_content_requests_per_minute_per_project_per_model'
+        per_day = 'generativelanguage.googleapis.com/generate_content_requests_per_day_per_project_per_model'
+        cases = (('a per-minute window named only by the metric', violation(None, metric=per_minute), adapter.FAILED, ''),
+                 ('a daily window named only by the metric', violation(None, metric=per_day), adapter.HOLD,
+                  adapter.QUOTA),
+                 ('a per-minute id with a daily metric', violation(PER_MINUTE, metric=per_day), adapter.HOLD,
+                  adapter.QUOTA),
+                 ('a daily id with a per-minute metric', violation(PER_DAY, metric=per_minute), adapter.HOLD,
+                  adapter.QUOTA),
+                 ('a free tier named with a hyphen', violation(PER_MINUTE, metric='generativelanguage.googleapis.com/'
+                                                                                  'generate_content_free-tier_requests'),
+                  adapter.HOLD, adapter.QUOTA),
+                 ('a per-minute metric with its limit left out', violation(None, metric=per_minute, limit=None),
+                  adapter.HOLD, adapter.QUOTA))
+        for label, found, kind, hold in cases:
+            with self.subTest(label):
+                raw = error_body(429, 'RESOURCE_EXHAUSTED', quota_failure(found), retry_info('9s'))
+                self.assertKind(adapter.classify('failed', 429, raw), kind, hold)
+
     def test_a_daily_zero_unbilled_or_unnamed_quota_is_a_hold(self):
+        control = error_body(429, 'RESOURCE_EXHAUSTED', quota_failure(violation(PER_MINUTE)), retry_info('60s'))
+        self.assertKind(adapter.classify('failed', 429, control), adapter.FAILED)  # each case below differs by its label
         cases = {'a daily quota': [violation(PER_DAY)],
                  'a daily quota among per-minute ones': [violation(PER_MINUTE), violation(PER_DAY),
                                                          violation(PER_MINUTE)],
-                 'a limit of 0 (string)': [violation(PER_MINUTE, quotaValue='0')],
-                 'a limit of 0 (number)': [violation(PER_MINUTE, quotaValue=0)],
+                 'a limit of 0, left out as Google leaves it out': [violation(PER_MINUTE, limit=None)],
+                 'a limit of 0 (string)': [violation(PER_MINUTE, limit='0')],
+                 'a limit of 0 (number)': [violation(PER_MINUTE, limit=0)],
                  'a free-tier quota': [violation(PER_MINUTE + '-FreeTier')],
                  'a free-tier metric': [violation(PER_MINUTE,
                                                   metric='generativelanguage.googleapis.com/'

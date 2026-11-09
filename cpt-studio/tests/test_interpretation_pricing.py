@@ -1,8 +1,9 @@
 """The interpreter's cost estimate (Gemini migration slice S06; design/FINAL.md 3.2): gemini-4-argon's Standard-tier rates,
 read 2026-11-09 - $2.00 per million input tokens and $10.00 per million output tokens, thinking included, through
 2026-11-30, and $4.00 and $20.00 from 2026-12-01 - priced at the rate of the day the request was sent, from the
-usageMetadata the response reported, in Decimal; no estimate rather than a guessed one. The participants' estimates are
-unchanged (tests/test_participants_pricing.py, run beside this). Pure; no I/O."""
+usageMetadata the response reported, in Decimal; prompt tokens served from a cache (Google's implicit caching reports
+them without being asked) priced at the full input rate, a stated upper bound; no estimate rather than a guessed one.
+The participants' estimates are unchanged (tests/test_participants_pricing.py, run beside this). Pure; no I/O."""
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
@@ -14,7 +15,8 @@ from studio import interpretation
 from studio.participants import pricing
 
 GEMINI = 'gemini-4-argon'
-BASIS = 'estimated from published rates as of 2026-11-09; not reconciled to an invoice'
+BASIS = ('estimated from published rates as of 2026-11-09; prompt tokens served from a cache are priced at the full '
+         'input rate, so an estimate that reports any is an upper bound; not reconciled to an invoice')
 TRIAL_DAY = date(2026, 11, 9)
 # gemini-trial REPORT.md section D: the seven answers of 2026-11-09, (input tokens, output tokens, the report's estimate
 # rounded to a ten-thousandth of a dollar). No thinking tokens were reported.
@@ -45,6 +47,7 @@ class GeminiPricingTests(SimpleTestCase):
     def test_the_rates_are_the_published_ones_read_2026_11_09(self):
         self.assertEqual(pricing.GEMINI, interpretation.MODEL)
         self.assertEqual(pricing.GEMINI_RATES_AS_OF, '2026-11-09')
+        self.assertEqual(pricing.GEMINI_BASIS, BASIS)
         self.assertEqual(pricing.GEMINI_PERIODS, (
             (None, date(2026, 11, 30), {'input': Decimal('2.00'), 'output': Decimal('10.00')}),
             (date(2026, 12, 1), None, {'input': Decimal('4.00'), 'output': Decimal('20.00')})))
@@ -67,7 +70,7 @@ class GeminiPricingTests(SimpleTestCase):
         self.assertEqual(result['rates'], {
             'model': GEMINI, 'as_of': '2026-11-09', 'usd_per_million_tokens': {'input': '2.00', 'output': '10.00'},
             'priced_tokens': {'input': 5355, 'output': 9183}, 'priced_on': '2026-11-09', 'effective': 'through 2026-11-30',
-            'source': pricing.GEMINI_SOURCE, 'thinking_tokens': 0})
+            'source': pricing.GEMINI_SOURCE, 'thinking_tokens': 0, 'cached_tokens': 0})
 
     def test_thinking_is_priced_as_output(self):
         result = pricing.estimate(GEMINI, usage(1000, 500, thoughts=1500), on=TRIAL_DAY)
@@ -113,7 +116,10 @@ class GeminiPricingTests(SimpleTestCase):
                  'input as a float': usage(10.0, 5), 'a boolean': usage(10, True),
                  'negative': usage(-1, 5), 'beyond any answer': usage(10 ** 15, 5),
                  'thinking as text': {'promptTokenCount': 10, 'candidatesTokenCount': 5, 'thoughtsTokenCount': '3'},
-                 'cached content': usage(10, 5, cachedContentTokenCount=4),
+                 'more cached tokens than the prompt holds': usage(10, 5, cachedContentTokenCount=11),
+                 'cached tokens as text': usage(10, 5, cachedContentTokenCount='4'),
+                 'cached tokens negative': usage(10, 5, cachedContentTokenCount=-1),
+                 'cached tokens as a float': usage(10, 5, cachedContentTokenCount=4.0),
                  'tool-use prompt': usage(10, 5, toolUsePromptTokenCount=4),
                  'a total that does not add up': dict(usage(10, 5), totalTokenCount=16),
                  'a total that leaves thinking unpriced': dict(usage(10, 5), totalTokenCount=1015),
@@ -123,6 +129,34 @@ class GeminiPricingTests(SimpleTestCase):
             with self.subTest(label):
                 self.assertIsNone(pricing.estimate(GEMINI, reported, on=TRIAL_DAY))
         self.assertIsNotNone(pricing.estimate(GEMINI, {'promptTokenCount': 10}, on=TRIAL_DAY))  # control
+
+    def test_prompt_tokens_served_from_a_cache_are_priced_at_the_full_input_rate_an_upper_bound(self):
+        # Google's implicit caching may serve the prefix every request repeats (the instructions and the schema) from a
+        # cache without being asked; promptTokenCount already includes those tokens. No cached-input rate is recorded,
+        # so they are priced at the input rate, and the estimate says how many there were.
+        reported = {'promptTokenCount': 8000, 'cachedContentTokenCount': 4096, 'candidatesTokenCount': 3000,
+                    'totalTokenCount': 11000, 'promptTokensDetails': [{'modality': 'TEXT', 'tokenCount': 8000}],
+                    'cacheTokensDetails': [{'modality': 'TEXT', 'tokenCount': 4096}]}
+        day = date(2026, 11, 20)
+        result = pricing.estimate(GEMINI, reported, on=day)
+        self.assertIsNotNone(result)
+        self.assertEqual(result['estimated_usd'], '0.046000')  # 8,000 x $2 + 3,000 x $10, per million
+        self.assertEqual((result['rates']['priced_tokens'], result['rates']['cached_tokens'], result['basis']),
+                         ({'input': 8000, 'output': 3000}, 4096, BASIS))
+        uncached = {key: value for key, value in reported.items()
+                    if key not in ('cachedContentTokenCount', 'cacheTokensDetails')}
+        plain = pricing.estimate(GEMINI, uncached, on=day)
+        self.assertEqual(result, {**plain, 'rates': {**plain['rates'], 'cached_tokens': 4096}})  # only the count differs
+        # a prompt served whole from the cache (the same request sent again), at the rate of its day
+        whole = dict(usage(5000, 1000), cachedContentTokenCount=5000)
+        self.assertEqual(self.usd(whole, on=date(2026, 12, 2)), '0.040000')  # 5,000 x $4 + 1,000 x $20, per million
+        # a loop adds the cached tokens up, as it adds the thinking tokens
+        loop = pricing.estimate_loop(GEMINI, [reported, whole, usage(100, 10)], on=day)
+        self.assertEqual((loop['estimated_usd'], loop['rates']['cached_tokens'], loop['rates']['priced_tokens'],
+                          loop['basis']),
+                         ('0.066300', 9096, {'input': 13100, 'output': 4010}, BASIS))
+        # tool-use prompt tokens stay unpriced: no tool is offered, and no rate is recorded for them
+        self.assertIsNone(pricing.estimate(GEMINI, dict(reported, toolUsePromptTokenCount=1), on=day))
 
     def test_only_this_model_is_priced_at_these_rates(self):
         reported = usage(1000, 100)

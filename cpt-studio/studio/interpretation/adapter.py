@@ -422,6 +422,8 @@ MAX_VIOLATIONS = 20  # recorded on the hold; the run keeps the whole body
 _STATUS = re.compile(r'[A-Z][A-Z_]{0,39}')  # fits InterpreterHold.vendor_status
 _REASON = re.compile(r'[A-Z][A-Z0-9_]{0,63}')
 _DELAY = re.compile(r'[0-9]{1,12}(?:\.[0-9]{1,9})?s')  # a google.protobuf.Duration in JSON: "7824s", "1.5s"
+_LIMIT = re.compile(r'[0-9]{1,19}')  # an int64 in JSON: ASCII digits, no sign, space or exponent
+_INT64_MAX = 2 ** 63 - 1
 
 
 @dataclass(frozen=True)
@@ -452,11 +454,12 @@ def classify(outcome: str, http_status, response_bytes) -> Optional[Classificati
     'failed' (a non-200, its body kept): by the error body's ErrorInfo reasons, then its error.status, then the HTTP
     status (P-3): API_KEY_INVALID, API_KEY_EXPIRED, UNAUTHENTICATED or 401 is a HOLD (auth); BILLING_DISABLED a HOLD
     (quota); API_KEY_SERVICE_BLOCKED, SERVICE_DISABLED, PERMISSION_DENIED, FAILED_PRECONDITION or 403 a HOLD
-    (permission). Then a 429, or RESOURCE_EXHAUSTED, by its QuotaFailure violations (P-4): FAILED, with RetryInfo kept,
-    only when there are none or every one is a per-minute quota above zero on a paid tier; any daily quota, a limit of
-    0, a free-tier quota (gemini-4-argon has none: billing is not enabled) or a window the violation does not name is a
-    HOLD (quota). Everything else - a 400 INVALID_ARGUMENT with none of those names, a 404, a 5xx, an unread redirect,
-    a body that is not JSON - is FAILED."""
+    (permission). Then a 429, or RESOURCE_EXHAUSTED, by its QuotaFailure violations' quotaId or quotaMetric (P-4):
+    FAILED, with RetryInfo kept, only when there are none or every one is a per-minute quota on a paid tier stating a
+    limit above 0; any daily quota, a limit of 0 - which Google's JSON states by leaving quotaValue out - or one left
+    out or unreadable, a free-tier quota (gemini-4-argon has none: billing is not enabled) or a window the violation
+    does not name is a HOLD (quota). Everything else - a 400 INVALID_ARGUMENT with none of those names, a 404, a 5xx, an
+    unread redirect, a body that is not JSON - is FAILED."""
     if outcome == 'succeeded':
         status = http_status if isinstance(http_status, int) and not isinstance(http_status, bool) else None
         _, code, why = _envelope(response_bytes)
@@ -544,15 +547,29 @@ def _error(raw) -> dict:
 
 def _rate_only(violation: dict) -> bool:
     """Whether a QuotaFailure violation refuses only this attempt (P-4): a per-minute quota, on a paid tier, whose limit
-    is not 0. A daily quota, a limit of 0, a free-tier quota (the model has none: billing is not enabled) or a window the
-    violation does not name is not."""
+    is stated and above 0. A daily quota, a free-tier quota (the model has none: billing is not enabled), a window the
+    violation does not name, or a limit that is 0, left out or unreadable is not. The window and the tier are read from
+    quotaId and quotaMetric alike, without '_' and '-' (a metric names them in snake_case: 'per_minute', 'free_tier')."""
     quota_id, metric = violation.get('quotaId'), violation.get('quotaMetric')
     names = ' '.join(value for value in (quota_id, metric) if isinstance(value, str)).lower()
-    if 'perday' in names or 'perminute' not in names:
+    names = names.replace('_', '').replace('-', '')
+    if 'perday' in names or 'perminute' not in names or 'freetier' in names:
         return False
-    if 'freetier' in names or 'free_tier' in names:
-        return False
-    return violation.get('quotaValue') not in (0, '0')
+    return _stated_limit(violation.get('quotaValue')) > 0
+
+
+def _stated_limit(value) -> int:
+    """A violation's quotaValue as the whole number it states, or 0. It is an int64 (google.rpc.QuotaFailure.Violation
+    quota_value, a plain proto3 scalar), so Google's JSON gives it as a string of digits ("1000") and leaves it out when
+    it is 0: the trial's recorded 429 says "limit: 0" four times, and none of its violations has a quotaValue. A missing,
+    null, signed, fractional, boolean or out-of-range value states no limit above 0."""
+    if type(value) is int:
+        number = value
+    elif isinstance(value, str) and _LIMIT.fullmatch(value):
+        number = int(value)
+    else:
+        return 0
+    return number if 0 < number <= _INT64_MAX else 0
 
 
 # --- the configured interpreter -----------------------------------------------------------------------------------------
