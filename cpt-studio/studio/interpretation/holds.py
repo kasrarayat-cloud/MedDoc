@@ -36,10 +36,16 @@ There is no automatic retry and no fallback, and never the legacy reader (D11).
 THE HOLD (FINAL 11.2). While one stands, or the interpreter mode is 'disabled' (D11 refined: treated like a hold), no
 Gemini request is built for sending: each interpret stage records a not-sent run with scope.held = HELD_HOLD or
 HELD_DISABLED (``paused_reason``) and ends CANCELLED, and the encounter reads stopped with the paused phase and
-PAUSED_MESSAGE. It is installation-wide (it names no workspace) and append-only: an InterpreterHold row stands until an
-InterpreterHoldRelease names it. A run sets at most one hold, so settling a run twice never sets a second one. An
-operator - an active account holding an operator grant no revocation ended - releases every standing hold with
-``manage.py interpreter_hold --release`` and a recorded note; members then Resume.
+PAUSED_MESSAGE. The hold is installation-wide (it names no workspace) and append-only: an InterpreterHold row stands until
+an InterpreterHoldRelease names it. One ANSWER sets at most one hold, whichever run carries it: settling a run twice, or a
+reuse of it (jobs' reuse doors copy the answer and send nothing), never sets a second one, and a run that was not sent
+sets none. An operator - an active account holding an operator grant no revocation ended - releases every standing hold
+with ``manage.py interpreter_hold --release`` and a recorded note; members then Resume.
+
+TWO SCOPES. A hold is stored, so every process sees the same holds. The mode is a setting of each PROCESS
+(settings.GEMINI_MODE): the worker's decides for the worker, and a one-shot runs with the interpreter disabled unless it is
+given a mode (FINAL 13), so what a one-shot reads of its own mode says nothing of the worker's. ``state`` names the two
+apart, and the installer reads the worker's configured mode from the worker itself.
 """
 from __future__ import annotations
 
@@ -48,6 +54,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 
 from studio import interpretation
 from studio.interpretation import adapter
@@ -159,20 +166,27 @@ def _refusal_why(refused) -> str:
 
 # --- the hold --------------------------------------------------------------------------------------------------------------
 
-def record(run, outcome: Outcome) -> InterpreterHold:
-    """The hold ``outcome`` (a HOLD) sets, recorded against ``run``, the interpretation run whose answer set it, with what
-    adapter.classify read from the answer: the reason, the HTTP status, the vendor status and the violations (P-3, P-4),
-    unchanged. A run sets at most one hold: settling it again - a stale sweep, a second worker - returns the hold it
-    already set, released or not, and never sets another. Concurrent settlements of one run are serialized on the run's
-    row."""
+def record(run, outcome: Outcome) -> Optional[InterpreterHold]:
+    """The hold ``outcome`` (a HOLD) sets for the ANSWER ``run`` carries, with what adapter.classify read from it: the
+    reason, the HTTP status, the vendor status and the violations (P-3, P-4), unchanged, recorded against the run that
+    was sent. One answer sets at most one hold, whichever run carries it:
+    - settling a run again (a stale sweep, a second worker) returns the hold its answer already set, released or not;
+    - a reuse (jobs' reuse doors: nothing sent, the earlier run's bytes copied, reused_from that run) carries its
+      origin's answer, so it returns the hold that answer set, released or not, and never sets another: an operator's
+      release of a hold is not undone by re-reading the answer that set it;
+    - a run that was not sent sets no hold of its own (it paid nothing; the answer's hold, if any, was its origin's), and
+      returns None when its origin set none.
+    Concurrent settlements of one answer are serialized on the origin run's row."""
     if outcome.effect != HOLD:
         raise ValueError('Only a hold outcome records a hold.')
     _check_run(run)
+    origin = run.reused_from_id or run.pk
     verdict = outcome.verdict
     with transaction.atomic():
-        ProviderRun.objects.select_for_update().filter(pk=run.pk).exists()
-        existing = InterpreterHold.objects.filter(run_id=run.pk).order_by('created_at', 'pk').first()
-        if existing is not None:
+        ProviderRun.objects.select_for_update().filter(pk=origin).exists()
+        existing = (InterpreterHold.objects.filter(Q(run_id=origin) | Q(run__reused_from_id=origin))
+                    .order_by('created_at', 'pk').first())
+        if existing is not None or not run.sent:
             return existing
         return InterpreterHold.objects.create(
             reason=verdict.hold, http_status=verdict.http_status, vendor_status=verdict.vendor_status,
@@ -180,9 +194,15 @@ def record(run, outcome: Outcome) -> InterpreterHold:
 
 
 def settle(run, *, inventory=None) -> tuple:
-    """(outcome, hold): classify_run(run), and the hold it records when it is one (None otherwise)."""
+    """(outcome, hold): classify_run(run), and the STANDING hold its answer set - None when the outcome is not a hold,
+    when that hold was released, or for an unsent copy of an answer whose origin set none. A HOLD outcome with no
+    standing hold is still an answer that is never read (P-5: a substituted model), so the caller must not read it; only
+    the installation is not paused by it any more."""
     outcome = classify_run(run, inventory=inventory)
-    return outcome, (record(run, outcome) if outcome.effect == HOLD else None)
+    if outcome.effect != HOLD:
+        return outcome, None
+    hold = record(run, outcome)
+    return outcome, (hold if hold is not None and not _has_release(hold) else None)
 
 
 def active():
@@ -200,16 +220,18 @@ def is_held() -> bool:
 
 
 def mode() -> str:
-    """The configured interpreter mode (settings.GEMINI_MODE, validated when the settings load); 'disabled' when none is
-    configured."""
+    """THIS PROCESS's configured interpreter mode (settings.GEMINI_MODE, validated when the settings load); 'disabled'
+    when none is configured. Never the installation's: each process has its own, and a one-shot's is 'disabled' unless
+    it is given one."""
     from django.conf import settings
 
     return getattr(settings, 'GEMINI_MODE', DISABLED) or DISABLED
 
 
 def paused_reason() -> Optional[str]:
-    """Why an interpret stage may build no request now (FINAL 6.3 step 3; 11.2): HELD_DISABLED when the mode is
-    'disabled', HELD_HOLD while a hold stands, else None."""
+    """Why an interpret stage run in THIS process may build no request now (FINAL 6.3 step 3; 11.2): HELD_DISABLED when
+    this process's mode is 'disabled', HELD_HOLD while a hold stands (installation-wide), else None. The worker asks it
+    for its own stages."""
     if mode() == DISABLED:
         return HELD_DISABLED
     if is_held():
@@ -268,11 +290,16 @@ def _has_release(hold) -> bool:
 
 
 def state() -> dict:
-    """The installation's interpreter state now, for the operator: the mode, whether an interpret stage is paused and
-    why, the paused message, and every standing hold."""
-    paused = paused_reason()
-    return {'mode': mode(), 'paused': paused, 'message': PAUSED_MESSAGE if paused else '',
-            'standing': [as_json(hold) for hold in active().select_related('run')]}
+    """The interpreter state for the operator, in its two scopes, named apart:
+    - INSTALLATION-WIDE (stored rows, the same in every process): 'held', whether a hold stands, and 'standing', every
+      standing hold;
+    - THIS PROCESS only: 'process_mode', its own settings.GEMINI_MODE, and 'process_paused', why an interpret stage run
+      here would build no request (paused_reason), with the paused message. A one-shot's mode is not the worker's."""
+    standing = [as_json(hold) for hold in active().select_related('run')]
+    process_mode = mode()
+    paused = HELD_DISABLED if process_mode == DISABLED else HELD_HOLD if standing else None
+    return {'held': bool(standing), 'standing': standing, 'process_mode': process_mode, 'process_paused': paused,
+            'message': PAUSED_MESSAGE if paused else ''}
 
 
 def describe(hold: InterpreterHold) -> str:

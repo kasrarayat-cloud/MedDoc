@@ -35,17 +35,22 @@ without executing it.
 TEST MODE (call_checks, strict; FINAL 10.2 and R-3): CALL events on every code object, counting - when the calling code is
 the app's own - a re.Pattern method given a denied pattern as its first argument, a bound method of a denied pattern, one
 of the re module's functions given a denied pattern, the lru_cache wrapper of a denied function, and a denied pattern's
-bound method passed as a first argument: the C-level reads PY_START cannot see. A denied pattern is one held in a denied
-module's globals that no other loaded production module holds too (re's own cache returns one object for one source, so
-the same regex compiled by new code is that code's pattern as much as the legacy one's). checks.py, itself a legacy
-module, never exempts a pattern by holding it.
+bound method passed as a first argument: the C-level reads PY_START cannot see. The denied patterns (denied_patterns) are
+every compiled pattern a denied module's globals hold, and checks.py's split as its functions are (R-5): a pattern global
+the allowed closure names (CHECKS_ALLOWED_PATTERNS) is allowed, every other one (CHECKS_DENIED_PATTERNS, the denied
+readers' keyword vocabularies) is denied. Only a pinned pattern is exempt (EXEMPT_PATTERNS): one that is not the legacy
+reader's, though a denied module holds it - the re-homed predicates' pattern, and a regex new code compiles from the same
+source, which re's cache can return as the one object. Holding a legacy pattern exempts nothing, so a module that imports
+one leaves it denied, and a new exemption is a deliberate edit of the pin (the test fails on any production regex equal to
+a denied one whose original is not pinned: twins).
 
 SCOPES AND LABELS (FINAL 10.3): ``scope`` opens a new_path, legacy_record or other scope; ``relabel`` changes the label
 for one row of a reader; outside any scope an execution counts as unscoped. WRITE GATES (``gate``) refuse - CPT Studio's
 sentence, and an AuditEvent 'sentinel.tripped' naming the entry points and the counts - when this process's sentinel is not
 installed and proven, when no scope armed by it is open, when a callback failed in the scope, or when the scope (with its
-enclosing scopes) counted a new_path execution. Reads (``observe``) record and never refuse. The D22 record of a new-path
-assessment is ``record``.
+enclosing scopes) counted a new_path execution. Reads (``observe``) never refuse and record what a write would refuse:
+once per scope for the scope's own reason, and once per PROCESS when this process's sentinel is not installed and proven
+(FINAL 10.2: "The web records it. The D22 report shows it."). The D22 record of a new-path assessment is ``record``.
 
 FAIL-CLOSED. Whatever keeps the deny set from being computed exactly as pinned, the tool from being acquired, or the
 positive control from firing leaves the sentinel failed, with the reason (status). The failure stands for the process -
@@ -154,6 +159,31 @@ CHECKS_DENIED = (
     'uncertain_reason', 'uncited_label', 'unlisted_codes', 'unlisted_codes_check', 'unproposed_check',
     'unsupported_check',
 )
+# checks.py's compiled patterns, split as its functions are (R-5), by the global that holds them: ALLOWED when a function
+# of the allowed closure or an allowlisted constant names it (LOAD_GLOBAL), DENIED otherwise - the keyword vocabularies of
+# the denied _V2_ and _VAL_ readers (and one no function names), as legacy as a gi pattern. Test mode denies their reads.
+CHECKS_ALLOWED_PATTERNS = ('SCOPE_FORMATS',)
+CHECKS_DENIED_PATTERNS = (
+    '_ACT_STATED', '_V2_ACT_END', '_V2_AUX', '_V2_BLEEDING', '_V2_CLASS_NEEDS', '_V2_CLASS_WORD', '_V2_CUT',
+    '_V2_DENIAL_WORDS', '_V2_DENIED_PARTICIPLE', '_V2_DOUBT_WORDS', '_V2_HEDGE', '_V2_IN_LEAD', '_V2_IT',
+    '_V2_LEAD_CLAUSE', '_V2_LEAD_WORD', '_V2_LIST_MARK', '_V2_MEDICATION', '_V2_MODAL', '_V2_N3', '_V2_NOT_ATTR',
+    '_V2_NOUN_REFERENCE', '_V2_NO_REPEAT', '_V2_OTHER_EXAM', '_V2_PROCEDURE_STEP', '_V2_PRONOUN', '_V2_SCOPES',
+    '_V2_SIBLING', '_V2_SOFT', '_V2_SUBJECT', '_V2_TIME_WORD', '_V2_WORD', '_VAL_ACT_VERB', '_VAL_ANY_OWN',
+    '_VAL_INTRO', '_VAL_INTRO_ELSEWHEN', '_VAL_LIST_MARKER', '_VAL_NAME_LEAD', '_VAL_OBJECT', '_VAL_ONE_PROCEDURE',
+    '_VAL_OWN_PROCEDURES', '_VAL_REFERENCE', '_VAL_RELATIVE_BEFORE', '_VAL_SERVICE_NOUNS', '_VAL_SIBLING',
+    '_VAL_TEMPORAL_LEAD',
+)
+# The only denied-module patterns test mode does not deny, each with why it is not the legacy reader's (by any location a
+# denied module holds it under). Holding a pattern exempts nothing: a new exemption is an edit here, and the test fails on
+# any production regex whose source and flags are a denied one's (twins) unless its original is pinned here.
+EXEMPT_PATTERNS = {
+    'studio.gi.context._CHARGE_NOTE_OWN': 'the re-homed stored-fact predicates\' own pattern: studio.context_facts '
+                                          'compiles it and gi.context imports it back (S04)',
+    'studio.candidates._ISO_DATE': 'a bare ISO date shape that new code compiles from the same source; re\'s cache can '
+                                   'return the one object to both',
+    'studio.gi.context.MONTH_YEAR': 'a month-and-year date literal that studio.interpretation.literals compiles from the '
+                                    'same source (EB1 reads date literals); re\'s cache can return the one object to both',
+}
 # Denied code objects per file (a nested function, lambda or generator expression is its own code object), measured on
 # Python 3.12 (the image's and CI's): a different interpreter compiles a different number of code objects, and the
 # install then refuses rather than guess.
@@ -221,6 +251,10 @@ class _State:
         self.wrappers = {}  # id(wrapper) -> the lru_cache wrapper of a denied function
         self.checks = {}  # the checks split, by name
         self.errors = 0  # callback failures in this process
+        # a read in a process that cannot count says so once (FINAL 10.2): logged, and recorded on the first read that
+        # names an encounter (an AuditEvent needs its workspace)
+        self.unavailable_logged = False
+        self.unavailable_recorded = False
 
 
 _STATE = _State()
@@ -230,7 +264,7 @@ _TOTALS = {label: {} for label in LABELS}  # the process's counts: closed outerm
 _UNSCOPED = _TOTALS[UNSCOPED]
 _NAMES = {}  # id -> a readable name ('studio/gi/detect.py:120 route', 'studio.gi.cues.PAGE_NUMBER_LINE')
 _KINDS = {}  # id -> CODE, REGEX or CACHE
-_CALLS = {'depth': 0, 'shared': {}}
+_CALLS = {'depth': 0, 'exempt': {}}
 _PATTERNS = frozenset()  # test mode: ids of the denied patterns
 _WRAPPERS = frozenset()  # test mode: ids of the denied cache wrappers
 _RE_FUNCTIONS = frozenset({re.search, re.match, re.fullmatch, re.finditer, re.findall, re.sub, re.subn, re.split})
@@ -241,7 +275,7 @@ _BOUND = frozenset({type(len), type(re.compile('').search)})
 _LRU_WRAPPER = functools._lru_cache_wrapper
 STUDIO_DIR = Path(__file__).resolve().parent.parent  # the studio package
 _APP_PREFIX = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) + os.sep
-HOLDERS = frozenset({'studio', 'cptstudio'})  # the packages whose modules may hold a pattern a denied module holds too
+HOLDERS = frozenset({'studio', 'cptstudio'})  # the production packages twins() reads (never a test's)
 
 
 def _after_fork_in_child():
@@ -661,16 +695,23 @@ def _reaching(graph: dict, targets) -> set:
     return _closure(callers, targets)
 
 
-def checks_split(module=None, codes=None) -> dict:
-    """The checks.py split (R-5; FINAL 10.1(3)), computed from the module's code: {'allowed', 'helpers', 'denied',
-    'importers', 'reaching', 'named'} by function name, and 'codes', the denied code objects by id. Raises _Refused when
-    the allowlist names a function the module lacks or reaches a function 10.1(3) denies."""
-    module = module or sys.modules[CHECKS_MODULE]
-    if codes is None:
-        codes = _live_codes({module.__file__}, [module])[module.__file__]
+def _checks_graph(module) -> tuple:
+    """(top functions by name, their code trees by name, the call graph by name) of checks.py, from its own code."""
     top = _top_functions(module)
     trees = {name: _tree(fn.__code__, {}) for name, fn in top.items()}
     graph = {name: (_global_refs(tree) & top.keys()) - {name} for name, tree in trees.items()}
+    return top, trees, graph
+
+
+def checks_split(module=None, codes=None) -> dict:
+    """The checks.py split (R-5; FINAL 10.1(3)), computed from the module's code: {'allowed', 'helpers', 'denied',
+    'importers', 'reaching', 'named'} by function name; {'patterns_allowed', 'patterns_denied'}, its pattern globals
+    split the same way (checks_patterns); and 'codes', the denied code objects by id. Raises _Refused when the allowlist
+    names a function the module lacks or reaches a function 10.1(3) denies."""
+    module = module or sys.modules[CHECKS_MODULE]
+    if codes is None:
+        codes = _live_codes({module.__file__}, [module])[module.__file__]
+    top, trees, graph = _checks_graph(module)
     package = module.__name__.rpartition('.')[0]
     importers = {name for name, tree in trees.items()
                  if any(_legacy_import(found, fromlist) for found, fromlist in _imports(tree, package))}
@@ -691,7 +732,26 @@ def checks_split(module=None, codes=None) -> dict:
     return {'allowed': sorted(allowed), 'helpers': sorted(allowed - set(CHECKS_ALLOWLIST)),
             'denied': sorted(set(top) - allowed), 'importers': sorted(importers),
             'reaching': sorted(reaching - importers), 'named': sorted(CHECKS_NAMED_READERS),
+            **_split_patterns(module, trees, allowed),
             'codes': {key: code for key, code in codes.items() if key not in allowed_ids}}
+
+
+def checks_patterns(module=None) -> dict:
+    """R-5 applied to checks.py's compiled patterns (FINAL 10.2's CALL checks): {'patterns_allowed', 'patterns_denied'},
+    its pattern globals by name. A global is allowed when a function of the allowed closure, or an allowlisted constant,
+    names it (LOAD_GLOBAL); every other one is denied - the keyword vocabularies of the denied _V2_ and _VAL_ readers."""
+    module = module or sys.modules[CHECKS_MODULE]
+    top, trees, graph = _checks_graph(module)
+    return _split_patterns(module, trees, _closure(graph, [name for name in CHECKS_ALLOWLIST if name in top]))
+
+
+def _split_patterns(module, trees: dict, allowed) -> dict:
+    named = set(CHECKS_ALLOWLIST_CONSTANTS)
+    for name in allowed:
+        named |= _global_refs(trees[name])
+    held = _pattern_globals(module)
+    return {'patterns_allowed': sorted(name for name in held if name in named),
+            'patterns_denied': sorted(name for name in held if name not in named)}
 
 
 def _compute():
@@ -724,7 +784,8 @@ def _check_pins(sizes: dict, checks: dict):
                   if sizes.get(key) != PINNED_SIZES.get(key)}
         raise _Refused(f'the deny set differs from its pins (computed, pinned): {differ}')
     for field, pinned in (('denied', CHECKS_DENIED), ('helpers', CHECKS_ALLOWED_HELPERS),
-                          ('importers', CHECKS_GI_IMPORTERS)):
+                          ('importers', CHECKS_GI_IMPORTERS), ('patterns_denied', CHECKS_DENIED_PATTERNS),
+                          ('patterns_allowed', CHECKS_ALLOWED_PATTERNS)):
         if tuple(checks[field]) != tuple(sorted(pinned)):
             raise _Refused(f'the checks split differs from its pin: {field}')
 
@@ -1036,13 +1097,38 @@ def gate(entry: str, *, encounter=None, actor=None, scope_: Optional[Scope] = No
 
 
 def observe(entry: str, *, encounter=None, actor=None, scope_: Optional[Scope] = None) -> dict:
-    """A new-path READ (FINAL 10.3): never refuses, for availability; records AuditEvent 'sentinel.tripped' (refused
-    false) once per scope when the scope counted a new_path execution. Returns the scope's counts."""
+    """A new-path READ (FINAL 10.3): never refuses, for availability, and records AuditEvent 'sentinel.tripped' (refused
+    false) for what a write in its place would be refused for:
+    - this process's sentinel is not installed and proven ('unavailable', with the install's reason): once per PROCESS,
+      whatever the scope, so a process that cannot count is on record - in the D22 report, where 'no sentinel trip'
+      then fails - before any write of its trips a gate (FINAL 10.2: "The web records it. The D22 report shows it.");
+    - otherwise the scope's own reason ('executed', 'instrument', or 'unavailable' for a scope opened before the
+      install): once per scope. A read outside any scope records nothing more.
+    Returns the scope's counts."""
     scope_ = scope_ if scope_ is not None else current()
-    if scope_ is not None and refusal(scope_) == 'executed' and not scope_.reported:
-        scope_.reported = True
-        _audit(encounter, actor, _trip(entry, 'executed', scope_, refused=False))
+    if not _STATE.installed or not _intact():
+        _unavailable_read(entry, encounter, actor, scope_)
+    elif scope_ is not None and not scope_.reported:
+        reason = refusal(scope_)
+        if reason is not None:
+            scope_.reported = True
+            _audit(encounter, actor, _trip(entry, reason, scope_, refused=False))
     return scope_.counts() if scope_ is not None else {}
+
+
+def _unavailable_read(entry: str, encounter, actor, scope_: Optional[Scope]):
+    """A read in a process whose sentinel cannot count: logged once, and recorded once, on the first read that names an
+    encounter."""
+    with _LOCK:
+        if _STATE.unavailable_recorded or (encounter is None and _STATE.unavailable_logged):
+            return
+        _STATE.unavailable_logged = True
+        _STATE.unavailable_recorded = encounter is not None
+    try:
+        _audit(encounter, actor, _trip(entry, 'unavailable', scope_, refused=False))
+    except Exception:
+        _STATE.unavailable_recorded = False  # not recorded: the next read that names an encounter records it
+        raise
 
 
 def _trip(entry: str, reason: str, scope_: Optional[Scope], *, refused: bool) -> dict:
@@ -1093,12 +1179,12 @@ def call_checks():
     with _LOCK:
         _CALLS['depth'] += 1
         if _CALLS['depth'] == 1:
-            patterns, shared = denied_patterns()
+            patterns, exempt = denied_patterns()
             for key, (pattern, where) in patterns.items():
                 _NAMES[key] = where
                 _KINDS[key] = REGEX
             _PATTERNS, _WRAPPERS = frozenset(patterns), frozenset(_STATE.wrappers)
-            _CALLS['shared'] = {key: where for key, where in shared.items()}  # names only: no pattern object is kept
+            _CALLS['exempt'] = {key: where for key, (where, _) in exempt.items()}  # names only: no pattern is kept
             monitoring.register_callback(TOOL_ID, monitoring.events.CALL, _on_call)
             monitoring.set_events(TOOL_ID, monitoring.events.CALL)
     try:
@@ -1124,50 +1210,105 @@ def strict(entry: str = 'strict'):
 
 
 def denied_patterns() -> tuple:
-    """({id: (pattern, where)} of the compiled patterns held in the denied modules' globals - in a container, a class of
-    the module or an instance of one - that no other loaded PRODUCTION module holds too; and {id: (where, held by)} of
-    those one does, which are not denied. Only the application's own packages (HOLDERS) count as holders, never this
-    module (whose state lists what it denies), never checks.py (a legacy module itself, denied by function) and never a
-    test: a test that imports a legacy pattern must not thereby exempt it."""
-    mine = {}
+    """({id: (pattern, where)} of the denied patterns; {id: (where, why)} of the pinned exemptions). Denied: every
+    compiled pattern a denied module's globals hold - directly, in a container, a class of the module or an instance of
+    one - and every pattern of checks.py's denied globals (checks_patterns), but never one its allowed globals hold too
+    (code_scope reads SCOPE_FORMATS on the new path). Exempt: a pattern any of whose denied locations EXEMPT_PATTERNS
+    names, and nothing else - whichever module holds a pattern, it stays denied, so a module that imports a legacy
+    pattern cannot exempt it, and a new exemption is a deliberate edit of the pin."""
+    found = _denied_locations()
+    exempt = {}
+    for key, (pattern, wheres) in list(found.items()):
+        pinned = [where for where in wheres if where in EXEMPT_PATTERNS]
+        if pinned:
+            exempt[key] = (pinned[0], EXEMPT_PATTERNS[pinned[0]])
+            del found[key]
+    return {key: (pattern, wheres[0]) for key, (pattern, wheres) in found.items()}, exempt
+
+
+def _denied_locations() -> dict:
+    """{id: (pattern, [every location a denied module or a denied checks global holds it under])}, before exemptions."""
+    found = {}
+
+    def add(pattern, where):
+        found.setdefault(id(pattern), (pattern, []))[1].append(where)
+
     for name in DENY_MODULES:
-        for key, (pattern, where) in _patterns_of(sys.modules[name]).items():
-            mine.setdefault(key, (pattern, where))
-    shared = {}
-    for name, module in list(sys.modules.items()):
-        if (name in DENY_MODULES or name in (__name__, CHECKS_MODULE) or module is None
-                or name.partition('.')[0] not in HOLDERS):
+        for located in _pattern_globals(sys.modules[name]).values():
+            for where, pattern in located.items():
+                add(pattern, where)
+    checks = sys.modules[CHECKS_MODULE]
+    # the split the install computed and checked against its pins, else computed now (by name: it never goes stale)
+    split = _STATE.checks if 'patterns_denied' in _STATE.checks else checks_patterns(checks)
+    held = _pattern_globals(checks)
+    allowed = {id(pattern) for name in split['patterns_allowed'] for pattern in held[name].values()}
+    for name in split['patterns_denied']:
+        for where, pattern in held[name].items():
+            add(pattern, where)
+    for key in allowed:
+        found.pop(key, None)
+    return found
+
+
+def twins() -> dict:
+    """TESTS ONLY (the pin of EXEMPT_PATTERNS): {location: [denied locations]} for every compiled pattern a loaded
+    PRODUCTION module holds - the application's own packages (HOLDERS) outside the denied modules, this module and
+    checks.py's denied globals - whose source and flags are a denied pattern's: the same object or not, since re's cache
+    returns one object for one source in some import orders and not in others. A twin is either new code's own regex,
+    whose denied original EXEMPT_PATTERNS names, or a legacy pattern a module imported, which stays denied; the test
+    fails on a twin of an unpinned pattern, so neither arrives unseen."""
+    by_source = {}
+    for pattern, wheres in _denied_locations().values():
+        by_source.setdefault((pattern.pattern, pattern.flags), set()).update(wheres)
+    allowed = set(checks_patterns()['patterns_allowed'])
+    out = {}
+    for name, module in sorted(sys.modules.items()):
+        if (module is None or name.partition('.')[0] not in HOLDERS or name in DENY_MODULES
+                or name == __name__):
             continue
-        for key, (_, where) in _patterns_of(module).items():
-            if key in mine:
-                shared.setdefault(key, (mine[key][1], where))
-    return {key: value for key, value in mine.items() if key not in shared}, shared
+        for held, located in _pattern_globals(module).items():
+            if name == CHECKS_MODULE and held not in allowed:
+                continue
+            for where, pattern in located.items():
+                original = by_source.get((pattern.pattern, pattern.flags))
+                if original:
+                    out[where] = sorted(original)
+    return out
 
 
-def _patterns_of(module) -> dict:
-    found, seen, owner = {}, set(), module.__name__
+def _pattern_globals(module) -> dict:
+    """{global name: {location: pattern}}: every compiled pattern the module's globals hold - directly, in a container,
+    in a class defined in the module or in an instance of one - under the global that holds it (an object held twice is
+    listed at each location)."""
+    out, owner = {}, module.__name__
 
-    def visit(value, where, depth):
-        if depth > 6 or id(value) in seen:
+    def visit(value, where, depth, seen, into):
+        if depth > 6:
+            return
+        if isinstance(value, re.Pattern):
+            into.setdefault(where, value)
+            return
+        if id(value) in seen:
             return
         seen.add(id(value))
-        if isinstance(value, re.Pattern):
-            found.setdefault(id(value), (value, where))
-        elif isinstance(value, (tuple, list, set, frozenset)):
+        if isinstance(value, (tuple, list, set, frozenset)):
             for at, item in enumerate(value):
-                visit(item, f'{where}[{at}]', depth + 1)
+                visit(item, f'{where}[{at}]', depth + 1, seen, into)
         elif isinstance(value, dict):
             for key, item in list(value.items()):
-                visit(item, f'{where}[{key!r}]', depth + 1)
+                visit(item, f'{where}[{key!r}]', depth + 1, seen, into)
         elif isinstance(value, type):
             if value.__module__ == owner:
                 for key, item in list(vars(value).items()):
-                    visit(item, f'{where}.{key}', depth + 1)
+                    visit(item, f'{where}.{key}', depth + 1, seen, into)
         elif type(value).__module__ == owner and hasattr(value, '__dict__'):
             for key, item in list(vars(value).items()):
-                visit(item, f'{where}.{key}', depth + 1)
+                visit(item, f'{where}.{key}', depth + 1, seen, into)
 
     for key, value in list(vars(module).items()):
         if not isinstance(value, types.ModuleType):
-            visit(value, f'{owner}.{key}', 0)
-    return found
+            located = {}
+            visit(value, f'{owner}.{key}', 0, set(), located)
+            if located:
+                out[key] = located
+    return out

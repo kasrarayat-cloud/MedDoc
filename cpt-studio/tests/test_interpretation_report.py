@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import sys
 import time
 from datetime import datetime, timezone as dt_timezone
 from decimal import Decimal
@@ -283,10 +284,15 @@ class WindowTests(TestCase):
                          {'total': 4, 'new_path': 3, 'legacy_engine': 1, 'without_inventory': 1,
                           'without_sentinel_record': 1, 'legacy_calls': 2, 'with_legacy_calls': 1})
         self.assertEqual(assessments['off_pins'], 0)
+        # the record problems, read as record_problems reads them, without the legacy-call count (checked apart): only
+        # the bare new-path assessment has one
+        self.assertEqual((assessments['with_record_problems'], assessments['record_problems']),
+                         (1, {'The assessment carries no interpretation record.': 1}))
         self.assertEqual((assessments['deny_sizes'], assessments['positive_controls'], assessments['tools']),
                          ({'2548': 2}, {'ok': 2}, {'sys.monitoring': 2}))
         self.assertEqual(found['trips'], {'total': 2, 'refused': 1, 'recorded': 1, 'by_reason': {'executed': 2},
-                                          'by_entry': {'persist_assessment': 1, 'review view': 1}})
+                                          'by_entry': {'persist_assessment': 1, 'review view': 1},
+                                          'unavailable': {'total': 0, 'refused': 0, 'recorded': 0, 'install': {}}})
         self.assertEqual({key: found['sentinel'][key] for key in ('state', 'deny_size', 'positive_control', 'tool')},
                          {'state': 'ok', 'deny_size': 2548, 'positive_control': 'ok', 'tool': 'sys.monitoring'})
         self.assertEqual(set(found['sentinel']['totals']), set(sentinel.LABELS))
@@ -295,8 +301,10 @@ class WindowTests(TestCase):
         self.assertEqual(hold['set'], {'auth': 1, 'quota': 1})
         self.assertEqual(hold['released'], [{'id': str(self.release.pk), 'hold': str(self.release.hold_id),
                                              'by': 'synthetic-operator', 'at': self.release.created_at.isoformat()}])
+        self.assertEqual((hold['held'], hold['process_mode'], hold['process_paused']),
+                         (True, 'disabled', holds.HELD_DISABLED))
         self.assertEqual(found['interpreter'], {
-            'mode': 'disabled', 'model': 'gemini-4-argon', 'provider': 'gemini',
+            'process_mode': 'disabled', 'model': 'gemini-4-argon', 'provider': 'gemini',
             'adapter_version': 'gemini-generate@cptstudio-1', 'interpretation_version': 'gemini-events@1',
             'inventory_version': 'gemini-inventory@1', 'engine_version': 'cpt-studio-events@1'})
         json.dumps(found)
@@ -322,6 +330,79 @@ class WindowTests(TestCase):
         clean = report.self_test(report.window(timezone.now()))
         self.assertTrue(clean['passed'], clean)
         self.assertEqual(tuple(item['name'] for item in clean['checks']), report.SELF_TEST)
+        self.assertNotIn('interpreter mode', report.SELF_TEST)  # a one-shot's mode is its own, never checked as the worker's
+
+    def test_the_model_constant_is_checked_against_d13s_literal(self):
+        # interpretation.MODEL, adapter.MODEL and adapter.ENDPOINT are one value: comparing them with each other passes
+        # whatever the model is
+        from studio.interpretation import adapter
+
+        clean = {item['name']: item for item in report.self_test(report.window(timezone.now()))['checks']}
+        self.assertTrue(clean['model constant']['ok'], clean['model constant'])
+        self.assertEqual((report.D13_MODEL, report.FINAL_ENDPOINT),
+                         ('gemini-4-argon',
+                          'https://generativelanguage.googleapis.com/v1beta/models/gemini-4-argon:generateContent'))
+        changed = 'gemini-4-argon-preview'  # the reviewer's case: the constant edited in interpretation/__init__.py
+        with mock.patch.object(interpretation, 'MODEL', changed), mock.patch.object(adapter, 'MODEL', changed), \
+                mock.patch.object(adapter, 'ENDPOINT', adapter.ENDPOINT.replace('gemini-4-argon', changed)):
+            test = report.self_test(report.window(timezone.now()))
+        check = {item['name']: item for item in test['checks']}['model constant']
+        self.assertFalse(check['ok'])
+        self.assertFalse(test['passed'])
+        self.assertIn('D13 says gemini-4-argon', check['detail'])
+        with mock.patch.object(adapter, 'ENDPOINT', adapter.ENDPOINT.replace('v1beta', 'v1')):  # the endpoint alone
+            self.assertFalse({item['name']: item for item in report.self_test(report.window(timezone.now()))['checks']}
+                             ['model constant']['ok'])
+
+    def test_a_record_that_names_another_inventory_fails_the_self_test(self):
+        # the reviewer's case: a complete, on-pin sentinel record and an inventory on the assessment, but the record
+        # names another inventory and run than the one the assessment was made from
+        since = timezone.now()
+        _, inventory, _ = self.rows.new_path()
+        other = self.rows.inventory(self.rows.run(usage=USAGE))
+        context = self.rows.context(other)
+        record = report.interpretation_record(inventory=other, context=context, member_date_state='supplies',
+                                              sentinel_record=dict(CLEAN))
+        wrong = self.rows.assessment(context=context, inventory=inventory, record=record)
+        self.assertEqual(report.record_problems(wrong), ['The record names another inventory than the assessment does.'])
+        found = report.window(since)
+        self.assertEqual({key: found['assessments'][key] for key in ('new_path', 'without_inventory',
+                                                                      'without_sentinel_record', 'off_pins',
+                                                                      'with_record_problems')},
+                         {'new_path': 2, 'without_inventory': 0, 'without_sentinel_record': 0, 'off_pins': 0,
+                          'with_record_problems': 1})
+        test = report.self_test(found)
+        self.assertEqual([item['name'] for item in test['checks'] if not item['ok']],
+                         ['every new-path assessment carries its record'])
+        self.assertIn('The record names another inventory than the assessment does. x1',
+                      dict(line.split(': ', 1) for line in report.render(found))['new-path records with problems'])
+
+    def test_a_process_that_could_not_count_is_shown_and_fails_the_self_test(self):
+        # FINAL 10.2: a web process whose sentinel failed records it on its first read naming an encounter; the
+        # installer's one-shot, whose own sentinel installs cleanly, must then not pass
+        since = timezone.now()
+        sentinel.uninstall()
+        sys.monitoring.use_tool_id(4, 'synthetic-debugger')
+        try:
+            with self.assertLogs(sentinel.log, 'ERROR'):
+                self.assertEqual(sentinel.install()['state'], 'failed')
+                with sentinel.scope(sentinel.NEW_PATH, entry='GET /api/encounters/x'):
+                    sentinel.observe('review view', encounter=self.rows.enc)
+        finally:
+            sys.monitoring.free_tool_id(4)
+        sentinel.uninstall()  # the one-shot is another process: its own sentinel installs
+        self.assertEqual(sentinel.install()['state'], 'ok')
+        found = report.window(since)
+        self.assertEqual(found['trips']['unavailable'],
+                         {'total': 1, 'refused': 0, 'recorded': 1,
+                          'install': {"sys.monitoring tool 4 is held by 'synthetic-debugger'": 1}})
+        test = report.self_test(found)
+        self.assertEqual([item['name'] for item in test['checks'] if not item['ok']], ['no sentinel trip'])
+        lines = dict(line.split(': ', 1) for line in report.render(found, test))
+        self.assertTrue(lines['sentinel unavailable in a process'].startswith(
+            '1 recorded by a process whose sentinel could not count (0 refused writes, 1 reads); sys.monitoring tool 4 '
+            'is held by \'synthetic-debugger\' x1'), lines['sentinel unavailable in a process'])
+        self.assertTrue(lines['sentinel install'].startswith('ok;'))  # the one-shot's own sentinel
 
 
 class CommandTests(TestCase):
@@ -352,8 +433,11 @@ class CommandTests(TestCase):
         self.assertEqual(lines['sentinel positive control'], 'ok')
         self.assertTrue(lines['sentinel install'].startswith('ok; sys.monitoring tool 4 (cpt-studio-sentinel)'))
         self.assertEqual(lines['new-path assessments'], '1')
+        self.assertEqual(lines['new-path records with problems'], '0')
         self.assertIn('0 over 1 new-path assessments', lines['sentinel legacy calls recorded'])
-        self.assertEqual(lines['interpreter hold'], 'none standing')
+        self.assertTrue(lines['sentinel unavailable in a process'].startswith('0 recorded'))
+        self.assertEqual(lines['interpreter hold'], 'none standing; installation-wide')
+        self.assertTrue(lines['interpreter mode (this process)'].startswith('disabled; this process\'s own setting'))
         self.assertNotIn('self-test', text)
 
     def test_json_carries_the_same_report(self):
@@ -394,14 +478,20 @@ class CommandTests(TestCase):
         found = report.window(datetime(2026, 1, 1, tzinfo=dt_timezone.utc))
         self.assertEqual(found['assessments']['off_pins'], 3)
 
-    def test_the_mode_the_installer_expects_is_checked(self):
-        with self.assertRaises(CommandError) as failed:
+    def test_the_mode_printed_is_this_processs_own_and_never_checked_as_the_installations(self):
+        # FINAL 13: a one-shot runs with the interpreter disabled unless it is given a mode, so checking its own mode
+        # either fails every correct install or passes whatever mode the worker runs with
+        self.rows.new_path()
+        for mode in ('disabled', 'live'):
+            with self.subTest(mode=mode), override_settings(GEMINI_MODE=mode):
+                text = self.run_command('--since', '2026-01-01T00:00:00Z', '--self-test')
+                self.assertIn(f'interpreter mode (this process): {mode}; this process\'s own setting - a one-shot runs '
+                              'with the interpreter disabled unless it is given a mode', text)
+                self.assertNotIn('self-test interpreter mode', text)
+                self.assertTrue(text.rstrip().endswith('self-test: PASSED'))
+        with self.assertRaises(CommandError) as refused:  # the option that checked the one-shot's own setting is gone
             self.run_command('--since', '2026-01-01T00:00:00Z', '--self-test', '--expect-mode', 'live')
-        self.assertIn('interpreter mode', str(failed.exception))
-        with override_settings(GEMINI_MODE='live'):
-            text = self.run_command('--since', '2026-01-01T00:00:00Z', '--self-test', '--expect-mode', 'live')
-        self.assertIn('self-test interpreter mode: PASS (live, expected live)', text)
-        self.assertIn('interpreter mode: live\n', text)
+        self.assertIn('unrecognized arguments: --expect-mode live', str(refused.exception))
 
     def test_a_failed_sentinel_fails_the_self_test(self):
         sentinel.uninstall()  # installed()'s cleanup restores the process
@@ -423,8 +513,7 @@ class CommandTests(TestCase):
         for args, expected in ((('--since', '2026-11-09T09:00:00'), 'with its offset'),
                                (('--since', 'yesterday'), 'with its offset'),
                                (('--since', '2026-11-09T09:00:00Z', '--until', '2026-11-09T08:00:00Z'),
-                                'ends after it starts'),
-                               (('--since', '2026-11-09T09:00:00Z', '--expect-mode', 'live'), 'goes with --self-test')):
+                                'ends after it starts')):
             with self.subTest(args=args):
                 with self.assertRaises(CommandError) as refused:
                     self.run_command(*args)

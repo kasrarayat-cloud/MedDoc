@@ -8,22 +8,26 @@ both interpretation versions, the inventory id and its sha256, the Gemini run, t
 sentinel's record ({legacy_calls, scope, tool, deny_size, positive_control}, sentinel.record). One builder, so the writer
 (persist_assessment) and the readers here agree on one shape.
 
-THE WINDOW REPORT (D22; ``window``) states, for [since, until): the interpreter mode and the model constant; the Gemini
-runs by state, by the model asked for and the model that answered, the paused ones, their usage as reported and their
-estimated cost (participants.pricing's dated rates; an estimate, never an invoice); the event inventories by state; the
-assessments by engine version, the legacy-engine ones among them, and the new-path ones that lack an inventory or a
-sentinel record; the legacy calls the new-path records count; the sentinel's recorded trips (AuditEvent
-'sentinel.tripped'); this process's sentinel (install state, deny-set size against its pin, the positive control, its
-counters, among them the residual legacy execution on legacy rows); and the interpreter hold (standing, set and released
-in the window). Every field is in D22_FIELDS, and ``render`` prints each one.
+THE WINDOW REPORT (D22; ``window``) states, for [since, until): the model constant and this process's interpreter mode;
+the Gemini runs by state, by the model asked for and the model that answered, the paused ones, their usage as reported
+and their estimated cost (participants.pricing's dated rates; an estimate, never an invoice); the event inventories by
+state; the assessments by engine version, the legacy-engine ones among them, the new-path ones that lack an inventory or
+a sentinel record, and every problem record_problems finds in a new-path record; the legacy calls the new-path records
+count; the sentinel's recorded trips (AuditEvent 'sentinel.tripped'), among them the processes that recorded they could
+not count; this process's sentinel (install state, deny-set size against its pin, the positive control, its counters,
+among them the residual legacy execution on legacy rows); and the interpreter hold (standing, set and released in the
+window). Every field is in D22_FIELDS, and ``render`` prints each one.
 
 THE SELF-TEST (FINAL 13; ``self_test``) is the installer's verify one-shot: the sentinel installed in this process with the
-deny set as pinned, the positive control ok and tripping, the model constant, zero new_path executions recorded, zero
-sentinel trips, zero legacy-engine assessments in the window (the installer gives --since the new worker's start,
-ADJUDICATION P-7), and - when one is expected - the interpreter mode. The hold state is reported beside it.
+deny set as pinned, the positive control ok and tripping, the model constant equal to D13's literal, zero new_path
+executions recorded, every new-path record without a problem, zero sentinel trips, and zero legacy-engine assessments in
+the window (the installer gives --since the new worker's start, ADJUDICATION P-7). The hold state is reported beside it.
 
-Counts are read from stored rows; a sentinel's counters live in each process's memory, so a one-shot reports its own
-beside what the web and the worker recorded on their rows.
+WHAT A ONE-SHOT CAN SEE. Counts, trips and holds are stored rows, the same from every process. The interpreter mode and a
+sentinel's counters belong to each process: the report prints its own, labelled 'this process', and checks neither as the
+installation's. A one-shot runs with the interpreter disabled unless it is given a mode (FINAL 13), so the installer reads
+the worker's configured mode from the worker itself; a web or worker process that could not count records that on its
+first read or write (sentinel.observe, sentinel.gate), and the trips show it here.
 """
 from __future__ import annotations
 
@@ -48,7 +52,7 @@ USAGE_KEYS = ('promptTokenCount', 'candidatesTokenCount', 'thoughtsTokenCount', 
 # Every field of the window report, in the order ``render`` prints them (each is printed once, with its value).
 D22_FIELDS = (
     'window',
-    'interpreter mode',
+    'interpreter mode (this process)',
     'model',
     'gemini runs',
     'gemini runs by state',
@@ -64,8 +68,10 @@ D22_FIELDS = (
     'new-path assessments without an inventory',
     'new-path assessments without a sentinel record',
     'new-path records off their pins',
+    'new-path records with problems',
     'sentinel legacy calls recorded',
     'sentinel trips',
+    'sentinel unavailable in a process',
     'sentinel install',
     'sentinel deny-set size',
     'sentinel positive control',
@@ -77,7 +83,12 @@ D22_FIELDS = (
 )
 SELF_TEST = ('sentinel installed', 'deny set as pinned', 'positive control', 'positive control trips', 'model constant',
              'no new-path legacy execution recorded', 'every new-path assessment carries its record',
-             'no sentinel trip', 'no legacy-engine assessment', 'interpreter mode')
+             'no sentinel trip', 'no legacy-engine assessment')
+# The model constant as D13 and FINAL 5.4 state it, written out: the self-test compares the code's constants with these,
+# never with each other (interpretation.MODEL, adapter.MODEL and adapter.ENDPOINT are one value).
+D13_MODEL = 'gemini-4-argon'
+FINAL_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-4-argon:generateContent'
+MAX_PROBLEMS = 10  # distinct record problems the report names (the count is complete)
 
 
 # --- the record (FINAL 4.2) -------------------------------------------------------------------------------------------------
@@ -110,11 +121,24 @@ def interpretation_record(*, inventory, context, member_date_state, sentinel_rec
             'sentinel': {key: sentinel_record[key] for key in SENTINEL_KEYS}}
 
 
-def record_problems(assessment) -> list:
+_STORED = ('sha256', 'provider_run_id', 'interpretation_version', 'inventory_version')
+
+
+def record_problems(assessment, *, calls: bool = True) -> list:
     """What is wrong with a new-path assessment's stored record, in CPT Studio's words ([] when nothing is): a missing or
     misshapen record, one that disagrees with the assessment's own inventory, run or context, or a sentinel record that
-    counts legacy executions, names another tool or deny set, or a positive control that did not pass."""
-    record = assessment.interpretation
+    counts legacy executions (unless ``calls`` is False: the D22 self-test checks those apart), names another tool or
+    deny set, or a positive control that did not pass."""
+    stored = None
+    if assessment.event_inventory_id is not None:
+        stored = EventInventory.objects.filter(pk=assessment.event_inventory_id).values(*_STORED).first()
+    return _record_problems(assessment.interpretation, assessment.event_inventory_id, assessment.context_id, stored,
+                            calls=calls)
+
+
+def _record_problems(record, event_inventory_id, context_id, stored: Optional[dict], *, calls: bool) -> list:
+    """record_problems over stored values: the record, the assessment's inventory and context ids, and that inventory's
+    stored _STORED values (None when it is not stored)."""
     if not isinstance(record, dict):
         return ['The assessment carries no interpretation record.']
     problems = []
@@ -122,34 +146,34 @@ def record_problems(assessment) -> list:
     if missing:
         problems.append(f'The interpretation record lacks {", ".join(missing)}.')
     inventory = record.get('inventory') if isinstance(record.get('inventory'), dict) else {}
-    if assessment.event_inventory_id is None:
+    if event_inventory_id is None:
         problems.append('The assessment names no event inventory.')
-    elif inventory.get('id') != str(assessment.event_inventory_id):
+    elif inventory.get('id') != str(event_inventory_id):
         problems.append('The record names another inventory than the assessment does.')
-    else:
-        stored = EventInventory.objects.filter(pk=assessment.event_inventory_id).values(
-            'sha256', 'provider_run_id', 'interpretation_version', 'inventory_version').first()
-        if stored is None or stored['sha256'] != inventory.get('sha256'):
-            problems.append('The record\'s inventory sha256 is not the stored inventory\'s.')
-        elif record.get('gemini_run') != str(stored['provider_run_id']):
-            problems.append('The record names another run than the inventory was read from.')
-        elif (record.get('interpretation_version'), record.get('inventory_version')) != (
-                stored['interpretation_version'], stored['inventory_version']):
-            problems.append('The record\'s versions are not the inventory\'s.')
-    if record.get('context') != str(assessment.context_id):
+    elif stored is None or stored['sha256'] != inventory.get('sha256'):
+        problems.append('The record\'s inventory sha256 is not the stored inventory\'s.')
+    elif record.get('gemini_run') != str(stored['provider_run_id']):
+        problems.append('The record names another run than the inventory was read from.')
+    elif (record.get('interpretation_version'), record.get('inventory_version')) != (
+            stored['interpretation_version'], stored['inventory_version']):
+        problems.append('The record\'s versions are not the inventory\'s.')
+    if record.get('context') != str(context_id):
         problems.append('The record names another context than the assessment does.')
-    problems += sentinel_problems(record.get('sentinel'))
+    problems += sentinel_problems(record.get('sentinel'), calls=calls)
     return problems
 
 
-def sentinel_problems(found) -> list:
-    """What a recorded sentinel record says is wrong ([] when nothing is)."""
+def sentinel_problems(found, *, calls: bool = True) -> list:
+    """What a recorded sentinel record says is wrong ([] when nothing is). ``calls``: whether a counted legacy execution
+    is one (a count that is not a count always is)."""
     if not isinstance(found, dict) or tuple(sorted(found)) != tuple(sorted(SENTINEL_KEYS)):
         return ['The assessment carries no sentinel record.']
     problems = []
-    calls = found['legacy_calls']
-    if type(calls) is not int or calls != 0:
-        problems.append(f'The sentinel counted {calls} legacy executions while the assessment was made.')
+    counted = found['legacy_calls']
+    if type(counted) is not int or counted < 0:
+        problems.append(f'The sentinel record counts legacy executions as {counted!r}, which is not a count.')
+    elif calls and counted != 0:
+        problems.append(f'The sentinel counted {counted} legacy executions while the assessment was made.')
     if found['tool'] != sentinel.TOOL:
         problems.append('The sentinel record names another tool.')
     if found['deny_size'] != sentinel.DENY_SIZE:
@@ -225,7 +249,8 @@ def window(since: datetime, until: Optional[datetime] = None) -> dict:
     _check_window(since, until)
     span = {'created_at__gte': since, 'created_at__lt': until}
     return {'window': {'since': since.isoformat(), 'until': until.isoformat()},
-            'interpreter': {'mode': holds.mode(), 'model': interpretation.MODEL, 'provider': interpretation.PROVIDER,
+            'interpreter': {'process_mode': holds.mode(), 'model': interpretation.MODEL,
+                            'provider': interpretation.PROVIDER,
                             'adapter_version': interpretation.ADAPTER_VERSION,
                             'interpretation_version': interpretation.INTERPRETATION_VERSION,
                             'inventory_version': interpretation.INVENTORY_VERSION,
@@ -293,7 +318,8 @@ def _pricing_basis() -> str:
 
 
 def _assessments(span: dict) -> dict:
-    rows = list(Assessment.objects.filter(**span).values('engine_version', 'event_inventory_id', 'interpretation'))
+    rows = list(Assessment.objects.filter(**span).values('engine_version', 'event_inventory_id', 'context_id',
+                                                         'interpretation'))
     new = [row for row in rows if _is_new(row['engine_version'])]
     records = [row['interpretation'].get('sentinel') if isinstance(row['interpretation'], dict) else None
                for row in new]
@@ -301,12 +327,23 @@ def _assessments(span: dict) -> dict:
     calls = sum(found['legacy_calls'] for found in complete)
     off_pins = sum(1 for found in complete if (found['tool'], found['deny_size'], found['positive_control'])
                    != (sentinel.TOOL, sentinel.DENY_SIZE, 'ok'))
+    # every new-path record read as record_problems reads one, without its legacy-call count (checked apart)
+    ids = {row['event_inventory_id'] for row in new if row['event_inventory_id'] is not None}
+    stored = {row['id']: row for row in EventInventory.objects.filter(pk__in=ids).values('id', *_STORED)}
+    problems, with_problems = Counter(), 0
+    for row in new:
+        found = _record_problems(row['interpretation'], row['event_inventory_id'], row['context_id'],
+                                 stored.get(row['event_inventory_id']), calls=False)
+        with_problems += bool(found)
+        problems.update(found)
     return {'total': len(rows),
             'by_engine_version': dict(sorted(Counter(row['engine_version'] for row in rows).items())),
             'new_path': len(new), 'legacy_engine': len(rows) - len(new),
             'without_inventory': sum(1 for row in new if row['event_inventory_id'] is None),
             'without_sentinel_record': len(new) - len(complete),
             'off_pins': off_pins,
+            'with_record_problems': with_problems,
+            'record_problems': dict(problems.most_common(MAX_PROBLEMS)),
             'legacy_calls': calls,
             'with_legacy_calls': sum(1 for found in complete if found['legacy_calls'] != 0),
             'deny_sizes': dict(sorted(Counter(str(found['deny_size']) for found in complete).items())),
@@ -337,22 +374,34 @@ class _Engine:
 def _trips(span: dict) -> dict:
     rows = [data if isinstance(data, dict) else {} for data in
             AuditEvent.objects.filter(event=sentinel.TRIPPED, **span).values_list('data', flat=True)]
+    # FINAL 10.2: a process that could not count records it (a refused write, or once per process on a read)
+    unavailable = [data for data in rows if data.get('reason') == 'unavailable']
     return {'total': len(rows), 'refused': sum(1 for data in rows if data.get('refused') is True),
             'recorded': sum(1 for data in rows if data.get('refused') is not True),
             'by_reason': dict(sorted(Counter(str(data.get('reason', '')) for data in rows).items())),
-            'by_entry': dict(sorted(Counter(str(data.get('entry', '')) for data in rows).items()))}
+            'by_entry': dict(sorted(Counter(str(data.get('entry', '')) for data in rows).items())),
+            'unavailable': {'total': len(unavailable),
+                            'refused': sum(1 for data in unavailable if data.get('refused') is True),
+                            'recorded': sum(1 for data in unavailable if data.get('refused') is not True),
+                            'install': dict(sorted(Counter(str(data.get('install', '')) for data in unavailable)
+                                                   .items()))}}
 
 
 # --- the self-test (FINAL 13) --------------------------------------------------------------------------------------------
 
-def self_test(report: dict, *, expect_mode: Optional[str] = None) -> dict:
+def self_test(report: dict) -> dict:
     """The installer's verify checks over a window report from this process (``window``): {'passed', 'checks': [{name,
-    ok, detail}]}, one per SELF_TEST name. 'interpreter mode' passes when no mode is expected."""
+    ok, detail}]}, one per SELF_TEST name. Nothing here checks the interpreter mode: a one-shot's is its own, never the
+    worker's, so the installer reads the worker's configured mode from the worker."""
     found = report['sentinel']
     assessments, trips = report['assessments'], report['trips']
     trip = sentinel.trip_test()
     from studio.interpretation import adapter
 
+    constants = {'interpretation.MODEL': interpretation.MODEL, 'adapter.MODEL': adapter.MODEL,
+                 'adapter.ENDPOINT': adapter.ENDPOINT}
+    expected = {'interpretation.MODEL': D13_MODEL, 'adapter.MODEL': D13_MODEL, 'adapter.ENDPOINT': FINAL_ENDPOINT}
+    wrong = [name for name, value in constants.items() if value != expected[name]]
     checks = [
         ('sentinel installed', found['state'] == 'ok', found['reason'] or found['state']),
         ('deny set as pinned', found['deny_size'] == sentinel.DENY_SIZE and found['sizes'] == sentinel.PINNED_SIZES,
@@ -362,20 +411,18 @@ def self_test(report: dict, *, expect_mode: Optional[str] = None) -> dict:
          f'a probe execution in a new_path scope was counted {trip["counted"]} time(s) and '
          f'{"refused" if trip["tripped"] else "NOT refused"}; a clean scope was '
          f'{"not refused" if trip["clean"] else "REFUSED"}'),
-        ('model constant', interpretation.MODEL == adapter.MODEL and adapter.ENDPOINT.endswith(
-            f'/models/{interpretation.MODEL}:generateContent'), interpretation.MODEL),
+        ('model constant', not wrong,
+         f'{interpretation.MODEL}, D13 says {D13_MODEL}' + (f'; {", ".join(wrong)} differ' if wrong else '')),
         ('no new-path legacy execution recorded', assessments['legacy_calls'] == 0,
          f'{assessments["legacy_calls"]} legacy executions over {assessments["new_path"]} new-path assessments'),
-        ('every new-path assessment carries its record',
-         assessments['without_inventory'] == 0 and assessments['without_sentinel_record'] == 0
-         and assessments['off_pins'] == 0,
-         f'{assessments["without_inventory"]} without an inventory, {assessments["without_sentinel_record"]} without '
-         f'a sentinel record, {assessments["off_pins"]} off their pins'),
-        ('no sentinel trip', trips['total'] == 0, f'{trips["total"]} recorded'),
+        ('every new-path assessment carries its record', assessments['with_record_problems'] == 0,
+         f'{assessments["with_record_problems"]} of {assessments["new_path"]} with a problem in their record '
+         f'({assessments["without_inventory"]} without an inventory, {assessments["without_sentinel_record"]} without '
+         f'a sentinel record, {assessments["off_pins"]} off their pins)'),
+        ('no sentinel trip', trips['total'] == 0,
+         f'{trips["total"]} recorded, {trips["unavailable"]["total"]} of them a process that could not count'),
         ('no legacy-engine assessment', assessments['legacy_engine'] == 0,
          f'{assessments["legacy_engine"]} in the window'),
-        ('interpreter mode', expect_mode is None or report['interpreter']['mode'] == expect_mode,
-         f'{report["interpreter"]["mode"]}' + (f', expected {expect_mode}' if expect_mode else '')),
     ]
     return {'passed': all(ok for _, ok, _ in checks),
             'checks': [{'name': name, 'ok': bool(ok), 'detail': detail} for name, ok, detail in checks]}
@@ -386,10 +433,12 @@ def self_test(report: dict, *, expect_mode: Optional[str] = None) -> dict:
 def render(report: dict, test: Optional[dict] = None) -> list:
     """The report (and the self-test) as text lines, one 'field: value' line per D22 field, in D22_FIELDS' order."""
     runs, assessments, found, hold = report['gemini_runs'], report['assessments'], report['sentinel'], report['hold']
-    standing = hold['standing']
+    standing, unavailable = hold['standing'], report['trips']['unavailable']
     values = {
         'window': f'{report["window"]["since"]} to {report["window"]["until"]}',
-        'interpreter mode': report['interpreter']['mode'] + (f' (paused: {hold["paused"]})' if hold['paused'] else ''),
+        'interpreter mode (this process)': (f'{report["interpreter"]["process_mode"]}; this process\'s own setting - a '
+                                            'one-shot runs with the interpreter disabled unless it is given a mode, '
+                                            'and the worker\'s own setting decides for the worker'),
         'model': f'{report["interpreter"]["model"]} (asked by URL; an answer naming another is held)',
         'gemini runs': f'{runs["total"]} ({runs["sent"]} sent, {runs["reused"]} reused)',
         'gemini runs by state': _pairs(runs['by_state']),
@@ -408,6 +457,9 @@ def render(report: dict, test: Optional[dict] = None) -> list:
         'new-path assessments without a sentinel record': str(assessments['without_sentinel_record']),
         'new-path records off their pins': (f'{assessments["off_pins"]} (another tool, deny set or a positive control '
                                             'that had not passed)'),
+        'new-path records with problems': (f'{assessments["with_record_problems"]}' + (
+            ' (' + '; '.join(f'{sentence} x{n}' for sentence, n in assessments['record_problems'].items()) + ')'
+            if assessments['record_problems'] else '')),
         'sentinel legacy calls recorded': (f'{assessments["legacy_calls"]} over {assessments["new_path"]} new-path '
                                            f'assessments ({assessments["with_legacy_calls"]} with any); deny sizes '
                                            f'{_pairs(assessments["deny_sizes"])}; positive controls '
@@ -416,6 +468,10 @@ def render(report: dict, test: Optional[dict] = None) -> list:
         'sentinel trips': (f'{report["trips"]["total"]} ({report["trips"]["refused"]} refused writes, '
                            f'{report["trips"]["recorded"]} recorded reads); by reason {_pairs(report["trips"]["by_reason"])}'
                            f'; by entry {_pairs(report["trips"]["by_entry"])}'),
+        'sentinel unavailable in a process': (
+            f'{unavailable["total"]} recorded by a process whose sentinel could not count ({unavailable["refused"]} '
+            f'refused writes, {unavailable["recorded"]} reads); '
+            + ('; '.join(f'{reason} x{n}' for reason, n in unavailable['install'].items()) or 'none')),
         'sentinel install': (f'{found["state"]}' + (f' ({found["reason"]})' if found['reason'] else '')
                              + f'; {found["tool"]} tool {found["tool_id"]} ({found["tool_name"]}); Python '
                                f'{found["python"]}; this process'),
@@ -424,9 +480,9 @@ def render(report: dict, test: Optional[dict] = None) -> list:
         'sentinel positive control': found['positive_control'],
         'sentinel totals': _pairs(found['totals']) + '; this process',
         'sentinel residual legacy execution': ('; '.join(found['residual']) or 'none') + '; this process',
-        'interpreter hold': ('; '.join(f'{item["reason"]} set {item["set_at"]} by run {item["run"]} (HTTP '
-                                       f'{item["http_status"]}, {item["vendor_status"] or "no vendor status"})'
-                                       for item in standing) or 'none standing'),
+        'interpreter hold': (('; '.join(f'{item["reason"]} set {item["set_at"]} by run {item["run"]} (HTTP '
+                                        f'{item["http_status"]}, {item["vendor_status"] or "no vendor status"})'
+                                        for item in standing) or 'none standing') + '; installation-wide'),
         'holds set': _pairs(hold['set']),
         'hold releases': ('; '.join(f'hold {item["hold"]} by {item["by"]} at {item["at"]}' for item in hold['released'])
                           or 'none'),

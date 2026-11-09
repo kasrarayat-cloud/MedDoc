@@ -1,8 +1,9 @@
 """Show the installation-wide interpreter hold, or release it with a recorded note (design/FINAL.md 11.2; DECISIONS D11).
 
-With no option it prints the interpreter mode, whether an interpret stage would pause now and why, every standing hold
-(its reason, the HTTP and vendor status the answer carried, the run that set it) and the most recent releases; nothing
-is written.
+With no option it prints every standing hold - installation-wide, from the stored rows: its reason, the HTTP and vendor
+status the answer carried, the run that set it - and the most recent releases; nothing is written. It prints its own
+process's interpreter mode too, labelled as that: a one-shot runs with the interpreter disabled unless it is given a mode
+(FINAL 13), so its mode is not the worker's.
 
 ``--release`` ends every standing hold, each with an InterpreterHoldRelease naming the operator (``--username``: an
 active account holding an operator grant no revocation ended) and the note - given as ``--note-file`` (read from a file,
@@ -63,16 +64,17 @@ class Command(BaseCommand):
             raise CommandError(f'The note file cannot be read: {path} ({type(exc).__name__}); nothing was recorded.')
 
     def show(self):
-        found = holds.state()
-        self.stdout.write(f'interpreter mode: {found["mode"]}')
-        self.stdout.write(f'interpret stages: {"paused (" + found["paused"] + ")" if found["paused"] else "not paused"}')
         standing = list(holds.active().select_related('run'))
         if not standing:
-            self.stdout.write('interpreter hold: none standing')
+            self.stdout.write('interpreter hold (installation-wide): none standing; interpret stages are not held')
         else:
-            self.stdout.write(f'interpreter hold: {len(standing)} standing')
+            self.stdout.write(f'interpreter hold (installation-wide): {len(standing)} standing; every interpret stage '
+                              'sends nothing until an operator releases it')
             for hold in standing:
                 self.stdout.write(f'  {holds.describe(hold)}')
+        self.stdout.write(f'interpreter mode (this command\'s own process): {holds.mode()}; a one-shot runs with the '
+                          'interpreter disabled unless it is given a mode, and the worker\'s own setting decides for '
+                          'the worker')
         releases = list(models.InterpreterHoldRelease.objects.select_related('hold', 'released_by')
                         .order_by('-created_at', '-pk')[:RECENT])
         for item in releases:

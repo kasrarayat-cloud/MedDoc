@@ -12,10 +12,14 @@ What each class proves:
   relabel; nesting; the entry point names the first new-path frame past the denied ones; the denied caches are cleared
   when a new_path scope opens and when a row is relabelled new_path.
 - GateTests: the positive control trips the write gate (Tripped, an AuditEvent 'sentinel.tripped'); no scope, an unarmed
-  scope or a failed callback refuse too; a read records once and never refuses; the D22 record.
+  scope or a failed callback refuse too; a read records once per scope and never refuses, and a process that cannot
+  count records that once on a read (FINAL 10.2); the D22 record.
 - ForkTests: a forked child's counts come back with its result and join the parent's scope, even when the child raised.
 - CallCheckTests (test mode, R-3): the C-level reads PY_START cannot see - each call form of a denied pattern and a
-  denied cache hit - are counted from the app's own code, and the legacy chain records a hit in every class.
+  denied cache hit - are counted from the app's own code, and the legacy chain records a hit in every class; checks.py's
+  denied readers' keyword patterns are denied and SCOPE_FORMATS is not (R-5); only a pinned pattern is exempt, so a
+  module that imports a legacy pattern leaves it denied, and every production regex equal to a denied one is a twin of a
+  pinned pattern.
 """
 from __future__ import annotations
 
@@ -23,6 +27,7 @@ import gc
 import importlib
 import json
 import os
+import pkgutil
 import re
 import subprocess
 import sys
@@ -33,7 +38,9 @@ from unittest import mock
 from django.apps import apps
 from django.test import SimpleTestCase, TestCase
 
-from studio import bounded, context_facts, jobs
+import cptstudio
+import studio
+from studio import bounded, context_facts, jobs, progress
 from studio.gi import catalogue, context as gi_context, cues, detect, profiles, services, structure
 from studio.interpretation import sentinel
 from studio.validation import checks, engine, questions, rationale, reconcile, review_view
@@ -64,6 +71,28 @@ FINAL_7_1 = ('code_scope', 'scope_check', 'exact_evidence', 'evidence_checks', '
 FINAL_10_1_READERS = ('evidence_readings', 'routing_readings', 'resolve_status', 'required_fact_states',
                       'separate_em_statement', 'routing_check', 'status_check', 'exclusion_reason', 'uncertain_reason',
                       'performed_clarification', 'unproposed_check', 'unsupported_check', 'restated', 'cite', 'silent')
+# The only exempt patterns, named again here: a new exemption takes a deliberate edit of both
+EXEMPT = ('studio.candidates._ISO_DATE', 'studio.gi.context.MONTH_YEAR', 'studio.gi.context._CHARGE_NOTE_OWN')
+
+
+def patterns_in(value, depth=0) -> list:
+    """The compiled patterns a module global holds, directly or in a container (the test's own reading)."""
+    if isinstance(value, re.Pattern):
+        return [value]
+    if depth < 6 and isinstance(value, (tuple, list, set, frozenset)):
+        return [found for item in value for found in patterns_in(item, depth + 1)]
+    if depth < 6 and isinstance(value, dict):
+        return [found for item in value.values() for found in patterns_in(item, depth + 1)]
+    return []
+
+
+def import_production():
+    """Every module of the application's own packages, as a long-running process may load them (migrations and the
+    WSGI and ASGI entry points aside): a twin in a module nothing imported yet must still be seen."""
+    for package in (studio, cptstudio):
+        for info in pkgutil.walk_packages(package.__path__, f'{package.__name__}.'):
+            if '.migrations' not in info.name and info.name not in ('cptstudio.wsgi', 'cptstudio.asgi'):
+                importlib.import_module(info.name)
 
 
 def legacy_call():
@@ -240,6 +269,22 @@ class DenySetTests(SentinelCase):
         for name in split['denied']:
             self.assertIn(id(sentinel._unwrap(getattr(checks, name)).__code__), armed, name)
 
+    def test_the_checks_patterns_are_split_as_its_functions_are(self):
+        # R-5 applied to checks.py's compiled patterns: only what the allowed closure names is allowed
+        split = sentinel.checks_split()
+        self.assertEqual((split['patterns_allowed'], len(split['patterns_denied'])), (['SCOPE_FORMATS'], 45))
+        self.assertEqual(split['patterns_denied'], sorted(sentinel.CHECKS_DENIED_PATTERNS))
+        self.assertEqual(sentinel.checks_patterns(), {key: split[key] for key in ('patterns_allowed',
+                                                                                   'patterns_denied')})
+        held = {name for name, value in vars(checks).items() if patterns_in(value)}  # measured independently
+        self.assertEqual(held, set(split['patterns_allowed']) | set(split['patterns_denied']))
+        for name in ('_V2_DENIAL_WORDS', '_V2_DOUBT_WORDS', '_V2_HEDGE', '_V2_MODAL', '_V2_TIME_WORD',
+                     '_VAL_TEMPORAL_LEAD', '_VAL_INTRO_ELSEWHEN', '_V2_CLASS_WORD'):
+            self.assertIn(name, split['patterns_denied'])
+        top = {name: sentinel._unwrap(getattr(checks, name)) for name in split['allowed']}
+        named = set().union(*(sentinel._global_refs(sentinel._tree(fn.__code__, {})) for fn in top.values()))
+        self.assertEqual(set(split['patterns_allowed']), held & named)  # code_scope reads SCOPE_FORMATS
+
     def test_an_allowlist_that_reaches_a_reader_final_denies_is_refused(self):
         with mock.patch.object(sentinel, 'CHECKS_ALLOWLIST', sentinel.CHECKS_ALLOWLIST + ('status_check',)):
             with self.assertRaisesRegex(sentinel._Refused, 'reaches functions FINAL 10.1\\(3\\) denies'):
@@ -315,7 +360,9 @@ class InstallFailureTests(SentinelCase):
                                 (mock.patch.object(sentinel, 'CHECKS_ALLOWED_HELPERS',
                                                    sentinel.CHECKS_ALLOWED_HELPERS[1:]), 'helpers'),
                                 (mock.patch.object(sentinel, 'CHECKS_GI_IMPORTERS', sentinel.CHECKS_GI_IMPORTERS[1:]),
-                                 'importers')):
+                                 'importers'),
+                                (mock.patch.object(sentinel, 'CHECKS_DENIED_PATTERNS',
+                                                   sentinel.CHECKS_DENIED_PATTERNS[1:]), 'patterns_denied')):
             with self.subTest(expected), patch:
                 sentinel.uninstall()
                 status = self.install_failing()
@@ -571,6 +618,59 @@ class GateTests(TestCase):
         self.assertTrue(opened.reported)
         self.assertEqual(sentinel.observe('outside'), {})
 
+    def test_a_process_that_cannot_count_records_it_once_on_a_read(self):
+        # FINAL 10.2: "If tool id 4 cannot be acquired ... The web records it. The D22 report shows it." A read in such a
+        # process runs legacy code unseen (nothing is armed, so nothing is counted): the read must say so itself, once
+        # for the process, before any write of it trips a gate
+        sentinel.uninstall()
+        self.addCleanup(lambda: (sentinel.uninstall(), ensure_installed(self)))
+        sys.monitoring.use_tool_id(4, 'synthetic-debugger')
+        try:
+            with self.assertLogs(sentinel.log, 'ERROR'):
+                self.assertEqual(sentinel.install()['state'], 'failed')
+            with self.assertLogs(sentinel.log, 'ERROR') as logged:
+                with sentinel.scope(NEW, entry='GET /api/session'):
+                    legacy_call()
+                    self.assertEqual(sentinel.observe('session view'), {})  # no encounter: logged only
+            self.assertEqual(len(logged.output), 1)
+            self.assertEqual(self.trips(), [])
+            with self.assertLogs(sentinel.log, 'ERROR'):
+                with sentinel.scope(NEW, entry='GET /api/encounters/x'):
+                    legacy_call()
+                    self.assertEqual(sentinel.observe('review view', encounter=self.encounter, actor=self.user), {})
+            with self.assertNoLogs(sentinel.log, 'ERROR'):  # once per process: later reads record nothing more
+                for entry in ('GET /api/encounters/y', 'GET /api/encounters/z'):
+                    with sentinel.scope(NEW, entry=entry):
+                        legacy_call()
+                        sentinel.observe('review view', encounter=self.encounter)
+                sentinel.observe('outside any scope', encounter=self.encounter)
+        finally:
+            sys.monitoring.free_tool_id(4)
+        (event,) = self.trips()
+        self.assertEqual((event.encounter, event.actor), (self.encounter, self.user))
+        self.assertEqual({key: event.data[key] for key in ('entry', 'reason', 'refused', 'scope', 'label', 'counts')},
+                         {'entry': 'review view', 'reason': 'unavailable', 'refused': False,
+                          'scope': 'GET /api/encounters/x', 'label': NEW, 'counts': {}})
+        self.assertIn("sys.monitoring tool 4 is held by 'synthetic-debugger'", event.data['install'])
+
+    def test_a_read_records_its_scopes_own_reason_once(self):
+        # a read records what a write in its place would be refused for, not only a counted execution
+        sentinel.uninstall()
+        self.addCleanup(lambda: (sentinel.uninstall(), ensure_installed(self)))
+        with sentinel.scope(OTHER, entry='opened before the install'):
+            ensure_installed(self)
+            with self.assertLogs(sentinel.log, 'ERROR'):
+                sentinel.observe('list view', encounter=self.encounter)
+            sentinel.observe('list view', encounter=self.encounter)
+        with sentinel.scope(NEW, entry='GET /api/encounters/x'):
+            sentinel._FRAME.get().hits = None  # the next callback fails
+            legacy_call()
+            with self.assertLogs(sentinel.log, 'ERROR'):
+                sentinel.observe('review view', encounter=self.encounter)
+            sentinel.observe('review view', encounter=self.encounter)
+        self.assertEqual([(event.data['reason'], event.data['refused']) for event in self.trips()],
+                         [('unavailable', False), ('instrument', False)])
+
     def test_the_d22_record(self):
         with sentinel.scope(NEW, entry='assess') as opened:
             self.assertEqual(sentinel.record(), {'legacy_calls': 0, 'scope': 'assess', 'tool': 'sys.monitoring',
@@ -637,10 +737,10 @@ class CallCheckTests(SentinelCase):
 
     def setUp(self):
         super().setUp()
-        patterns, shared = sentinel.denied_patterns()
+        patterns, exempt = sentinel.denied_patterns()
         self.pattern = cues.PAGE_NUMBER_LINE
         self.assertIn(id(self.pattern), patterns)
-        self.shared = shared
+        self.exempt = exempt
 
     def forms(self):
         """Each form isolates one branch of the check: a method call and re.Pattern's own descriptor (the pattern as
@@ -701,13 +801,54 @@ class CallCheckTests(SentinelCase):
             self.pattern.search('page 3')
         self.assertEqual(later.counts(), {})
 
-    def test_a_pattern_another_production_module_holds_is_not_denied_but_checks_exempts_none(self):
-        held_by = {where for _, where in self.shared.values()}
-        self.assertIn('studio.context_facts._CHARGE_NOTE_OWN', held_by)  # re-homed: context_facts holds it
-        self.assertFalse([where for where in held_by if where.startswith('studio.validation.checks.')])
+    def test_only_a_pinned_pattern_is_exempt_and_holding_a_legacy_pattern_exempts_nothing(self):
+        self.assertEqual(sorted(sentinel.EXEMPT_PATTERNS), sorted(EXEMPT))
+        self.assertTrue(all(why.strip() for why in sentinel.EXEMPT_PATTERNS.values()))
+        self.assertEqual(sorted({where for where, _ in self.exempt.values()}), sorted(EXEMPT))
         patterns, _ = sentinel.denied_patterns()
-        self.assertIn(id(detect._MOTION_PREDICATE_WORD), patterns)  # checks.py holds the same object: still denied
-        self.assertIs(detect._MOTION_PREDICATE_WORD, checks._V2_CLASS_WORD)
+        self.assertNotIn(id(context_facts._CHARGE_NOTE_OWN), patterns)  # the re-homed predicates' own pattern
+        # the reviewer's case: a consumer that imports a legacy pattern (simulated on studio.progress) must not exempt
+        # it, so a new-path read of it through the consumer is still counted
+        with mock.patch.object(progress, 'PAGE_NUMBER_LINE', cues.PAGE_NUMBER_LINE, create=True):
+            patterns, exempt = sentinel.denied_patterns()
+            self.assertIn(id(cues.PAGE_NUMBER_LINE), patterns)
+            self.assertNotIn(id(cues.PAGE_NUMBER_LINE), exempt)
+            self.assertIn('studio.progress.PAGE_NUMBER_LINE', sentinel.twins())  # a twin of an unpinned pattern, which
+            # the twin test below fails on
+            with self.assertRaises(AssertionError) as caught, sentinel.strict('a consumer\'s imported pattern'):
+                progress.PAGE_NUMBER_LINE.search('page 3')
+        self.assertIn('studio.gi.cues.PAGE_NUMBER_LINE', str(caught.exception))
+
+    def test_every_production_twin_of_a_denied_pattern_is_a_twin_of_a_pinned_one(self):
+        # re's cache returns one object for one source in some import orders, so a production regex equal to a denied
+        # one is either new code's own (its original pinned in EXEMPT_PATTERNS) or a legacy pattern imported: every
+        # module is loaded first, so the answer does not depend on what this process happened to import
+        import_production()
+        found = sentinel.twins()
+        self.assertIn('studio.context_facts._CHARGE_NOTE_OWN', found)  # S04's re-homing, by identity
+        unpinned = {where: originals for where, originals in found.items() if not set(originals) <= set(EXEMPT)}
+        self.assertEqual(unpinned, {})
+        self.assertEqual({original for originals in found.values() for original in originals}, set(EXEMPT))
+
+    def test_the_checks_readers_keyword_patterns_are_denied_and_scope_formats_is_not(self):
+        # R-5: checks.py is an allowlist, and its denied readers' keyword vocabularies are as legacy as a gi pattern
+        patterns, _ = sentinel.denied_patterns()
+        denied = [pattern for name in sentinel.CHECKS_DENIED_PATTERNS for pattern in patterns_in(getattr(checks, name))]
+        self.assertGreaterEqual(len(denied), 45)
+        self.assertEqual([pattern.pattern for pattern in denied if id(pattern) not in patterns], [])
+        self.assertIn(id(detect._MOTION_PREDICATE_WORD), patterns)  # whether re's cache made it checks' or not
+        for _, pattern, _ in checks.SCOPE_FORMATS:
+            self.assertNotIn(id(pattern), patterns)
+        # re's cache could hand a denied module code_scope's own object: the allowlist still wins
+        with mock.patch.object(cues, 'PLANTED_SCOPE_FORMAT', checks.SCOPE_FORMATS[0][1], create=True):
+            self.assertNotIn(id(checks.SCOPE_FORMATS[0][1]), sentinel.denied_patterns()[0])
+        with self.assertRaises(AssertionError) as caught, sentinel.strict('a checks keyword read'):
+            checks._V2_DENIAL_WORDS.search('the snare was not used')
+        self.assertIn('studio.validation.checks._V2_DENIAL_WORDS', str(caught.exception))
+        with sentinel.strict('the allowlisted code_scope') as opened:
+            self.assertEqual(checks.code_scope('45385'), ('cpt1', ''))
+            self.assertEqual(checks.code_scope('G0121')[0], 'hcpcs')
+        self.assertEqual(opened.counts(), {})
 
     def test_the_legacy_chain_records_a_hit_in_every_class(self):
         # FINAL 10.4(3): a gi function, an engine/reconcile/review_view function, a legacy regex and a cache wrapper

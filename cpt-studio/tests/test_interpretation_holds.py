@@ -165,6 +165,17 @@ def gemini_run(enc, rev, *, state='failed', http_status=401, body=b'', provider=
         http_status=http_status, response_bytes=body, response_sha256=hashlib.sha256(body).hexdigest())
 
 
+def reused(prior):
+    """A reuse of ``prior`` as jobs' reuse doors write one (jobs._reused_participant_run): the whole run, nothing sent,
+    its bytes copied, reused_from it."""
+    return models.ProviderRun.objects.create(
+        encounter=prior.encounter, revision=prior.revision, provider=prior.provider,
+        adapter_version=prior.adapter_version, purpose=prior.purpose, request_sha256=prior.request_sha256,
+        request_body=prior.request_body, contexts=prior.contexts, state=models.ProviderRun.SUCCEEDED, sent=False,
+        http_status=prior.http_status, response_sha256=prior.response_sha256,
+        response_bytes=bytes(prior.response_bytes), usage={}, reused_from=prior)
+
+
 def an_operator(username='synthetic-operator'):
     user = f.user(username)
     operator.grant(user, 'Synthetic grant for an interpreter-hold test.', 'tests')
@@ -207,9 +218,34 @@ class HoldRecordTests(TestCase):
         _, again = holds.settle(run)
         self.assertEqual(first, again)
         holds.release(user=an_operator(), note=NOTE)
-        _, after = holds.settle(run)  # a stale sweep settling the same run again never stands a new hold
-        self.assertEqual(after, first)
+        outcome, after = holds.settle(run)  # a stale sweep settling the same run again never stands a new hold ...
+        self.assertEqual((outcome.effect, after), (holds.HOLD, None))  # ... and reports none standing
+        self.assertEqual(holds.record(run, outcome), first)  # the answer's hold, released
         self.assertEqual(models.InterpreterHold.objects.filter(run=run).count(), 1)
+        self.assertFalse(holds.is_held())
+
+    def test_one_answer_sets_one_hold_whichever_run_carries_it(self):
+        # a reuse door copies a SUCCEEDED run's answer and sends nothing; a substituted model's answer is SUCCEEDED, so
+        # every Resume that reuses it would hold the installation again with nothing sent
+        sent = gemini_run(self.enc, self.rev, state='succeeded', http_status=200, body=substituted())
+        outcome, first = holds.settle(sent)
+        self.assertEqual((outcome.effect, outcome.reason, first.run_id), (holds.HOLD, holds.MODEL, sent.pk))
+        copy = reused(sent)
+        outcome, standing = holds.settle(copy)
+        self.assertEqual((outcome.effect, standing), (holds.HOLD, first))  # the answer's own hold, still standing
+        holds.release(user=an_operator(), note=NOTE)
+        for run in (copy, reused(sent), sent):  # every later Resume re-reading the released answer
+            with self.subTest(run=str(run.pk), sent=run.sent):
+                outcome, standing = holds.settle(run)
+                self.assertEqual((outcome.effect, standing), (holds.HOLD, None))
+                self.assertEqual(holds.record(run, outcome), first)
+        self.assertEqual(models.InterpreterHold.objects.count(), 1)
+        self.assertFalse(holds.is_held())
+        # a run that was not sent sets no hold of its own, even when its origin's answer set none
+        unsettled = gemini_run(self.enc, self.rev, state='succeeded', http_status=200, body=substituted())
+        outcome, standing = holds.settle(reused(unsettled))
+        self.assertEqual((outcome.effect, standing), (holds.HOLD, None))
+        self.assertEqual(models.InterpreterHold.objects.count(), 1)
         self.assertFalse(holds.is_held())
 
     def test_a_definite_failure_or_an_answer_sets_no_hold(self):
@@ -263,16 +299,28 @@ class HoldRecordTests(TestCase):
             self.assertEqual(list(holds.active()), [older, newer])
             self.assertEqual(holds.current(), newer)
             found = holds.state()
-            self.assertEqual((found['mode'], found['paused'], found['message']),
-                             ('live', holds.HELD_HOLD, holds.PAUSED_MESSAGE))
+            self.assertEqual((found['held'], found['process_mode'], found['process_paused'], found['message']),
+                             (True, 'live', holds.HELD_HOLD, holds.PAUSED_MESSAGE))
             self.assertEqual([item['id'] for item in found['standing']], [str(older.pk), str(newer.pk)])
             self.assertEqual({key: found['standing'][0][key] for key in ('reason', 'http_status', 'run', 'released_at')},
                              {'reason': 'auth', 'http_status': 401, 'run': str(older.run_id), 'released_at': None})
             holds.release(user=an_operator(), note=NOTE)
             self.assertIsNone(holds.paused_reason())
-            self.assertEqual(holds.state()['standing'], [])
+            self.assertEqual((holds.state()['standing'], holds.state()['held']), ([], False))
         with override_settings(GEMINI_MODE='replay'):
             self.assertIsNone(holds.paused_reason())
+
+    def test_the_state_names_the_process_mode_apart_from_the_installations_hold(self):
+        # a one-shot runs with the interpreter disabled unless given a mode (FINAL 13): its own mode is not the worker's,
+        # and nothing in the state presents it as the installation's
+        with override_settings(GEMINI_MODE='disabled'):
+            found = holds.state()
+            self.assertEqual((found['held'], found['standing'], found['process_mode'], found['process_paused']),
+                             (False, [], 'disabled', holds.HELD_DISABLED))
+            self.assertNotIn('mode', found)
+            self.assertNotIn('paused', found)
+            holds.settle(gemini_run(self.enc, self.rev))
+            self.assertEqual((holds.state()['held'], holds.state()['process_paused']), (True, holds.HELD_DISABLED))
 
     def test_describe_names_the_reason_statuses_and_run(self):
         raw = TRIAL_429.read_bytes()
@@ -349,19 +397,21 @@ class CommandTests(TestCase):
     def hold(self, **run):
         return holds.settle(gemini_run(self.enc, self.rev, **run))[1]
 
-    def test_with_no_option_it_shows_the_mode_the_holds_and_writes_nothing(self):
+    def test_with_no_option_it_shows_the_holds_and_its_own_processs_mode_and_writes_nothing(self):
         with override_settings(GEMINI_MODE='live'):
             shown = self.run_command()
-            self.assertIn('interpreter mode: live', shown)
-            self.assertIn('interpret stages: not paused', shown)
-            self.assertIn('interpreter hold: none standing', shown)
+            self.assertIn('interpreter hold (installation-wide): none standing; interpret stages are not held', shown)
+            self.assertIn('interpreter mode (this command\'s own process): live;', shown)
             hold = self.hold()
             shown = self.run_command()
-            self.assertIn('interpret stages: paused (interpreter_hold)', shown)
-            self.assertIn('interpreter hold: 1 standing', shown)
+            self.assertIn('interpreter hold (installation-wide): 1 standing; every interpret stage sends nothing', shown)
             self.assertIn(holds.describe(hold), shown)
-        with override_settings(GEMINI_MODE='disabled'):
-            self.assertIn('interpret stages: paused (interpreter_disabled)', self.run_command())
+        with override_settings(GEMINI_MODE='disabled'):  # a one-shot's own mode, never the installation's state
+            shown = self.run_command()
+            self.assertIn('interpreter mode (this command\'s own process): disabled; a one-shot runs with the interpreter '
+                          'disabled unless it is given a mode', shown)
+            self.assertNotIn('paused (interpreter_disabled)', shown)
+            self.assertNotIn('interpreter mode: disabled', shown)
         self.assertEqual(models.InterpreterHoldRelease.objects.count(), 0)
 
     def test_release_with_a_note_records_it_and_says_members_may_resume(self):
