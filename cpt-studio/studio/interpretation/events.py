@@ -1,0 +1,825 @@
+"""The per-code rule of the events engine (design/FINAL.md 7.2-7.6, as design/ADJUDICATION.md C-1, C-6, C-9 and C-10 amend
+it): one proposed code against the persisted event inventory - its candidates, its supporting events, its dependencies,
+the relations that decide it, its exclusion, and the ONE focused question that holds it. Pure: it reads the inventory's
+stored attributes (values, states, the literals of their own words) and the code's kept evidence spans, never the
+revision text for meaning (P6), and it produces no value (P2).
+
+THE RULE, in order (7.2): R1 (scope and exact evidence) is the caller's - a code failing it is never evaluated. Then:
+- R2 a link route (mapping.code_link): (a) the catalogue, (b) an unreconciled act; route (c) is REMOVED (C-6), so a code
+  with no catalogue profile or of another family is held, never READY ("outside CPT Studio's coding profiles; review
+  required").
+- R3 a SUPPORTING event (7.3) for each of the code's requirement groups (``requirements``): the examination kinds are the
+  SESSION, never an act (C-1), so a code whose covers hold an examination kind and others needs a supporting event of
+  EACH other kind; any other code needs one of its kinds (a tattoo and an injection are one act). An event supports when
+  it is a candidate (its catalogue kind maps into the group, or is an umbrella covering it, in the code's family - any
+  family on route (b)) and: its kind and family are usable (verified, or default-accepted, and not opened); its status is
+  a usable ``performed`` - or, for a code that accounts for the examination itself (a base code, an examination-only
+  EUS code), a usable ``attempted_not_completed`` (verified by its failure marker; the 52/53 consideration); its time is
+  a usable ``current_encounter`` and its performer a usable ``documenting_team`` (an explicit unknown is absent, never a
+  match: C6); it is not a positive removal umbrella (line 5: no method-specific code rests on one); and it is the
+  positive side of no CONTRADICTION, DOUBT or UNRESOLVED relation.
+- When a group has no supporting event: 7.4 (a positive candidate: held, ONE focused question, h1-h5 in order over the
+  candidates in document order), else 7.5 (a decisive statement: EXCLUDED, reinstatable), else 7.6 (not documented:
+  held). C-9: for a code that does not account for the examination, an act begun and not completed is a HOLD
+  (performed_status and the 52/53 consideration), never an exclusion.
+- R4 the dependencies beyond R3: the device class when the profile names a technique (a verified device of that class;
+  another class is the "dilation of another technique" hold, an absent or unverified device the technique question).
+- R5 bundling (7.7, through coverage): every supporting act part of another documented act holds the code with the
+  legacy "part of another documented act" sentence; an act whose bundling depends on an unresolved identity holds it
+  with act_target.
+R6-R9 (required facts, the date, the combination rules, the reference checks) are the assessment's (assess.py), over
+this module's Evaluation.
+
+7.5 EXCLUSION (D5, tightened; Engine A's "only event of its kind" arm is rejected): with no supporting event and no
+positive candidate, a DECISIVE event D excludes the code only when (1) D concerns the code's acts - its kind in the group
+or an umbrella covering it, its kind and family usable; (2) D's deciding attribute passed its deterministic check
+(verify.exclusion_basis: status not_performed by a negator, planned by a planning marker; time earlier or future by a
+compared date literal or a time marker; performer another clinician by a titled or credentialed name, another facility
+by a name or a facility marker) - the exclusion records ``basis``; an exceptive statement never excludes (C-7), and an
+act begun and not completed never does (C-9); (3) D covers the code: D is a BROAD statement (not_performed, all_of_kind
+usable, current_encounter usable, its family's session resolved), or the code's kept spans that overlap D's own passages
+lie within the union of D's own attribute word spans (C-10's kind, status, time and target, with its performer and its
+scope: COVERING) - a kept span that overlaps D's
+passages but reaches words no D word covers gives a statement_scope question instead; (4) nothing doubts the code's
+kinds (no uncertain candidate, no DOUBT relation on a candidate or from a statement of its kinds).
+
+THE OMISSION CASE (P4): Gemini drops a current act and the proposer cites that act's own passage; only a historical or
+denied statement of the kind exists elsewhere, or in the same sentence. Coverage fails (the citation reaches words the
+statement's own words do not cover), so the code is held, never excluded.
+
+Imports nothing from studio.gi but the reference tables, through mapping (FINAL 3.1).
+"""
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
+from typing import Optional
+
+from studio.interpretation import identity, mapping, relations, verify, wording
+
+ATTRIBUTES = ('procedure', 'kind', 'technique', 'target', 'time', 'performer', 'status', 'scope', 'purpose')
+BLOCKING = (relations.CONTRADICTION, relations.DOUBT, relations.UNRESOLVED)
+# The attributes an exclusion's coverage reads the words of: C-10's kind, status, time and target, with the two other
+# attributes a statement's own words state - its performer (the deciding attribute of an exclusion by another
+# performer) and its scope (a broad statement's quantifier).
+COVERING = ('kind', 'status', 'time', 'target', 'performer', 'scope')
+# The event's own statement: the passages of the act itself (what a question quotes and a support shows).
+OWN = ('kind', 'status', 'target')
+
+# Evaluation.reason values.
+SUPPORTED, INCOMPLETE = 'supported', 'incomplete'
+NOT_LINKED, UNPROFILED = 'not_linked', 'unprofiled'
+CONFLICT, DOUBT, UNRESOLVED, UNVERIFIED, ATTEMPTED, METHOD = (
+    'conflict', 'doubt', 'unresolved', 'unverified', 'attempted', 'method')
+EXCLUDED, STATEMENT_SCOPE, NOT_DOCUMENTED = 'excluded', 'statement_scope', 'not_documented'
+TECHNIQUE, ANOTHER_TECHNIQUE, BUNDLED, BUNDLING_IDENTITY = 'technique', 'another_technique', 'bundled', 'bundling'
+
+
+# --- the stored inventory, as this engine reads it -------------------------------------------------------------------
+
+class Reading:
+    """One stored event inventory (store.StoredInventory, normalize.Inventory, or a mapping of its content), indexed for
+    the engine. Read-only by convention: nothing here changes a record. It answers what identity.lesion_facts and
+    relations.Context read of a Draft (``lesions``, ``events``, ``passages_of``), so their pure rules read it as they
+    read the inventory while it was made."""
+
+    def __init__(self, events: Mapping, encounter_facts: Mapping, open_questions: Sequence = ()):
+        self.passages = {record['id']: record for record in events['passages']}
+        self.lesions = {record['id']: record for record in events['lesions']}
+        self.events = {record['id']: record for record in events['events']}
+        self.relations = list(events['relations'])
+        self.encounter = encounter_facts
+        self.open_questions = list(open_questions)
+        self.order = {eid: index for index, eid in enumerate(self.events)}
+        self.by_event: dict = {}
+        self.by_statement: dict = {}
+        for relation in self.relations:
+            self.by_event.setdefault(relation['event'], []).append(relation)
+            self.by_statement.setdefault(relation['statement'], []).append(relation)
+        self._facts = None
+        self._context = None
+
+    @classmethod
+    def of(cls, inventory) -> 'Reading':
+        if isinstance(inventory, Reading):
+            return inventory
+        if isinstance(inventory, Mapping):
+            return cls(inventory['events'], inventory['encounter_facts'], inventory.get('open_questions') or ())
+        return cls(inventory.events, inventory.encounter_facts, inventory.open_questions)
+
+    def passages_of(self, span: Mapping) -> list:
+        """The located or ambiguous passages one of whose places holds ``span`` (normalize.Draft.passages_of)."""
+        return [pid for pid, record in self.passages.items() if record['state'] != 'unlocated' and any(
+            place['start'] <= span['start'] and span['end'] <= place['end'] for place in record['spans'])]
+
+    def places(self, pids) -> list:
+        """The located places of passages ``pids`` (every place of an ambiguous one), each {start, end, text}."""
+        out = []
+        for pid in pids:
+            record = self.passages.get(pid)
+            if record and record['state'] != 'unlocated':
+                out.extend({'start': place['start'], 'end': place['end'], 'text': place['text']}
+                           for place in record['spans'])
+        return out
+
+    @property
+    def lesion_facts(self) -> dict:
+        if self._facts is None:
+            self._facts = identity.lesion_facts(self)
+        return self._facts
+
+    @property
+    def context(self) -> relations.Context:
+        if self._context is None:
+            self._context = relations.Context(self)
+        return self._context
+
+    def relations_of(self, event_id: str, types=BLOCKING) -> list:
+        return [relation for relation in self.by_event.get(event_id, ()) if relation['type'] in types]
+
+
+# --- reading one event -------------------------------------------------------------------------------------------------
+
+def usable(event: Mapping, name: str) -> bool:
+    return verify.usable(event.get(name))
+
+
+def value(event: Mapping, name: str):
+    record = event.get(name)
+    return record.get('value') if isinstance(record, Mapping) else None
+
+
+def words_of(event: Mapping, *names) -> Optional[dict]:
+    """The first of ``names``' own words spans the event has (status, kind, ... by default)."""
+    for name in names or ('status', 'kind', 'target', 'time', 'performer'):
+        record = event.get(name)
+        if isinstance(record, Mapping) and isinstance(record.get('words'), Mapping):
+            return record['words']
+    return None
+
+
+def own_passages(event: Mapping, names=OWN) -> list:
+    ids = []
+    for name in names:
+        record = event.get(name)
+        if isinstance(record, Mapping):
+            ids.extend(record.get('passages') or ())
+    return list(dict.fromkeys(ids))
+
+
+def all_passages(event: Mapping) -> list:
+    return own_passages(event, ATTRIBUTES)
+
+
+def statement_text(reading: Reading, event: Mapping) -> str:
+    """The event's own words to quote: its status words, else its kind words, else its first own located passage."""
+    span = words_of(event, 'status', 'kind')
+    if span is not None:
+        return span['text']
+    places = reading.places(own_passages(event))
+    return places[0]['text'] if places else ''
+
+
+def anchors(reading: Reading, event: Mapping) -> list:
+    """The event's own statement in the document: the places of its kind, status and target passages, each once, in
+    document order (FINAL 7.11 ``source``; 7.8 the unresolved items' evidence)."""
+    seen, out = set(), []
+    for place in sorted(reading.places(own_passages(event)), key=lambda item: (item['start'], item['end'])):
+        key = (place['start'], place['end'])
+        if key not in seen:
+            seen.add(key)
+            out.append(place)
+    return out
+
+
+def verified_other_time(event: Mapping) -> bool:
+    return usable(event, 'time') and value(event, 'time') in ('earlier_encounter', 'future')
+
+
+def verified_other_performer(event: Mapping) -> bool:
+    return usable(event, 'performer') and value(event, 'performer') in ('other_clinician', 'other_facility')
+
+
+def done(event: Mapping) -> bool:
+    """Performed (or begun) at this encounter by the documenting team, every one of those attributes usable: what a
+    reportable event and a session's examination are (7.8)."""
+    return (usable(event, 'status') and value(event, 'status') in verify.POSITIVE
+            and usable(event, 'time') and value(event, 'time') == 'current_encounter'
+            and usable(event, 'performer') and value(event, 'performer') == 'documenting_team')
+
+
+# --- labels (CPT Studio's words over the event's stored values and the document's own slices) --------------------------
+
+def lesion_words(reading: Reading, lesion_id: str) -> str:
+    """A lesion as CPT Studio names it: its own description (the document's slice), with its verified site."""
+    lesion = reading.lesions.get(lesion_id)
+    if lesion is None:
+        return ''
+    text = ' '.join(lesion['words']['text'].split()) if lesion.get('words') else ''
+    site = lesion.get('site') or {}
+    where = wording.landmark_label(site.get('value', '')) if verify.usable(site) else ''
+    if where and where not in text.lower():
+        text = f'{text} in the {where}' if text else where
+    return text
+
+
+def event_label(reading: Reading, event: Mapping) -> str:
+    """reconcile.describe_act's form over an event: its act label, its verified device where the label does not name
+    it, and the verified lesion it was done on, else its verified site."""
+    kind = event.get('catalogue_kind') or ''
+    if kind in mapping.EXAMINATION_KINDS:
+        label = wording.kind_label(mapping.service_kind(event.get('family', ''))) if kind == mapping.EXAMINATION \
+            else wording.act_label(kind)
+        if not label or label == 'examination':
+            label = 'examination'
+    else:
+        label = wording.event_kind_label(kind or value(event, 'kind') or 'other')
+    device = value(event, 'technique') if usable(event, 'technique') else ''
+    device = wording.landmark_label(device) if device not in ('', 'not_stated', 'other', 'endoscope') else ''
+    if device and device not in label:
+        label = f'{label} ({device})'
+    lesion = identity.verified_lesion(event)
+    words = lesion_words(reading, lesion) if lesion else ''
+    if words:
+        return f'{label} of the {words}'
+    place = wording.landmark_label(mapping.target_landmark(event))
+    return f'{label} at the {place}' if place else label
+
+
+def group_label(link: mapping.CodeLink, group: Sequence[str]) -> str:
+    """What a code's requirement group names: the session's service for an examination, else its acts."""
+    if all(kind in mapping.EXAMINATION_KINDS for kind in group):
+        service = mapping.service_kind(link.family)
+        if group and group[0] == mapping.EUS_EXAMINATION:
+            return wording.act_label(mapping.EUS_EXAMINATION)
+        return wording.kind_label(service) if service else 'examination'
+    return ' or '.join(dict.fromkeys(wording.act_label(kind) for kind in group))
+
+
+def service_label(family: str) -> str:
+    service = mapping.service_kind(family)
+    return wording.kind_label(service) if service else wording.family_label(family)
+
+
+# --- the requirement groups (C-1) --------------------------------------------------------------------------------------
+
+def requirements(link: mapping.CodeLink) -> tuple:
+    """The code's requirement groups, each needing a supporting event of one of its kinds (module docstring)."""
+    if not link.linked:
+        return ()
+    if link.route == mapping.UNRECONCILED_ROUTE:
+        return (tuple(link.kinds),)
+    if link.acts and any(kind in mapping.EXAMINATION_KINDS for kind in link.kinds):
+        return tuple((kind,) for kind in link.acts)  # C-1: each act besides the examination, which is the session
+    return (tuple(link.kinds),) if link.kinds else ()
+
+
+def examination_code(link: mapping.CodeLink) -> bool:
+    """Whether the code accounts for the examination itself (a base code, an examination-only EUS code): an examination
+    begun and not completed supports it, with the 52/53 consideration (7.3 line 2)."""
+    return link.base or (bool(link.kinds) and all(kind in mapping.EXAMINATION_KINDS for kind in link.kinds))
+
+
+def is_candidate(link: mapping.CodeLink, group: Sequence[str], event: Mapping) -> bool:
+    """7.3: an event of a kind in the group, or of an umbrella covering it, of the code's family (route (a)); on route
+    (b), of a kind in the group with its verified target in the code's regions, in any family."""
+    if not link.linked:
+        return False
+    kind = event.get('catalogue_kind') or ''
+    if link.route == mapping.UNRECONCILED_ROUTE:
+        return kind in group and mapping.in_regions(mapping.target_landmark(event), link.regions)
+    if event.get('family') != link.family:
+        return False
+    return any(mapping.covers(kind, wanted) for wanted in group)
+
+
+def endoscopic_examination(event: Mapping) -> bool:
+    """Whether an examination event can be its endoscopic family's session (FINAL 5.6, E13: "the session's examination is
+    the colonoscopy"): any examination but one of an endoscopic family whose device is VERIFIED as another than the
+    endoscope - a digital rectal examination read as the family's examination (technique ``manual``) is no session and
+    supports no base code. An unstated or unverified device never sets an examination apart (fail toward the hold)."""
+    if event.get('family') not in mapping.ENDOSCOPIC_FAMILIES:
+        return True
+    return not (usable(event, 'technique') and value(event, 'technique') != 'endoscope')
+
+
+def supports(reading: Reading, link: mapping.CodeLink, group: Sequence[str], event: Mapping) -> bool:
+    """7.3 lines 1-4, 6 and 7 (line 5, the device class, is R4's)."""
+    if not is_candidate(link, group, event) or (event.get('catalogue_kind') or '') in mapping.UMBRELLAS:
+        return False
+    if event.get('catalogue_kind') in mapping.EXAMINATION_KINDS and not endoscopic_examination(event):
+        return False
+    if not usable(event, 'kind') or (link.route == mapping.CATALOGUE_ROUTE and not usable(event, 'procedure')):
+        return False
+    allowed = verify.POSITIVE if examination_code(link) else ('performed',)
+    if not (usable(event, 'status') and value(event, 'status') in allowed):
+        return False
+    if not (usable(event, 'time') and value(event, 'time') == 'current_encounter'):
+        return False
+    if not (usable(event, 'performer') and value(event, 'performer') == 'documenting_team'):
+        return False
+    return not reading.relations_of(event['id'])
+
+
+# --- what the rule decides -------------------------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class Question:
+    """The one focused question of a held code: its fact (questions.MISSING's or wording.NEW_FACTS'), CPT Studio's
+    question and reason, the events it concerns and the document's spans it quotes ({start, end, text})."""
+    fact: str
+    question: str
+    reason: str
+    events: tuple = ()
+    passages: tuple = ()
+
+
+@dataclass(frozen=True)
+class Exclusion:
+    """A decisive statement that excludes the code (7.5): its event, the deciding attribute and value, the basis
+    (literal | marker; C1), the deciding words and CPT Studio's reason."""
+    event: str
+    attribute: str
+    value: str
+    basis: str
+    words: Optional[dict]
+    reason: str
+    cover: str  # 'broad' or 'citation'
+
+
+@dataclass(frozen=True)
+class Evaluation:
+    """What the per-code rule decided for one code. ``state``: performed | incomplete | not_performed | uncertain (the
+    code's support state, FINAL 7.11); ``reason``: this module's reason constants; ``supporting``: E*(C), the event ids
+    the code accounts for (empty when held or excluded); ``read``: every event the decision read (its fingerprint's
+    events); ``unverified``: the (event, attribute) pairs a decision read and found unusable."""
+    code: str
+    family: str
+    link: mapping.CodeLink
+    state: str
+    reason: str
+    detail: str
+    supporting: tuple = ()
+    read: tuple = ()
+    question: Optional[Question] = None
+    exclusion: Optional[Exclusion] = None
+    relation: Optional[dict] = None
+    incomplete_words: str = ''  # the failure-marker words of an examination begun and not completed (R-4)
+    attempted: bool = False  # C-9: a non-examination code's act begun and not completed (the 52/53 consideration)
+    unverified: tuple = ()
+    bundled: tuple = field(default=())  # (event id, why) of supporting acts part of another documented act
+
+    @property
+    def held(self) -> bool:
+        return self.state == 'uncertain'
+
+    @property
+    def excluded(self) -> bool:
+        return self.state == 'not_performed'
+
+
+def _spans(items) -> tuple:
+    out, seen = [], set()
+    for item in items:
+        if not isinstance(item, Mapping):
+            continue
+        key = (item['start'], item['end'])
+        if key not in seen:
+            seen.add(key)
+            out.append({'start': item['start'], 'end': item['end'], 'text': item['text']})
+    return tuple(out)
+
+
+def _kept_places(kept) -> tuple:
+    return _spans({'start': span.start, 'end': span.end, 'text': span.text} for span in kept)
+
+
+def evaluate(code: str, kept: Sequence, reading: Reading, link: Optional[mapping.CodeLink] = None) -> Evaluation:
+    """The per-code rule (module docstring) for ``code`` in scope with its kept exact evidence ``kept``
+    (types.EvidenceSpan, already verified against the revision text by checks.exact_evidence)."""
+    from studio.interpretation import coverage  # bundling is coverage's (7.7); coverage reads this module
+
+    link = link if link is not None else mapping.code_link(code)
+    family = link.family
+    own = _kept_places(kept)
+    if not link.linked or not requirements(link):  # no route, or a route naming no act: held, never READY (C-6)
+        unprofiled = link.reason == mapping.UNPROFILED
+        reason = wording.not_linked_reason(code, unprofiled)
+        return Evaluation(code, family, link, 'uncertain', UNPROFILED if unprofiled else NOT_LINKED, reason,
+                          question=Question('performed_status', wording.performed_question(code), reason, (), own))
+    supporting: list = []
+    for group in requirements(link):
+        found = [event for event in reading.events.values() if supports(reading, link, group, event)]
+        if not found:
+            return _without_support(code, link, group, kept, own, reading)
+        supporting.extend(event for event in found if event not in supporting)
+    name = service_label(family)
+    if link.technique:  # R4: the device class of a technique-specific code
+        fitting = [event for event in supporting if mapping.code_technique(event) == link.technique]
+        if not fitting:
+            return _technique_hold(code, link, supporting, reading, own, name)
+        supporting = fitting
+    own_acts, doubts, bundled = [], [], []
+    for event in supporting:  # R5: bundling (7.7)
+        why = coverage.bundled_reason(reading, event)
+        doubt = coverage.bundling_doubt(reading, event)
+        if why:
+            bundled.append((event, why))
+        elif doubt is not None:
+            doubts.append((event, doubt))
+        else:
+            own_acts.append(event)
+    read = tuple(event['id'] for event in supporting)
+    if not own_acts and doubts:
+        event, relation = doubts[0]
+        whole = reading.events.get(relation['statement'])
+        act = event_label(reading, event)
+        question = wording.bundling_question(relation['reason'], wording.event_kind_label(event['catalogue_kind']),
+                                             statement_text(reading, event),
+                                             statement_text(reading, whole) if whole else '')
+        places = anchors(reading, event) + (anchors(reading, whole) if whole else [])
+        return Evaluation(code, family, link, 'uncertain', BUNDLING_IDENTITY, wording.bundling_reason(act), read=read,
+                          question=Question('act_target', question, wording.bundling_reason(act),
+                                            (event['id'],) + ((whole['id'],) if whole else ()), _spans(places)),
+                          relation=relation)
+    if not own_acts:
+        event, why = bundled[0]
+        what = group_label(link, link.acts or link.kinds)
+        listed = '; '.join(event_label(reading, item) for item, _ in bundled[:4])
+        detail, question = wording.act_included(name, 'performed', listed, why, what, statement_text(reading, event))
+        return Evaluation(code, family, link, 'uncertain', BUNDLED, detail, read=read,
+                          question=Question('performed_status', question, detail, (event['id'],),
+                                            _spans(anchors(reading, event))),
+                          bundled=tuple((item['id'], reason) for item, reason in bundled))
+    performed = [event for event in own_acts if value(event, 'status') == 'performed']
+    labels = [event_label(reading, event) for event in own_acts[:4]]
+    if not performed:  # an examination begun and not completed (7.3 line 2): its failure-marker words (R-4)
+        words = words_of(own_acts[0], 'status')
+        return Evaluation(code, family, link, 'incomplete', INCOMPLETE,
+                          f'The {name} is documented as begun and not completed'
+                          + (f': {wording.quote(words["text"])}.' if words else '.'),
+                          supporting=tuple(event['id'] for event in own_acts), read=read,
+                          incomplete_words=words['text'] if words else '',
+                          bundled=tuple((item['id'], reason) for item, reason in bundled))
+    if examination_code(link) and not link.acts:
+        detail = f'The {name} is documented as performed on the date of service.'
+    else:
+        detail = f'The {name} is documented as performed with {"; ".join(labels)}.'
+    return Evaluation(code, family, link, 'performed', SUPPORTED, detail,
+                      supporting=tuple(event['id'] for event in own_acts), read=read,
+                      bundled=tuple((item['id'], reason) for item, reason in bundled))
+
+
+def _technique_hold(code: str, link: mapping.CodeLink, supporting: Sequence, reading: Reading, own: tuple,
+                    name: str) -> Evaluation:
+    """R4: no supporting act of the code's own technique. A verified device of another class is the "dilation of
+    another technique" hold (reconcile.py:307-316; FINAL 7.4 h6) - never excluded; an absent or unverified device asks
+    which technique was used."""
+    required = wording.TECHNIQUE_WORDS.get(link.technique, link.technique)
+    read = tuple(event['id'] for event in supporting)
+    other = next((event for event in supporting if mapping.code_technique(event)), None)
+    if other is not None:
+        stated = wording.TECHNIQUE_WORDS.get(mapping.code_technique(other), 'dilation of another technique')
+        words = statement_text(reading, other)
+        detail, question = wording.another_technique(name, stated, required, words)
+        return Evaluation(code, link.family, link, 'uncertain', ANOTHER_TECHNIQUE, detail, read=read,
+                          question=Question('technique', question, detail, (other['id'],),
+                                            _spans(anchors(reading, other))))
+    event = supporting[0]
+    act = event_label(reading, event)
+    reason = wording.technique_reason(act, required)
+    unverified = tuple((item['id'], 'technique') for item in supporting if not usable(item, 'technique')
+                       and value(item, 'technique') != 'not_stated')
+    return Evaluation(code, link.family, link, 'uncertain', TECHNIQUE, reason, read=read,
+                      question=Question('technique', wording.technique_question(act, statement_text(reading, event)),
+                                        reason, (event['id'],), _spans(anchors(reading, event))),
+                      unverified=unverified)
+
+
+# --- 7.4-7.6: no supporting event --------------------------------------------------------------------------------------
+
+def _without_support(code: str, link: mapping.CodeLink, group: Sequence[str], kept: Sequence, own: tuple,
+                     reading: Reading) -> Evaluation:
+    candidates = [event for event in reading.events.values() if is_candidate(link, group, event)]
+    positive = [event for event in candidates if value(event, 'status') in verify.POSITIVE + ('uncertain',)
+                and not verified_other_time(event) and not verified_other_performer(event)]
+    if positive:
+        return _focused(code, link, group, positive, reading)
+    decided = _exclusion(code, link, group, candidates, kept, reading)
+    if decided is not None:
+        return decided
+    act = group_label(link, group)
+    reason = wording.not_documented_reason(act)
+    return Evaluation(code, link.family, link, 'uncertain', NOT_DOCUMENTED, reason,
+                      read=tuple(event['id'] for event in candidates),
+                      question=Question('performed_status', wording.performed_question(code), reason, (), own))
+
+
+def _focused(code: str, link: mapping.CodeLink, group: Sequence[str], positive: Sequence, reading: Reading
+             ) -> Evaluation:
+    """7.4: the first rule that applies (h1-h5, in order), over the positive candidates in document order, decides the
+    ONE question; its passages are that candidate's own (both sides of a relation for h1-h3)."""
+    read = tuple(event['id'] for event in positive)
+    for rule in (_h1_contradiction, _h2_doubt, _h3_unresolved, _h4_unverified, _h4_attempted, _h5_method):
+        for event in positive:
+            found = rule(code, link, event, reading)
+            if found is not None:
+                return Evaluation(code, link.family, link, 'uncertain', found['reason'], found['question'].reason,
+                                  read=read, question=found['question'], relation=found.get('relation'),
+                                  attempted=found.get('attempted', False),
+                                  unverified=tuple(found.get('unverified', ())))
+    event = positive[0]
+    act = event_label(reading, event)
+    reason = wording.status_reason(act)
+    return Evaluation(code, link.family, link, 'uncertain', UNVERIFIED, reason, read=read,
+                      question=Question('performed_status', wording.status_question(act, statement_text(reading, event)),
+                                        reason, (event['id'],), _spans(anchors(reading, event))))
+
+
+def _relation_question(reading: Reading, relation: Mapping, event: Mapping) -> dict:
+    statement = reading.events.get(relation['statement']) or {}
+    places = reading.places(relation.get('passages') or ()) or (anchors(reading, statement) + anchors(reading, event))
+    return {'events': tuple(dict.fromkeys((event['id'], relation['statement']))), 'passages': _spans(places),
+            'statement': statement}
+
+
+def _h1_contradiction(code, link, event, reading):
+    for relation in reading.relations_of(event['id'], (relations.CONTRADICTION,)):
+        found = _relation_question(reading, relation, event)
+        act = wording.event_kind_label(event['catalogue_kind'])
+        reason = wording.conflict_reason(act, statement_text(reading, event), statement_text(reading, found['statement']))
+        return {'reason': CONFLICT, 'relation': relation,
+                'question': Question(f'conflict:{event["catalogue_kind"] or value(event, "kind")}',
+                                     wording.conflict_question(act), reason, found['events'], found['passages'])}
+    return None
+
+
+def _h2_doubt(code, link, event, reading):
+    for relation in reading.relations_of(event['id'], (relations.DOUBT,)):
+        found = _relation_question(reading, relation, event)
+        act = event_label(reading, event)
+        words = statement_text(reading, found['statement'])
+        return {'reason': DOUBT, 'relation': relation,
+                'question': Question('performed_status', wording.doubt_question(act, statement_text(reading, event)),
+                                     wording.doubt_reason(act, words), found['events'], found['passages'])}
+    if value(event, 'status') == 'uncertain':
+        act = event_label(reading, event)
+        words = statement_text(reading, event)
+        return {'reason': DOUBT,
+                'question': Question('performed_status', wording.doubt_question(act, words),
+                                     wording.doubt_reason(act, words), (event['id'],),
+                                     _spans(anchors(reading, event)))}
+    return None
+
+
+# relations.ATTRIBUTES -> the fact a question about it names (FINAL 7.4 h3)
+RELATION_FACTS = {'time': 'event_time', 'performer': 'event_performer', 'target': 'act_target',
+                  'technique': 'technique', 'scope': 'statement_scope', 'status': 'performed_status',
+                  'procedure': 'procedure', 'kind': 'performed_status', 'part_of': 'performed_status'}
+
+
+def _h3_unresolved(code, link, event, reading):
+    for relation in reading.relations_of(event['id'], (relations.UNRESOLVED,)):
+        found = _relation_question(reading, relation, event)
+        fact = RELATION_FACTS.get(relation['attribute'], 'performed_status')
+        act = event_label(reading, event)
+        words = statement_text(reading, event)
+        question, reason = _attribute_question(fact, act, words)
+        if fact == 'statement_scope':
+            statement = statement_text(reading, found['statement'])
+            question, reason = wording.scope_question(statement, act, words), wording.scope_reason(statement, act)
+        return {'reason': UNRESOLVED, 'relation': relation,
+                'question': Question(fact, question, reason, found['events'], found['passages'])}
+    return None
+
+
+def _attribute_question(fact: str, act: str, words: str) -> tuple:
+    if fact == 'event_time':
+        return wording.time_question(act, words), wording.time_reason(act)
+    if fact == 'event_performer':
+        return wording.performer_question(act, words), wording.performer_reason(act)
+    if fact == 'procedure':
+        return wording.procedure_question(act, words), wording.procedure_reason(act)
+    if fact == 'act_target':
+        return wording.target_question(act, words), wording.target_reason(act)
+    if fact == 'technique':
+        return wording.technique_question(act, words), wording.technique_unresolved_reason(act)
+    return wording.status_question(act, words), wording.status_reason(act)
+
+
+# 7.3 lines 1-3, in order: the attribute an unusable value of which decides h4, and the fact it names.
+LINE_FACTS = (('procedure', 'procedure'), ('kind', 'performed_status'), ('status', 'performed_status'),
+              ('time', 'event_time'), ('performer', 'event_performer'))
+
+
+def _h4_unverified(code, link, event, reading):
+    for name, fact in LINE_FACTS:
+        if name == 'procedure' and link.route != mapping.CATALOGUE_ROUTE:
+            continue
+        if usable(event, name):
+            continue
+        act = event_label(reading, event)
+        question, reason = _attribute_question(fact, act, statement_text(reading, event))
+        return {'reason': UNVERIFIED, 'unverified': ((event['id'], name),),
+                'question': Question(fact, question, reason, (event['id'],), _spans(anchors(reading, event)))}
+    return None
+
+
+def _h4_attempted(code, link, event, reading):
+    """C-9: for a code that does not account for the examination, an act begun and not completed is a hold, with the
+    52/53 consideration - never an exclusion and never support."""
+    if value(event, 'status') != 'attempted_not_completed' or examination_code(link):
+        return None
+    act = event_label(reading, event)
+    words = statement_text(reading, event)
+    return {'reason': ATTEMPTED, 'attempted': True,
+            'question': Question('performed_status', wording.attempted_question(code, act),
+                                 wording.attempted_reason(act, words), (event['id'],), _spans(anchors(reading, event)))}
+
+
+def _h5_method(code, link, event, reading):
+    if (event.get('catalogue_kind') or '') not in mapping.UMBRELLAS:
+        return None
+    lesion = identity.verified_lesion(event)
+    what = lesion_words(reading, lesion) if lesion else ''
+    if not what:
+        place = wording.landmark_label(mapping.target_landmark(event))
+        what = f'lesion at the {place}' if place else 'lesion'
+    act = group_label(link, link.acts or link.kinds)
+    reason = wording.method_reason(act)
+    return {'reason': METHOD,
+            'question': Question('act_method', wording.method_question(what), reason, (event['id'],),
+                                 _spans(anchors(reading, event)))}
+
+
+def focus_question(reading: Reading, event: Mapping) -> Optional[Question]:
+    """The 7.4 question about one event no code depends on (FINAL 7.8: an in_doubt item's service-scope question):
+    h1-h3 and h5 over the event, else h4 over its own statement's attributes; None when nothing in it is in doubt."""
+    link = mapping.CodeLink(code='', route=mapping.CATALOGUE_ROUTE, family=event.get('family', ''),
+                            kinds=(event.get('catalogue_kind') or '',))
+    for rule in (_h1_contradiction, _h2_doubt, _h3_unresolved, _h4_unverified, _h5_method):
+        found = rule('', link, event, reading)
+        if found is not None:
+            return found['question']
+    return None
+
+
+# --- 7.5: exclusion ------------------------------------------------------------------------------------------------------
+
+def concerns(link: mapping.CodeLink, group: Sequence[str], event: Mapping) -> bool:
+    """7.5 (1): the statement's kind is in the group or an umbrella covering it, its kind usable, and its family the
+    code's, usable (route (a)); on route (b), a statement of the group's kind at the code's regions."""
+    if not usable(event, 'kind'):
+        return False
+    if link.route == mapping.UNRECONCILED_ROUTE:
+        return is_candidate(link, group, event)
+    return (event.get('family') == link.family and usable(event, 'procedure')
+            and any(mapping.covers(event.get('catalogue_kind') or '', wanted) for wanted in group))
+
+
+def deciding(event: Mapping) -> tuple:
+    """7.5 (2): (attribute, value, basis) of the statement's deciding attribute, the first of status, time and performer
+    with a deterministic basis (verify.exclusion_basis); ('', '', '') when none. An act begun and not completed never
+    decides an exclusion (C-9)."""
+    for name in ('status', 'time', 'performer'):
+        basis = verify.exclusion_basis(name, event.get(name))
+        if not basis:
+            continue
+        if name == 'status' and value(event, 'status') == 'attempted_not_completed':
+            continue
+        return name, value(event, name), basis
+    return '', '', ''
+
+
+def broad(reading: Reading, event: Mapping) -> bool:
+    """7.5 (3), the broad arm: a current denial of every act of its kind in its own session (C-8)."""
+    return (usable(event, 'status') and value(event, 'status') == 'not_performed'
+            and usable(event, 'scope') and value(event, 'scope') == 'all_of_kind'
+            and usable(event, 'time') and value(event, 'time') == 'current_encounter'
+            and event.get('family') not in reading.context.unresolved_sessions)
+
+
+def _overlaps(one: Mapping, two: Mapping) -> bool:
+    return one['start'] < two['end'] and two['start'] < one['end']
+
+
+def within_words(span: Mapping, words: Sequence[Mapping]) -> bool:
+    """C-10: whether every word of ``span`` (each letter or digit) lies inside one of ``words``' spans."""
+    for offset, char in enumerate(span['text']):
+        if not char.isalnum():
+            continue
+        position = span['start'] + offset
+        if not any(item['start'] <= position < item['end'] for item in words):
+            return False
+    return True
+
+
+def coverage_of(reading: Reading, event: Mapping, kept: Sequence[Mapping]) -> str:
+    """7.5 (3) as C-10 amends it: 'broad', 'citation' (every kept span that overlaps the statement's own passages lies
+    within its own attribute words), 'partial' (one reaches words the statement's words do not cover: a statement_scope
+    question) or '' (the code was not cited for the statement)."""
+    if broad(reading, event):
+        return 'broad'
+    places = reading.places(all_passages(event))
+    overlapping = [span for span in kept if any(_overlaps(span, place) for place in places)]
+    if not overlapping:
+        return ''
+    words = [event[name]['words'] for name in COVERING
+             if isinstance(event.get(name), Mapping) and isinstance(event[name].get('words'), Mapping)]
+    return 'citation' if all(within_words(span, words) for span in overlapping) else 'partial'
+
+
+def _doubted(reading: Reading, link: mapping.CodeLink, group: Sequence[str], candidates: Sequence) -> bool:
+    """7.5 (4): an uncertain candidate, or a DOUBT relation on a candidate or from a statement of the group's kinds."""
+    if any(value(event, 'status') == 'uncertain' for event in candidates):
+        return True
+    ids = {event['id'] for event in candidates}
+    for relation in reading.relations:
+        if relation['type'] != relations.DOUBT:
+            continue
+        statement = reading.events.get(relation['statement']) or {}
+        if relation['event'] in ids or any(mapping.covers(statement.get('catalogue_kind') or '', wanted)
+                                           for wanted in group):
+            return True
+    return False
+
+
+def _exclusion(code: str, link: mapping.CodeLink, group: Sequence[str], candidates: Sequence, kept: Sequence,
+               reading: Reading) -> Optional[Evaluation]:
+    if _doubted(reading, link, group, candidates):
+        return None
+    places = _kept_places(kept)
+    partial = None
+    act = group_label(link, group)
+    for event in reading.events.values():
+        if not concerns(link, group, event) or value(event, 'scope') == 'exceptive':  # C-7: never excludes
+            continue
+        name, decided, basis = deciding(event)
+        if not basis:
+            continue
+        cover = coverage_of(reading, event, places)
+        if cover in ('broad', 'citation'):
+            words = (event[name].get('words') if isinstance(event.get(name), Mapping) else None) \
+                or words_of(event, 'status', 'kind')
+            text = words['text'] if words else statement_text(reading, event)
+            reason = wording.exclusion_reason(act, name, decided, text)
+            return Evaluation(code, link.family, link, 'not_performed', EXCLUDED, reason, read=(event['id'],),
+                              exclusion=Exclusion(event['id'], name, decided, basis, words, reason, cover))
+        if cover == 'partial' and partial is None:
+            partial = event
+    if partial is None:
+        return None
+    statement = statement_text(reading, partial)
+    reason = wording.scope_reason(statement, act)
+    return Evaluation(code, link.family, link, 'uncertain', STATEMENT_SCOPE, reason, read=(partial['id'],),
+                      question=Question('statement_scope', wording.scope_question(statement, act), reason,
+                                        (partial['id'],), _spans(anchors(reading, partial) + list(places))))
+
+
+# --- support (FINAL 7.11, contract 9.3) ----------------------------------------------------------------------------------
+
+def support_spans(reading: Reading, evaluation: Evaluation, kept: Sequence) -> dict:
+    """How the code's kept spans relate to E*'s own passages, by offset overlap only (contract 9.3): 'pass' when one
+    overlaps them, 'warn' when none does (CPT Studio's own located passages are then shown), 'not_applicable' for a code
+    with no supporting event. ``supporting`` and ``unrelated`` are indices into ``kept``; ``source`` E*'s own passage
+    spans. It never decides a status."""
+    events = [reading.events[eid] for eid in evaluation.supporting if eid in reading.events]
+    source = []
+    for event in events:
+        source.extend(anchors(reading, event))
+    source = list(_spans(sorted(source, key=lambda item: (item['start'], item['end']))))
+    supporting, unrelated = [], []
+    for index, span in enumerate(kept):
+        place = {'start': span.start, 'end': span.end}
+        (supporting if any(_overlaps(place, item) for item in source) else unrelated).append(index)
+    if not events:
+        return {'status': 'not_applicable', 'supporting': [], 'unrelated': list(range(len(kept))), 'source': [],
+                'detail': 'Not checked: no documented event supports this code.'}
+    what = wording.join(list(dict.fromkeys(event_label(reading, event) for event in events[:3])))
+    if supporting and not unrelated:
+        detail, status = f'Every cited passage shows the {what}.', 'pass'
+    elif supporting:
+        detail, status = (f'{len(supporting)} of {len(kept)} cited passages show the {what}; {len(unrelated)} cite '
+                          'text that does not.'), 'pass'
+    elif source:
+        detail, status = (f'None of the cited passages shows the {what}; CPT Studio shows the passages that do: '
+                          + '; '.join(wording.quote(item['text'], 120) for item in source[:2]) + '.'), 'warn'
+    else:
+        detail, status = f'No passage shows the {what}.', 'fail'
+    return {'status': status, 'supporting': supporting, 'unrelated': unrelated, 'source': source[:4], 'detail': detail}
+
+
+def basis_of(reading: Reading, evaluation: Evaluation) -> list:
+    """The fingerprint's events (FINAL 7.11): (id, its usable attributes' values, their words' texts) of every event the
+    decision read, in document order."""
+    out = []
+    for eid in sorted(set(evaluation.supporting) | set(evaluation.read), key=lambda item: reading.order.get(item, 0)):
+        event = reading.events.get(eid)
+        if event is None:
+            continue
+        values = {name: event[name]['value'] for name in ATTRIBUTES
+                  if isinstance(event.get(name), Mapping) and verify.usable(event[name])}
+        texts = sorted({event[name]['words']['text'] for name in ATTRIBUTES if isinstance(event.get(name), Mapping)
+                        and isinstance(event[name].get('words'), Mapping)})
+        out.append([eid, values, texts])
+    return out
