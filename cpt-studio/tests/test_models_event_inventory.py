@@ -9,7 +9,10 @@ What each class proves:
   them - holds NULL there: that NULL is what keeps a legacy row a legacy row on the rollback image and in the new
   image's dispatch;
 - the new rows are append-only, one inventory per (revision, interpretation version, inventory version, run), and an
-  inventory referenced by a context or an assessment cannot be deleted.
+  inventory referenced by a context or an assessment cannot be deleted;
+- every foreign key on the new tables and columns is PROTECT. For the hold tables the refusal is also shown through the
+  parents' own delete(): ProviderRun and User are plain models, and a cascade removes child rows with a raw delete that
+  ImmutableModel never sees.
 """
 import ast
 import hashlib
@@ -182,15 +185,26 @@ class ModelShapeTests(SimpleTestCase):
         hold = models.InterpreterHold._meta
         self.assertFalse([field.name for field in hold.get_fields() if getattr(field, 'related_model', None)
                           is models.Workspace or field.name in ('workspace', 'encounter')])
-        self.assertIs(hold.get_field('run').null, False)
-        self.assertIs(hold.get_field('run').remote_field.model, models.ProviderRun)
         self.assertEqual(hold.get_field('vendor_status').max_length, 40)
         self.assertFalse(hold.get_field('reason').choices)  # holds.classify owns them: a new one needs no migration
         release = models.InterpreterHoldRelease._meta.get_field('hold')
         self.assertIsInstance(release, django_models.OneToOneField)
-        self.assertIs(release.remote_field.model, models.InterpreterHold)
         self.assertEqual(release.remote_field.related_name, 'release')
-        self.assertIs(models.InterpreterHoldRelease._meta.get_field('released_by').remote_field.model, models.User)
+        # every foreign key PROTECT, in the models and in 0014 alike (FINAL 4.1; as OperatorGrant and
+        # OperatorRevocation). Under any other on_delete, deleting a run would end a standing hold and deleting an
+        # operator would revive a hold they released, with no release row saying who or why (InterpreterHoldRowTests
+        # shows the refusals)
+        created = {operation.name: dict(operation.fields) for operation in loaded_migration().operations
+                   if isinstance(operation, CreateModel)}
+        for model, name, target in ((models.InterpreterHold, 'run', models.ProviderRun),
+                                    (models.InterpreterHoldRelease, 'hold', models.InterpreterHold),
+                                    (models.InterpreterHoldRelease, 'released_by', models.User)):
+            field = model._meta.get_field(name)
+            with self.subTest(f'{model.__name__}.{name}'):
+                self.assertIs(field.null, False)
+                self.assertIs(field.remote_field.model, target)
+                self.assertIs(field.remote_field.on_delete, PROTECT)
+                self.assertIs(created[model.__name__][name].remote_field.on_delete, PROTECT)
 
     def test_models_still_import_nothing_but_django_and_the_standard_library(self):
         # ADJUDICATION R-1 rests on this: AppConfig.ready (the sentinel's install point) imports studio.models, which
@@ -472,6 +486,39 @@ class InterpreterHoldRowTests(TestCase):
                     type(row).objects.filter(pk=row.pk).delete()
         self.assertEqual(models.InterpreterHold.objects.get(pk=hold.pk).reason, models.InterpreterHold.QUOTA)
         self.assertEqual(models.InterpreterHoldRelease.objects.get(pk=release.pk).note, 'Released.')
+
+    # The three below delete a parent through its own delete(). ProviderRun and User are plain models, and the cascade
+    # any on_delete but PROTECT would run removes a hold row with a raw batch delete that ImmutableModel never sees.
+
+    def test_a_run_cannot_be_deleted_from_under_the_hold_it_set(self):
+        # a standing hold: its run's deletion would otherwise end the installation-wide pause with no release recorded,
+        # and the next interpret stage would send again
+        standing = self.hold()
+        with self.assertRaises(ProtectedError) as refused, transaction.atomic():
+            self.run.delete()
+        self.assertEqual(set(refused.exception.protected_objects), {standing})
+        self.assertTrue(models.ProviderRun.objects.filter(pk=self.run.pk).exists())
+        self.assertEqual(self.active(), [standing])
+
+    def test_a_released_hold_cannot_be_deleted_even_past_the_immutable_manager(self):
+        hold = self.hold()
+        release = models.InterpreterHoldRelease.objects.create(hold=hold, released_by=self.operator, note='Released.')
+        with self.assertRaises(ProtectedError) as refused, transaction.atomic():
+            django_models.QuerySet(models.InterpreterHold).filter(pk=hold.pk).delete()
+        self.assertEqual(set(refused.exception.protected_objects), {release})
+        self.assertEqual(models.InterpreterHold.objects.get(pk=hold.pk).release, release)
+
+    def test_the_operator_who_released_a_hold_cannot_be_deleted(self):
+        # the operator's deletion would otherwise delete the release and so stand the hold again: interpretation paused
+        # once more, with no record why
+        hold = self.hold()
+        release = models.InterpreterHoldRelease.objects.create(hold=hold, released_by=self.operator, note='Released.')
+        with self.assertRaises(ProtectedError) as refused, transaction.atomic():
+            self.operator.delete()
+        self.assertEqual(set(refused.exception.protected_objects), {release})
+        self.assertTrue(models.User.objects.filter(pk=self.operator.pk).exists())
+        self.assertEqual(models.InterpreterHoldRelease.objects.get(pk=release.pk).released_by, self.operator)
+        self.assertEqual(self.active(), [])
 
     def test_a_hold_names_its_run_and_needs_no_status_body(self):
         with self.assertRaises(IntegrityError), transaction.atomic():
