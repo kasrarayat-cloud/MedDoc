@@ -22,8 +22,10 @@ from django.utils import timezone
 
 from . import jobs, models, participants, review
 from .gi.context import is_member_conflict
+from .interpretation import holds as interpretation_holds
 
 Job = models.Job
+INTERPRET = jobs.INTERPRET  # the Gemini migration's interpret stage (design/FINAL.md 6.11)
 ACTIVE = (Job.QUEUED, Job.RUNNING)
 READING, IDENTIFYING, CHECKING, PREPARING = 'reading', 'identifying', 'checking', 'preparing'
 STEPS = ((READING, 'Reading your document'), (IDENTIFYING, 'Identifying procedures'),
@@ -35,10 +37,12 @@ PHASES = ('queued', 'processing', 'action_needed', 'awaiting_detail', 'completed
 DOCUMENT_REVIEW, INDEPENDENT_CHECKS, CODING_VALIDATION = 'Document review', 'Independent checks', 'Coding validation'
 SENDING_KINDS = (Job.PREDICT, Job.REVIEW2)
 CHECK_KINDS = Job.PARTICIPANT_KINDS + Job.PEER_KINDS
-# What a running step is doing, by the kind of its job: the functions, never who performs them.
+# What a running step is doing, by the kind of its job: the functions, never who performs them (the interpret stage's
+# names a function, never a vendor: FINAL 6.11).
 DETAILS = {Job.PREDICT: DOCUMENT_REVIEW, Job.REVIEW2: DOCUMENT_REVIEW, Job.ASSESS: CODING_VALIDATION,
-           **{kind: INDEPENDENT_CHECKS for kind in CHECK_KINDS}}
-STEP_OF = {Job.EXTRACT: READING, Job.ANALYZE: IDENTIFYING, **{kind: CHECKING for kind in SENDING_KINDS + CHECK_KINDS}}
+           **{kind: INDEPENDENT_CHECKS for kind in CHECK_KINDS}, INTERPRET: 'Reading the documented procedures'}
+STEP_OF = {Job.EXTRACT: READING, Job.ANALYZE: IDENTIFYING, INTERPRET: IDENTIFYING,
+           **{kind: CHECKING for kind in SENDING_KINDS + CHECK_KINDS}}
 JOB_STEP_STATES = {Job.SUCCEEDED: 'done', Job.FAILED: 'failed', Job.CANCELLED: 'stopped',
                    # an outcome still being confirmed did not finish; it is never called a failure of a send that may
                    # have been answered (the being_confirmed phase says what happens next)
@@ -85,6 +89,7 @@ SLOW_MESSAGES = {
     Job.EXTRACT: ('Reading is taking longer than usual. Long or scanned documents take more time while their text is '
                   'recognised.'),
     Job.ANALYZE: 'Identifying the procedures is taking longer than usual for this document.',
+    INTERPRET: 'Reading the documented procedures is taking longer than usual for this document.',
     Job.PREDICT: ('The document review is taking longer than usual: it is still waiting for the coding service to '
                   'answer.'),
     Job.REVIEW2: ('The document review is taking longer than usual: it is still waiting for the coding service to '
@@ -107,6 +112,21 @@ ERRORS = {
 }
 STOPPED_BY_MEMBER = 'Processing was stopped before it finished.'
 STOPPED_BY_SYSTEM = 'Processing paused before it finished.'
+# The interpretation's own outcomes (design/FINAL.md 6.11 and 11): a failed interpret stage leaves an existing state
+# (review._failed_stage_state: provider_failed with its run, or provider_not_run), worded here from that run - a document
+# over the size bound or cut off at the output limit (C5: never offered a paid retry), one that could not be prepared,
+# or any other definite failure, which offers the recorded retry ('retry_reading': FINAL 11.3) - and an interpreter that
+# is disabled or held reads as the existing stopped state with the paused phase (FINAL 11.2). Never a vendor's name.
+INTERPRETATION_ERRORS = {
+    'too_long': ('This document is too long to be read in one piece, so nothing was suggested for it. Shorten it or '
+                 'split it, then upload it again.', 'new_document'),
+    'unprepared': ('This document could not be prepared for reading, so nothing was suggested for it. Upload it again.',
+                   'new_document'),
+    'failed': ('Reading the documented procedures could not be completed for this document, so no codes were '
+               'suggested.', 'retry_reading'),
+    'not_run': ('Reading documented procedures is not available right now, so no codes were suggested.', 'none'),
+}
+INTERPRETATION_PAUSED = interpretation_holds.PAUSED_MESSAGE
 
 
 def _iso(value):
@@ -215,6 +235,10 @@ def _step_outcome(job):
         return JOB_STEP_STATES.get(job.state, 'failed')
     if _skip(job):
         return None
+    if job.kind == INTERPRET:
+        # an interpretation blocked by an unknown outcome, or whose own outcome is unknown, did not finish: it reads as
+        # an outcome still being confirmed; every other interpret that succeeded read the document (FINAL 6.11)
+        return 'stopped' if _recorded(job) in (BLOCKED, models.ProviderRun.UNKNOWN) else 'done'
     sends = job.kind in SENDING_KINDS + CHECK_KINDS
     if sends and _held(None, job.context):
         return None  # nothing was asked while a member date conflict held the document (the step reads skipped)
@@ -308,6 +332,38 @@ def date_held(encounter):
             and is_member_conflict((context.facts or {}).get('service_date')))
 
 
+def interpreter_paused(encounter):
+    """Whether the current revision's latest stage is an interpret stage the interpreter's pause ended (FINAL 11.2: the
+    mode is disabled or an installation-wide hold stands, so it recorded a not-sent run and ended CANCELLED with the
+    paused message). Read from the stage's own record, never from this process's settings: the worker's mode decides."""
+    latest = review.latest_job(encounter)
+    return (latest is not None and latest.kind == INTERPRET and latest.state == Job.CANCELLED
+            and latest.error == INTERPRETATION_PAUSED)
+
+
+def interpretation_error(encounter, state, run):
+    """(text, action) of a failed interpret stage (FINAL 6.11), or None when the failed state is not an interpret
+    stage's: ``state`` and ``run`` are review._state_and_run's (the run is the stage's own, which explains it). Too long -
+    the size bound, or an answer cut off at its output limit (C5) - or a document that could not be prepared: upload it
+    again; any other failure offers the recorded retry; no request made: not available now."""
+    latest = review.latest_job(encounter)
+    if latest is None or latest.kind != INTERPRET or latest.state not in (Job.FAILED, Job.UNKNOWN):
+        return None
+    if state == 'provider_not_run':
+        return INTERPRETATION_ERRORS['not_run']
+    if state != 'provider_failed' or run is None or run.purpose != jobs.INTERPRETATION:
+        return None
+    scope = run.scope or {}
+    if scope.get('refused') == jobs.UNBUILT:
+        return INTERPRETATION_ERRORS['unprepared']
+    if scope.get('refused') == jobs.FAILED_BEFORE:
+        # the failed-request door kept it unsent: worded by the attempt that failed (a cut-off answer stays too long)
+        run = encounter.provider_runs.filter(pk=scope.get('failed'), purpose=jobs.INTERPRETATION).first() or run
+    if scope.get('refused') == jobs.SIZE or jobs.interpretation_effect(run) == interpretation_holds.TOO_LONG:
+        return INTERPRETATION_ERRORS['too_long']
+    return INTERPRETATION_ERRORS['failed']
+
+
 def stage_bound(kind):
     """The seconds a running stage of ``kind`` really has - the bound enforced where it runs, never a figure nothing
     reads - from which "taking longer than usual" is drawn (critic C4): the extraction child's timeout
@@ -318,6 +374,8 @@ def stage_bound(kind):
     predict and review2 entries are read nowhere, so they are never used. None for a kind with no bound."""
     if kind == Job.EXTRACT:
         return settings.EXTRACTION_TIMEOUT_SECONDS
+    if kind == INTERPRET:
+        return settings.JOB_DEADLINE_SECONDS.get(INTERPRET)  # its one send's deadline and its reading: 380 s
     if kind in SENDING_KINDS:
         return settings.PROVIDER_READ_TIMEOUT_SECONDS + 30
     if kind in (Job.ANALYZE, Job.ASSESS) + CHECK_KINDS:
@@ -492,7 +550,8 @@ def _busy_state(key, mine, current, revision, configured):
             return 'waiting'  # an assess #1: its peer reviews follow it
     if mine:
         return _jobs_outcome(mine)
-    if active.kind in (Job.EXTRACT, Job.ANALYZE) or (key == 'independent_checks' and active.kind in SENDING_KINDS):
+    if (active.kind in (Job.EXTRACT, INTERPRET, Job.ANALYZE)
+            or (key == 'independent_checks' and active.kind in SENDING_KINDS)):
         return 'waiting'
     previous = models.Assessment.objects.filter(revision=revision).order_by('-created_at', '-pk').first()
     if previous is None:
@@ -526,14 +585,20 @@ def encounter_progress(encounter, now=None) -> dict:
         phase = 'processing' if running is not None else 'queued'
         slow, slow_message = _slow(active, now)
     else:
-        state = review._derive_state(encounter)
-        if state == 'stopped':
+        state, failed_run = review._state_and_run(encounter)
+        if state == 'stopped' and interpreter_paused(encounter):
+            # FINAL 11.2: the interpreter is disabled or held - the existing stopped state, the paused phase and the
+            # paused message; Resume once it is available again
+            phase = 'paused'
+            error = {'text': INTERPRETATION_PAUSED, 'action': 'resume' if review.can_resume(encounter) else 'none'}
+        elif state == 'stopped':
             phase = 'stopped'
             error = {'text': STOPPED_BY_MEMBER if encounter.stopped_at is not None else STOPPED_BY_SYSTEM,
                      'action': 'resume' if review.can_resume(encounter) else 'none'}
         elif state in FAILED_STATES or state == 'processing':
             phase = 'failed'
-            text, action = ERRORS[state if state in FAILED_STATES else 'unfinished']
+            text, action = (interpretation_error(encounter, state, failed_run)
+                            or ERRORS[state if state in FAILED_STATES else 'unfinished'])
             error = {'text': text, 'action': action}
         elif state == 'provider_unknown':
             phase = 'being_confirmed'

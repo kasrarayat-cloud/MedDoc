@@ -1467,6 +1467,34 @@ def _failed_stage_state(encounter, revision, job):
     provider_failed (else None); (None, None) when the assessment's own state stands."""
     if job.kind == Job.EXTRACT:
         return 'extraction_failed', None
+    from .interpretation import JOB_KIND, PURPOSE  # the Gemini migration's stage and its runs (labels only)
+
+    if job.kind == JOB_KIND:
+        # design/FINAL.md 6.11: an interpret stage reads like a predict whose runs have purpose 'interpretation' - an
+        # outcome still unknown is provider_unknown; a definite failure is provider_failed with the run that explains it
+        # (the progress panel words it and offers the retry door, FINAL 11.3); one that recorded no run (the live gate
+        # refused it, or it stopped with an unexpected error before any) or that the live gate or the sentinel kept from
+        # making one made no request: provider_not_run; one whose answer arrived usable and was then not used reads
+        # processing_failed, as a predict's does
+        if job.state == Job.UNKNOWN:
+            return 'provider_unknown', None
+        run = (encounter.provider_runs.filter(revision=revision, created_at__gte=job.created_at, purpose=PURPOSE)
+               .order_by('-created_at', '-pk').first())
+        if run is None or (run.state == ProviderRun.NOT_SENT and (run.scope or {}).get('refused') in (
+                'live_gate', 'sentinel')):  # jobs.NOT_RUN: refused before any request could be made
+            return 'provider_not_run', None
+        state = ProviderRun.NOT_SENT if run.state == ProviderRun.RESERVED else run.state
+        if state in UNSETTLED_RUN_STATES:
+            return 'provider_unknown', None
+        if state == ProviderRun.SUCCEEDED:
+            from .jobs import interpretation_effect  # local import: jobs imports this module
+            from .interpretation.holds import ANSWERED
+
+            if interpretation_effect(run) == ANSWERED:
+                # the answer is a usable one (read, or still unread: this server could not read it to the end): what
+                # failed is the processing, as for a predict whose answer arrived - never the interpretation's request
+                return 'processing_failed', None
+        return 'provider_failed', run
     if job.kind in Job.PARTICIPANT_KINDS + Job.PEER_KINDS:
         # A harness participant's stage - its first reading's or its peer review's (HARNESS.md 12.1) - never makes the
         # encounter provider_failed, which is Corti's state: its own failures are runs of its own, and the chain goes on
@@ -1993,8 +2021,14 @@ def estimated_cost(run):
     reuse, a request not sent), where the pricing module is not installed, where a loop's exchanges do not add up to its
     usage, where an exchange that may have been billed reported no usage (unpriced_exchanges: an estimate of the others
     is no estimate of the run), and where pricing cannot price the usage: an estimate is informational, so it never
-    fails the page or a report (its error is logged)."""
-    if run is None or run.provider not in participants.PARTICIPANTS or not run.usage:
+    fails the page or a report (its error is logged).
+
+    The interpreter's runs (provider 'gemini', design/FINAL.md 3.2 and 6.3) are priced too: one exchange, at the rate of
+    the UTC day its request was sent (pricing.estimate(..., on=run.started_at): Gemini's rates are dated, so a run with
+    no recorded start has no estimate). Astra's and Fable's rates are undated and do not read the day."""
+    from .interpretation import PROVIDER as INTERPRETER
+
+    if run is None or run.provider not in participants.PARTICIPANTS + (INTERPRETER,) or not run.usage:
         return None
     try:
         pricing = importlib.import_module(PRICING_MODULE)
@@ -2006,11 +2040,11 @@ def estimated_cost(run):
         exchanges = list(run.exchanges.order_by('turn').values_list('turn', 'state', 'usage'))
         usages = [dict(usage or {}) for _, _, usage in exchanges]
         if run.usage_basis != participant_loop.LOOP_USAGE_BASIS and len(usages) <= 1:
-            return _usd(pricing.estimate(run.requested_model, dict(run.usage)))
+            return _usd(pricing.estimate(run.requested_model, dict(run.usage), on=run.started_at))
         reported = participant_loop.summed_usage([usage for usage in usages if usage])
         if _unpriced(exchanges) or reported != dict(run.usage):
             return None
-        return _usd(pricing.estimate_loop(run.requested_model, usages))
+        return _usd(pricing.estimate_loop(run.requested_model, usages, on=run.started_at))
     except Exception:  # noqa: BLE001 - logged; no estimate is shown rather than a failed page or report
         log.exception('the usage of run %s could not be priced', run.pk)
         return None
