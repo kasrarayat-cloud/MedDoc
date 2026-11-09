@@ -238,6 +238,35 @@ class ChainTests(InterpretCase):
         self.assertEqual((assess.kind, assess.context_id, assess.provider_run_id), ('assess', context.pk, None))
         self.assertEqual(models.RoutingRun.objects.filter(revision=revision).count(), 1)  # the stand-in, once
 
+    def test_an_upload_through_the_api_reaches_predict_with_a_gemini_context(self):
+        """The done-when, from the member's own act: a pasted SYNTHETIC document uploaded through POST /api/encounters
+        (the attestation and the intake path) is interpreted from its replay recording and reaches predict on a
+        gemini-context@1 context with its stand-in, nothing of the legacy reader called."""
+        from django.test import Client
+
+        client = Client()
+        client.force_login(self.user)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = client.post('/api/encounters', {'text': TEXT, 'synthetic_attestation': 'yes'})
+        self.assertEqual(response.status_code, 201, response.content[:300])
+        encounter = models.Encounter.objects.get(pk=response.json()['id'])
+        revision = encounter.current_revision
+        self.run_next('extract')
+        self.record(revision)
+        with mock.patch.object(jobs, '_analyze_child', side_effect=AssertionError('legacy analyze')), \
+                mock.patch.object(jobs, '_route_child', side_effect=AssertionError('legacy router')):
+            for kind in ('interpret', 'analyze', 'predict'):
+                job = self.run_next(kind)
+                self.assertEqual(job.state, models.Job.SUCCEEDED, f'{kind}: {job.error}')
+        encounter.refresh_from_db()
+        context = encounter.current_context
+        self.assertEqual((context.version, context.event_inventory.provider_run.purpose),
+                         ('gemini-context@1', 'interpretation'))
+        self.assertTrue(models.RoutingRun.objects.filter(revision=revision, version='gemini-routing@1',
+                                                         service_date=date(2026, 11, 9),
+                                                         result__inventory=str(context.event_inventory_id)).exists())
+        self.assertEqual([(job.kind, job.context_id) for job in self.queued()], [('assess', context.pk)])
+
     def test_the_stored_inventory_reads_back_through_the_store(self):
         _, revision = self.through_extract()
         self.record(revision)
