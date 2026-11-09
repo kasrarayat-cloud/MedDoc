@@ -2695,3 +2695,101 @@ document now states a date: a member answer that CONTRADICTS the newly read docu
 is taken - exactly as for every date the installed reader already reads. The gate accepts NEW-HELD and NEW-TAKE only in
 those two shapes, text by text; SEND->ASK stays refused. The day-first and weekday forms under the installed labels read
 exactly as the installed month-day-year twin, its 2026-10-28 known limits included (recorded as parity).
+
+## Owner requirement, 2026-11-09 — the shared evidence model (GI Note #8), added to the completion contract
+
+Received by session 30a58364 (the integration and deployment owner) on 2026-11-09 at about 00:00Z, as pasted. Recorded
+verbatim below; it adds to the 2026-11-06 directive and replaces none of its unfinished requirements.
+
+> Add this requirement to the current CPT Studio repair harness and continue the existing work. Do not restart the project or create a competing deployment task.
+>
+> MOST IMPORTANT: Fix the shared documentation-validation logic, not just the five CPT codes or GI Note #8. The repair must address the underlying association of evidence with procedures, targets, techniques and encounters so the same defect does not recur elsewhere.
+>
+> Integrate this into HARNESS.md, CPT-HARNESS-CHECKLIST.md and the current checkpoint. Cross-reference U12 and U30 and any related existing defects. Preserve completed work and reopen only items invalidated by new evidence.
+>
+> The new report concerns Advanced GI / IBD Colonoscopy Procedure Note #8. It reports five detected candidates—45385, 45390, 45386, 45380 and 45381—but six clarification questions and no codes ready for review. Treat this as evidence to reproduce, not proof that all five codes must be approved or separately billable.
+>
+> Complete these additional acceptance items:
+>
+> - [ ] Reproduce and trace the actual failure.
+>   Locate the original retained document, extracted text, provider responses and current assessment. Trace all five candidates and all six questions. Identify the earliest stage where evidence becomes associated with the wrong target, technique, time or procedure. Compare the installed release with the active repair branch to avoid duplicating work already completed.
+>
+> - [ ] Repair the shared evidence model.
+>   Before evaluating contradictions, associate each assertion with its procedure, anatomical target or lesion, intervention, technique, encounter/time, performer, outcome and exact source spans. Use the existing architecture where possible; the report’s suggested JSON is conceptual, not a requirement for a new database schema.
+>
+>   Different lesions can share the same anatomical segment. One lesion can also have several descriptions. Resolve references such as “this polyp,” “this lesion” and “the stricture” from their context rather than location or nearest-word matching alone. Preserve uncertain identity instead of guessing.
+>
+> - [ ] Evaluate genuine contradictions correctly.
+>   Similar vocabulary must not establish a conflict. Compare assertions about compatible events and determine whether their meanings are actually incompatible.
+>
+>   Test both different-target and same-target cases. “No EMR electrosurgical snare was used” may coexist with cold-snare removal on the SAME polyp; do not assume it describes another lesion. Conversely, a broad denial of resection may contradict a specific completed resection on the same target.
+>
+>   Preserve sequence: an unsuccessful initial attempt followed by documented successful completion is not automatically contradictory. Genuine unresolved contradictions must still trigger review.
+>
+> - [ ] Repair temporal, injection and extent interpretation.
+>   Historical non-performance in 2024 must not invalidate a separately documented current intervention. Inherit a supported service date within the correct procedure context; do not substitute upload, signature or document-creation dates.
+>
+>   Distinguish completed tattoo placement for future localization from planned tattooing. Keep tattoo material, target and purpose separate from an EMR saline lift. Documentation of two actions does not itself establish separate billability.
+>
+>   For altered surgical anatomy, extract the documented anatomy, anastomosis, landmarks, furthest point reached and traversal before/after dilation. Do not invent a cecum or automatically equate neo-terminal ileum intubation with every standard completion criterion.
+>
+> - [ ] Keep documentation and billing decisions separate.
+>   Clearly distinguish performed, not performed, historical, planned/deferred and uncertain documentation from bundling, modifier, payer and reference restrictions.
+>
+>   Apply the same evidence standards to explicit Corti, Astra and Fable proposals. Preserve independent readings and provenance. Agreement alone must not approve a code.
+>
+>   Before asking a question, check whether the complete report already resolves it. A recognition failure must not be presented as proof that a procedure was not performed.
+>
+> - [ ] Prove generalization.
+>   Add focused unit and integration tests for different lesions at the same site, different techniques on the same lesion, historical versus current events, failed-then-completed attempts, completed tattoos with future purposes, altered anatomy and genuine same-event contradictions.
+>
+>   Vary wording, paragraph order and PDF/Word layouts. Include negative controls for deferred procedures, untreated lesions and included procedural components. Trace other consumers of the shared validator and test reusable behavior without claiming untested specialties are clinically validated.
+>
+> - [ ] Verify every question and persisted outcome.
+>   Produce a before/after table for each of the six questions: original reason, implicated evidence, confirmed cause, corrected result and any legitimate remaining uncertainty.
+>
+>   Remove a question only when existing documentation resolves it. Do not target “zero questions” or “five READY” regardless of evidence. Preserve original responses, assessments, answers and decisions.
+>
+>   Reassess retained data first, then complete a small fresh synthetic acceptance check. Verify review decisions, clarification recomputation, reload and actual downloads.
+>
+> - [ ] Install and close with evidence.
+>   Continue through the authorized repair, relevant regression tests, independent adversarial review, installation and served verification while keeping the website accessible.
+>
+>   Tick these items only when their acceptance evidence passes. If a proposed fix fails, preserve the counterexample and change approach; do not drop the shared-core requirement and call the job complete.
+>
+>   Report the installed revision, confirmed root cause, shared functions repaired, generalization tests, six-question comparison, actual website/export results and precise remaining limitations.
+>
+> Continue under the existing standing synthetic-testing authority and technical safeguards. This is an addition to the current completion contract, not a replacement for its unfinished requirements.
+
+### Session interpretation, 2026-11-09 (30a58364, on receipt) — recorded, not owner-ruled
+
+(a) **The case, located and reproduced.** "GI_Advanced_IBD_Colonoscopy_Procedure_Note_08" is encounter
+9dbe9fc4-0cef-48a5-85a7-34d873f92963, uploaded by the owner account on 2026-11-08 at 23:48Z as a PDF (19,398 extracted
+characters, text sha256 prefix 25ef61e4bf743b70) and assessed by the installed release c2e53f8e (gi-routing@12,
+cpt-studio-validation@10). Corti, Astra and Fable all answered. After the peer reviews all five candidates (45385, 45381,
+45390, 45386, 45380) were held with ten stored questions, which the page shows as six: four "performed and not performed"
+conflicts (snare 45385, endoscopic mucosal resection 45390, dilation 45386, biopsy 45380), 45381's performed status, and
+one extent question (five per-code rows). The owner then answered "cannot confirm" to all ten and revoked three, so every
+code reads excluded and the encounter reads reviewed. Re-assessed offline from its retained responses on a restored copy
+(the R-judge path, nothing sent), the installed code reproduces both states exactly: with the owner's answers, five
+excluded; without them, the same ten questions. Every original response, assessment, answer and revocation stays as it is.
+
+(b) **What the requirement repairs.** The shared association of evidence: an assertion (an act done, an act denied, a plan,
+a history) is tied to its procedure, its target or lesion, its technique, its time and its outcome before any two
+assertions are compared. Note #8 is the evidence, not the target: no code is to be made READY, and no question removed,
+except where the document resolves it. Its expected documentation reading is fixed by a careful reading recorded with
+the trace, never by the five codes the report lists.
+
+(c) **Cross-references.** U12 (one fact, three readers - the parent defect), U13 (a failed attempt's device; a lesion's
+disposition), U30 (a cited passage that hedges holds the code; a denied lift injection read against a tattoo), U19 and
+U14 (extent), U21 (the date forms), U10 and U11 (answers). Each keeps its own row; the new class is recorded as U32.
+
+(d) **Documentation and billing stay apart.** Whether an act is documented as performed, not performed, historical,
+planned or uncertain is the readers' decision. Bundling (45381 beside 45390, 45385 beside 45390 on another lesion),
+modifiers, payer and reference rules stay considerations (limitation L2, NCCI PTP unconnected) and never hold or release
+a documented act.
+
+(e) **The same proof burden.** A design, two refutation cycles under the two-cycle rule, the full suite, CI, a declared
+install, the retained re-assessment first, then a fresh synthetic acceptance check written blind to the repair. The date
+item touches the request side (studio/gi/context.py, the H2 freeze); what it moves is decided after its trace, and any
+request-side movement beyond the 2026-11-07 decision is put to the owner before it ships.

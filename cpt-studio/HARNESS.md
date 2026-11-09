@@ -4225,3 +4225,38 @@ were found by the suite and re-pinned.
   twin keeps that sentence verbatim (an installed blind spot of the short reach, 152 readings in the lens's batteries).
 - The narrowing's cost: 283 of 378 natural correct long reaches read as installed.
 - The cache repair: nothing found on other caches, on cost or on determinism.
+
+## The shared evidence model (2026-11-09): GI Note #8, and association before contradiction
+
+The owner's requirement of 2026-11-09 (verbatim, with the session's interpretation, in
+`docs/foundation/rulings/2026-10-23-cpt-studio-gi.md`) adds to the completion contract: repair the shared association of
+evidence with procedures, targets, techniques and encounters, so that a contradiction is judged only between assertions about
+compatible events. Its case is GI Note #8; its class is U32 (CPT-HARNESS-CHECKLIST.md), whose parent is U12 ("one fact, three
+readers"), with U13, U30, U19/U14, U21 and U10/U11 related. This section records the work as it happens; the trace, the
+design, the refutations and the install are appended below, never rewritten.
+
+### The case, located and reproduced (2026-11-09)
+
+- **The record.** Encounter `9dbe9fc4-0cef-48a5-85a7-34d873f92963`, "GI_Advanced_IBD_Colonoscopy_Procedure_Note_08", uploaded
+  by the owner account at 2026-11-08T23:48Z as a PDF; 19,398 extracted characters (text sha256 prefix `25ef61e4bf743b70`).
+  Assessed by the installed release `c2e53f8e` (gi-routing@12, cpt-studio-validation@10). Corti, Astra and Fable answered, and
+  both peer reviews were made.
+- **What it read.** All five candidates held - 45385, 45381, 45390, 45386, 45380 - with ten stored questions, which the page
+  shows as six:
+  - four "performed and not performed" conflicts, each pairing a completed act with a denial about something else:
+    - 45385 (snare): the cold-snared descending polyp, against "No biopsy, snare resection, ablation, or balloon dilation was
+      performed on this splenic-flexure lesion" - another lesion;
+    - 45390 (EMR): the transverse-colon resection, against "Neither the dilation balloon nor the EMR electrosurgical snare was
+      used to treat this polyp" - the cold-snared polyp, another target and another technique;
+    - 45386 (dilation): the anastomotic dilation, against "No dilation was carried out in 2024." - another time;
+    - 45380 (biopsy): the targeted biopsies, against the splenic-flexure denial - another lesion;
+  - 45381's performed status: the completed carbon-particle tattoo, written "For future localization, ... was placed", read as
+    planned, and read against "No carbon-particle tattoo was placed into the transverse-colon resection bed" - another target;
+  - one extent question, on all five: the ileocecal resection leaves no cecum, and the neo-terminal ileum, reached after the
+    anastomosis was dilated and traversed, is read as no extent.
+  The stated "Date of service: November 8, 2026" was not read either: the date in use is the one the owner entered at upload.
+- **The owner's answers.** "Cannot confirm" to all ten at 23:57:49Z, three revoked: every code reads excluded, and the
+  encounter reads reviewed. Every original response, assessment, answer and revocation is kept.
+- **Reproduced offline** from the retained responses on a restored copy (`rjudge.sh`, nothing sent): with the owner's answers,
+  five excluded; without them, the same ten questions. The trace of every candidate and question, with the earliest stage of
+  wrong association, follows.

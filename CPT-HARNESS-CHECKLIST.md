@@ -224,8 +224,8 @@ the progress log below.
 | objective | the installed website assesses an uploaded GI PDF or Word document with Corti, Astra and Fable, supported proposals reach review, decisions persist, and the download matches them |
 | installed | `c2e53f8e7d33` at https://cpt.quillmd.com since 2026-11-08 (app phase 22:53:32-22:56:31Z; declaration `docs/foundation/mutations/20261108-cpt-studio-structure-round-install.md`; record `docs/deploy-reports/20261108-cpt-studio-c2e53f8e-install-and-walk.md`); rollback image `cpt-studio:aeae34bebbe5` |
 | candidate | none: the next round (U29, U30 and U31, with U20) is not built yet |
-| current stage | the structure round is installed and walked: the blind c5 walk 0 of 3 on holds, no false READY (U29, U30, U31); c4 walked again: c4c passes every product check, c4b 43239 READY and approved, c4a routed as performed with its codes held (U30, U15/U17, U19) |
-| next action | land this record; commission a fresh blind set c6, sealed before any design reads it; plan the next round against the development corpus with retained provider citations on extracted text (U30 is the largest class live) |
+| current stage | the next round on fix/cpt-studio-c5-round-20261109: wave 1 (U30, U29, U31 designs and lenses) running; the owner's 2026-11-09 requirement (the shared evidence model, GI Note #8, U32) added: Note #8 located and reproduced, traced; a fresh blind set c6 sealed for the next walk |
+| next action | the Note #8 trace's synthesis; then the shared evidence model's design (association before contradiction), with U30's wave-1 designs and wave 2 (U19, the unread acts) folded in; refutation; integration; install; the retained re-assessment (Note #8 and the walk members); a fresh synthetic acceptance check written blind |
 
 ### Unresolved defects (each closed only by acceptance evidence)
 
@@ -262,6 +262,7 @@ the progress log below.
 | U29 | a title whose aside the title rules do not list ("UPPER ENDOSCOPY (EGD) - URGENT ADD-ON", "ENDOSCOPY NOTE - EGD AND COLONOSCOPY, SAME SESSION") is an unsafe title (I7: the instrument reader stops below it) and no procedure title (I9), and the title reads uncertain: a plain procedure narrative under "Procedure:" reads no mention, every code held | the blind c5 walk (c5a, c5c), read offline on c2e53f8e (c5diag/instruments.py) | OPEN |
 | U30 | a cited passage that hedges holds the code: a provider's citation set that includes another act's or lesion's negation ("it was not sampled", "was not sent to pathology", "without submucosal injection") holds a code whose own act the inventory reads as performed; and a denied accessory injection holds the tattoo's 45381 (same act kind) | c4a 45385 and c4b 43247 on the live c4 walk again; c5b 45385 and 45381 on the blind c5 walk; engine._negation_resolved (main's rule; the narrower exception refuted three times and dropped, the harness repair's round 3) | OPEN |
 | U31 | the section structure: a hard-wrapped label at a line start ("Past\nhistory: ERCP ...") is read as a heading, and the section it opens swallows bare family-name headings ("EGD", "COLONOSCOPY") that open no section (U20's class): both narratives read as history | the blind c5 walk (c5c), read offline on c2e53f8e (c5diag/layout.py) | OPEN |
+| U32 | the shared evidence association (owner requirement 2026-11-09): an assertion - an act done, an act denied, a history, a plan - is compared with another by its act kind alone, before it is tied to its target or lesion, technique, time and outcome. GI Note #8: four "performed and not performed" conflicts pair a completed act with a denial about another lesion ("on this splenic-flexure lesion"), another technique on the same polyp ("Neither the dilation balloon nor the EMR electrosurgical snare was used to treat this polyp") or another time ("No dilation was carried out in 2024"); the completed tattoo "For future localization" is read as planned and against "No carbon-particle tattoo was placed into the transverse-colon resection bed"; the altered anatomy (no cecum; the neo-terminal ileum reached after dilating the anastomosis) reads no extent; the stated "Date of service: November 8, 2026" is not read | encounter 9dbe9fc4 (owner upload 2026-11-08T23:48Z), reproduced from its retained responses on c2e53f8e with and without the owner's answers; related: U12 (parent), U13, U30, U19/U14, U21, U10/U11 | OPEN (traced 2026-11-09) |
 | Q1 | owner question (class (a)): does 43247 cover a food bolus pushed into the stomach? 13 corpus entries wait on it | corpus RULING entries | OWNER |
 | Q2 | owner question: two dilation techniques on one stricture (an NCCI question; NCCI unconnected) | corpus | OWNER |
 | L1 | pypdf 6.21.2's seven denial-of-service advisories: accounted for, not resolved | `docs/cpt-harness/repair3-20261105/pypdf-advisories-accounting.md` | LIMITATION, reported until resolved |
@@ -297,6 +298,35 @@ the progress log below.
     to harness repair 3's pins once the labels are set back), the installer suites (350 OK).
 - **Provider runs and usage in this repair:** none sent.
 - **Deployment receipts:** none yet. Earlier receipts are in /home/claude/cpt-studio-install-20261023.
+
+## The shared evidence model, 2026-11-09 (owner requirement of 2026-11-09)
+
+The requirement is recorded verbatim, with the session's interpretation on receipt, in
+`docs/foundation/rulings/2026-10-23-cpt-studio-gi.md` ("Owner requirement, 2026-11-09"). It adds to the 2026-11-06 directive and
+replaces none of its unfinished requirements. Its case is GI Note #8 (encounter 9dbe9fc4); its class is U32, with U12 its parent
+and U13, U30, U19/U14, U21 and U10/U11 related. Each item is ticked only when its acceptance evidence passes.
+
+- [ ] **Reproduce and trace the actual failure.** Located: the owner's upload of 2026-11-08T23:48Z (PDF, 19,398 extracted
+  characters), its Corti, Astra and Fable runs, its six assessments and its ten stored questions. Reproduced offline from the
+  retained responses on c2e53f8e, with the owner's answers (five excluded) and without them (the same ten questions). The trace
+  of all five candidates and six questions, with the earliest stage of wrong association, is running.
+- [ ] **Repair the shared evidence model** (association of each assertion with procedure, target or lesion, intervention,
+  technique, encounter/time, performer, outcome and exact spans, before contradictions; lesion identity from context, uncertain
+  identity preserved).
+- [ ] **Evaluate genuine contradictions correctly** (compatible events only; the same target with another technique; a broad
+  denial against a specific completed act on the same target; a failed attempt followed by a completed one; genuine
+  contradictions still reviewed).
+- [ ] **Repair temporal, injection and extent interpretation** (historical non-performance; the procedure's own date; a
+  completed tattoo for future localization against a planned one; the lift kept apart from the tattoo; altered anatomy).
+- [ ] **Keep documentation and billing decisions separate** (documentation statuses against bundling, modifier, payer and
+  reference rules; the same standard for Corti, Astra and Fable; provenance kept; agreement never approves; questions only where
+  the report leaves the fact open).
+- [ ] **Prove generalization** (unit and integration tests for each case named; wording, order and PDF/Word variation; negative
+  controls; the shared validator's other consumers traced).
+- [ ] **Verify every question and persisted outcome** (the six-question before/after table; the retained re-assessment first;
+  then a fresh synthetic acceptance check with decisions, recomputation, reload and downloads).
+- [ ] **Install and close with evidence** (the authorized repair, regression tests, an independent adversarial review, the
+  install, served verification, the record).
 
 ## Progress log (append only)
 
@@ -1124,3 +1154,6 @@ the progress log below.
   - The declaration's offline predictions cited hand-picked passages on the source text. The live engine reads the
     retained provider citation on the extracted text, so c4a's 45385 and c4b's 43247 did not read READY live. A
     re-walk is predicted with the retained responses on the extracted text.
+- **2026-11-09 The owner's requirement: the shared evidence model (GI Note #8).** Recorded verbatim in the rulings file with the
+  session's interpretation; U32 added (U12 its parent; U13, U30, U19/U14, U21, U10/U11 related). Note #8 located (encounter
+  9dbe9fc4) and reproduced from its retained responses on c2e53f8e, with and without the owner's answers; the trace is running.
