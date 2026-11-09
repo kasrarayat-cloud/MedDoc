@@ -372,22 +372,43 @@ class Bases(SimpleTestCase):
 
 
 class EB(SimpleTestCase):
-    """ADJUDICATION EB1-EB2: the passage guards are gone; a frame default is Gemini's reading."""
+    """ADJUDICATION EB1-EB2: the passage guards are gone; a frame default is Gemini's reading. Each pin is built so that
+    the removed guard, in the shape contract 5.3 and 8.3 gave it, would have failed the default: the act's own passage
+    holds a date that is not the service date (refuter C-13), or a titled name that is not on a VERIFIED team (C-14;
+    with no team name verified, contract 8.3 skipped the guard's name test, so a pin without one would pin nothing)."""
 
+    SERVICE = 'Synthetic report. Date of service: 11/09/2026.'
     TATTOO = ('A carbon-particle tattoo was placed 3 cm distal to the mass to mark it for the colectomy scheduled on '
               '12/01/2026.')
+    ANASTOMOSIS = 'The anastomosis, created in 2017, was dilated with a 15 mm balloon.'
     PATEL = ('At the request of Dr. Patel, the referring gastroenterologist, random biopsies were taken from the duodenum '
              'to exclude celiac disease.')
+    ENDOSCOPIST = 'Endoscopist: Grace Okafor, MD.'
+
+    def dated(self, sentence: str, **changes):
+        """``sentence`` (P1) after a stated date of service of 2026-11-09 (P0), its only event citing P1."""
+        value, _ = one_line(sentence, **changes)
+        value['encounter']['date_of_service'] = {'value': '2026-11-09', 'state': 'stated', 'words': '11/09/2026',
+                                                 'passages': ['P0'], 'other_dates': []}
+        value['passages'].insert(0, {'id': 'P0', 'text': self.SERVICE})
+        return value, doc(self.SERVICE, sentence)
 
     def tattoo(self, **changes):
-        value, text = one_line(self.TATTOO, **{
+        return self.dated(self.TATTOO, **{
             'procedure': attr('colonoscopy'), 'kind': attr('tattoo', 'tattoo', ['P1']),
             'status': attr('performed', 'was placed', ['P1']),
             'purpose': attr('marking', 'to mark it for the colectomy scheduled on 12/01/2026', ['P1']), **changes})
-        value['encounter']['date_of_service'] = {'value': '2026-11-09', 'state': 'stated', 'words': '11/09/2026',
-                                                 'passages': ['P0'], 'other_dates': []}
-        value['passages'].insert(0, {'id': 'P0', 'text': 'Synthetic report. Date of service: 11/09/2026.'})
-        return value, doc('Synthetic report. Date of service: 11/09/2026.', self.TATTOO)
+
+    def patel(self, verified_team: bool, **changes):
+        """The referring Dr. Patel's sentence, with (P2) or without a verified documenting endoscopist, Grace Okafor."""
+        value, text = one_line(self.PATEL, **{'kind': attr('biopsy', 'random biopsies were taken', ['P1']),
+                                              'status': attr('performed', 'were taken', ['P1']),
+                                              'target': target('', 'duodenum', 'from the duodenum', ['P1']), **changes})
+        if verified_team:
+            value['encounter']['documenting_endoscopist'] = {'words': 'Grace Okafor, MD', 'passages': ['P2']}
+            value['passages'].append({'id': 'P2', 'text': self.ENDOSCOPIST})
+            text += self.ENDOSCOPIST + '\n'
+        return value, text
 
     def test_a_scheduled_colectomy_date_in_purpose_words_does_not_fail_the_time_default(self):
         value, text = self.tattoo()
@@ -398,6 +419,19 @@ class EB(SimpleTestCase):
         self.assertEqual(state(tattoo['purpose']), ('verified', 'stated', []))
         self.assertEqual(tattoo['current'], 'yes')
 
+    def test_a_year_in_a_relative_clause_does_not_fail_the_time_default(self):
+        # The removed guard's year arm (a year standing alone in the act's own passage; refuter C-13's second case):
+        # the year dates the anastomosis, and the dilation's time is the default, with no words of its own.
+        value, text = self.dated(self.ANASTOMOSIS, kind=attr('dilation', 'was dilated', ['P1']),
+                                 status=attr('performed', 'was dilated', ['P1']),
+                                 target=target('', 'anastomosis', 'The anastomosis', ['P1']))
+        inventory = run(value, text)
+        dilation = ev(inventory, 'E1')
+        self.assertEqual(inventory.encounter_facts['date_of_service']['value'], '2026-11-09')
+        self.assertEqual(state(dilation['time']), ('verified', 'default', []))
+        self.assertEqual(state(dilation['target']), ('verified', 'stated', []))
+        self.assertEqual(dilation['current'], 'yes')
+
     def test_but_given_time_words_holding_that_date_leave_the_time_unverified(self):
         value, text = self.tattoo(time=attr('current_encounter', 'scheduled on 12/01/2026', ['P1']))
         tattoo = ev(run(value, text), 'E1')
@@ -406,24 +440,24 @@ class EB(SimpleTestCase):
         self.assertEqual(tattoo['current'], 'unresolved')
 
     def test_a_referring_physician_named_in_the_passage_does_not_fail_the_performer_default(self):
-        value, text = one_line(self.PATEL, kind=attr('biopsy', 'random biopsies were taken', ['P1']),
-                               status=attr('performed', 'were taken', ['P1']),
-                               target=target('', 'duodenum', 'from the duodenum', ['P1']))
-        biopsy = ev(run(value, text), 'E1')
-        self.assertEqual(state(biopsy['performer']), ('verified', 'default', []))
-        self.assertEqual(state(biopsy['target']), ('verified', 'stated', []))
+        # The pin is the verified team (refuter C-14: "Dr. Patel is titled, is not in the team and performs no
+        # event"); the document with no team is kept beside it.
+        for verified_team in (True, False):
+            with self.subTest(verified_team=verified_team):
+                inventory = run(*self.patel(verified_team))
+                okafor = [{'tokens': ['grace', 'okafor'], 'titled': False, 'credentialed': True}]
+                self.assertEqual(inventory.encounter_facts['documenting_endoscopist']['names'],
+                                 okafor if verified_team else [])
+                biopsy = ev(inventory, 'E1')
+                self.assertEqual(state(biopsy['performer']), ('verified', 'default', []))
+                self.assertEqual(state(biopsy['target']), ('verified', 'stated', []))
 
     def test_but_given_performer_words_naming_him_leave_the_performer_unverified(self):
-        value, text = one_line(self.PATEL, kind=attr('biopsy', 'random biopsies were taken', ['P1']),
-                               status=attr('performed', 'were taken', ['P1']),
-                               performer=attr('documenting_team', 'Dr. Patel', ['P1']))
-        value['encounter']['documenting_endoscopist'] = {'words': 'Grace Okafor', 'passages': ['P2']}
-        value['passages'].append({'id': 'P2', 'text': 'Endoscopist: Grace Okafor.'})
-        biopsy = ev(run(value, text + 'Endoscopist: Grace Okafor.\n'), 'E1')
+        biopsy = ev(run(*self.patel(True, performer=attr('documenting_team', 'Dr. Patel', ['P1']))), 'E1')
         self.assertEqual(state(biopsy['performer']), ('unverified', 'stated', ['name_mismatch']))
 
     def test_no_inventory_ever_carries_a_removed_reason(self):
-        for value, text in (self.tattoo(), one_line(self.PATEL)):
+        for value, text in (self.tattoo(), self.dated(self.ANASTOMOSIS), self.patel(True), self.patel(False)):
             dumped = json.dumps(run(value, text).__dict__)
             for removed in verify.REMOVED_REASONS:
                 self.assertNotIn(removed, dumped)
