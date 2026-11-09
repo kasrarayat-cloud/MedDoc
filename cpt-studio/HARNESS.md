@@ -4381,6 +4381,9 @@ well."; two performers; altered anatomy with guidewire versus scope passage).
   - No usage was reported, nothing was billed, no model was substituted, and no outcome is unknown.
 - **The trial client's flaw.** After the first refusal, the client sent the remaining six requests; it now stops a batch at the first
   access error.
+- **The credential stayed out of every artifact.** A scan run the same way read 3,626 files (777 MB): the trial directory, the
+  scratchpad, the session transcript with every subagent and workflow record, and these docs. None contains the key, and none
+  was unreadable. Note #8's case text hash equals the revision hash frozen into the live assessment's Astra and Fable inputs.
 - **Suitability: undetermined.** Enabling a paid tier is the owner's decision. The trial re-runs unchanged once quota exists.
 - **The evidence.** The session directory's `gemini-trial/` (REPORT.md, the cases, the sealed expectations, the raw refusals and the
   request ledger).
