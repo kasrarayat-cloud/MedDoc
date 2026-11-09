@@ -2066,8 +2066,9 @@ def stage_interpret(job):
     the run it was released for from its recorded exchange when it can (ADJUDICATION P-6). The doors, in predict's
     order: an inventory already read for this revision and versions (no send: analyze); a stored answer to the
     identical request (reused, nothing sent; P-2); the encounter-wide unknown-outcome block; the failed-before door
-    (skipping a run released for one retry); the live gate; then one send (_send, purpose 'interpretation'), and its
-    outcome settled (_settle_interpretation)."""
+    (skipping a run released for one retry); the live gate and the write gate asked before the send (each refusal a
+    not-sent run: every outcome is a run); then one send (_send, purpose 'interpretation'), and its outcome settled
+    (_settle_interpretation)."""
     revision, encounter = job.revision, job.encounter
     encounter.refresh_from_db()
     revision.refresh_from_db()
@@ -3657,6 +3658,11 @@ def reconcile(encounter, run, user, note):
     run's reconciliation, and only the participant released here is sent again. Otherwise a predict, as before: also
     for a context an earlier version recorded, which the predict remakes under the current rules before anything is
     sent (_remade_context), since those rules may hold the encounter where the earlier ones did not.
+
+    The Gemini migration (design/FINAL.md 6.9 and 9): a reconciled interpretation run, or any reconciliation on a
+    revision with no inventory read at the current versions, queues the interpret stage
+    ('interpret:...:after-reconcile:<run>') and never a predict; that stage settles the run from its recorded exchange
+    before it would send (ADJUDICATION P-6).
     """
     with transaction.atomic():
         encounter = _locked(encounter)
