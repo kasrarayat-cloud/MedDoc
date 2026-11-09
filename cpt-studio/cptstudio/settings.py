@@ -159,6 +159,16 @@ for _name, _mode in (('ASTRA', ASTRA_MODE), ('FABLE', FABLE_MODE)):
 OPENAI_CREDENTIALS_FILE = _env('OPENAI_CREDENTIALS_FILE', '')
 ANTHROPIC_CREDENTIALS_FILE = _env('ANTHROPIC_CREDENTIALS_FILE', '')
 PARTICIPANT_REPLAY_DIR = _env('PARTICIPANT_REPLAY_DIR', '')
+# The interpreter (the Gemini migration; studio/interpretation/), configured on its own: 'disabled' sends nothing and
+# pauses every interpret stage (FINAL 11.2); 'replay' reads recorded answers by request sha256 from
+# GEMINI_REPLAY_DIR/gemini/ and is labelled REPLAY; 'live' calls Gemini. Its model and endpoint are code constants
+# (studio/interpretation/adapter.py), never settings. The credentials file holds GEMINI_API_KEY only, parsed strictly as
+# data by the participants' credentials rules; it is mounted in the worker only, since the web never sends (D14).
+GEMINI_MODE = _env('GEMINI_MODE', 'disabled')
+if GEMINI_MODE not in {'disabled', 'replay', 'live'}:
+    raise RuntimeError('CPT_STUDIO_GEMINI_MODE must be disabled, replay or live.')
+GEMINI_CREDENTIALS_FILE = _env('GEMINI_CREDENTIALS_FILE', '')
+GEMINI_REPLAY_DIR = _env('GEMINI_REPLAY_DIR', '')
 # Release scope after refutation round 3 (HARNESS.md 12.10, the session's D7): this release offers no reviewer
 # confirmation of a participant's located passage. A code-level literal, deliberately never read from the environment or
 # an installer file, so no variable, file or member action turns it on; only a test's override_settings does, for the
@@ -187,6 +197,16 @@ PARTICIPANT_MAX_EXCHANGES = 4
 PARTICIPANT_EXCHANGE_READ_TIMEOUT_SECONDS = 240
 PARTICIPANT_LOOP_DEADLINE_SECONDS = 540
 PARTICIPANT_MAX_TOOL_RESULT_BYTES = 256 * 1024  # one tool result, as returned to the participant
+# The interpreter's one exchange (D12): connect and read as the participants' (above), within this send deadline, which
+# no caller's deadline stretches. Its stage (JOB_DEADLINE_SECONDS['interpret'] below) covers it, the 15 s kept for
+# recording its outcome (jobs.LOOP_RECORDING_SECONDS) and the stage's own work, and ends well before
+# STALE_RUNNING_SECONDS.
+INTERPRETER_SEND_DEADLINE_SECONDS = 330
+# The size bound (D4, FINAL C9): a revision longer than this, or with more pages, is not sent to the interpreter, and its
+# stage says so plainly. The characters are PROVISIONAL until measured from the recorded output tokens (slice S16); the
+# pages equal MAX_PDF_PAGES' default.
+INTERPRET_MAX_CHARS = 30_000
+INTERPRET_MAX_PAGES = 40
 # The assess stage routes the document again (validation's span readings read that routing's analysis) and then
 # validates, so it has the analyze stage's time and memory and as much again for the validation: a document the analyze
 # stage read within its limits is never sent and then left unassessed for repeating that work (round 7 bounded:1).
@@ -197,7 +217,7 @@ PARTICIPANT_MAX_TOOL_RESULT_BYTES = 256 * 1024  # one tool result, as returned t
 # STALE_RUNNING_SECONDS (600), where the stale-stage sweep takes a stage for dead, so a live stage is never swept. The
 # worker's stop timeout (ops/install.py, 600 s) outlasts it.
 JOB_DEADLINE_SECONDS = {'extract': 300, 'analyze': 60, 'predict': 180, 'assess': 120, 'review2': 180,
-                        'astra': 580, 'fable': 580, 'astra_peer': 580, 'fable_peer': 580}
+                        'astra': 580, 'fable': 580, 'astra_peer': 580, 'fable_peer': 580, 'interpret': 380}
 # Routing and context extraction run in a forked child under these (studio/bounded.py): the stage's deadline
 # above, this growth of address space past what the worker already uses, and a shorter wall clock when a
 # member's context change runs the extraction inside a web request.

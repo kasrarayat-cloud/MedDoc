@@ -1,4 +1,4 @@
-"""Estimated cost of one participant answer, from fixed vendor rates dated 2026-11-01 (HARNESS.md 6).
+"""Estimated cost of one participant or interpreter answer, from fixed, dated vendor rates (HARNESS.md 6).
 
 An estimate is computed from the token counts the vendor reported (ProviderRun.usage, as stored), in Decimal, and is
 never an invoice: its basis says so. Rates are US dollars per million tokens, read from the vendors' published pricing
@@ -11,6 +11,17 @@ on 2026-11-01 (docs/cpt-harness/vendor-and-reference-facts-20261101.md):
   cache reads and writes, each counted on its own; ``output_tokens`` includes thinking tokens. The harness asks for no
   caching and no fallback, so the top-level counts are the whole request (usage.iterations is not priced).
 
+The interpreter (Gemini migration, FINAL 3.2; studio/interpretation/adapter.py), read 2026-11-09 (GEMINI_SOURCE):
+
+- gemini-4-argon, Standard tier: input $2.00 and output $10.00 through 2026-11-30; input $4.00 and output $20.00 from
+  2026-12-01. Its rates are DATED, so a Gemini answer is priced at the rate of the day its request was sent (``on``, a
+  date, or a timezone-aware datetime read in UTC) and has no estimate without one - never one at a guessed rate.
+  usageMetadata's ``promptTokenCount`` is the input; the output is ``candidatesTokenCount`` plus
+  ``thoughtsTokenCount``, since thinking is billed as output (each absent or null count is zero, as the API omits a zero).
+  CPT Studio asks for no cached content and offers no tool, and no rate is recorded here for either, so a usage that
+  reports cached-content or tool-use prompt tokens has no estimate; nor has one whose ``totalTokenCount`` is not its
+  input and output added up (some tokens would be unpriced).
+
 Corti reports credits, not tokens, and has no estimate here. An answer whose usage lacks a token count, or states one
 that is not a whole number of tokens, has no estimate (None) rather than a guessed one.
 
@@ -19,6 +30,8 @@ property of one request, so a loop's summed usage is never priced as if it were 
 """
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+from datetime import date, datetime, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Optional
 
@@ -32,6 +45,19 @@ RATES = {  # US dollars per million tokens
 }
 ASTRA_LONG_INPUT_TOKENS = 272_000  # above this many input tokens a request is priced as long context
 ASTRA_LONG_MULTIPLIERS = {'input': Decimal('2'), 'output': Decimal('1.5')}
+
+GEMINI = 'gemini-4-argon'  # the interpreter's model (studio.interpretation.MODEL; a test pins the two equal)
+GEMINI_RATES_AS_OF = '2026-11-09'
+GEMINI_BASIS = 'estimated from published rates as of 2026-11-09; not reconciled to an invoice'
+GEMINI_SOURCE = ("Google's Gemini API pricing page, read 2026-11-09 (gemini-trial REPORT.md section D): gemini-4-argon, "
+                 'Standard tier, $2.00 per million input tokens and $10.00 per million output tokens (thinking '
+                 'included) through 2026-11-30; $4.00 and $20.00 from 2026-12-01.')
+# (first day, last day, US dollars per million tokens), in order; None is open-ended. A day is a UTC calendar day.
+GEMINI_PERIODS = (
+    (None, date(2026, 11, 30), {'input': Decimal('2.00'), 'output': Decimal('10.00')}),
+    (date(2026, 12, 1), None, {'input': Decimal('4.00'), 'output': Decimal('20.00')}),
+)
+
 _MILLION = Decimal(1_000_000)
 _PRECISION = Decimal('0.000001')  # estimates are stated to a millionth of a dollar
 _MAX_TOKENS = 10 ** 15  # beyond any real answer; keeps every product inside Decimal's 28 digits
@@ -41,45 +67,61 @@ class _Invalid(Exception):
     pass
 
 
-def estimate(model: str, usage) -> Optional[dict]:
+@dataclass(frozen=True)
+class _Terms:
+    """The rates one answer is priced at, and what its estimate says about them."""
+    rates: dict
+    as_of: str = RATES_AS_OF
+    basis: str = BASIS
+    stated: dict = field(default_factory=dict)  # added to the estimate's rates (Gemini's: the day priced and why)
+
+
+def estimate(model: str, usage, *, on=None) -> Optional[dict]:
     """{'estimated_usd': '0.040690', 'rates': {...}, 'basis': BASIS} for an answer of ``model`` (the model the request
-    named) with ``usage`` as the vendor reported it; None when there is nothing to estimate from."""
-    priced = _priced(model, usage)
+    named) with ``usage`` as the vendor reported it; None when there is nothing to estimate from. ``on``: the day the
+    request was sent (a date, or a timezone-aware datetime read in UTC), which a dated rate needs (Gemini's); Astra's
+    and Fable's rates are undated and do not read it."""
+    priced = _priced(model, usage, on)
     return None if priced is None else _result(model, *priced)
 
 
-def estimate_loop(model: str, usages) -> Optional[dict]:
+def estimate_loop(model: str, usages, *, on=None) -> Optional[dict]:
     """The estimate for a tool loop whose exchanges reported ``usages`` (each exchange's usage as reported, in order):
     each exchange priced on its own and the costs added up (Astra's long-context rate applies per request). One
     exchange's estimate is estimate()'s exactly. An exchange that reported no usage ({}: one never answered, say) is
-    counted and not priced; None when no exchange can be priced or a reported usage cannot be."""
+    counted and not priced; None when no exchange can be priced or a reported usage cannot be. ``on`` as estimate()'s:
+    every exchange of one run is priced at the rate of the day its run was sent."""
     if not isinstance(usages, (list, tuple)):
         return None
     if len(usages) == 1:
-        return estimate(model, usages[0])
+        return estimate(model, usages[0], on=on)
     reported = [usage for usage in usages if usage != {}]
-    priced = [_priced(model, usage) for usage in reported]
+    priced = [_priced(model, usage, on) for usage in reported]
     if not priced or any(item is None for item in priced):
         return None
     tokens = {}
-    for _, counts, _ in priced:
+    for _, counts, _, _ in priced:
         for kind, count in counts.items():
             tokens[kind] = tokens.get(kind, 0) + count
     extra = {'exchanges': len(usages), 'exchanges_priced': len(priced)}
     if model == ASTRA:
-        extra['long_context_exchanges'] = sum(1 for _, _, details in priced if details['long_context'])
-    return _result(model, sum(cost for cost, _, _ in priced), tokens, extra)
+        extra['long_context_exchanges'] = sum(1 for _, _, details, _ in priced if details['long_context'])
+    if model == GEMINI:
+        extra['thinking_tokens'] = sum(details['thinking_tokens'] for _, _, details, _ in priced)
+    return _result(model, sum(cost for cost, _, _, _ in priced), tokens, extra, priced[0][3])
 
 
-def _priced(model: str, usage) -> Optional[tuple]:
-    """(unrounded cost, priced tokens, extra rate details) of one answer, or None."""
+def _priced(model: str, usage, on) -> Optional[tuple]:
+    """(unrounded cost, priced tokens, extra rate details, terms) of one answer, or None."""
     if not isinstance(usage, dict):
         return None
     try:
         if model == ASTRA:
-            return _astra(usage)
+            return (*_astra(usage), _Terms(RATES[ASTRA]))
         if model == FABLE:
-            return _fable(usage)
+            return (*_fable(usage), _Terms(RATES[FABLE]))
+        if model == GEMINI:
+            return _gemini(usage, on)
     except _Invalid:
         return None
     return None
@@ -115,6 +157,41 @@ def _fable(usage: dict) -> tuple:
     return cost, tokens, {}
 
 
+def _gemini(usage: dict, on) -> tuple:
+    day = _day(on)
+    if day is None:
+        raise _Invalid  # a dated rate needs the day the request was sent
+    first, last, rates = next(period for period in GEMINI_PERIODS
+                              if (period[0] is None or day >= period[0]) and (period[1] is None or day <= period[1]))
+    prompt = _count(usage, 'promptTokenCount')
+    candidates = _count(usage, 'candidatesTokenCount', optional=True)
+    thoughts = _count(usage, 'thoughtsTokenCount', optional=True)
+    if _count(usage, 'cachedContentTokenCount', optional=True) or _count(usage, 'toolUsePromptTokenCount',
+                                                                          optional=True):
+        raise _Invalid  # never asked for, and no rate for them is recorded here
+    total = usage.get('totalTokenCount')
+    if total is not None and (type(total) is not int or total != prompt + candidates + thoughts):
+        raise _Invalid  # tokens this estimate would leave unpriced
+    tokens = {'input': prompt, 'output': candidates + thoughts}
+    cost = (tokens['input'] * rates['input'] + tokens['output'] * rates['output']) / _MILLION
+    effective = f'through {last.isoformat()}' if first is None else f'from {first.isoformat()}'
+    terms = _Terms(rates, GEMINI_RATES_AS_OF, GEMINI_BASIS,
+                   {'priced_on': day.isoformat(), 'effective': effective, 'source': GEMINI_SOURCE})
+    return cost, tokens, {'thinking_tokens': thoughts}, terms
+
+
+def _day(on) -> Optional[date]:
+    """The UTC calendar day of ``on``: a date as given, a timezone-aware datetime converted to UTC; None otherwise (a
+    naive datetime names no day anywhere in particular)."""
+    if isinstance(on, datetime):
+        if on.tzinfo is None or on.utcoffset() is None:
+            return None
+        return on.astimezone(timezone.utc).date()
+    if isinstance(on, date):
+        return on
+    return None
+
+
 def _count(usage: dict, key: str, *, optional: bool = False) -> int:
     """A token count as reported: a whole number, zero or more. An optional count that is absent or null is zero."""
     value = usage.get(key)
@@ -125,9 +202,9 @@ def _count(usage: dict, key: str, *, optional: bool = False) -> int:
     return value
 
 
-def _result(model: str, cost: Decimal, tokens: dict, extra: dict) -> dict:
+def _result(model: str, cost: Decimal, tokens: dict, extra: dict, terms: _Terms) -> dict:
     return {'estimated_usd': f'{cost.quantize(_PRECISION, rounding=ROUND_HALF_UP):f}',
-            'rates': {'model': model, 'as_of': RATES_AS_OF,
-                      'usd_per_million_tokens': {kind: str(rate) for kind, rate in RATES[model].items()},
-                      'priced_tokens': dict(tokens), **extra},
-            'basis': BASIS}
+            'rates': {'model': model, 'as_of': terms.as_of,
+                      'usd_per_million_tokens': {kind: str(rate) for kind, rate in terms.rates.items()},
+                      'priced_tokens': dict(tokens), **terms.stated, **extra},
+            'basis': terms.basis}

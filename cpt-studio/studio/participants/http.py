@@ -63,7 +63,12 @@ _RESPONSE_ID = re.compile(r'[\x21-\x7e]{1,140}')  # fits ProviderRun.response_id
 @dataclass(frozen=True)
 class Vendor:
     label: str  # how errors name the vendor
-    request_id_header: str  # the response header carrying the vendor's own request id
+    request_id_header: str  # the response header carrying the vendor's own request id ('' when it sends none)
+    # The vendor's describe hook (Gemini migration, FINAL 3.2): how a response body states its usage, model and id,
+    # ``describe(raw) -> (usage, model, id)``. None is this module's describe, which reads all three at the top level as
+    # OpenAI and Anthropic state them; Gemini states them as usageMetadata, modelVersion and responseId
+    # (studio/interpretation/adapter.py). What a hook returns is kept only where it fits the record (described).
+    describe: Optional[Callable[[bytes], tuple]] = None
 
 
 def default_session() -> requests.Session:
@@ -276,8 +281,11 @@ def expanded_length(stored_length: int, holder: dict, file_prefix: str) -> int:
 
 def check_shape(body, model: str, keys: frozenset) -> None:
     """A verified body is still one this adapter builds: exactly its fields, naming its model (HARNESS.md 8: the model
-    is a code constant, and nothing else - no sampling, thinking or fallback field - can ride along)."""
-    if not isinstance(body, dict) or set(body) != keys or body.get('model') != model:
+    is a code constant, and nothing else - no sampling, thinking or fallback field - can ride along). A vendor whose URL
+    names the model (Gemini's generateContent, studio/interpretation/adapter.py) builds a body with no model field: its
+    fields hold none, so a model field is refused as any other extra field is, and that adapter checks the rest of its
+    body itself. Every body whose fields include ``model`` must name ``model``, exactly as before."""
+    if not isinstance(body, dict) or set(body) != keys or ('model' in keys and body.get('model') != model):
         raise ProviderUnavailable('The request body is not one this adapter builds (its fields or its model differ); '
                                   'nothing was sent.')
 
@@ -401,7 +409,7 @@ def post(vendor: Vendor, session_factory: Callable[[], requests.Session], url: s
                 with suppress(Exception):
                     response.close()
         latency = _elapsed_ms(started)
-        usage, returned_model, response_id = describe(raw)
+        usage, returned_model, response_id = described(vendor, raw)
         error = ''
         if status != 200:
             redirect = ' (a redirect; it was not followed)' if isinstance(status, int) and 300 <= status < 400 else ''
@@ -426,6 +434,21 @@ def describe(raw: bytes) -> tuple[dict, str, str]:
     if not isinstance(parsed, dict):
         return {}, '', ''
     usage, model, response_id = parsed.get('usage'), parsed.get('model'), parsed.get('id')
+    return (usage if isinstance(usage, dict) else {}, recorded_model(model),
+            response_id if isinstance(response_id, str) and _RESPONSE_ID.fullmatch(response_id) else '')
+
+
+def described(vendor: Vendor, raw: bytes) -> tuple[dict, str, str]:
+    """(usage, model, id) as ``vendor``'s describe hook reads ``raw``: describe's reading exactly, for a vendor with no
+    hook (OpenAI, Anthropic); a hook's reading kept only where it fits the record - the usage a JSON object, the model
+    as recorded_model keeps one, the id visible ASCII of at most 140 characters - and nothing at all ({}, '', '') when
+    the hook raises or answers in another shape. It never raises: what a response says never changes its outcome."""
+    if vendor.describe is None:
+        return describe(raw)
+    try:
+        usage, model, response_id = vendor.describe(raw)
+    except Exception:  # noqa: BLE001 - the hook reads vendor bytes; a hook that cannot describe them records nothing
+        return {}, '', ''
     return (usage if isinstance(usage, dict) else {}, recorded_model(model),
             response_id if isinstance(response_id, str) and _RESPONSE_ID.fullmatch(response_id) else '')
 
