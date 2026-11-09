@@ -2874,3 +2874,182 @@ temporal override or a cross-sentence reference.
 
 (f) **Unsafe variants stay out of deployment.** The installed release (c2e53f8e) stays live and unchanged until an integrated repair
 passes; no candidate is installed that turns a correctly held original input READY.
+
+
+## Owner request, 2026-11-09 — the first Gemini interpretation trial (recorded late, from the session transcript)
+
+Received by session 30a58364 at 2026-11-09T05:45:13Z. **Recorded late:** the trial's records (HARNESS.md "The Gemini interpretation
+trial", the trial REPORT) acted on this request, but the request itself lived only in the session transcript, which is the gap the
+ruling rule in AGENTS.md exists to close. Extracted verbatim from the transcript on 2026-11-09 at ~07:20Z. The credential line is as
+the owner pasted it: a file path and a variable name, no secret.
+
+> Run the first Gemini interpretation trial now, within the existing CPT Studio harness.
+>
+> Credential:
+> `/etc/cpt-studio-provider-sources/gemini.env`
+> Variable: `GEMINI_API_KEY`
+> Requested model: `gemini-4-argon`
+>
+> Read the credential securely without printing it. Verify access and record the returned model/version. Do not silently substitute another model. Use an isolated test process; keep the live website, current provider routing and saved approvals unchanged.
+>
+> Complete this bounded experiment:
+>
+> - [ ] Verify authentication and model access. Distinguish access errors, malformed responses and interpretation failures.
+> - [ ] Locate the complete retained synthetic GI Note #8, encounter `9dbe9fc4-0cef-48a5-85a7-34d873f92963`. Preserve its source and revision hashes. If testing extracted text rather than the original PDF, explicitly label PDF/OCR understanding as untested.
+> - [ ] Establish expected event facts independently before calling Gemini. Do not send Gemini the expected codes, previous model answers, bug report conclusions or desired result.
+> - [ ] Ask Gemini to interpret the complete source into a compact structured event list: procedure, target/lesion, anatomy, technique, performer, time, performed/planned/denied/uncertain status, sequence, extent and exact supporting or contradicting passages. Unknown facts must remain unknown.
+> - [ ] Test a small fixed set covering different lesions at the same site; different techniques on the same lesion; historical denial versus current performance; “This time as well”; different performers; and altered anatomy, including guidewire passage versus scope passage.
+> - [ ] Freeze Gemini’s initial outputs before comparing them with retained Astra/Fable findings. Do not rerun those providers unnecessarily.
+> - [ ] Independently evaluate meaning—not merely valid JSON or matching quotations. Check missed supported acts, unsupported completed acts, incorrect target/time/performer links, omitted contradictory evidence and unnecessary questions.
+>
+> Use concurrency one, finite deadlines, Stop and duplicate prevention. Preserve raw results and failures securely. Reconcile unknown execution outcomes before any resend.
+>
+> Report the actual results:
+> 1. Did Gemini answer successfully using the requested model?
+> 2. Which Note #8 interpretation errors did it resolve?
+> 3. Did it introduce any incorrect completed procedures or miss genuine contradictions?
+> 4. How did it compare with the current reader and retained participant findings?
+> 5. What were latency and provider-reported usage?
+> 6. Is it suitable for a controlled integration trial, or what specific failure needs repair?
+>
+> Do not claim Gemini is integrated or the website is repaired merely because this experiment passes. If suitable, the next integration must use its evidence-linked event interpretation without sending it through the same faulty keyword interpretation as an unconditional veto.
+>
+> Carry this trial through execution and an evidence-backed result report. Use the existing synthetic-testing authority; do not stop at a design proposal.
+
+## Owner message, 2026-11-09 — billing enabled; continue the trial through evaluation (recorded late, from the session transcript)
+
+Received 2026-11-09T06:15:03Z, and recorded late for the same reason. Outcome: HARNESS.md "The Gemini interpretation trial"
+(freeze 0dfb1b2a, result d1137dbd).
+
+> Google billing is now activated and I have added credit. Continue the existing Gemini interpretation trial through its evaluation and final report.
+>
+> Read the retained trial report and current HARNESS.md first:
+> - /home/claude/cpt-studio-completion-20261106/gemini-trial/REPORT.md
+> - cpt-studio/HARNESS.md
+>
+> Use the existing protected credential at /etc/cpt-studio-provider-sources/gemini.env. Never print its contents.
+>
+> **Purpose**
+>
+> Evaluate Gemini as an evidence-based interpreter of procedure events: what was performed, on which target, using which technique, by whom, and when—including negatives, historical statements and contradictions. Determine whether it can address the shared interpretation defects behind Note #8’s false holds. Model agreement alone must not approve codes or override conflicting documentation.
+>
+> **Continue this checklist, ticking items only when supported by saved evidence:**
+>
+> - [ ] Recover the original seven cases, sealed expectations, prompt, schema and input hashes. Keep them unchanged for this retry. Preserve all seven earlier HTTP 429 refusals.
+> - [ ] Run the first case once with the existing key and requested model, gemini-4-argon. Record the returned model/version information where available. A model-information lookup alone does not establish generation access.
+> - [ ] If the first generation succeeds, retain it as case one and complete the other six cases. Do not rerun case one unnecessarily.
+> - [ ] If authentication, billing or quota fails, stop further generation immediately and inspect the exact error and project configuration. Do not substitute another model. Reconcile an unknown execution outcome before resubmitting.
+> - [ ] Freeze and hash every response before evaluation. Keep expectations, previous model answers and desired conclusions out of Gemini’s input.
+> - [ ] Independently evaluate all seven cases against the sealed expectations. Report corrected false holds, missed events, incorrect completed-procedure interpretations, missed contradictions and unresolved ambiguity.
+> - [ ] Compare with the current reader and available retained Astra/Fable findings on matching inputs. Clearly identify missing or non-comparable evidence. Use retained results wherever possible.
+> - [ ] Update HARNESS.md and the trial report with evidence links, actual usage, latency, estimated costs where calculable, and the remaining limitations.
+>
+> Use sequential requests, finite deadlines and bounded execution. Continue all already-authorized trial work without asking me to approve each request.
+>
+> Keep the live website available and its current provider routing, documents and saved approvals unchanged during this trial.
+>
+> Finish with a clear answer:
+> 1. Did Gemini actually answer using the requested model?
+> 2. Which interpretation errors did it fix or introduce?
+> 3. Is there enough evidence for a controlled integration trial?
+> 4. What shared architectural change would be required so a correct AI interpretation is not rejected again by the same defective reader?
+>
+> Distinguish successful API access, interpretation performance and readiness for integration. Seven synthetic cases cannot establish overall GI coding accuracy.
+
+## Owner directive, 2026-11-09 — replace the legacy semantic interpretation engine with Gemini
+
+Received by session 30a58364, the integration and deployment owner, at 2026-11-09T07:10Z. Recorded verbatim in this, the session's
+first commit after receipt.
+
+> Change of direction: replace CPT Studio's legacy semantic interpretation engine with Gemini. Stop extending the old keyword reader as the long-term solution.
+>
+> This authorizes implementation, necessary synthetic testing, installation on the existing authenticated synthetic site, and verification. A shadow-only implementation is not the requested final result.
+>
+> Keep the website available throughout the work. Preserve existing records, approvals, raw responses, failures and exports.
+>
+> ## Target architecture
+>
+> - Gemini, using the successfully tested gemini-4-argon model, becomes the primary interpreter of documented clinical events.
+> - Corti, Astra and Fable remain code-proposal/review participants. Preserve their independent first assessments and source attribution.
+> - Shared evidence checks, applicable coding/reference rules and reviewer approval remain.
+> - The legacy semantic reader must no longer independently reinterpret Gemini's accepted events or veto them through keyword matching.
+> - Gemini interpretation and model agreement do not constitute clinical approval.
+>
+> Read the current HARNESS.md, trial report and installed code before editing. Coordinate existing agents under one integration/deployment owner. Preserve unfinished work before stopping obsolete reader-repair branches.
+>
+> ## Evidence-backed completion checklist
+>
+> Create this migration checklist in HARNESS.md. Tick items only after their stated outcome is verified.
+>
+> - [ ] Record the installed baseline, rollback image, active work and all locations where semantic interpretation influences routing, matching, contradictions, completeness, clarification, review, saving and export.
+>
+> - [ ] Implement the production Gemini adapter using the existing protected credential. Include finite deadlines, Stop/resume, duplicate prevention, usage recording and reconciliation of unknown outcomes. Authentication/quota failures must stop requests. No silent model substitution or fallback to the old reader.
+>
+> - [ ] Introduce one versioned, persisted event inventory containing event identity, procedure, target/lesion, technique, time, performer, status, anatomy/extent and attribute-level source evidence. Bind it to the exact document revision and interpretation version. Preserve distinctions that the old Act structure or merge rules could erase.
+>
+> - [ ] Make all downstream consumers use that same inventory. Remove legacy semantic rereads from the new execution path—including those triggered by save, reload, review and export. Keeping archived legacy code for rollback is acceptable; retaining its hidden veto is not.
+>
+> - [ ] Preserve schema checks, source integrity, evidence binding, tenant isolation, applicable reference rules and approval controls. A quotation appearing in the document does not by itself establish that it supports an attribute.
+>
+> - [ ] Handle contradictions by their documented scope. Distinguish targets, techniques, times and performers, while also respecting broad statements such as "No polyp was removed today." Missing identifiers must not manufacture either a match or a non-match. Ask a focused question when necessary. An unresolved required attribute must still block the dependent code; unrelated supported codes can proceed.
+>
+> - [ ] Cover the original seven cases and the four reported Gemini slips, particularly unsupported historical extent and biopsy-site conflation. Include the scar example, historical/current acts, different lesions at one site, technique-specific denials, different performers, future purpose and guidewire-versus-scope extent. Preserve genuine contradictions.
+>
+> - [ ] Test independently authored PDF and Word inputs through actual ingestion, with repeated runs and source-grounded expectations. Label replay, text-only tests and fresh provider calls separately. Do not hardcode Note #8, its five codes, or expected answers.
+>
+> - [ ] Complete the actual website workflow with Gemini driving interpretation: upload, truthful progress, code review, explicitly labelled synthetic approval, save, reload and downloaded reports. Verify that saved decisions and downloaded content match. Keep provider/model names and traces out of customer screens and downloads.
+>
+> - [ ] Install the replacement through the established deployment process. Verify the served release and operator-side execution evidence showing Gemini is the active interpreter and legacy semantic vetoes are unused. Verify availability, preservation and rollback compatibility.
+>
+> ## Completion and reporting
+>
+> Continue through implementation, installation and meaningful verification. If a check fails, investigate and repair the new architecture without weakening acceptance criteria or returning to endless legacy-reader patches.
+>
+> Necessary testing remains authorized under the existing standing authority. Use purposeful bounded batches; preserve and report usage and costs.
+>
+> Report:
+> 1. The installed revision and website link.
+> 2. Exactly which legacy interpretation paths were replaced.
+> 3. Which independent cases passed or failed.
+> 4. Remaining false holds, false-ready results and unresolved questions.
+> 5. Actual save/reload/download verification.
+> 6. Usage, latency, costs and material limitations.
+>
+> Do not declare completion because the adapter works or the seven-case trial passed. Completion means the installed application actually uses the replacement successfully. Keep clinical accuracy claims separate from functional completion.
+>
+> If an unavoidable external dependency prevents completion, name the exact dependency and preserve a resumable checkpoint. Do not claim installation or success that has not occurred.
+
+### Session interpretation, 2026-11-09 (30a58364, on receipt) — recorded, not owner-ruled
+
+(a) **What "primary interpreter" covers.** Every new assessment of a GI document gets its event inventory from Gemini
+(`gemini-4-argon`, pinned; no other model is accepted). On the new path, routing (which families), the matching of proposed codes to
+events, contradictions, completeness facts (extent and the like), clarification questions, review, save, reload and export read that
+persisted inventory. None of them calls the legacy semantic reader: `studio.gi.detect`, `studio.gi.services`, `studio.gi.context`,
+`studio.gi.structure` / `sections`, `studio.gi.cues` / `purpose`, or the validation checks that consume them. A test and operator-side
+evidence enforce this.
+
+(b) **What is not semantic interpretation, and stays.** Ingestion and text extraction; source integrity (revision text, hashes,
+offsets); evidence binding (every quotation and attribute anchor located in the revision); the reference store and the coding
+rules (code definitions, inclusions and bundling, required facts); tenant isolation; human approval. These now take their inputs
+from the inventory. Locating a quotation is necessary, not sufficient: each attribute needs its own support.
+
+(c) **Participants.** Corti, Astra and Fable keep their roles and their independent first assessments. Their proposed codes are
+matched to inventory events. The 2026-11-05 rulings stand: an explicit, supported proposal reaches review whoever proposed it, and
+agreement is never approval.
+
+(d) **Unresolved attributes.** A required attribute that is unknown or unverified holds only the code that depends on it, with a
+focused question. Unrelated supported codes proceed.
+
+(e) **Existing records.** Assessments made by the legacy reader stay exactly as they are and are not re-assessed silently. Reload
+and export read the persisted assessment. A re-assessment is an explicit act that creates a new assessment.
+
+(f) **Rollback.** The installed image (`cpt-studio:c2e53f8e7d33`) stays tagged. Migrations are additive, so that image can run
+against the migrated database; this is tested before the install.
+
+(g) **The 2026-11-09 requirement and amendment.** Their outcome conditions carry over where this directive's checklist restates them:
+target, technique, time, performer and extent association; genuine contradictions; targeted unresolved states; a regression is a
+regression. Their MEANS, repairing the keyword reader stage by stage, is superseded. The U32 c4 workflow was stopped at 07:12Z after
+its files were hashed, and its four-result counterexample registry (1,374 entries) is kept as a regression corpus for the replacement.
+
+(h) **Spending.** Gemini calls run in purposeful, bounded batches with concurrency one; every request's usage is recorded and
+reported. The legacy reader's code stays in the tree for rollback only and is not deleted in this change.

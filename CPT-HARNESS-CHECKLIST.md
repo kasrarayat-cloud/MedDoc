@@ -301,6 +301,11 @@ the progress log below.
 
 ## The shared evidence model, 2026-11-09 (owner requirement of 2026-11-09)
 
+> **SUPERSEDED IN ITS MEANS, 2026-11-09T07:10Z, by the owner's directive to replace the legacy semantic reader with
+> Gemini.** The keyword-reader repair below (stages A-D) is stopped and its work preserved. The migration checklist lives in
+> cpt-studio/HARNESS.md ("The Gemini interpretation migration"). The outcome conditions carry over where that checklist restates
+> them. The items below are kept as written, as the record of what was being attempted.
+
 The requirement is recorded verbatim, with the session's interpretation on receipt, in
 `docs/foundation/rulings/2026-10-23-cpt-studio-gi.md` ("Owner requirement, 2026-11-09"). It adds to the 2026-11-06 directive and
 replaces none of its unfinished requirements. Its case is GI Note #8 (encounter 9dbe9fc4); its class is U32, with U12 its parent
@@ -1236,3 +1241,8 @@ and U13, U30, U19/U14, U21 and U10/U11 related. Each item is ticked only when it
   - Every fact behind the installed reader's ten Note #8 false holds, and the v1-v6 reader errors, is read correctly.
   - $0.185 in all. Not integrated.
   - New: the installed reader itself makes a wrong 45385 READY on v5 (U32).
+- **2026-11-09T07:10Z Owner directive: replace the legacy semantic reader with Gemini.**
+  - Recorded verbatim in the rulings file, with index rows. The 2026-11-09 requirement and amendment rows, and the two Gemini trial
+    messages, were missing and are added late.
+  - The U32 c4 workflow was stopped (07:12Z) after hashing its 6,413 files; its registry is kept as a corpus.
+  - The migration checklist is in HARNESS.md. Preflight 20261109T071128Z: FIX-AND-GO (an image-reclaim report only).

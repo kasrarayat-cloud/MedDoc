@@ -4487,3 +4487,57 @@ b12c4bf66a6dd5437e5cd96679a32818a6a5be4dc4aa7d33a647b166dfc1e9da  run3-six.jsonl
 - The live CPT Studio containers had identical ids, images, start times and restart counts before and after, HTTP 302 both times.
 - The trial had no mount or connection to the site.
 - A repeated key scan (3,694 files, 788 MB, 0 unreadable) found the key in none.
+
+
+## The Gemini interpretation migration (owner directive, 2026-11-09): Gemini replaces the legacy semantic reader
+
+The owner's directive is in `docs/foundation/rulings/2026-10-23-cpt-studio-gi.md` ("Owner directive, 2026-11-09 — replace the legacy
+semantic interpretation engine with Gemini"), verbatim, with the session's interpretation (a)-(h). **One integration and deployment
+owner:** session 30a58364. Every agent works under it; no other actor installs.
+
+**Work stopped and preserved before the change, at 2026-11-09T07:11-07:12Z.**
+- The U32 c4 workflow (`wf_797a9eb3-a98`, task `wcvdtwf1e`), a stage-by-stage repair of the keyword reader, was stopped. Its files
+  were hashed first: 6,413 before the stop and 6,417 after (the session directory's `gemini-migration/c4-preserved-*.sha256`).
+  - Its counterexample registry is complete and KEPT as a regression corpus for the replacement: `design-r3/registry/`, 1,374
+    entries and 2,448 code rows, each with four results.
+  - On those inputs the installed release has 444 material false holds, 46 false READYs and 7 READYs on the wrong facts.
+  - Its two stage-A redesigns (A-t1, A-t2) were unfinished and are kept as they stood; they will not be continued.
+- Open branches of the keyword-reader era, with commits not on main, are all preserved on origin and none is deleted:
+  - `fix/cpt-studio-gi-binding-20261029` (76 commits);
+  - `wip/7c8-p2dates` (9);
+  - `fix/cpt-studio-pypdf-6.21.4-20261031` and its `prep/` branch (16 and 1): a deferred dependency move, not a reader repair.
+- No CPT Studio pull request is open. `fix/cpt-studio-c5-round-20261109` (documents only) lands through a PR.
+
+### The migration checklist (the owner's, verbatim; an item is ticked only when its stated outcome is verified, with the evidence linked)
+
+- [ ] Record the installed baseline, rollback image, active work and all locations where semantic interpretation influences routing,
+  matching, contradictions, completeness, clarification, review, saving and export.
+- [ ] Implement the production Gemini adapter using the existing protected credential. Include finite deadlines, Stop/resume,
+  duplicate prevention, usage recording and reconciliation of unknown outcomes. Authentication/quota failures must stop requests. No
+  silent model substitution or fallback to the old reader.
+- [ ] Introduce one versioned, persisted event inventory containing event identity, procedure, target/lesion, technique, time,
+  performer, status, anatomy/extent and attribute-level source evidence. Bind it to the exact document revision and interpretation
+  version. Preserve distinctions that the old Act structure or merge rules could erase.
+- [ ] Make all downstream consumers use that same inventory. Remove legacy semantic rereads from the new execution path—including those
+  triggered by save, reload, review and export. Keeping archived legacy code for rollback is acceptable; retaining its hidden veto is
+  not.
+- [ ] Preserve schema checks, source integrity, evidence binding, tenant isolation, applicable reference rules and approval controls. A
+  quotation appearing in the document does not by itself establish that it supports an attribute.
+- [ ] Handle contradictions by their documented scope. Distinguish targets, techniques, times and performers, while also respecting
+  broad statements such as "No polyp was removed today." Missing identifiers must not manufacture either a match or a non-match. Ask a
+  focused question when necessary. An unresolved required attribute must still block the dependent code; unrelated supported codes can
+  proceed.
+- [ ] Cover the original seven cases and the four reported Gemini slips, particularly unsupported historical extent and biopsy-site
+  conflation. Include the scar example, historical/current acts, different lesions at one site, technique-specific denials, different
+  performers, future purpose and guidewire-versus-scope extent. Preserve genuine contradictions.
+- [ ] Test independently authored PDF and Word inputs through actual ingestion, with repeated runs and source-grounded expectations.
+  Label replay, text-only tests and fresh provider calls separately. Do not hardcode Note #8, its five codes, or expected answers.
+- [ ] Complete the actual website workflow with Gemini driving interpretation: upload, truthful progress, code review, explicitly
+  labelled synthetic approval, save, reload and downloaded reports. Verify that saved decisions and downloaded content match. Keep
+  provider/model names and traces out of customer screens and downloads.
+- [ ] Install the replacement through the established deployment process. Verify the served release and operator-side execution
+  evidence showing Gemini is the active interpreter and legacy semantic vetoes are unused. Verify availability, preservation and
+  rollback compatibility.
+
+**Completion** means the INSTALLED application actually uses the replacement successfully. A working adapter or a passed seven-case
+trial is not completion. Clinical-accuracy claims stay separate from functional completion.
