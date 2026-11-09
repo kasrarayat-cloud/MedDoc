@@ -4510,8 +4510,17 @@ owner:** session 30a58364. Every agent works under it; no other actor installs.
 
 ### The migration checklist (the owner's, verbatim; an item is ticked only when its stated outcome is verified, with the evidence linked)
 
-- [ ] Record the installed baseline, rollback image, active work and all locations where semantic interpretation influences routing,
+- [x] Record the installed baseline, rollback image, active work and all locations where semantic interpretation influences routing,
   matching, contradictions, completeness, clarification, review, saving and export.
+  **Evidence:** `cpt-studio/GEMINI-MIGRATION-MAP.md` (2026-11-09), recording:
+  - the baseline: release c2e53f8e, image `sha256:02a99d53026f`, rollback images c2e53f8e7d33 and aeae34bebbe5 present, schema
+    leaf 0013, read-only live counts at 08:20:55Z (86 encounters, 180 assessments, 2,477 proposals, 62 decisions);
+  - the active work: the U32 c4 workflow stopped and preserved; the keyword-era branches parked; g1 sealed;
+  - 97 influence sites by concern and the ordered legacy calls on 9 execution paths, from 8 readers plus a re-reading
+    synthesis, 11 high-impact sites re-verified against the code by the integration owner;
+  - the keep/replace/utility split and 33 hazards.
+  It is a STATIC map: for the new path, the runtime call guard of item 4 is the backstop against any site static reading
+  missed (function-local imports, module names in strings).
 - [ ] Implement the production Gemini adapter using the existing protected credential. Include finite deadlines, Stop/resume,
   duplicate prevention, usage recording and reconciliation of unknown outcomes. Authentication/quota failures must stop requests. No
   silent model substitution or fallback to the old reader.
