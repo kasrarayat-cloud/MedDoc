@@ -438,15 +438,28 @@ class MigrationReceiptTests(TemporaryDirectoryTest):
         # audience, member answers and the upload key), each read safe by the same gate (the last assertion)
         # completion repair (2026-11-06, U11): 0013 binds a member's answer to the question it answered and closes a
         # question with its answer - a column with a database default and a nullable foreign key, read safe
+        # Gemini migration (2026-11-09, S05): 0014 adds the persisted event inventory and the interpreter hold and its
+        # release - three new tables, an index and a constraint on a table it creates - and three nullable columns
+        # that bind a context and an assessment to the inventory they were made from, read safe
         self.assertEqual(sorted(migrations['after_baseline']), ['0006_services_completeness_second_review',
                                                                 '0007_harness_participants_retrieval', MIGRATION_0008,
                                                                 '0009_cux_review', '0010_cux_operator', '0011_cux_flow',
                                                                 '0012_cux_worker_beat',
-                                                                '0013_completion_answer_binding'])
+                                                                '0013_completion_answer_binding',
+                                                                '0014_event_inventory'])
         self.assertEqual(migrations['after_baseline'][MIGRATION_0008], {'safe': True, 'why': WHY_0008})
         self.assertEqual(migrations['after_baseline']['0013_completion_answer_binding'],
                          {'safe': True, 'why': ['memberanswer.question: NOT NULL with a database default (db_default)',
                                                 'clarification.answer: nullable']})
+        self.assertEqual(migrations['after_baseline']['0014_event_inventory'],
+                         {'safe': True, 'why': ['EventInventory: a new table no older revision reads',
+                                                'eventinventory: an index (writes are not refused)',
+                                                'eventinventory: a constraint on a table this migration creates',
+                                                'encountercontext.event_inventory: nullable',
+                                                'assessment.event_inventory: nullable',
+                                                'assessment.interpretation: nullable',
+                                                'InterpreterHold: a new table no older revision reads',
+                                                'InterpreterHoldRelease: a new table no older revision reads']})
         self.assertTrue(all(verdict['safe'] for verdict in migrations['after_baseline'].values()))
 
     def test_0008_adds_no_column_to_an_existing_table(self):
