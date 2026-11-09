@@ -832,12 +832,15 @@ const named = enc => (({ ok, date }) => ({ ok, date }))(vb.documentedServiceDate
 
 test('the member-conflict notes and the date forms the walk reads are the server\'s own (studio/gi/context.py)', () => {
   const context = fs.readFileSync(path.join(ROOT, 'studio', 'gi', 'context.py'), 'utf8');
-  const note = /^USER_CONFLICT_NOTE = \(((?:\s*'[^']*')+)\)/m.exec(context);
-  assert.ok(note, 'USER_CONFLICT_NOTE not found in context.py');
+  // the two notes are defined in studio/context_facts.py since the Gemini migration's S04 (gi/context.py imports
+  // them back, the same objects); merge_user_values and the date forms below are still gi/context.py's own
+  const facts = fs.readFileSync(path.join(ROOT, 'studio', 'context_facts.py'), 'utf8');
+  const note = /^USER_CONFLICT_NOTE = \(((?:\s*'[^']*')+)\)/m.exec(facts);
+  assert.ok(note, 'USER_CONFLICT_NOTE not found in context_facts.py');
   assert.equal([...note[1].matchAll(/'([^']*)'/g)].map(m => m[1]).join(''), vb.USER_CONFLICT_NOTE);
   assert.equal(vb.USER_CONFLICT_NOTE, CONFLICT_NOTE('{user}', '{document}'));
-  const elsewhere = /^USER_ELSEWHERE_NOTE = \(_USER_CONFLICT_PREFIX \+ ((?:\s*(?:'[^']*'|"[^"]*"))+)\)/m.exec(context);
-  assert.ok(elsewhere, 'USER_ELSEWHERE_NOTE not found in context.py');
+  const elsewhere = /^USER_ELSEWHERE_NOTE = \(_USER_CONFLICT_PREFIX \+ ((?:\s*(?:'[^']*'|"[^"]*"))+)\)/m.exec(facts);
+  assert.ok(elsewhere, 'USER_ELSEWHERE_NOTE not found in context_facts.py');
   const prefix = vb.USER_CONFLICT_NOTE.split('{', 1)[0];
   assert.equal(prefix + [...elsewhere[1].matchAll(/'([^']*)'|"([^"]*)"/g)].map(m => m[1] ?? m[2]).join(''), vb.USER_ELSEWHERE_NOTE);
   assert.equal(vb.USER_ELSEWHERE_NOTE, ELSEWHERE_NOTE('{user}', '{document}'));
