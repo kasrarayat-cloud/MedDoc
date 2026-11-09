@@ -1,0 +1,32 @@
+{
+  "label": "SYNTHETIC-SLIP",
+  "slip": "S1",
+  "role": "twin",
+  "name": "s1-twin-current-reach",
+  "about": "The correct reading: the historical examination has no reach; the current one reaches the terminal ileum.",
+  "kind": "txt",
+  "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nCOLONOSCOPY REPORT\nDate of service: November 9, 2026\nEndoscopist: Ines Valdero, MD (fictional)\nHistory: A colonoscopy in January 2024 reached the cecum and was normal.\nProcedure: The colonoscope was advanced to the terminal ileum, which appeared normal.\nFindings: The colon was normal throughout.\nImpression: Normal colonoscopy.\n",
+  "response": {
+    "candidates": [
+      {
+        "content": {
+          "parts": [
+            {
+              "text": "{\"passages\": [{\"id\": \"P1\", \"text\": \"Date of service: November 9, 2026\"}, {\"id\": \"P2\", \"text\": \"Endoscopist: Ines Valdero, MD (fictional)\"}, {\"id\": \"P3\", \"text\": \"History: A colonoscopy in January 2024 reached the cecum and was normal.\"}, {\"id\": \"P4\", \"text\": \"Procedure: The colonoscope was advanced to the terminal ileum, which appeared normal.\"}], \"encounter\": {\"date_of_service\": {\"value\": \"2026-11-09\", \"state\": \"stated\", \"words\": \"November 9, 2026\", \"passages\": [\"P1\"], \"other_dates\": []}, \"documenting_endoscopist\": {\"words\": \"Ines Valdero, MD (fictional)\", \"passages\": [\"P2\"]}, \"team\": [], \"anatomy\": [], \"reach\": [{\"event\": \"E2\", \"landmark\": \"terminal_ileum\", \"words\": \"advanced to the terminal ileum\", \"passages\": [\"P4\"], \"completion\": {\"value\": \"not_stated\", \"words\": \"\", \"passages\": []}}], \"visit_facts\": []}, \"lesions\": [], \"events\": [{\"id\": \"E1\", \"procedure\": {\"value\": \"colonoscopy\", \"words\": \"colonoscopy\", \"passages\": [\"P3\"]}, \"kind\": {\"value\": \"examination\", \"words\": \"colonoscopy\", \"passages\": [\"P3\"]}, \"technique\": {\"value\": \"endoscope\", \"words\": \"colonoscopy\", \"passages\": [\"P3\"]}, \"target\": {\"lesion\": \"\", \"landmark\": \"not_stated\", \"words\": \"\", \"passages\": []}, \"time\": {\"value\": \"earlier_encounter\", \"words\": \"in January 2024\", \"passages\": [\"P3\"]}, \"performer\": {\"value\": \"unknown\", \"words\": \"\", \"passages\": []}, \"status\": {\"value\": \"performed\", \"words\": \"reached the cecum\", \"passages\": [\"P3\"]}, \"scope\": {\"value\": \"not_applicable\", \"targets\": [], \"words\": \"\", \"passages\": []}, \"purpose\": {\"value\": \"not_stated\", \"words\": \"\", \"passages\": []}, \"part_of\": \"\", \"sequence\": 0, \"contradicts\": []}, {\"id\": \"E2\", \"procedure\": {\"value\": \"colonoscopy\", \"words\": \"\", \"passages\": []}, \"kind\": {\"value\": \"examination\", \"words\": \"colonoscope\", \"passages\": [\"P4\"]}, \"technique\": {\"value\": \"endoscope\", \"words\": \"colonoscope\", \"passages\": [\"P4\"]}, \"target\": {\"lesion\": \"\", \"landmark\": \"not_stated\", \"words\": \"\", \"passages\": []}, \"time\": {\"value\": \"current_encounter\", \"words\": \"\", \"passages\": []}, \"performer\": {\"value\": \"documenting_team\", \"words\": \"\", \"passages\": []}, \"status\": {\"value\": \"performed\", \"words\": \"was advanced to the terminal ileum\", \"passages\": [\"P4\"]}, \"scope\": {\"value\": \"not_applicable\", \"targets\": [], \"words\": \"\", \"passages\": []}, \"purpose\": {\"value\": \"not_stated\", \"words\": \"\", \"passages\": []}, \"part_of\": \"\", \"sequence\": 0, \"contradicts\": []}], \"open_questions\": []}"
+            }
+          ],
+          "role": "model"
+        },
+        "finishReason": "STOP",
+        "index": 0
+      }
+    ],
+    "modelVersion": "gemini-4-argon",
+    "responseId": "synthetic-s1-twin-current-reach",
+    "usageMetadata": {
+      "promptTokenCount": 0,
+      "candidatesTokenCount": 0,
+      "totalTokenCount": 0
+    }
+  }
+}
