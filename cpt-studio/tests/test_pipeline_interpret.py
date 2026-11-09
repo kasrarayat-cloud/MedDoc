@@ -161,21 +161,45 @@ class InterpretCase(TestCase):
         encounter.refresh_from_db()
         return review._state_and_run(encounter)
 
-    def unknown_holding_an_answer(self, encounter, revision, *, state=Run.UNKNOWN):
+    def unknown_holding_an_answer(self, encounter, revision, *, state=Run.UNKNOWN, body=None):
         """A run as a worker that died after its exchange was answered and recorded leaves it (decision (k), or a dead
-        worker): its outcome not recorded, its one exchange recorded succeeded with HTTP 200."""
+        worker): its outcome not recorded, its one exchange recorded succeeded with HTTP 200 (``body``, the answer by
+        default). An UNKNOWN run carries the effect the stage records on one ('unknown': _settle_interpretation and
+        _stale_interpretation), as every unknown outcome the stage settled does; a SENDING one carries none."""
         request = self.request_for(revision)
-        body = envelope()
+        body = envelope() if body is None else body
         run = Run.objects.create(
             encounter=encounter, revision=revision, provider='gemini', adapter_version=interpretation.ADAPTER_VERSION,
             request_sha256=request.canonical_sha256, request_body=request.body, contexts=list(request.contexts),
-            state=state, sent=True, purpose=interpretation.PURPOSE, scope={'mode': 'replay'},
+            state=state, sent=True, purpose=interpretation.PURPOSE,
+            scope={'mode': 'replay', **({'effect': holds.UNKNOWN} if state == Run.UNKNOWN else {})},
             endpoint=ScriptedInterpreter.endpoint, requested_model=interpretation.MODEL, started_at=timezone.now(),
             authorization_ref=AUTH, requested_by=self.user)
         models.ProviderExchange.objects.create(
             run=run, turn=1, request_body=request.body, request_sha256=request.canonical_sha256, state='succeeded',
             http_status=200, response_bytes=body, response_sha256=hashlib.sha256(body).hexdigest(), usage=dict(USAGE),
             response_id='synthetic-s09', started_at=timezone.now(), finished_at=timezone.now())
+        return run
+
+    def answered_run(self, encounter, revision, body, *, request_sha256=None):
+        """A sent interpretation run recorded SUCCEEDED with ``body`` and its turn-1 exchange, as _send leaves one whose
+        worker died before the stage settled its outcome: no effect recorded, no inventory read. ``request_sha256``: the
+        request it answered when that is not the one this revision makes now (an upgrade changed the request between the
+        stage that sent it and the stage that settles it)."""
+        request = self.request_for(revision)
+        sha = request_sha256 or request.canonical_sha256
+        digest = hashlib.sha256(body).hexdigest()
+        run = Run.objects.create(
+            encounter=encounter, revision=revision, provider='gemini', adapter_version=interpretation.ADAPTER_VERSION,
+            request_sha256=sha, request_body=request.body, contexts=list(request.contexts), state=Run.SUCCEEDED,
+            sent=True, http_status=200, response_bytes=body, response_sha256=digest, usage=dict(USAGE),
+            purpose=interpretation.PURPOSE, scope={'mode': 'replay'}, endpoint=ScriptedInterpreter.endpoint,
+            requested_model=interpretation.MODEL, started_at=timezone.now(), finished_at=timezone.now(),
+            authorization_ref=AUTH, requested_by=self.user)
+        models.ProviderExchange.objects.create(
+            run=run, turn=1, request_body=request.body, request_sha256=sha, state='succeeded', http_status=200,
+            response_bytes=body, response_sha256=digest, usage=dict(USAGE), started_at=timezone.now(),
+            finished_at=timezone.now())
         return run
 
 
@@ -714,19 +738,111 @@ class UnknownOutcomeTests(InterpretCase):
         self.assertEqual(models.EventInventory.objects.get(revision=revision).state, 'read')
 
     def test_p6_a_reconciled_run_holding_an_answer_is_read_from_its_exchange_and_nothing_is_sent(self):
+        """The run as the stage leaves an unknown outcome - its effect recorded 'unknown' - holding an answered exchange:
+        the reconciliation's stage settles it from that exchange and reads it as its own answer."""
         interpreter = self.scripted()
         encounter, revision = self.through_extract()
         models.Job.objects.filter(state=models.Job.QUEUED).update(state=models.Job.CANCELLED)
         run = self.unknown_holding_an_answer(encounter, revision)
+        self.assertEqual(run.scope['effect'], 'unknown')
         self.assertTrue(jobs.reconcile(encounter, run, self.user, NOTE))
         job = self.run_next('interpret')
         self.assertEqual(job.state, models.Job.SUCCEEDED, job.error)
         run.refresh_from_db()
-        self.assertEqual((run.state, run.http_status, run.scope.get(jobs.SETTLED_FROM_EXCHANGE), run.usage),
-                         ('succeeded', 200, True, USAGE))
+        self.assertEqual((run.state, run.http_status, run.scope.get(jobs.SETTLED_FROM_EXCHANGE), run.usage,
+                          run.scope['effect']), ('succeeded', 200, True, USAGE, 'answered'))
         self.assertEqual(interpreter.sent, [])  # P-6: nothing is sent
         inventory = models.EventInventory.objects.get(revision=revision)
-        self.assertEqual((inventory.state, inventory.provider_run.reused_from_id), ('read', run.pk))
+        self.assertEqual((inventory.state, inventory.provider_run_id), ('read', run.pk))
+        self.assertEqual(job.result, {'provider': 'succeeded', 'run': str(run.pk), 'inventory': str(inventory.pk)})
+        self.assertEqual(len(self.interpret_runs(revision)), 1)  # read as its own answer: no run of the stage's own
+        [analyze] = self.queued()
+        self.assertEqual(analyze.idempotency_key, f'analyze:{revision.pk}:{inventory.pk}')
+
+    def test_p6_decision_k_an_answer_whose_outcome_write_failed_is_read_after_reconciliation(self):
+        """P-6 in the scenario it was adopted for, driven through the stage itself (decision (k)): the answer arrived and
+        its exchange was committed as it ended (turn 1, HTTP 200), then the run's outcome could not be written, so
+        _finish_loop recorded the run unknown and the stage recorded the effect 'unknown'. The reconciliation's stage
+        settles the run from its exchange and reads that answer: it is never paid for again."""
+        interpreter = self.scripted(answered(envelope()), answered(envelope()))
+        encounter, revision = self.through_extract()
+        real, calls = jobs._finish_run, []
+
+        def outcome_write_fails_once(run, exchange):
+            calls.append(exchange.outcome)
+            if len(calls) == 1:
+                raise RuntimeError('synthetic: the outcome write failed')
+            return real(run, exchange)
+
+        with mock.patch.object(jobs, '_finish_run', side_effect=outcome_write_fails_once), \
+                self.assertLogs('studio.jobs', level='ERROR'):
+            job = self.run_next('interpret')
+        [run] = self.interpret_runs(revision)
+        self.assertEqual((job.state, job.result, run.state, run.sent, run.scope.get('effect')),
+                         (models.Job.SUCCEEDED, {'provider': 'unknown', 'run': str(run.pk)}, 'unknown', True,
+                          'unknown'))
+        self.assertEqual(list(run.exchanges.values_list('turn', 'state', 'http_status')), [(1, 'succeeded', 200)])
+        self.assertEqual(len(interpreter.sent), 1)
+        self.assertEqual(self.state(encounter)[0], 'provider_unknown')
+
+        self.assertTrue(jobs.reconcile(encounter, run, self.user, NOTE))
+        job = self.run_next('interpret')
+        self.assertEqual(job.state, models.Job.SUCCEEDED, job.error)
+        self.assertEqual(len(interpreter.sent), 1)  # P-6: the answer CPT Studio holds is not requested again
+        run.refresh_from_db()
+        self.assertEqual((run.state, run.scope.get(jobs.SETTLED_FROM_EXCHANGE), run.scope.get('effect')),
+                         ('succeeded', True, 'answered'))
+        inventory = models.EventInventory.objects.get(revision=revision)
+        self.assertEqual((inventory.state, inventory.provider_run_id), ('read', run.pk))
+        self.assertEqual(len(self.interpret_runs(revision)), 1)
+        self.assertEqual([job.idempotency_key for job in self.queued()], [f'analyze:{revision.pk}:{inventory.pk}'])
+
+    def test_p6_a_held_answer_naming_another_model_records_its_hold_against_its_own_run_and_sends_nothing(self):
+        """P-6 with P-5: the answer an unknown run holds names another model. Settled from its exchange, it is never read
+        and never paid for again: its hold is recorded against the run that was sent, and the stage pauses."""
+        interpreter = self.scripted()
+        encounter, revision = self.through_extract()
+        models.Job.objects.filter(state=models.Job.QUEUED).update(state=models.Job.CANCELLED)
+        run = self.unknown_holding_an_answer(encounter, revision, body=envelope(model='gemini-4-argon-preview'))
+        self.assertTrue(jobs.reconcile(encounter, run, self.user, NOTE))
+        job = self.run_next('interpret')
+        self.assertEqual((job.state, job.error), (models.Job.CANCELLED, holds.PAUSED_MESSAGE))
+        self.assertEqual(interpreter.sent, [])
+        hold = models.InterpreterHold.objects.get()
+        self.assertEqual((hold.reason, hold.run_id), ('model', run.pk))
+        run.refresh_from_db()
+        self.assertEqual((run.state, run.scope['effect'], run.returned_model),
+                         ('succeeded', 'hold', 'gemini-4-argon-preview'))
+        self.assertEqual(models.EventInventory.objects.get(provider_run=run).state, 'refused')
+        self.assertEqual(len(self.interpret_runs(revision)), 1)
+        self.assertFalse(models.Job.objects.filter(kind='analyze').exists())
+        self.assertEqual(progress.encounter_progress(encounter)['phase'], 'paused')
+
+    def test_an_effect_recorded_unknown_or_none_never_outlives_a_definite_outcome(self):
+        """The effect the stage recorded describes the run as it was settled: P-6 drops it as it settles a run from its
+        exchange, and 'unknown' or 'none' read on a run whose outcome is now definite is ignored - the run is classified
+        from what it stores. A definite effect, and 'unknown' or 'none' where they still describe the run, stand."""
+        encounter, revision = self.through_extract()
+        run = self.unknown_holding_an_answer(encounter, revision)
+        self.assertEqual(jobs.interpretation_effect(run), 'unknown')
+        self.assertTrue(jobs._settle_from_exchange(run))
+        self.assertNotIn('effect', run.scope)
+        self.assertEqual(Run.objects.get(pk=run.pk).scope, {'mode': 'replay', jobs.SETTLED_FROM_EXCHANGE: True})
+        self.assertEqual(jobs.interpretation_effect(run), 'answered')
+        failure = json.dumps({'error': {'code': 503, 'status': 'UNAVAILABLE'}}).encode()
+        for state, status, body, expected in ((Run.SUCCEEDED, 200, envelope(), 'answered'),
+                                              (Run.FAILED, 503, failure, 'failed')):
+            for stale in ('unknown', 'none'):
+                Run.objects.filter(pk=run.pk).update(state=state, http_status=status, response_bytes=body,
+                                                     response_sha256=hashlib.sha256(body).hexdigest(),
+                                                     scope={'mode': 'replay', 'effect': stale})
+                self.assertEqual(jobs.interpretation_effect(Run.objects.get(pk=run.pk)), expected, (state, stale))
+        Run.objects.filter(pk=run.pk).update(state=Run.SUCCEEDED, scope={'mode': 'replay', 'effect': 'hold'})
+        self.assertEqual(jobs.interpretation_effect(Run.objects.get(pk=run.pk)), 'hold')
+        Run.objects.filter(pk=run.pk).update(state=Run.UNKNOWN, scope={'mode': 'replay', 'effect': 'unknown'})
+        self.assertEqual(jobs.interpretation_effect(Run.objects.get(pk=run.pk)), 'unknown')
+        Run.objects.filter(pk=run.pk).update(state=Run.NOT_SENT, scope={'mode': 'replay', 'effect': 'none'})
+        self.assertEqual(jobs.interpretation_effect(Run.objects.get(pk=run.pk)), 'none')
 
     def test_p6_an_exchange_that_does_not_check_is_never_settled(self):
         encounter, revision = self.through_extract()
@@ -821,6 +937,187 @@ class StaleSweepTests(InterpretCase):
         self.assertEqual(job.state, models.Job.FAILED)
         self.assertFalse(models.InterpreterHold.objects.exists())
         self.assertEqual(self.state(encounter)[0], 'provider_failed')
+
+    def test_p6_an_unknown_outcome_the_stale_sweep_settled_is_read_after_reconciliation(self):
+        """The stage recorded its run unknown (the answer's exchange committed, the outcome write failed) and its worker
+        died before the stage ended: the sweep settles the stage by that run (_stale_interpretation records 'unknown'),
+        and the member's reconciliation reads the answer the run holds - nothing is sent."""
+        interpreter = self.scripted()
+        encounter, revision = self.through_extract()
+        job = self.dead(revision)
+        run = self.unknown_holding_an_answer(encounter, revision)
+        jobs.mark_stale()
+        job.refresh_from_db()
+        run.refresh_from_db()
+        self.assertEqual((job.state, job.result['run'], run.state, run.scope['effect']),
+                         (models.Job.SUCCEEDED, str(run.pk), 'unknown', 'unknown'))
+        self.assertEqual((self.state(encounter)[0], self.queued()), ('provider_unknown', []))
+        self.assertTrue(jobs.reconcile(encounter, run, self.user, NOTE))
+        self.assertEqual(self.run_next('interpret').state, models.Job.SUCCEEDED)
+        self.assertEqual(interpreter.sent, [])
+        inventory = models.EventInventory.objects.get(revision=revision)
+        self.assertEqual((inventory.state, inventory.provider_run_id), ('read', run.pk))
+
+    def test_the_settled_path_records_a_substituted_model_answer_as_its_hold_and_sends_nothing(self):
+        """FINAL 6.9 with P-5 and D11: the worker died after the answer was recorded SUCCEEDED and before the stage
+        settled its outcome; the answer names another model. The settled path settles that run itself - its hold
+        recorded against the run that was sent, the stage paused - and sends nothing: a substituted model's answer is not
+        paid for again."""
+        interpreter = self.scripted()
+        encounter, revision = self.through_extract()
+        job = self.dead(revision)
+        run = self.answered_run(encounter, revision, envelope(model='gemini-4-argon-preview'))
+        jobs.mark_stale()
+        job.refresh_from_db()
+        [settled] = self.queued()
+        self.assertEqual((job.state, settled.idempotency_key),
+                         (models.Job.SUCCEEDED, f'interpret:{revision.pk}:gemini-events@1:settled:{run.pk}'))
+        job = self.run_next('interpret')
+        self.assertEqual((job.state, job.error), (models.Job.CANCELLED, holds.PAUSED_MESSAGE))
+        self.assertEqual(interpreter.sent, [])
+        hold = models.InterpreterHold.objects.get()
+        self.assertEqual((hold.reason, hold.run_id), ('model', run.pk))
+        self.assertEqual(Run.objects.get(pk=run.pk).scope['effect'], 'hold')
+        self.assertEqual(self.interpret_runs(revision), [run])  # nothing attempted: no run of the stage's own
+        self.assertEqual(progress.encounter_progress(encounter)['phase'], 'paused')
+
+    def test_a_released_hold_on_a_settled_answer_lets_a_members_resume_send_one_new_attempt(self):
+        """After the settled path recorded a substituted model's hold, an operator's release and then a member's Resume -
+        the explicit act every released hold waits on (FINAL 11.2) - send one new attempt, as after any hold; the answer
+        the hold was set for is settled once and never read."""
+        interpreter = self.scripted(answered(envelope()))
+        encounter, revision = self.through_extract()
+        self.dead(revision)
+        run = self.answered_run(encounter, revision, envelope(model='gemini-4-argon-preview'))
+        jobs.mark_stale()
+        self.assertEqual(self.run_next('interpret').state, models.Job.CANCELLED)
+        models.InterpreterHoldRelease.objects.create(hold=models.InterpreterHold.objects.get(), released_by=self.user,
+                                                     note='Synthetic: the operator confirmed the model.')
+        resumed = jobs.resume(encounter, self.user)
+        self.assertEqual(resumed.idempotency_key.split(':resume:')[0],
+                         f'interpret:{revision.pk}:gemini-events@1:settled:{run.pk}')
+        job = self.run_next('interpret')
+        self.assertEqual(job.state, models.Job.SUCCEEDED, job.error)
+        self.assertEqual(len(interpreter.sent), 1)
+        inventory = models.EventInventory.objects.get(revision=revision, state='read')
+        self.assertNotEqual(inventory.provider_run_id, run.pk)
+        self.assertEqual((Run.objects.get(pk=run.pk).scope['effect'], models.InterpreterHold.objects.count()),
+                         ('hold', 1))
+
+    def test_the_settled_path_fails_a_cut_off_answer_as_cut_off_and_sends_nothing(self):
+        """A cut-off answer the sweep left unsettled is settled as the stage would have settled it: read and refused at
+        its output limit (C5), the member told the document is too long - and nothing is sent."""
+        interpreter = self.scripted()
+        encounter, revision = self.through_extract()
+        self.dead(revision)
+        run = self.answered_run(encounter, revision, envelope(finish='MAX_TOKENS'))
+        jobs.mark_stale()
+        job = self.run_next('interpret')
+        self.assertEqual((job.state, job.error), (models.Job.FAILED, jobs.INTERPRET_CUT_OFF_MESSAGE))
+        self.assertEqual(interpreter.sent, [])
+        self.assertEqual(Run.objects.get(pk=run.pk).scope['effect'], 'too_long')
+        self.assertEqual(models.EventInventory.objects.get(provider_run=run).state, 'refused')
+        self.assertEqual(self.interpret_runs(revision), [run])
+        self.assertEqual(self.state(encounter), ('provider_failed', run))
+        self.assertEqual(progress.encounter_progress(encounter)['error'],
+                         {'text': progress.INTERPRETATION_ERRORS['too_long'][0], 'action': 'new_document'})
+
+    def test_the_settled_path_never_sends_for_a_request_its_run_does_not_answer_until_a_member_resumes(self):
+        """FINAL 6.9: the settled path sends nothing, whatever it finds. Here the stored answer answers another request
+        (an upgrade changed the request between the stage that sent it and the stage that settles it), so nothing stored
+        answers the request made now: the stage records that nothing was sent and ends resumable, and only a member's
+        Resume - an explicit act - sends it."""
+        interpreter = self.scripted(answered(envelope()))
+        encounter, revision = self.through_extract()
+        self.dead(revision)
+        stale = self.answered_run(encounter, revision, envelope(), request_sha256='f' * 64)
+        jobs.mark_stale()
+        job = self.run_next('interpret')
+        self.assertEqual((job.state, job.error), (models.Job.CANCELLED, jobs.INTERPRET_SETTLED_MESSAGE))
+        self.assertEqual(interpreter.sent, [])
+        kept = self.interpret_runs(revision)[-1]
+        self.assertEqual((kept.state, kept.sent, kept.scope['refused'], kept.scope['effect'], kept.request_sha256),
+                         ('not_sent', False, jobs.SETTLED, 'none', self.request_for(revision).canonical_sha256))
+        self.assertFalse(models.EventInventory.objects.exists())
+        block = progress.encounter_progress(encounter)
+        self.assertEqual((block['phase'], block['can_resume']), ('stopped', True))
+        resumed = jobs.resume(encounter, self.user)
+        self.assertEqual(resumed.idempotency_key.split(':resume:')[0],
+                         f'interpret:{revision.pk}:gemini-events@1:settled:{stale.pk}')
+        self.assertEqual(self.run_next('interpret').state, models.Job.SUCCEEDED)
+        self.assertEqual(len(interpreter.sent), 1)
+        self.assertEqual(models.EventInventory.objects.get(revision=revision).state, 'read')
+
+    def test_the_settled_path_never_reads_an_answer_recorded_in_another_mode(self):
+        """The settled path settles its run only where the stored-answer door would read it - the identical request, in
+        the same mode: a live answer never stands in for a replay, nor a replayed one for a live request. Otherwise it
+        reads nothing, sends nothing and ends resumable."""
+        interpreter = self.scripted()
+        encounter, revision = self.through_extract()
+        self.dead(revision)
+        run = self.answered_run(encounter, revision, envelope())
+        Run.objects.filter(pk=run.pk).update(scope={'mode': 'live'})
+        jobs.mark_stale()
+        job = self.run_next('interpret')
+        self.assertEqual((job.state, job.error), (models.Job.CANCELLED, jobs.INTERPRET_SETTLED_MESSAGE))
+        self.assertEqual(interpreter.sent, [])
+        self.assertFalse(models.EventInventory.objects.exists())
+        self.assertNotIn('effect', Run.objects.get(pk=run.pk).scope)
+
+    def orphaned(self, encounter, revision, *, answered_exchange=True):
+        """A run left 'sending' 700 s ago by an interpret stage that no longer runs: the stage FAILED (decision (k): even
+        _finish_loop's fallback write failed), so the dead-worker sweep never visits it."""
+        models.Job.objects.filter(revision=revision, kind='interpret').update(
+            state=models.Job.FAILED, created_at=timezone.now() - timedelta(seconds=800),
+            started_at=timezone.now() - timedelta(seconds=750), finished_at=timezone.now() - timedelta(seconds=690))
+        run = self.unknown_holding_an_answer(encounter, revision, state=Run.SENDING)
+        if not answered_exchange:
+            models.ProviderExchange.objects.filter(run=run).update(state='failed', http_status=503)
+        Run.objects.filter(pk=run.pk).update(created_at=timezone.now() - timedelta(seconds=700))
+        return run
+
+    def test_p6_an_orphaned_sending_run_whose_exchange_answered_is_settled_and_read_with_nothing_sent(self):
+        """ADJUDICATION P-6 in the decision-(k) orphan sweep: a run its stage left 'sending', whose one exchange answered
+        (HTTP 200, a sha256 that checks), is settled SUCCEEDED from that exchange - never left unknown for a member's
+        reconciliation - and its settled path reads it, with nothing sent."""
+        interpreter = self.scripted()
+        encounter, revision = self.through_extract()
+        run = self.orphaned(encounter, revision)
+        jobs.mark_stale()
+        run.refresh_from_db()
+        self.assertEqual((run.state, run.error, run.http_status, run.scope.get(jobs.SETTLED_FROM_EXCHANGE)),
+                         ('succeeded', '', 200, True))
+        [settled] = self.queued()
+        self.assertEqual(settled.idempotency_key, f'interpret:{revision.pk}:gemini-events@1:settled:{run.pk}')
+        self.assertEqual(self.state(encounter)[0], 'processing')
+        self.assertEqual(self.run_next('interpret').state, models.Job.SUCCEEDED)
+        self.assertEqual(interpreter.sent, [])
+        inventory = models.EventInventory.objects.get(revision=revision)
+        self.assertEqual((inventory.state, inventory.provider_run_id), ('read', run.pk))
+        self.assertEqual([job.idempotency_key for job in self.queued()], [f'analyze:{revision.pk}:{inventory.pk}'])
+
+    def test_an_answered_orphan_of_an_earlier_revision_is_settled_and_queues_nothing(self):
+        """The orphan's answer is settled from its exchange wherever it is - it no longer blocks the encounter as an
+        unknown outcome - but only the current revision is read: a newer revision has its own interpretation."""
+        interpreter = self.scripted()
+        encounter, revision = self.through_extract()
+        run = self.orphaned(encounter, revision)
+        f.pasted_revision(encounter, self.user, TEXT + '\nSynthetic addendum: no further findings.')
+        jobs.mark_stale()
+        run.refresh_from_db()
+        self.assertEqual((run.state, run.scope.get(jobs.SETTLED_FROM_EXCHANGE)), ('succeeded', True))
+        self.assertEqual(self.queued(), [])
+        encounter.refresh_from_db()
+        self.assertFalse(review._unreconciled_unknown(encounter))
+        self.assertEqual(interpreter.sent, [])
+
+    def test_an_orphaned_sending_run_with_no_answered_exchange_is_still_settled_unknown(self):
+        encounter, revision = self.through_extract()
+        run = self.orphaned(encounter, revision, answered_exchange=False)
+        jobs.mark_stale()
+        run.refresh_from_db()
+        self.assertEqual((run.state, run.error, run.sent), ('unknown', jobs.ORPHANED_SENDING_MESSAGE, True))
+        self.assertEqual((self.queued(), self.state(encounter)[0]), ([], 'provider_unknown'))
 
 
 class AnalyzeTests(InterpretCase):

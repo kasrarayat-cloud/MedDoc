@@ -1480,6 +1480,15 @@ def _failed_stage_state(encounter, revision, job):
             return 'provider_unknown', None
         run = (encounter.provider_runs.filter(revision=revision, created_at__gte=job.created_at, purpose=PURPOSE)
                .order_by('-created_at', '-pk').first())
+        if run is None:
+            # a settled or after-reconcile stage settles the run its key names itself and records no run of its own
+            # (jobs._settled_answer): a definite outcome of that run - a cut-off answer, a refused reading - is the
+            # stage's own failure, worded from that run
+            from .jobs import keyed_interpretation_run  # local import: jobs imports this module
+
+            keyed = keyed_interpretation_run(job)
+            if keyed is not None and keyed.state in (ProviderRun.SUCCEEDED, ProviderRun.FAILED):
+                run = keyed
         if run is None or (run.state == ProviderRun.NOT_SENT and (run.scope or {}).get('refused') in (
                 'live_gate', 'sentinel')):  # jobs.NOT_RUN: refused before any request could be made
             return 'provider_not_run', None

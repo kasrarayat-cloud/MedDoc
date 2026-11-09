@@ -1747,9 +1747,11 @@ def stage_participant(job):
 #
 # Each run's meaning (interpretation.holds' effect: answered, failed, too_long, hold, unknown, none) is recorded on its
 # scope ('effect') as the stage settles it; a run the stage itself kept from sending says why ('refused': 'size' for the
-# size bound, 'unbuilt' for a text that cannot be framed, 'failed_before' for the failed-request door, 'live_gate' and
-# 'sentinel' where no request could be made; 'held' for a pause, FINAL 11.2). Every outcome is a run (FINAL 6.3), and the
-# progress panel and the retry door read them.
+# size bound, 'unbuilt' for a text that cannot be framed, 'failed_before' for the failed-request door, 'settled' for the
+# stale sweep's settled path, which never sends, 'live_gate' and 'sentinel' where no request could be made; 'held' for a
+# pause, FINAL 11.2). Every outcome is a run (FINAL 6.3), and the progress panel and the retry door read them. A stage
+# keyed ':settled:<run>' or ':after-reconcile:<run>' settles that run itself when it holds the answer to the request
+# (_settled_answer), recording no run of its own: that run is its outcome (keyed_interpretation_run).
 
 INTERPRET_TOO_LONG_MESSAGE = 'This document is too long to read in one piece; nothing was sent.'
 INTERPRET_UNBUILT_MESSAGE = 'The document could not be prepared for reading; nothing was sent.'
@@ -1760,6 +1762,9 @@ INTERPRET_CUT_OFF_MESSAGE = ('The interpretation was cut off at its output limit
 INTERPRET_NOT_RESENT_MESSAGE = ('Nothing was sent: this document\'s reading was sent before and did not succeed, and '
                                 'the identical request is sent again only for a recorded retry.')
 INTERPRET_BLOCKED = 'a previous request has an unknown outcome; reconcile it before sending again'
+INTERPRET_SETTLED_MESSAGE = ('Nothing was sent: the stage that sent this document\'s request stopped before its answer '
+                             'was used, and no stored answer answers the request made now. Resume to have the document '
+                             'read.')
 STORED_ANSWER_CHANGED = 'The stored answer no longer matches its recorded hash; nothing from it was used.'
 READ_OVERRUN_MESSAGE = 'The stored answer could not be read within the {reason} limit; nothing from it was used.'
 READ_FAILED_MESSAGE = ('The stored answer could not be read: the reader stopped with an unexpected error (logged), so '
@@ -1768,6 +1773,7 @@ RETRY_RELEASE_NOTE = 'released for one retry'  # FINAL 11.3: the note a retry wr
 # scope['refused'] of a run the stage kept unsent: the size bound, a text that cannot be framed, the failed-before door,
 # the live gate, a sentinel that cannot vouch for the write the answer would need (NOT_RUN: no request could be made)
 SIZE, UNBUILT, FAILED_BEFORE, LIVE_GATE, SENTINEL = 'size', 'unbuilt', 'failed_before', 'live_gate', 'sentinel'
+SETTLED = 'settled'  # ... and the stale sweep's settled path, which never sends (FINAL 6.9; D11: no automatic retry)
 NOT_RUN = (LIVE_GATE, SENTINEL)
 SETTLED_FROM_EXCHANGE = 'settled_from_exchange'  # scope key of a run P-6 settled from its recorded exchange
 
@@ -1792,6 +1798,25 @@ def _keyed_run(job, mark):
     except ValueError:
         return None
     return models.ProviderRun.objects.filter(pk=pk, encounter_id=job.encounter_id).first()
+
+
+def keyed_interpretation_run(job):
+    """The interpretation run of ``job``'s revision that its key names - ':settled:<run>' (the stale sweep, FINAL 6.9) or
+    ':after-reconcile:<run>' (a reconciliation) - or None. Such a stage settles that run itself when it holds the answer
+    to the request (_settled_answer) and records no run of its own, so that run's outcome is the stage's own (the reading
+    review._failed_stage_state makes of a failed one)."""
+    for mark in ('settled', 'after-reconcile'):
+        run = _keyed_run(job, mark)
+        if run is not None:
+            return run if run.purpose == INTERPRETATION and run.revision_id == job.revision_id else None
+    return None
+
+
+def _settled_path(job) -> bool:
+    """Whether ``job`` is the stale sweep's settled path itself ('interpret:...:settled:<run>'), never a member's Resume
+    of it: the one interpret stage that sends nothing, whatever it finds (FINAL 6.9; D11: no automatic retry)."""
+    base, resumed, _ = job.idempotency_key.partition(':resume:')
+    return not resumed and ':settled:' in base
 
 
 def _size_bound(revision):
@@ -1848,12 +1873,28 @@ def _answer_refusal(run):
         inventory_version=interpretation.INVENTORY_VERSION).order_by('created_at', 'pk').first())
 
 
+def _recorded_effect(run):
+    """The effect a stage recorded on ``run`` (scope 'effect') while it still describes the run, else None: 'unknown' or
+    'none' recorded on a run whose outcome is now a definite one (SUCCEEDED or FAILED) - an unknown outcome P-6 settled
+    from its recorded exchange - describes the run as it was, never its answer, which is classified from the run as
+    stored (refutation of S09, finding 1: a stale 'unknown' kept the settled answer from every door, and it was paid
+    for again)."""
+    stored = (run.scope or {}).get('effect')
+    if stored not in interpretation_holds.EFFECTS:
+        return None
+    if (stored in (interpretation_holds.UNKNOWN, interpretation_holds.NONE)
+            and run.state in (models.ProviderRun.SUCCEEDED, models.ProviderRun.FAILED)):
+        return None
+    return stored
+
+
 def interpretation_effect(run) -> str:
     """What interpretation run ``run``'s outcome means (interpretation.holds' table, FINAL 11.1): as the stage recorded it
-    (scope 'effect'), else classified now from the run as stored - for a stored answer, with the refusal of any reading
-    of that answer (_answer_refusal). 'none' for a run that sent nothing or has no outcome yet."""
-    stored = (run.scope or {}).get('effect')
-    if stored in interpretation_holds.EFFECTS:
+    (scope 'effect', while it still describes the run: _recorded_effect), else classified now from the run as stored -
+    for a stored answer, with the refusal of any reading of that answer (_answer_refusal). 'none' for a run that sent
+    nothing or has no outcome yet."""
+    stored = _recorded_effect(run)
+    if stored is not None:
         return stored
     if run.state in (models.ProviderRun.SUCCEEDED, models.ProviderRun.FAILED):
         return interpretation_holds.classify(run.state, run.http_status, bytes(run.response_bytes or b''),
@@ -1928,10 +1969,12 @@ def _interpretation_failed_before(encounter, interpreter, request):
 
 
 def _settle_from_exchange(run) -> bool:
-    """ADJUDICATION P-6: an interpretation run left 'sending' by a dead worker, or recorded unknown and reconciled,
-    whose one exchange (turn 1) was recorded succeeded with HTTP 200 and response bytes whose sha256 checks, is settled
-    SUCCEEDED from that exchange - the answer it holds - so the stored-answer door reads it and nothing is sent. Every
-    other run is left as it is (False)."""
+    """ADJUDICATION P-6: an interpretation run left 'sending' by a dead worker or by a stage that no longer runs, or
+    recorded unknown and reconciled, whose one exchange (turn 1) was recorded succeeded with HTTP 200 and response bytes
+    whose sha256 checks, is settled SUCCEEDED from that exchange - the answer it holds - and its settled path reads it,
+    or records its hold, or fails its refused reading (_settled_answer, _settle_interpretation): nothing is sent. The
+    effect a stage recorded on it ('unknown') is dropped, since it described the run as it was and never its answer
+    (refutation of S09, finding 1). Every other run is left as it is (False)."""
     if (run.provider != interpretation.PROVIDER or run.purpose != INTERPRETATION
             or run.state not in (models.ProviderRun.SENDING, models.ProviderRun.UNKNOWN)):
         return False
@@ -1946,16 +1989,34 @@ def _settle_from_exchange(run) -> bool:
         return False
     _, model, response_id = interpretation_adapter.describe(data)
     usage = dict(exchange.usage or {})
+    scope = {key: value for key, value in (run.scope or {}).items() if key != 'effect'}
     settled = models.ProviderRun.objects.filter(pk=run.pk, state=run.state).update(
         state=models.ProviderRun.SUCCEEDED, sent=run.sent or bool(run.endpoint), http_status=200, response_bytes=data,
         response_sha256=exchange.response_sha256, latency_ms=exchange.latency_ms, usage=usage,
         usage_basis=participant_http.USAGE_BASIS if usage else '', error='',
         provider_request_id=exchange.provider_request_id, response_id=exchange.response_id or response_id,
         returned_model=model, finished_at=exchange.finished_at or timezone.now(),
-        scope={**(run.scope or {}), SETTLED_FROM_EXCHANGE: True})
+        scope={**scope, SETTLED_FROM_EXCHANGE: True})
     if settled:
         run.refresh_from_db()
     return bool(settled)
+
+
+def _settled_answer(job, interpreter, request):
+    """The run a settled or after-reconcile stage settles itself, before any door (FINAL 6.9; ADJUDICATION P-6;
+    refutation of S09, findings 1 and 2): its keyed run (keyed_interpretation_run) when that run SUCCEEDED - the stale
+    sweep's, or one P-6 settled from its recorded exchange - holds the answer to the identical request (provider,
+    adapter version, request sha256 and mode, as the stored-answer door matches them) and no stage has settled its
+    outcome yet (no effect recorded that still describes it). _settle_interpretation then reads it, records its hold
+    (P-5: an answer naming another model is never read and never paid for again) or fails its refused or cut-off reading,
+    exactly as the stage that sent it would have: nothing is sent (D11). None otherwise - a run already settled, or one
+    that answers another request - and the doors decide."""
+    run = keyed_interpretation_run(job)
+    if (run is None or run.state != models.ProviderRun.SUCCEEDED or run.provider != interpreter.name
+            or run.adapter_version != interpreter.adapter_version or run.request_sha256 != request.canonical_sha256
+            or (run.scope or {}).get('mode') != interpreter.mode or _recorded_effect(run) is not None):
+        return None
+    return run
 
 
 def _queue_analyze(job, inventory):
@@ -2064,11 +2125,14 @@ def stage_interpret(job):
     paused, resumable; FINAL 11.2); then the request, built purely from the text, its page framing and the
     instructions (one that cannot be framed: a not-sent run, failed). Before the doors, a reconciliation's stage settles
     the run it was released for from its recorded exchange when it can (ADJUDICATION P-6). The doors, in predict's
-    order: an inventory already read for this revision and versions (no send: analyze); a stored answer to the
-    identical request (reused, nothing sent; P-2); the encounter-wide unknown-outcome block; the failed-before door
-    (skipping a run released for one retry); the live gate and the write gate asked before the send (each refusal a
-    not-sent run: every outcome is a run); then one send (_send, purpose 'interpretation'), and its outcome settled
-    (_settle_interpretation)."""
+    order: an inventory already read for this revision and versions (no send: analyze); the run a settled or
+    after-reconcile key names, settled itself when it holds the answer to the identical request and no stage settled it
+    yet (_settled_answer: read, its hold recorded, or its refused or cut-off reading failed - nothing sent); a stored
+    answer to the identical request (reused, nothing sent; P-2); the encounter-wide unknown-outcome block; the
+    failed-before door (skipping a run released for one retry); the stale sweep's settled path stops here, recording
+    that nothing was sent, resumable (FINAL 6.9: it never sends - only a member's Resume of it may); the live gate and
+    the write gate asked before the send (each refusal a not-sent run: every outcome is a run); then one send (_send,
+    purpose 'interpretation'), and its outcome settled (_settle_interpretation)."""
     revision, encounter = job.revision, job.encounter
     encounter.refresh_from_db()
     revision.refresh_from_db()
@@ -2107,6 +2171,11 @@ def stage_interpret(job):
     if existing is not None:
         _queue_analyze(job, existing)
         return {'provider': 'read_before', 'run': str(existing.provider_run_id), 'inventory': str(existing.pk)}
+    settled = _settled_answer(job, interpreter, request)
+    if settled is not None:
+        # FINAL 6.9 and P-6: the answer the keyed run holds is settled as the stage that sent it would have settled it -
+        # read, its hold recorded against it, or its refused or cut-off reading failed - and never paid for again
+        return _settle_interpretation(job, settled, reused=settled.reused_from_id is not None)
     prior = _retained_interpretation(encounter, interpreter, request)
     if prior is not None:
         return _settle_interpretation(job, _reused_participant_run(job, prior, INTERPRETATION), reused=True)
@@ -2118,6 +2187,13 @@ def stage_interpret(job):
                                  request=request, started=True, refused=FAILED_BEFORE, failed=str(failed.pk),
                                  effect=interpretation_holds.NONE)
         raise StageFailure(INTERPRET_NOT_RESENT_MESSAGE)
+    if _settled_path(job):
+        # FINAL 6.9: the stale sweep's settled path sends nothing (D11: no automatic retry). Its run was read or settled
+        # above, or a door answered; what is left - a request the stored answer does not answer, an answer settled
+        # before - is sent only on a member's explicit act: a Resume of this stage
+        _interpretation_not_sent(job, INTERPRET_SETTLED_MESSAGE, mode=interpreter.mode, interpreter=interpreter,
+                                 request=request, started=True, refused=SETTLED, effect=interpretation_holds.NONE)
+        raise StageCancelled(INTERPRET_SETTLED_MESSAGE)
     for refused, check in ((LIVE_GATE, lambda: _live_gate(job, interpreter, revision, encounter)),
                            # the inventory write is gated after the read (_read_answer); asked here first too, so an
                            # answer this process could not record - its sentinel not installed and proven, or a denied
@@ -3340,10 +3416,11 @@ STALE_INTERPRETATION = 'the worker stopped after the interpretation outcome was 
 def _stale_interpretation(job, run):
     """(job state, error, result) of an interpret stage its worker left running after ``run`` (its newest finished
     interpretation run) recorded an outcome - settled as the stage would have settled it, sending nothing (FINAL 6.9):
-    a SUCCEEDED run (P-6's included) queues 'interpret:...:settled:<run>', which meets the stored-answer door and reads
-    the stored bytes (or finds the inventory already read); an unknown outcome stays for the reconcile flow; a FAILED
-    run goes through interpretation.holds (a hold pauses, anything else fails the stage); a run kept unsent ends as its
-    stage did - paused when it was a pause, failed otherwise."""
+    a SUCCEEDED run (P-6's included) queues 'interpret:...:settled:<run>', the settled path, which finds the inventory
+    already read or settles that run itself from its stored bytes (_settled_answer: read, its hold recorded, or its
+    refused or cut-off reading failed) and never sends (_settled_path); an unknown outcome stays for the reconcile flow;
+    a FAILED run goes through interpretation.holds (a hold pauses, anything else fails the stage); a run kept unsent
+    ends as its stage did - paused when it was a pause, failed otherwise."""
     result = {'provider': run.state, 'run': str(run.pk), 'settled': STALE_INTERPRETATION}
     if run.state == models.ProviderRun.SUCCEEDED:
         enqueue(INTERPRET, encounter=job.encounter, revision=job.revision,
@@ -3464,14 +3541,24 @@ def mark_stale():
     # Decision (k): a run left 'sending' by a stage that no longer runs - its outcome never recorded, the job failed or
     # ended - is settled unknown like a dead worker's, so its reconciliation can release one new attempt. Until then
     # every send door blocks on it (review._orphaned_sending). Its own stage, were it running, started before it.
+    # ADJUDICATION P-6 comes first (refutation of S09, finding 3): an interpretation run whose one exchange was recorded
+    # answered (HTTP 200, a sha256 that checks) is settled SUCCEEDED from that exchange instead - the answer it holds,
+    # never an outcome left for a member to reconcile - and, on the encounter's current revision, its settled path is
+    # queued ('interpret:...:settled:<run>'), which reads it, records its hold or fails its reading, and sends nothing.
     for run in models.ProviderRun.objects.filter(state=models.ProviderRun.SENDING, created_at__lt=cutoff):
         if Job.objects.filter(encounter_id=run.encounter_id, state=Job.RUNNING, started_at__lte=run.created_at).exists():
             continue
         with transaction.atomic():
-            reached = may_have_reached_vendor(models.ProviderRun.objects.filter(pk=run.pk)).exists()
-            settled = models.ProviderRun.objects.filter(pk=run.pk, state=models.ProviderRun.SENDING).update(
-                state=models.ProviderRun.UNKNOWN, error=ORPHANED_SENDING_MESSAGE, finished_at=timezone.now(),
-                sent=run.sent or reached)
+            if _settle_from_exchange(run):
+                settled, encounter = True, run.encounter
+                if encounter.current_revision_id == run.revision_id:
+                    enqueue(INTERPRET, encounter=encounter, revision=run.revision,
+                            key=_interpret_key(run.revision, f'settled:{run.pk}'), requested_by=run.requested_by)
+            else:
+                reached = may_have_reached_vendor(models.ProviderRun.objects.filter(pk=run.pk)).exists()
+                settled = models.ProviderRun.objects.filter(pk=run.pk, state=models.ProviderRun.SENDING).update(
+                    state=models.ProviderRun.UNKNOWN, error=ORPHANED_SENDING_MESSAGE, finished_at=timezone.now(),
+                    sent=run.sent or reached)
         if settled:
             review.refresh_state(run.encounter)
     # Refutation r2, L5-3: a reservation left by a stage that no longer runs - the stage failed before sending it, and
