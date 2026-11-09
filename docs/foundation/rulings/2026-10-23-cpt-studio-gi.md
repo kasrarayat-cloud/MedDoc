@@ -2793,3 +2793,84 @@ a documented act.
 install, the retained re-assessment first, then a fresh synthetic acceptance check written blind to the repair. The date
 item touches the request side (studio/gi/context.py, the H2 freeze); what it moves is decided after its trace, and any
 request-side movement beyond the 2026-11-07 decision is put to the owner before it ships.
+
+## Owner amendment, 2026-11-09 — parity is diagnostic; regressions are regressions; the paired denial-timing cases
+
+Received by session 30a58364 at about 05:25Z, as pasted, after the session recorded its parity decision (HARNESS.md "The design,
+stage A"). Recorded verbatim below; it amends the acceptance rule of the 2026-11-09 requirement and supersedes that decision.
+
+> Continue the repair chain. Do not stop the project or pause the live website. Keep progressing through time, targets, matching and anatomy, but amend the harness’s acceptance rule as follows.
+>
+> **Ordinary-heading parity is diagnostic evidence, not proof of correctness.**
+>
+> For every recorded counterexample, record separately:
+> 1. The installed release’s result on the exact original input.
+> 2. The candidate’s result on that same input.
+> 3. The ordinary-heading comparison, if useful.
+> 4. The expected semantic outcome supported by the complete document.
+>
+> If the candidate incorrectly changes the original input from HELD to READY, record a regression. Do not dismiss it because the installed release also fails on a rewritten input. If both versions fail the same input, record an existing defect—not a passing correctness check.
+>
+> Do not describe “bounded by the ordinary-heading comparison” as “no false positives.”
+>
+> **Keep the completion requirement practical and specific.**
+>
+> I am not asking for proof that no imaginable document can ever fail. I am requiring resolution of the demonstrated material false READY and false-hold cases within this repair’s scope. Keep unrelated existing limitations separately recorded.
+>
+> Statements assigning a procedure to an earlier time or another performer must be interpreted in their full context. Do not automatically treat them as current, dismiss them as contrived, or turn uncertainty into evidence of performance.
+>
+> **Test the alternative denial-timing approach before accepting it.**
+>
+> Section context may contribute to time interpretation, but must not erase explicit dates, local temporal overrides or cross-sentence references.
+>
+> Required paired cases include:
+> - A historical denial followed by a clearly documented current intervention.
+> - A historical denial explicitly extended to the current encounter.
+> - Historical and current services mixed within one section.
+> - A previous performer and the current performer described in the same narrative.
+> - A failed attempt followed by successful completion of the same intervention.
+> - An unrelated target’s denial beside a completed current intervention.
+>
+> If time, ownership or reference resolution remains uncertain, preserve a targeted unresolved state. Do not invent current performance or apply a whole-document hold unnecessarily.
+>
+> **Keep repairing the shared logic.**
+>
+> Retiring an unsafe implementation after two attempts does not retire the requirement. Preserve its counterexamples and change the approach. Keep unsafe variants out of deployment while independent work continues.
+>
+> Before marking the integrated repair PASS:
+> - Resolve the original Note #8 false holds and the retained material false READY counterexamples.
+> - Verify correct target, technique, time, performer and extent—not just the code’s READY label.
+> - Run independent review of the integrated result.
+> - Install through the existing coordinated process and verify the served workflow, saved decisions and actual downloads.
+>
+> Continue under the existing completion contract. Do not close this work with a parity-only justification for unresolved failures in the changed behavior.
+
+### Session interpretation, 2026-11-09 (30a58364, on receipt) — recorded, not owner-ruled
+
+(a) **The session's parity decision is withdrawn.** "Parity-bounded" was used to set aside findings in which the candidate turned the
+exact original input from held to READY while the installed release held it (c5c with "She had this done at the age of 50.", "Both done
+by her previous gastroenterologist.", "She had both in her fifties."). Under this amendment each of those is a REGRESSION of the
+candidate, to be resolved; the installed release's READY on the ordinary-heading rewrite is an EXISTING DEFECT, recorded beside it.
+
+(b) **The counterexample registry.** Every recorded counterexample (wave 1's lens findings, the stage-A judges' batteries, the trace's
+cases and every later lens finding) is kept with four separate results: the installed release on the exact input; the candidate on the
+same input; the ordinary-heading comparison where it helps diagnosis; and the expected outcome the complete document supports. A
+candidate's held-to-READY change against that outcome is a regression; a failure both share is an existing defect.
+
+(c) **Scope and materiality.** Within scope: the association of a statement with its procedure, target, technique, time, performer,
+outcome and extent, and the contradictions judged on it. "Material": a plausible report could contain it, and it changes a code's
+documentation reading. Within-scope material false READYs and false holds are resolved before PASS; out-of-scope limitations stay
+recorded separately (ACCURACY-RESIDUALS.md).
+
+(d) **Time and performer by interpretation.** A statement that assigns a procedure to another time or another performer is read in its
+full context - its referents ("this", "both", "all of this"), the patient's stated age, the document's own endoscopist, explicit dates,
+local overrides ("today", "this time") and cross-sentence references - and is never assumed current, dismissed as contrived, or turned
+into performance. Where the resolution stays uncertain, the affected codes keep a targeted unresolved state (a question about those
+codes), never a whole-document hold where the rest is resolved.
+
+(e) **The denial-timing approach is tested before it is accepted**, on the six paired cases the amendment names, built as unit and
+integration tests with wording, order and PDF/Word variation. Section context contributes; it never erases an explicit date, a local
+temporal override or a cross-sentence reference.
+
+(f) **Unsafe variants stay out of deployment.** The installed release (c2e53f8e) stays live and unchanged until an integrated repair
+passes; no candidate is installed that turns a correctly held original input READY.

@@ -316,7 +316,18 @@ and U13, U30, U19/U14, U21 and U10/U11 related. Each item is ticked only when it
   layout) overlap U32 and are folded into its design, not built twice.
 - [ ] **Repair the shared evidence model** (association of each assertion with procedure, target or lesion, intervention,
   technique, encounter/time, performer, outcome and exact spans, before contradictions; lesion identity from context, uncertain
-  identity preserved).
+  identity preserved). Amended 2026-11-09 by the owner: statements that assign a procedure to another time or performer are read in
+  full context (referents, the patient's age, the document's endoscopist, explicit dates, local overrides, cross-sentence
+  references); uncertainty keeps a targeted unresolved state, never invented performance and never an unnecessary whole-document hold.
+- [ ] **The counterexample registry** (owner amendment 2026-11-09): every recorded counterexample with four separate results -
+  installed on the exact input, candidate on the same input, the ordinary-heading comparison (diagnostic only), the expected outcome the
+  complete document supports; held-to-READY against that outcome is a regression; a shared failure is an existing defect; the
+  within-scope material false READY and false-hold cases resolved before PASS, out-of-scope limitations recorded separately.
+- [ ] **The six paired denial-timing cases** (owner amendment 2026-11-09), each a unit and integration test with wording, order and
+  PDF/Word variation, passing before the approach is accepted: a historical denial then a clearly documented current intervention; a
+  historical denial explicitly extended to the current encounter; historical and current services mixed in one section; a previous
+  and the current performer in one narrative; a failed attempt then successful completion of the same intervention; an unrelated
+  target's denial beside a completed current intervention.
 - [ ] **Evaluate genuine contradictions correctly** (compatible events only; the same target with another technique; a broad
   denial against a specific completed act on the same target; a failed attempt followed by a completed one; genuine
   contradictions still reviewed).
@@ -330,7 +341,9 @@ and U13, U30, U19/U14, U21 and U10/U11 related. Each item is ticked only when it
 - [ ] **Verify every question and persisted outcome** (the six-question before/after table; the retained re-assessment first;
   then a fresh synthetic acceptance check with decisions, recomputation, reload and downloads).
 - [ ] **Install and close with evidence** (the authorized repair, regression tests, an independent adversarial review, the
-  install, served verification, the record).
+  install, served verification, the record). Before PASS (owner amendment 2026-11-09): Note #8's false holds and the retained material
+  false READY counterexamples resolved; each code's target, technique, time, performer and extent verified, not only its READY label;
+  an independent review of the integrated result; no parity-only justification for an unresolved failure in the changed behaviour.
 
 ## Progress log (append only)
 
@@ -1169,3 +1182,7 @@ and U13, U30, U19/U14, U21 and U10/U11 related. Each item is ticked only when it
   questions are resolved by the document; what remains is billing and reference. CORRECTION to U32 as recorded on
   receipt (the row is kept): the stated date of service IS read; only its provenance is replaced when a member enters the
   same date (context.py:3541). No single-stage fix converges (measured): the stages must land together.
+- **2026-11-09 ~05:25Z The owner's amendment** (verbatim in the rulings file): ordinary-heading parity is diagnostic, not proof; a
+  candidate's held-to-READY change is a regression; a four-result counterexample registry; the six paired denial-timing cases;
+  time and performer read in full context with targeted unresolved states. The session's parity decision (HARNESS.md "The design,
+  stage A") is withdrawn; the c3 workflow (wf_ad9e3752-1b5), whose verifier used it, was stopped at its first agent.

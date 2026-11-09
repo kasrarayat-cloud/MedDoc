@@ -4351,3 +4351,13 @@ offline judge. Stage A (time) took two cycles:
     historical "Pertinent records reviewed" part. The sentence guard and a fail-closed rule for history parts that say today also apply.
     A denial in today's sections pairs exactly as installed, and no denial's own reading is rewritten.
   - Every later judge and lens reports parity and plausibility for each finding (a severity rubric).
+
+**Superseded the same day by the owner's amendment (2026-11-09, verbatim in the rulings file).** Ordinary-heading parity is diagnostic
+evidence, not proof of correctness. A candidate that turns the exact original input from held to READY against the document's
+supported outcome has a REGRESSION, whatever the installed release does on a rewritten input; a failure both share is an existing
+defect. The decision above to keep a4's section time on parity grounds is therefore withdrawn: its open-vocabulary other-age and
+other-performer findings are regressions to resolve, and the installed release's READY on their ordinary-heading rewrites is recorded
+as an existing defect. Every counterexample is now kept in a registry with four separate results (installed on the exact input;
+candidate on the same input; the ordinary-heading comparison; the expected outcome the complete document supports). The time stage
+is redesigned to interpret time and performer statements in full context, and the denial-timing approach is tested on the six paired
+cases the owner named before it is accepted.
