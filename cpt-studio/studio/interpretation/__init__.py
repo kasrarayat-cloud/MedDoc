@@ -22,7 +22,7 @@ from __future__ import annotations
 INTERPRETATION_VERSION = 'gemini-events@1'
 # sha256 of prompt.INSTRUCTIONS (UTF-8) and of the canonical bytes of schema.LOCAL_SCHEMA and schema.RESPONSE_SCHEMA
 # (schema.sha256_of). A changed byte of any of them needs a new INTERPRETATION_VERSION and new pins.
-INSTRUCTIONS_SHA256 = '7bdaae793599415f9d60bb16b66e0a07c8dece5e2a5485f94d8777f3152c1bad'
+INSTRUCTIONS_SHA256 = '00da58c5a8f0f5deca4ee0dd8259bb7065ee6dd551e408e3257bd33b4eee14b1'
 LOCAL_SCHEMA_SHA256 = '93574cacb4dc3d9fb0c3ed7789a8c2f7c708bf94176b53f1dd850fcd0214ccc3'
 RESPONSE_SCHEMA_SHA256 = '7bb3057d724012910b4210272c31480eacb6fc6fe6dbacbce4415c61592d2537'
 

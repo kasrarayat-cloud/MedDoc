@@ -100,13 +100,19 @@ EVENTS
   act in time. Give them whenever the document gives any sign of when the act was done, whatever time you give: a date
   stated for it; a word such as "prior", "previous", "previously", "at that time" or "next"; or the heading or line that
   introduces the part of the document the act is told in, such as "History:", with that line among the time's passages.
+  A sentence that says which occasion a part of the document belongs to - before that part, such as "The reports below
+  are copied from her earlier hospital stay.", or after it, such as "That was the examination of last spring." - places
+  every act told in that part: give each of those acts the time it states, with that sentence as the act's time words
+  and its passage among the time's passages.
   Give "" only when the act is told as part of this encounter with no such sign of its own. A purpose is not a time: an
   act done in this encounter for a later purpose is current_encounter. A statement that extends another statement to
   another time takes the time it establishes. For another time stated without a date, the words include the word that
   places it there, such as "previously" or "next".
 - performer: documenting_team (the documenting endoscopist or the team); other_clinician; other_facility; unknown. words:
   the name or description as written, or "" when the document names none. For another facility, the words include the
-  word that names the place, such as "outside hospital".
+  word that names the place, such as "outside hospital". A sentence that says who did the acts told in a part of the
+  document, before or after that part, such as "All of the above was done by her previous surgeon.", gives each act told
+  in that part that performer, with that sentence as the act's performer words.
 - status: performed; attempted_not_completed (begun in this encounter and not completed); planned; not_performed;
   uncertain (the document leaves it in doubt). words: the words that state it, including the word that says the act was
   not done, is planned, or was not completed.

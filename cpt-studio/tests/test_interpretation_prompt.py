@@ -40,7 +40,7 @@ SLICE_MODULES = ('__init__', 'prompt', 'schema', 'read', 'store')
 # FRESH request's sha256 still matches its record).
 PINS = {
     'gemini-events@1': {
-        'INSTRUCTIONS': '7bdaae793599415f9d60bb16b66e0a07c8dece5e2a5485f94d8777f3152c1bad',
+        'INSTRUCTIONS': '00da58c5a8f0f5deca4ee0dd8259bb7065ee6dd551e408e3257bd33b4eee14b1',
         'LOCAL_SCHEMA': '93574cacb4dc3d9fb0c3ed7789a8c2f7c708bf94176b53f1dd850fcd0214ccc3',
         'RESPONSE_SCHEMA': '7bb3057d724012910b4210272c31480eacb6fc6fe6dbacbce4415c61592d2537',
         'BOUNDS': '1465ca8d83ec9337e7c13245571fc01112c820cf2f2f98438e9a52039654dc4b',
@@ -99,6 +99,25 @@ ADJUDICATED_EDITS = (
   unknown. words: the words that set the scope, including for exceptive the word that makes the exception, such as
   "further", "other" or "additional".
 '''),
+    # S16, after the FRESH recording (DECISIONS D33): a sentence that frames a part of the document - before or after
+    # it - places every act told in that part in time and says who did them (EB4: asking for the words, never a word
+    # list). Applied after C-8, so undone first.
+    ('''  introduces the part of the document the act is told in, such as "History:", with that line among the time's passages.
+  Give "" only when the act is told as part of this encounter with no such sign of its own. A purpose is not a time: an
+''', '''  introduces the part of the document the act is told in, such as "History:", with that line among the time's passages.
+  A sentence that says which occasion a part of the document belongs to - before that part, such as "The reports below
+  are copied from her earlier hospital stay.", or after it, such as "That was the examination of last spring." - places
+  every act told in that part: give each of those acts the time it states, with that sentence as the act's time words
+  and its passage among the time's passages.
+  Give "" only when the act is told as part of this encounter with no such sign of its own. A purpose is not a time: an
+'''),
+    ('''  the name or description as written, or "" when the document names none. For another facility, the words include the
+  word that names the place, such as "outside hospital".
+''', '''  the name or description as written, or "" when the document names none. For another facility, the words include the
+  word that names the place, such as "outside hospital". A sentence that says who did the acts told in a part of the
+  document, before or after that part, such as "All of the above was done by her previous surgeon.", gives each act told
+  in that part that performer, with that sentence as the act's performer words.
+'''),
 )
 # (the contract's 2.1 text, FINAL 5.3's): C1's three sentences and C3's part_of line (FINAL 5.3, "Changed against").
 FINAL_EDITS = (
@@ -126,7 +145,7 @@ BREAK = NOTE.index('Page two')
 PAGES = (PageSpan(page=1, start=0, end=BREAK), PageSpan(page=2, start=BREAK, end=len(NOTE)))
 # The request sha256 of NOTE framed as a PDF: the replay key a recording of it would carry. It moves with any byte of
 # the instructions, the schema, the framing or the body's shape.
-NOTE_PDF_REQUEST_SHA256 = 'ef3b7b530735e8a9a540dbf111cc8672c3242b83eeec525b588bb0aeb25bfa10'
+NOTE_PDF_REQUEST_SHA256 = '556582e7bf355b27755ec471e83df6989d3a5c03fc10dd4f5adb015f92195c0e'
 
 
 def sha256_text(text: str) -> str:
