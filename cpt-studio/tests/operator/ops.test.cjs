@@ -3673,3 +3673,160 @@ test('an unreconciled interpretation run is named as the interpreter\'s', () => 
   const html = render(doc);
   assert.ok(html.includes('Gemini, the interpreter · Interpretation · 9 Nov 2026, 10:00 UTC · The read timed out after the request was sent.'), html.slice(html.indexOf('Unreconciled'), html.indexOf('Unreconciled') + 300));
 });
+
+// --- the interpreter hold's release redraws the page it was released from (S13 review) ---
+//
+// A console page the way the browser holds it, in a fake DOM: #main's markup, the toast, the release form, the session's
+// sidebar, and the list's three slots; the API answered by `answers`. The hold is installation-wide, so after a release
+// the page the operator is on - the overview, where the console lands, as well as a document - is drawn again from the
+// hold's state, the session read again first.
+function consolePage(answers) {
+  const elements = new Map();
+  const absent = new Set(['#documentSearch', '#searchEmpty', '#sourceScroll', '#pageNumber']);
+  const element = selector => {
+    if (absent.has(selector)) return null;
+    if (!elements.has(selector)) {
+      elements.set(selector, { textContent: '', innerHTML: '', hidden: true, checked: false, value: '', options: [{ textContent: '' }],
+        classList: { add() {}, remove() {}, toggle() {}, contains: () => false }, setAttribute() {}, removeAttribute() {} });
+    }
+    return elements.get(selector);
+  };
+  const attributes = new Set();
+  const button = { disabled: false, toggleAttribute: (name, on) => (on ? attributes.add(name) : attributes.delete(name)), busy: () => attributes.has('aria-busy') };
+  const asked = [];
+  const saved = { document: global.document, fetch: global.fetch, window: global.window };
+  global.document = { querySelector: element, querySelectorAll: () => [], cookie: 'cptstudio_csrf=token123', activeElement: null };
+  global.window = { scrollY: 0, scrollTo() {}, matchMedia: () => ({ matches: false }) };
+  global.fetch = async (url, init) => {
+    asked.push(`${init.method} ${url}`);
+    const reply = answers(url, init);
+    return { status: reply.status, ok: reply.status < 300, redirected: false, url: `http://127.0.0.1${url}`, headers: { get: () => 'application/json' }, json: async () => reply.body };
+  };
+  const restore = () => {
+    Object.assign(global, saved);
+    app.state.doc = null;
+    app.state.docKey = '';
+    app.state.route = null;
+    app.state.session = null;
+    clearTimeout(app.state.toastTimer);
+  };
+  return { element, main: () => element('#main').innerHTML, button, form: { id: 'releaseHoldForm', querySelector: () => button }, asked, restore };
+}
+const HOLD = { id: 'h0000000-0000-4000-8000-0000000000b2', reason: 'quota', means: 'a daily, zero or unbilled quota is exhausted, or billing is not enabled',
+  http_status: 429, vendor_status: 'RESOURCE_EXHAUSTED', violations: 2, run: 'f0000000-0000-4000-8000-0000000000f1', set_at: '2026-11-09T06:00:00+00:00', released_at: null, released_by: null };
+const holdState = held => ({ held, standing: held ? [HOLD] : [], process_mode: 'live', process_paused: held ? 'interpreter_hold' : null, message: held ? PAUSED : '' });
+const sessionWith = held => ({ ...fixture('session.json'), interpreter: holdState(held) });
+
+test('the release redraws the overview from the hold\'s state: the card is gone and the button is usable again', async () => {
+  let held = true;
+  const page = consolePage(url => {
+    if (url === '/ops/api/interpreter') {
+      held = false;
+      return { status: 201, body: { released: [HOLD.id], ...holdState(false) } };
+    }
+    if (url === '/ops/api/session') return { status: 200, body: sessionWith(held) };
+    if (url === '/ops/api/encounters') return { status: 200, body: { encounters: [] } };
+    return { status: 404, body: { error: 'Not found.' } };
+  });
+  try {
+    app.state.session = sessionWith(true);
+    app.state.route = { name: 'workspace' };
+    page.element('#main').innerHTML = app.overviewView();
+    assert.ok(page.main().includes('data-interpreter-hold'));
+    page.element('#releaseHoldNote').value = 'Billing enabled on the project; quota restored.';
+    await app.submitHoldRelease(page.form);
+    assert.deepEqual(page.asked, ['POST /ops/api/interpreter', 'GET /ops/api/session', 'GET /ops/api/encounters']);
+    assert.equal(app.state.session.interpreter.held, false);
+    assert.equal(page.main().includes('data-interpreter-hold'), false, 'the overview is drawn again, without the hold');
+    assert.ok(page.main().includes('A CLEARER VIEW OF EVERY CODE'), 'and it is the overview');
+    assert.equal(page.button.disabled, false);
+    assert.equal(page.button.busy(), false);
+    assert.equal(page.element('#toast').textContent, app.HOLD_RELEASED);
+  } finally {
+    page.restore();
+  }
+});
+
+test('the release redraws a document from the session read after it, though the document itself is unchanged', async () => {
+  const doc = failedReadingDoc();
+  let held = true;
+  const page = consolePage(url => {
+    if (url === '/ops/api/interpreter') {
+      held = false;
+      return { status: 201, body: { released: [HOLD.id], ...holdState(false) } };
+    }
+    if (url === '/ops/api/session') return { status: 200, body: sessionWith(held) };
+    if (url === `/ops/api/encounters/${doc.id}`) return { status: 200, body: clone(doc) };
+    return { status: 404, body: { error: 'Not found.' } };
+  });
+  try {
+    app.state.session = sessionWith(true);
+    app.state.route = { name: 'doc', id: doc.id };
+    app.state.doc = clone(doc);
+    app.state.docKey = JSON.stringify(doc);
+    app.state.layout = app.documentLayout(doc);
+    page.element('#main').innerHTML = render(doc);
+    assert.ok(page.main().includes('data-interpreter-hold'));
+    page.element('#releaseHoldNote').value = 'Billing enabled on the project; quota restored.';
+    await app.submitHoldRelease(page.form);
+    assert.deepEqual(page.asked, ['POST /ops/api/interpreter', 'GET /ops/api/session', `GET /ops/api/encounters/${doc.id}`]);
+    assert.equal(page.main().includes('data-interpreter-hold'), false, 'the document is drawn again, without the hold');
+    assert.ok(page.main().includes('data-retry-reading'), 'and it is the document, its failed reading still offered for a retry');
+    assert.equal(page.button.disabled, false);
+    // a refused release leaves the page as it was, with the server's sentence and the button usable
+    held = true;
+    page.asked.length = 0;
+    app.state.session = sessionWith(true);
+    page.element('#main').innerHTML = render(doc);
+    global.fetch = async url => {
+      page.asked.push(url);
+      return { status: 403, ok: false, redirected: false, url: `http://127.0.0.1${url}`, headers: { get: () => 'application/json' }, json: async () => ({ error: 'Only an operator may release the interpreter hold.' }) };
+    };
+    await app.submitHoldRelease(page.form);
+    assert.deepEqual(page.asked, ['/ops/api/interpreter']);
+    assert.equal(page.element('#releaseHoldError').textContent, 'Only an operator may release the interpreter hold.');
+    assert.ok(page.main().includes('data-interpreter-hold'));
+    assert.equal(page.button.disabled, false);
+  } finally {
+    page.restore();
+  }
+});
+
+test('a document whose reading the pause ended reads the session again, so a hold set since the console opened is shown', async () => {
+  const base = fixture('encounter-ready.json');
+  const paused = { ...base, state: 'stopped', assessment: null, routing: null, provider_runs: [],
+    pipeline: { ...base.pipeline, busy: false, can_resume: true, stopped_by_member: false, stages: [stage('extract', 'succeeded'), stage('interpret', 'cancelled', PAUSED)] } };
+  assert.equal(app.INTERPRET_PAUSED, PAUSED);
+  assert.equal(app.pausedReading(paused), true);
+  assert.equal(app.pausedReading({ ...paused, pipeline: { ...paused.pipeline, stages: [stage('extract', 'succeeded'), stage('interpret', 'cancelled', 'Stopped by a member.')] } }), false);
+  assert.equal(app.pausedReading(failedReadingDoc()), false);
+  // the server's own message: the stage that the pause ended records it, and progress reads a pause by it
+  const holds = fs.readFileSync(path.join(__dirname, '..', '..', 'studio', 'interpretation', 'holds.py'), 'utf8');
+  assert.ok(holds.replace(/'\n\s+'/g, '').includes(`PAUSED_MESSAGE = ('${PAUSED}')`), 'holds.PAUSED_MESSAGE');
+  const page = consolePage(url => {
+    if (url === '/ops/api/session') return { status: 200, body: sessionWith(true) };
+    if (url === `/ops/api/encounters/${paused.id}`) return { status: 200, body: clone(paused) };
+    return { status: 404, body: { error: 'Not found.' } };
+  });
+  try {
+    app.state.session = sessionWith(false);  // read when the console opened, before the worker set the hold
+    app.state.route = { name: 'doc', id: paused.id };
+    await app.loadDocument(paused.id, app.state.routeToken, false);
+    assert.deepEqual(page.asked, [`GET /ops/api/encounters/${paused.id}`, 'GET /ops/api/session']);
+    assert.ok(page.main().includes('data-interpreter-hold'), 'the hold is shown with its release');
+    // a session that already says so is not read again, and neither is it for a document that was not paused
+    page.asked.length = 0;
+    await app.loadDocument(paused.id, app.state.routeToken, false);
+    assert.deepEqual(page.asked, [`GET /ops/api/encounters/${paused.id}`]);
+    app.state.session = sessionWith(false);
+    page.asked.length = 0;
+    global.fetch = async url => {
+      page.asked.push(url);
+      return { status: 200, ok: true, redirected: false, url: `http://127.0.0.1${url}`, headers: { get: () => 'application/json' }, json: async () => clone(base) };
+    };
+    await app.loadDocument(base.id, app.state.routeToken, false);
+    assert.deepEqual(page.asked, [`/ops/api/encounters/${base.id}`]);
+  } finally {
+    page.restore();
+  }
+});

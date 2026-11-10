@@ -3910,14 +3910,34 @@ test('checkRouting on the stand-in: status and presence as before, facts from th
   const absent = newPathEncounter();
   absent.routing.families = absent.routing.families.slice(1);
   assert.deepEqual(failures(vb.checkRouting(ROUTED, absent)), ['routing.gi.flex_sig.present']);
-  // each fact the inventory states: a target, a visit's basis, a cannulation; one it does not state is not judged
-  const values = (family, name, events, facts = {}) => vb.standInValues({ assessment: { interpretation: { inventory: { events: { events }, encounter_facts: facts } } } }, family, name);
-  assert.deepEqual(values('gi.eus', 'target', [{ id: 'E1', family: 'gi.eus', current: 'yes', target: attr('pancreas', 'verified', { lesion: '' }) }]), ['pancreas']);
-  assert.deepEqual(values('gi.eus', 'target', [{ id: 'E1', family: 'gi.eus', current: 'yes', target: attr('not_stated', 'verified', { lesion: 'L1' }) }]), ['lesion']);
-  assert.deepEqual(values('gi.office_em', 'em_basis', [{ id: 'E1', family: 'gi.office_em', current: 'yes' }],
-    { visits: [{ event: 'E1', basis: 'medical_decision_making', basis_state: 'verified' }] }), ['medical decision making']);
-  assert.deepEqual(values('gi.ercp', 'cannulation', [{ id: 'E1', family: 'gi.ercp', current: 'yes', kind: attr('cannulation'), status: attr('performed') }]), ['performed']);
-  assert.deepEqual(values('gi.ercp', 'cannulation', [{ id: 'E1', family: 'gi.ercp', current: 'yes', kind: attr('cannulation'), status: attr('attempted_not_completed') }]), []);
+  // an extent an open question names is an unverified one (verify.usable), and so is the reach that is that extent
+  const opened = newPathEncounter();
+  opened.assessment.interpretation.inventory.events.events[0].extent.open = true;
+  assert.deepEqual(failures(vb.checkRouting(ROUTED, opened)), ['routing.gi.flex_sig.fact.extent']);
+  // each fact the inventory states, in the routing reading's words (API.md): a target's landmark, or the site of the
+  // lesion the act is verified to have been done on; a visit's basis as time or mdm; a cannulation performed as
+  // successful, begun and not completed as failed. One the inventory has no attribute for is not judged.
+  const values = (family, name, events, facts = {}, lesions = []) => vb.standInValues({ assessment: { interpretation: { inventory: { events: { events, lesions }, encounter_facts: facts } } } }, family, name);
+  const eus = target => [{ id: 'E1', family: 'gi.eus', current: 'yes', target }];
+  const L1 = [{ id: 'L1', landmark: 'pancreas', site: attr('pancreas') }];
+  assert.deepEqual(values('gi.eus', 'target', eus(attr('pancreas', 'verified', { lesion: '' }))), ['pancreas']);
+  assert.deepEqual(values('gi.eus', 'target', eus(attr('not_stated', 'verified', { lesion: 'L1', identity: 'verified' })), {}, L1), ['pancreas']);
+  assert.deepEqual(values('gi.eus', 'target', eus(attr('not_stated', 'absent', { lesion: 'L1', identity: 'verified' })), {}, L1), ['pancreas']);
+  assert.deepEqual(values('gi.eus', 'target', eus(attr('duodenal_bulb', 'verified', { lesion: 'L1', identity: 'verified' })), {}, L1), ['duodenal bulb', 'pancreas']);
+  // a lesion is read only where the act is verified to have been done on it (identity.verified_lesion), at its usable site
+  assert.deepEqual(values('gi.eus', 'target', eus(attr('not_stated', 'verified', { lesion: 'L1', identity: 'unresolved' })), {}, L1), []);
+  assert.deepEqual(values('gi.eus', 'target', eus(attr('not_stated', 'verified', { lesion: 'L1', identity: 'verified' })), {}, [{ ...L1[0], site: attr('pancreas', 'unverified') }]), []);
+  assert.deepEqual(values('gi.eus', 'target', eus(attr('not_stated', 'verified', { lesion: 'L1', identity: 'verified' })), {}, [{ ...L1[0], site: attr('pancreas', 'verified', { open: true }) }]), []);
+  assert.deepEqual(values('gi.eus', 'target', eus(attr('not_stated', 'verified', { lesion: 'L2', identity: 'verified' })), {}, L1), [], 'a lesion the inventory does not define');
+  assert.deepEqual(values('gi.eus', 'target', eus(attr('pancreas', 'verified', { lesion: '', open: true }))), [], 'an open attribute is an unverified one');
+  assert.deepEqual(values('gi.eus', 'target', eus(attr('other', 'verified', { lesion: '' }))), [], 'a landmark CPT Studio cannot name');
+  const visit = basis => values('gi.office_em', 'em_basis', [{ id: 'E1', family: 'gi.office_em', current: 'yes' }], { visits: [{ event: 'E1', basis, basis_state: 'verified' }] });
+  assert.deepEqual(visit('medical_decision_making'), ['mdm']);
+  assert.deepEqual(visit('total_time'), ['time']);
+  const cannulation = status => values('gi.ercp', 'cannulation', [{ id: 'E1', family: 'gi.ercp', current: 'yes', kind: attr('cannulation'), status: attr(status) }]);
+  assert.deepEqual(cannulation('performed'), ['successful']);
+  assert.deepEqual(cannulation('attempted_not_completed'), ['failed']);
+  for (const status of ['not_performed', 'planned', 'uncertain']) assert.deepEqual(cannulation(status), [], status);
   assert.equal(values('gi.colonoscopy', 'intent', []), null);
   // a legacy routing is read as before (the stand-in check is the new path's alone)
   assert.equal(vb.checkRouting(ROUTED, encounter()).some(r => r.id === 'routing.stand_in'), false);
@@ -4006,4 +4026,216 @@ test('the denylist holds the interpreter\'s names and the new operator identifie
   const file = `Approved codes\n  1. 45331\n     "Hemostasis: argon plasma coagulation was applied."\nLimitations\n`;
   assert.deepEqual(vb.scanFile(file, ctx, 'approved.txt', 'txt'), []);
   assert.deepEqual(hitIds(vb.scanFile(`${file}  Read by Google.\n`, ctx, 'approved.txt', 'txt')), ['provider_name']);
+});
+
+
+// --- the Gemini migration (S13 review): every manifest expectation is met by a correct new-path reading ---
+//
+// A correct reading of each verification document (ops/verification/documents/*.txt) as its event inventory states it:
+// the events (family, kind, status, time, target, extent), lesions, reach and visit facts. The routing stand-in is
+// derived from the events by the server's rule (studio/interpretation/facts.py routing_stand_in and _status, for time
+// words that carry no date literal: a family's status the strongest its events give), and the context by D3 (a member's
+// value or missing; the document's date of service). Each manifest document's expected_routing and expected_context are
+// judged on it as the walk judges them: an expectation that no correct reading can meet - a fact stated in a vocabulary
+// the stand-in never states, as gi-10's "successful" cannulation was against the inventory's "performed" - fails here,
+// in CI, rather than on every walk of the document.
+const MANIFEST = JSON.parse(fs.readFileSync(path.join(__dirname, 'manifest.json'), 'utf8'));
+const RANK = ['performed', 'incomplete', 'uncertain', 'planned', 'historical', 'negated', 'cancelled'];  // facts.RANK
+const usableAttr = attribute => Boolean(attribute) && attribute.state === 'verified' && attribute.open !== true;
+function standInStatus(event) {  // facts._status
+  const status = event.status?.value;
+  if (status === 'uncertain' || !usableAttr(event.status)) return ['performed', 'attempted_not_completed', 'uncertain'].includes(status) ? 'uncertain' : '';
+  const time = usableAttr(event.time) ? event.time.value : 'unknown';
+  if (['performed', 'attempted_not_completed'].includes(status)) {
+    if (time === 'current_encounter') return status === 'performed' ? 'performed' : 'incomplete';
+    if (time === 'earlier_encounter' || time === 'future') return time === 'future' ? 'planned' : 'historical';
+    return 'uncertain';
+  }
+  return status === 'planned' ? 'planned' : status === 'not_performed' ? 'negated' : '';
+}
+function standInFamilies(events) {  // facts.routing_stand_in's findings
+  const found = new Map();
+  for (const event of events) {
+    const status = standInStatus(event);
+    if (event.family && status && (!found.has(event.family) || RANK.indexOf(status) < RANK.indexOf(found.get(event.family)))) found.set(event.family, status);
+  }
+  return [...found].map(([family, status]) => ({ family, label: family, supported: true, status, mentions: [], facts: [], missing: [] }));
+}
+const noTarget = () => attr('not_stated', 'absent', { lesion: '', identity: 'none', identity_by: null });
+const atLandmark = landmark => attr(landmark, 'verified', { lesion: '', identity: 'none', identity_by: null });
+const onLesion = (lesion, landmark = 'not_stated', state = 'verified') => attr(landmark, state, { lesion, identity: 'verified', identity_by: null });
+function ev(id, family, kind, status, time = 'current_encounter', extra = {}) {
+  return { id, family, current: time === 'current_encounter' ? 'yes' : 'no', kind: attr(kind), status: attr(status),
+    time: attr(time, 'verified', time === 'current_encounter' ? { basis: 'default' } : {}),
+    performer: attr('documenting_team', 'verified', { basis: 'default' }), target: noTarget(), extent: null, completion: null, visit: null, ...extra };
+}
+const visitOf = basis => ({ basis: attr(basis), separately_identifiable: attr('not_stated', 'absent') });
+const visitFact = (event, basis) => ({ event, basis, basis_state: 'verified', separately_identifiable: 'not_stated', separately_identifiable_state: 'absent', attached: true });
+const reachOf = (event, family, landmark) => ({ event, family, landmark, state: 'verified', reasons: [], attached: true });
+const lesionOf = (id, landmark, multiplicity = 'single') => ({ id, words: null, landmark, site: attr(landmark), size: { mm: [], span: null }, multiplicity,
+  passages: ['P1'], state: 'verified', reasons: [], distinct_from: [], possibly_same_as: [] });
+const READINGS = {
+  // the visit read on its total time, or on its medical decision making: the note documents both
+  'gi-01': ['total_time', 'medical_decision_making'].map(basis => ({
+    date: '2026-10-21', visits: [visitFact('E1', basis)],
+    events: [ev('E1', 'gi.office_em', 'em_visit', 'performed', 'current_encounter', { visit: visitOf(basis) }), ev('E2', 'gi.egd', 'examination', 'planned', 'future')] })),
+  'gi-02': [{ date: '2026-10-14', reach: [reachOf('E1', 'gi.egd', 'second_portion_duodenum')],
+    events: [ev('E1', 'gi.egd', 'examination', 'performed', 'current_encounter', { extent: attr('second_portion_duodenum') }),
+      ev('E2', 'gi.egd', 'biopsy', 'performed', 'current_encounter', { technique: attr('cold_forceps'), target: atLandmark('gastric_antrum') })] }],
+  'gi-03': [{ date: '2026-10-09', reach: [reachOf('E1', 'gi.colonoscopy', 'cecum')], lesions: [lesionOf('L1', 'transverse_colon', 'group'), lesionOf('L2', 'rectum')],
+    events: [ev('E1', 'gi.colonoscopy', 'examination', 'performed', 'current_encounter', { extent: attr('cecum') }),
+      ev('E2', 'gi.colonoscopy', 'snare', 'performed', 'current_encounter', { technique: attr('cold_snare'), target: onLesion('L1', 'transverse_colon') }),
+      ev('E3', 'gi.colonoscopy', 'biopsy', 'performed', 'current_encounter', { technique: attr('cold_forceps'), target: onLesion('L2', 'rectum') })] }],
+  'gi-04': [{ date: '2026-10-16', reach: [reachOf('E1', 'gi.egd', 'second_portion_duodenum'), reachOf('E3', 'gi.colonoscopy', 'terminal_ileum')],
+    events: [ev('E1', 'gi.egd', 'examination', 'performed', 'current_encounter', { extent: attr('second_portion_duodenum') }),
+      ev('E2', 'gi.egd', 'biopsy', 'performed', 'current_encounter', { target: atLandmark('second_portion_duodenum') }),
+      ev('E3', 'gi.colonoscopy', 'examination', 'performed', 'current_encounter', { extent: attr('terminal_ileum') }),
+      ev('E4', 'gi.colonoscopy', 'biopsy', 'performed', 'current_encounter', { target: atLandmark('ascending_colon') })] }],
+  'gi-05': [{ date: '2026-10-20', visits: [visitFact('E1', 'medical_decision_making')],
+    events: [ev('E1', 'gi.office_em', 'em_visit', 'performed', 'current_encounter', { visit: visitOf('medical_decision_making') }),
+      ev('E2', 'gi.colonoscopy', 'examination', 'planned', 'future'), ev('E3', 'gi.colonoscopy', 'examination', 'performed', 'earlier_encounter'),
+      ev('E4', 'gi.colonoscopy', 'snare', 'performed', 'earlier_encounter'), ev('E5', 'gi.colonoscopy', 'examination', 'not_performed')] }],
+  'gi-06': [{ date: '2026-10-13', reach: [reachOf('E1', 'gi.colonoscopy', 'splenic_flexure')],
+    events: [ev('E1', 'gi.colonoscopy', 'examination', 'attempted_not_completed', 'current_encounter', { extent: attr('splenic_flexure'), completion: attr('incomplete') }),
+      ev('E2', 'gi.colonoscopy', 'biopsy', 'not_performed'), ev('E3', 'gi.colonoscopy', 'removal', 'not_performed')] }],
+  'gi-07': [{ date: null, events: [ev('E1', 'gi.office_em', 'em_visit', 'performed')] }],
+  'gi-08': [{ date: '2026-10-07', reach: [reachOf('E1', 'gi.flex_sig', 'descending_colon')],
+    events: [ev('E1', 'gi.flex_sig', 'examination', 'performed', 'current_encounter', { extent: attr('descending_colon') }),
+      ev('E2', 'gi.flex_sig', 'biopsy', 'performed', 'current_encounter', { target: atLandmark('rectum') }),
+      ev('E3', 'gi.flex_sig', 'biopsy', 'performed', 'current_encounter', { target: atLandmark('descending_colon') }),
+      ev('E4', 'gi.colonoscopy', 'examination', 'performed', 'earlier_encounter'), ev('E5', 'gi.office_em', 'em_visit', 'planned', 'future')] }],
+  // the biopsy's target three ways a correct reading may state it: its landmark, the lesion it was done on with its own
+  // words, or that lesion with no words of its own (tied by the act's statement, contract 6.2)
+  'gi-09': [atLandmark('pancreas'), onLesion('L1'), onLesion('L1', 'not_stated', 'absent')].map(target => ({
+    date: '2026-10-19', lesions: [lesionOf('L1', 'pancreas')],
+    events: [ev('E1', 'gi.eus', 'examination', 'performed'), ev('E2', 'gi.eus', 'fna', 'performed', 'current_encounter', { technique: attr('needle'), target }),
+      ev('E3', 'gi.ercp', 'examination', 'planned', 'future')] })),
+  'gi-10': [{ date: '2026-10-22',
+    events: [ev('E1', 'gi.ercp', 'examination', 'performed'), ev('E2', 'gi.ercp', 'cannulation', 'performed', 'current_encounter', { target: atLandmark('common_bile_duct') }),
+      ev('E3', 'gi.ercp', 'cannulation', 'not_performed', 'current_encounter', { target: atLandmark('pancreatic_duct'), scope: attr('single_target') }),
+      ev('E4', 'gi.ercp', 'sphincterotomy', 'performed'), ev('E5', 'gi.ercp', 'stone_extraction', 'performed', 'current_encounter', { technique: attr('extraction_balloon') }),
+      ev('E6', 'gi.office_em', 'em_visit', 'planned', 'future')] }],
+};
+// The operator view of a reading: the assessment's interpretation section naming its inventory, the stand-in derived from
+// it, and the context D3 leaves (the document's date of service; setting, billing context and patient status missing).
+function readingView(reading) {
+  const missing = { value: null, origin: 'missing', evidence: [], note: '' };
+  return {
+    assessment: { engine_version: 'cpt-studio-events@1', interpretation: { engine: 'events', record: { inventory: { id: INV } },
+      inventory: { id: INV, state: 'read', events: { passages: [], lesions: reading.lesions || [], events: reading.events, relations: [] },
+        encounter_facts: { reach: reading.reach || [], visits: reading.visits || [] } } } },
+    routing: { version: 'gemini-routing@1', document_kind: '', derived: true, derived_from: 'the event inventory', inventory: INV, inventory_sha256: sha('inventory'),
+      families: standInFamilies(reading.events) },
+    context: { facts: { service_date: reading.date ? { value: reading.date, origin: 'document', evidence: [], note: '' } : { ...missing },
+      setting: { ...missing }, billing_context: { ...missing }, patient_status: { ...missing } } },
+  };
+}
+
+test('every manifest document\'s routing and context expectations are met by a correct new-path reading of it', () => {
+  assert.deepEqual(Object.keys(READINGS).sort(), MANIFEST.documents.map(doc => doc.id).sort(), 'a reading for every manifest document');
+  let judged = 0;
+  for (const doc of MANIFEST.documents) {
+    for (const [index, reading] of READINGS[doc.id].entries()) {
+      const view = readingView(reading);
+      const results = [...vb.checkRouting(doc.expected_routing || {}, view), ...vb.checkContext(doc.expected_context || {}, view)];
+      const where = `${doc.id}, reading ${index + 1}`;
+      // nothing fails and nothing warns: an informational expectation is met too, or not judged at all
+      assert.deepEqual(results.filter(r => !['pass', 'skipped'].includes(r.status)), [], where);
+      assert.deepEqual(statuses(results, 'routing.stand_in'), ['pass'], where);
+      // each fact the stand-in states is JUDGED, never skipped: the routing reading's facts the manifest names
+      for (const [slug, want] of Object.entries(doc.expected_routing?.families || {})) {
+        for (const [kind, rules] of [['fact', want.facts], ['info.fact', want.informational?.facts]]) {
+          for (const name of Object.keys(rules || {}).filter(fact => vb.standInValues(view, slug, fact) !== null)) {
+            assert.deepEqual(statuses(results, `routing.${slug}.${kind}.${name}`), ['pass'], `${where}: ${slug} ${kind} ${name}`);
+            judged += 1;
+          }
+        }
+      }
+    }
+  }
+  // the manifest's stand-in facts, counted so a reading that judges nothing cannot pass: extent in gi-02, gi-03, gi-04
+  // (two), gi-06 and gi-08; target in gi-09 (three readings); cannulation in gi-10; em_basis hard and informational in
+  // gi-01 (two readings) and gi-05
+  assert.equal(judged, 6 + 3 + 1 + 6);
+  // the expectations this test was written for: unreachable before the stand-in stated them in the reading's words
+  const gi10 = MANIFEST.documents.find(doc => doc.id === 'gi-10');
+  assert.deepEqual(gi10.expected_routing.families['gi.ercp'].facts.cannulation.value_contains_any, ['successful']);
+  const gi09 = vb.checkRouting(MANIFEST.documents.find(doc => doc.id === 'gi-09').expected_routing, readingView(READINGS['gi-09'][1]));
+  assert.match(gi09.find(r => r.id === 'routing.gi.eus.fact.target').reason, /\["pancreas"\]/);
+});
+
+test('checkContext on the new path judges what an expectation names besides the document, beside D3', () => {
+  const view = fact => ({ ...newPathEncounter(), context: { facts: { setting: fact } } });
+  const member = value => ({ value, origin: 'user', evidence: [], note: '' });
+  const absent = { value: null, origin: 'missing', evidence: [], note: 'No place of service or care setting is documented.' };
+  const memberAsc = { setting: { origin_in: ['user'], value_in: ['asc'] } };
+  assert.deepEqual(failures(vb.checkContext(memberAsc, view(member('asc')))), []);
+  assert.deepEqual(failures(vb.checkContext(memberAsc, view(member('ASC')))), [], 'values compare as the API vocabulary, case-insensitively');
+  // a member's other value, or none, is not the member's asc - on the new path as on a legacy encounter
+  for (const fact of [member('office'), absent]) {
+    assert.deepEqual(failures(vb.checkContext(memberAsc, view(fact))), ['context.setting'], JSON.stringify(fact));
+    const legacy = encounter();
+    legacy.context.facts.setting = fact;
+    assert.deepEqual(failures(vb.checkContext(memberAsc, legacy)), ['context.setting'], `legacy ${JSON.stringify(fact)}`);
+  }
+  assert.match(vb.checkContext(memberAsc, view(absent))[0].reason, /expected origin user, value asc/);
+  // an expectation of missing is met by missing only
+  const none = { setting: { origin_in: ['missing'] } };
+  assert.deepEqual(failures(vb.checkContext(none, view(absent))), []);
+  assert.deepEqual(failures(vb.checkContext(none, view(member('office')))), ['context.setting']);
+  // a value expected of any origin is judged too
+  assert.deepEqual(failures(vb.checkContext({ setting: { value_in: ['office'] } }, view(member('office')))), []);
+  assert.deepEqual(failures(vb.checkContext({ setting: { value_in: ['office'] } }, view(absent))), ['context.setting']);
+  // the document's part alone is not judged: where the context's origin is none of the others the expectation names
+  const either = { setting: { origin_in: ['document', 'user'], value_in: ['office'] } };
+  assert.deepEqual(statuses(vb.checkContext(either, view(absent)), 'context.setting.document'), ['skipped']);
+  assert.deepEqual(failures(vb.checkContext(either, view(absent))), []);
+  assert.deepEqual(failures(vb.checkContext(either, view(member('office')))), []);
+  assert.deepEqual(statuses(vb.checkContext(either, view(member('office'))), 'context.setting.document'), []);
+  assert.deepEqual(failures(vb.checkContext(either, view(member('asc')))), ['context.setting']);
+  // D3 stands whatever the expectation: a document origin fails, and a fact not reported fails
+  assert.deepEqual(failures(vb.checkContext(none, view({ value: 'office', origin: 'document', evidence: [], note: '' }))), ['context.setting']);
+  assert.deepEqual(failures(vb.checkContext(memberAsc, { ...newPathEncounter(), context: { facts: {} } })), ['context.setting']);
+});
+
+test('duplicateSends: a refused reading released for one recorded retry is sent again once, and only so', () => {
+  const T = second => `2026-11-09T10:00:${String(second).padStart(2, '0')}+00:00`;
+  const reading = (id, second, extra = {}) => ({ ...sent(id, { provider: 'gemini', purpose: 'interpretation', created_at: T(second) }), ...extra });
+  const retry = second => ({ event: 'interpretation.retry', summary: 'interpretation.retry', actor: 'Operator', actor_kind: 'human', created_at: T(second), data: { effect: 'failed' } });
+  const view = (runs, activity = []) => ({ provider_runs: runs, activity });
+  // the designed resend: an answer whose reading was refused, released (reconciled) by the recorded retry, then sent again
+  assert.deepEqual(failed(vb.checkNoDuplicateSends(view([reading('r1', 1, { reconciled: true }), reading('r2', 5)], [retry(3)]))), []);
+  assert.deepEqual(vb.duplicateSends([reading('r1', 1, { reconciled: true }), reading('r2', 5)], [retry(3)]), []);
+  // ... released again after the second attempt was refused too: each recorded retry releases the one attempt after it
+  assert.deepEqual(failed(vb.checkNoDuplicateSends(view([reading('r1', 1, { reconciled: true }), reading('r2', 5, { reconciled: true }), reading('r3', 9)],
+    [retry(3), retry(7)]))), []);
+  // a send after an answer that was read is a duplicate paid request, however many retries were recorded before it
+  const resent = vb.checkNoDuplicateSends(view([reading('r1', 1, { reconciled: true }), reading('r2', 5), reading('r3', 9)], [retry(3)]));
+  assert.deepEqual(failed(resent), ['pipeline.no_duplicate_send']);
+  assert.match(resent[0].reason, /r3 \(interpretation\/succeeded\) after r2 succeeded/);
+  // one retry releases one attempt: two sends after it, the second is a duplicate
+  assert.deepEqual(failed(vb.checkNoDuplicateSends(view([reading('r1', 1, { reconciled: true }), reading('r2', 5, { reconciled: true }), reading('r3', 9)],
+    [retry(3)]))), ['pipeline.no_duplicate_send']);
+  // and it releases the attempt after it only: a send with no retry before it is a duplicate, and so is every later one
+  // that answer still holds, whatever was released after it
+  const late = vb.duplicateSends([reading('r1', 1, { reconciled: true }), reading('r2', 5, { reconciled: true }), reading('r3', 9)], [retry(7)]);
+  assert.deepEqual(late.map(({ run, earlier }) => `${run.id} after ${earlier.map(item => item.id).join(' ')}`), ['r2 after r1', 'r3 after r1']);
+  // a reconciled answer with no recorded retry before the send - an unknown outcome a member reconciled and the stage then
+  // settled SUCCEEDED from its recorded exchange (ADJUDICATION P-6) holds its answer - is never paid for again
+  assert.deepEqual(failed(vb.checkNoDuplicateSends(view([reading('r1', 1, { reconciled: true }), reading('r2', 5)]))), ['pipeline.no_duplicate_send']);
+  assert.deepEqual(failed(vb.checkNoDuplicateSends(view([reading('r1', 1, { reconciled: true }), reading('r2', 5)], [retry(7)]))), ['pipeline.no_duplicate_send'], 'a retry after the send released nothing before it');
+  assert.deepEqual(failed(vb.checkNoDuplicateSends(view([reading('r1', 1, { reconciled: true }), reading('r2', 5)], [{ ...retry(3), event: 'provider.reconciled' }]))), ['pipeline.no_duplicate_send']);
+  // a run the door did not release (not reconciled) still blocks, whatever the activity records
+  assert.deepEqual(failed(vb.checkNoDuplicateSends(view([reading('r1', 1), reading('r2', 5)], [retry(3)]))), ['pipeline.no_duplicate_send']);
+  // the door is the interpreter's alone: a reconciled answer of another purpose still blocks its request
+  assert.deepEqual(failed(vb.checkNoDuplicateSends(view([sent('r1', { reconciled: true, created_at: T(1) }), sent('r2', { created_at: T(5) })], [retry(3)]))),
+    ['pipeline.no_duplicate_send']);
+  // a run with no readable time is never released
+  assert.deepEqual(failed(vb.checkNoDuplicateSends(view([reading('r1', 1, { reconciled: true }), reading('r2', 5, { created_at: 'never' })], [retry(3)]))), ['pipeline.no_duplicate_send']);
+  // the audit event the walk counts is the one the retry door records, and the release it reads is the one the door
+  // writes on reconciled_at, which the operator view serves as reconciled
+  const jobs = fs.readFileSync(path.join(ROOT, 'studio', 'jobs.py'), 'utf8');
+  assert.ok(jobs.includes(`audit.record(encounter.workspace, '${vb.RETRY_EVENT}', encounter=encounter, actor=user,`));
+  assert.ok(jobs.includes('locked.reconciled_by, locked.reconciled_at = user, timezone.now()'));
+  assert.ok(fs.readFileSync(path.join(ROOT, 'studio', 'serializers.py'), 'utf8').includes("'reconciled': run.reconciled_at is not None"));
 });

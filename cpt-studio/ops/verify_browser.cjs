@@ -85,14 +85,18 @@
  * The Gemini migration's new path (cpt-studio/design: FINAL.md 4.3, 8.3, 11; DECISIONS D3, D22), told apart by the
  * operator view - the assessment's engine label, its interpretation section, a routing stand-in labelled derived
  * (newPath). There the routing is a stand-in derived from the event inventory: its families and statuses are judged as a
- * reading's, a fact the manifest names is read from the VERIFIED attributes of that family's current events in the
- * inventory the stand-in names (standInValues), and a reading's missing lists and mentions - which a stand-in never
+ * reading's, a fact the manifest names is read from the usable (verified, not open) attributes of that family's current
+ * events in the inventory the stand-in names and stated in the routing reading's own words (standInValues: a landmark,
+ * or the site of the lesion an act is verified to be done on; time or mdm; successful or failed), so the documents'
+ * expectations read the same on both paths, and a reading's missing lists and mentions - which a stand-in never
  * carries - are recorded as not judged. Setting, billing context and patient status come only from a member's values
- * (D3), so a document origin there fails and the manifest's document expectation is recorded as not judged. The
- * provenance adds the interpretation's (checkInterpretation): an inventory that was read, the interpreter's run asking
- * for and answered by its one model with its hashes and usage, a record with no problem and no legacy execution
- * counted, and the trace carrying the same section. A failed reading's notice offers its recorded retry ("Try reading
- * again", ERROR_ACTION_BUTTONS); the /ops/ probes cover the retry and the interpreter hold's URLs.
+ * (D3), so a document origin there fails, the document part of an expectation is recorded as not judged, and the rest
+ * of it (a member's value, missing) is judged as on a reading. The provenance adds the interpretation's
+ * (checkInterpretation): an inventory that was read, the interpreter's run asking for and answered by its one model with
+ * its hashes and usage, a record with no problem and no legacy execution counted, and the trace carrying the same
+ * section. A failed reading's notice offers its recorded retry ("Try reading again", ERROR_ACTION_BUTTONS), and a refused
+ * reading the recorded retry released is sent again once without counting as a duplicate paid request
+ * (releasedForRetry); the /ops/ probes cover the retry and the interpreter hold's URLs.
  *
  * --acceptance-reviewer (CPT Studio GI interpretation 63) is kept as before: a human reviewer account, approvals only,
  * each recorded as that reviewer's. It records HUMAN approvals: the 2026-11-03 directive labels every test approval an
@@ -504,12 +508,21 @@ function checkContext(expected, enc) {
   return Object.entries(expected || {}).flatMap(([name, want]) => {
     const fact = facts[name];
     if (derived && MEMBER_ONLY_FACTS.has(name)) {
-      // D3: never read from the document on the new path - a context that states one from it read it anyway; what the
-      // author expected the document to state is not what this context can say
+      // D3: never read from the document on the new path - a context that states one from it read it anyway. What the
+      // author expected the document to state is not what this context can say: an expectation's document part (its
+      // origin_in names the document, and the context's origin is none of the others it names) is recorded as not
+      // judged; anything else it names - a member's value, missing, a value - is judged as on a reading
       const origin = fact?.origin;
-      const judged = check(`context.${name}`, 'hard', Boolean(fact) && ['user', 'missing'].includes(origin), fact
-        ? `origin ${origin}, value ${JSON.stringify(fact.value)} (on the new path only a member's value or missing: D3)` : 'fact not reported');
-      return (want.origin_in || []).includes('document')
+      const member = Boolean(fact) && ['user', 'missing'].includes(origin);
+      const named = Array.isArray(want.origin_in) ? want.origin_in : null;
+      const others = named ? named.filter(item => item !== 'document') : null;
+      const documentPart = Boolean(named) && named.includes('document') && !others.includes(origin);
+      const expected = !documentPart && (!others || others.includes(origin))
+        && (!want.value_in || want.value_in.map(v => v.toLowerCase()).includes(String(fact?.value ?? '').toLowerCase()));
+      const asked = documentPart ? '' : `; expected origin ${others ? others.join('|') : 'any'}${want.value_in ? `, value ${want.value_in.join('|')}` : ''}`;
+      const judged = check(`context.${name}`, 'hard', member && (documentPart || expected), fact
+        ? `origin ${origin}, value ${JSON.stringify(fact.value)} (on the new path only a member's value or missing: D3${asked})` : 'fact not reported');
+      return documentPart
         ? [judged, skip(`context.${name}.document`, `not judged on the new path: ${name} comes only from a member's values (D3), never from the document`)]
         : [judged];
     }
@@ -550,41 +563,68 @@ function checkStandIn(enc) {
 }
 
 // What a stand-in's family states of a fact the manifest names, read from the event inventory the assessment was made
-// from (its interpretation section): only the VERIFIED attributes of that family's current events that state the fact -
-// never a passage's words - as words (an enumeration's underscores as spaces). null for a fact no attribute states.
+// from (its interpretation section): only the USABLE attributes of that family's current events that state the fact -
+// verified, and named by no open question (interpretation.verify.usable: an open attribute is an unverified one) - never
+// a passage's words; and stated in the routing reading's own words (API.md: a landmark's label, time or mdm, successful
+// or failed), the vocabulary the manifest's expectations are written in (its expectation_corrections: gi-10's
+// cannulation is "successful", which the inventory's "performed" never contains). null for a fact no attribute states.
 const STAND_IN_FACTS = {
   extent: 'landmark the examination reached',
-  target: 'landmark or lesion the act was done on',
+  target: 'landmark or lesion site the act was done on',
   em_basis: 'basis of the visit',
-  cannulation: 'cannulation performed',
+  cannulation: 'cannulation outcome',
 };
+// The routing reading's words for the inventory's values (studio/gi/detect.py _em_facts and _cannulation; API.md): a
+// visit's basis is time or mdm; a cannulation's outcome successful, or failed for one begun and not completed. A
+// cannulation not performed states no outcome ("the pancreatic duct was not cannulated" is no failed cannulation).
+const STAND_IN_WORDS = {
+  em_basis: { total_time: 'time', medical_decision_making: 'mdm' },
+  cannulation: { performed: 'successful', attempted_not_completed: 'failed' },
+};
+// The landmarks CPT Studio names no place by (interpretation.lexicon.UNPLACED_LANDMARKS; wording.landmark_label).
+const UNPLACED_LANDMARKS = new Set(['not_stated', 'other']);
 
 function standInValues(enc, family, name) {
   if (!Object.hasOwn(STAND_IN_FACTS, name)) return null;
   const inventory = enc?.assessment?.interpretation?.inventory;
-  const events = (Array.isArray(inventory?.events?.events) ? inventory.events.events : []).filter(isObject);
+  const parts = isObject(inventory?.events) ? inventory.events : {};
+  const events = (Array.isArray(parts.events) ? parts.events : []).filter(isObject);
+  const lesions = new Map((Array.isArray(parts.lesions) ? parts.lesions : []).filter(isObject).map(lesion => [lesion.id, lesion]));
   const facts = isObject(inventory?.encounter_facts) ? inventory.encounter_facts : {};
   const current = events.filter(event => event.family === family && event.current === 'yes');
-  const ids = new Set(current.map(event => event.id));
-  const verified = attribute => isObject(attribute) && attribute.state === 'verified';
+  const byId = new Map(current.map(event => [event.id, event]));
+  const usable = attribute => isObject(attribute) && attribute.state === 'verified' && attribute.open !== true;
   const stated = value => typeof value === 'string' && value !== '' && value !== 'not_stated';
+  const placed = value => stated(value) && !UNPLACED_LANDMARKS.has(value);
   const words = value => String(value).replace(/_/g, ' ');
   if (name === 'extent') {
+    // a reach entry IS its examination's extent (normalize attaches it), so one whose extent an open question names is not
     const reach = (Array.isArray(facts.reach) ? facts.reach : []).filter(item => isObject(item) && item.family === family
-      && ids.has(item.event) && item.state === 'verified' && stated(item.landmark)).map(item => item.landmark);
-    return [...reach, ...current.filter(event => verified(event.extent) && stated(event.extent.value)).map(event => event.extent.value)].map(words);
+      && byId.has(item.event) && item.state === 'verified' && placed(item.landmark) && byId.get(item.event).extent?.open !== true)
+      .map(item => item.landmark);
+    return [...reach, ...current.filter(event => usable(event.extent) && placed(event.extent.value)).map(event => event.extent.value)].map(words);
   }
   if (name === 'target') {
-    return current.filter(event => verified(event.target) && (stated(event.target.value) || stated(event.target.lesion)))
-      .map(event => words(stated(event.target.value) ? event.target.value : 'lesion'));
+    // the act's own landmark (mapping.target_landmark), and the usable site of the lesion it is verified to have been done
+    // on (identity.verified_lesion; events.lesion_words reads that site): an act on "the pancreatic head mass" may name
+    // the mass and leave the landmark to the lesion, whatever the target's own words
+    return current.flatMap(event => {
+      const target = isObject(event.target) ? event.target : {};
+      const own = usable(target) && placed(target.value) ? [target.value] : [];
+      const lesion = target.identity === 'verified' && typeof target.lesion === 'string' && target.lesion ? lesions.get(target.lesion) : undefined;
+      const site = lesion && usable(lesion.site) && placed(lesion.site.value) ? [lesion.site.value] : [];
+      return [...own, ...site].map(words);
+    });
   }
+  const said = (table, value) => (Object.hasOwn(table, value) ? table[value] : words(value));
   if (name === 'em_basis') {
-    const visits = (Array.isArray(facts.visits) ? facts.visits : []).filter(item => isObject(item) && ids.has(item.event)
-      && item.basis_state === 'verified' && stated(item.basis)).map(item => item.basis);
-    return [...visits, ...current.filter(event => verified(event.visit?.basis) && stated(event.visit.basis.value)).map(event => event.visit.basis.value)].map(words);
+    const visits = (Array.isArray(facts.visits) ? facts.visits : []).filter(item => isObject(item) && byId.has(item.event)
+      && item.basis_state === 'verified' && stated(item.basis) && byId.get(item.event).visit?.basis?.open !== true).map(item => item.basis);
+    return [...visits, ...current.filter(event => usable(event.visit?.basis) && stated(event.visit.basis.value)).map(event => event.visit.basis.value)]
+      .map(value => said(STAND_IN_WORDS.em_basis, value));
   }
-  return current.filter(event => verified(event.kind) && event.kind.value === 'cannulation' && verified(event.status)
-    && event.status.value === 'performed').map(() => 'performed');
+  return current.filter(event => usable(event.kind) && event.kind.value === 'cannulation' && usable(event.status)
+    && Object.hasOwn(STAND_IN_WORDS.cannulation, event.status.value)).map(event => STAND_IN_WORDS.cannulation[event.status.value]);
 }
 
 function standInFact(enc, family, name, rule, id, severity) {
@@ -2404,16 +2444,39 @@ function byCreated(a, b) {
   return String(a.created_at || '').localeCompare(String(b.created_at || ''));
 }
 
+// The recorded retry of a failed reading (FINAL 11.3; ADJUDICATION P-2; studio/jobs.py retry_reading): the newest
+// interpretation attempt that was sent and did not succeed - a failure, or an answer whose reading was refused or cut off,
+// which is a SUCCEEDED run - is released for ONE more attempt, written on its reconciled_at (the operator view serves
+// reconciled: true) and audited RETRY_EVENT, and the stage it queues sends the identical request. A reconciled answer
+// alone is no release: an unknown outcome a member reconciled, which the stage then settled SUCCEEDED from its recorded
+// exchange (P-6), is reconciled too, and it holds its answer.
+const RETRY_EVENT = 'interpretation.retry';
+
+// Whether the recorded retry released ``run`` (a SUCCEEDED run) for ``next``, the next send of its request: an
+// interpretation run that is reconciled, with a retry recorded in the activity after it was made and no later than that
+// send. So one retry releases the one attempt after it, and an answer that was read is never sent again.
+function releasedForRetry(run, next, retries) {
+  if (run.provider !== INTERPRETER.provider || run.purpose !== INTERPRETER.purpose || run.reconciled !== true) return false;
+  const made = Date.parse(run.created_at);
+  const resent = Date.parse(next?.created_at);
+  return Number.isFinite(made) && Number.isFinite(resent) && retries.some(at => at > made && at <= resent);
+}
+
 // Each sent run whose request (provider, purpose, request hash) was already answered (succeeded) or left unknown and not
-// reconciled by an earlier sent run: a duplicate paid request. A request sent again after a definite failure is a retry.
-function duplicateSends(runs) {
+// reconciled by an earlier sent run: a duplicate paid request. A request sent again after a definite failure is a retry,
+// and so is one sent again after an answer the recorded retry released (releasedForRetry, read from ``activity``, the
+// operator view's).
+function duplicateSends(runs, activity = []) {
+  const retries = (Array.isArray(activity) ? activity : []).filter(item => isObject(item) && item.event === RETRY_EVENT)
+    .map(item => Date.parse(item.created_at)).filter(Number.isFinite);
   const groups = new Map();
   const duplicates = [];
   for (const run of [...(runs || [])].sort(byCreated)) {
     if (!sentRun(run) || !run.request_sha256) continue;
     const key = `${run.provider}|${run.purpose}|${run.request_sha256}`;
     const earlier = groups.get(key) || [];
-    const blocking = earlier.filter(item => item.state === 'succeeded' || (item.state === 'unknown' && !item.reconciled));
+    const blocking = earlier.filter((item, index) => (item.state === 'succeeded' && !releasedForRetry(item, earlier[index + 1] || run, retries))
+      || (item.state === 'unknown' && !item.reconciled));
     if (blocking.length) duplicates.push({ run, earlier: blocking });
     groups.set(key, [...earlier, run]);
   }
@@ -2422,7 +2485,7 @@ function duplicateSends(runs) {
 
 function checkNoDuplicateSends(op, id = 'pipeline.no_duplicate_send') {
   const runs = op?.provider_runs || [];
-  const dupes = duplicateSends(runs);
+  const dupes = duplicateSends(runs, op?.activity);
   const sent = runs.filter(sentRun).length;
   return [check(id, 'hard', dupes.length === 0, dupes.length
     ? `sent again after an answer or an unreconciled unknown outcome: ${dupes.map(({ run, earlier }) => `${run.id} (${describeRun(run)}) after ${earlier.map(e => `${e.id} ${e.state}`).join(', ')}`).join('; ')}`
@@ -4642,7 +4705,7 @@ module.exports = {
   checkAddendum, withdrawalTookEffect,
   // the Gemini migration's new path: the routing stand-in, D3, the interpretation's provenance, the retry action
   newPath, checkStandIn, standInValues, checkInterpretation, ERROR_ACTION_BUTTONS, STEP_OF_KIND, INTERPRETER, EVENTS_ENGINE_PREFIX,
-  ROUTING_STAND_IN, MEMBER_ONLY_FACTS, OPS_POST_BODY,
+  ROUTING_STAND_IN, MEMBER_ONLY_FACTS, OPS_POST_BODY, STAND_IN_WORDS, RETRY_EVENT, releasedForRetry,
 };
 
 if (require.main === module) {

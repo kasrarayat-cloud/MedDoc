@@ -153,6 +153,9 @@ const BASES = { stated: 'stated', default: 'the frame default', absent: 'not giv
 const INTERPRETATION_TAB = ['interpretation', 'Interpretation'];
 const RETRY_DONE = 'The reading is tried once more, as a stage of its own; the release of the failed attempt is recorded.';
 const HOLD_RELEASED = 'The interpreter hold was released and the release recorded. Members can now resume the documents it paused.';
+// What an interpret stage the interpreter's pause ended records as its error (interpretation.holds.PAUSED_MESSAGE, by
+// which progress.interpreter_paused reads a paused reading).
+const INTERPRET_PAUSED = 'Reading documented procedures is paused on this installation. Nothing was sent. Resume once it is available again.';
 const CANDIDATE_NOTE = 'A candidate answers nothing until a reviewer confirms it. Agreement between participants never verifies or confirms one, and a confirmation approves no code.';
 // What a verified candidate's consistency check established, by fact (HARNESS.md 12.5, as refutation round 2 left it):
 // every fact's passage lies in no history, plan or indication section (VERIFIED_SECTIONS), and a status is read by CPT
@@ -1953,6 +1956,14 @@ function interpreterHoldCard(interpreter) {
   return `<div data-interpreter-hold>${infoCard('Reading is paused<br>on this installation.', lines, form)}</div>`;
 }
 
+// Whether the revision's latest stage is an interpret stage the interpreter's pause ended (FINAL 11.2;
+// progress.interpreter_paused): it sent nothing, and the hold that paused it - or the disabled mode - stands.
+function pausedReading(doc) {
+  const stages = Array.isArray(doc?.pipeline?.stages) ? doc.pipeline.stages : [];
+  const latest = stages[stages.length - 1];
+  return latest?.kind === 'interpret' && latest.state === 'cancelled' && latest.error === INTERPRET_PAUSED;
+}
+
 // The latest stage of the revision when it is an interpret stage that FAILED (nothing runs after a failed reading), else
 // null: the reading could not be completed, and the recorded retry applies (FINAL 11.3).
 function failedReading(doc) {
@@ -2770,6 +2781,12 @@ async function loadDocument(id, token, silent) {
     return;
   }
   if (token !== state.routeToken) return;
+  // a reading the interpreter's pause ended while the session read before says no hold stands: a hold the worker set
+  // since then is read now, so the page shows it with its release (FINAL 11.2)
+  if (pausedReading(doc) && state.session?.interpreter?.held !== true) {
+    await loadSession();
+    if (token !== state.routeToken) return;
+  }
   state.poll.errors = 0;
   renderDocument(doc, !silent);
   schedulePoll(token);
@@ -2792,6 +2809,19 @@ async function refreshDocument() {
   state.poll.count = 0;
   state.poll.errors = 0;
   await loadDocument(state.route.id, state.routeToken, true);
+}
+
+// The page the operator is on, drawn again from the session just read (the interpreter hold's release: the hold is drawn
+// on the overview and on every document, from the session, not from the document): a document silently - drawn even
+// though its own payload is unchanged - and the overview or a list whole. The trace and the explainer draw no hold.
+async function redrawRoute() {
+  const current = state.route;
+  if (current?.name === 'doc') {
+    state.docKey = '';
+    return refreshDocument();
+  }
+  if (current && ['workspace', 'documents', 'queue'].includes(current.name)) return showList(current.name, state.routeToken);
+  return undefined;
 }
 
 function focusTarget() {
@@ -3293,6 +3323,8 @@ function submitRetryReading(form) {
 }
 
 // The recorded release of the interpreter hold (POST /ops/api/interpreter {note}, FINAL 11.2): the note says why it may end.
+// The hold is installation-wide and drawn from the session, so once it is released the session takes the hold's state the
+// answer carries (holds.state), is read again, and the page the operator is on is drawn again from it (redrawRoute).
 function submitHoldRelease(form) {
   const note = $('#releaseHoldNote').value.trim();
   if (!note) {
@@ -3303,14 +3335,26 @@ function submitHoldRelease(form) {
     const button = form.querySelector('button[type="submit"]');
     setBusy(button, true);
     hideError('releaseHoldError');
+    let answer;
     try {
-      await api('/ops/api/interpreter', { method: 'POST', json: { note } });
-      await afterChange(HOLD_RELEASED);
+      answer = await api('/ops/api/interpreter', { method: 'POST', json: { note } });
     } catch (error) {
       showError('releaseHoldError', error.message);
       setBusy(button, false);
+      return;
     }
+    setBusy(button, false);
+    if (state.session) state.session = { ...state.session, interpreter: heldState(answer) };
+    toast(HOLD_RELEASED);
+    await loadSession();
+    await redrawRoute();
   });
+}
+
+// The hold's state (interpretation.holds.state) an answer of POST /ops/api/interpreter carries beside what it released.
+function heldState(answer) {
+  return { held: answer?.held === true, standing: Array.isArray(answer?.standing) ? answer.standing : [],
+    process_mode: answer?.process_mode, process_paused: answer?.process_paused, message: answer?.message };
 }
 
 function openExport() {
@@ -3523,7 +3567,7 @@ if (typeof module === 'object' && module.exports) {
     TABS, INTERPRETATION_TAB, INTERPRET_STAGE, DERIVE_STAGE_LABEL, EVENT_FACTS, FINDING_FACTS, RUN_PROVIDERS, RUN_PURPOSES,
     RETRY_DONE, HOLD_RELEASED, interpreted, tabsFor, stagesFor, interpretationPanel, interpretationCards, attributeLine,
     interpreterHoldCard, failedReading, retryReadingCard, stateCards, progressCard, activityPanel, usageText, onSubmit,
-    submitRetryReading, submitHoldRelease,
+    submitRetryReading, submitHoldRelease, INTERPRET_PAUSED, pausedReading, loadDocument, redrawRoute, heldState,
   };
 }
 if (typeof document !== 'undefined') boot();
