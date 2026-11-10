@@ -25,6 +25,16 @@ unknown). Otherwise the first UNKNOWN in row order gives UNRESOLVED(that attribu
 must be verified (an unverified kind gives UNRESOLVED(scope): whether the statement concerns the act; an unverified status
 UNRESOLVED(status)); then N not_performed gives CONTRADICTION and N uncertain gives DOUBT.
 
+PLACES (Context.places, read by the target row, the claims and the bundling identities): an event's verified, placed
+target landmark and its verified lesion's verified site. A surgically made place has no position in the tract, so it is
+never disjoint from anything (lexicon.ALTERED_LANDMARKS) - except that a target verified at an anastomosis takes the
+place of the encounter's ONE anastomosis when its anatomy entry's own words name its type (DECISIONS D34,
+mapping.anastomosis_place: an ileocolonic one the right colon, a colorectal, coloanal or ileorectal one the rectum, a
+gastrojejunal one the stomach, an esophagojejunal or esophagogastric one the esophagus). Several anastomoses, no type
+word, an unknown type, a target whose own words name another type, or an event whose family does not reach that place
+(mapping.ANASTOMOSIS_FAMILIES) keep the ambiguity. A lesion's site is read as stated. A difference that rests on a D34 place sets a pair apart, but it is never HARD: that place is in the anatomy
+entry's words, not the event's, so it never dismisses Gemini's own claim (C-11; Context.stated_places).
+
 MODEL CLAIMS (6.4; C-11). Each contradicts[] entry normalize handed over is judged by the same table (a planned statement
 judged as a statement, giving DOUBT). A claim the table finds INDEPENDENT is a ``dismissed_claim`` only when a HARD literal
 establishes the difference - disjoint places, distances or specimen labels (identity.HARD), a time with a date literal,
@@ -146,6 +156,9 @@ class Context:
         self.unresolved_sessions = frozenset(family for family, count in exams.items() if count >= 2)
         self.facts = identity.lesion_facts(draft)
         self.kinds = {eid: mapping.catalogue_kind(event) for eid, event in draft.events.items()}
+        # DECISIONS D34: the place the encounter's one anastomosis takes, from its anatomy entry's own words ('' when
+        # none is established: several anastomoses, no type word, an unknown type).
+        self.anastomosis = mapping.anastomosis_place(draft.encounter)
 
     @property
     def multi_family(self) -> bool:
@@ -157,17 +170,28 @@ class Context:
             return ''
         return identity.distinct_reason(self.facts[first], self.facts[second]) or 'passage'
 
+    def target_place(self, event: Mapping) -> str:
+        """The event's verified, placed target landmark as the comparisons and D29 read it: an anastomosis at the place
+        the encounter's one anastomosis takes (DECISIONS D34; mapping.compared_landmark), else as stated."""
+        return mapping.compared_landmark(event, self.anastomosis)
+
     def places(self, event: Mapping) -> frozenset:
-        """The places an event's target is verified to be at: its verified, placed target landmark and its verified
-        lesion's verified site."""
+        """The places an event's target is verified to be at: its verified, placed target landmark (target_place: an
+        anastomosis at its D34 place) and its verified lesion's verified site."""
         found = set()
-        own = mapping.target_landmark(event)
+        own = self.target_place(event)
         if own:
             found.add(own)
         lesion = identity.verified_lesion(event)
         if lesion and self.facts[lesion].landmark:
             found.add(self.facts[lesion].landmark)
         return frozenset(found)
+
+    def stated_places(self, *events) -> bool:
+        """Whether every place of ``events`` is stated by that event's own words or its lesion's: none is an anastomosis
+        D34 placed. A D34 place comes from the anatomy entry's words, not the event's, so a difference it makes sets the
+        two apart for the pairing and D29 but is never HARD (C-11: Gemini's own claim is dismissed only by a literal)."""
+        return not any(self.target_place(event) != mapping.target_landmark(event) for event in events)
 
 
 def concerns(context: Context, statement: Mapping, act: Mapping) -> bool:
@@ -264,14 +288,14 @@ def _single_target(context: Context, statement: Mapping, act: Mapping) -> Row:
                 return Row('target', DIFFERENT, 'another_lesion', why in identity.HARD)
             return Row('target', UNKNOWN, 'possibly_same_lesion')
         if _all_disjoint(places, act_places):
-            return Row('target', DIFFERENT, 'another_site', True)
+            return Row('target', DIFFERENT, 'another_site', context.stated_places(statement, act))
         return Row('target', UNKNOWN, 'identity_unresolved')
     if not places or not act_places:
         return Row('target', UNKNOWN, 'site_unresolved')
     if all(any(own == place or lexicon.contains(own, place) for own in places) for place in act_places):
         return Row('target', SAME)
     if _all_disjoint(places, act_places):
-        return Row('target', DIFFERENT, 'another_site', True)
+        return Row('target', DIFFERENT, 'another_site', context.stated_places(statement, act))
     return Row('target', UNKNOWN, 'site_overlap')
 
 
@@ -288,7 +312,7 @@ def _listed_targets(context: Context, statement: Mapping, act: Mapping) -> Row:
     places = context.places(act)
     sites = [context.facts[other].landmark for other in listed if other in context.facts]
     if listed and places and len(sites) == len(listed) and all(sites) and _all_disjoint(places, sites):
-        return Row('target', DIFFERENT, 'another_site', True)
+        return Row('target', DIFFERENT, 'another_site', context.stated_places(act))
     return Row('target', UNKNOWN, 'identity_unresolved')
 
 
@@ -368,7 +392,7 @@ def _act_target_row(context: Context, first: Mapping, second: Mapping) -> Row:
             return Row('target', DIFFERENT, 'another_lesion', why in identity.HARD)
         return Row('target', UNKNOWN, 'possibly_same_lesion')
     if _all_disjoint(context.places(first), context.places(second)):
-        return Row('target', DIFFERENT, 'another_site', True)
+        return Row('target', DIFFERENT, 'another_site', context.stated_places(first, second))
     return Row('target', UNKNOWN, 'identity_unresolved')
 
 

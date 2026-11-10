@@ -109,6 +109,50 @@ class Landmarks(SimpleTestCase):
         self.assertFalse(lexicon.compatible('cecum', 'rectum'))
 
 
+class AnastomosisTypes(SimpleTestCase):
+    """DECISIONS D34: an anastomosis's type word directly before its noun names the place it takes; every type word,
+    wherever it stands, is read only to say against one type; the plural names several anastomoses."""
+
+    def test_each_type_word_before_each_noun_names_its_place(self):
+        self.assertEqual(dict(lexicon.ANASTOMOSIS_TYPES), {
+            'right_colon': ('ileocolonic', 'ileocolic', 'ileo colonic', 'ileo colic'),
+            'rectum': ('colorectal', 'coloanal', 'ileorectal', 'colo rectal', 'colo anal', 'ileo rectal'),
+            'stomach': ('gastrojejunal', 'gastro jejunal'),
+            'esophagus': ('esophagojejunal', 'esophagogastric', 'oesophagojejunal', 'oesophagogastric',
+                          'esophago jejunal', 'esophago gastric', 'oesophago jejunal', 'oesophago gastric')})
+        for place, forms in lexicon.ANASTOMOSIS_TYPES.items():
+            self.assertIn(place, lexicon.LANDMARK_FORMS)
+            for form in forms:
+                for noun in lexicon.LANDMARK_FORMS['anastomosis']:
+                    with self.subTest(form=form, noun=noun):
+                        self.assertEqual(lexicon.anastomosis_places(f'the {form} {noun} was seen'), (place,))
+        cases = (('stapled side-to-side ileocolonic anastomosis', ('right_colon',)),
+                 ('Ileo-colic anastomotic stricture', ('right_colon',)),
+                 ('Gastro-jejunal anastomosis', ('stomach',)),
+                 ('colorectal anastomosis at 20 cm', ('rectum',)))
+        for text, places in cases:
+            with self.subTest(text):
+                self.assertEqual(lexicon.anastomosis_places(text), places)
+
+    def test_no_place_without_a_type_word_before_the_noun(self):
+        for text in ('anastomosis', 'the anastomotic stricture', 'ileocolonic', 'for colorectal cancer',
+                     'ileocolonic side-to-side anastomosis', 'colocolonic anastomosis', 'ileoanal anastomosis',
+                     'ileal pouch-anal anastomosis', 'gastroduodenal anastomosis', 'Roux-en-Y anastomosis',
+                     'an ileocolonoscopy anastomosis'):
+            with self.subTest(text):
+                self.assertEqual(lexicon.anastomosis_places(text), ())
+
+    def test_every_type_word_anywhere_and_the_plural(self):
+        text = 'right hemicolectomy for colorectal cancer with an ileocolonic anastomosis'
+        self.assertEqual((lexicon.anastomosis_places(text), lexicon.anastomosis_type_places(text)),
+                         (('right_colon',), ('rectum', 'right_colon')))
+        text = 'ileocolonic and colorectal anastomoses'
+        self.assertEqual((lexicon.anastomosis_places(text), lexicon.anastomosis_type_places(text)),
+                         (('rectum',), ('right_colon', 'rectum')))
+        self.assertTrue(lexicon.holds(text, lexicon.ANASTOMOSES))
+        self.assertFalse(lexicon.holds('the anastomosis and the anastomotic rim', lexicon.ANASTOMOSES))
+
+
 class Devices(SimpleTestCase):
     NAMED = {
         'endoscope': ('the colonoscope', 'pediatric colonoscope', 'the scope', 'EGD'),

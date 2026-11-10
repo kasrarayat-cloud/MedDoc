@@ -473,11 +473,14 @@ class DefiningKinds(SimpleTestCase):
 EGD_REACH = 'EGD: the gastroscope was advanced to the second portion of the duodenum.'
 
 
-def dilated(line: str, target: dict, lesions=(), technique=('balloon', 'through-the-scope balloon')):
-    """An EGD to the second portion of the duodenum (E1, G1) with one dilation (E2, G2) at ``target``."""
+def dilated(line: str, target: dict, lesions=(), technique=('balloon', 'through-the-scope balloon'), history: str = '',
+            anatomy=()):
+    """An EGD to the second portion of the duodenum (E1, G1) with one dilation (E2, G2) at ``target``; ``history`` is
+    line G3 and ``anatomy`` the encounter's anatomy entries (DECISIONS D34)."""
     dilation = act('E2', 'G2', 'dilation', 'dilated', procedure=a('egd'), target=target,
                    technique=a(technique[0], technique[1], ['G2']))
-    return inventory({'G1': EGD_REACH, 'G2': line}, lesions=lesions,
+    lines = {'G1': EGD_REACH, 'G2': line, **({'G3': history} if history else {})}
+    return inventory(lines, lesions=lesions, anatomy=list(anatomy),
                      events=[exam('E1', 'G1', words='gastroscope', procedure=a('egd')), dilation],
                      reach=[reached('E1', 'second_portion_duodenum', 'second portion of the duodenum', 'G1')])
 
@@ -571,6 +574,71 @@ class DilationSite(SimpleTestCase):
             'E2', 'P2', 'dilation', 'dilated', technique=a('balloon', 'through-the-scope balloon', ['P2']),
             target=tg('', 'anastomosis', 'anastomotic', ['P2']))])
         self.assertEqual(proposal(run(inv, text, [('45386', lines['P2'])]), '45386').status, 'ready')
+
+
+GASTRIC_BYPASS = 'History: Roux-en-Y gastric bypass with a gastrojejunal anastomosis.'
+GASTRECTOMY = 'History: total gastrectomy with an esophagojejunal anastomosis.'
+
+
+def anatomy_entry(words: str, passage: str = 'G3', state: str = 'altered') -> dict:
+    return {'state': state, 'landmark': 'anastomosis', 'words': words, 'passages': [passage]}
+
+
+class AnastomosisSite(SimpleTestCase):
+    """DECISIONS D34 with D29 (fb07: 43245 held on a gastrojejunal anastomotic stricture): a dilation verified at the
+    encounter's one anastomosis takes the place its anatomy entry's own type words give - a gastrojejunal one the
+    stomach side (the gastric or duodenal class), an esophagojejunal one the esophagus side - so the code of that class
+    is supported and the other class's code takes the "dilation at another site" hold. No anatomy entry, a type word in
+    the passage only, several anastomoses, an unknown type, another type in the act's own words, or a place the act's
+    family does not reach (an ileocolonic anastomosis for an EGD) leave the site unsettled (act_target), as before.
+    Never excluded."""
+
+    def assessed(self, history: str = GASTRIC_BYPASS, anatomy=(anatomy_entry('gastrojejunal anastomosis'),),
+                 case=ANASTOMOTIC):
+        line, target = case
+        inv, text = dilated(line, target, history=history, anatomy=anatomy)
+        result = run(inv, text, [(code, line) for code in ('43249', '43245')])
+        return inv, [proposal(result, code) for code in ('43249', '43245')]
+
+    def test_a_gastrojejunal_anastomosis_is_on_the_stomach_side(self):
+        inv, (esophageal, gastric) = self.assessed()
+        reading = events.Reading.of(inv)
+        self.assertEqual((mapping.target_landmark(reading.events['E2']), events.site_places(reading, reading.events['E2'])),
+                         ('anastomosis', ('stomach',)))
+        self.assertEqual((gastric.status, [item['id'] for item in gastric.support['acts']]), ('ready', ['E2']))
+        self.assertEqual((esophageal.status, asked(esophageal), esophageal.support['reason'], esophageal.bucket),
+                         ('needs_clarification', ['act_target'], events.ANOTHER_SITE, 'selected'))
+        self.assertEqual(esophageal.clarifications[0].question,
+                         'The documented dilation (“dilated”) is at the stomach. Was a dilation of the esophagus '
+                         'performed on the date of service?')
+
+    def test_an_esophagojejunal_anastomosis_is_on_the_esophagus_side(self):
+        _, (esophageal, gastric) = self.assessed(GASTRECTOMY, (anatomy_entry('esophagojejunal anastomosis'),))
+        self.assertEqual(esophageal.status, 'ready')
+        self.assertEqual((gastric.status, asked(gastric), gastric.support['reason']),
+                         ('needs_clarification', ['act_target'], events.ANOTHER_SITE))
+
+    def test_what_leaves_the_site_unsettled(self):
+        other_type = ('The esophagojejunal anastomotic stricture was dilated with a through-the-scope balloon to 12 mm.',
+                      tg('', 'anastomosis', 'esophagojejunal anastomotic stricture', ['G2']))
+        cases = {
+            'no anatomy entry': dict(anatomy=()),
+            'a type word in the passage only': dict(anatomy=(anatomy_entry('anastomosis'),)),
+            'two anastomoses': dict(history=GASTRIC_BYPASS + ' A jejunojejunal anastomosis was also described.',
+                                    anatomy=(anatomy_entry('gastrojejunal anastomosis'),
+                                             anatomy_entry('jejunojejunal anastomosis'))),
+            'an unknown type': dict(history='History: Billroth I gastrectomy with a gastroduodenal anastomosis.',
+                                    anatomy=(anatomy_entry('gastroduodenal anastomosis'),)),
+            'another type in the act\'s own words': dict(case=other_type),
+            'a colonic anastomosis for an upper endoscopy': dict(
+                history='History: right hemicolectomy with an ileocolonic anastomosis.',
+                anatomy=(anatomy_entry('ileocolonic anastomosis'),)),
+        }
+        for name, options in cases.items():
+            for p in self.assessed(**options)[1]:
+                with self.subTest(name, code=p.code):
+                    self.assertEqual((p.status, asked(p), p.support['reason'], p.bucket),
+                                     ('needs_clarification', ['act_target'], events.SITE, 'selected'))
 
 
 # --- 7.4: a positive candidate, no supporting event: held, ONE focused question ----------------------------------------

@@ -181,6 +181,20 @@ UNPLACED_LANDMARKS = frozenset({'not_stated', 'other'})
 # Surgically made places whose position in the tract this vocabulary cannot tell (an anastomosis may be in any segment):
 # never disjoint from anything, so a difference of site is never manufactured from them (contract 6.3).
 ALTERED_LANDMARKS = frozenset({'anastomosis', 'stoma', 'pouch'})
+# DECISIONS D34: an anastomosis's TYPE, named by a literal place word directly before its noun ("ileocolonic
+# anastomosis", "colorectal anastomotic stricture"), and the place that type gives it - the side of the tract it joins:
+# an ileocolonic or ileocolic one the right colon side; a colorectal, coloanal or ileorectal one the rectum; a
+# gastrojejunal one the stomach side (D29's gastric class); an esophagojejunal or esophagogastric one the esophagus side.
+# A closed list: any other type ("colocolonic", "ileoanal", a gastroduodenal or Roux limb) names no place, and a type
+# word that does not qualify the noun ("for colorectal cancer") names none either. Read only in an anatomy entry's own
+# words (mapping.anastomosis_place); a word missing here keeps the anastomosis unplaced, as before.
+ANASTOMOSIS_TYPES = MappingProxyType({
+    'right_colon': ('ileocolonic', 'ileocolic', 'ileo colonic', 'ileo colic'),
+    'rectum': ('colorectal', 'coloanal', 'ileorectal', 'colo rectal', 'colo anal', 'ileo rectal'),
+    'stomach': ('gastrojejunal', 'gastro jejunal'),
+    'esophagus': ('esophagojejunal', 'esophagogastric', 'oesophagojejunal', 'oesophagogastric', 'esophago jejunal',
+                  'esophago gastric', 'oesophago jejunal', 'oesophago gastric'),
+})
 
 # What each landmark contains (contract appendix B; C-15's colon regions). Generous on purpose: a containment missing
 # here would make two places "disjoint" and so manufacture a difference (6.3), and would fail a correct landmark.
@@ -260,6 +274,30 @@ def landmarks_named(text: str) -> tuple[str, ...]:
         if landmark not in named:
             named.append(landmark)
     return tuple(named)
+
+
+# D34: every anastomosis type word, folded, and the place it gives; and each type word directly before an anastomosis
+# noun (LANDMARK_FORMS['anastomosis']).
+_ANASTOMOSIS_TYPE_WORDS = MappingProxyType({fold(form): place for place, forms in ANASTOMOSIS_TYPES.items()
+                                            for form in forms})
+_ANASTOMOSIS_TYPE_OF_FORM = MappingProxyType({f'{form} {fold(noun)}': place
+                                              for form, place in _ANASTOMOSIS_TYPE_WORDS.items()
+                                              for noun in LANDMARK_FORMS['anastomosis']})
+# More than one anastomosis named in one record's words (D34: several anastomoses keep the ambiguity).
+ANASTOMOSES = ('anastomoses',)
+
+
+def anastomosis_places(text: str) -> tuple[str, ...]:
+    """DECISIONS D34: the places of the anastomosis types ``text`` names - a type word of ANASTOMOSIS_TYPES directly
+    before an anastomosis noun ("stapled ileocolonic anastomosis", "colorectal anastomotic stricture") - in the order
+    they occur, each once. A type word that qualifies no anastomosis noun names nothing here."""
+    return tuple(dict.fromkeys(_ANASTOMOSIS_TYPE_OF_FORM[form] for form in found(text, _ANASTOMOSIS_TYPE_OF_FORM)))
+
+
+def anastomosis_type_places(text: str) -> tuple[str, ...]:
+    """D34: the places of EVERY anastomosis type word ``text`` holds, wherever it stands ("for colorectal cancer"
+    too), in the order they occur, each once: what a record's words could say against one type."""
+    return tuple(dict.fromkeys(_ANASTOMOSIS_TYPE_WORDS[form] for form in found(text, _ANASTOMOSIS_TYPE_WORDS)))
 
 
 # --- devices (contract 5.3, technique row; catalogue BALLOON / WIRE_BOUGIE and the unguided bougie) -------------------

@@ -327,6 +327,126 @@ class Target(SimpleTestCase):
         self.assertEqual(verdict(inventory), ('unresolved', 'target', 'possibly_same_lesion'))
 
 
+# --- DECISIONS D34: the place an anastomosis takes ------------------------------------------------------------------------
+
+DILATED = 'The anastomotic narrowing was dilated with a through-the-scope balloon to 15 mm.'
+DESCENDING_POLYP = 'A 7 mm sessile polyp was seen in the descending colon.'
+NOT_DILATED = 'No dilation was performed on this polyp.'
+SURGERY = 'History: right hemicolectomy with a stapled side-to-side ileocolonic anastomosis.'
+L_DESCENDING = les('L1', '7 mm sessile polyp', 'P2', landmark='descending_colon', site_words='descending colon',
+                   size_words='7 mm')
+
+
+def anatomy_entry(words: str, passage: str = 'P4', state: str = 'altered', landmark: str = 'anastomosis') -> dict:
+    """An encounter.anatomy entry as Gemini gives it."""
+    return {'state': state, 'landmark': landmark, 'words': words, 'passages': [passage]}
+
+
+IN_SURGERY = anatomy_entry('stapled side-to-side ileocolonic anastomosis')
+
+
+class AnastomosisPlace(SimpleTestCase):
+    """DECISIONS D34 (Note #8's 45386): a target verified at an anastomosis takes the place of the encounter's ONE
+    anastomosis, read from its anatomy entry's own type words (ileocolonic: the right colon), so the dilation of the
+    anastomotic narrowing is set apart from a dilation denial on a descending-colon polyp. Nothing else moves: no
+    anatomy entry, several anastomoses (an unverified second one too), no type word in the entry's own words (one in its
+    passage only), an unknown type, or a type of another place in the act's own words keep the anastomosis unplaced and
+    the pair unresolved, as before. A statement at the anastomosis still meets the act there; a D34 difference never
+    dismisses Gemini's own claim (C-11); and the bundling identities read the same place."""
+
+    def inventory(self, anatomy=(IN_SURGERY,), act_line=DILATED, act_words='anastomotic narrowing',
+                  act_landmark='anastomosis', statement=None, extra=None):
+        lines = {'P1': act_line, 'P2': DESCENDING_POLYP, 'P3': NOT_DILATED, 'P4': SURGERY, **(extra or {})}
+        dilation = act('E1', 'P1', 'dilation', 'dilated', technique=a('balloon', 'through-the-scope balloon', ['P1']),
+                       target=tg('', act_landmark, act_words, ['P1']))
+        statement = statement or act('E2', 'P3', 'dilation', 'dilation', status='not_performed',
+                                     status_words='No dilation was performed',
+                                     scope=sc('single_target', 'on this polyp', ['P3']),
+                                     target=tg('L1', 'not_stated', 'this polyp', ['P3']))
+        return normalized(lines, lesions=[L_DESCENDING], events=[dilation, statement], anatomy=list(anatomy))
+
+    def test_an_ileocolonic_anastomosis_is_set_apart_from_a_descending_colon_polyp(self):
+        inventory = self.inventory()
+        self.assertEqual(inventory.encounter_facts['anatomy'][0]['state'], 'verified')
+        self.assertEqual(verdict(inventory), ('independent', 'target', 'another_site'))
+        self.assertEqual(verdict(self.inventory(anatomy=())), ('unresolved', 'target', 'identity_unresolved'))
+
+    def test_what_keeps_the_ambiguity(self):
+        second = anatomy_entry('colorectal anastomosis', 'P5')
+        unverified_second = anatomy_entry('end colostomy', 'P5')  # its words name no anastomosis: unverified, counted
+        cases = {
+            'a type word in the passage only': dict(anatomy=(anatomy_entry('anastomosis'),)),
+            'two anastomoses': dict(anatomy=(IN_SURGERY, second),
+                                    extra={'P5': 'A colorectal anastomosis was also described.'}),
+            'an unverified second one': dict(anatomy=(IN_SURGERY, unverified_second),
+                                             extra={'P5': 'An end colostomy was also noted.'}),
+            'an unknown type': dict(anatomy=(anatomy_entry('colocolonic anastomosis'),),
+                                    extra={'P4': 'History: subtotal colectomy with a colocolonic anastomosis.'}),
+            'two types in the entry': dict(anatomy=(anatomy_entry('right hemicolectomy for colorectal cancer, with an '
+                                                                  'ileocolonic anastomosis'),),
+                                           extra={'P4': 'History: right hemicolectomy for colorectal cancer, with an '
+                                                        'ileocolonic anastomosis.'}),
+            'another type in the act\'s own words': dict(
+                act_line='The colorectal anastomotic narrowing was dilated with a through-the-scope balloon to 15 mm.',
+                act_words='colorectal anastomotic narrowing'),
+            'an absent anastomosis': dict(anatomy=(anatomy_entry('stapled side-to-side ileocolonic anastomosis',
+                                                                 state='absent'),)),
+        }
+        for name, options in cases.items():
+            with self.subTest(name):
+                inventory = self.inventory(**options)
+                if name == 'an unverified second one':
+                    self.assertEqual([item['state'] for item in inventory.encounter_facts['anatomy']],
+                                     ['verified', 'unverified'])
+                self.assertEqual(verdict(inventory), ('unresolved', 'target', 'identity_unresolved'))
+
+    def test_a_statement_at_the_anastomosis_still_meets_the_act_there(self):
+        statement = act('E2', 'P3', 'dilation', 'dilation', status='not_performed',
+                        status_words='No dilation of the anastomosis was performed',
+                        scope=sc('single_target', 'of the anastomosis', ['P3']),
+                        target=tg('', 'anastomosis', 'the anastomosis', ['P3']))
+        extra = {'P3': 'No dilation of the anastomosis was performed.'}
+        for anatomy in ((IN_SURGERY,), ()):
+            with self.subTest(anatomy=bool(anatomy)):
+                self.assertEqual(verdict(self.inventory(anatomy=anatomy, statement=statement, extra=extra)),
+                                 CONTRADICTION)
+
+    def test_a_d34_difference_never_dismisses_geminis_own_claim(self):
+        claimed = act('E2', 'P3', 'dilation', 'dilation', status='not_performed', status_words='No dilation was performed',
+                      scope=sc('single_target', 'on this polyp', ['P3']), target=tg('L1', 'not_stated', 'this polyp', ['P3']),
+                      contradicts=[{'event': 'E1', 'passages': ['P1', 'P3']}])
+        found = relations_of(self.inventory(statement=claimed), 'E2', 'E1')
+        self.assertEqual([(item['type'], item['attribute'], item['reason'], item['claimed_by_model']) for item in found],
+                         [('unresolved', 'target', 'claim_soft_difference', True)])
+        # the twin: the act's own words place it in the transverse colon, a hard literal
+        found = relations_of(self.inventory(statement=claimed, act_landmark='transverse_colon',
+                                            act_line='The transverse colon narrowing was dilated with a through-the-scope '
+                                                     'balloon to 15 mm.', act_words='transverse colon narrowing'),
+                             'E2', 'E1')
+        self.assertEqual([(item['type'], item['attribute'], item['reason'], item['claimed_by_model']) for item in found],
+                         [('dismissed_claim', 'target', 'another_site', True)])
+
+    def test_the_bundling_identities_read_the_same_place(self):
+        line = 'Biopsies were taken from the anastomosis and a polyp in the {} was removed with a cold snare.'
+
+        def bundling(segment: str, anatomy) -> list:
+            lines = {'P1': line.format(segment.replace('_', ' ')), 'P4': SURGERY}
+            inventory = normalized(lines, anatomy=list(anatomy), events=[
+                act('E1', 'P1', 'biopsy', 'Biopsies', status_words='were taken',
+                    target=tg('', 'anastomosis', 'the anastomosis', ['P1'])),
+                snare('E2', 'P1', target=tg('', segment, segment.replace('_', ' '), ['P1']))])
+            return [(item['type'], item['statement'], item['event'], item['reason'])
+                    for item in inventory.events['relations'] if item['type'] == relations.BUNDLING]
+
+        # placed on the right colon side: compatible with the ascending colon, so the identity in doubt is asked (never
+        # READY); disjoint from the descending colon, so nothing is asked. Unplaced, an anastomosis is compared with
+        # nothing, as before.
+        self.assertEqual(bundling('ascending_colon', (IN_SURGERY,)),
+                         [('bundling_identity', 'E2', 'E1', 'biopsy_of_removed_lesion')])
+        self.assertEqual(bundling('descending_colon', (IN_SURGERY,)), [])
+        self.assertEqual(bundling('ascending_colon', ()), [])
+
+
 class Scope(SimpleTestCase):
     def test_c7_an_exceptive_statement_never_pairs(self):
         inventory = pairing('No other polyp was removed.', removed(),

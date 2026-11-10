@@ -202,6 +202,60 @@ def target_landmark(event: Mapping) -> str:
     return target['value']
 
 
+# --- the place an anastomosis takes (DECISIONS D34) ---------------------------------------------------------------------
+
+ANASTOMOSIS = 'anastomosis'
+# The families whose examination reaches each place an anastomosis can take (lexicon.ANASTOMOSIS_TYPES): an upper
+# endoscopy (EGD, EUS, ERCP, enteroscopy) the esophagus and the stomach side, a colonoscopy or a sigmoidoscopy the right
+# colon side and the rectum. An act of any other family (or of none) is not at the encounter's one listed anastomosis -
+# the document then names another, whose ambiguity it keeps - so it takes no place.
+_UPPER = frozenset({'gi.egd', 'gi.eus', 'gi.ercp', 'gi.enteroscopy'})
+_LOWER = frozenset({'gi.colonoscopy', 'gi.flex_sig'})
+ANASTOMOSIS_FAMILIES = MappingProxyType({'esophagus': _UPPER, 'stomach': _UPPER, 'right_colon': _LOWER,
+                                         'rectum': _LOWER})
+
+
+def _words_text(record: Mapping) -> str:
+    words = record.get('words') if isinstance(record, Mapping) else None
+    return (words.get('text') or '') if isinstance(words, Mapping) else ''
+
+
+def anastomosis_place(encounter: Mapping) -> str:
+    """D34: the place the encounter's anastomosis takes, read only from its anatomy entry's OWN words (EB1): exactly one
+    anatomy entry names an anastomosis - whatever that entry's state, so an unverified second entry still counts as a
+    second anastomosis - and that entry is a usable (verified, not opened) altered structure whose words name ONE type
+    (lexicon.anastomosis_places: a type word directly before the noun), name no type word of another place anywhere,
+    and name no plural "anastomoses". Otherwise '' - several anastomoses, no type word, an unknown type, two types -
+    and the anastomosis keeps its ambiguity (lexicon.ALTERED_LANDMARKS)."""
+    entries = [entry for entry in (encounter.get('anatomy') or ()) if isinstance(entry, Mapping)
+               and entry.get('value') == ANASTOMOSIS]
+    if len(entries) != 1 or entries[0].get('anatomy') != 'altered' or not verify.usable(entries[0]):
+        return ''
+    text = _words_text(entries[0])
+    places = lexicon.anastomosis_places(text)
+    if len(places) != 1 or set(lexicon.anastomosis_type_places(text)) != set(places) or lexicon.holds(
+            text, lexicon.ANASTOMOSES):
+        return ''
+    return places[0]
+
+
+def compared_landmark(event: Mapping, anastomosis: str) -> str:
+    """The event's target landmark as the place comparisons (relations.Context.places) and D29 (events.site_places)
+    read it: target_landmark, except that a verified 'anastomosis' takes ``anastomosis``, the place of the encounter's
+    one anastomosis (D34, anastomosis_place) - unless the event's family does not reach that place
+    (ANASTOMOSIS_FAMILIES), or the target's OWN words name a type of another place or several anastomoses (the document
+    then names a second one, whose ambiguity it keeps). For comparisons and D29 only: the target's value, its region and
+    every label keep the anastomosis."""
+    own = target_landmark(event)
+    if own != ANASTOMOSIS or not anastomosis or event.get('family') not in ANASTOMOSIS_FAMILIES.get(anastomosis, ()):
+        return own
+    text = _words_text(event['target'])
+    if any(place != anastomosis for place in lexicon.anastomosis_type_places(text)) or lexicon.holds(
+            text, lexicon.ANASTOMOSES):
+        return own
+    return anastomosis
+
+
 def key(event: Mapping) -> dict:
     """The event's code key (module docstring)."""
     kind = catalogue_kind(event)

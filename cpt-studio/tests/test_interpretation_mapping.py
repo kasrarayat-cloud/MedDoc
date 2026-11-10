@@ -289,6 +289,90 @@ class CodeLinks(SimpleTestCase):
             self.assertLessEqual(landmarks, set(schema.LANDMARKS))
 
 
+def anatomy(words: str, *, landmark: str = 'anastomosis', state: str = 'verified', structure: str = 'altered',
+            opened: bool = False) -> dict:
+    """An encounter.anatomy entry in its stored shape, as far as anastomosis_place reads it."""
+    return {'value': landmark, 'anatomy': structure, 'state': state, 'open': opened,
+            'words': {'start': 0, 'end': len(words), 'text': words} if words else None}
+
+
+def targeted(landmark: str, words: str, state: str = 'verified') -> dict:
+    """An event whose target is ``landmark`` with its own ``words``."""
+    item = event('dilation', landmark=landmark, landmark_state=state)
+    item['target']['words'] = {'start': 0, 'end': len(words), 'text': words} if words else None
+    return item
+
+
+class AnastomosisPlace(SimpleTestCase):
+    """DECISIONS D34: the place the encounter's one anastomosis takes, from its anatomy entry's own type words, and the
+    landmark the comparisons and D29 read for a target at it."""
+    ILEOCOLONIC = anatomy('stapled side-to-side ileocolonic anastomosis')
+
+    def test_each_type_gives_its_place(self):
+        cases = {'stapled side-to-side ileocolonic anastomosis': 'right_colon', 'ileocolic anastomosis': 'right_colon',
+                 'colorectal anastomosis at 20 cm': 'rectum', 'coloanal anastomosis': 'rectum',
+                 'ileorectal anastomosis': 'rectum', 'gastrojejunal anastomosis': 'stomach',
+                 'esophagojejunal anastomosis': 'esophagus', 'esophagogastric anastomosis': 'esophagus'}
+        for words, place in cases.items():
+            with self.subTest(words):
+                self.assertEqual(mapping.anastomosis_place({'anatomy': [anatomy(words)]}), place)
+        others = [anatomy('native cecum', landmark='cecum', structure='absent'), anatomy('end ileostomy',
+                                                                                       landmark='stoma')]
+        self.assertEqual(mapping.anastomosis_place({'anatomy': others + [self.ILEOCOLONIC]}), 'right_colon')
+
+    def test_what_establishes_no_place(self):
+        cases = {
+            'no anatomy': {'anatomy': []},
+            'no anatomy list': {},
+            'two anastomoses': {'anatomy': [self.ILEOCOLONIC, anatomy('colorectal anastomosis')]},
+            'the same type twice': {'anatomy': [self.ILEOCOLONIC, anatomy('ileocolonic anastomosis')]},
+            'an unverified second one': {'anatomy': [self.ILEOCOLONIC, anatomy('end colostomy', state='unverified')]},
+            'unverified': {'anatomy': [anatomy('ileocolonic anastomosis', state='unverified')]},
+            'opened': {'anatomy': [anatomy('ileocolonic anastomosis', opened=True)]},
+            'absent': {'anatomy': [anatomy('ileocolonic anastomosis', structure='absent')]},
+            'no words': {'anatomy': [anatomy('')]},
+            'no type word': {'anatomy': [anatomy('the anastomotic stricture')]},
+            'a type word not before the noun': {'anatomy': [anatomy('ileocolonic side-to-side anastomosis')]},
+            'an unknown type': {'anatomy': [anatomy('colocolonic anastomosis')]},
+            'a pouch': {'anatomy': [anatomy('ileal pouch-anal anastomosis')]},
+            'two types': {'anatomy': [anatomy('ileocolonic and colorectal anastomoses')]},
+            'another type elsewhere in the words': {'anatomy': [anatomy(
+                'right hemicolectomy for colorectal cancer with an ileocolonic anastomosis')]},
+            'several of one type': {'anatomy': [anatomy('two ileocolonic anastomoses')]},
+        }
+        for name, encounter in cases.items():
+            with self.subTest(name):
+                self.assertEqual(mapping.anastomosis_place(encounter), '')
+
+    def test_the_landmark_the_comparisons_read(self):
+        compared = mapping.compared_landmark
+        self.assertEqual(compared(targeted('anastomosis', 'anastomotic narrowing'), 'right_colon'), 'right_colon')
+        self.assertEqual(compared(targeted('anastomosis', 'the ileocolonic anastomosis'), 'right_colon'), 'right_colon')
+        self.assertEqual(compared(targeted('anastomosis', 'anastomotic narrowing'), ''), 'anastomosis')
+        self.assertEqual(compared(targeted('descending_colon', 'descending colon'), 'right_colon'), 'descending_colon')
+        self.assertEqual(compared(targeted('anastomosis', 'anastomotic narrowing', 'unverified'), 'right_colon'), '')
+        self.assertEqual(compared(targeted('not_stated', ''), 'right_colon'), '')
+        # an act of a family that does not reach the place is not at that anastomosis: the ambiguity is kept
+        upper = dict(targeted('anastomosis', 'anastomotic stricture'), family='gi.egd')
+        self.assertEqual((compared(upper, 'right_colon'), compared(upper, 'stomach'), compared(upper, 'esophagus')),
+                         ('anastomosis', 'stomach', 'esophagus'))
+        for family in ('gi.other', ''):
+            with self.subTest(family=family):
+                self.assertEqual(compared(dict(targeted('anastomosis', 'anastomotic stricture'), family=family),
+                                          'right_colon'), 'anastomosis')
+        self.assertEqual({place: sorted(families) for place, families in mapping.ANASTOMOSIS_FAMILIES.items()}, {
+            'esophagus': ['gi.egd', 'gi.enteroscopy', 'gi.ercp', 'gi.eus'],
+            'stomach': ['gi.egd', 'gi.enteroscopy', 'gi.ercp', 'gi.eus'],
+            'right_colon': ['gi.colonoscopy', 'gi.flex_sig'], 'rectum': ['gi.colonoscopy', 'gi.flex_sig']})
+        # the target's own words name another type, or several anastomoses: the ambiguity is kept
+        self.assertEqual(compared(targeted('anastomosis', 'colorectal anastomotic stricture'), 'right_colon'),
+                         'anastomosis')
+        self.assertEqual(compared(targeted('anastomosis', 'the anastomoses'), 'right_colon'), 'anastomosis')
+        # never the target's value, its region or its label
+        item = targeted('anastomosis', 'anastomotic narrowing')
+        self.assertEqual((mapping.target_landmark(item), mapping.key(item)['region']), ('anastomosis', ''))
+
+
 class MapEvents(SimpleTestCase):
     def test_every_event_gets_its_mapping_fields_through_normalize(self):
         lines = {'P1': 'The colonoscope was advanced to the cecum.',

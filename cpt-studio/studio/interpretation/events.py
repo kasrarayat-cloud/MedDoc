@@ -31,8 +31,9 @@ THE RULE, in order (7.2): R1 (scope and exact evidence) is the caller's - a code
   then, for a site-specific dilation code (DECISIONS D29, mapping.DILATION_SITES), the site class of the dilation: its
   target landmark verified - directly, or as the verified site of its verified lesion - in the code's class (esophageal,
   or gastric and duodenal). A dilation verified outside the class supports nothing ("dilation at another site", held);
-  one whose place is not verified, is a surgically made place (an anastomosis) or is verified both in and outside the
-  class asks which structure was dilated (act_target). Never excluded.
+  one whose place is not verified, is a surgically made place (an anastomosis, unless DECISIONS D34 places it: the
+  encounter's one anastomosis at the place its anatomy entry's own type words give) or is verified both in and outside
+  the class asks which structure was dilated (act_target). Never excluded.
 - R5 bundling (7.7, through coverage): every supporting act part of another documented act holds the code with the
   legacy "part of another documented act" sentence; an act whose bundling depends on an unresolved identity holds it
   with act_target.
@@ -586,9 +587,10 @@ FITS, OUTSIDE, UNSETTLED = 'fits', 'outside', 'unsettled'
 
 
 def site_places(reading: Reading, event: Mapping) -> tuple:
-    """D29: the event's verified places - its target landmark when verified and placed (mapping.target_landmark), then
+    """D29: the event's verified places - its target landmark when verified and placed (mapping.target_landmark; an
+    anastomosis at the place the encounter's one anastomosis takes, DECISIONS D34: relations.Context.target_place), then
     the site of its verified lesion when that site is verified and placed - each once."""
-    places = [mapping.target_landmark(event)]
+    places = [reading.context.target_place(event)]
     lesion = identity.verified_lesion(event)
     site = (reading.lesions.get(lesion) or {}).get('site') if lesion else None
     if verify.usable(site) and site.get('value') not in lexicon.UNPLACED_LANDMARKS:
@@ -599,8 +601,8 @@ def site_places(reading: Reading, event: Mapping) -> tuple:
 def site_fit(reading: Reading, event: Mapping, site: str) -> str:
     """D29: FITS when a verified place of the event is in the site class and none is verified outside it; OUTSIDE when
     every verified place lies outside it and none is a surgically made place (whose position in the tract cannot be
-    told, lexicon.ALTERED_LANDMARKS); UNSETTLED otherwise - no verified place, a surgically made one (an anastomosis),
-    or places on both sides of the class."""
+    told, lexicon.ALTERED_LANDMARKS); UNSETTLED otherwise - no verified place, a surgically made one (an anastomosis
+    D34 does not place), or places on both sides of the class."""
     landmarks = mapping.SITE_CLASSES[site]
     places = site_places(reading, event)
     inside = [place for place in places if place in landmarks]
