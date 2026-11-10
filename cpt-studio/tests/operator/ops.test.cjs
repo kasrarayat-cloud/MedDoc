@@ -3366,3 +3366,310 @@ test('R11 page-1 to page-4: a piece is titled by the passages it holds, of every
   const shape4 = page(`Procedure: Colonoscopy\n${first}\n${snare}\n${biopsies}\n`, [['p1', '45385', [seen, snare], checked([1], [0])], ['p2', '45380', [first, biopsies], checked([1], [0])]]);
   assert.deepEqual(r7Titles(shape4), [[first, notTheAct('45385, 45380')], [snare, 'Evidence for 45385'], [biopsies, 'Evidence for 45380']]);
 });
+
+
+// --- the Gemini migration (S13): the interpretation tab, the interpreter stage, the hold, the retry ---
+//
+// A new-path encounter as the operator API serves it (studio/serializers.py: assessment.interpretation from
+// interpretation.report.interpretation_section, routing.derived from _routing_json; the interpreter's run beside the
+// others), built on encounter-ready.json. NEW_PATH_SECTION's inventory is the REAL normalized inventory of the S1 twin
+// synthetic fixture (tests/fixtures/interpretation/synthetic/s1-twin-current-reach.json, read by adapter.answer_text and
+// read.read and normalized by normalize.normalize as the stage stores it), with synthetic ids, hashes and usage.
+const NEW_PATH_SECTION = {"engine":"events","engine_version":"cpt-studio-events@1","hold":null,"inventory":{"counts":{"events":2,"lesions":0,"passages":4,"relations":0},"created_at":"2026-11-09T10:00:05+00:00","encounter_facts":{"anatomy":[],"date_of_service":{"candidates":[],"others":{"birth":[],"other_document":[],"other_occurrence":[],"report_time":[],"unclear":[]},"passages":["P1"],"readings":["2026-11-09"],"reasons":[],"state":"stated","value":"2026-11-09","verified":true,"words":{"end":119,"match":"exact","occurrences":1,"start":103,"text":"November 9, 2026"}},"derived":{"absent":[],"current_families":["gi.colonoscopy"],"procedure_day":{"performed":["gi.colonoscopy"],"possible":[]}},"documenting_endoscopist":{"checks":["passages_located","words_in_own_passage"],"names":[{"credentialed":true,"titled":false,"tokens":["ines","valdero"]}],"passages":["P2"],"reasons":[],"state":"verified","words":{"end":161,"match":"exact","occurrences":1,"start":133,"text":"Ines Valdero, MD (fictional)"}},"reach":[{"attached":true,"event":"E2","family":"gi.colonoscopy","landmark":"terminal_ileum","reasons":[],"state":"verified"}],"team":[],"visits":[]},"events":{"events":[{"catalogue_kind":"examination","code_technique":"","completion":null,"current":"no","extent":null,"family":"gi.colonoscopy","id":"E1","key":{"catalogue_kind":"examination","family":"gi.colonoscopy","members":[],"region":"","role":"session","service":"colonoscopy","technique":""},"kind":{"basis":"stated","checks":["passages_located","words_in_own_passage"],"literals":{},"open":false,"passages":["P3"],"reasons":[],"state":"verified","value":"examination","words":{"end":184,"match":"exact","occurrences":1,"start":173,"text":"colonoscopy"}},"part_of":{"basis":"absent","checks":[],"literals":{},"open":false,"passages":[],"reasons":[],"state":"absent","value":"","words":null},"performer":{"basis":"absent","checks":[],"literals":{},"open":false,"passages":[],"reasons":[],"state":"absent","value":"unknown","words":null},"positive":true,"procedure":{"basis":"stated","checks":["passages_located","words_in_own_passage"],"literals":{},"open":false,"passages":["P3"],"reasons":[],"state":"verified","value":"colonoscopy","words":{"end":184,"match":"exact","occurrences":1,"start":173,"text":"colonoscopy"}},"purpose":{"basis":"absent","checks":[],"literals":{},"open":false,"passages":[],"reasons":[],"state":"absent","value":"not_stated","words":null},"scope":{"basis":"absent","checks":["scope_permitted"],"literals":{},"open":false,"passages":[],"reasons":[],"state":"absent","targets":[],"value":"not_applicable","words":null},"sequence":0,"status":{"basis":"stated","checks":["passages_located","words_in_own_passage","status_time"],"literals":{},"open":false,"passages":["P3"],"reasons":[],"state":"verified","value":"performed","words":{"end":218,"match":"exact","occurrences":1,"start":201,"text":"reached the cecum"}},"target":{"basis":"absent","checks":[],"identity":"none","identity_by":null,"lesion":"","literals":{},"open":false,"passages":[],"reasons":[],"state":"absent","value":"not_stated","words":null},"technique":{"basis":"stated","checks":["passages_located","words_in_own_passage","device_words"],"literals":{"devices":["endoscope"]},"open":false,"passages":["P3"],"reasons":[],"state":"verified","value":"endoscope","words":{"end":184,"match":"exact","occurrences":1,"start":173,"text":"colonoscopy"}},"time":{"basis":"stated","checks":["passages_located","words_in_own_passage","date_literal","status_time"],"literals":{"dates":[{"precision":"month","value":"2024-01"}]},"open":false,"passages":["P3"],"reasons":[],"state":"verified","value":"earlier_encounter","words":{"end":200,"match":"exact","occurrences":1,"start":185,"text":"in January 2024"}},"visit":null},{"catalogue_kind":"examination","code_technique":"","completion":{"basis":"absent","checks":[],"literals":{},"open":false,"passages":[],"reasons":[],"state":"absent","value":"not_stated","words":null},"current":"yes","extent":{"basis":"stated","checks":["passages_located","words_in_own_passage","landmark_words","reach_device","reach_permitted"],"literals":{"landmarks":["terminal_ileum"]},"open":false,"passages":["P4"],"reasons":[],"state":"verified","value":"terminal_ileum","words":{"end":296,"match":"exact","occurrences":1,"start":266,"text":"advanced to the terminal ileum"}},"family":"gi.colonoscopy","id":"E2","key":{"catalogue_kind":"examination","family":"gi.colonoscopy","members":[],"region":"","role":"session","service":"colonoscopy","technique":""},"kind":{"basis":"stated","checks":["passages_located","words_in_own_passage"],"literals":{},"open":false,"passages":["P4"],"reasons":[],"state":"verified","value":"examination","words":{"end":261,"match":"exact","occurrences":1,"start":250,"text":"colonoscope"}},"part_of":{"basis":"absent","checks":[],"literals":{},"open":false,"passages":[],"reasons":[],"state":"absent","value":"","words":null},"performer":{"basis":"default","checks":["default"],"literals":{},"open":false,"passages":[],"reasons":[],"state":"verified","value":"documenting_team","words":null},"positive":true,"procedure":{"basis":"default","checks":["default","single_family"],"literals":{},"open":false,"passages":[],"reasons":[],"state":"verified","value":"colonoscopy","words":null},"purpose":{"basis":"absent","checks":[],"literals":{},"open":false,"passages":[],"reasons":[],"state":"absent","value":"not_stated","words":null},"scope":{"basis":"absent","checks":["scope_permitted"],"literals":{},"open":false,"passages":[],"reasons":[],"state":"absent","targets":[],"value":"not_applicable","words":null},"sequence":0,"status":{"basis":"stated","checks":["passages_located","words_in_own_passage","status_time"],"literals":{},"open":false,"passages":["P4"],"reasons":[],"state":"verified","value":"performed","words":{"end":296,"match":"exact","occurrences":1,"start":262,"text":"was advanced to the terminal ileum"}},"target":{"basis":"absent","checks":[],"identity":"none","identity_by":null,"lesion":"","literals":{},"open":false,"passages":[],"reasons":[],"state":"absent","value":"not_stated","words":null},"technique":{"basis":"stated","checks":["passages_located","words_in_own_passage","device_words"],"literals":{"devices":["endoscope"]},"open":false,"passages":["P4"],"reasons":[],"state":"verified","value":"endoscope","words":{"end":261,"match":"exact","occurrences":1,"start":250,"text":"colonoscope"}},"time":{"basis":"default","checks":["default","status_time"],"literals":{},"open":false,"passages":[],"reasons":[],"state":"verified","value":"current_encounter","words":null},"visit":null}],"lesions":[],"passages":[{"chars":33,"extended":"","id":"P1","reason":"","spans":[{"end":119,"start":86,"text":"Date of service: November 9, 2026"}],"state":"located"},{"chars":41,"extended":"","id":"P2","reason":"","spans":[{"end":161,"start":120,"text":"Endoscopist: Ines Valdero, MD (fictional)"}],"state":"located"},{"chars":72,"extended":"","id":"P3","reason":"","spans":[{"end":234,"start":162,"text":"History: A colonoscopy in January 2024 reached the cecum and was normal."}],"state":"located"},{"chars":85,"extended":"","id":"P4","reason":"","spans":[{"end":320,"start":235,"text":"Procedure: The colonoscope was advanced to the terminal ileum, which appeared normal."}],"state":"located"}],"relations":[]},"id":"5e0b1c2d-0001-4f00-8a00-00000000e001","interpretation_version":"gemini-events@1","inventory_version":"gemini-inventory@1","open_questions":[],"request_sha256":"1f58b9145b24d108d7ac38887338b3ea3229833b9c1e418250343f907bfd1047","response_sha256":"a9f4b3d22a523fdada41c85c175425bcd15b32b4cd0f54d9433accd52d7195a1","sha256":"b11a85b296a90afc460430434a504e7acb04b064575b7277724688af0e59d189","state":"read","text_sha256":"68159a1dcbcb04ee59352e57b46c4b5292b04086f8582dc0514c30e09e9b1940","verification":{"counts":{"completion":{"absent":1,"claimed":0,"discarded":0,"open":0,"unverified":0,"verified":0},"date_of_service":{"absent":0,"claimed":1,"discarded":0,"open":0,"unverified":0,"verified":1},"documenting_endoscopist":{"absent":0,"claimed":1,"discarded":0,"open":0,"unverified":0,"verified":1},"kind":{"absent":0,"claimed":2,"discarded":0,"open":0,"unverified":0,"verified":2},"part_of":{"absent":2,"claimed":0,"discarded":0,"open":0,"unverified":0,"verified":0},"performer":{"absent":1,"claimed":1,"discarded":0,"open":0,"unverified":0,"verified":1},"procedure":{"absent":0,"claimed":2,"discarded":0,"open":0,"unverified":0,"verified":2},"purpose":{"absent":2,"claimed":0,"discarded":0,"open":0,"unverified":0,"verified":0},"reach":{"absent":0,"claimed":1,"discarded":0,"open":0,"unverified":0,"verified":1},"scope":{"absent":2,"claimed":0,"discarded":0,"open":0,"unverified":0,"verified":0},"status":{"absent":0,"claimed":2,"discarded":0,"open":0,"unverified":0,"verified":2},"target":{"absent":2,"claimed":0,"discarded":0,"open":0,"unverified":0,"verified":0},"technique":{"absent":0,"claimed":2,"discarded":0,"open":0,"unverified":0,"verified":2},"time":{"absent":0,"claimed":2,"discarded":0,"open":0,"unverified":0,"verified":2}},"discarded":[],"label":"gemini-events@1+inventory@1","problems":[],"reasons":{},"refused":false,"relations":{},"request_sha256":"1f58b9145b24d108d7ac38887338b3ea3229833b9c1e418250343f907bfd1047","response_sha256":"a9f4b3d22a523fdada41c85c175425bcd15b32b4cd0f54d9433accd52d7195a1"}},"problems":[],"record":{"context":"5e0b1c2d-0003-4f00-8a00-00000000e003","engine_version":"cpt-studio-events@1","gemini_run":"5e0b1c2d-0002-4f00-8a00-00000000e002","interpretation_version":"gemini-events@1","inventory":{"id":"5e0b1c2d-0001-4f00-8a00-00000000e001","sha256":"b11a85b296a90afc460430434a504e7acb04b064575b7277724688af0e59d189"},"inventory_version":"gemini-inventory@1","member_date_state":{"effective":"2026-11-09","hold":false,"origin":"document","state":"stated"},"sentinel":{"deny_size":2539,"legacy_calls":0,"positive_control":"ok","scope":"assess","tool":"sys.monitoring"}},"run":{"adapter_version":"gemini-generate@cptstudio-1","estimated_cost":"0.0381","finished_at":"2026-11-09T10:00:04+00:00","http_status":200,"id":"5e0b1c2d-0002-4f00-8a00-00000000e002","latency_ms":4120,"provider":"gemini","purpose":"interpretation","request_sha256":"1f58b9145b24d108d7ac38887338b3ea3229833b9c1e418250343f907bfd1047","requested_model":"gemini-4-argon","response_sha256":"a9f4b3d22a523fdada41c85c175425bcd15b32b4cd0f54d9433accd52d7195a1","returned_model":"gemini-4-argon","reused_from":null,"sent":true,"started_at":"2026-11-09T10:00:00+00:00","state":"succeeded","usage":{"candidatesTokenCount":1840,"promptTokenCount":5210,"thoughtsTokenCount":912,"totalTokenCount":7962}}};
+const NEW_PATH_RUN = { id: NEW_PATH_SECTION.run.id, provider: 'gemini', mode: 'live', state: 'succeeded', http_status: 200, latency_ms: 4120,
+  usage: NEW_PATH_SECTION.run.usage, usage_basis: '', request_sha256: NEW_PATH_SECTION.run.request_sha256,
+  response_sha256: NEW_PATH_SECTION.run.response_sha256, reused_from: null, error: '', reconciled: false,
+  created_at: '2026-11-09T10:00:00Z', purpose: 'interpretation', scope_items: [], requested_model: 'gemini-4-argon', returned_model: 'gemini-4-argon' };
+const PAUSED = 'Reading documented procedures is paused on this installation. Nothing was sent. Resume once it is available again.';
+const CUT_OFF = 'The interpretation was cut off at its output limit: the document is too long to be read in one piece.';
+const clone = value => JSON.parse(JSON.stringify(value));
+const stage = (kind, state, error = '') => ({ kind, state, error, finished_at: '2026-11-09T10:00:06Z', step_outcome: state === 'succeeded' ? 'done' : null });
+const flat = html => textOf(html).replace(/\s+/g, ' ');
+
+function newPathDoc(extra = {}) {
+  const base = fixture('encounter-ready.json');
+  const section = clone(NEW_PATH_SECTION);
+  return {
+    ...base,
+    routing: { version: 'gemini-routing@1', document_kind: '', derived: true, derived_from: 'the event inventory',
+      inventory: section.inventory.id, inventory_sha256: section.inventory.sha256,
+      families: [{ family: 'gi.colonoscopy', label: 'Colonoscopy', supported: true, status: 'performed', mentions: [], facts: [], missing: [] }] },
+    pipeline: { ...base.pipeline, stages: [stage('extract', 'succeeded'), stage('interpret', 'succeeded'), stage('analyze', 'succeeded'),
+      stage('predict', 'succeeded'), stage('assess', 'succeeded')] },
+    provider_runs: [...base.provider_runs, { ...NEW_PATH_RUN }],
+    assessment: { ...base.assessment, engine_version: 'cpt-studio-events@1', interpretation: section },
+    ...extra,
+  };
+}
+
+// a document whose reading could not be completed: its interpret stage FAILED, its state the run's (provider_failed)
+function failedReadingDoc(error = 'Reading the documented procedures could not be completed.', run = {}) {
+  const base = fixture('encounter-ready.json');
+  const failed = { ...NEW_PATH_RUN, id: 'f0000000-0000-4000-8000-0000000000f1', state: 'failed', http_status: 503, usage: {}, response_sha256: '', error: 'Google answered HTTP 503', ...run };
+  return { ...base, state: 'provider_failed', state_run: failed.id, assessment: null, routing: null,
+    pipeline: { ...base.pipeline, busy: false, stages: [stage('extract', 'succeeded'), stage('interpret', 'failed', error)] },
+    provider_runs: [failed] };
+}
+
+test('a legacy assessment keeps its three tabs and its progress rows; a new-path one adds the Interpretation tab', () => {
+  for (const name of ['encounter-ready.json', 'encounter-harness2-final.json']) {
+    const doc = fixture(name);
+    assert.deepEqual(app.tabsFor(doc), app.TABS, name);
+    assert.equal(app.interpreted(doc), false, name);
+    // the tab is never drawn for it, and asked for anyway it draws the suggestions (renderDocument falls back to them)
+    assert.equal(render(doc, 'interpretation').includes('data-tab="interpretation"'), false, name);
+    assert.equal(render(doc, 'interpretation').includes('Interpreter run'), false, name);
+    assert.deepEqual(app.stagesFor(doc.pipeline.stages), app.STAGES, name);
+  }
+  // the harness@2 fixtures carry a legacy assessment's section, which says it was read by the legacy reader
+  assert.equal(fixture('encounter-harness2-final.json').assessment.interpretation.engine, 'legacy');
+  const doc = newPathDoc();
+  assert.deepEqual(app.tabsFor(doc).map(([id]) => id), ['codes', 'checks', 'timeline', 'interpretation']);
+  const html = render(doc, 'interpretation');
+  assert.match(html, /<button type="button" role="tab" id="tab-interpretation" data-tab="interpretation" aria-controls="resultContent" aria-selected="true" tabindex="0">Interpretation<\/button>/);
+  assert.ok(html.includes('aria-labelledby="tab-interpretation"'));
+  assert.ok(render(doc, 'codes').includes('id="tab-interpretation" data-tab="interpretation" aria-controls="resultContent" aria-selected="false" tabindex="-1">Interpretation</button>'));
+});
+
+test('the interpretation tab shows the record, the Gemini run with its usage and cost, the inventory and each event as stored', () => {
+  const doc = newPathDoc();
+  const panel = app.interpretationPanel(doc);
+  const text = flat(panel);
+  const section = NEW_PATH_SECTION;
+  // the record (D22): engine, versions, inventory, run, context, the sentinel's count
+  for (const want of ['Engine cpt-studio-events@1', 'Interpretation gemini-events@1 · gemini-inventory@1',
+    `Event inventory ${section.inventory.id} · sha256 ${section.inventory.sha256}`, `Interpreter run ${section.run.id}`, `Context ${section.record.context}`,
+    'Legacy-call sentinel 0 execution(s) of the legacy reader counted · scope assess · sys.monitoring · deny set 2539 · positive control ok',
+    'The record has no problem.']) assert.ok(text.includes(want), want);
+  // the run: provider, purpose, models, usage as Gemini reported it, the estimated cost, the hashes
+  for (const want of ['Gemini, the interpreter · Succeeded', 'Provider Gemini', 'Purpose Interpretation', 'Sent Yes', 'HTTP status 200',
+    'Model requested gemini-4-argon', 'Model that answered gemini-4-argon', 'Adapter version gemini-generate@cptstudio-1',
+    // the usage exactly as reported, in its own key order (this payload's keys are sorted)
+    'Usage candidatesTokenCount 1840 · promptTokenCount 5210 · thoughtsTokenCount 912 · totalTokenCount 7962',
+    'Estimated cost $0.0381 (estimated from published rates for the day sent, not reconciled to an invoice)',
+    `Request sha256 ${section.run.request_sha256}`, `Response sha256 ${section.run.response_sha256}`, 'Latency 4.1 s']) assert.ok(text.includes(want), want);
+  // the inventory, its contents counted
+  for (const want of [`Event inventory · read`, `Inventory ${section.inventory.id}`, `Text sha256 ${section.inventory.text_sha256}`,
+    'Contents 4 passages · 0 lesions · 2 events · 0 relations', 'Events · 2 events']) assert.ok(text.includes(want), want);
+  // each event: its id, family, act and whether it is current, then each attribute with its value, basis, state and words
+  assert.ok(text.includes('E1 · Colonoscopy · examination · current: no'), text.slice(0, 400));
+  assert.ok(text.includes('E2 · Colonoscopy · examination · current: yes'));
+  assert.ok(text.includes('Time: current encounter — the frame default, verified'), 'a frame default is shown as Gemini\'s reading (EB2)');
+  assert.ok(text.includes('Status: performed — stated, verified · “was advanced to the terminal ileum”'));
+  assert.ok(text.includes('Extent: terminal ileum — stated, verified · “advanced to the terminal ileum”'));
+  assert.ok(text.includes('Time: earlier encounter — stated, verified · “in January 2024”'));
+  assert.ok(text.includes('Target: not stated — not given, absent'));
+  assert.ok(text.includes('Catalogue act: examination'));
+  // the verification report, its counts per attribute
+  assert.ok(text.includes('Verification report'));
+  assert.ok(text.includes('reach: 1 claimed, 1 verified, 0 unverified, 0 absent, 0 discarded, 0 open'));
+  assert.ok(text.includes('time: 2 claimed, 2 verified, 0 unverified, 0 absent, 0 discarded, 0 open'));
+  // the routing: a stand-in derived from the event inventory, read as no reading
+  assert.ok(text.includes(`Routing: a stand-in derived from the event inventory ${section.inventory.id} (sha256 ${section.inventory.sha256}), read as no reading: Colonoscopy: performed.`));
+  assert.ok(text.includes('Interpretation and agreement are never approval.'));
+});
+
+test('the interpretation tab says what is wrong: an unverified attribute with its reasons, record problems, a hold its run set', () => {
+  const doc = newPathDoc();
+  const section = doc.assessment.interpretation;
+  const e2 = section.inventory.events.events.find(event => event.id === 'E2');
+  e2.performer = { ...e2.performer, value: 'other_clinician', basis: 'stated', state: 'unverified', reasons: ['name_mismatch'],
+    words: { start: 0, end: 9, text: 'SYNTHETIC', match: 'exact', occurrences: 1 } };
+  section.problems = ['The record counts 1 execution(s) of the legacy reader.'];
+  section.hold = { id: 'h0000000-0000-4000-8000-0000000000a1', reason: 'model', means: 'an answer named a model other than the one asked for, and was not read',
+    http_status: 200, vendor_status: '', violations: 0, run: section.run.id, set_at: '2026-11-09T10:00:04+00:00', released_at: null, released_by: null };
+  const html = app.interpretationPanel(doc);
+  const text = flat(html);
+  assert.ok(text.includes('Performer: other clinician — stated, unverified (name mismatch) · “SYNTHETIC”'), text);
+  assert.ok(text.includes('Record problems'));
+  assert.ok(text.includes('The record counts 1 execution(s) of the legacy reader.'));
+  assert.equal(text.includes('The record has no problem.'), false);
+  assert.ok(text.includes('This run set the interpreter hold h0000000-0000-4000-8000-0000000000a1: an answer named a model other than the one asked for, and was not read (model); standing.'));
+  // a record whose sentinel counts nothing is never shown as counting none
+  const uncounted = clone(doc);
+  delete uncounted.assessment.interpretation.record.sentinel.legacy_calls;
+  assert.ok(flat(app.interpretationPanel(uncounted)).includes('Legacy-call sentinel an unrecorded number of execution(s) of the legacy reader counted'));
+  // the event with an unverified attribute is drawn as pending, the other as checked
+  const items = [...html.matchAll(/<div class="check-item( pending)?">.*?<strong>(E\d)/g)].map(match => [match[2], Boolean(match[1])]);
+  assert.deepEqual(items, [['E1', false], ['E2', true]]);
+  // every value is the server's, escaped: a document's words can hold markup
+  e2.status.words.text = XSS;
+  assert.ok(app.interpretationPanel(doc).includes(XSS_ESCAPED));
+  assert.equal(app.interpretationPanel(doc).includes('<img'), false);
+});
+
+test('the interpret stage and the derive-only analyze are drawn where an interpret stage exists; the Gemini run is named', () => {
+  const doc = newPathDoc({ pipeline: { busy: true, can_stop: true, stages: [stage('extract', 'succeeded'), { kind: 'interpret', state: 'running', error: '', finished_at: null }] } });
+  const card = app.progressCard(doc);
+  const rows = [...card.matchAll(/<strong>([^<]+)<\/strong>(?:<p>([^<]*)<\/p>)?/g)].map(match => [match[1], match[2] || '']);
+  assert.deepEqual(rows.slice(0, 3), [['Read the original document', 'Done'], ['Gemini: read the documented procedures into an event inventory', 'In progress'],
+    ['Derive the context from the event inventory', 'Not started']]);
+  // a legacy chain is drawn exactly as before (the digests of the older payloads hold that too)
+  const legacy = fixture('encounter-processing.json');
+  assert.equal(app.progressCard(legacy).includes('Gemini'), false);
+  // the Activity tab: the run, its purpose, its usage as Gemini reported it and its models
+  const timeline = render(newPathDoc(), 'timeline');
+  assert.ok(timeline.includes('<strong>Gemini · live · Interpretation · Succeeded</strong>'), timeline);
+  assert.ok(timeline.includes('HTTP 200 · 4.1 s · 5210 prompt tokens, 1840 output tokens, 912 thinking tokens, 7962 total tokens (vendor-reported; basis: not recorded)'));
+  assert.ok(timeline.includes('Model requested: gemini-4-argon; answered by gemini-4-argon.'));
+  assert.equal(app.usageText({ usage: { creditsConsumed: 1 }, usage_basis: 'provider_reported_credits_not_usd' }), '1 provider-reported credits (not USD)');
+});
+
+test('a failed reading offers the recorded retry with the override unticked; nothing else is offered for it', () => {
+  const doc = failedReadingDoc(CUT_OFF);
+  assert.equal(app.failedReading(doc).kind, 'interpret');
+  const html = render(doc);
+  const card = html.slice(html.indexOf('<div data-retry-reading>'));
+  assert.ok(html.includes('<div data-retry-reading>'), html);
+  assert.ok(card.includes(`<p>Gemini: read the documented procedures into an event inventory: ${CUT_OFF}</p>`));
+  assert.ok(card.includes('<p>Interpreter run f0000000-0000-4000-8000-0000000000f1 · Failed · HTTP 503 · Google answered HTTP 503</p>'));
+  assert.ok(card.includes('<form id="retryReadingForm" novalidate><label class="check-label"><input type="checkbox" id="retryOverride"><span>Override the refusal of an answer cut off at its output limit: recorded with your name, and never offered to a member.</span></label>'));
+  assert.equal(card.includes('checked'), false, 'the override is never ticked for the operator');
+  assert.equal(html.includes('The provider request<br>failed.'), false, 'the legacy card is not drawn for the interpreter');
+  // a reading that is running again, or one followed by another stage, offers nothing
+  assert.equal(app.failedReading({ ...doc, pipeline: { ...doc.pipeline, busy: true } }), null);
+  assert.equal(app.failedReading({ ...doc, pipeline: { ...doc.pipeline, stages: [...doc.pipeline.stages, stage('interpret', 'running')] } }), null);
+  assert.equal(render({ ...doc, pipeline: { ...doc.pipeline, busy: true } }).includes('retryReadingForm'), false);
+  // a legacy provider failure is drawn as before
+  const legacy = { ...fixture('encounter-ready.json'), state: 'provider_failed', state_run: 'e0000000-0000-4000-8000-000000000001' };
+  legacy.provider_runs = legacy.provider_runs.map(run => ({ ...run, state: 'failed', error: 'Corti answered HTTP 503' }));
+  assert.ok(render(legacy).includes('The provider request<br>failed.'));
+  assert.equal(render(legacy).includes('retryReadingForm'), false);
+  // a reading that did not run: said as the interpret stage's, never as a missing proposal request
+  const notRun = { ...doc, state: 'provider_not_run', state_run: null, provider_runs: [] };
+  notRun.pipeline = { ...doc.pipeline, stages: [stage('extract', 'succeeded'), stage('interpret', 'failed', 'Reading documented procedures is not available right now.')] };
+  const said = render(notRun);
+  assert.ok(said.includes('<h3>The document was<br>not read.</h3><p>Gemini: read the documented procedures into an event inventory: Reading documented procedures is not available right now.</p>'), said);
+  assert.equal(said.includes('No proposals were<br>requested.'), false);
+});
+
+test('a reading paused on the installation is named by its stage, with Resume; the standing hold is shown with its release', () => {
+  const base = fixture('encounter-ready.json');
+  const paused = { ...base, state: 'stopped', assessment: null, routing: null, provider_runs: [],
+    pipeline: { ...base.pipeline, busy: false, can_resume: true, stopped_by_member: false, stages: [stage('extract', 'succeeded'), stage('interpret', 'cancelled', PAUSED)] } };
+  const html = render(paused);
+  assert.ok(html.includes(`<p>Gemini: read the documented procedures into an event inventory: ${PAUSED}</p>`), html);
+  assert.ok(html.includes('data-action="resume"'));
+  assert.equal(html.includes('data-interpreter-hold'), false, 'no hold card while none stands');
+  const hold = { id: 'h0000000-0000-4000-8000-0000000000b2', reason: 'quota', means: 'a daily, zero or unbilled quota is exhausted, or billing is not enabled',
+    http_status: 429, vendor_status: 'RESOURCE_EXHAUSTED', violations: 2, run: 'f0000000-0000-4000-8000-0000000000f1', set_at: '2026-11-09T06:00:00+00:00', released_at: null, released_by: null };
+  app.state.session = { interpreter: { held: true, standing: [hold], process_mode: 'live', process_paused: 'interpreter_hold', message: PAUSED } };
+  try {
+    const held = render(paused);
+    const card = held.slice(held.indexOf('<div data-interpreter-hold>'));
+    assert.ok(held.includes('<div data-interpreter-hold>'));
+    assert.ok(card.includes('<p>Reading documented procedures is paused on this installation: each interpret stage ends paused and sends nothing to Gemini until the hold is released.</p>'));
+    assert.ok(card.includes('<p>Hold h0000000-0000-4000-8000-0000000000b2: a daily, zero or unbilled quota is exhausted, or billing is not enabled (quota) · HTTP 429 · RESOURCE_EXHAUSTED · 2 quota violations · set 9 Nov 2026, 06:00 UTC by the run f0000000-0000-4000-8000-0000000000f1</p>'), card);
+    assert.ok(card.includes('<p>This web process&#x27;s interpreter mode: live (the worker&#x27;s mode is its own).</p>'));
+    assert.ok(card.includes('<form id="releaseHoldForm" novalidate><label class="field-label">Release note<textarea id="releaseHoldNote"'));
+    // the overview, where an operator lands, says so too
+    assert.ok(app.overviewView().startsWith('<section class="view-entrance"><div data-interpreter-hold>'));
+  } finally {
+    app.state.session = null;
+  }
+  assert.equal(app.overviewView().includes('data-interpreter-hold'), false);
+});
+
+test('the retry and the release post what the operator chose, and a refusal is shown in the server\'s words', async () => {
+  const doc = failedReadingDoc(CUT_OFF);
+  const saved = { document: global.document, fetch: global.fetch };
+  const toastEl = { textContent: '', classList: { add() {}, remove() {} } };
+  const elements = new Map([['#toast', toastEl]]);
+  const element = selector => {
+    if (!elements.has(selector)) elements.set(selector, { textContent: '', hidden: true, checked: false, value: '', options: [{ textContent: '' }] });
+    return elements.get(selector);
+  };
+  const attributes = new Set();
+  const button = { disabled: false, toggleAttribute: (name, on) => (on ? attributes.add(name) : attributes.delete(name)), hasAttribute: name => attributes.has(name) };
+  const form = id => ({ id, querySelector: () => button });
+  const asked = [];
+  let answer = { status: 201, body: { retrying: true, job: 'j1', override: false } };
+  try {
+    global.document = { querySelector: element, cookie: 'cptstudio_csrf=token123' };
+    global.fetch = async (url, init) => {
+      asked.push({ url, method: init.method, body: init.body ? JSON.parse(init.body) : null, csrf: init.headers['X-CSRFToken'] });
+      const reply = url === '/ops/api/session' ? { status: 200, body: fixture('session.json') } : answer;
+      return { status: reply.status, ok: reply.status < 300, redirected: false, url: `http://127.0.0.1${url}`, headers: { get: () => 'application/json' }, json: async () => reply.body };
+    };
+    app.state.doc = doc;
+    app.state.route = null;
+    // the override is sent only when ticked
+    await app.submitRetryReading(form('retryReadingForm'));
+    assert.deepEqual(asked[0], { url: `/ops/api/encounters/${doc.id}/retry-reading`, method: 'POST', body: { override: false }, csrf: 'token123' });
+    assert.equal(toastEl.textContent, app.RETRY_DONE);
+    element('#retryOverride').checked = true;
+    asked.length = 0;
+    await app.submitRetryReading(form('retryReadingForm'));
+    assert.deepEqual(asked[0].body, { override: true });
+    // a refusal: the server's sentence where the operator asked, the button usable again
+    answer = { status: 409, body: { error: 'This document is too long to be read in one piece, so the same request would be cut off again; it is not sent again. Shorten it or split it, then upload it again.' } };
+    await app.submitRetryReading(form('retryReadingForm'));
+    assert.equal(element('#retryReadingError').hidden, false);
+    assert.equal(element('#retryReadingError').textContent, answer.body.error);
+    assert.equal(button.disabled, false);
+    // the release: a note is required before anything is sent
+    asked.length = 0;
+    element('#releaseHoldNote').value = '   ';
+    await app.submitHoldRelease(form('releaseHoldForm'));
+    assert.deepEqual(asked, []);
+    assert.equal(element('#releaseHoldError').textContent, 'Say why the hold may end: the release is recorded with this note.');
+    element('#releaseHoldNote').value = ' Billing enabled on the project; quota restored. ';
+    answer = { status: 201, body: { released: ['h1'], held: false, standing: [], process_mode: 'live', process_paused: null, message: '' } };
+    await app.submitHoldRelease(form('releaseHoldForm'));
+    assert.deepEqual(asked[0], { url: '/ops/api/interpreter', method: 'POST', body: { note: 'Billing enabled on the project; quota restored.' }, csrf: 'token123' });
+    assert.equal(toastEl.textContent, app.HOLD_RELEASED);
+    answer = { status: 403, body: { error: 'Only an operator may release the interpreter hold.' } };
+    await app.submitHoldRelease(form('releaseHoldForm'));
+    assert.equal(element('#releaseHoldError').textContent, 'Only an operator may release the interpreter hold.');
+    // the forms are told apart by their ids, and any other submit is left to the page
+    let prevented = 0;
+    const event = id => ({ target: form(id), preventDefault: () => { prevented += 1; } });
+    asked.length = 0;
+    answer = { status: 201, body: { retrying: true } };
+    await app.onSubmit(event('retryReadingForm'));
+    assert.equal(asked[0].url, `/ops/api/encounters/${doc.id}/retry-reading`);
+    assert.equal(app.onSubmit(event('uploadForm')), undefined);
+    assert.equal(prevented, 1);
+  } finally {
+    global.document = saved.document;
+    global.fetch = saved.fetch;
+    app.state.doc = null;
+    app.state.session = null;
+    clearTimeout(app.state.toastTimer);
+  }
+});
+
+test('the new facts are worded in the console, one for each fact the server asks a new-path code about', () => {
+  const root = path.join(__dirname, '..', '..');
+  const wording = fs.readFileSync(path.join(root, 'studio', 'interpretation', 'wording.py'), 'utf8');
+  const missing = /^MISSING = \{\n((?:    '[a-z_]+': '[^']*',\n)+)\}/m.exec(wording);
+  assert.ok(missing, 'interpretation.wording.MISSING not found');
+  const facts = [...missing[1].matchAll(/^    '([a-z_]+)':/gm)].map(match => match[1]);
+  assert.deepEqual(Object.keys(app.EVENT_FACTS).sort(), [...facts].sort());
+  const answers = fs.readFileSync(path.join(root, 'studio', 'answers.py'), 'utf8');
+  for (const fact of facts) {
+    assert.ok(answers.includes(`    '${fact}': '`), `answers.PROMPTS asks ${fact}`);
+    assert.equal(app.FINDING_FACTS[fact], app.EVENT_FACTS[fact], fact);
+    assert.ok(app.EVENT_FACTS[fact] && !/gemini|google|argon/i.test(app.EVENT_FACTS[fact]), fact);
+  }
+  // the facts asked before keep their words
+  assert.equal(app.FINDING_FACTS.extent, 'Extent reached');
+});
+
+test('the trace carries a new-path assessment\'s interpretation section; an earlier trace is drawn as before', () => {
+  const trace = fixture(HARNESS_TRACE);
+  assert.equal(app.traceView(trace, trace.encounter.id).includes('Interpretation'), false);
+  const html = app.traceView({ ...trace, interpretation: clone(NEW_PATH_SECTION) }, trace.encounter.id);
+  const text = flat(html);
+  assert.ok(text.includes('Interpretation cpt-studio-events@1'), text.slice(0, 300));
+  assert.ok(text.includes(`Interpreter run ${NEW_PATH_SECTION.run.id}`));
+  assert.ok(text.includes('E2 · gi.colonoscopy · examination · current: yes'), 'the trace names a family by its slug');
+  assert.equal(app.traceView({ ...trace, interpretation: { engine: 'legacy', engine_version: 'x', record: null } }, trace.encounter.id).includes('Interpreter run'), false);
+});
+
+test('an unreconciled interpretation run is named as the interpreter\'s', () => {
+  const doc = newPathDoc({ state: 'provider_unknown' });
+  doc.provider_runs = [{ ...NEW_PATH_RUN, state: 'unknown', http_status: null, response_sha256: '', usage: {}, error: 'The read timed out after the request was sent.' }];
+  const html = render(doc);
+  assert.ok(html.includes('Gemini, the interpreter · Interpretation · 9 Nov 2026, 10:00 UTC · The read timed out after the request was sent.'), html.slice(html.indexOf('Unreconciled'), html.indexOf('Unreconciled') + 300));
+});

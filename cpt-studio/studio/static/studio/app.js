@@ -86,7 +86,11 @@ const USE_DOCUMENT = 'use_document';
 // Removing the member's entered date of service (the server's own clear path), where the document gives no single date.
 const CLEAR_DATE = 'clear';
 const KIND_LABELS = { upload: 'Uploaded file', paste: 'Pasted text', addendum: 'Document with addendum' };
-const ERROR_ACTIONS = { resume: ['resume', 'Resume processing'], new_document: ['upload', 'Upload a new document'] };
+// The button the notice offers for the error's action. retry_reading: one more attempt at reading a document whose
+// reading could not be completed, recorded as the member's (POST .../retry-reading; never offered for a document too long
+// to be read in one piece, which says to shorten or split it instead).
+const ERROR_ACTIONS = { resume: ['resume', 'Resume processing'], new_document: ['upload', 'Upload a new document'], retry_reading: ['retry-reading', 'Try reading again'] };
+const RETRY_ASKED = 'Asked. The documented procedures are being read again.';
 const ACKNOWLEDGEMENTS = {
   human: 'I read the whole source document, not only the cited passages, and it supports this code as a service performed at this encounter. The documentation checks can miss wording they do not recognise. This synthetic review is not clinical approval or billing advice.',
   agent: 'I am an automated agent. I read the whole source document, not only the cited passages, and it supports this code as a service performed at this encounter. The documentation checks can miss wording they do not recognise. This agent-executed synthetic review is not clinical approval or billing advice.',
@@ -665,7 +669,8 @@ function progressTime(progress, phase, ui) {
   }
   const finished = isoTime(progress.finished_at);
   if (!finished) return null;
-  return [phase === 'failed' || phase === 'stopped' ? 'Ran for' : 'Finished in', `<span data-elapsed data-since="${escapeHtml(started)}" data-until="${escapeHtml(finished)}">${escapeHtml(durationText(Date.parse(finished) - Date.parse(started)))}</span>`];
+  // a document that did not finish - failed, stopped, or paused before it was read (nothing running) - ran for its time
+  return [['failed', 'stopped', 'paused'].includes(phase) ? 'Ran for' : 'Finished in', `<span data-elapsed data-since="${escapeHtml(started)}" data-until="${escapeHtml(finished)}">${escapeHtml(durationText(Date.parse(finished) - Date.parse(started)))}</span>`];
 }
 
 function progressStep(step, active, animate, detail) {
@@ -957,6 +962,8 @@ function emptyResults(doc, ui) {
     uploading: 'Suggested codes appear here when processing finishes.', queued: 'Suggested codes appear here when processing finishes.', processing: 'Suggested codes appear here when processing finishes.',
     action_needed: 'Nothing has been checked yet. Choose the date of service to continue.', failed: 'No codes were suggested.', stopped: 'Processing stopped before codes were suggested.',
     being_confirmed: 'Suggested codes appear here once the earlier check is confirmed.',
+    // paused: nothing was suggested yet, and nothing was decided about the document - it is read once processing resumes
+    paused: 'Processing is paused, so no codes have been suggested yet. Suggested codes appear here once processing resumes.',
   }, phase, 'No CPT codes were suggested for this document.');
 }
 
@@ -1841,6 +1848,23 @@ function resumeProcessing(button) {
   });
 }
 
+// The recorded retry of a reading that could not be completed (the notice's "Try reading again"): one more attempt,
+// asked once; a refusal says why in the server's own words (processing runs, an earlier outcome is being confirmed,
+// reading is paused, the document is too long to be read in one piece ...).
+function retryReading(button) {
+  if (!state.doc) return undefined;
+  return guarded('retry-reading', async () => {
+    setBusy(button, true);
+    try {
+      await api(`/api/encounters/${encodeURIComponent(state.doc.id)}/retry-reading`, { method: 'POST', json: {} });
+      await afterChange(RETRY_ASKED);
+    } catch (error) {
+      toast(error.message);
+      setBusy(button, false);
+    }
+  });
+}
+
 function openExport() {
   if (!state.doc) return;
   const readiness = state.doc.readiness || {};
@@ -1944,6 +1968,7 @@ function onClick(event) {
     'revoke-detail': () => revokeDetail(action),
     stop: () => stopProcessing(action),
     resume: () => resumeProcessing(action),
+    'retry-reading': () => retryReading(action),
     recheck: () => requestRecheck(action),
     reload: () => location.reload(),
     retry: route,
@@ -2050,7 +2075,7 @@ if (typeof module === 'object' && module.exports) {
     documentLayout, sourcePanel, reviewMeta, progressPanel, checksPanel, detailsPanel, detailRow, questionPassages, earlierAnswers, detailAnswers, answerable, resultRow, resultList,
     resultsSection, whyThisCode, decisionLine, reviewBar, notSeparatelyCoded, otherCodes, notesSection, recheckOffer, activityLog, reviewView,
     exportOptions, uploadForm, state, ACKNOWLEDGEMENTS, AGENT_REVIEW, OUTDATED_TEXT, CLIENT_HEADER, CLIENT_VERSION, QUEUE_STATES, RECHECK_LABEL, RECHECK_NOTE, QUEUED_AFTER_DONE_TITLE,
-    STEP_KEYS, CHECK_KEYS, MODIFIER_CHOICES,
+    STEP_KEYS, CHECK_KEYS, MODIFIER_CHOICES, ERROR_ACTIONS, RETRY_ASKED, emptyResults, retryReading, onClick,
   };
 }
 if (typeof document !== 'undefined') boot();

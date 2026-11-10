@@ -11,9 +11,11 @@
   "allowed": ["cpt-studio-customer-report@1", "cpt.quillmd.com"],
   "patterns": [
     {"id": "provider_name", "severity": "hard", "surfaces": ["dom", "json", "header", "file", "bundle"],
-     "source": "\\b(?:corti|astra|fable|openai|anthropic|claude)\\b"},
+     "source": "\\b(?:corti|astra|fable|openai|anthropic|claude|gemini|google)\\b"},
     {"id": "model_id", "severity": "hard", "surfaces": ["dom", "json", "header", "file", "bundle"],
-     "source": "\\b(?:gpt|claude)-[a-z0-9]"},
+     "source": "\\b(?:gpt|claude|gemini)-[a-z0-9]"},
+    {"id": "interpreter_model", "severity": "hard", "surfaces": ["dom", "json", "header", "file", "bundle"],
+     "source": "\\bgemini-4-argon\\b"},
     {"id": "adapter_version", "severity": "hard", "surfaces": ["dom", "json", "header", "file", "bundle"],
      "source": "@cptstudio-\\d|\\bcpt-studio:[a-z]"},
     {"id": "versioned_id", "severity": "hard", "surfaces": ["dom", "json", "header", "file", "bundle"],
@@ -79,7 +81,8 @@
     "reference_check", "engine_version", "profiles_version", "profile_version", "routing", "cues", "fingerprint",
     "credits", "tokens", "proposed_by", "listed_by", "corti_relation", "participant_positions", "phases", "rationale",
     "exclusion_reason", "support", "encounter_checks", "latency_ms", "http_status", "scope_items", "purpose",
-    "reused_from", "reconciled", "source_file", "username"
+    "reused_from", "reconciled", "source_file", "username", "interpretation", "interpreter", "event_inventory",
+    "inventory", "inventory_sha256", "gemini_run", "sentinel", "legacy_calls", "derived_from"
   ],
   "deny_value_min_length": 8,
   "deny_value_shape": "[0-9._:@/-]",
@@ -95,7 +98,17 @@
       "assessment.proposals[].checks[].source", "assessment.encounter_checks[].id",
       "assessment.encounter_checks[].source", "assessment.reference_sources[].key",
       "assessment.reference_sources[].sha256", "assessment.reference_sources[].url", "reports[].sha256",
-      "routing.version"
+      "routing.version",
+      "assessment.interpretation.engine_version", "assessment.interpretation.record.interpretation_version",
+      "assessment.interpretation.record.inventory_version", "assessment.interpretation.record.inventory.id",
+      "assessment.interpretation.record.inventory.sha256", "assessment.interpretation.record.gemini_run",
+      "assessment.interpretation.record.context", "assessment.interpretation.inventory.id",
+      "assessment.interpretation.inventory.sha256", "assessment.interpretation.inventory.text_sha256",
+      "assessment.interpretation.inventory.request_sha256", "assessment.interpretation.inventory.response_sha256",
+      "assessment.interpretation.run.id", "assessment.interpretation.run.request_sha256",
+      "assessment.interpretation.run.response_sha256", "assessment.interpretation.run.requested_model",
+      "assessment.interpretation.run.returned_model", "assessment.interpretation.run.adapter_version",
+      "routing.inventory", "routing.inventory_sha256"
     ],
     "trace": [
       "participants[].runs[].id", "participants[].runs[].run_identity", "participants[].runs[].authorization_ref",
@@ -107,7 +120,12 @@
       "participants[].runs[].exchanges[].response_sha256",
       "participants[].runs[].exchanges[].tool_calls[].call_id",
       "participants[].runs[].exchanges[].tool_calls[].result_sha256", "assessments[].id", "assessments[].frozen[].1",
-      "revision.id", "revision.text_sha256"
+      "revision.id", "revision.text_sha256",
+      "interpretation.engine_version", "interpretation.record.gemini_run", "interpretation.inventory.id",
+      "interpretation.inventory.sha256", "interpretation.inventory.request_sha256",
+      "interpretation.inventory.response_sha256", "interpretation.run.id", "interpretation.run.request_sha256",
+      "interpretation.run.response_sha256", "interpretation.run.requested_model", "interpretation.run.returned_model",
+      "interpretation.run.adapter_version"
     ]
   },
   "vectors_note": "hits: the sorted, de-duplicated pattern ids a scan of text on that surface must find (deny values and forbidden keys aside); [] for none.",
@@ -150,6 +168,17 @@
     {"surface": "dom", "text": "The tool loop stopped", "hits": ["tool_call"]},
     {"surface": "json", "text": "harness@2", "hits": ["orchestration"]},
     {"surface": "dom", "text": "\u017fha256 and to\u212aens are not sha256 or tokens folded", "hits": ["sha256", "token"]},
-    {"surface": "dom", "text": "\u017fha256 to\u212aen", "hits": []}
+    {"surface": "dom", "text": "\u017fha256 to\u212aen", "hits": []},
+    {"surface": "dom", "text": "Read by Gemini", "hits": ["provider_name"]},
+    {"surface": "json", "text": "Google refused the request", "hits": ["provider_name"]},
+    {"surface": "file", "text": "Interpreted by gemini-4-argon", "hits": ["interpreter_model", "model_id", "provider_name"]},
+    {"surface": "header", "text": "GEMINI-4-ARGON", "hits": ["interpreter_model", "model_id", "provider_name"]},
+    {"surface": "bundle", "text": "const MODEL = 'gemini-2.5-pro';", "hits": ["model_id", "provider_name"]},
+    {"surface": "dom", "text": "Argon plasma coagulation (APC) was applied to the angioectasia.", "hits": []},
+    {"surface": "file", "text": "Hemostasis achieved with argon plasma coagulation at 40 W.", "hits": []},
+    {"surface": "json", "text": "argon", "hits": []},
+    {"surface": "header", "text": "argon", "hits": []},
+    {"surface": "bundle", "text": "// argon plasma coagulation", "hits": []},
+    {"surface": "dom", "text": "Geminid meteors, googled", "hits": []}
   ]
 }

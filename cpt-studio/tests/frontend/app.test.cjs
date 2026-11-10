@@ -52,7 +52,7 @@ function parts(html) {
 // Internal machinery a customer must never read (design section 0.6): provider and model names, participants and peer
 // review, usage, credits and tokens, request/response/run ids, hashes, trace links, rule ids and source keys, technical
 // payloads.
-const NAMES = /\b(?:corti|astra|fable|openai|anthropic|claude)\b|\bgpt-|\bclaude-/i;
+const NAMES = /\b(?:corti|astra|fable|openai|anthropic|claude|gemini|google)\b|\bgpt-|\bclaude-|\bgemini-/i;
 // (Clinical words stay out of this net: "diagnostic colonoscopy", "the operator", "with the exception of".)
 const MACHINERY = /\b(?:participants?|peers?|providers?|vendors?|models?|tokens?|credits?|usage|traces?|tracing|harness|engine|pipeline|orchestrat\w*|replay|sha-?256|traceback|review2|(?:request|response|run|rule|check)[\s_-]?ids?|tool[\s_-]?calls?)\b|\bHTTP\s?\d{3}\b/i;
 const RULE_IDS = /\b(?:confirmations|context|cpt|em|evidence|extraction|facts|mue|ncci|participants|pfs|provider|review|routing|scope|services?|units|gi)\.[a-z_]+\b|\bcms-[a-z]+(?:-[a-z0-9]+)*\b|\bcpt-studio:[a-z]+@|\b[a-z][\w-]*@(?:\d|cptstudio)|\b[0-9a-f]{40,64}\b/i;
@@ -1211,7 +1211,7 @@ test('the customer bundle names no internal machinery, not even in comments', ()
   const source = fs.readFileSync(BUNDLE, 'utf8');
   // the only exception: the protocol names Django's CSRF protection requires
   const scanned = source.replaceAll('X-CSRFToken', 'X-CSRF').replaceAll('csrfmiddlewaretoken', 'csrfmiddleware');
-  const terms = /corti|astra|fable|openai|anthropic|claude|gpt|participant|peer|provider|vendor|model|trace|usage|credit|token|sha256|sha-256|harness|pipeline|engine|orchestrat|diagnostic|operator|replay|request[\s_-]?id|requestid|rule[\s_-]?id|ruleid|response[\s_-]?id|tool[\s_-]?call|cms-|ncci\.|pfs\.|mue\./gi;
+  const terms = /corti|astra|fable|openai|anthropic|claude|gpt|gemini|google|participant|peer|provider|vendor|model|trace|usage|credit|token|sha256|sha-256|harness|pipeline|engine|orchestrat|diagnostic|operator|replay|request[\s_-]?id|requestid|rule[\s_-]?id|ruleid|response[\s_-]?id|tool[\s_-]?call|cms-|ncci\.|pfs\.|mue\./gi;
   const hits = [...scanned.matchAll(terms)].map(match => `${match[0]} @${scanned.slice(0, match.index).split('\n').length}`);
   assert.deepEqual(hits, []);
   assert.equal(count(source, 'X-CSRFToken'), 1);
@@ -1320,4 +1320,205 @@ test('list rows show the plain state, the kind, the details needed and the date;
   const counted = fixture('session.json').counts.queue;
   assert.equal(counted, queued.length, `${counted} counted, ${queued.length} listed`);
   assert.equal(app.listDescription('queue', rows), `${queued.length} documents wait on you: a date to choose, a detail to answer, codes to review, or something still open.`);
+});
+
+
+// --- the Gemini migration (S13): the retry of a failed reading, the paused copy, the new facts ---
+//
+// What the server serves (studio/progress.py INTERPRETATION_ERRORS and the interpreter's paused phase; studio/answers.py
+// PROMPTS for the new path's facts; interpretation/wording.py MISSING) is read from the source, so a fixture here is the
+// server's own wording, never one written for the test.
+const SERVER = name => fs.readFileSync(path.join(ROOT, 'studio', ...name.split('/')), 'utf8');
+const pyString = (source, name) => {
+  const found = new RegExp(`^${name} = \\(?((?:\\s*'[^']*')+)\\)?$`, 'm').exec(source);
+  assert.ok(found, `${name} not found`);
+  return [...found[1].matchAll(/'([^']*)'/g)].map(match => match[1]).join('');
+};
+const PAUSED = pyString(SERVER('interpretation/holds.py'), 'PAUSED_MESSAGE');
+const READING_FAILED = (() => {
+  const found = /'failed': \('([^']*)'\s*\n\s*'([^']*)', 'retry_reading'\)/.exec(SERVER('progress.py'));
+  assert.ok(found, 'INTERPRETATION_ERRORS failed not found');
+  return found[1] + found[2];
+})();
+
+// a document whose reading could not be completed, as progress.encounter_progress serves it (FINAL 6.11, 11.3)
+function failedReading(action = 'retry_reading') {
+  const doc = clone(fixture('encounter-failed.json'));
+  doc.progress.steps = doc.progress.steps.map(step => ({ ...step, state: step.key === 'reading' ? 'done' : step.key === 'identifying' ? 'failed' : 'not_started' }));
+  doc.progress.message = READING_FAILED;
+  doc.progress.error = { text: READING_FAILED, action };
+  return doc;
+}
+
+// a document whose reading the interpreter's pause ended (FINAL 11.2): the existing stopped state, the paused phase
+function pausedReading() {
+  const doc = clone(fixture('encounter-stopped.json'));
+  doc.progress.phase = 'paused';
+  doc.progress.steps = doc.progress.steps.map(step => ({ ...step, state: step.key === 'reading' ? 'done' : step.key === 'identifying' ? 'stopped' : 'not_started' }));
+  doc.progress.message = PAUSED;
+  doc.progress.error = { text: PAUSED, action: 'resume' };
+  return doc;
+}
+
+test('a reading that could not be completed offers "Try reading again"; too long, or a viewer, is never offered it', () => {
+  assert.ok(READING_FAILED.startsWith('Reading the documented procedures could not be completed'), READING_FAILED);
+  const doc = failedReading();
+  const html = app.progressPanel(doc, ui(doc));
+  assert.match(html, /<section class="progress-panel" data-phase="failed"/);
+  assert.ok(html.includes('<div class="progress-error" role="alert">'));
+  assert.ok(html.includes(`<p>${esc(READING_FAILED)}</p><button type="button" class="button secondary" data-action="retry-reading">Try reading again</button>`), html);
+  assert.equal(count(html, 'data-action="retry-reading"'), 1);
+  assert.equal(count(html, READING_FAILED), 1, 'the head does not repeat the notice');
+  // a member who may not act is served 'none' (customer_api.progress_block), and even served the action sees no button
+  const viewer = failedReading();
+  viewer.permissions.can_review = false;
+  assert.doesNotMatch(app.progressPanel(viewer, ui(viewer)), /data-action="retry-reading"/);
+  assert.doesNotMatch(app.progressPanel(failedReading('none'), ui(doc)), /data-action="retry-reading"/);
+  // a document too long to be read in one piece is never offered a retry (C5): the server says to upload it again
+  const long = failedReading('new_document');
+  assert.match(app.progressPanel(long, ui(long)), /data-action="upload">Upload a new document<\/button>/);
+  assert.doesNotMatch(app.progressPanel(long, ui(long)), /retry-reading/);
+  // every action the server serves has its button, and no button the server never asks for
+  const contract = JSON.parse(fs.readFileSync(path.join(ROOT, 'ops', 'verification', 'customer-contract.json'), 'utf8'));
+  const served = contract.encounter.keys.progress.keys.error.keys.action.enum.filter(action => action !== 'none');
+  assert.deepEqual(Object.keys(app.ERROR_ACTIONS).sort(), [...served].sort());
+  // the actions of progress.py's two error tables (ERRORS, INTERPRETATION_ERRORS) and Resume beside them
+  const progress = SERVER('progress.py');
+  const tables = ['ERRORS', 'INTERPRETATION_ERRORS'].map(name => {
+    const at = progress.indexOf(`\n${name} = {\n`);
+    assert.ok(at >= 0, `${name} not found in progress.py`);
+    return progress.slice(at, progress.indexOf('\n}\n', at));
+  });
+  const actions = new Set(tables.flatMap(table => [...table.matchAll(/, '([a-z_]+)'\),?$/gm)].map(match => match[1])));
+  assert.ok(actions.has('retry_reading') && actions.has('new_document'), [...actions].join(', '));
+  assert.ok(progress.includes("'action': 'resume' if review.can_resume(encounter) else 'none'"));
+  for (const action of actions) assert.ok(action === 'none' || Object.hasOwn(app.ERROR_ACTIONS, action), `progress.py serves ${action}`);
+});
+
+test('the paused copy: a reading paused on the installation reads as paused with Resume, ran for its time and is still', () => {
+  assert.ok(SERVER('progress.py').includes("PHASES = ('queued', 'processing', 'action_needed', 'awaiting_detail', 'completed', 'partial', 'failed', 'stopped',\n          'being_confirmed', 'paused')"));
+  const doc = pausedReading();
+  const html = app.progressPanel(doc, ui(doc));
+  assert.match(html, /^<section class="progress-panel" data-phase="paused" aria-labelledby="progressTitle">/);
+  assert.match(html, /<h2 id="progressTitle">Processing paused<\/h2>/);
+  assert.ok(html.includes('<use href="#i-info"/>'), 'the paused head is informational, never an alarm or a clock');
+  assert.equal(count(html, esc(PAUSED)), 1, 'the paused sentence once, in the notice');
+  assert.ok(html.includes(`<div class="progress-error" role="alert"><svg class="" aria-hidden="true"><use href="#i-info"/></svg><div><p>${esc(PAUSED)}</p></div></div>`), html);
+  assert.match(html, /<button type="button" class="button primary" data-action="resume">Resume processing/);
+  assert.equal(count(html, 'data-action="resume"'), 1, 'Resume once: the panel\'s own');
+  assert.doesNotMatch(html, /data-action="stop"|is-animated|progress-card/);
+  assert.ok(html.includes('<p class="leave-note">You can leave this page — your document is saved.</p>'));
+  assert.ok(html.includes(`<p class="progress-time">Ran for <span data-elapsed data-since="${doc.progress.started_at}" data-until="${doc.progress.finished_at}">`), 'paused before it finished: it ran, it did not finish');
+  assert.equal(app.shouldPoll(doc), false, 'nothing runs until Resume');
+  assert.equal(app.emptyResults(doc, ui(doc)), 'Processing is paused, so no codes have been suggested yet. Suggested codes appear here once processing resumes.');
+  // the earlier pause (decision (j): a silent worker while the document is busy) keeps its own copy: no time, it polls
+  const silent = clone(fixture('encounter-processing.json'));
+  silent.progress.phase = 'paused';
+  silent.progress.message = 'Processing is paused: the processing service is not responding right now. Your document is saved, and this page shows the next step once the service is back.';
+  const busy = app.progressPanel(silent, ui(silent));
+  assert.ok(busy.includes(`<p class="progress-message">${esc(silent.progress.message)}</p>`));
+  assert.doesNotMatch(busy, /is-animated|Ran for|Finished in|Elapsed/);
+  assert.equal(app.shouldPoll(silent), true);
+  // the stopped and failed panels keep their copy
+  const stopped = fixture('encounter-stopped.json');
+  assert.ok(app.progressPanel(stopped, ui(stopped)).includes('<h2 id="progressTitle">Processing stopped</h2>'));
+  assert.equal(app.emptyResults(stopped, ui(stopped)), 'Processing stopped before codes were suggested.');
+  for (const page of [html, busy]) assert.deepEqual(leaks(page, doc), []);
+});
+
+test('"Try reading again" asks the server once, with the page\'s headers; a refusal says why in the server\'s words', async () => {
+  const doc = failedReading();
+  const saved = { document: global.document, fetch: global.fetch };
+  const toastEl = { textContent: '', classList: { add() {}, remove() {} } };
+  const elements = new Map([['#toast', toastEl]]);
+  const element = selector => {
+    if (!elements.has(selector)) elements.set(selector, { textContent: '', hidden: false });
+    return elements.get(selector);
+  };
+  const attributes = new Set();
+  const button = { dataset: { action: 'retry-reading' }, disabled: false, toggleAttribute: (name, on) => (on ? attributes.add(name) : attributes.delete(name)) };
+  const asked = [];
+  let answer = { status: 201, body: { retrying: true } };
+  try {
+    global.document = { querySelector: element, querySelectorAll: () => [], cookie: 'cptstudio_csrf=token123' };
+    global.fetch = async (url, init) => {
+      asked.push({ url, method: init.method, body: init.body ? JSON.parse(init.body) : null, csrf: init.headers['X-CSRFToken'], client: init.headers[app.CLIENT_HEADER] });
+      const reply = url === '/api/session' ? { status: 200, body: fixture('session.json') } : answer;
+      return { status: reply.status, ok: reply.status < 300, redirected: false, url: `http://127.0.0.1${url}`, headers: { get: () => 'application/json' }, json: async () => reply.body };
+    };
+    app.state.doc = doc;
+    app.state.route = null;  // nothing is redrawn here: the page's refresh is the route's
+    // the notice's button, clicked: the page's own click handler takes it
+    const target = { closest: selector => (selector === '[data-action]' ? button : null) };
+    await app.onClick({ target });
+    await new Promise(resolve => setImmediate(resolve));
+    const posts = () => asked.filter(item => item.method === 'POST');
+    assert.deepEqual(posts(), [{ url: `/api/encounters/${doc.id}/retry-reading`, method: 'POST', body: {}, csrf: 'token123', client: app.CLIENT_VERSION }]);
+    assert.equal(toastEl.textContent, app.RETRY_ASKED);
+    assert.equal(app.RETRY_ASKED, 'Asked. The documented procedures are being read again.');
+    // a refusal (409, the member's words: customer_api.KNOWN_ERRORS) is said, and the button can be used again
+    asked.length = 0;
+    answer = { status: 409, body: { error: 'Reading documented procedures is paused on this installation; resume processing once it is available again.' } };
+    await app.retryReading(button);
+    assert.deepEqual(posts().map(item => item.url), [`/api/encounters/${doc.id}/retry-reading`]);
+    assert.equal(toastEl.textContent, answer.body.error);
+    assert.equal(button.disabled, false);
+    // nothing is asked without a document on the page
+    asked.length = 0;
+    app.state.doc = null;
+    await app.retryReading(button);
+    assert.deepEqual(asked, []);
+  } finally {
+    global.document = saved.document;
+    global.fetch = saved.fetch;
+    app.state.doc = null;
+    clearTimeout(app.state.toastTimer);
+  }
+});
+
+test('the new path\'s facts are drawn in the server\'s words, answerable only as not documented or cannot confirm', () => {
+  const answers = SERVER('answers.py');
+  const wording = SERVER('interpretation/wording.py');
+  const missing = /^MISSING = \{\n((?:    '[a-z_]+': '[^']*',\n)+)\}/m.exec(wording);
+  assert.ok(missing, 'interpretation.wording.MISSING not found');
+  const facts = [...missing[1].matchAll(/^    '([a-z_]+)': '([^']*)',$/gm)].map(match => [match[1], match[2]]);
+  assert.deepEqual(facts.map(([fact]) => fact), ['event_time', 'event_performer', 'act_target', 'technique', 'statement_scope', 'act_method', 'procedure']);
+  const passage = 'The colonoscope was advanced to the cecum.';
+  for (const [fact, what] of facts) {
+    const prompt = new RegExp(`^    '${fact}': '([^']*)',$`, 'm').exec(answers);
+    assert.ok(prompt, `answers.PROMPTS has no ${fact}`);
+    const row = { id: `d-${fact}`, fact, family_label: 'Colonoscopy', prompt: prompt[1], control: 'confirm', choices: [], allow: ['not_documented', 'cannot_confirm'],
+      document_value: null, entered_value: null, quote: null, affects: ['45378'], saved: null, addendum_allowed: false, missing: what,
+      statement: `CPT Studio could not confirm ${what}.`, passages: [{ text: passage, start: 0, end: passage.length, page: 1 }] };
+    const doc = clone(fixture('encounter-needs-detail.json'));
+    doc.details_needed = [row];
+    const html = app.detailRow(row, doc, ui(doc));
+    assert.ok(html.includes(`<span class="detail-prompt">${esc(prompt[1])}</span>`), fact);
+    assert.ok(html.includes(`<p class="detail-statement">${esc(row.statement)}</p>`), fact);
+    assert.ok(html.includes(`<q class="detail-quote">${esc(passage)}</q><span class="detail-page">Page 1</span>`), fact);
+    // a confirmation: the two answers a member may give, as buttons, and no choice of a clinical value (answers.py:
+    // the allowed answers stay "Not documented" and "Cannot confirm")
+    const offered = [...html.matchAll(/data-detail-choice="([^"]*)"/g)].map(match => match[1]);
+    assert.deepEqual(offered, ['not_documented', 'cannot_confirm'], fact);
+    assert.ok(html.includes('>Not documented</button>') && html.includes('>Cannot confirm</button>'), fact);
+    assert.doesNotMatch(html, /type="radio"|type="date"/, fact);
+    assert.deepEqual(leaks(html, doc), [], fact);
+    assert.doesNotMatch(prompt[1] + what, /gemini|google|argon|interpreter|model/i, fact);
+  }
+});
+
+test('the net names the interpreter\'s vendor and model; argon plasma coagulation in the document is no leak', () => {
+  const doc = clone(fixture('encounter-ready.json'));
+  const planted = clone(doc);
+  planted.codes[0].summary = 'Read by Gemini.';
+  planted.limitations.push('The interpretation came from gemini-4-argon.');
+  planted.activity.push({ event: 'x', summary: 'Google answered', actor: '', actor_kind: 'human', at: '' });
+  const found = leaks(everything(planted), planted).join('\n');
+  for (const word of ['Gemini', 'gemini-', 'Google']) assert.match(found, new RegExp(word), word);
+  // the document's own words are the member's document: an argon plasma coagulation it documents is drawn as it is
+  const own = clone(doc);
+  own.document.text = `${own.document.text}\nHemostasis: argon plasma coagulation was applied to the angioectasia.\n`;
+  assert.deepEqual(leaks(app.sourcePanel(own, app.documentLayout(own)), own), []);
+  // and "argon" alone is clinical wording, never a name
+  assert.deepEqual(forbidden('Argon plasma coagulation (APC) was applied.'), []);
 });

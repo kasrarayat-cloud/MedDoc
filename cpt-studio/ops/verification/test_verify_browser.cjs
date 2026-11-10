@@ -1318,9 +1318,13 @@ test('the date question, the dateless request and the answer the walk reads are 
   // a member date that settles the question is stated as the member's (origin 'user')
   assert.ok(read('studio', 'gi', 'context.py').includes("        merged[name] = Fact(name, value, 'user', (), USER_NOTE)\n    return merged"));
   // the save makes a request unless the run in use answers the answered context's request; a re-check never queues the
-  // second review
+  // second review. The Gemini migration (S10) moved the decision into jobs._decide_after_save, the same for every
+  // context save (FINAL 6.10: "decide exactly as today"), so the line now stands at that function's own depth
   const jobs = read('studio', 'jobs.py');
-  assert.ok(jobs.includes('        if _run_answers(last_run, revision, context) and not owed:'));
+  const decide = jobs.slice(jobs.indexOf('\ndef _decide_after_save('), jobs.indexOf('\ndef _change_context('));
+  assert.ok(decide.startsWith('\ndef _decide_after_save('), 'jobs._decide_after_save not found before _change_context');
+  assert.ok(decide.includes('\n    if _run_answers(last_run, revision, context) and not owed:\n'));
+  assert.ok(jobs.includes('_decide_after_save(encounter, user, revision, previous, context)'), 'the save no longer decides through it');
   assert.ok(jobs.includes('    # The bounded second review is never queued here: a workspace owner or reviewer asks for it'));
 });
 
@@ -3146,6 +3150,8 @@ function fakeSite({ leak = {} } = {}) {
     if (where === `/ops/api/encounters/${id}/trace`) return json(200, state.trace);
     if (where === `/ops/api/encounters/${id}/reports`) return json(200, { reports: [...state.listing, ...state.legacy] });
     if (where === '/ops/' || where === '/ops/assets/ops.js') return bytes(200, 'operator page', { 'content-type': 'text/html' });
+    // the interpreter hold's state (studio.operator.interpreter: interpretation.holds.state), read by the operator only
+    if (where === '/ops/api/interpreter') return json(200, { held: false, standing: [], process_mode: 'live', process_paused: null, message: '' });
     const report = /^\/ops\/api\/reports\/([^/]+)\/download$/.exec(where);
     if (report && state.files.has(report[1])) {
       const data = state.files.get(report[1]);
@@ -3752,4 +3758,252 @@ test('withdrawalTookEffect waits for the withdrawn answer itself, not for the pa
   assert.equal(vb.withdrawalTookEffect({ details_needed: [row({ id: 'd3', affects: ['45380'] })] }, 'extent', '45338', 'ans-1'), false);
   // the row served again, unsaved and offering the addendum: taken effect
   assert.equal(vb.withdrawalTookEffect({ details_needed: [row({ id: 'd3', affects: ['45380'] }), row()] }, 'extent', '45338', 'ans-1'), true);
+});
+
+
+// --- the Gemini migration (S13): the new path the walk reads ---
+//
+// The operator view of a new-path encounter (studio/serializers.py: the assessment's engine label and interpretation
+// section, the routing stand-in labelled derived; the interpreter's run beside the others), on this module's gi-08
+// document. The inventory's shapes are the stored ones (studio/interpretation/store.py: an attribute's value, basis,
+// state, words and reasons; the reach entries of encounter_facts).
+const INV = '5e0b1c2d-0001-4f00-8a00-00000000e001';
+const RUN_ID = '5e0b1c2d-0002-4f00-8a00-00000000e002';
+const attr = (value, state = 'verified', extra = {}) => ({ value, basis: 'stated', state, open: false, words: null, passages: ['P1'], checks: [], literals: {}, reasons: [], ...extra });
+function interpretationSection() {
+  const flex = { id: 'E1', family: 'gi.flex_sig', current: 'yes', kind: attr('examination'), status: attr('performed'), time: attr('current_encounter', 'verified', { basis: 'default' }),
+    target: attr('not_stated', 'absent', { lesion: '', identity: 'none', identity_by: null }), extent: attr('sigmoid_colon'), catalogue_kind: 'examination' };
+  const history = { id: 'E2', family: 'gi.colonoscopy', current: 'no', kind: attr('examination'), status: attr('performed'), time: attr('earlier_encounter'), extent: attr('cecum'), catalogue_kind: 'examination' };
+  return {
+    engine: 'events', engine_version: 'cpt-studio-events@1',
+    record: { engine_version: 'cpt-studio-events@1', interpretation_version: 'gemini-events@1', inventory_version: 'gemini-inventory@1',
+      inventory: { id: INV, sha256: sha('inventory') }, gemini_run: RUN_ID, context: 'ctx-1', member_date_state: { state: 'stated' },
+      sentinel: { legacy_calls: 0, scope: 'assess', tool: 'sys.monitoring', deny_size: 2539, positive_control: 'ok' } },
+    problems: [],
+    inventory: { id: INV, state: 'read', interpretation_version: 'gemini-events@1', inventory_version: 'gemini-inventory@1', sha256: sha('inventory'),
+      text_sha256: sha(TEXT), request_sha256: sha('request'), response_sha256: sha('response'), created_at: '2026-11-09T10:00:05+00:00',
+      counts: { passages: 1, lesions: 0, events: 2, relations: 0 }, events: { passages: [], lesions: [], events: [flex, history], relations: [] },
+      encounter_facts: { reach: [{ event: 'E1', family: 'gi.flex_sig', landmark: 'sigmoid_colon', state: 'verified', reasons: [], attached: true },
+        { event: 'E2', family: 'gi.colonoscopy', landmark: 'cecum', state: 'verified', reasons: [], attached: true }], visits: [] },
+      open_questions: [], verification: {} },
+    run: { id: RUN_ID, provider: 'gemini', purpose: 'interpretation', state: 'succeeded', sent: true, http_status: 200, requested_model: 'gemini-4-argon',
+      returned_model: 'gemini-4-argon', adapter_version: 'gemini-generate@cptstudio-1', request_sha256: sha('request'), response_sha256: sha('response'),
+      usage: { promptTokenCount: 5210, candidatesTokenCount: 1840, totalTokenCount: 7050 }, estimated_cost: '0.0288', reused_from: null,
+      started_at: '2026-11-09T10:00:00+00:00', finished_at: '2026-11-09T10:00:04+00:00', latency_ms: 4120 },
+    hold: null,
+  };
+}
+function newPathEncounter() {
+  const enc = encounter();
+  enc.assessment = { ...enc.assessment, engine_version: 'cpt-studio-events@1', interpretation: interpretationSection() };
+  enc.routing = { version: 'gemini-routing@1', document_kind: '', derived: true, derived_from: 'the event inventory', inventory: INV, inventory_sha256: sha('inventory'),
+    families: [{ family: 'gi.flex_sig', label: 'Flexible sigmoidoscopy', supported: true, status: 'performed', mentions: [], facts: [], missing: [] },
+      { family: 'gi.colonoscopy', label: 'Colonoscopy', supported: true, status: 'historical', mentions: [], facts: [], missing: [] }] };
+  enc.context.facts.setting = { value: null, origin: 'missing', evidence: [], note: 'No place of service or care setting is documented.' };
+  return enc;
+}
+const ROUTED = {
+  families: {
+    'gi.flex_sig': { presence: 'required', status_in: ['performed'], facts: { extent: { value_contains_any: ['sigmoid'] } }, missing_excludes: ['extent'],
+      informational: { facts: { intent: { value_contains_any: ['screening'] } }, mention_statuses_include: ['performed'] } },
+    'gi.colonoscopy': { presence: 'optional', status_in: ['historical'] },
+  },
+  not_performed: ['gi.colonoscopy', 'gi.egd'],
+};
+
+test('the walk\'s new-path labels, D3 facts, step and error actions are the server\'s and the page\'s own', () => {
+  const read = (...parts) => fs.readFileSync(path.join(ROOT, ...parts), 'utf8');
+  const labels = read('studio', 'interpretation', '__init__.py');
+  const label = name => new RegExp(`^${name} = '([^']*)'`, 'm').exec(labels)?.[1];
+  assert.equal(`${label('ENGINE_VERSION').split('@')[0]}@`, vb.EVENTS_ENGINE_PREFIX);
+  assert.equal(label('ROUTING_VERSION'), vb.ROUTING_STAND_IN);
+  assert.deepEqual({ ...vb.INTERPRETER }, { provider: label('PROVIDER'), model: label('MODEL'), purpose: label('PURPOSE') });
+  const members = /^MEMBER_FACTS = \(([^)]*)\)/m.exec(read('studio', 'interpretation', 'facts.py'));
+  assert.ok(members, 'MEMBER_FACTS not found in interpretation/facts.py');
+  assert.deepEqual([...members[1].matchAll(/'([a-z_]+)'/g)].map(m => m[1]).sort(), [...vb.MEMBER_ONLY_FACTS].sort());
+  // the interpret stage folds into "Identifying procedures", as progress.STEP_OF says
+  assert.ok(read('studio', 'progress.py').includes('STEP_OF = {Job.EXTRACT: READING, Job.ANALYZE: IDENTIFYING, INTERPRET: IDENTIFYING,'));
+  assert.equal(vb.STEP_OF_KIND.interpret, 'identifying');
+  assert.equal(vb.foldedSteps({ pipeline: { stages: [{ kind: 'extract', state: 'succeeded', step_outcome: 'done' }, { kind: 'interpret', state: 'failed', step_outcome: 'failed' }] } }).identifying, 'failed');
+  // the notice's button for each action is the page's own (app.js ERROR_ACTIONS)
+  assert.deepEqual(vb.ERROR_ACTION_BUTTONS, Object.fromEntries(Object.entries(app.ERROR_ACTIONS).map(([action, [button]]) => [action, button])));
+  // the /ops/ probes cover the retry and the interpreter hold, each a route of the site; the POST body is refused by both
+  const urls = read('cptstudio', 'urls.py');
+  for (const where of [...vb.OPS_GET_PATHS('<uuid:encounter_id>'), ...vb.OPS_POST_PATHS('<uuid:encounter_id>')]) {
+    assert.ok(urls.includes(`('${where.slice(1)}', operator.`), where);
+  }
+  assert.ok(vb.OPS_GET_PATHS('x').includes('/ops/api/interpreter'));
+  assert.ok(vb.OPS_POST_PATHS('x').includes('/ops/api/encounters/x/retry-reading'));
+  assert.equal(typeof vb.OPS_POST_BODY.override === 'boolean', false, 'retry-reading answers 400 to an override that is not true or false');
+  assert.equal('note' in vb.OPS_POST_BODY, false, 'the hold is never released without a note');
+  // the contract lets the server serve the retry
+  const failedReading = clone(CUST());
+  failedReading.progress.error = { text: 'Reading the documented procedures could not be completed for this document, so no codes were suggested.', action: 'retry_reading' };
+  assert.deepEqual(vb.shapeProblems(failedReading, vb.CONTRACT.encounter), []);
+  failedReading.progress.error.action = 'retry';
+  assert.ok(vb.shapeProblems(failedReading, vb.CONTRACT.encounter).some(problem => problem.startsWith('$.progress.error.action')));
+});
+
+test('checkContext on the new path: setting, billing context and patient status are a member\'s or missing, never the document\'s (D3)', () => {
+  const enc = newPathEncounter();
+  assert.equal(vb.newPath(enc), true);
+  assert.equal(vb.newPath(encounter()), false);
+  const expected = { service_date: { origin_in: ['document'], value_in: ['2026-10-07'] }, setting: { origin_in: ['document'], value_in: ['office'] } };
+  const results = vb.checkContext(expected, enc);
+  assert.deepEqual(failures(results), []);
+  assert.deepEqual(statuses(results, 'context.setting'), ['pass']);
+  assert.deepEqual(statuses(results, 'context.setting.document'), ['skipped']);
+  // a member's value is the member's; a value the context took from the document is D3 broken
+  enc.context.facts.setting = { value: 'office', origin: 'user', evidence: [], note: '' };
+  assert.deepEqual(failures(vb.checkContext(expected, enc)), []);
+  enc.context.facts.setting = { value: 'office', origin: 'document', evidence: [], note: '' };
+  assert.deepEqual(failures(vb.checkContext(expected, enc)), ['context.setting']);
+  delete enc.context.facts.setting;
+  assert.deepEqual(failures(vb.checkContext(expected, enc)), ['context.setting']);
+  // the date of service is still the document's, judged as before
+  const moved = newPathEncounter();
+  moved.context.facts.service_date.value = '2026-10-08';
+  assert.deepEqual(failures(vb.checkContext(expected, moved)), ['context.service_date']);
+  // an expectation of missing needs nothing skipped
+  assert.deepEqual(statuses(vb.checkContext({ patient_status: { origin_in: ['missing'] } }, { ...newPathEncounter(), context: { facts: { patient_status: { value: null, origin: 'missing' } } } }), 'context.patient_status'), ['pass']);
+  // a legacy encounter is judged as before: the document's setting
+  assert.deepEqual(failures(vb.checkContext(expected, encounter())), []);
+});
+
+test('checkRouting on the stand-in: status and presence as before, facts from the verified inventory, no reading\'s lists judged', () => {
+  const enc = newPathEncounter();
+  const results = vb.checkRouting(ROUTED, enc);
+  assert.deepEqual(failures(results), []);
+  assert.deepEqual(statuses(results, 'routing.stand_in'), ['pass']);
+  assert.deepEqual(statuses(results, 'routing.gi.flex_sig.fact.extent'), ['pass']);
+  assert.match(results.find(r => r.id === 'routing.gi.flex_sig.fact.extent').reason, /\["sigmoid colon","sigmoid colon"\]/);
+  for (const id of ['routing.gi.flex_sig.not_missing.extent', 'routing.gi.flex_sig.info.mentions', 'routing.gi.flex_sig.info.fact.intent']) {
+    assert.deepEqual(statuses(results, id), ['skipped'], id);
+  }
+  // a fact only an UNVERIFIED attribute states, or only an earlier examination's, is not stated
+  const unverified = newPathEncounter();
+  const facts = unverified.assessment.interpretation.inventory;
+  facts.encounter_facts.reach[0].state = 'unverified';
+  facts.events.events[0].extent.state = 'unverified';
+  assert.deepEqual(failures(vb.checkRouting(ROUTED, unverified)), ['routing.gi.flex_sig.fact.extent']);
+  const earlier = newPathEncounter();
+  earlier.assessment.interpretation.inventory.events.events[0].current = 'no';
+  assert.deepEqual(failures(vb.checkRouting(ROUTED, earlier)), ['routing.gi.flex_sig.fact.extent']);
+  const elsewhere = newPathEncounter();
+  for (const item of elsewhere.assessment.interpretation.inventory.encounter_facts.reach) item.landmark = 'descending_colon';
+  elsewhere.assessment.interpretation.inventory.events.events[0].extent.value = 'descending_colon';
+  assert.deepEqual(failures(vb.checkRouting(ROUTED, elsewhere)), ['routing.gi.flex_sig.fact.extent']);
+  // a stand-in of another inventory, one not labelled derived, or one carrying a reading's lists, is no stand-in of this assessment
+  const other = newPathEncounter();
+  other.routing.inventory = '5e0b1c2d-0001-4f00-8a00-00000000ffff';
+  assert.deepEqual(failures(vb.checkRouting(ROUTED, other)), ['routing.stand_in']);
+  const unlabelled = newPathEncounter();
+  unlabelled.routing.derived = false;
+  assert.deepEqual(failures(vb.checkRouting(ROUTED, unlabelled)), ['routing.stand_in']);
+  const reading = newPathEncounter();
+  reading.routing.families[0].missing = ['extent'];
+  assert.deepEqual(failures(vb.checkRouting(ROUTED, reading)), ['routing.stand_in']);
+  // statuses and not_performed stand as on a reading
+  const performed = newPathEncounter();
+  performed.routing.families[1].status = 'performed';
+  assert.deepEqual(failures(vb.checkRouting(ROUTED, performed)).sort(), ['routing.gi.colonoscopy.not_performed', 'routing.gi.colonoscopy.status']);
+  const absent = newPathEncounter();
+  absent.routing.families = absent.routing.families.slice(1);
+  assert.deepEqual(failures(vb.checkRouting(ROUTED, absent)), ['routing.gi.flex_sig.present']);
+  // each fact the inventory states: a target, a visit's basis, a cannulation; one it does not state is not judged
+  const values = (family, name, events, facts = {}) => vb.standInValues({ assessment: { interpretation: { inventory: { events: { events }, encounter_facts: facts } } } }, family, name);
+  assert.deepEqual(values('gi.eus', 'target', [{ id: 'E1', family: 'gi.eus', current: 'yes', target: attr('pancreas', 'verified', { lesion: '' }) }]), ['pancreas']);
+  assert.deepEqual(values('gi.eus', 'target', [{ id: 'E1', family: 'gi.eus', current: 'yes', target: attr('not_stated', 'verified', { lesion: 'L1' }) }]), ['lesion']);
+  assert.deepEqual(values('gi.office_em', 'em_basis', [{ id: 'E1', family: 'gi.office_em', current: 'yes' }],
+    { visits: [{ event: 'E1', basis: 'medical_decision_making', basis_state: 'verified' }] }), ['medical decision making']);
+  assert.deepEqual(values('gi.ercp', 'cannulation', [{ id: 'E1', family: 'gi.ercp', current: 'yes', kind: attr('cannulation'), status: attr('performed') }]), ['performed']);
+  assert.deepEqual(values('gi.ercp', 'cannulation', [{ id: 'E1', family: 'gi.ercp', current: 'yes', kind: attr('cannulation'), status: attr('attempted_not_completed') }]), []);
+  assert.equal(values('gi.colonoscopy', 'intent', []), null);
+  // a legacy routing is read as before (the stand-in check is the new path's alone)
+  assert.equal(vb.checkRouting(ROUTED, encounter()).some(r => r.id === 'routing.stand_in'), false);
+});
+
+test('checkInterpretation: the inventory read, the interpreter\'s one model asked and answering, no legacy execution, the trace beside it', () => {
+  const op = newPathEncounter();
+  const trace = { interpretation: interpretationSection() };
+  const good = vb.checkInterpretation(op, trace);
+  assert.deepEqual(failed(good), []);
+  assert.deepEqual(ids(good), ['provenance.interpretation:pass', 'provenance.interpretation.usage:pass', 'provenance.interpretation.trace:pass']);
+  // checkProvenance adds them on the new path only
+  assert.ok(ids(vb.checkProvenance(op, trace)).includes('provenance.interpretation:pass'));
+  assert.equal(ids(vb.checkProvenance(OP(), TRACE())).some(id => id.startsWith('provenance.interpretation')), false);
+  const broken = [
+    [enc => { delete enc.assessment.interpretation; }, 'no interpretation section'],
+    [enc => { enc.assessment.interpretation = { engine: 'legacy', engine_version: 'cpt-studio-validation@10', record: null }; }, 'legacy'],
+    [enc => { enc.assessment.interpretation.inventory.state = 'refused'; }, 'event inventory was refused'],
+    [enc => { enc.assessment.interpretation.run.requested_model = 'gemini-2.5-pro'; }, 'asked for'],
+    [enc => { enc.assessment.interpretation.run.returned_model = 'gemini-4-argon-latest'; }, 'answered by'],
+    [enc => { enc.assessment.interpretation.run.provider = 'corti'; }, 'corti/interpretation'],
+    [enc => { enc.assessment.interpretation.run.response_sha256 = ''; }, 'sha256'],
+    [enc => { enc.assessment.interpretation.record.sentinel.legacy_calls = 1; }, 'execution(s) of the legacy reader'],
+    [enc => { enc.assessment.interpretation.record.gemini_run = 'another-run'; }, 'another run'],
+    [enc => { enc.assessment.interpretation.problems = ['The record names another context than the assessment does.']; }, 'another context'],
+  ];
+  for (const [mutate, word] of broken) {
+    const enc = newPathEncounter();
+    mutate(enc);
+    const results = vb.checkInterpretation(enc, trace);
+    assert.deepEqual(failed(results), ['provenance.interpretation'], word);
+    assert.match(results[0].reason, new RegExp(word.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')), word);
+  }
+  // the trace: read but without the section, or naming another run
+  assert.deepEqual(failed(vb.checkInterpretation(op, {})), ['provenance.interpretation.trace']);
+  assert.deepEqual(failed(vb.checkInterpretation(op, { interpretation: { ...interpretationSection(), run: { id: 'x' } } })), ['provenance.interpretation.trace']);
+  assert.deepEqual(failed(vb.checkInterpretation(op, null)), ['provenance.interpretation.trace']);
+  assert.equal(ids(vb.checkInterpretation(op, undefined)).some(id => id.endsWith('.trace:pass') || id.endsWith('.trace:fail')), false, 'a trace not read is not judged');
+  // a sent answer without its usage is a warning; a reuse makes no request and needs none
+  const unmetered = newPathEncounter();
+  unmetered.assessment.interpretation.run.usage = {};
+  assert.deepEqual(statuses(vb.checkInterpretation(unmetered, trace), 'provenance.interpretation.usage'), ['warn']);
+  const reused = newPathEncounter();
+  Object.assign(reused.assessment.interpretation.run, { sent: false, reused_from: 'r0', usage: {} });
+  assert.deepEqual(failed(vb.checkInterpretation(reused, trace)), []);
+});
+
+test('checkProgressDom: the real page offers "Try reading again" for a failed reading, and a paused reading is held still', () => {
+  const failedDoc = customerFixture('encounter-failed.json');
+  failedDoc.progress.message = 'Reading the documented procedures could not be completed for this document, so no codes were suggested.';
+  failedDoc.progress.error = { text: failedDoc.progress.message, action: 'retry_reading' };
+  const results = vb.checkProgressDom(failedDoc, pageDom(failedDoc), []);
+  assert.deepEqual(failed(results), []);
+  assert.ok(ids(results).includes('progress.dom.error_action:pass'));
+  const bare = pageDom(failedDoc, html => html.replace(/<button type="button" class="button secondary" data-action="retry-reading">Try reading again<\/button>/, ''));
+  assert.deepEqual(failed(vb.checkProgressDom(failedDoc, bare, [])), ['progress.dom.error_action']);
+  // the page's other actions are judged the same way; Resume stays the panel's own
+  const upload = customerFixture('encounter-failed.json');
+  assert.ok(ids(vb.checkProgressDom(upload, pageDom(upload), [])).includes('progress.dom.error_action:pass'));
+  assert.equal(ids(vb.checkProgressDom(customerFixture('encounter-stopped.json'), pageDom(customerFixture('encounter-stopped.json')), [])).some(id => id.startsWith('progress.dom.error_action')), false);
+  // a reading paused on the installation: the stopped state, the paused phase, nothing running - held as still as a stop
+  const paused = customerFixture('encounter-stopped.json');
+  paused.progress.phase = 'paused';
+  paused.progress.message = 'Reading documented procedures is paused on this installation. Nothing was sent. Resume once it is available again.';
+  paused.progress.error = { text: paused.progress.message, action: 'resume' };
+  const still = vb.checkProgressDom(paused, pageDom(paused), []);
+  assert.deepEqual(failed(still), []);
+  assert.ok(ids(still).includes('progress.dom.settled_still:pass'));
+  assert.deepEqual(failed(vb.checkProgressDom(paused, pageDom(paused), ['li.progress-step (pulse)'])), ['progress.dom.settled_still']);
+});
+
+test('the denylist holds the interpreter\'s names and the new operator identifiers; argon in the document is no hit', () => {
+  const op = newPathEncounter();
+  const values = vb.denyValuesFrom(op, { interpretation: interpretationSection() });
+  for (const want of [INV, RUN_ID, 'gemini-4-argon', 'gemini-generate@cptstudio-1', 'cpt-studio-events@1', 'gemini-events@1', 'gemini-inventory@1', sha('request'), sha('inventory')]) {
+    assert.ok(values.includes(want), want);
+  }
+  assert.equal(values.some(value => /^argon$/i.test(value)), false);
+  const ctx = vb.scanContext({ documentText: `${TEXT}Hemostasis: argon plasma coagulation was applied.\n`, denyValues: values });
+  assert.deepEqual(vb.scanJson({ why: { quotes: [{ text: 'Hemostasis: argon plasma coagulation was applied.' }] } }, ctx), []);
+  assert.deepEqual(vb.scanText('Argon plasma coagulation is a treatment.', ctx, 'dom'), []);
+  assert.deepEqual(hitIds(vb.scanJson({ summary: 'Read by gemini-4-argon.' }, ctx)), ['deny_value', 'interpreter_model', 'model_id', 'provider_name']);
+  assert.deepEqual(hitIds(vb.scanJson({ interpretation: {} }, ctx)), ['forbidden_key']);
+  assert.deepEqual(hitIds(vb.scanJson({ limitations: [`Inventory ${INV}`] }, ctx)), ['deny_value']);
+  // a customer report that quotes the document's argon is clean; one naming the interpreter is not
+  const file = `Approved codes\n  1. 45331\n     "Hemostasis: argon plasma coagulation was applied."\nLimitations\n`;
+  assert.deepEqual(vb.scanFile(file, ctx, 'approved.txt', 'txt'), []);
+  assert.deepEqual(hitIds(vb.scanFile(`${file}  Read by Google.\n`, ctx, 'approved.txt', 'txt')), ['provider_name']);
 });

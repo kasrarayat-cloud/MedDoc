@@ -44,6 +44,12 @@ Format @4 adds, and these are checked only in a file that names that format:
            conflict row per persisted conflict; every source passage of a
            proposal row is the API's and quotes the revision text exactly
 
+The Gemini migration's new path (cpt-studio/design: FINAL.md 4.3, 8.3), read
+where the encounter JSON's assessment is the events engine's: its services
+record is a stub with no service, conflict or act (so no conflict entry is
+listed and no act's evidence is quoted: the anchors are support.source), and a
+contradiction is one line, the detail of its 'services.conflicts' check.
+
 And only where the encounter JSON records it: a bounded second review (its
 Origin lines, alternatives and usage entry), and a member date conflict's hold
 (PROVIDER USAGE lists it as recorded with nothing sent, no usage and no hashes,
@@ -591,11 +597,14 @@ def _txt_documented(doc, name, text, sections, api, revision_text) -> list[Resul
                       f'section {"missing" if heading is None else "differs"}: listed {sorted(listed)}, persisted '
                       f'{sorted(expected)}'))
     conflict_lines = body.get('CONFLICTS IN THE RECORD', [])
-    named = {(line.split('(', 1)[1].split(')', 1)[0], line[4:].split(' (', 1)[0].replace(' ', '_'))
-             for line in conflict_lines if line.startswith('  - ') and '(' in line}
-    out.append(Result(doc, name, 'txt.conflicts', 'pass' if named == conflicts else 'fail',
-                      f'{len(named)} conflict(s) listed, as persisted' if named == conflicts else
-                      f'listed {sorted(named)}, persisted {sorted(conflicts)}'))
+    if events_engine(api):
+        out.append(_txt_event_conflicts(doc, name, conflict_lines, api))
+    else:
+        named = {(line.split('(', 1)[1].split(')', 1)[0], line[4:].split(' (', 1)[0].replace(' ', '_'))
+                 for line in conflict_lines if line.startswith('  - ') and '(' in line}
+        out.append(Result(doc, name, 'txt.conflicts', 'pass' if named == conflicts else 'fail',
+                          f'{len(named)} conflict(s) listed, as persisted' if named == conflicts else
+                          f'listed {sorted(named)}, persisted {sorted(conflicts)}'))
     # A passage over several lines is one entry (the renderer continues it at nine spaces and closes it on its last
     # line), read like an evidence entry; an opener with no closing citation cannot be checked and fails.
     entries, unclosed = scan_entries(text.splitlines(), SOURCE_OPENER, SOURCE_OPENER)
@@ -605,6 +614,25 @@ def _txt_documented(doc, name, text, sections, api, revision_text) -> list[Resul
                       f'source passages that do not quote the revision text at their offsets: {wrong}' if wrong
                       else f'{len(entries)} source passage(s) quote the revision text exactly at their offsets'))
     return out
+
+
+LEGACY_CONFLICT_END = '; both sides kept, neither chosen:'  # reports._conflicts_section's line of a stored conflict
+EVENT_CONFLICTS_HEAD = 'Conflicting statements'  # every services.conflicts warning's detail starts so (assess.py)
+
+
+def _txt_event_conflicts(doc, name, lines, api) -> Result:
+    """CONFLICTS IN THE RECORD of a new-path assessment: the services.conflicts check's detail as its one line where the
+    check warns, and no conflict entry of a stored services record - the stub stores none - nor a warning the check does
+    not make (reports._conflicts_section over reports._event_services)."""
+    note = conflict_note(api)
+    entries = [line for line in lines if line.startswith('  - ')]
+    stored = [line for line in entries if line.endswith(LEGACY_CONFLICT_END)]
+    worded = [line for line in entries if line[4:].startswith(EVENT_CONFLICTS_HEAD)]
+    want = [f'  - {note}'] if note else []
+    ok = not stored and worded == want
+    return Result(doc, name, 'txt.conflicts', 'pass' if ok else 'fail',
+                  ('the services.conflicts warning is listed, as recorded' if note else 'no conflict listed, none recorded')
+                  if ok else f'listed {worded + stored}; recorded {want or "no conflict"}')
 
 
 # --- harness@2 (cpt-studio/HARNESS.md 12.6) -------------------------------------------------------------------------
@@ -1002,14 +1030,40 @@ def _csv_second_review(doc, name, items_rows, columns, api) -> Result:
                   str(wrong) if wrong else f'{len(items_rows)} row(s) carry their persisted origin')
 
 
+# The Gemini migration's new path (design/FINAL.md 4.3, 8.3): an assessment the events engine made
+# (interpretation.is_new_assessment: its engine label) carries the stub services record - no service, conflict or act -
+# and words a contradiction in its encounter check 'services.conflicts', which reports._event_services prints as the one
+# line of CONFLICTS IN THE RECORD (conflict_note).
+EVENTS_ENGINE = 'cpt-studio-events@'
+CONFLICTS_CHECK = 'services.conflicts'
+
+
+def events_engine(api: dict) -> bool:
+    """Whether the encounter JSON's assessment was made by the events engine (the new path)."""
+    return str(((api or {}).get('assessment') or {}).get('engine_version') or '').startswith(EVENTS_ENGINE)
+
+
+def conflict_note(api: dict) -> str:
+    """The new path's line of CONFLICTS IN THE RECORD (reports._event_services' conflict_note): the detail of the
+    assessment's 'services.conflicts' check where it warns; '' where it does not, or for a legacy assessment."""
+    if not events_engine(api):
+        return ''
+    for check in (api.get('assessment') or {}).get('encounter_checks') or []:
+        if isinstance(check, dict) and check.get('id') == CONFLICTS_CHECK and check.get('status') == 'warn':
+            return str(check.get('detail') or '')
+    return ''
+
+
 def _documented_expected(api: dict):
     """(coding state, {(service, label)} unresolved, {(service, subject)} conflicts, {proposal id: [source spans]})
-    as the encounter JSON persists them."""
+    as the encounter JSON persists them. A new-path assessment persists no conflict entry (its stub's list is empty and
+    nothing else is read as one): its contradictions are conflict_note's one line."""
     assessment = api.get('assessment') or {}
     completeness = assessment.get('completeness') or {}
     inventory = assessment.get('services') or {}
     unresolved = {(u.get('service', ''), u.get('label', '')) for u in completeness.get('unresolved_items') or []}
-    conflicts = {(c.get('service', ''), c.get('subject', '')) for c in inventory.get('conflicts') or []}
+    conflicts = set() if events_engine(api) else {(c.get('service', ''), c.get('subject', ''))
+                                                  for c in inventory.get('conflicts') or []}
     sources = {p.get('id'): list((p.get('support') or {}).get('source') or []) for p in assessment.get('proposals') or []}
     return ((api.get('coding') or {}).get('state'), unresolved, conflicts, sources)
 
@@ -1315,7 +1369,10 @@ def agent_reviewed(p: dict) -> bool:
 
 
 def act_index(api: dict) -> dict:
-    """CPT Studio's located acts by id, from the operator view's recorded reading (assessment.services)."""
+    """CPT Studio's located acts by id, from the operator view's recorded reading (assessment.services), whatever the
+    engine - as review.act_index reads it for customer_api._act_index and review.approved_items. A new-path assessment's
+    services record is the stub (design/FINAL.md 4.3, 8.3), which carries no act, so its anchors are its support.source
+    alone."""
     out = {}
     services = ((api.get('assessment') or {}).get('services') or {}).get('services')
     for service in services if isinstance(services, list) else []:

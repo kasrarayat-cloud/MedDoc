@@ -47,9 +47,14 @@ const PEER_STAGES = [['astra_peer', 'Peer review: Astra (OpenAI GPT-6 Astra)'], 
 const PEER_KINDS = new Set(PEER_STAGES.map(([kind]) => kind));
 const FIRST_ASSESS_LABEL = 'First assessment: check the frozen first readings against references';
 const SECOND_ASSESS_STAGE = ['assess2', 'Second assessment: reconcile both phases (final)'];
+// The Gemini migration (cpt-studio/design: FINAL.md 3.2, 6.3-6.4, 8.3, 11): the interpret stage reads the document into
+// an event inventory through Gemini, and analyze then derives the context from that inventory, reading nothing. Their rows
+// are drawn so only where an interpret stage exists: an earlier encounter's card is drawn as before.
+const INTERPRET_STAGE = ['interpret', 'Gemini: read the documented procedures into an event inventory'];
+const DERIVE_STAGE_LABEL = 'Derive the context from the event inventory';
 // The stages that start a chain or read the document afresh: an assess after one of them, with no peer stage between,
 // is a first assessment (phasedJobs).
-const CHAIN_KINDS = new Set(['extract', 'analyze', 'predict', 'astra', 'fable']);
+const CHAIN_KINDS = new Set(['extract', 'interpret', 'analyze', 'predict', 'astra', 'fable']);
 const STAGE_STATES = { queued: 'Waiting', running: 'In progress', succeeded: 'Done', failed: 'Failed', unknown: 'Outcome unknown', cancelled: 'Stopped' };
 const STAGE_LOOKS = { queued: ['muted', 'clock'], running: ['pending running', 'clock'], succeeded: ['', 'circle-check'], failed: ['pending', 'close'], unknown: ['pending', 'info'], cancelled: ['muted', 'stop'] };
 // The harness participants (HARNESS.md 1), keyed as the API names them in harness.participants, proposed_by,
@@ -117,17 +122,37 @@ const REFERENCE_CHECK_LABELS = { passed: 'passed', attention: 'needs attention',
 const POSITION_WORDS = { proposed: 'proposed it', not_proposed: 'did not propose it', advised_not_to_code: 'advised not to code it', not_run: 'gave no reading' };
 const DECISION_WORDS = { approved: 'approved{by}', rejected: 'rejected{by}', reinstated: 'reinstated for review{by}; not approved', exclusion_confirmed: 'exclusion confirmed{by}', undecided: 'not decided yet' };
 const NOT_CODED_WORDS = { not_performed_at_this_encounter: 'not performed at this encounter', included_in_another_code: 'included in another code', insufficient_documentation: 'insufficient documentation', outside_gi_scope: 'outside the GI scope', other: 'another reason' };
-const RUN_PROVIDERS = { corti: 'Corti', replay: 'Replay', astra: 'Astra', fable: 'Fable' };
-const RUN_PURPOSES = { primary: 'Primary request', second_review: 'Second review', independent: 'Independent review', peer_review: 'Peer review' };
+const RUN_PROVIDERS = { corti: 'Corti', replay: 'Replay', astra: 'Astra', fable: 'Fable', gemini: 'Gemini' };
+const RUN_PURPOSES = { primary: 'Primary request', second_review: 'Second review', independent: 'Independent review', peer_review: 'Peer review', interpretation: 'Interpretation' };
 // The runs the Activity tab names by purpose; a primary request reads as before.
-const NAMED_PURPOSES = new Set(['second_review', 'independent', 'peer_review']);
+const NAMED_PURPOSES = new Set(['second_review', 'independent', 'peer_review', 'interpretation']);
+// The interpreter's runs (purpose interpretation): Gemini reading the documented procedures (FINAL 6.3).
+const INTERPRETER_TITLE = 'Gemini, the interpreter';
 // harness@2's words (HARNESS.md 11.1-11.4, 12.5): the phase a participant proposed a code or located a passage in, a
 // peer-review position, an assessment's phase, and the facts a reviewer confirms - the engine's own labels.
 const PROPOSED_PHASES = { independent: 'independent reading', peer_review: 'after peer review' };
 const LOCATED_PHASES = { independent: 'in its independent first reading', peer_review: 'in peer review' };
 const PEER_POSITIONS = { supports: 'supports it', disputes: 'disputes it', cannot_tell: 'cannot tell' };
 const ASSESSMENT_PHASES = { 0: 'No model participant: Corti only', 1: 'Phase 1: the frozen first readings', 2: 'Phase 2: after peer review' };
-const FINDING_FACTS = { service_date: 'Date of service', performed_status: 'Performed at this encounter', extent: 'Extent reached', target: 'Structure examined', cannulation: 'Cannulation outcome', em_basis: 'Basis for the visit level (total time or medical decision making)' };
+// The facts a new-path code asks about (FINAL 7.4, 8.3; answers.PROMPTS and interpretation.wording.MISSING), in the
+// console's words: each names what CPT Studio could not confirm of one act, never that the document leaves it out.
+const EVENT_FACTS = {
+  event_time: 'Done at this encounter, on the date of service', event_performer: 'Who performed the act',
+  act_target: 'The lesion or site the act was done on', technique: 'The technique used',
+  statement_scope: 'Whether a statement applies to the act', act_method: 'The method the lesion was removed by',
+  procedure: 'The procedure the act was done in',
+};
+const FINDING_FACTS = { service_date: 'Date of service', performed_status: 'Performed at this encounter', extent: 'Extent reached', target: 'Structure examined', cannulation: 'Cannulation outcome', em_basis: 'Basis for the visit level (total time or medical decision making)', ...EVENT_FACTS };
+// An event's attributes in the order the interpretation section lists them (the contract's 4.2 record), each with its
+// label; a value's underscores are read as spaces.
+const EVENT_ATTRIBUTES = [['procedure', 'Procedure'], ['kind', 'Act'], ['status', 'Status'], ['time', 'Time'], ['performer', 'Performer'],
+  ['target', 'Target'], ['technique', 'Technique'], ['scope', 'Scope'], ['purpose', 'Purpose'], ['extent', 'Extent'], ['completion', 'Completion'],
+  ['part_of', 'Part of'], ['sequence', 'Sequence']];
+const ATTRIBUTE_STATES = { verified: 'verified', unverified: 'unverified', absent: 'absent', discarded: 'discarded' };
+const BASES = { stated: 'stated', default: 'the frame default', absent: 'not given' };
+const INTERPRETATION_TAB = ['interpretation', 'Interpretation'];
+const RETRY_DONE = 'The reading is tried once more, as a stage of its own; the release of the failed attempt is recorded.';
+const HOLD_RELEASED = 'The interpreter hold was released and the release recorded. Members can now resume the documents it paused.';
 const CANDIDATE_NOTE = 'A candidate answers nothing until a reviewer confirms it. Agreement between participants never verifies or confirms one, and a confirmation approves no code.';
 // What a verified candidate's consistency check established, by fact (HARNESS.md 12.5, as refutation round 2 left it):
 // every fact's passage lies in no history, plan or indication section (VERIFIED_SECTIONS), and a status is read by CPT
@@ -726,7 +751,8 @@ function inviteMarkup(encounters) {
 }
 
 function overviewView() {
-  return `<section class="view-entrance"><div class="heading-row home-heading"><div><span class="eyebrow">A CLEARER VIEW OF EVERY CODE</span><h1>Precision starts<br>with the <em>evidence.</em></h1><p>A focused workspace to turn clinical documentation into evidence-backed CPT suggestions.</p></div><div class="heading-actions"><span class="only-tag">CPT ONLY</span><button type="button" class="button primary" data-action="upload" aria-label="New document">${icon('plus')}<span class="desktop-label">New document</span></button></div></div>
+  const held = state.session?.interpreter?.held === true ? interpreterHoldCard(state.session.interpreter) : '';
+  return `<section class="view-entrance">${held}<div class="heading-row home-heading"><div><span class="eyebrow">A CLEARER VIEW OF EVERY CODE</span><h1>Precision starts<br>with the <em>evidence.</em></h1><p>A focused workspace to turn clinical documentation into evidence-backed CPT suggestions.</p></div><div class="heading-actions"><span class="only-tag">CPT ONLY</span><button type="button" class="button primary" data-action="upload" aria-label="New document">${icon('plus')}<span class="desktop-label">New document</span></button></div></div>
   <div class="home-grid"><section class="upload-panel"><div class="panel-heading">${icon('file')}<h2>Start a coding review</h2><span class="small-badge">One encounter at a time</span></div><button type="button" class="drop-zone" id="overviewDrop" data-action="upload"><span class="upload-icon">${icon('upload')}</span><strong>Bring the original document.</strong><span>Choose a file, drop it here or paste the text</span><span>PDF, DOCX or TXT</span></button><div class="upload-footnote">${icon('info')}<span>Synthetic documents only. Do not upload real patient information.</span></div><div class="sample-invite" id="recentInvite">${inviteMarkup(null)}</div></section>
   <aside class="story-panel"><span class="eyebrow">BUILT AROUND THE CLINICAL STORY</span><h2>A clearer path.<br>From note to code.</h2><ol class="workflow-list"><li><span class="workflow-number">01</span><span><strong>Read the whole note</strong><p>Begin with the original documentation and encounter context.</p></span></li><li><span class="workflow-number">02</span><span><strong>Connect every suggestion</strong><p>See the source passages that support the proposed code.</p></span></li><li><span class="workflow-number">03</span><span><strong>Make a clear decision</strong><p>Review the evidence and resolve gaps before approval.</p></span></li></ol><div class="story-bottom">${icon('link')}Evidence beside the decision. Always.</div></aside></div>
   <div class="section-heading"><h2>Recent documents</h2><a href="#documents">View all ${icon('arrow')}</a></div><div class="document-list" id="documentsTable">${LIST_HEADER}<p class="empty-state">Loading documents…</p></div></section>`;
@@ -1624,7 +1650,11 @@ function usageText(run) {
     return run.usage_basis === 'provider_reported_credits_not_usd' ? `${credits} provider-reported credits (not USD)` : `${credits} credits (basis: ${run.usage_basis || 'not recorded'})`;
   }
   const tokens = [['input_tokens', 'input'], ['output_tokens', 'output']].filter(([key]) => Number.isInteger(run.usage?.[key])).map(([key, word]) => `${run.usage[key]} ${word} tokens`);
-  return tokens.length ? `${tokens.join(', ')} (vendor-reported; basis: ${run.usage_basis || 'not recorded'})` : 'Usage not reported';
+  if (tokens.length) return `${tokens.join(', ')} (vendor-reported; basis: ${run.usage_basis || 'not recorded'})`;
+  // Gemini reports usageMetadata's counts (the interpreter's runs; FINAL 6.3): prompt, output, thinking and total tokens
+  const counts = [['promptTokenCount', 'prompt'], ['candidatesTokenCount', 'output'], ['thoughtsTokenCount', 'thinking'], ['totalTokenCount', 'total']]
+    .filter(([key]) => Number.isInteger(run.usage?.[key])).map(([key, word]) => `${run.usage[key]} ${word} tokens`);
+  return counts.length ? `${counts.join(', ')} (vendor-reported; basis: ${run.usage_basis || 'not recorded'})` : 'Usage not reported';
 }
 
 function activityPanel(doc) {
@@ -1657,6 +1687,13 @@ function harnessParticipant(doc, name) {
   return participants.find(item => item && typeof item === 'object' && item.name === name) || null;
 }
 
+// The stage rows of a revision's jobs: STAGES, with the interpret stage after extract and analyze read as the derivation
+// it is on the new path wherever an interpret stage exists (FINAL 6.3-6.4); exactly STAGES otherwise.
+function stagesFor(stages) {
+  if (!(Array.isArray(stages) ? stages : []).some(item => item?.kind === 'interpret')) return STAGES;
+  return STAGES.flatMap(([kind, label]) => (kind === 'extract' ? [[kind, label], INTERPRET_STAGE] : [[kind, kind === 'analyze' ? DERIVE_STAGE_LABEL : label]]));
+}
+
 // Each row shows the LATEST job of its stage (a context change, a resume or a second review runs a stage again: the
 // first one's "Done" was shown while the new one waited), and the second review's row appears once one was asked for.
 // Astra's and Fable's rows appear once their stage exists or the API's harness lists them; one not configured on this
@@ -1666,7 +1703,8 @@ function progressCard(doc) {
   const stages = Array.isArray(doc.pipeline?.stages) ? doc.pipeline.stages : [];
   const listed = kind => !PARTICIPANT_STAGES.has(kind) || stages.some(item => item?.kind === kind) || Boolean(harnessParticipant(doc, kind));
   const phased = harness2(doc) || stages.some(item => PEER_KINDS.has(item?.kind)) ? phasedJobs(stages) : null;
-  const base = phased ? [...STAGES.map(([kind, label]) => [kind, kind === 'assess' ? FIRST_ASSESS_LABEL : label]), ...PEER_STAGES, SECOND_ASSESS_STAGE] : STAGES;
+  const chain = stagesFor(stages);
+  const base = phased ? [...chain.map(([kind, label]) => [kind, kind === 'assess' ? FIRST_ASSESS_LABEL : label]), ...PEER_STAGES, SECOND_ASSESS_STAGE] : chain;
   const rows = (stages.some(item => item?.kind === 'review2') ? [...base, SECOND_REVIEW_STAGE] : base).filter(([kind]) => listed(kind));
   const items = rows.map(([kind, label]) => {
     const stage = phased && Object.hasOwn(phased, kind) ? phased[kind] : [...stages].reverse().find(item => item?.kind === kind);
@@ -1889,18 +1927,64 @@ function reconcileCard(doc) {
   const run = (doc.provider_runs || []).filter(item => item.state === 'unknown' && !item.reconciled).pop();
   const canReview = doc.permissions?.can_review;
   // An independent participant's request is named: its unknown outcome blocks every send for the encounter too.
-  const participant = PARTICIPANT_STAGES.has(run?.provider) ? PARTICIPANT_TITLES[run.provider] : '';
-  const detail = run ? `<div class="clarification-question"><strong>Unreconciled request</strong><br>${escapeHtml([participant, run.purpose === 'second_review' || run.purpose === 'peer_review' ? RUN_PURPOSES[run.purpose] : '', formatTimestamp(run.created_at), run.error].filter(Boolean).join(' · ') || 'No further detail was recorded.')}</div>` : '';
+  // The interpreter's run too: its unknown outcome is reconciled before the document is read again (FINAL 6.9).
+  const participant = PARTICIPANT_STAGES.has(run?.provider) ? PARTICIPANT_TITLES[run.provider] : run?.purpose === 'interpretation' ? INTERPRETER_TITLE : '';
+  const detail = run ? `<div class="clarification-question"><strong>Unreconciled request</strong><br>${escapeHtml([participant, ['second_review', 'peer_review', 'interpretation'].includes(run.purpose) ? RUN_PURPOSES[run.purpose] : '', formatTimestamp(run.created_at), run.error].filter(Boolean).join(' · ') || 'No further detail was recorded.')}</div>` : '';
   const form = run && canReview ? `<form id="reconcileForm" data-run="${escapeHtml(run.id)}" novalidate><label class="field-label">Reconciliation note<textarea id="reconcileNote" rows="3" maxlength="2000" placeholder="What is known about this request…"></textarea></label><p class="form-error" id="reconcileError" role="alert" hidden></p><button type="submit" class="button primary">Record reconciliation ${icon('check')}</button></form>` : '';
   const viewer = run && !canReview ? '<p class="checks-disclaimer">Only owners and reviewers can record a reconciliation.</p>' : '';
   return `<div class="clarification-card"><span class="clarification-icon">${icon('help')}</span><h3>The provider outcome<br>is unknown.</h3><p>A request was sent but no response was recorded. Nothing is resent automatically: record what is known before one new attempt is allowed.</p>${detail}${form}${viewer}</div>`;
 }
 
+// The interpreter hold (FINAL 11.2), installation-wide: each standing hold with what it means and what set it, this web
+// process's own interpreter mode beside it (a worker's mode is the worker's own), and its recorded release - the same act
+// as `manage.py interpreter_hold --release` - with a note saying why the hold may end. Members then Resume.
+function interpreterHoldCard(interpreter) {
+  const standing = objects(interpreter?.standing);
+  const lines = [
+    'Reading documented procedures is paused on this installation: each interpret stage ends paused and sends nothing to Gemini until the hold is released.',
+    ...standing.map(hold => [`Hold ${textValue(hold.id) || 'not identified'}: ${textValue(hold.means) || 'an unrecorded reason'} (${textValue(hold.reason) || 'no reason recorded'})`,
+      Number.isInteger(hold.http_status) ? `HTTP ${hold.http_status}` : 'no HTTP status', textValue(hold.vendor_status),
+      Number.isInteger(hold.violations) && hold.violations > 0 ? plural(hold.violations, 'quota violation', 'quota violations') : '',
+      `set ${formatTimestamp(hold.set_at) || 'at a time not recorded'} by the run ${textValue(hold.run) || 'not recorded'}`].filter(Boolean).join(' · ')),
+    `This web process's interpreter mode: ${textValue(interpreter?.process_mode) || 'not reported'} (the worker's mode is its own).`,
+  ];
+  const form = '<form id="releaseHoldForm" novalidate><label class="field-label">Release note<textarea id="releaseHoldNote" rows="3" maxlength="2000" placeholder="Why the hold may end…"></textarea></label><p class="form-error" id="releaseHoldError" role="alert" hidden></p>'
+    + `<button type="submit" class="button primary">Release the hold ${icon('check')}</button></form>`;
+  return `<div data-interpreter-hold>${infoCard('Reading is paused<br>on this installation.', lines, form)}</div>`;
+}
+
+// The latest stage of the revision when it is an interpret stage that FAILED (nothing runs after a failed reading), else
+// null: the reading could not be completed, and the recorded retry applies (FINAL 11.3).
+function failedReading(doc) {
+  const stages = Array.isArray(doc?.pipeline?.stages) ? doc.pipeline.stages : [];
+  const latest = stages[stages.length - 1];
+  return !doc?.pipeline?.busy && latest?.kind === 'interpret' && latest.state === 'failed' ? latest : null;
+}
+
+// A reading that could not be completed (FINAL 6.3, 11.3): what its stage and its run recorded, and the recorded retry -
+// one more attempt, as a stage of its own, the failed attempt released for that attempt only. An answer cut off at its
+// output limit is never retried for a member (C5); an operator may override that refusal here, and the audit row records
+// the override with the operator's name. A refusal is said in the server's words. The retry is an operator's act (the
+// operator grant, never a workspace membership: studio.operator.retry_reading), offered while nothing runs.
+function retryReadingCard(doc, stage, run) {
+  const lines = [
+    stage?.error ? `${INTERPRET_STAGE[1]}: ${stage.error}` : 'The reading of this document could not be completed.',
+    run ? [`Interpreter run ${textValue(run.id) || 'not identified'}`, lookup(RUN_STATES, run.state, textValue(run.state) || 'state not recorded'),
+      Number.isInteger(run.http_status) ? `HTTP ${run.http_status}` : '', textValue(run.error)].filter(Boolean).join(' · ') : '',
+    'Nothing is sent again by itself.',
+  ];
+  const form = !doc.pipeline?.busy ? '<form id="retryReadingForm" novalidate><label class="check-label"><input type="checkbox" id="retryOverride"><span>Override the refusal of an answer cut off at its output limit: recorded with your name, and never offered to a member.</span></label><p class="form-error" id="retryReadingError" role="alert" hidden></p>'
+    + `<button type="submit" class="button primary">Retry the reading ${icon('arrow')}</button></form>` : '';
+  return `<div data-retry-reading>${infoCard('The document could<br>not be read.', lines, form)}</div>`;
+}
+
 function stateCards(doc) {
   const cards = [];
   if (doc.pipeline?.busy) cards.push(progressCard(doc));
+  if (state.session?.interpreter?.held === true) cards.push(interpreterHoldCard(state.session.interpreter));
   const runs = doc.provider_runs || [];
   const stages = doc.pipeline?.stages || [];
+  const reading = failedReading(doc);
   // Any unreconciled unknown outcome, the second review's included: nothing is sent again until it is reconciled.
   if (doc.state === 'provider_unknown' || runs.some(run => run.state === 'unknown' && !run.reconciled)) cards.push(reconcileCard(doc));
   if (doc.state === 'extraction_failed') {
@@ -1910,7 +1994,10 @@ function stateCards(doc) {
     // The run this state reads, as the API names it (state_run): never one picked by recency - an earlier failed request
     // for another date (ec5 re-check), nor a newer one a Stop or the sweep settled before sending (ec5 skeptic).
     const failed = doc.state_run ? runs.find(run => run?.id === doc.state_run) : undefined;
-    if (failed?.state === 'succeeded') {
+    if (failed?.purpose === 'interpretation' || reading) {
+      // the interpreter's run (FINAL 6.11): the reading could not be completed, and the recorded retry is offered
+      cards.push(retryReadingCard(doc, reading, failed?.purpose === 'interpretation' ? failed : null));
+    } else if (failed?.state === 'succeeded') {
       // A response refused whole (the state reads that run): read and not used, never a failed request nor one that
       // returned no proposals; its own failed check says why (round 7 bypass:1; skeptic of refutation 7c8 reports-5).
       const checks = Array.isArray(doc.assessment?.encounter_checks) ? doc.assessment.encounter_checks : [];
@@ -1924,7 +2011,10 @@ function stateCards(doc) {
   if (doc.state === 'provider_not_run') {
     // the latest predict is the one that did not run: an earlier one that ran says nothing about it
     const predict = [...stages].reverse().find(stage => stage?.kind === 'predict');
-    cards.push(infoCard('No proposals were<br>requested.', [predict?.error || (state.session?.provider_mode === 'disabled' ? 'Provider requests are disabled in this deployment.' : 'The provider step did not run for this revision.')]));
+    if (reading) cards.push(infoCard('The document was<br>not read.', [`${INTERPRET_STAGE[1]}: ${reading.error || 'the stage did not run for this revision.'}`]));
+    else cards.push(infoCard('No proposals were<br>requested.', [predict?.error || (state.session?.provider_mode === 'disabled' ? 'Provider requests are disabled in this deployment.' : 'The provider step did not run for this revision.')]));
+  } else if (reading && doc.state !== 'provider_failed') {
+    cards.push(retryReadingCard(doc, reading, null));
   }
   if (doc.state === 'stopped') {
     const resume = doc.pipeline?.can_resume ? `<button type="button" class="button primary" data-action="resume">${icon('arrow')}Resume processing</button>` : '';
@@ -1932,7 +2022,8 @@ function stateCards(doc) {
     // say what was recorded instead of telling the member they stopped it.
     const cause = [...stages].reverse().find(stage => stage.state === 'cancelled' && stage.error);
     if (doc.pipeline?.stopped_by_member === false && cause) {
-      const label = lookup(Object.fromEntries([...STAGES, ...PEER_STAGES]), cause.kind, 'A processing stage');
+      // a reading paused on the installation (FINAL 11.2) is named by its stage too: its error is the paused message
+      const label = lookup(Object.fromEntries([...STAGES, ...PEER_STAGES, INTERPRET_STAGE]), cause.kind, 'A processing stage');
       cards.push(infoCard('Processing did<br>not finish.', [`${label}: ${cause.error}`, 'Nothing was resent automatically.'], resume));
     } else {
       cards.push(infoCard('Processing was<br>stopped.', ['Queued stages were cancelled, and no unsent provider request is made unless processing is resumed.'], resume));
@@ -1941,7 +2032,140 @@ function stateCards(doc) {
   return cards.join('');
 }
 
+// --- the operator's interpretation section (the Gemini migration; FINAL 3.1, 8.3; D22) --------------------------------
+
+// Whether the assessment shown is a new-path one, with its interpretation section served (an earlier assessment's says it
+// was read by the legacy reader, and its page is drawn as before).
+function interpreted(doc) {
+  return doc?.assessment?.interpretation?.engine === 'events';
+}
+
+// The review tabs of a document: Suggestions, Checks and Activity, and Interpretation for a new-path assessment.
+function tabsFor(doc) {
+  return interpreted(doc) ? [...TABS, INTERPRETATION_TAB] : TABS;
+}
+
+function words(value) {
+  return textValue(value).replace(/_/g, ' ');
+}
+
+// One attribute of an event as the inventory stores it (the contract's 4.2 record): its value, its basis, its state and the
+// reasons it is not verified, and the document's words it cites - an exact slice of the revision text.
+function attributeLine(label, attribute) {
+  if (!attribute || typeof attribute !== 'object') return `${label}: ${attribute === null || attribute === undefined || attribute === '' ? 'none' : words(attribute)}`;
+  const value = words(attribute.value) || 'not stated';
+  const how = [lookup(BASES, attribute.basis, ''), lookup(ATTRIBUTE_STATES, attribute.state, textValue(attribute.state) || 'state not recorded')].filter(Boolean).join(', ');
+  const reasons = strings(attribute.reasons).map(words);
+  const quoted = attribute.words && typeof attribute.words === 'object' && textValue(attribute.words.text) ? ` · “${attribute.words.text}”` : '';
+  const lesion = label === 'Target' && textValue(attribute.lesion) ? ` (lesion ${attribute.lesion}${textValue(attribute.identity) ? `, identity ${words(attribute.identity)}` : ''})` : '';
+  return `${label}: ${value}${lesion} — ${how}${reasons.length ? ` (${reasons.join(', ')})` : ''}${quoted}`;
+}
+
+// Each event of the inventory: its id, family, act and whether it is current, then every attribute it states.
+function inventoryEvents(inventory, doc) {
+  const events = objects(inventory?.events?.events);
+  if (!events.length) return '<p class="harness-note">The inventory records no event.</p>';
+  return events.map(event => {
+    const unverified = EVENT_ATTRIBUTES.some(([key]) => event[key] && typeof event[key] === 'object' && ['unverified', 'discarded'].includes(event[key].state));
+    const family = textValue(event.family) ? (doc ? familyLabel(doc, event.family) : event.family) : 'no family';
+    const title = [textValue(event.id) || 'Event', family, words(event.kind?.value) || 'act not stated', `current: ${words(event.current) || 'not recorded'}`].join(' · ');
+    const lines = EVENT_ATTRIBUTES.filter(([key]) => event[key] !== undefined && event[key] !== null && event[key] !== '').map(([key, label]) => attributeLine(label, event[key]));
+    if (textValue(event.catalogue_kind)) lines.push(`Catalogue act: ${words(event.catalogue_kind)}${textValue(event.code_technique) ? ` · technique for coding: ${words(event.code_technique)}` : ''}`);
+    return checkItem(unverified ? 'pending' : '', unverified ? 'info' : 'circle-check', title, '', lines.map(line => `<p>${escapeHtml(line)}</p>`).join(''));
+  }).join('');
+}
+
+// The verification report (contract 5): per attribute how many were claimed, verified, unverified, absent, discarded and
+// open; the reasons counted; the relations by type; what normalization discarded; and its problems.
+function verificationReport(verification) {
+  const report = verification && typeof verification === 'object' ? verification : {};
+  const counts = report.counts && typeof report.counts === 'object' ? Object.entries(report.counts) : [];
+  const countLines = counts.map(([name, row]) => `${words(name)}: ${['claimed', 'verified', 'unverified', 'absent', 'discarded', 'open'].map(key => `${Number.isInteger(row?.[key]) ? row[key] : 0} ${key}`).join(', ')}`);
+  const tally = value => (value && typeof value === 'object' ? Object.entries(value).map(([key, count]) => `${words(key)} ${textValue(count)}`) : []);
+  const listed = (title, items) => (items.length ? `${groupLabel(title)}<ul class="trace-list">${items.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : '');
+  const discarded = objects(report.discarded).map(item => `${textValue(item.where) || 'somewhere'}: ${words(item.reason) || 'no reason recorded'}`);
+  return `<div class="check-list-card">${groupLabel(`Verification report${report.refused === true ? ' · refused' : ''}`)}${countLines.length ? `<ul class="trace-list">${countLines.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : '<p class="harness-note">No attribute was counted.</p>'}${listed('Reasons', tally(report.reasons))}${listed('Relations', tally(report.relations))}${listed('Discarded', discarded)}${listed('Problems', strings(report.problems))}</div>`;
+}
+
+// The interpreter's run as the section serves it: what was asked for and what answered, its outcome, the usage Gemini
+// reported and the cost estimated from the dated published rates - never the request body, the response or a key.
+function interpreterRunFields(run) {
+  const usage = usagePairs(run.usage && typeof run.usage === 'object' ? run.usage : {});
+  const cost = textValue(run.estimated_cost);
+  return traceFields([
+    ['Run', shownOr(run.id)],
+    ['Provider', lookup(RUN_PROVIDERS, run.provider, shownOr(run.provider))],
+    ['Purpose', lookup(RUN_PURPOSES, run.purpose, shownOr(run.purpose))],
+    ['State', lookup(RUN_STATES, run.state, shownOr(run.state))],
+    ['Sent', run.sent === true ? 'Yes' : run.sent === false ? 'No' : 'Not recorded'],
+    ['HTTP status', Number.isInteger(run.http_status) ? String(run.http_status) : 'No HTTP response recorded'],
+    ['Model requested', shownOr(run.requested_model, 'None named')],
+    ['Model that answered', shownOr(run.returned_model, 'None named')],
+    ['Adapter version', shownOr(run.adapter_version)],
+    ['Usage', usage.length ? usage.join(' · ') : 'Not reported'],
+    ['Estimated cost', cost ? `$${cost} (estimated from published rates for the day sent, not reconciled to an invoice)` : run.reused_from ? 'None: a reuse makes no request' : 'Not estimated'],
+    ['Request sha256', shownOr(run.request_sha256)],
+    ['Response sha256', shownOr(run.response_sha256)],
+    ['Reused from', shownOr(run.reused_from, 'Not reused')],
+    ['Started', formatTimestamp(run.started_at) || 'Not recorded'],
+    ['Finished', formatTimestamp(run.finished_at) || 'Not recorded'],
+    ['Latency', typeof run.latency_ms === 'number' ? `${(run.latency_ms / 1000).toFixed(1)} s` : 'Not recorded'],
+  ]);
+}
+
+// The cards of an interpretation section (the detail's assessment.interpretation, the trace's interpretation): the D22
+// record and its problems, the run with the hold it set, the event inventory with its events and verification report.
+// ``doc``: the encounter detail whose family labels name the events (null on the trace page: the slugs).
+function interpretationCards(section, doc = null) {
+  const record = section?.record && typeof section.record === 'object' ? section.record : null;
+  const inventory = section?.inventory && typeof section.inventory === 'object' ? section.inventory : null;
+  const run = section?.run && typeof section.run === 'object' ? section.run : null;
+  const sentinel = record?.sentinel && typeof record.sentinel === 'object' ? record.sentinel : null;
+  const problems = strings(section?.problems);
+  const recordCard = `<div class="check-list-card">${groupLabel('The assessment\'s record')}${traceFields([
+    ['Engine', shownOr(section?.engine_version)],
+    ['Interpretation', [textValue(record?.interpretation_version), textValue(record?.inventory_version)].filter(Boolean).join(' · ') || 'Not recorded'],
+    ['Event inventory', record?.inventory ? [textValue(record.inventory.id), textValue(record.inventory.sha256) ? `sha256 ${record.inventory.sha256}` : ''].filter(Boolean).join(' · ') : 'Not recorded'],
+    ['Interpreter run', shownOr(record?.gemini_run)],
+    ['Context', shownOr(record?.context)],
+    ['Member date state', record && record.member_date_state !== undefined ? JSON.stringify(record.member_date_state) : 'Not recorded'],
+    ['Legacy-call sentinel', sentinel ? `${Number.isInteger(sentinel.legacy_calls) ? sentinel.legacy_calls : 'an unrecorded number of'} execution(s) of the legacy reader counted · scope ${shownOr(sentinel.scope)} · ${shownOr(sentinel.tool)} · deny set ${shownOr(sentinel.deny_size)} · positive control ${shownOr(sentinel.positive_control)}` : 'Not recorded'],
+  ])}${problems.length ? `${groupLabel('Record problems')}<ul class="trace-list">${problems.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : '<p class="harness-note">The record has no problem.</p>'}</div>`;
+  const hold = section?.hold && typeof section.hold === 'object' ? section.hold : null;
+  const holdLine = hold ? `<p class="harness-note">${escapeHtml(`This run set the interpreter hold ${textValue(hold.id)}: ${textValue(hold.means) || textValue(hold.reason)} (${textValue(hold.reason)}); ${hold.released_at ? `released ${formatTimestamp(hold.released_at)} by ${textValue(hold.released_by) || 'an operator'}` : 'standing'}.`)}</p>` : '';
+  const runCard = `<div class="check-list-card">${groupLabel(`${INTERPRETER_TITLE} · ${run ? lookup(RUN_STATES, run.state, shownOr(run.state)) : 'no run'}`)}${run ? interpreterRunFields(run) : '<p class="harness-note">No interpreter run is recorded for this inventory.</p>'}${holdLine}</div>`;
+  const counts = inventory?.counts && typeof inventory.counts === 'object' ? inventory.counts : {};
+  const inventoryCard = `<div class="check-list-card">${groupLabel(`Event inventory · ${inventory ? shownOr(inventory.state) : 'none'}`)}${inventory ? traceFields([
+    ['Inventory', shownOr(inventory.id)],
+    ['Versions', [textValue(inventory.interpretation_version), textValue(inventory.inventory_version)].filter(Boolean).join(' · ') || 'Not recorded'],
+    ['Inventory sha256', shownOr(inventory.sha256)],
+    ['Text sha256', shownOr(inventory.text_sha256)],
+    ['Request sha256', shownOr(inventory.request_sha256)],
+    ['Response sha256', shownOr(inventory.response_sha256)],
+    ['Recorded', formatTimestamp(inventory.created_at) || 'Not recorded'],
+    ['Contents', ['passages', 'lesions', 'events', 'relations'].map(part => `${Number.isInteger(counts[part]) ? counts[part] : 0} ${part}`).join(' · ')],
+  ]) : '<p class="harness-note">The assessment names no event inventory.</p>'}</div>`;
+  const relations = objects(inventory?.events?.relations).map(item => [words(item.type) || 'relation', textValue(item.event), words(item.attribute), words(item.reason), item.claimed_by_model === true ? 'claimed by the model' : ''].filter(Boolean).join(' · '));
+  const questions = objects(inventory?.open_questions).map(item => [`about ${words(item.about) || 'not recorded'}`, strings(item.events).length ? `events ${strings(item.events).join(', ')}` : '', strings(item.lesions).length ? `lesions ${strings(item.lesions).join(', ')}` : ''].filter(Boolean).join(' · '));
+  const listed = (title, items) => (items.length ? `<div class="check-list-card">${groupLabel(title)}<ul class="trace-list">${items.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div>` : '');
+  const eventsCard = inventory ? `<div class="check-list-card">${groupLabel(`Events · ${plural(objects(inventory.events?.events).length, 'event', 'events')}`)}${inventoryEvents(inventory, doc)}</div>` : '';
+  return [recordCard, runCard, inventoryCard, eventsCard, listed('Relations', relations), listed('Open questions', questions), inventory ? verificationReport(inventory.verification) : ''].join('');
+}
+
+// The Interpretation tab of a new-path assessment: the routing the codes were checked with - a stand-in derived from the
+// event inventory, never a reading (FINAL 4.3) - and the section's cards.
+function interpretationPanel(doc) {
+  const section = doc?.assessment?.interpretation || {};
+  const routing = doc?.routing && typeof doc.routing === 'object' ? doc.routing : null;
+  const families = objects(routing?.families).map(family => `${familyLabel(doc, family.family)}: ${words(family.status) || 'no status'}`);
+  const stand = routing?.derived === true
+    ? `Routing: a stand-in derived from ${textValue(routing.derived_from) || 'the event inventory'} ${textValue(routing.inventory)}${textValue(routing.inventory_sha256) ? ` (sha256 ${routing.inventory_sha256})` : ''}, read as no reading: ${families.join('; ') || 'no family'}.`
+    : routing ? `Routing: ${textValue(routing.version) || 'a reading'} (not derived from the event inventory).` : 'No routing is recorded for this assessment.';
+  return `<div class="card-stack"><p class="checks-disclaimer">${escapeHtml('Gemini read the documented procedures into this event inventory; CPT Studio checked each attribute against the words it cites, and decided every code from the inventory. Interpretation and agreement are never approval.')}</p><div class="check-list-card">${groupLabel('Routing')}<p class="harness-note">${escapeHtml(stand)}</p></div>${interpretationCards(section, doc)}</div>`;
+}
+
 function tabContent(doc, tab, layout) {
+  if (tab === 'interpretation' && interpreted(doc)) return interpretationPanel(doc);
   if (tab === 'checks') return checksPanel(doc);
   if (tab === 'timeline') return activityPanel(doc);
   return suggestionsPanel(doc, layout);
@@ -1949,7 +2173,7 @@ function tabContent(doc, tab, layout) {
 
 function reviewView(doc, layout, tab, entrance) {
   const selected = proposalsIn(doc.assessment, 'selected');
-  const tabs = doc.assessment ? `<div class="result-tabs" role="tablist" aria-label="Review details">${TABS.map(([id, label]) => `<button type="button" role="tab" id="tab-${id}" data-tab="${id}" aria-controls="resultContent" aria-selected="${tab === id}" tabindex="${tab === id ? 0 : -1}">${label}${id === 'codes' ? ` <span class="tab-count">${selected.length}</span>` : ''}</button>`).join('')}</div><div id="resultContent" role="tabpanel" tabindex="0" aria-labelledby="tab-${tab}">${tabContent(doc, tab, layout)}</div>` : '';
+  const tabs = doc.assessment ? `<div class="result-tabs" role="tablist" aria-label="Review details">${tabsFor(doc).map(([id, label]) => `<button type="button" role="tab" id="tab-${id}" data-tab="${id}" aria-controls="resultContent" aria-selected="${tab === id}" tabindex="${tab === id ? 0 : -1}">${label}${id === 'codes' ? ` <span class="tab-count">${selected.length}</span>` : ''}</button>`).join('')}</div><div id="resultContent" role="tabpanel" tabindex="0" aria-labelledby="tab-${tab}">${tabContent(doc, tab, layout)}</div>` : '';
   const exportButton = doc.assessment ? `<button type="button" class="button primary" data-action="export">${icon('download')}Export</button>` : '';
   return `<section${entrance ? ' class="view-entrance"' : ''}><a class="back-link" href="#documents">${icon('arrow')}All documents</a><div class="heading-row review-heading"><div><span class="eyebrow">CPT REVIEW · SYNTHETIC</span><h1>${escapeHtml(doc.title || 'Untitled document')}</h1><div class="review-meta">${reviewMeta(doc)}</div></div><div class="heading-actions"><button type="button" class="button secondary" data-action="upload">${icon('plus')}New document</button>${exportButton}</div></div><div class="review-layout">${sourcePanel(doc, layout)}<section class="review-column" aria-label="Coding review"><div class="results-topline"><h2>Coding review</h2><span class="small-badge">CPT only</span></div>${participantsCard(doc)}${stateCards(doc)}${tabs}</section></div><div class="sample-strip"><span>SYNTHETIC DEMONSTRATION · Not clinical approval, coding advice or billing.</span><a href="#how-it-works">About the workflow ${icon('arrow')}</a></div></section>`;
 }
@@ -2261,7 +2485,10 @@ function traceView(trace, id) {
   }).join('');
   // harness@2: each assessment of the revision with the frozen phase-1 outputs it recorded (HARNESS.md 12.3)
   const assessments = Array.isArray(data.assessments) ? `${sectionHeading('Assessments of this revision', objects(data.assessments).length)}<div class="card-stack">${traceAssessments(data.assessments)}</div>` : '';
-  return `<section class="view-entrance"><a class="back-link" href="#doc/${escapeHtml(encodeURIComponent(id))}">${icon('arrow')}Back to the review</a><div class="heading-row review-heading"><div><span class="eyebrow">TRACE · OWNER ONLY · SYNTHETIC</span><h1>${escapeHtml(textValue(encounter.title) || 'Document trace')}</h1><div class="review-meta">${meta}</div></div></div><p class="checks-disclaimer">Costs are estimated from fixed, dated vendor rates and are not reconciled to an invoice; Corti reports credits, not USD. Each hash names the exact stored request or raw response.</p>${participants}${assessments}${sectionHeading('Reference retrieval', objects(data.retrieval).length)}<div class="card-stack">${retrievalTraces(data.retrieval)}</div>${sectionHeading('Reconciliation', objects(data.reconciliation).length)}${traceReconciliation(data.reconciliation)}</section>`;
+  // a new-path live assessment's interpretation section (the Gemini migration; FINAL 3.1): the record, the run, the inventory
+  const interpretation = data.interpretation && typeof data.interpretation === 'object' && data.interpretation.engine === 'events'
+    ? `${sectionHeading('Interpretation', textValue(data.interpretation.engine_version) || 'events')}<div class="card-stack">${interpretationCards(data.interpretation)}</div>` : '';
+  return `<section class="view-entrance"><a class="back-link" href="#doc/${escapeHtml(encodeURIComponent(id))}">${icon('arrow')}Back to the review</a><div class="heading-row review-heading"><div><span class="eyebrow">TRACE · OWNER ONLY · SYNTHETIC</span><h1>${escapeHtml(textValue(encounter.title) || 'Document trace')}</h1><div class="review-meta">${meta}</div></div></div><p class="checks-disclaimer">Costs are estimated from fixed, dated vendor rates and are not reconciled to an invoice; Corti reports credits, not USD. Each hash names the exact stored request or raw response.</p>${participants}${interpretation}${assessments}${sectionHeading('Reference retrieval', objects(data.retrieval).length)}<div class="card-stack">${retrievalTraces(data.retrieval)}</div>${sectionHeading('Reconciliation', objects(data.reconciliation).length)}${traceReconciliation(data.reconciliation)}</section>`;
 }
 
 // What the trace page says when the API refuses it: a 403 plainly (the trace is the owner's), never as an error to retry.
@@ -2595,7 +2822,7 @@ function renderDocument(doc, fresh) {
   state.doc = doc;
   state.docKey = key;
   state.layout = documentLayout(doc);
-  if (!doc.assessment) state.currentTab = 'codes';
+  if (!doc.assessment || !tabsFor(doc).some(([id]) => id === state.currentTab)) state.currentTab = 'codes';
   $('#main').innerHTML = reviewView(doc, state.layout, state.currentTab, fresh);
   if (keep) {
     if ($('#sourceScroll')) $('#sourceScroll').scrollTop = keep.source;
@@ -2607,7 +2834,7 @@ function renderDocument(doc, fresh) {
 }
 
 function selectTab(tab, focus = false) {
-  if (!TABS.some(([id]) => id === tab) || !state.doc?.assessment || !$('#resultContent')) return;
+  if (!tabsFor(state.doc).some(([id]) => id === tab) || !state.doc?.assessment || !$('#resultContent')) return;
   state.currentTab = tab;
   $$('[role="tab"]').forEach(button => {
     const selected = button.dataset.tab === tab;
@@ -3046,6 +3273,46 @@ function submitReconcile(form) {
   });
 }
 
+// The operator's recorded retry of a failed reading (POST /ops/api/encounters/<id>/retry-reading, FINAL 11.3): the
+// override is sent only when ticked, and recorded with the operator's name.
+function submitRetryReading(form) {
+  if (!state.doc) return undefined;
+  const override = $('#retryOverride')?.checked === true;
+  return guarded('retry-reading', async () => {
+    const button = form.querySelector('button[type="submit"]');
+    setBusy(button, true);
+    hideError('retryReadingError');
+    try {
+      await api(`/ops/api/encounters/${encodeURIComponent(state.doc.id)}/retry-reading`, { method: 'POST', json: { override } });
+      await afterChange(RETRY_DONE);
+    } catch (error) {
+      showError('retryReadingError', error.message);
+      setBusy(button, false);
+    }
+  });
+}
+
+// The recorded release of the interpreter hold (POST /ops/api/interpreter {note}, FINAL 11.2): the note says why it may end.
+function submitHoldRelease(form) {
+  const note = $('#releaseHoldNote').value.trim();
+  if (!note) {
+    showError('releaseHoldError', 'Say why the hold may end: the release is recorded with this note.');
+    return undefined;
+  }
+  return guarded('release-hold', async () => {
+    const button = form.querySelector('button[type="submit"]');
+    setBusy(button, true);
+    hideError('releaseHoldError');
+    try {
+      await api('/ops/api/interpreter', { method: 'POST', json: { note } });
+      await afterChange(HOLD_RELEASED);
+    } catch (error) {
+      showError('releaseHoldError', error.message);
+      setBusy(button, false);
+    }
+  });
+}
+
 function openExport() {
   if (!state.doc) return;
   const readiness = state.doc.readiness || {};
@@ -3151,6 +3418,14 @@ function onClick(event) {
   })[action.dataset.action]?.();
 }
 
+// The console's own forms: a reconciliation, the retry of a failed reading, the release of the interpreter hold.
+function onSubmit(event) {
+  const handler = { reconcileForm: submitReconcile, retryReadingForm: submitRetryReading, releaseHoldForm: submitHoldRelease }[event.target?.id];
+  if (!handler) return undefined;
+  event.preventDefault();
+  return handler(event.target);
+}
+
 // The confirm action is offered once its attestation is ticked.
 function onChange(event) {
   const box = event.target.matches?.('input[data-attest]') ? event.target.closest('.confirm-finding') : null;
@@ -3209,11 +3484,7 @@ function boot() {
   document.addEventListener('change', onChange);
   document.addEventListener('keydown', onKeydown);
   document.addEventListener('input', event => { if (event.target.id === 'documentSearch') applySearch(); });
-  document.addEventListener('submit', event => {
-    if (event.target.id !== 'reconcileForm') return;
-    event.preventDefault();
-    submitReconcile(event.target);
-  });
+  document.addEventListener('submit', event => onSubmit(event));
   let pageFrame = 0;
   document.addEventListener('scroll', event => {
     if (event.target.id !== 'sourceScroll' || pageFrame) return;
@@ -3248,6 +3519,11 @@ if (typeof module === 'object' && module.exports) {
     DESCRIPTOR_WITHHELD,
     PEER_STAGES, PEER_STATES, PEER_NOT_RUN, CANDIDATE_NOTE, harness2, phasedJobs, peerPhaseOnly, confirmedFrom, locatedBy,
     candidateAnswers, referenceLists, confirmedFindings, confirmFinding, confirmedMessage, onChange,
+    // the Gemini migration: the interpretation tab, the hold, the retry of a failed reading, the interpreter's rows
+    TABS, INTERPRETATION_TAB, INTERPRET_STAGE, DERIVE_STAGE_LABEL, EVENT_FACTS, FINDING_FACTS, RUN_PROVIDERS, RUN_PURPOSES,
+    RETRY_DONE, HOLD_RELEASED, interpreted, tabsFor, stagesFor, interpretationPanel, interpretationCards, attributeLine,
+    interpreterHoldCard, failedReading, retryReadingCard, stateCards, progressCard, activityPanel, usageText, onSubmit,
+    submitRetryReading, submitHoldRelease,
   };
 }
 if (typeof document !== 'undefined') boot();

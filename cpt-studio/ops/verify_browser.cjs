@@ -82,6 +82,18 @@
  * leave note), the operator state, no code, no provider request, the original still served, both viewports, the scans and
  * the direct-URL probes. Such a document has no review_plan: there is nothing to decide.
  *
+ * The Gemini migration's new path (cpt-studio/design: FINAL.md 4.3, 8.3, 11; DECISIONS D3, D22), told apart by the
+ * operator view - the assessment's engine label, its interpretation section, a routing stand-in labelled derived
+ * (newPath). There the routing is a stand-in derived from the event inventory: its families and statuses are judged as a
+ * reading's, a fact the manifest names is read from the VERIFIED attributes of that family's current events in the
+ * inventory the stand-in names (standInValues), and a reading's missing lists and mentions - which a stand-in never
+ * carries - are recorded as not judged. Setting, billing context and patient status come only from a member's values
+ * (D3), so a document origin there fails and the manifest's document expectation is recorded as not judged. The
+ * provenance adds the interpretation's (checkInterpretation): an inventory that was read, the interpreter's run asking
+ * for and answered by its one model with its hashes and usage, a record with no problem and no legacy execution
+ * counted, and the trace carrying the same section. A failed reading's notice offers its recorded retry ("Try reading
+ * again", ERROR_ACTION_BUTTONS); the /ops/ probes cover the retry and the interpreter hold's URLs.
+ *
  * --acceptance-reviewer (CPT Studio GI interpretation 63) is kept as before: a human reviewer account, approvals only,
  * each recorded as that reviewer's. It records HUMAN approvals: the 2026-11-03 directive labels every test approval an
  * agent-executed synthetic review, so its walks use agent mode.
@@ -168,6 +180,15 @@ const FULL_DATE = new RegExp('(?<![\\w/-])(?:(\\d{4})-(\\d{2})-(\\d{2})|(\\d{1,2
   + `|(${MONTH_NAME})\\.?[ \\t]+(\\d{1,2})(?:st|nd|rd|th)?,?[ \\t]+(\\d{4})`
   + `|(\\d{1,2})(?:st|nd|rd|th)?(?:[ \\t]+|-)(${MONTH_NAME})\\.?(?:,?[ \\t]+|-)(\\d{4}))(?![\\w/-])`, 'gi');
 const MONTH_KEYS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+// The Gemini migration's new path (studio/interpretation/__init__.py: ENGINE_VERSION, ROUTING_VERSION, PROVIDER, MODEL,
+// PURPOSE; the unit tests hold these to the source): the events engine's label, the routing stand-in's version and the
+// interpreter's one provider, model and run purpose.
+const EVENTS_ENGINE_PREFIX = 'cpt-studio-events@';
+const ROUTING_STAND_IN = 'gemini-routing@1';
+const INTERPRETER = Object.freeze({ provider: 'gemini', model: 'gemini-4-argon', purpose: 'interpretation' });
+// D3 (FINAL 4.3; interpretation.facts.MEMBER_FACTS): on the new path these come only from a member's values, never from
+// the document, so the context states each as the member's or as missing.
+const MEMBER_ONLY_FACTS = new Set(['setting', 'billing_context', 'patient_status']);
 
 // --- the customer surface (cpt-studio/CORE-UX-DESIGN.md sections 5-8) ------------------------------------------------
 //
@@ -203,18 +224,20 @@ const COMPACT_TITLES = { completed: 'Results ready', awaiting_detail: 'Results r
 // member, so neither shows a running time (refutation, 2026-11-05: the walk once demanded one of every busy panel).
 const ELAPSED_PHASES = new Set(['queued', 'processing']);
 // The operator states a document fails in (progress.FAILED_STATES), each read by the customer as failed; the button the
-// failed notice offers for each served error action (app.js ERROR_ACTIONS: "Upload a new document", "Resume processing").
+// failed notice offers for each served error action (app.js ERROR_ACTIONS: "Upload a new document", "Resume processing",
+// and the Gemini migration's "Try reading again": the recorded retry of a failed reading, design/FINAL.md 11.3).
 const FAILED_STATES = new Set(['extraction_failed', 'processing_failed', 'provider_failed', 'provider_not_run']);
-const ERROR_ACTION_BUTTONS = { new_document: 'upload', resume: 'resume' };
+const ERROR_ACTION_BUTTONS = { new_document: 'upload', resume: 'resume', retry_reading: 'retry-reading' };
 // The operator state each customer state is read from (CORE-UX-DESIGN 7; the hold of a member date conflict is the
 // customer's action_needed, whatever operator state it records).
 const CUSTOMER_STATE_OF = { ready_for_review: 'ready', needs_clarification: 'awaiting_detail', reviewed: 'reviewed',
   no_codes: 'no_codes', stopped: 'stopped', provider_unknown: 'being_confirmed', processing: 'processing',
   provider_failed: 'failed', extraction_failed: 'failed', processing_failed: 'failed', provider_not_run: 'failed' };
 // P5's fold of the current revision's jobs into the four customer steps; an assess job is the "checking" step while a
-// peer review follows it, the "preparing" step otherwise (the final assessment).
-const STEP_OF_KIND = { extract: 'reading', analyze: 'identifying', predict: 'checking', astra: 'checking', fable: 'checking',
-  astra_peer: 'checking', fable_peer: 'checking', review2: 'checking' };
+// peer review follows it, the "preparing" step otherwise (the final assessment). The Gemini migration's interpret stage
+// is "Identifying procedures", as analyze is (progress.STEP_OF; design/FINAL.md 6.11).
+const STEP_OF_KIND = { extract: 'reading', interpret: 'identifying', analyze: 'identifying', predict: 'checking', astra: 'checking',
+  fable: 'checking', astra_peer: 'checking', fable_peer: 'checking', review2: 'checking' };
 const PEER_KINDS = new Set(['astra_peer', 'fable_peer']);
 // The customer step states a job state may be drawn as (queued may read as the active step or a waiting one).
 // An outcome left unknown is being confirmed (CORE-UX-DESIGN 6): its step may read failed, waiting or active, never done.
@@ -232,12 +255,15 @@ const PLAN_KEYS = new Set(['reject', 'approve_codes', 'context_edit', 'second_re
 // A modifier-shaped token a row might show although none is assigned.
 const MODIFIER_TOKEN = /\b(?:59|X[ESPU]|25|33|PT|5[23]|7[6-9])\b/;
 // The /ops/ surface (CORE-UX-DESIGN 5): every URL answers 404 to anyone who is not a platform operator.
+// The Gemini migration adds the interpreter hold's state and release (/ops/api/interpreter) and the operator's retry of a
+// failed reading (FINAL 11.2-11.3): an operator's too.
 const OPS_GET_PATHS = id => ['/ops/', '/ops/assets/ops.js', '/ops/api/encounters', `/ops/api/encounters/${id}`,
-  `/ops/api/encounters/${id}/trace`, `/ops/api/encounters/${id}/reports`];
-const OPS_POST_PATHS = id => [`/ops/api/encounters/${id}/reports`, `/ops/api/encounters/${id}/reconcile`];
-// A body the operator views refuse (an unknown report kind, a run that is no run): a gate that answered anything but
-// 404 to a customer would still create nothing.
-const OPS_POST_BODY = { kind: '__verify_unknown_kind__', fmt: '__none__', run: '__not_a_run__' };
+  `/ops/api/encounters/${id}/trace`, `/ops/api/encounters/${id}/reports`, '/ops/api/interpreter'];
+const OPS_POST_PATHS = id => [`/ops/api/encounters/${id}/reports`, `/ops/api/encounters/${id}/reconcile`,
+  `/ops/api/encounters/${id}/retry-reading`, '/ops/api/interpreter'];
+// A body the operator views refuse (an unknown report kind, a run that is no run, an override that is not true or false,
+// and no release note): a gate that answered anything but 404 to a customer would still create nothing.
+const OPS_POST_BODY = { kind: '__verify_unknown_kind__', fmt: '__none__', run: '__not_a_run__', override: '__not_a_flag__' };
 const REMOVED_PATHS = id => [`/api/encounters/${id}/trace`];
 // Response headers that carry no customer-facing wording (security policy, cookies, caching, dates).
 const UNSCANNED_HEADERS = new Set(['set-cookie', 'date', 'etag', 'last-modified', 'content-length', 'content-security-policy',
@@ -464,10 +490,29 @@ function checkExtraction(expected, enc, delivery, sourceText) {
   return out;
 }
 
+// Whether the operator view is a new-path encounter's (the Gemini migration): its assessment the events engine's, its
+// interpretation section the events', or its routing the stand-in derived from an event inventory.
+function newPath(enc) {
+  return String(enc?.assessment?.engine_version || '').startsWith(EVENTS_ENGINE_PREFIX)
+    || enc?.assessment?.interpretation?.engine === 'events' || enc?.routing?.derived === true
+    || enc?.routing?.version === ROUTING_STAND_IN;
+}
+
 function checkContext(expected, enc) {
   const facts = enc.context?.facts || {};
+  const derived = newPath(enc);
   return Object.entries(expected || {}).flatMap(([name, want]) => {
     const fact = facts[name];
+    if (derived && MEMBER_ONLY_FACTS.has(name)) {
+      // D3: never read from the document on the new path - a context that states one from it read it anyway; what the
+      // author expected the document to state is not what this context can say
+      const origin = fact?.origin;
+      const judged = check(`context.${name}`, 'hard', Boolean(fact) && ['user', 'missing'].includes(origin), fact
+        ? `origin ${origin}, value ${JSON.stringify(fact.value)} (on the new path only a member's value or missing: D3)` : 'fact not reported');
+      return (want.origin_in || []).includes('document')
+        ? [judged, skip(`context.${name}.document`, `not judged on the new path: ${name} comes only from a member's values (D3), never from the document`)]
+        : [judged];
+    }
     if (!fact) return [check(`context.${name}`, 'hard', false, 'fact not reported')];
     const origin = !want.origin_in || want.origin_in.includes(fact.origin);
     const value = !want.value_in || want.value_in.map(v => v.toLowerCase()).includes(String(fact.value ?? '').toLowerCase());
@@ -485,11 +530,79 @@ function containsAny(value, needles) {
   return needles.some(n => text.includes(n.toLowerCase()));
 }
 
+// The routing stand-in of the new path (design/FINAL.md 4.3): a version, one finding per family the event inventory's
+// events name with a status derived from their VERIFIED attributes, no mention, fact or missing list, and the inventory
+// it was derived from - which must be the one the assessment was made from (its interpretation section), or the stand-in
+// says nothing about this assessment.
+function checkStandIn(enc) {
+  const routing = enc.routing || {};
+  const section = isObject(enc.assessment?.interpretation) ? enc.assessment.interpretation : null;
+  const made = section?.inventory?.id ?? section?.record?.inventory?.id ?? null;
+  const problems = [];
+  if (routing.derived !== true) problems.push('it is not labelled derived');
+  if (routing.version !== ROUTING_STAND_IN) problems.push(`its version is ${JSON.stringify(routing.version)}`);
+  if (typeof routing.inventory !== 'string' || !routing.inventory) problems.push('it names no event inventory');
+  else if (made && routing.inventory !== made) problems.push(`it names the inventory ${routing.inventory}; the assessment was made from ${made}`);
+  const read = (routing.families || []).filter(family => (family.mentions || []).length || (family.facts || []).length || (family.missing || []).length);
+  if (read.length) problems.push(`it carries a reading's mentions, facts or missing lists for ${read.map(family => family.family).join(', ')}`);
+  return check('routing.stand_in', 'hard', problems.length === 0, problems.length ? `the routing stand-in: ${problems.join('; ')}`
+    : `a stand-in derived from the event inventory ${routing.inventory}${made ? ', the one the assessment was made from' : ''}`);
+}
+
+// What a stand-in's family states of a fact the manifest names, read from the event inventory the assessment was made
+// from (its interpretation section): only the VERIFIED attributes of that family's current events that state the fact -
+// never a passage's words - as words (an enumeration's underscores as spaces). null for a fact no attribute states.
+const STAND_IN_FACTS = {
+  extent: 'landmark the examination reached',
+  target: 'landmark or lesion the act was done on',
+  em_basis: 'basis of the visit',
+  cannulation: 'cannulation performed',
+};
+
+function standInValues(enc, family, name) {
+  if (!Object.hasOwn(STAND_IN_FACTS, name)) return null;
+  const inventory = enc?.assessment?.interpretation?.inventory;
+  const events = (Array.isArray(inventory?.events?.events) ? inventory.events.events : []).filter(isObject);
+  const facts = isObject(inventory?.encounter_facts) ? inventory.encounter_facts : {};
+  const current = events.filter(event => event.family === family && event.current === 'yes');
+  const ids = new Set(current.map(event => event.id));
+  const verified = attribute => isObject(attribute) && attribute.state === 'verified';
+  const stated = value => typeof value === 'string' && value !== '' && value !== 'not_stated';
+  const words = value => String(value).replace(/_/g, ' ');
+  if (name === 'extent') {
+    const reach = (Array.isArray(facts.reach) ? facts.reach : []).filter(item => isObject(item) && item.family === family
+      && ids.has(item.event) && item.state === 'verified' && stated(item.landmark)).map(item => item.landmark);
+    return [...reach, ...current.filter(event => verified(event.extent) && stated(event.extent.value)).map(event => event.extent.value)].map(words);
+  }
+  if (name === 'target') {
+    return current.filter(event => verified(event.target) && (stated(event.target.value) || stated(event.target.lesion)))
+      .map(event => words(stated(event.target.value) ? event.target.value : 'lesion'));
+  }
+  if (name === 'em_basis') {
+    const visits = (Array.isArray(facts.visits) ? facts.visits : []).filter(item => isObject(item) && ids.has(item.event)
+      && item.basis_state === 'verified' && stated(item.basis)).map(item => item.basis);
+    return [...visits, ...current.filter(event => verified(event.visit?.basis) && stated(event.visit.basis.value)).map(event => event.visit.basis.value)].map(words);
+  }
+  return current.filter(event => verified(event.kind) && event.kind.value === 'cannulation' && verified(event.status)
+    && event.status.value === 'performed').map(() => 'performed');
+}
+
+function standInFact(enc, family, name, rule, id, severity) {
+  const values = standInValues(enc, family, name);
+  if (values === null) return skip(id, `not judged on the routing stand-in: it states no ${name}, and no attribute of the event inventory states it`);
+  const wanted = rule.value_contains_any || (severity === 'soft' ? [''] : null);
+  const ok = values.length > 0 && (!wanted || values.some(value => containsAny(value, wanted)));
+  return check(id, severity, ok, values.length
+    ? `the event inventory's verified ${STAND_IN_FACTS[name]}: ${JSON.stringify(values)}${rule.value_contains_any ? ` (expected one of ${rule.value_contains_any.join('|')})` : ''}`
+    : `no verified ${STAND_IN_FACTS[name]} of ${family} in the event inventory`);
+}
+
 function checkRouting(expected, enc) {
   const routing = enc.routing;
   if (!routing) return [check('routing.present', 'hard', false, 'no routing in the encounter JSON')];
   const families = routing.families || [];
-  const out = [];
+  const derived = routing.derived === true || routing.version === ROUTING_STAND_IN;
+  const out = derived ? [checkStandIn(enc)] : [];
   for (const [slug, want] of Object.entries(expected.families || {})) {
     const family = families.find(f => f.family === slug);
     const id = `routing.${slug}`;
@@ -498,6 +611,17 @@ function checkRouting(expected, enc) {
       continue;
     }
     out.push(check(`${id}.status`, 'hard', (want.status_in || []).includes(family.status), `${family.status} (expected ${(want.status_in || []).join('|')})`));
+    if (derived) {
+      // a reading's missing lists and mentions: the stand-in carries neither (FINAL 4.3), so they are not judged here
+      for (const [name, rule] of Object.entries(want.facts || {})) out.push(standInFact(enc, slug, name, rule, `${id}.fact.${name}`, 'hard'));
+      const unjudged = 'not judged on the routing stand-in: it carries no missing list (FINAL 4.3)';
+      for (const name of want.missing_includes || []) out.push(skip(`${id}.missing.${name}`, unjudged));
+      for (const name of want.missing_excludes || []) out.push(skip(`${id}.not_missing.${name}`, unjudged));
+      const info = want.informational || {};
+      for (const [name, rule] of Object.entries(info.facts || {})) out.push(standInFact(enc, slug, name, rule, `${id}.info.fact.${name}`, 'soft'));
+      if (info.mention_statuses_include) out.push(skip(`${id}.info.mentions`, 'not judged on the routing stand-in: it carries no mention (FINAL 4.3)'));
+      continue;
+    }
     for (const [name, rule] of Object.entries(want.facts || {})) {
       const fact = familyFact(family, name);
       const ok = Boolean(fact) && (!rule.value_contains_any || containsAny(fact.value, rule.value_contains_any));
@@ -1733,6 +1857,8 @@ function sameList(a, b) {
 }
 
 // CPT Studio's located acts by id, from the operator view's recorded reading (assessment.services).
+// Read whatever the engine, as review.act_index is (customer_api._act_index): a new-path assessment's services record is
+// the stub (design/FINAL.md 4.3, 8.3), which carries no act, so its anchors are its support.source alone.
 function actIndex(op) {
   const out = new Map();
   const services = op?.assessment?.services?.services;
@@ -2174,7 +2300,15 @@ function checkProgressDom(cust, dom, animating = []) {
   if (progress.can_stop) out.push(check('progress.dom.stop', 'hard', panel.stop, `Stop ${panel.stop ? 'offered' : 'not offered'} while the API allows it`));
   if (progress.can_resume) out.push(check('progress.dom.resume', 'hard', panel.resume, `Resume ${panel.resume ? 'offered' : 'not offered'} while the API allows it`));
   if (progress.can_leave) out.push(check('progress.dom.leave_note', 'hard', Boolean(panel.leave), `leave note ${panel.leave ? JSON.stringify(panel.leave) : 'not shown'}`));
-  if (SETTLED_PHASES.has(progress.phase)) {
+  // the notice offers the error's own action where the page offers it there (app.js progressError: Resume may be the
+  // panel's own button instead) - the recorded retry of a failed reading included (FINAL 11.3)
+  const offered = isObject(progress.error) ? ERROR_ACTION_BUTTONS[progress.error.action] || null : null;
+  if (offered && offered !== 'resume') {
+    out.push(check('progress.dom.error_action', 'hard', panel.notice_action === offered, `the notice offers ${panel.notice_action ? `"${panel.notice_action}"` : 'no action'}; the error's action ${progress.error.action} offers "${offered}"`));
+  }
+  // a reading paused on the installation (FINAL 11.2: the stopped state with the paused phase, nothing running) is as
+  // settled as a stop; a paused worker that is still busy is not
+  if (SETTLED_PHASES.has(progress.phase) || (progress.phase === 'paused' && !progress.busy)) {
     out.push(check('progress.dom.settled_still', 'hard', animating.length === 0 && !panel.steps.some(step => step.state === 'active'),
       animating.length ? `${progress.phase}, and still animating: ${animating.slice(0, 5).join(', ')}` : panel.steps.some(step => step.state === 'active')
         ? `${progress.phase}, and a step still reads active` : `${progress.phase}: no step active, nothing animating`));
@@ -2399,6 +2533,7 @@ function checkProvenance(op, trace, { expectHarness = false } = {}) {
       out.push(check('provenance.peer_reviews', 'hard', peers.length === 0, peers.length ? `no peer review state for ${peers.map(row => row.name).join(', ')}` : 'Astra and Fable each with a peer review state'));
     }
   }
+  if (newPath(op)) out.push(...checkInterpretation(op, trace));
   const runs = Array.isArray(op?.provider_runs) ? op.provider_runs : [];
   const unhashed = runs.filter(run => sentRun(run) && (!SHA256.test(String(run.request_sha256 || '')) || (run.state === 'succeeded' && !SHA256.test(String(run.response_sha256 || '')))));
   out.push(check('provenance.request_hashes', 'hard', unhashed.length === 0, unhashed.length ? `sent run(s) without their request/response sha256: ${unhashed.map(describeRun).join(', ')}`
@@ -2418,6 +2553,54 @@ function checkProvenance(op, trace, { expectHarness = false } = {}) {
   out.push(check('provenance.trace', 'hard', Boolean(trace) && bare.length === 0, !trace ? 'the operator trace was not served'
     : bare.length ? `traced runs without endpoint, model (or, where the API names none, adapter version) or identity: ${bare.map(r => `${r.participant} ${r.id}`).join(', ')}`
       : `${traced.length} traced run(s), each with its endpoint, model or adapter version, and identity`));
+  return out;
+}
+
+// The interpretation's provenance on a new-path encounter (design/FINAL.md 3.1, 8.3; D22), from the operator view's
+// interpretation section: the assessment was made from an event inventory that was READ, through the interpreter's run
+// - its provider and purpose, the one model asked for, and that model answering (a substituted model is refused and never
+// read, ADJUDICATION P-5) - whose request and response hashes it keeps, and whose usage it records where it sent; the D22
+// record has no problem and counts no execution of the legacy reader (P1); and the trace, where it was read, carries the
+// same section (``trace`` undefined: not read).
+function checkInterpretation(op, trace) {
+  const section = isObject(op?.assessment?.interpretation) ? op.assessment.interpretation : null;
+  if (!section || section.engine !== 'events') {
+    return [check('provenance.interpretation', 'hard', false, section ? `the assessment's interpretation section names the engine ${JSON.stringify(section.engine)}`
+      : 'the operator view serves no interpretation section for a new-path assessment')];
+  }
+  const inventory = isObject(section.inventory) ? section.inventory : null;
+  const run = isObject(section.run) ? section.run : null;
+  const record = isObject(section.record) ? section.record : null;
+  const problems = [];
+  if (!inventory) problems.push('no event inventory');
+  else if (inventory.state !== 'read') problems.push(`its event inventory was ${inventory.state}`);
+  if (!run) problems.push('no interpreter run');
+  else {
+    if (run.provider !== INTERPRETER.provider || run.purpose !== INTERPRETER.purpose) problems.push(`its run is ${run.provider}/${run.purpose}`);
+    if (run.requested_model !== INTERPRETER.model) problems.push(`its run asked for ${JSON.stringify(run.requested_model)}`);
+    if ((run.sent || run.returned_model) && run.returned_model !== INTERPRETER.model) problems.push(`its run was answered by ${JSON.stringify(run.returned_model)}`);
+    if (!SHA256.test(String(run.request_sha256 || '')) || (run.state === 'succeeded' && !SHA256.test(String(run.response_sha256 || '')))) problems.push('its run lacks its request or response sha256');
+  }
+  if (!record) problems.push('no D22 record');
+  else {
+    if (record.sentinel?.legacy_calls !== 0) problems.push(`the record counts ${JSON.stringify(record.sentinel?.legacy_calls)} execution(s) of the legacy reader`);
+    if (inventory && record.inventory?.id !== inventory.id) problems.push('the record names another inventory');
+    if (run && record.gemini_run !== run.id) problems.push('the record names another run');
+  }
+  const recorded = Array.isArray(section.problems) ? section.problems : ['problems not served'];
+  if (recorded.length) problems.push(`the record's problems: ${recorded.join(' ')}`);
+  const out = [check('provenance.interpretation', 'hard', problems.length === 0, problems.length ? problems.join('; ')
+    : `made from the event inventory ${inventory.id} (read), through the ${run.provider} run ${run.id} asking for ${run.requested_model}${run.returned_model ? `, answered by ${run.returned_model}` : ''}; no legacy execution counted`)];
+  if (run && run.sent && run.state === 'succeeded') {
+    out.push(check('provenance.interpretation.usage', 'soft', isObject(run.usage) && Object.keys(run.usage).length > 0,
+      isObject(run.usage) && Object.keys(run.usage).length ? `usage ${JSON.stringify(run.usage)}${run.estimated_cost ? `, estimated USD ${run.estimated_cost}` : ''}` : 'the interpreter run that sent records no usage'));
+  }
+  if (trace !== undefined) {
+    const traced = isObject(trace?.interpretation) ? trace.interpretation : null;
+    out.push(check('provenance.interpretation.trace', 'hard', Boolean(traced) && traced.engine === 'events' && traced.run?.id === run?.id,
+      !trace ? 'the operator trace was not served' : !traced ? 'the trace carries no interpretation section'
+        : traced.run?.id === run?.id ? 'the trace carries the same interpretation section' : `the trace names the run ${traced.run?.id}, the detail ${run?.id}`));
+  }
   return out;
 }
 
@@ -4457,6 +4640,9 @@ module.exports = {
   checkCompactProgress, PANEL_PHASES, MODELLESS_PARTICIPANTS, uploadCarriedClientKey, checkFailure, FAILED_STATES, FAILURE_WALKED,
   // the completion repair's physician addendum step (review_plan.addendum)
   checkAddendum, withdrawalTookEffect,
+  // the Gemini migration's new path: the routing stand-in, D3, the interpretation's provenance, the retry action
+  newPath, checkStandIn, standInValues, checkInterpretation, ERROR_ACTION_BUTTONS, STEP_OF_KIND, INTERPRETER, EVENTS_ENGINE_PREFIX,
+  ROUTING_STAND_IN, MEMBER_ONLY_FACTS, OPS_POST_BODY,
 };
 
 if (require.main === module) {

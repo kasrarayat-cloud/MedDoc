@@ -73,7 +73,7 @@
       "phase": {"enum": ["queued", "processing", "action_needed", "awaiting_detail", "completed", "partial", "failed", "stopped", "being_confirmed", "paused"]},
       "busy": "boolean", "steps": {"items": {"ref": "step"}}, "active_detail": "string", "started_at": "iso?", "finished_at": "iso?",
       "server_time": "iso", "slow": "boolean", "message": "string", "can_stop": "boolean", "can_resume": "boolean", "can_leave": "boolean",
-      "error": {"nullable": true, "keys": {"text": "string", "action": {"enum": ["resume", "new_document", "none"]}}}}},
+      "error": {"nullable": true, "keys": {"text": "string", "action": {"enum": ["resume", "new_document", "retry_reading", "none"]}}}}},
     "checks": {"items": {"keys": {"key": {"enum": ["document_review", "independent_checks", "coding_validation"]}, "label": "string",
                                   "state": {"enum": ["done", "running", "waiting", "unavailable", "not_run"]}}}},
     "codes": {"items": {"ref": "code"}},
