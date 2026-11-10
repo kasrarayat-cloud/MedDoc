@@ -351,3 +351,412 @@ evidence, and such an argument comes back to the owner of these decisions.
     piece', and the member's retry is refused (an operator's override remains).
   - #4: not a defect.
   - #14 is repaired in D51.
+- **S17 refutation round 2 (wf_20a87b6f-e16, 2026-11-10; 5 lenses over 2fe6efe89..cad5637b7): 20 findings, 18
+  confirmed.** Repaired as D54-D61. Recorded and not repaired:
+  - #2 and #6: a sibling the per-code rule held (D29's site, D27's not documented) does not compete with its rival
+    for the act, so the rival is READY where c2e53f8e holds both with competing_codes. The READY code is the one the
+    document supports in every demonstrated input (43249 on an 18 mm esophageal balloon dilation; 43264 on a balloon
+    extraction without lithotripsy). FRESH-B grades them correct, and the misfit sibling stays held with its own
+    question. By the registry's categories (false READY, exclusion, dropped question, wrong act, against the
+    expected outcome) this is a correction, not a regression.
+  - #18: a per-minute rate limit that Google names only in ErrorInfo becomes an installation-wide quota hold under
+    D39: a fail-closed false hold an operator releases, accepted as D39's cost.
+  - #17 and #19: not defects (their verifiers refuted them).
+  The full suite on cad5637b7 also failed the guard matrix: TARGET_MODEL_READS and TOUCHED_SINCE_READ, D51's new
+  in-image scripts, were not driven by tests/guard_support.py's in_image. They now are, with their answers asserted.
+- **D54 A worded current time is verified only by whole present-encounter frames or a date at day precision
+  (2026-11-10; round-2 refutation findings 0, 7 and 8; amends D42).** D42 verified a current time when an anchor WORD
+  stood anywhere in its words ("this", "these", "same", "currently", a procedure's phase), or when the words held any
+  date literal. So when Gemini called an index colonoscopy's act current, 45385 went READY with any of these words:
+  "These were the findings at her index colonoscopy", "At her index colonoscopy this spring", "At her first colonoscopy
+  the same", "At the index procedure, on withdrawal", "At her index colonoscopy in November 2026". On each exact input
+  the installed release holds the code (needs_clarification, performed_status) or excludes it as historical (the
+  "History:" lines). That is held turned to READY.
+  - The rule. A current_encounter time given words is unverified (current_unanchored: a time question, never an
+    exclusion) unless one of three things holds:
+    - the words carry a date at day precision, and the date check decides (equal, or date_mismatch);
+    - they carry a D35 marker, and other_occasion stands alone, as before;
+    - they are made only of whole present-encounter frames. lexicon.current_frame folds the words, strips the
+      punctuation and whitespace at their edges, and splits them at commas, semicolons and a standalone "and". It
+      needs at least one part, and every part must equal a CURRENT_FRAMES entry.
+  - CURRENT_FRAMES is the census of every current time FRESH-1 and FRESH-2 recorded:
+    - the frozen answers: 1,099 + 1,079 current times, 136 + 219 of them worded, 24 distinct texts;
+    - each recorded present-encounter wording, exactly as recorded: today; during the present encounter; during (and
+      occurred during) the single date of service stated at the top of this report; this examination; at this
+      examination; this time; this time as well; on this occasion; same session; on withdrawal;
+    - eight obvious exact frames: this procedure; at this procedure; during this procedure; during this examination;
+      at the present encounter; on the date of service; this morning; this afternoon.
+    - D42's CURRENT_ANCHORS, PROCEDURE_PHASES and current_anchors are removed. The check name current_anchor, the reason
+      and the @1 labels are unchanged (nothing is recorded under them in production; D33, D48).
+  - A year or a month no longer anchors. "November 2026" alone is now unanchored: its two D42-era pins moved, the
+    literal-precision pass test and the EB3 test.
+    - A year or month that differs from the service date gives date_mismatch AND current_unanchored.
+    - current_unanchored never depends on the service date. A member may supply that date after normalization, and
+      time_state recomputes only the date reasons.
+    - With no document date, D42 verified "At her index colonoscopy in 2025" outright, and it stayed verified when a
+      member supplied a 2025 date. D54 leaves it unanchored whatever date is supplied.
+  - Cost measured.
+    - FRESH-2 re-scored on the repair (f2d54): A 96/6, B 177/15, C 167/19 plus 4 dropped_question and 2 safe_hold. This
+      equals f2r1f: 0 of 486 rows, 0 of 179 runs and 0 of 358 inventory and assessment files differ.
+    - FRESH-1 scored on e6f41f4f7 and on the repair: identical (0 of 486 rows, 0 of 179 runs, 0 of 358 files).
+    - The census's other wordings were already unanchored under D42 ("Those were the findings at her index
+      colonoscopy.", "Over the summer", "initially", "then", "FINDINGS"), are dated at day precision, or are D35's.
+    - The replay pins, regenerated from f2d54, are byte-identical to the committed MANIFEST.json and FREEZE.sha256:
+      none move.
+    - One committed test outside this repair's files moves: tests/test_interpretation_slips.py:136. It pins the
+      synthetic s1-e5 current time worded "in January 2024" as ['date_mismatch'], and D54 adds current_unanchored. The
+      state is the same (unverified), and 45378 stays READY on the current examination
+      (tests/test_interpretation_cases.py passes). Its one-line update is offered separately.
+    - The fallback test's unlocated time words moved from "today SYNTHETIC-MODEL-TEXT-S02", which D54 now denies, to
+      the frame "during this procedure".
+  - Residual, recorded (EB4); D54 cannot close it.
+    - Gemini misreads another occasion's act as current and gives no words, or gives words that are themselves a
+      present-encounter frame (a reproduced report's own "on withdrawal" or "this examination"). That act reads READY.
+    - It is recorded on FRESH-2. In aside-of-twins-023 r1 and r2, the biopsies inside the reproduced "original
+      procedure" narrative carry the words "On withdrawal" and verify as current. 43239 is held there only by the
+      extent question, exactly as under D42.
+    - A date at day precision that equals the service date anchors, whatever else the words say. On an 11/09/2026
+      service, "These were the findings at her index colonoscopy, faxed to us on 11/09/2026" verifies.
+    - Finding 8's own control shows the same arm. The line is "History: At her index colonoscopy on 11/09/2026, a 12 mm
+      sessile polyp in the ascending colon was removed with a hot snare." The words are "At her index colonoscopy on
+      11/09/2026", on an 11/09/2026 service.
+      - 45385 is READY under D42 and under D54.
+      - The installed release EXCLUDES it as historical: excluded turned to READY.
+    - Measured alternative, not built: a day-precision date anchors only when the words left once its dates (and a
+      dangling "on") are removed are empty or whole frames. On FRESH-2 it changes 0 rows. It changes one inventory,
+      aside-of-twins-019 r1: the three times worded "Summary of the upper endoscopy of 2026-09-30 for the referring
+      physician." become unverified. They were already opened by an open question. That moves one committed replay
+      pin. It would close this control.
+    - The installed reader's section heuristics held some of these: finding 7's "History:" lines are EXCLUDED as
+      historical. The owner's directive keeps the legacy reader off the new path, so the residual is measured, never
+      patched with a passage word list.
+  - Pins.
+    - tests.test_interpretation_verify: test_d54_words_that_are_not_whole_frames_leave_a_current_time_unverified,
+      test_d54_a_year_or_a_month_compares_and_anchors_nothing, test_d54_whole_frames_and_a_date_at_day_precision_verify
+      and test_d54_d35_marker_stands_alone_where_found.
+    - tests.test_interpretation_lexicon: test_d54_the_whole_frames_of_this_encounter (the tuple) and
+      test_d54_current_frame_reads_the_words_whole.
+    - tests.test_interpretation_normalize: test_d54_unbound_current_time_words_that_are_not_whole_frames_deny_the_default
+      and test_d54_located_current_time_words_that_are_not_whole_frames_leave_it_unverified.
+  - Mutation proof (each mutant in its own private copy; each applied exactly once and confirmed):
+    - M1, the change undone: 7 of 8 pins fail. The D35 pin guards a behaviour D54 keeps; M8 fails it.
+    - M2, D42's anchor-word test restored: 3 fail.
+    - M3, any date literal anchoring: 3.
+    - M4, any part a frame: 4.
+    - M5, a frame inside a part: 3.
+    - M6, a vacuous all() over no parts: 2.
+    - M7, edges not stripped: 2.
+    - M8, the D35 marker no longer standing alone: 1.
+    - M9, "this spring" added as a frame: 3.
+  - Each pin, and the mutants that fail it:
+    - not_whole_frames: M1, M2, M4, M5, M6, M9.
+    - year_or_a_month: M1, M3.
+    - whole_frames_and_a_date: M1, M7.
+    - d35_marker_stands_alone: M8.
+    - the tuple: M1, M9.
+    - current_frame_reads_the_words_whole: M1, M4, M5, M6, M7, M9.
+    - unbound words: M1 to M5.
+    - located words: M1 to M4.
+
+- **D55 A code D27 narrows competes for every act its covers name (2026-11-10; the round-2 refutation, finding 1;
+  completes D27 and D40).** D27 narrowed what MATCHES 43265 (its lithotripsy), and the narrowing also reached what the
+  competition read: D40 compares E* sets, and 43265's E* was its lithotripsy alone. So 43264 (the balloon extraction)
+  and 43265 (the lithotripsy) proposed for one stone clearance never intersected, and both were READY. The installed
+  release holds both with competing_codes, because its competition reads the catalogue covers, and 43265 covers the
+  extraction. The competition call in assess.py now passes each counted code's CLAIMS (assess._claims): its E*, plus,
+  for a matched code that D27 narrows (CodeLink.defining non-empty, E* non-empty), every current performed event
+  (coverage.current_performed) of its own family of a kind in its acts beside its defining kinds. Only 43265 (the stone
+  extraction), 44365 (the ablation) and 49440 (the tube placement) gain claims; the EUS codes' acts are their defining
+  kinds. A code the per-code rule held has an empty E* and claims nothing. So 43265 held not documented leaves 43264
+  READY (D27's own test), and the competition of held codes is unchanged (findings 2 and 6, recorded as not
+  regressions). E*, support['acts'], the coverage reconciliation and combination.competition are unchanged. The D27 pin
+  that asserted both codes READY (test_the_lithotripsy_code_with_its_lithotripsy_is_ready) is replaced by the D55 pin.
+  Cost on FRESH-2: no row changes. fb13 r1-r3 propose both codes, but 43265 is held not documented there.
+  - Pins: tests/test_interpretation_events.py DefiningKinds.test_d55_* (four: the shared ERCP fixture; finding 1's own
+    input, with Astra and Fable read and proposing nothing; 44365 beside 44369; 49440 beside 49441), and
+    tests/test_interpretation_combination.py Competition.test_d55_* (the three-code table, and _claims on matched, held
+    and earlier acts).
+  - Mutation proof: with the call site restored to E*, the 4 behaviour pins fail (6 assertion failures); with _claims
+    reduced to E*, all 5 D55 tests fail (7).
+- **D56 A doubted 'incomplete' completion never fits the full EUS class (2026-11-10; the round-2 refutation, finding 3;
+  completes D43).** D43 read the completion through _stated_incomplete, which is true only when the completion is
+  usable. A confident 'incomplete' held 43259. The same 'incomplete' left unverified (words that do not bind) or
+  opened (Gemini's own completion question) fitted the full class, so 43259 was READY on "The examination was
+  incomplete: the esophagus and the stomach were not examined." The installed release holds that input. In
+  _examination_class a FULL-class code now does not fit when its session examination's completion has the value
+  'incomplete' in ANY state: verified, unverified or opened (fail-closed, _said_incomplete). The question keeps D43's
+  "stated to be incomplete" form. The limited and lower-tract classes still read their reach only, and D38's reach rule
+  keeps the verified predicate.
+  - Cost on FRESH-2: no change. Its 4 'incomplete' completions are all verified, and none is on a full EUS code.
+  - Pin: tests/test_interpretation_assess.py
+    ExaminationClass.test_d56_a_doubted_or_unbound_incomplete_completion_holds_the_full_class_code. It covers five
+    unbinding shapes (opened with and without passages, words not in their passage, words cited elsewhere, no words),
+    each run with and without the participants.
+  - Mutation proof: with the verified-only predicate restored, all 10 subtests fail.
+- **D57 An anastomosis reach reads its own words (2026-11-10; the round-2 refutation, findings 4 and 9; completes
+  D44).** D44 placed the reach only by the encounter's anatomy entry. A history of a right hemicolectomy (one ileocolic
+  anastomosis entry) and a sigmoid colectomy, with "The colonoscope was advanced to the colorectal anastomosis at 15
+  cm.", made 45385 READY with "extent reached = anastomosis". The installed release asks the extent. D34's
+  compared_landmark already refuses that place for an act whose own words name another type.
+  _full_colonoscopy_reach now takes the extent record and applies the same own-words guard: an 'anastomosis' reach is
+  full only when the one anastomosis is placed on the right colon side (D44), and also when its own words name no
+  anastomosis type of another place (lexicon.anastomosis_type_places) and no plural "anastomoses"
+  (lexicon.ANASTOMOSES). The guard reads only literal type words in the reach's own words (EB1). The case needs Gemini
+  to list only the ileocolic anastomosis; a faithful answer lists both, the place is then '', and the extent was
+  already asked.
+  - Cost on FRESH-2: no change. Its 3 colonoscopy anastomosis reaches (v6 r1-r3) name the ileocolic anastomosis
+    their anatomy lists.
+  - Pin: tests/test_interpretation_assess.py
+    ColonoscopyReach.test_d57_a_reach_whose_own_words_name_the_other_anastomosis_asks_the_extent. It covers findings 4
+    and 9 verbatim, a coloanal reach and "both anastomoses", with controls for an ileocolic reach and an untyped reach.
+  - Mutation proof: with D44's anatomy-only reading restored, the 4 asked cases fail.
+- **D61 A session stated incomplete through its completion carries the 52/53 consideration (2026-11-10; the round-2
+  refutation, finding 10; ADJUDICATION R-4 and C-9).** On FRESH-2 Gemini states an examination's incompleteness only
+  through the reach's completion: 4 answers (A/v6 r2, B/fb07 r1-r3, all verified), and the round-2 verifier found none
+  through attempted_not_completed among 354 examinations. The 52/53 consideration and the service.incomplete warn
+  were tied to the attempted status alone. So on "The examination was incomplete because of poor preparation." the
+  READY 45385 and the held 45378 carried neither.
+  The installed release gives both codes both. Now every code of a session whose examination's completion is VERIFIED
+  'incomplete' carries both signals, each once (_incomplete_session), whatever the code's own state:
+  - the service.incomplete warn (wording.incomplete_check), worded from the completion's own words;
+  - the consideration (wording.incomplete_consideration), the installed release's sentence.
+  An excluded code carries neither. Status, READY and held never change: a warn and a consideration only. On finding
+  10's exact text the considerations equal the installed engine's, string for string (transverse and cecum reaches,
+  measured on c2e53f8e with the harness reference). The check quotes Gemini's completion words, where the installed
+  release quotes its cue sentence. On FRESH-2 those words are whole sentences ("The gastroscope could not be passed
+  through the stricture."); in the synthetic fixture they are "incomplete".
+  - Cost on FRESH-2 (f2asm against f2r1f): the summary is unchanged. 14 of 486 rows gain only a service.incomplete
+    warn: v6 r2 (45378, 45386) and fb07 r1-r3 (43235, 43245, 43248, 43249). No status, question or verdict moves.
+  - Pins: tests/test_interpretation_assess.py IncompleteCompletion (four tests). They cover finding 10's text with and
+    without Astra; a cecum reach; the base code of an examination also stated attempted (its one check and one
+    consideration), an act code, a held code and an excluded code; and controls (a completion that does not bind; an
+    incomplete upper examination beside a complete colonoscopy).
+  - Mutation proof: with the session's completion no longer read, all 4 tests fail (5 failures).
+  - Residual, for the owner: an examination stated attempted_not_completed, with no completion, still gives the
+    consideration to its base code only (FINAL 7.3). On finding 10's cecum text, read that way, 45385 is READY with
+    neither signal, while installed gives both codes both.
+
+- **D58 A removal's adjunct is set apart only by what verifiably separates it (2026-11-10; S17 refutation round 2,
+  finding 5; narrows D41).** D41 asked an ablation or a bleeding control beside a removal of its session unless
+  incompatible verified places, two distinct verified lesions or a verified part_of naming another act set it apart.
+  Two of those let a polypectomy site's own hemostasis go READY: 45382 beside 45385 on a rectosigmoid polyp whose clip
+  line says "the polypectomy site in the distal sigmoid colon" (lexicon.compatible reads the two as different places),
+  on a hepatic flexure polyp with the clip in the proximal transverse colon, and on a clip whose part_of names the
+  colonoscopy (normalize verifies a part_of only as naming an event that exists). c2e53f8e READYs all three, so this
+  repairs a false READY, not a regression. relations.identity_in_doubt's procedural_adjunct arm now sets the adjunct
+  apart:
+  - by a verified part_of only when it names an ACT (names_an_act): an event whose catalogue kind is neither an
+    examination (the session, ADJUDICATION C-1) nor an umbrella, read as every consumer reads one (FINAL 7.3 line 1:
+    its kind usable). An 'other' event (no catalogue kind) or one whose kind is not usable is not established as one;
+  - by places only when every pair is verifiably apart (adjunct_apart): both on one of the tract's two chains
+    (TRACT_POSITION: the anal canal to the terminal ileum, with the appendiceal orifice and the ileocecal valve at the
+    cecum; the proximal esophagus to the second portion of the duodenum), not compatible, and not ADJACENT (one step
+    apart). A place on no chain never sets it apart: a region, the ampulla, an organ beside the tract, and an
+    anastomosis, even one D34 places (that place is the anatomy entry's words, not the act's).
+  The adjacency is this arm's alone. lexicon.compatible, the pairing table and the other bundling rules are unchanged.
+  Cost: an adjunct that names no lesion and no act, one step from the removal or at a place on no chain, is now asked
+  even when it is a separate act. D30's standalone-ablation control (angioectasias in the ascending colon beside a cecal
+  EMR) goes from READY to act_target. That control now sits in the transverse colon, and the ascending-colon input is
+  pinned as the cost. FRESH-2 (f2d58 against f2r1f): 0 of 486 rows and 0 of 179 inventories change. All 56 recorded
+  adjunct-removal pairs carry a verified part_of naming an EMR (28 the removal itself, 28 the EMR beside a second
+  removal), none names an examination, and no procedural_adjunct relation is recorded before or after. The replay pins
+  do not move. Pins:
+  - finding 5's three variants (45382 asked, act_target);
+  - the cost, and an anastomosis, raw and D34-placed;
+  - the chain table, adjacent pairs on both chains, places on no chain, every pair apart;
+  - a part_of naming the examination, an umbrella, an 'other' event or an event whose kind is not verified;
+  - controls kept: D41's ascending-colon diverticulum beside the sigmoid polypectomy (READY), a part_of naming a
+    biopsy, and places two steps apart (READY).
+  Mutation proof (9 private copies): with relations.py restored, all 10 pins fail and no control does. Each arm's own
+  mutant (the place arm, the part_of arm, the D34 guard, any pair, no adjacency, places off the chains, an 'other'
+  event as an act, an unverified kind as an act) fails only that arm's pins. Recorded, not repaired: a part_of naming
+  an act that is itself part of the removal still sets the adjunct apart. Hemostatic clips part_of an epinephrine
+  injection that names nothing (the injection is asked), or part_of closure clips, leave 45382 READY, as before D58.
+
+- **D59 A switch-back's reinstatement guard holds through the approval, and its since is when this revision replaced
+  the target (2026-11-10; S17 refutation round 2, findings 11, 12, 13 and 14; amends D51).** Four changes, one
+  guard:
+  - Finding 11. D51's 'reinstatement' read only a current REINSTATE decision. Approving the reinstated code, the
+    normal end of a reinstatement, replaced it, so the reason cleared and switch-back and rollback-app refused nothing.
+    On those rows c2e53f8e readied and exported 45378 beside 45385. In variant (b), with the base left undecided, it
+    offered the base's approve, and one click billed both. The reason now names a new-path assessment while any code
+    stands reinstated as the review overlay counts one: review.reinstated_codes (current decision REINSTATE or
+    APPROVE), read where the image has it, else the same rule over the current decisions. Only a revoke of that code
+    (or a reject of the reinstatement) clears it. Legacy assessments are untouched (is_new_assessment gates it).
+  - Finding 12. The touched filter's since was the current containers' creation, while the target came from the
+    newest successful app receipt. A later app of this same revision installed a pair and then failed (its recompute,
+    or its access check: the pair stays installed). That moved the since past a standing reinstatement, and the
+    switch-back went on. The since is now the earliest time that same receipt records for its phase
+    (replaced_since: main's started_at). With none recorded, it falls back to the earliest of this revision's
+    containers and of every later app receipt of this revision (fail-closed). The B4 and B7 closes keep their own
+    since. The receipt records `touched_since`.
+  - Finding 14. B7 now reads the interpretation note again before its close may refuse. A receipt stopped at B7,
+    with the previous web serving and its worker held, carries B7's count, with B4's kept as `interpretation_at_b4`.
+  - Finding 13. The limit is stated in INSTALL.md (Switching back) and in the note. The previous revision reads a
+    new-path assessment through a stub that adds no base hold, so a reinstatement made THERE can leave the diagnostic
+    base approvable beside the therapeutic code. Re-check each new-path encounter on the previous web (a context save
+    reads it again) before reviewing it there. INTERPRETATION_MADE names, as `reinstatable`, the new-path encounters
+    whose current assessment holds an excluded, reinstatable code. The key is given only when there is one, so the
+    answer is as it was otherwise. The note counts them. Never a refusal (P-1).
+  - Cost, measured. 13 of 13 real app receipts (/home/claude/cpt-studio-install-20261023) carry started_at, so the
+    fallback never fires on them. On the 8 blue/green ones (24c49a50 to c2e53f8e), started_at precedes S1 (the
+    incoming web's creation) by 14.4-17.4 s. The touched filter now reaches that much earlier, into a window where
+    only the previous pair serves. A record it writes there for a reason it does not read (unknown, outcome, conflict)
+    is now named: fail-closed, more refusals, never fewer. The guard matrix runs every in-image script under the
+    sentinel. On 173e83336 (which drives the two D51 reads) with this patch, test_guard_matrix_new_path,
+    test_guard_mutation and SwitchBackHazardTests pass, 25 of 25.
+  - Pins. No existing test's expectation changed. BlueGreenWorld gained an opt-in answer to TOUCHED_SINCE_READ by
+    record time, and its default is as before. The ops suite went from 631 to 639 tests; test_readers_dispatch with
+    test_cux_undo went from 47 to 51.
+    - ops/test_install_bluegreen.py SwitchBackSinceTests: finding 12's sequence through the real install.main, plus
+      the since read at every check and the fallback.
+    - SwitchBackCountTests: the B7 count, and a switch-back that states the limit and proceeds.
+    - ExposedNoteTests: the note, and a malformed list not counted.
+    - InstallDocTests (d59).
+    - tests/test_readers_dispatch.py SwitchBackHazardTests: finding 11's variants (a) and (b), the reject boundary, the
+      no-hasattr arm, and INTERPRETATION_MADE on real rows.
+    - Mutation proof, ten private copies, each differing from the work copy in one file: every one of the 12 D59 pins
+      fails under the copy that undoes its change and passes on the work copy. The D51 pins pass in all eleven.
+  - Residual, to the owner. A switch-back refused at B7, followed by `app` to come back, gives a newer successful
+    receipt naming the same target. Its started_at becomes the since, so a reinstatement written under the earlier
+    pair is dropped again, and the switch-back completes. Reproduced on this patch in a scratch probe. Closing it means
+    taking the earliest app receipt that names that target since this revision's last successful switch-back. A B7
+    close that raises, rather than refuses, still leaves B4's count only.
+
+- **D60 Only a retry that released a run is read as a release (2026-11-10; the round-2 refutation of cad5637b7,
+  finding 15; amends D52).** D52 read any interpret stage keyed 'retry:<run>' as a release of that run's answer. But
+  every retry is keyed that way, including one that releases nothing. The case is a usable answer whose reading failed
+  on this server: the reading child overran or was killed, or the write gate refused. retry_target never releases that
+  answer, because it stays reusable (FINAL 6.3, Read). Under D52 it still read as released, so the stored-answer door
+  skipped it and the request was paid for again: by the retry or, if the retry was stopped, by the next upload of the
+  same text in the workspace. Now:
+  - The retry that releases a run an operator reconciled (D52's branch, which keeps the operator's record) is keyed
+    'retry-release:<run>'. That key is 113 characters, or 157 with a Resume's suffix, inside the column's 200.
+  - released_for_retry reads only that key.
+  - Every other retry keeps 'retry:<run>', which is never a release. A Resume of it is not a release either.
+  - Measured on synthetic probes, cad5637b7 -> the repair:
+    - overrun, then a retry: 2 sends -> 1 (reused);
+    - a stopped retry, then a new upload: 2 -> 1 (reused);
+    - D52's own path, where an operator reconciled a usable answer, its reading overran and the console retried:
+      1 send -> 0;
+    - D52's sequence, a reconciled answer whose reading was refused and then a retry: 2 -> 2, with the operator's
+      note kept.
+  - The other key readers need no change:
+    - a repeated retry's existence check and resume read whole keys;
+    - keyed_interpretation_run and _settled_path read other marks;
+    - ':retry:' never matches ':retry-release:';
+    - the API and console doors parse no key.
+  - Cost:
+    - A stage that the D52 build (cad5637b7..e6f41f4f7, never installed in production) keyed 'retry:<run>' for a
+      reconciled run is no longer a release. Measured: it stops at the failed-before door with nothing sent, and the
+      next retry releases the run under the new key. This fails closed.
+    - A run D52 already released can be retried again after its 'retry-release' stage was stopped before it ran. That
+      retry writes nothing and is keyed 'retry:<run>'; the release stands on the first stage's key.
+  - Pins:
+    - test_pipeline_interpret UnreadAnswerRetryTests (3 tests): the retry, a stopped retry then a new upload, and a
+      Resume of the retry.
+    - test_pipeline_interpret ReconciledRetryTests: D52's pin, which now asserts the key 'retry-release:<run>', and
+      test_d60_a_reconciled_runs_release_is_its_retry_release_stage_and_lets_one_attempt_send.
+    - test_retry_reading_api UnreadAnswerRetryTests (2 tests): the member's door, and the console on D52's path.
+    - Mutation proof in private copies: jobs.py as at e6f41f4f7 fails all 7 pins; the reader alone reverted fails 7;
+      the writer alone reverted fails the 2 D52-path pins.
+- **D53b A hold kept only in an unsettled run's exchange is recorded before the next send (2026-11-10; the round-2
+  refutation of cad5637b7, finding 16; completes D53).** D53's scan read only runs with a definite outcome, and
+  classified each from the run's own bytes. Two shapes keep the answer only in the run's recorded turn-1 exchange:
+  - decision (k): the exchange was committed as it ended, then the run's outcome write failed, so the run is UNKNOWN
+    with no bytes of its own;
+  - a worker that died between the two leaves the run 'sending', marked unsent, until the stale sweep runs.
+
+  In either shape, a substituted model's answer or the spending cap's 429 set no hold, and the next document's stage
+  sent again. The scan now also reads:
+  - every sent interpretation run left UNKNOWN, reconciled or not;
+  - every run still 'sending' that may have reached the vendor (may_have_reached_vendor).
+
+  It reads the run's turn-1 exchange as P-6 reads it, through _turn_one_exchange: the run's only exchange, with bytes
+  that check against their sha256, answering the run's request. _settle_from_exchange now shares that reader, with its
+  behaviour unchanged. An exchange recorded with an HTTP status is classified from its outcome, status and bytes by
+  holds.classify, which is adapter.classify. A HOLD is recorded against the run with holds.record. A run left sending
+  counts as sent, by may_have_reached_vendor's rule, for this record only. Nothing else is written: the owning stage,
+  P-6 and the sweep settle the run as before, and one answer sets one hold.
+  - Measured on synthetic probes, cad5637b7 -> the repair, with the next upload in another workspace:
+    - decision (k) with a model answer: 2 sends -> 1, with the 'model' hold on the first run;
+    - decision (k) with the cap's 429: 2 -> 1, with a 'quota' hold;
+    - a dead worker's sending run before the sweep, with either answer: the next document sends -> paused, 0 sends;
+    - the same after the sweep has made the run UNKNOWN: sends -> paused.
+  - Cost:
+    - The scan reads every UNKNOWN interpretation run on every send, and reconciled runs stay UNKNOWN for good.
+      Measured queries per scan:
+      - 3 with no such run (D53 alone: 1);
+      - 13 with 10 unknown runs whose exchanges are no hold;
+      - 4 more for each run whose exchange is a hold that is already recorded (63 with 10 of each kind).
+    - A reconciled unknown outcome whose exchange is a hold now pauses its own after-reconcile stage until an
+      operator releases the hold. Before, that stage sent again (measured: 2 sends -> 1).
+    - An unsettled answer whose hold was never recorded sets that hold at the first send after the install. Since one
+      answer sets one hold, such an answer can pause the installation once more after an operator has released
+      another answer's hold. Production holds no interpretation run (c2e53f8e has no interpreter).
+  - Pins, all in test_pipeline_interpret PauseTests:
+    - test_d53b_a_hold_kept_only_in_an_unknown_runs_exchange_stops_the_next_send: finding 16 case A, the pin the spec
+      asks for.
+    - test_d53b_a_hold_kept_only_in_a_dead_workers_exchange_stops_the_next_send_before_the_sweep: case B, followed by
+      the sweep and a reconciliation; one hold, nothing sent.
+    - test_d53b_a_reconciled_unknown_runs_hold_pauses_its_own_after_reconcile_stage.
+    - The control test_d53b_reads_an_unsettled_exchange_only_as_p6_reads_it_and_records_only_a_hold: an exchange that
+      does not check, one answering another request, a replay, a usable 200 and a 503 set no hold.
+  - Mutation proof:
+    - the scan removed: the 3 pins fail;
+    - without its sending branch, or without the in-memory sent flag: the dead-worker pin fails;
+    - the UNKNOWN read narrowed to unreconciled runs: the reconciled pin fails;
+    - the shared reader without its sha256 check: the control and P-6's own pin fail.
+
+- **D62 An unverified current time is a doubt, never an absence, for the rules that hold other codes (2026-11-10;
+  D54's review; structural).** coverage and relations read an event's currency only from a verified time. So
+  unverifying a current time (D35, D42, D54, or words that do not bind) removed that event from every rule that holds
+  OTHER codes by it. D54's reviewer measured two wrong READYs D54 created, and D42's own unanchored "then" already
+  did the same:
+  - an aside's examination ('These were the findings at her index colonoscopy') left today's session to the other
+    examination, so 45385 was READY on the index colonoscopy's snare;
+  - a removal whose time was 'During this colonoscopy' no longer bundled the biopsy of the lesion it removed, so 45380
+    was READY.
+  coverage.possibly_current: a current_encounter time, verified or not, unless its own words place the event
+  elsewhere (date_mismatch, other_occasion: evidence, not a doubt). It now drives:
+  - a session's examinations: a possibly current one beside a done one leaves the session unresolved, and is never
+    the session;
+  - the removal a part is bundled into (current_performed);
+  - relations' bundling-identity doubts and unresolved sessions;
+  - D55's claims.
+  An earlier or future time stays not current, verified or not. FRESH-2: no change; replay pins unchanged. Pins:
+  test_interpretation_coverage.PossiblyCurrent (3). Mutation proofs: each of the three parts fails its pin; the
+  contradicted-time exclusion also fails tests.test_interpretation_cases' s1-e5 (a 2024 examination mislabelled
+  current never takes today's session).
+- **D63 An anastomosis reach is full only when its own words name the right colon side's type (2026-11-10; D57's
+  review; fail-closed).** D57 read the reach's words as a deny list, so a bare 'anastomosis' (bound inside
+  'colorectal anastomosis') or a type no list holds ('colocolonic', 'rectal anastomosis', 'anastomosis in the rectum')
+  still counted as full beside an ileocolic anatomy entry. Now the reach's own words must name exactly the right
+  colon side's type ('the ileocolic anastomosis'), besides the anatomy's one anastomosis being placed there, and no
+  other type and no plural. Every recorded anastomosis reach names its type (FRESH-1 and FRESH-2: 6 of 6 'ileocolic
+  anastomosis'): no change. Pins: test_interpretation_assess.ColonoscopyReach (the D44 rows now name their type; a
+  bare reach beside an ileocolic anatomy asks), and the D57 rows. Mutation: the D57 deny-list form fails them.
+- **D64 A same-day date anchors a current time only where its other words name nothing else (2026-11-10; D54's
+  review).** D54 let any day-precision literal equal to the service date anchor the words around it. So 'At her index
+  colonoscopy on 11/09/2026' and 'faxed to us on 11/09/2026' verified the act as current (installed: excluded as
+  historical). With the literals cut out, every remaining part must be empty, a date connector ('on', 'dated', 'of',
+  'as of', 'date', 'date of service') or a whole frame (lexicon.dated_frame). 'on November 8, 2026' (the census) and
+  'today, 11/09/2026' still verify. Measured: FRESH-2 verdicts unchanged. One replay recording moves: C/W1-u29b-rel-p3-
+  aside-of-twins-019 r1, 3 'Summary of the upper endoscopy of 2026-09-30 for the referring physician' times verified
+  -> unverified, so MANIFEST.json and FREEZE.sha256 are regenerated and that is the only change. Mutation: the
+  bool(day) form fails the D54 pin's two D64 rows.
+- **D65 The switch-back's since is the earliest app receipt of this revision that replaced the same target
+  (2026-11-10; D59's review).** D59 read the since from the newest successful app receipt. Running app again after a
+  switch-back refused at B7 (the documented recovery) wrote a newer receipt naming the same target, and what this
+  revision wrote under its earlier pair was then read as the target's own: a standing approved reinstatement went to
+  c2e53f8e. replaced_since now also reads every earlier successful app receipt of this revision whose replaced web is
+  the same revision, and takes the earliest. Pin: ops.test_install_bluegreen test_d65 (and the receipts of another
+  target, a failed one and another revision's are not read). Mutation: it fails.
+- **D66 A hazard answer that is not a dict refuses the switch-back (2026-11-10; the D15 re-run's verifier).**
+  phase_switch_back's precheck and B4's read refused only on a non-empty answer, so None or any non-dict proceeded,
+  against switch_back_hazards' own contract. Both now refuse, with nothing started or stopped. Pin: test_d66 (None,
+  [], 'none', 0). Mutation: it fails.
+- **D58 amended in integration (2026-11-10):** the upper tract's chain runs on to the jejunum, which an enteroscopy
+  reaches. The ileum, which leads into the cecum on the lower chain, stays on no chain, so it never sets an adjunct
+  apart (fail-closed). D55's enteroscopy pin moved its ablation to the gastric antrum, four steps from the jejunal
+  removal.
