@@ -10,6 +10,9 @@ BUNDLING (7.7; COMMON_BUNDLED, catalogue.py:163-175):
   session at compatible places, neither naming an unresolved lesion and the two not verified on two lesions. Where its
   lesion or place is unresolved the relations step recorded a bundling_identity: asked, never READY (bundling_doubt).
 - resection_technique: a snare or hot biopsy part_of an EMR or ESD, or on the same verified lesion as one.
+- procedural adjunct (DECISIONS D30): an ablation or a bleeding control verifiably part_of a current performed removal
+  (snare, EMR, hot biopsy, ESD), or on that removal's verified lesion - the removal's adjunct coagulation, the control of
+  bleeding it causes - is included in the removal and never reported alone (PROCEDURAL_ADJUNCT), as resection_technique.
 - biopsy_of_removed_lesion: a biopsy of the same verified lesion as a current performed removal (snare, EMR, hot biopsy,
   ESD) where that lesion is single, or - whatever the multiplicity (C-2) - where the two acts cite a passage in common;
   a group lesion whose two acts sit in separate passages has a bundling_identity relation instead.
@@ -46,6 +49,12 @@ from studio.types import ClarificationSpec
 SECOND_REVIEW_CHECKED = 64  # engine.SECOND_REVIEW_CHECKED (copied, pinned equal)
 COMMON = dict(catalogue.COMMON_BUNDLED)
 RESECTIONS = frozenset({'emr', 'esd'})
+# D30: the kinds a removal's procedural adjunct can be, and why such an adjunct is never separately reported (CPT Studio's
+# own rule over the event structure, in COMMON_BUNDLED's form; the catalogue's table is the legacy one and is not edited)
+ADJUNCT_KINDS = frozenset({'ablation', mapping.BLEEDING_CONTROL})
+PROCEDURAL_ADJUNCT = ('An ablation or a control of bleeding done as part of a removal at the same session - on the lesion '
+                      'it removes, or of the bleeding it causes - is part of that removal, not a separate service '
+                      '(internal profile rule).')
 # The regions of the lower tract: an EUS event placed there is a lower EUS, of which no EGD is the endoscopic portion.
 LOWER_REGIONS = frozenset({'colon', 'rectum', 'anus'})
 NOT_ACT_KINDS = mapping.EXAMINATION_KINDS | frozenset(mapping.UMBRELLAS)
@@ -117,6 +126,11 @@ def bundled_reason(reading, event: Mapping) -> str:
             other = identity.verified_lesion(whole)
             if whole_of == whole['id'] or (lesion and lesion == other):
                 return COMMON['resection_technique']
+        return ''
+    if kind in ADJUNCT_KINDS:  # D30: a removal's procedural adjunct, by its verified part_of or the removal's lesion
+        for whole in _wholes(reading, event, mapping.REMOVAL_MEMBERS):
+            if whole_of == whole['id'] or (lesion and lesion == identity.verified_lesion(whole)):
+                return PROCEDURAL_ADJUNCT
         return ''
     if kind == 'biopsy' and lesion:
         for whole in _wholes(reading, event, mapping.REMOVAL_MEMBERS):

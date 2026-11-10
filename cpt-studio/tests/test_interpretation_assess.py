@@ -33,8 +33,9 @@ from studio.types import (AssessmentResult, CodePosition, EvidenceSpan, LocatedQ
                           ParticipantCode, ParticipantInput, ParticipantNotCoded, ParticipantReading, PeerReview,
                           ProviderCode, ReferenceSourceInfo, Span, from_jsonable, to_jsonable)
 from studio.validation import checks, engine, questions, rationale, reconcile, review_view
-from tests.test_interpretation_events import (COLONOSCOPE, LOOKUP, POLYP, asked, check, colonoscopy, exam, inventory,
-                                              proposal, reached, removed, response, run)
+from tests.test_interpretation_events import (COLONOSCOPE, DUODENAL_REACH, EUS_LINES, FNA, LOOKUP, NO_FNA, POLYP, asked,
+                                              check, colonoscopy, eus, exam, inventory, proposal, reached, removed,
+                                              response, run)
 from tests.test_interpretation_identity import a, act, les, sc, tg
 from tests.test_interpretation_no_gi import scan, violations
 
@@ -191,6 +192,18 @@ class Sentinel(SimpleTestCase):
                                   events=[exam(), omitted], reach=[reached()])
         yield lambda: run(inv10, text10, [('45385', POLYP), ('45390', (POLYP, 'No polyp was removed today.'))])
         yield lambda: run(inv6, text6, [('43242', EUS_LINES['P3']), ('43259', EUS_LINES['P1'])])
+        # DECISIONS D27-D30: the defining act not documented, the examination class that does not fit, the dilation at
+        # an anastomosis, the procedural adjunct
+        from tests.test_interpretation_coverage import adjunct
+        from tests.test_interpretation_events import ANASTOMOTIC, ERCP_LINES, dilated, ercp
+        inv11, text11 = ercp()
+        yield lambda: run(inv11, text11, [('43264', ERCP_LINES['P3']), ('43265', ERCP_LINES['P3'])])
+        inv12, text12 = eus(FNA, reach=[DUODENAL_REACH])
+        yield lambda: run(inv12, text12, [('43242', EUS_LINES['P3']), ('43238', EUS_LINES['P3'])])
+        inv13, text13 = dilated(*ANASTOMOTIC)
+        yield lambda: run(inv13, text13, [('43249', ANASTOMOTIC[0]), ('43245', ANASTOMOTIC[0])])
+        inv14, text14, lines14 = adjunct()
+        yield lambda: run(inv14, text14, [('45390', lines14['P2']), ('45388', lines14['P3'])])
 
     def test_strict_mode_shows_zero_denied_executions_on_every_path(self):
         for index, work in enumerate(self.assessments()):
@@ -257,14 +270,16 @@ class Participants(SimpleTestCase):
         self.assertTrue(all(key.startswith('altp:') for key in (p.key for p in alternatives.values())))
 
     def test_two_codes_for_one_event_compete_when_one_is_a_participants(self):
+        """Two esophageal balloon dilation codes for one distal esophageal balloon dilation (43245, a gastric or
+        duodenal dilation code, is no longer matched by it: DECISIONS D29)."""
         line = 'The distal esophageal stricture was dilated with a through-the-scope balloon to 15 mm.'
         inv, text = inventory({'G1': EGD_LINES['G1'], 'G2': line}, events=[
             exam('E0', 'G1', words='gastroscope', procedure=a('egd')),
             act('E2', 'G2', 'dilation', 'dilated', procedure=a('egd'), technique=a('balloon', 'balloon', ['G2']),
                 target=tg('', 'distal_esophagus', 'distal esophageal', ['G2']))],
             reach=[reached('E0', 'second_portion_duodenum', 'second portion of the duodenum', 'G1')])
-        result = run(inv, text, [('43249', line)], participants=(participant('astra', text, [('43245', line)]),))
-        for code, rival in (('43249', '43245'), ('43245', '43249')):
+        result = run(inv, text, [('43249', line)], participants=(participant('astra', text, [('43233', line)]),))
+        for code, rival in (('43249', '43233'), ('43233', '43249')):
             p = proposal(result, code)
             self.assertEqual(asked(p), ['competing_codes'])
             self.assertEqual(p.support['competes'], [rival])
@@ -403,6 +418,124 @@ class CustomerWords(SimpleTestCase):
             if text_:
                 self.assertIsNone(customer_api.FORBIDDEN.search(text_), text_)
                 self.assertNotIn('gemini', text_.lower())
+
+    def test_the_s16_repairs_holds_name_no_provider_reader_or_rule_id(self):
+        """The sentences DECISIONS D27-D30 added: the defining act not documented, the examination class (its reach not
+        stated, or not fitting), the dilation site (unsettled, or another site) and the procedural adjunct."""
+        from tests.test_interpretation_coverage import adjunct
+        from tests.test_interpretation_events import ANASTOMOTIC, ERCP_LINES, ESOPHAGEAL, dilated, ercp
+        results = []
+        inv, text = ercp()
+        results.append(run(inv, text, [('43265', ERCP_LINES['P3'])]))
+        for reach in ((), (reached('E1', 'duodenum', 'duodenum', 'P1'),)):
+            inv, text = eus(FNA, reach=reach)
+            results.append(run(inv, text, [('43238', EUS_LINES['P3']), ('43242', EUS_LINES['P3'])]))
+        for line, target in (ANASTOMOTIC, ESOPHAGEAL):
+            inv, text = dilated(line, target)
+            results.append(run(inv, text, [('43245', line), ('43249', line)]))
+        inv, text, lines = adjunct()
+        results.append(run(inv, text, [('45390', lines['P2']), ('45388', lines['P3'])]))
+        texts, reasons = [], set()
+        for result in results:
+            for p in result.proposals:
+                reasons.add(p.support.get('reason'))
+                texts += [spec.question for spec in p.clarifications] + [spec.reason for spec in p.clarifications]
+                texts += [item.detail for item in p.checks if item.id in ('service.status', 'facts.examination_class',
+                                                                          'facts.required', 'events.match')]
+                texts += [p.support.get('summary', '')] + [item['label'] for item in p.support.get('acts', ())]
+        self.assertLessEqual({events.NOT_DOCUMENTED, events.SITE, events.ANOTHER_SITE, events.BUNDLED}, reasons)
+        self.assertTrue(any('limited endoscopic ultrasound examination' in t for t in texts))
+        for text_ in texts:
+            if text_:
+                self.assertIsNone(customer_api.FORBIDDEN.search(text_), text_)
+                self.assertNotIn('gemini', text_.lower())
+
+
+# --- DECISIONS D28: the EUS examination class (R6) ---------------------------------------------------------------------
+
+def eus_reaching(landmark: str, words: str, *more):
+    """An upper EUS whose echoendoscope was advanced to ``words`` (its verified reach, ``landmark``), the pancreatic head
+    examined, with ``more`` events (each in its EUS_LINES passage)."""
+    lines = {'P1': f'A linear echoendoscope was advanced to the {words}.', 'P2': EUS_LINES['P2']}
+    lines.update({event['status']['passages'][0]: EUS_LINES[event['status']['passages'][0]] for event in more})
+    examination = exam(words='echoendoscope', procedure=a('eus'), target=tg('', 'pancreas', 'pancreatic head', ['P2']))
+    examination['target']['passages'] = ['P2']
+    return inventory(lines, events=[examination, *more], reach=[reached('E1', landmark, words, 'P1')])
+
+
+class ExaminationClass(SimpleTestCase):
+    """DECISIONS D28 (fb12: 43238 READY beside 43242, on an echoendoscope advanced to the second portion of the
+    duodenum): a code the catalogue gives an EUS examination class reads its session's verified reach - the extent R6
+    reads - and is held, never excluded and never READY, when that reach is not verified or does not fit the class.
+    Every other code is unaffected."""
+
+    def test_a_reach_into_the_duodenum_fits_the_full_code_and_holds_the_limited_one(self):
+        inv, text = eus_reaching('second_portion_duodenum', 'second portion of the duodenum', FNA)
+        result = run(inv, text, [('43242', EUS_LINES['P3']), ('43238', EUS_LINES['P3'])])
+        full, limited = proposal(result, '43242'), proposal(result, '43238')
+        self.assertEqual((full.status, check(full, 'facts.examination_class')), ('ready', None))
+        self.assertIn('extent reached = second portion duodenum', check(full, 'facts.required').detail)
+        self.assertEqual((limited.bucket, limited.status, asked(limited), limited.support['reason']),
+                         ('selected', 'needs_clarification', ['extent'], events.SUPPORTED))
+        reason, question = wording.examination_class_hold('43238', 'limited', 'second portion duodenum',
+                                                          'second portion of the duodenum')
+        self.assertEqual((check(limited, 'facts.examination_class').status, check(limited, 'facts.examination_class')
+                          .detail, limited.clarifications[0].question, limited.clarifications[0].reason),
+                         ('warn', reason, question, reason))
+        self.assertEqual(question, 'The documented endoscopic ultrasound examination (“second portion of the duodenum”) '
+                                   'reached the second portion duodenum. Was a limited endoscopic ultrasound examination '
+                                   '(short of the duodenum) performed on the date of service?')
+
+    def test_a_reach_short_of_the_duodenum_fits_the_limited_code_and_holds_the_full_one(self):
+        inv, text = eus_reaching('gastric_antrum', 'gastric antrum', FNA)
+        result = run(inv, text, [('43242', EUS_LINES['P3']), ('43238', EUS_LINES['P3'])])
+        self.assertEqual(proposal(result, '43238').status, 'ready')
+        full = proposal(result, '43242')
+        self.assertEqual((full.status, asked(full)), ('needs_clarification', ['extent']))
+        self.assertIn('accounts for a full endoscopic ultrasound examination (to the duodenum or beyond)',
+                      full.clarifications[0].reason)
+
+    def test_a_reach_in_neither_class_holds_both(self):
+        """A limited examination is one verified SHORT of the duodenum (D28), not any reach outside the full list: a
+        reach named only as the small bowel, or at an anastomosis, fits neither class."""
+        for landmark, words in (('small_bowel', 'small bowel'), ('anastomosis', 'anastomosis')):
+            inv, text = eus_reaching(landmark, words, FNA)
+            self.assertEqual(inv.encounter_facts['reach'][0]['state'], 'verified')
+            result = run(inv, text, [('43242', EUS_LINES['P3']), ('43238', EUS_LINES['P3'])])
+            for code in ('43242', '43238'):
+                p = proposal(result, code)
+                with self.subTest(reach=landmark, code=code):
+                    self.assertEqual((p.bucket, p.status, asked(p)), ('selected', 'needs_clarification', ['extent']))
+                    self.assertEqual(check(p, 'facts.examination_class').status, 'warn')
+
+    def test_an_unverified_reach_asks_the_extent_and_never_excludes(self):
+        inv, text = eus(FNA)
+        result = run(inv, text, [('43242', EUS_LINES['P3']), ('43238', EUS_LINES['P3']), ('45342', EUS_LINES['P3'])])
+        for code in ('43242', '43238'):
+            p = proposal(result, code)
+            with self.subTest(code=code):
+                self.assertEqual((p.bucket, p.status, asked(p)), ('selected', 'needs_clarification', ['extent']))
+                self.assertEqual(p.clarifications[0].question, 'Endoscopic ultrasound: confirm the furthest extent '
+                                                               'reached.')
+                self.assertEqual(check(p, 'facts.required').status, 'warn')
+                self.assertIsNone(check(p, 'facts.examination_class'))
+        self.assertEqual(proposal(result, '45342').status, 'ready')  # a code with no class is unaffected
+
+    def test_the_examination_only_codes(self):
+        inv, text = eus(reach=[DUODENAL_REACH])
+        statuses = {code: proposal(run(inv, text, [(code, EUS_LINES['P1'])]), code) for code in ('43259', '43237',
+                                                                                                 '43231', '45341')}
+        self.assertEqual({code: (p.status, asked(p)) for code, p in statuses.items()},
+                         {'43259': ('ready', []), '43237': ('needs_clarification', ['extent']),
+                          '43231': ('needs_clarification', ['extent']), '45341': ('ready', [])})
+
+    def test_an_excluded_class_code_waits_on_its_class_when_reinstated(self):
+        inv, text = eus(NO_FNA, reach=[DUODENAL_REACH])
+        p = proposal(run(inv, text, [('43238', 'No fine-needle aspiration was performed')]), '43238')
+        self.assertEqual((p.bucket, p.reinstatable), ('excluded', True))
+        _, question = wording.examination_class_hold('43238', 'limited', 'duodenum', 'duodenum')
+        self.assertEqual(p.support['reinstatement_waits'], [{'fact': 'extent', 'question': question}])
+        self.assertEqual(check(p, 'review.reinstatement').status, 'warn')
 
 
 # --- the copied legacy words, pinned ------------------------------------------------------------------------------------

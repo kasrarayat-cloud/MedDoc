@@ -228,6 +228,66 @@ class CodeLinks(SimpleTestCase):
         self.assertFalse(mapping.included('45342', egd))
         self.assertFalse(mapping.included('43242', event('biopsy', family='gi.egd')))
 
+    def test_d27_the_defining_kinds_computed_from_the_catalogue(self):
+        """DECISIONS D27: D(C) is C's covers less every kind another code of its family covers alone, kept where it is
+        non-empty and smaller than the covers - computed at import, pinned here. Every other code is unaffected."""
+        fna = ('fna',)
+        self.assertEqual(dict(mapping.DEFINING), {
+            '43265': ('lithotripsy',), '44365': ('hot_biopsy',), '49440': ('peg',),
+            '43232': fna, '43238': fna, '43242': fna, '44407': fna, '45342': fna, '45392': fna,
+            '43240': ('drainage',), '43253': ('injection',)})
+        for code in catalogue.CODES:
+            with self.subTest(code=code):
+                link = mapping.code_link(code)
+                self.assertEqual(link.defining, mapping.DEFINING.get(code, ()))
+                if link.defining and set(link.kinds) & mapping.EXAMINATION_KINDS:
+                    self.assertEqual(link.acts, link.defining)  # C-1's groups of an EUS code are already its D(C)
+        self.assertTrue(mapping.candidate(mapping.code_link('43265'), event('lithotripsy', family='gi.ercp')))
+        self.assertFalse(mapping.candidate(mapping.code_link('43265'), event('stone_extraction', family='gi.ercp')))
+        self.assertTrue(mapping.candidate(mapping.code_link('43264'), event('stone_extraction', family='gi.ercp')))
+        # the rule over a catalogue of other shapes: every kind of its own, or every kind another code's alone
+        mine = catalogue._c('gi.ercp', ('lithotripsy', 'cholangioscopy'))
+        with mock.patch.dict(catalogue.CODES, {'99001': mine, '99002': catalogue._c('gi.ercp', ('lithotripsy',)),
+                                               '99003': catalogue._c('gi.ercp', ('cholangioscopy', 'stent_removal'))}):
+            self.assertEqual(mapping._defining('99001', mine), ())  # cholangioscopy (43273) and lithotripsy (99002)
+            self.assertEqual(mapping._defining('99003', catalogue.CODES['99003']), ('stent_removal',))
+        self.assertEqual(mapping._defining('43264', catalogue.CODES['43264']), ())
+
+    def test_d28_the_examination_classes_and_the_reach_a_full_one_needs(self):
+        self.assertEqual({code: mapping.examination_class(code) for code in catalogue.CODES
+                          if mapping.examination_class(code)},
+                         {'43231': 'limited', '43232': 'limited', '43237': 'limited', '43238': 'limited',
+                          '43242': 'full', '43259': 'full'})
+        self.assertEqual(mapping.FULL_REACH, {'duodenum', 'duodenal_bulb', 'second_portion_duodenum', 'ampulla',
+                                              'jejunum'})
+        # short of the duodenum: the tract before it - D29's esophageal class and the stomach's half of its gastric one
+        self.assertEqual(mapping.SHORT_OF_DUODENUM, mapping.SITE_CLASSES[mapping.ESOPHAGEAL]
+                         | (mapping.SITE_CLASSES[mapping.GASTRIC_DUODENAL] - {'duodenum', 'duodenal_bulb',
+                                                                              'second_portion_duodenum'}))
+        self.assertEqual(dict(mapping.CLASS_REACH), {'full': mapping.FULL_REACH, 'limited': mapping.SHORT_OF_DUODENUM})
+        self.assertFalse(mapping.FULL_REACH & mapping.SHORT_OF_DUODENUM)
+        self.assertLessEqual(mapping.FULL_REACH | mapping.SHORT_OF_DUODENUM, set(schema.LANDMARKS))
+
+    def test_d29_the_site_specific_dilation_codes(self):
+        """DECISIONS D29: the table lives here (never in studio.gi), names only the catalogue's EGD-family dilation
+        codes, and every other dilation code of the catalogue (the colon's, the enteroscopy's, the ERCP's) is not in
+        it. The classes are D29's landmark lists, exactly."""
+        self.assertEqual(dict(mapping.DILATION_SITES), {
+            '43213': 'esophageal', '43214': 'esophageal', '43220': 'esophageal', '43226': 'esophageal',
+            '43233': 'esophageal', '43248': 'esophageal', '43249': 'esophageal', '43245': 'gastric_duodenal'})
+        for code in mapping.DILATION_SITES:
+            self.assertEqual((catalogue.CODES[code].family, catalogue.CODES[code].covers), ('gi.egd', ('dilation',)))
+        self.assertEqual({code for code, profile in catalogue.CODES.items() if 'dilation' in profile.covers}
+                         - set(mapping.DILATION_SITES), {'44381', '45386', '44405', '45340', '43277'})
+        self.assertEqual(mapping.SITE_CLASSES[mapping.ESOPHAGEAL],
+                         {'esophagus', 'proximal_esophagus', 'mid_esophagus', 'distal_esophagus',
+                          'gastroesophageal_junction'})
+        self.assertEqual(mapping.SITE_CLASSES[mapping.GASTRIC_DUODENAL],
+                         {'stomach', 'gastric_cardia', 'gastric_fundus', 'gastric_body', 'gastric_antrum', 'pylorus',
+                          'duodenum', 'duodenal_bulb', 'second_portion_duodenum'})
+        for landmarks in mapping.SITE_CLASSES.values():
+            self.assertLessEqual(landmarks, set(schema.LANDMARKS))
+
 
 class MapEvents(SimpleTestCase):
     def test_every_event_gets_its_mapping_fields_through_normalize(self):

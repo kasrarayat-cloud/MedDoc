@@ -13,6 +13,7 @@ document's own. Nothing is sent. The builders here are the S08 test modules' sha
 from __future__ import annotations
 
 import hashlib
+from unittest import mock
 
 from django.test import SimpleTestCase
 
@@ -261,11 +262,17 @@ EUS_LINES = {'P1': 'A linear echoendoscope was advanced to the duodenum.',
              'P4': 'No fine-needle aspiration was performed.'}
 
 
-def eus(*more, act_lines=('P1', 'P2')):
+def eus(*more, act_lines=('P1', 'P2'), reach=()):
+    """An upper EUS (E1: the echoendoscope advanced to the duodenum, P1; the pancreatic head examined, P2) plus ``more``
+    events; ``reach`` the encounter's reach entries (none by default: the EUS examination's reach is then not stated, and
+    a code with an EUS examination class asks it, DECISIONS D28)."""
     lines = {pid: EUS_LINES[pid] for pid in act_lines + tuple(event['status']['passages'][0] for event in more)}
     examination = exam(words='echoendoscope', procedure=a('eus'), target=tg('', 'pancreas', 'pancreatic head', ['P2']))
     examination['target']['passages'] = ['P2']
-    return inventory(lines, events=[examination, *more])
+    return inventory(lines, events=[examination, *more], reach=reach)
+
+
+DUODENAL_REACH = reached('E1', 'duodenum', 'duodenum', 'P1')  # EUS_LINES['P1']: a full examination's reach (D28)
 
 
 FNA = act('E2', 'P3', 'fna', 'sampled', status_words='was sampled with a 22-gauge needle',
@@ -338,6 +345,232 @@ class ExaminationIsTheSession(SimpleTestCase):
         self.assertEqual(events.requirements(mapping.code_link('45381')), (('injection', 'tattoo'),))  # one act
         self.assertEqual(events.requirements(mapping.code_link('46221')), (('band_ligation',),))
         self.assertEqual(events.requirements(mapping.code_link('45305')), ())
+
+
+# --- DECISIONS D27: the defining kinds (FINAL 7.3) ---------------------------------------------------------------------
+
+ERCP_LINES = {'P1': 'The duodenoscope was advanced to the major papilla.', 'P2': 'The common bile duct was cannulated.',
+              'P3': 'Three stones were extracted from the bile duct with an extraction balloon.',
+              'P4': 'Mechanical lithotripsy of a 15 mm stone was performed.', 'P5': 'No lithotripsy was performed.',
+              'P6': 'No stones were extracted.'}
+LITHOTRIPSY = act('E4', 'P4', 'lithotripsy', 'lithotripsy', status_words='was performed', procedure=a('ercp'))
+NO_LITHOTRIPSY = act('E4', 'P5', 'lithotripsy', 'lithotripsy', status='not_performed',
+                     status_words='No lithotripsy was performed', procedure=a('ercp'),
+                     scope=sc('all_of_kind', 'No', ['P5']))
+
+
+def ercp(*more, extraction=True):
+    """An ERCP (E1) with the common bile duct cannulated (E2) and, by default, a balloon stone extraction (E3)."""
+    acts = [exam(words='duodenoscope', procedure=a('ercp')),
+            act('E2', 'P2', 'cannulation', 'cannulated', status_words='was cannulated', procedure=a('ercp'),
+                target=tg('', 'common_bile_duct', 'common bile duct', ['P2']))]
+    if extraction:
+        acts.append(act('E3', 'P3', 'stone_extraction', 'extracted', status_words='were extracted', procedure=a('ercp'),
+                        technique=a('extraction_balloon', 'extraction balloon', ['P3'])))
+    lines = {pid: ERCP_LINES[pid] for pid in ('P1', 'P2') + (('P3',) if extraction else ())
+             + tuple(event['status']['passages'][0] for event in more)}
+    return inventory(lines, events=acts + list(more))
+
+
+class DefiningKinds(SimpleTestCase):
+    """DECISIONS D27 (fb13: 43265 READY on a balloon extraction): a code D27 narrows is matched only by an event of a
+    defining kind - a kind no other code of its family accounts for alone; with none, R3's failure path over those kinds
+    (7.6 here: not documented, naming the defining act). Every other code is unaffected."""
+
+    def test_the_lithotripsy_code_on_a_balloon_extraction_is_held_not_documented_and_43264_stays_ready(self):
+        inv, text = ercp()
+        result = run(inv, text, [('43264', ERCP_LINES['P3']), ('43265', ERCP_LINES['P3'])])
+        self.assertEqual((proposal(result, '43264').status, [item['id'] for item in proposal(result, '43264')
+                                                             .support['acts']]), ('ready', ['E3']))
+        p = proposal(result, '43265')
+        self.assertEqual((p.status, asked(p), p.support['reason'], p.support['acts']),
+                         ('needs_clarification', ['performed_status'], events.NOT_DOCUMENTED, []))
+        self.assertEqual(p.clarifications[0].reason, "CPT Studio's reading of the document records no lithotripsy "
+                                                     'documented as done on the date of service.')
+        self.assertEqual(p.support['summary'], 'CPT Studio could not confirm the lithotripsy as done on the date of '
+                                               'service.')
+        self.assertEqual(result.completeness['unresolved_items'], [])  # the extraction is 43264's
+
+    def test_alone_the_lithotripsy_code_leaves_the_extraction_uncovered(self):
+        inv, text = ercp()
+        result = run(inv, text, [('43265', ERCP_LINES['P3'])])
+        self.assertEqual(proposal(result, '43265').status, 'needs_clarification')
+        self.assertEqual([(item['act'], item['reason']) for item in result.completeness['unresolved_items']],
+                         [('stone_extraction', 'not_covered')])
+
+    def test_the_lithotripsy_code_with_its_lithotripsy_is_ready(self):
+        inv, text = ercp(LITHOTRIPSY)
+        result = run(inv, text, [('43264', ERCP_LINES['P3']), ('43265', ERCP_LINES['P4'])])
+        p = proposal(result, '43265')
+        self.assertEqual((p.status, [item['id'] for item in p.support['acts']]), ('ready', ['E4']))
+        self.assertEqual(proposal(result, '43264').status, 'ready')
+
+    def test_r3s_failure_path_reads_the_defining_kinds_only(self):
+        """A denial of the defining act the code cites excludes it (7.5, reinstatable); a denial of the act another
+        code accounts for alone no longer concerns it (7.6, held)."""
+        inv, text = ercp(NO_LITHOTRIPSY)
+        p = proposal(run(inv, text, [('43264', ERCP_LINES['P3']), ('43265', 'No lithotripsy was performed')]), '43265')
+        self.assertEqual((p.bucket, p.reinstatable, p.support['exclusion']['event']), ('excluded', True, 'E4'))
+        no_extraction = act('E3', 'P6', 'stone_extraction', 'extracted', status='not_performed',
+                            status_words='No stones were extracted', procedure=a('ercp'), scope=sc('all_of_kind', 'No',
+                                                                                                    ['P6']))
+        inv, text = ercp(no_extraction, extraction=False)
+        result = run(inv, text, [('43264', 'No stones were extracted'), ('43265', 'No stones were extracted')])
+        self.assertEqual(proposal(result, '43264').bucket, 'excluded')
+        p = proposal(result, '43265')
+        self.assertEqual((p.status, p.support['reason']), ('needs_clarification', events.NOT_DOCUMENTED))
+
+    def test_the_hot_forceps_enteroscopy_code_needs_its_hot_forceps_removal(self):
+        lines = {'P1': 'The enteroscope was advanced to the jejunum.',
+                 'P2': 'Two jejunal angioectasias were treated with argon plasma coagulation.',
+                 'P3': 'A 5 mm jejunal polyp was removed with hot biopsy forceps.'}
+
+        def enteroscopy(event):
+            pid = event['status']['passages'][0]
+            return inventory({'P1': lines['P1'], pid: lines[pid]},
+                             events=[exam(words='enteroscope', procedure=a('enteroscopy')), event],
+                             reach=[reached(landmark='jejunum', words='jejunum')])
+
+        inv, text = enteroscopy(act('E2', 'P2', 'ablation', 'argon plasma coagulation', status_words='were treated',
+                                    procedure=a('enteroscopy'),
+                                    technique=a('argon_plasma', 'argon plasma coagulation', ['P2'])))
+        result = run(inv, text, [('44365', lines['P2']), ('44369', lines['P2'])])
+        self.assertEqual(proposal(result, '44369').status, 'ready')
+        p = proposal(result, '44365')
+        self.assertEqual((p.status, p.support['reason']), ('needs_clarification', events.NOT_DOCUMENTED))
+        self.assertIn('records no hot forceps removal documented', p.clarifications[0].reason)
+        inv, text = enteroscopy(act('E2', 'P3', 'hot_biopsy', 'hot biopsy forceps', status_words='was removed',
+                                    procedure=a('enteroscopy'), technique=a('hot_forceps', 'hot biopsy forceps', ['P3'])))
+        self.assertEqual(proposal(run(inv, text, [('44365', lines['P3'])]), '44365').status, 'ready')
+
+    def test_the_percutaneous_gastrostomy_code_needs_its_gastrostomy(self):
+        lines = {'P1': 'A 14 Fr jejunostomy tube was placed percutaneously under fluoroscopic guidance.',
+                 'P2': 'A 20 Fr gastrostomy tube was placed percutaneously under fluoroscopic guidance.'}
+        inv, text = inventory({'P1': lines['P1']}, events=[act('E1', 'P1', 'tube_placement', 'jejunostomy tube',
+                                                               status_words='was placed',
+                                                               procedure=a('feeding_tube'))])
+        result = run(inv, text, [('49440', lines['P1']), ('49441', lines['P1'])])
+        self.assertEqual(proposal(result, '49441').status, 'ready')
+        p = proposal(result, '49440')
+        self.assertEqual((p.status, p.support['reason']), ('needs_clarification', events.NOT_DOCUMENTED))
+        self.assertIn('records no gastrostomy (PEG) placement documented', p.clarifications[0].reason)
+        inv, text = inventory({'P2': lines['P2']}, events=[act('E1', 'P2', 'peg', 'gastrostomy tube',
+                                                               status_words='was placed', procedure=a('feeding_tube'))])
+        self.assertEqual(proposal(run(inv, text, [('49440', lines['P2'])]), '49440').status, 'ready')
+
+    def test_the_requirement_groups_of_the_narrowed_codes(self):
+        self.assertEqual([events.requirements(mapping.code_link(code)) for code in ('43265', '44365', '49440')],
+                         [(('lithotripsy',),), (('hot_biopsy',),), (('peg',),)])
+        # not narrowed: both kinds their own (44372, 45381), or every kind another code's alone too (45385 and 44394)
+        self.assertEqual([events.requirements(mapping.code_link(code)) for code in ('44372', '45381', '45385')],
+                         [(('tube_placement', 'peg'),), (('injection', 'tattoo'),), (('snare',),)])
+        self.assertEqual(events.accounted(mapping.code_link('43265')), ('lithotripsy',))
+        self.assertEqual(events.accounted(mapping.code_link('43242')), ('fna',))
+
+
+# --- DECISIONS D29: the site of a dilation (R4) --------------------------------------------------------------------------
+
+EGD_REACH = 'EGD: the gastroscope was advanced to the second portion of the duodenum.'
+
+
+def dilated(line: str, target: dict, lesions=(), technique=('balloon', 'through-the-scope balloon')):
+    """An EGD to the second portion of the duodenum (E1, G1) with one dilation (E2, G2) at ``target``."""
+    dilation = act('E2', 'G2', 'dilation', 'dilated', procedure=a('egd'), target=target,
+                   technique=a(technique[0], technique[1], ['G2']))
+    return inventory({'G1': EGD_REACH, 'G2': line}, lesions=lesions,
+                     events=[exam('E1', 'G1', words='gastroscope', procedure=a('egd')), dilation],
+                     reach=[reached('E1', 'second_portion_duodenum', 'second portion of the duodenum', 'G1')])
+
+
+ESOPHAGEAL = ('The distal esophageal stricture was dilated with a through-the-scope balloon to 15 mm.',
+              tg('', 'distal_esophagus', 'distal esophageal', ['G2']))
+PYLORIC = ('A pyloric stricture was dilated with a through-the-scope balloon to 15 mm.',
+           tg('', 'pylorus', 'pyloric', ['G2']))
+ANASTOMOTIC = ('The gastrojejunal anastomotic stricture was dilated with a through-the-scope balloon to 12 mm.',
+               tg('', 'anastomosis', 'anastomotic', ['G2']))
+UNPLACED = ('The stricture was dilated with a through-the-scope balloon to 12 mm.', tg())
+
+
+class DilationSite(SimpleTestCase):
+    """DECISIONS D29 (fb07: 43249 READY on a gastrojejunal anastomotic stricture): a site-specific dilation code is
+    supported only by a dilation verified in its class - directly or through its verified lesion's verified site. One
+    verified outside the class is the "dilation at another site" hold; one whose place is not settled (not verified, an
+    anastomosis) asks which structure was dilated. Never excluded; every other dilation code is unaffected."""
+
+    def assessed(self, case, codes=('43249', '43245'), lesions=()):
+        line, target = case
+        inv, text = dilated(line, target, lesions)
+        result = run(inv, text, [(code, line) for code in codes])
+        return [proposal(result, code) for code in codes]
+
+    def test_an_esophageal_dilation_supports_the_esophageal_code_only(self):
+        esophageal, gastric = self.assessed(ESOPHAGEAL)
+        self.assertEqual((esophageal.status, [item['id'] for item in esophageal.support['acts']]), ('ready', ['E2']))
+        self.assertEqual((gastric.status, asked(gastric), gastric.support['reason'], gastric.bucket),
+                         ('needs_clarification', ['act_target'], events.ANOTHER_SITE, 'selected'))
+        self.assertEqual(gastric.clarifications[0].question,
+                         'The documented dilation (“dilated”) is at the distal esophagus. Was a dilation of the stomach '
+                         'or duodenum performed on the date of service?')
+
+    def test_a_pyloric_dilation_supports_the_gastric_or_duodenal_code_only(self):
+        esophageal, gastric = self.assessed(PYLORIC)
+        self.assertEqual(gastric.status, 'ready')
+        self.assertEqual((esophageal.status, asked(esophageal), esophageal.support['reason']),
+                         ('needs_clarification', ['act_target'], events.ANOTHER_SITE))
+        self.assertIn('this code accounts for a dilation of the esophagus, which CPT Studio could not find',
+                      check(esophageal, 'service.status').detail)
+
+    def test_an_anastomotic_or_unplaced_dilation_asks_which_structure_was_dilated(self):
+        for case in (ANASTOMOTIC, UNPLACED):
+            for p in self.assessed(case):
+                with self.subTest(line=case[0], code=p.code):
+                    self.assertEqual((p.status, asked(p), p.support['reason'], p.bucket),
+                                     ('needs_clarification', ['act_target'], events.SITE, 'selected'))
+                    self.assertTrue(p.clarifications[0].question.startswith('Which lesion or site was the dilation'))
+                    self.assertIn('could not confirm from the document which structure', p.clarifications[0].reason)
+
+    def test_the_verified_site_of_the_verified_lesion_places_the_dilation(self):
+        line = ('A 2 cm distal esophageal stricture was found; the stricture was dilated with a through-the-scope '
+                'balloon to 15 mm.')
+        stricture = les('L1', '2 cm distal esophageal stricture', 'G2', landmark='distal_esophagus',
+                        site_words='distal esophageal', size_words='2 cm')
+        inv, _ = dilated(line, tg('L1', 'not_stated', 'the stricture', ['G2']), (stricture,))
+        reading = events.Reading.of(inv)
+        self.assertEqual((mapping.target_landmark(reading.events['E2']), events.site_places(reading, reading.events['E2'])),
+                         ('', ('distal_esophagus',)))
+        esophageal, gastric = self.assessed((line, tg('L1', 'not_stated', 'the stricture', ['G2'])), lesions=(stricture,))
+        self.assertEqual((esophageal.status, gastric.support['reason']), ('ready', events.ANOTHER_SITE))
+
+    def test_the_fit_of_each_place(self):
+        reading = events.Reading.of(dilated(*UNPLACED)[0])
+
+        def fit(*places, site=mapping.ESOPHAGEAL):
+            with mock.patch.object(events, 'site_places', return_value=places):
+                return events.site_fit(reading, reading.events['E2'], site)
+
+        self.assertEqual([fit('distal_esophagus'), fit('gastroesophageal_junction'), fit('stomach'), fit('anastomosis'),
+                          fit(), fit('distal_esophagus', 'anastomosis'), fit('distal_esophagus', 'stomach'),
+                          fit('stomach', 'anastomosis'), fit('jejunum', 'stomach')],
+                         [events.FITS, events.FITS, events.OUTSIDE, events.UNSETTLED, events.UNSETTLED, events.FITS,
+                          events.UNSETTLED, events.UNSETTLED, events.OUTSIDE])
+        self.assertEqual([fit('duodenal_bulb', site=mapping.GASTRIC_DUODENAL), fit('ampulla', site=mapping.GASTRIC_DUODENAL),
+                          fit('gastroesophageal_junction', site=mapping.GASTRIC_DUODENAL)],
+                         [events.FITS, events.OUTSIDE, events.OUTSIDE])
+
+    def test_the_technique_is_read_first_and_codes_not_in_the_table_are_unaffected(self):
+        line = 'The gastrojejunal anastomotic stricture was dilated with Savary dilators over a guide wire to 12 mm.'
+        inv, text = dilated(line, ANASTOMOTIC[1], technique=('wire_bougie', 'Savary dilators over a guide wire'))
+        result = run(inv, text, [('43248', line), ('43249', line)])
+        p = proposal(result, '43249')  # a balloon code, a dilation over a guide wire: R4's technique decides first
+        self.assertEqual((asked(p), p.support['reason']), (['technique'], events.ANOTHER_TECHNIQUE))
+        p = proposal(result, '43248')  # the technique fits; the anastomosis does not settle the site
+        self.assertEqual((asked(p), p.support['reason']), (['act_target'], events.SITE))
+        lines = {'P1': COLONOSCOPE, 'P2': 'The ileocolonic anastomotic stricture was dilated with a through-the-scope '
+                                          'balloon to 15 mm.'}
+        inv, text = inventory(lines, reach=[reached()], events=[exam(), act(
+            'E2', 'P2', 'dilation', 'dilated', technique=a('balloon', 'through-the-scope balloon', ['P2']),
+            target=tg('', 'anastomosis', 'anastomotic', ['P2']))])
+        self.assertEqual(proposal(run(inv, text, [('45386', lines['P2'])]), '45386').status, 'ready')
 
 
 # --- 7.4: a positive candidate, no supporting event: held, ONE focused question ----------------------------------------

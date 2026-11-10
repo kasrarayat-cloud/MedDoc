@@ -11,7 +11,11 @@ member values only, D3).
 What it does, per proposed code (events.evaluate for R1-R5, then here):
 - R6 the profile's required facts, as FactStates built from the inventory - extent (the verified reach of the session's
   current examination), target (EUS), cannulation (ERCP), em_basis (the visit event's basis) - and setting and patient
-  status from the context; worded by checks.required_facts_check and checks.fact_clarifications;
+  status from the context; worded by checks.required_facts_check and checks.fact_clarifications; and (DECISIONS D28) the
+  EUS examination class of a code the catalogue gives one (CodeProfile.exam): its required facts gain the extent - the
+  same verified reach of its session's examination - and a reach that does not fit the class (a full examination needs
+  it at or beyond the duodenum, mapping.FULL_REACH; a limited one short of it, mapping.SHORT_OF_DUODENUM) holds the
+  code with the extent question in another_technique's form (facts.examination_class); never an exclusion, never READY;
 - R7 the date of service (checks.service_date_state over the gemini context; PROPOSAL_DATE_CHECK and the encounter's
   question);
 - R8 the combination holds (combination.py): base, base-within, competing, the same-day E/M by date of service (C-3);
@@ -218,15 +222,26 @@ def _span_of(record: Optional[Mapping]):
     return (Span(record['start'], record['end'], record['text']),) if isinstance(record, Mapping) else ()
 
 
+def _reach(family: str, reading: events.Reading, sessions_: Mapping) -> tuple:
+    """The verified reach of ``family``'s session examination (contract 9.2's extent): (its landmark, its extent record);
+    ('', the record or None) when the session has no single current examination or its reach is not verified or names
+    no place."""
+    session = sessions_.get(family)
+    exam = reading.events.get(session.event) if session is not None and session.event else None
+    extent = exam.get('extent') if exam is not None else None
+    if exam is not None and events.verify.usable(extent) and wording.landmark_label(extent.get('value', '')):
+        return extent['value'], extent
+    return '', extent
+
+
 def _inventory_fact(name: str, family: str, selection: _Selection, reading: events.Reading,
                     sessions_: Mapping) -> Optional[Fact]:
     """contract 9.2's required facts, read from the inventory's verified attributes (FINAL 7.2 R6)."""
     session = sessions_.get(family)
     if name == 'extent':
-        exam = reading.events.get(session.event) if session is not None and session.event else None
-        extent = exam.get('extent') if exam is not None else None
-        if exam is not None and events.verify.usable(extent) and wording.landmark_label(extent.get('value', '')):
-            return Fact('extent', wording.landmark_label(extent['value']), 'document', _span_of(extent.get('words')))
+        landmark, extent = _reach(family, reading, sessions_)
+        if landmark:
+            return Fact('extent', wording.landmark_label(landmark), 'document', _span_of(extent.get('words')))
         return None
     if name == 'target':
         candidates = [reading.events[eid] for eid in ((session.examinations if session is not None else ())
@@ -263,13 +278,37 @@ def _inventory_fact(name: str, family: str, selection: _Selection, reading: even
 
 def _fact_states(selection: _Selection, context: Mapping, reading: events.Reading, sessions_: Mapping) -> tuple:
     profile = PROFILES[selection.family]
+    names = tuple(profile.required_facts)
+    if mapping.examination_class(selection.code) and 'extent' not in names:
+        names += ('extent',)  # D28: an EUS examination class is read from the session's verified reach
     states = []
-    for name in profile.required_facts:
+    for name in names:
         if name in CONTEXT_FACTS:
             states.append(_state(name, context.get(name)))
         else:
             states.append(_state(name, _inventory_fact(name, selection.family, selection, reading, sessions_)))
     return tuple(states)
+
+
+def _examination_class(selection: _Selection, reading: events.Reading, sessions_: Mapping,
+                       key: str) -> Optional[tuple]:
+    """D28 (FINAL 7.2 R6): (check, clarification) of a code with an EUS examination class whose session's verified
+    reach - the reach the extent fact reads - does not fit it: a full examination needs the reach at or beyond the
+    duodenum (mapping.FULL_REACH), a limited one short of it (mapping.SHORT_OF_DUODENUM); a reach in neither fits
+    neither. None when it fits, when the code has no class, or when the reach is not verified (the extent fact the
+    class adds to the code's required facts is then missing, and asked). Never an exclusion."""
+    exam_class = mapping.examination_class(selection.code)
+    if not exam_class:
+        return None
+    landmark, extent = _reach(selection.family, reading, sessions_)
+    if not landmark or landmark in mapping.CLASS_REACH[exam_class]:
+        return None
+    words = extent['words']['text'] if isinstance(extent.get('words'), Mapping) else ''
+    reason, question = wording.examination_class_hold(selection.code, exam_class, wording.landmark_label(landmark),
+                                                      words)
+    return (Check(*wording.EXAMINATION_CLASS_CHECK, 'warn', reason, wording.SOURCE),
+            ClarificationSpec(scope='proposal', fact='extent', question=question, reason=reason,
+                              family=selection.family, proposal_key=key))
 
 
 def _procedural(selection: _Selection, ref) -> bool:
@@ -339,8 +378,7 @@ def _summary_sentence(selection: _Selection, reading: events.Reading) -> str:
     """One plain sentence of CPT Studio's reading of the documented events the code was matched to (FINAL 7.11)."""
     evaluation = selection.evaluation
     name = events.service_label(selection.family)
-    what = events.group_label(evaluation.link, evaluation.link.acts or evaluation.link.kinds) if evaluation.link.linked \
-        else name
+    what = events.group_label(evaluation.link, events.accounted(evaluation.link)) if evaluation.link.linked else name
     if evaluation.state in ('performed', 'incomplete'):
         examination = f'The {name}' + (' (an incomplete examination)' if evaluation.state == 'incomplete' else '')
         acts = [events.event_label(reading, reading.events[eid]) for eid in evaluation.supporting
@@ -424,6 +462,7 @@ def _proposal(selection: _Selection, key: str, enc: _Encounter, reading: events.
     elif evaluation.attempted:
         considerations.append(wording.incomplete_consideration(selection.code, ref.pfs, release))
     states = _fact_states(selection, enc.context, reading, enc.sessions)
+    exam_class = _examination_class(selection, reading, enc.sessions, key)  # D28 (R6)
     if not excluded:
         if evaluation.question is not None:
             clarifications.append(_spec(evaluation.question, selection.family, key))
@@ -445,6 +484,8 @@ def _proposal(selection: _Selection, key: str, enc: _Encounter, reading: events.
     facts_check = checks.required_facts_check(profile, states) if states else None
     if facts_check:
         found.append(facts_check)
+    if exam_class is not None:
+        found.append(exam_class[0])
     em = selection.family in wording.EM_FAMILIES
     documented = combination.separate_statement(reading, evaluation.supporting) if em else None
     if em and not enc.day_info.procedure_day:
@@ -453,6 +494,8 @@ def _proposal(selection: _Selection, key: str, enc: _Encounter, reading: events.
             found.append(checks.same_day_if_reinstated_check(enc.if_reinstated))
     if not excluded:
         clarifications += checks.fact_clarifications(states, profile, selection.family, key)
+        if exam_class is not None:
+            clarifications.append(exam_class[1])
         if em and enc.day_info.procedure_day:
             found.append(checks.em_procedure_check(enc.day_info.labels, enc.global_days, documented,
                                                    enc.day_info.possible))
@@ -487,6 +530,8 @@ def _proposal(selection: _Selection, key: str, enc: _Encounter, reading: events.
     waits = []
     if excluded:
         holds = list(checks.fact_clarifications(states, profile, selection.family, key))
+        if exam_class is not None:
+            holds.append(exam_class[1])
         if em and enc.day_info.procedure_day and documented is None:
             holds.append(checks.separate_em_clarification(enc.day_info.labels, selection.family, key,
                                                           enc.day_info.possible))

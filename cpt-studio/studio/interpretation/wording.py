@@ -325,6 +325,43 @@ def another_technique(name: str, stated: str, required: str, words: str) -> tupl
             'of service?')
 
 
+def another_site(name: str, place: str, required: str, words: str) -> tuple[str, str]:
+    """(detail, question) of a dilation verified at a place outside the code's site class (DECISIONS D29), in
+    another_technique's form: held, never excluded."""
+    return (f'The {name} is documented as performed with a dilation at the {place} ({quote(words)}); this code accounts '
+            f'for a {required}, which CPT Studio could not find in the document.',
+            f'The documented dilation ({quote(words, 120)}) is at the {place}. Was a {required} performed on the date of '
+            'service?')
+
+
+# --- the site of a dilation (DECISIONS D29; R4) and the EUS examination class (D28; R6): CPT Studio's own words --------
+
+SITE_WORDS = {'esophageal': 'dilation of the esophagus', 'gastric_duodenal': 'dilation of the stomach or duodenum'}
+
+
+def site_reason(act: str, required: str) -> str:
+    """D29: a dilation whose structure CPT Studio could not establish (no verified place, a surgically made place, or
+    places on both sides of the code's site class); its question is target_question's."""
+    return (f'This code accounts for a {required}; CPT Studio could not confirm from the document which structure the '
+            f'{act} was done on.')
+
+
+EXAMINATION_CLASS_WORDS = {'full': 'a full endoscopic ultrasound examination (to the duodenum or beyond)',
+                           'limited': 'a limited endoscopic ultrasound examination (short of the duodenum)'}
+EXAMINATION_CLASS_CHECK = ('facts.examination_class', 'Endoscopic ultrasound examination class')
+
+
+def examination_class_hold(code: str, exam_class: str, reached: str, words: str) -> tuple[str, str]:
+    """(reason, question) of a code whose EUS examination class the verified reach of its session does not fit
+    (DECISIONS D28), in another_technique's form: the code is held, never excluded, by it."""
+    required = EXAMINATION_CLASS_WORDS[exam_class]
+    said, shown = (f' ({quote(words)})', f' ({quote(words, 120)})') if words else ('', '')
+    return (f'The endoscopic ultrasound examination is documented as reaching the {reached}{said}; {code} accounts for '
+            f'{required}, which CPT Studio could not find in the document.',
+            f'The documented endoscopic ultrasound examination{shown} reached the {reached}. Was {required} performed '
+            'on the date of service?')
+
+
 def scope_question(statement: str, act: str, words: str = '') -> str:
     """FINAL 7.4 h3 (scope) and ADJUDICATION C-10: whether a statement applies to an act."""
     if words:

@@ -10,7 +10,11 @@ THE RULE, in order (7.2): R1 (scope and exact evidence) is the caller's - a code
   required").
 - R3 a SUPPORTING event (7.3) for each of the code's requirement groups (``requirements``): the examination kinds are the
   SESSION, never an act (C-1), so a code whose covers hold an examination kind and others needs a supporting event of
-  EACH other kind; any other code needs one of its kinds (a tattoo and an injection are one act). An event supports when
+  EACH other kind; any other code needs one of its kinds (a tattoo and an injection are one act) - of its DEFINING kinds
+  where DECISIONS D27 narrows it (mapping.DEFINING: the kinds no other code of its family accounts for alone; 43265 is
+  matched by a lithotripsy, never by the stone extraction 43264 accounts for), so a code with no supporting event of a
+  defining kind takes R3's failure path over those kinds (with none of them stated at all: 7.6, not documented, naming
+  the defining act). An event supports when
   it is a candidate (its catalogue kind maps into the group, or is an umbrella covering it, in the code's family - any
   family on route (b)) and: its kind and family are usable (verified, or default-accepted, and not opened); its status is
   a usable ``performed`` - or, for a code that accounts for the examination itself (a base code, an examination-only
@@ -23,7 +27,12 @@ THE RULE, in order (7.2): R1 (scope and exact evidence) is the caller's - a code
   held). C-9: for a code that does not account for the examination, an act begun and not completed is a HOLD
   (performed_status and the 52/53 consideration), never an exclusion.
 - R4 the dependencies beyond R3: the device class when the profile names a technique (a verified device of that class;
-  another class is the "dilation of another technique" hold, an absent or unverified device the technique question).
+  another class is the "dilation of another technique" hold, an absent or unverified device the technique question);
+  then, for a site-specific dilation code (DECISIONS D29, mapping.DILATION_SITES), the site class of the dilation: its
+  target landmark verified - directly, or as the verified site of its verified lesion - in the code's class (esophageal,
+  or gastric and duodenal). A dilation verified outside the class supports nothing ("dilation at another site", held);
+  one whose place is not verified, is a surgically made place (an anastomosis) or is verified both in and outside the
+  class asks which structure was dilated (act_target). Never excluded.
 - R5 bundling (7.7, through coverage): every supporting act part of another documented act holds the code with the
   legacy "part of another documented act" sentence; an act whose bundling depends on an unresolved identity holds it
   with act_target.
@@ -58,7 +67,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Optional
 
-from studio.interpretation import identity, mapping, relations, verify, wording
+from studio.interpretation import identity, lexicon, mapping, relations, verify, wording
 
 ATTRIBUTES = ('procedure', 'kind', 'technique', 'target', 'time', 'performer', 'status', 'scope', 'purpose')
 BLOCKING = (relations.CONTRADICTION, relations.DOUBT, relations.UNRESOLVED)
@@ -76,6 +85,7 @@ CONFLICT, DOUBT, UNRESOLVED, UNVERIFIED, ATTEMPTED, METHOD = (
     'conflict', 'doubt', 'unresolved', 'unverified', 'attempted', 'method')
 EXCLUDED, STATEMENT_SCOPE, NOT_DOCUMENTED = 'excluded', 'statement_scope', 'not_documented'
 TECHNIQUE, ANOTHER_TECHNIQUE, BUNDLED, BUNDLING_IDENTITY = 'technique', 'another_technique', 'bundled', 'bundling'
+SITE, ANOTHER_SITE = 'site', 'another_site'  # D29: a dilation's site not established, or verified outside the class
 
 
 # --- the stored inventory, as this engine reads it -------------------------------------------------------------------
@@ -273,8 +283,16 @@ def requirements(link: mapping.CodeLink) -> tuple:
     if link.route == mapping.UNRECONCILED_ROUTE:
         return (tuple(link.kinds),)
     if link.acts and any(kind in mapping.EXAMINATION_KINDS for kind in link.kinds):
-        return tuple((kind,) for kind in link.acts)  # C-1: each act besides the examination, which is the session
-    return (tuple(link.kinds),) if link.kinds else ()
+        # C-1: each act besides the examination, which is the session (an EUS code's acts are its D27 defining kinds)
+        return tuple((kind,) for kind in link.acts)
+    kinds = link.defining or link.kinds  # D27: only an event of a defining kind matches a code it narrows
+    return (tuple(kinds),) if kinds else ()
+
+
+def accounted(link: mapping.CodeLink) -> tuple:
+    """The kinds a code accounts for, as CPT Studio names them: its defining kinds where D27 narrows it, else the acts
+    besides the examination, else its kinds."""
+    return link.defining or link.acts or link.kinds
 
 
 def examination_code(link: mapping.CodeLink) -> bool:
@@ -426,6 +444,12 @@ def evaluate(code: str, kept: Sequence, reading: Reading, link: Optional[mapping
         if not fitting:
             return _technique_hold(code, link, supporting, reading, own, name)
         supporting = fitting
+    site = mapping.DILATION_SITES.get(code, '') if link.route == mapping.CATALOGUE_ROUTE else ''
+    if site:  # R4 (D29): the site class of a site-specific dilation code
+        fitting = [event for event in supporting if site_fit(reading, event, site) == FITS]
+        if not fitting:
+            return _site_hold(code, link, supporting, reading, name, site)
+        supporting = fitting
     own_acts, doubts, bundled = [], [], []
     for event in supporting:  # R5: bundling (7.7)
         why = coverage.bundled_reason(reading, event)
@@ -451,7 +475,7 @@ def evaluate(code: str, kept: Sequence, reading: Reading, link: Optional[mapping
                           relation=relation)
     if not own_acts:
         event, why = bundled[0]
-        what = group_label(link, link.acts or link.kinds)
+        what = group_label(link, accounted(link))
         listed = '; '.join(event_label(reading, item) for item, _ in bundled[:4])
         detail, question = wording.act_included(name, 'performed', listed, why, what, statement_text(reading, event))
         return Evaluation(code, family, link, 'uncertain', BUNDLED, detail, read=read,
@@ -500,6 +524,62 @@ def _technique_hold(code: str, link: mapping.CodeLink, supporting: Sequence, rea
     return Evaluation(code, link.family, link, 'uncertain', TECHNIQUE, reason, read=read,
                       question=Question('technique', wording.technique_question(act, statement_text(reading, event)),
                                         reason, (event['id'],), _spans(anchors(reading, event))),
+                      unverified=unverified)
+
+
+# D29: how a dilation's verified places stand to a site class (mapping.SITE_CLASSES).
+FITS, OUTSIDE, UNSETTLED = 'fits', 'outside', 'unsettled'
+
+
+def site_places(reading: Reading, event: Mapping) -> tuple:
+    """D29: the event's verified places - its target landmark when verified and placed (mapping.target_landmark), then
+    the site of its verified lesion when that site is verified and placed - each once."""
+    places = [mapping.target_landmark(event)]
+    lesion = identity.verified_lesion(event)
+    site = (reading.lesions.get(lesion) or {}).get('site') if lesion else None
+    if verify.usable(site) and site.get('value') not in lexicon.UNPLACED_LANDMARKS:
+        places.append(site['value'])
+    return tuple(dict.fromkeys(place for place in places if place))
+
+
+def site_fit(reading: Reading, event: Mapping, site: str) -> str:
+    """D29: FITS when a verified place of the event is in the site class and none is verified outside it; OUTSIDE when
+    every verified place lies outside it and none is a surgically made place (whose position in the tract cannot be
+    told, lexicon.ALTERED_LANDMARKS); UNSETTLED otherwise - no verified place, a surgically made one (an anastomosis),
+    or places on both sides of the class."""
+    landmarks = mapping.SITE_CLASSES[site]
+    places = site_places(reading, event)
+    inside = [place for place in places if place in landmarks]
+    outside = [place for place in places if place not in landmarks and place not in lexicon.ALTERED_LANDMARKS]
+    if inside and not outside:
+        return FITS
+    if outside and len(outside) == len(places):
+        return OUTSIDE
+    return UNSETTLED
+
+
+def _site_hold(code: str, link: mapping.CodeLink, supporting: Sequence, reading: Reading, name: str,
+               site: str) -> Evaluation:
+    """R4 (D29): no supporting dilation is verified in the code's site class. One whose place is not settled asks which
+    structure was dilated (act_target); with every one verified outside the class, the "dilation at another site" hold,
+    in the "dilation of another technique" hold's form. Never excluded."""
+    required = wording.SITE_WORDS[site]
+    read = tuple(event['id'] for event in supporting)
+    unsettled = next((event for event in supporting if site_fit(reading, event, site) == UNSETTLED), None)
+    if unsettled is None:
+        other = supporting[0]
+        detail, question = wording.another_site(name, wording.landmark_label(site_places(reading, other)[0]), required,
+                                                statement_text(reading, other))
+        return Evaluation(code, link.family, link, 'uncertain', ANOTHER_SITE, detail, read=read,
+                          question=Question('act_target', question, detail, (other['id'],),
+                                            _spans(anchors(reading, other))))
+    act = event_label(reading, unsettled)
+    reason = wording.site_reason(act, required)
+    unverified = tuple((item['id'], 'target') for item in supporting if not usable(item, 'target')
+                       and value(item, 'target') != 'not_stated')
+    return Evaluation(code, link.family, link, 'uncertain', SITE, reason, read=read,
+                      question=Question('act_target', wording.target_question(act, statement_text(reading, unsettled)),
+                                        reason, (unsettled['id'],), _spans(anchors(reading, unsettled))),
                       unverified=unverified)
 
 
@@ -652,7 +732,7 @@ def _h5_method(code, link, event, reading):
     if not what:
         place = wording.landmark_label(mapping.target_landmark(event))
         what = f'lesion at the {place}' if place else 'lesion'
-    act = group_label(link, link.acts or link.kinds)
+    act = group_label(link, accounted(link))
     reason = wording.method_reason(act)
     return {'reason': METHOD,
             'question': Question('act_method', wording.method_question(what), reason, (event['id'],),

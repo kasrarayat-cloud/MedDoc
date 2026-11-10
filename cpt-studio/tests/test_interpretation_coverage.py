@@ -155,6 +155,91 @@ class Bundling(SimpleTestCase):
         self.assertIn('common bile duct cannulated', check(p, 'facts.required').detail)
 
 
+ADJUNCT_LINES = {'P2': 'The 20 mm flat polyp in the cecum was resected by EMR.',
+                 'P3': 'The margins of the resection defect were treated with snare-tip soft coagulation.'}
+
+
+def adjunct(**changes):
+    """(inventory, text, lines) of a colonoscopy whose cecal EMR (E2) has an ablation (E3) verifiably part_of it - note8
+    r1's snare-tip soft coagulation - unless ``changes`` say otherwise."""
+    options = {'technique': a('electrocautery', 'snare-tip soft coagulation', ['P3']), 'part_of': 'E2', **changes}
+    ablation = act('E3', 'P3', 'ablation', 'snare-tip soft coagulation', status_words='were treated', **options)
+    inv, text = colonoscopy(ablation, polyp=emr(), lesions=(CECAL,), lines=ADJUNCT_LINES)
+    return inv, text, ADJUNCT_LINES
+
+
+class ProceduralAdjuncts(SimpleTestCase):
+    """DECISIONS D30 (note8 r1: 45388 READY on the snare-tip soft coagulation Gemini verified as part_of the EMR): an
+    ablation or a bleeding control verifiably part_of a current performed removal, or on that removal's verified
+    lesion, is bundled into it, so a code supported only by such acts takes R5's "part of another documented act" hold.
+    A standalone ablation, an act part_of nothing, and an act beside a removal of another encounter are unaffected."""
+
+    def test_an_ablation_part_of_the_resection_is_bundled_and_its_code_held(self):
+        inv, text, lines = adjunct()
+        reading = events.Reading.of(inv)
+        self.assertEqual(coverage.bundled_reason(reading, reading.events['E3']), coverage.PROCEDURAL_ADJUNCT)
+        result = run(inv, text, [('45390', lines['P2']), ('45388', lines['P3'])])
+        self.assertEqual(proposal(result, '45390').status, 'ready')
+        p = proposal(result, '45388')
+        self.assertEqual((p.bucket, p.status, asked(p), p.support['reason']),
+                         ('selected', 'needs_clarification', ['performed_status'], events.BUNDLED))
+        self.assertIn('which is part of another documented act: ' + coverage.PROCEDURAL_ADJUNCT,
+                      check(p, 'service.status').detail)
+        self.assertIn('Was a separate ablation performed on the date of service?', p.clarifications[0].question)
+        self.assertEqual([(item['event'], item['why']) for item in result.completeness['bundled']],
+                         [('E3', coverage.PROCEDURAL_ADJUNCT)])
+
+    def test_a_bleeding_control_on_the_removed_lesion_is_bundled_by_the_lesion_alone(self):
+        line = 'Oozing from the polypectomy site of the 6 mm sessile polyp was controlled with a clip for hemostasis.'
+        clip = act('E3', 'P3', 'clip', 'clip', status_words='was controlled', technique=a('clip', 'clip', ['P3']),
+                   purpose=a('hemostasis', 'for hemostasis', ['P3']), target=tg('L1', 'sigmoid_colon',
+                                                                               '6 mm sessile polyp', ['P3']))
+        inv, text = colonoscopy(clip, lines={'P3': line})
+        reading = events.Reading.of(inv)
+        self.assertEqual((reading.events['E3']['catalogue_kind'], reading.events['E3']['part_of']['value']),
+                         ('bleeding_control', ''))
+        self.assertEqual(coverage.bundled_reason(reading, reading.events['E3']), coverage.PROCEDURAL_ADJUNCT)
+        result = run(inv, text, [('45385', POLYP), ('45382', line)])
+        self.assertEqual(proposal(result, '45385').status, 'ready')
+        self.assertEqual(proposal(result, '45382').support['reason'], events.BUNDLED)
+
+    def test_a_standalone_ablation_stays_its_codes(self):
+        line = 'Two angioectasias in the ascending colon were treated with argon plasma coagulation.'
+        inv, text = colonoscopy(act('E3', 'P3', 'ablation', 'argon plasma coagulation', status_words='were treated',
+                                    technique=a('argon_plasma', 'argon plasma coagulation', ['P3']),
+                                    target=tg('', 'ascending_colon', 'ascending colon', ['P3'])),
+                                polyp=emr(), lesions=(CECAL,), lines={'P2': ADJUNCT_LINES['P2'], 'P3': line})
+        reading = events.Reading.of(inv)
+        self.assertEqual(coverage.bundled_reason(reading, reading.events['E3']), '')
+        result = run(inv, text, [('45390', ADJUNCT_LINES['P2']), ('45388', line)])
+        self.assertEqual([proposal(result, code).status for code in ('45390', '45388')], ['ready', 'ready'])
+
+    def test_an_adjunct_of_a_removal_of_another_encounter_is_its_own_act(self):
+        lines = {'P2': 'A 6 mm sessile polyp in the sigmoid colon was removed with a cold snare in 2024.',
+                 'P3': 'The scar was treated with argon plasma coagulation.'}
+        earlier = snare('E2', 'P2', target=tg('L1', 'sigmoid_colon', '6 mm sessile polyp in the sigmoid colon', ['P2']),
+                        time=a('earlier_encounter', 'in 2024', ['P2']))
+        ablation = act('E3', 'P3', 'ablation', 'argon plasma coagulation', status_words='was treated', part_of='E2',
+                       technique=a('argon_plasma', 'argon plasma coagulation', ['P3']))
+        inv, text = colonoscopy(ablation, polyp=earlier, lines=lines)
+        reading = events.Reading.of(inv)
+        self.assertEqual((reading.events['E3']['part_of']['value'], coverage.bundled_reason(reading,
+                                                                                            reading.events['E3'])),
+                         ('E2', ''))
+        self.assertEqual(proposal(run(inv, text, [('45388', lines['P3'])]), '45388').status, 'ready')
+
+    def test_a_biopsy_part_of_nothing_is_unaffected(self):
+        lines = {'P3': 'Cold forceps biopsies were taken from the transverse colon.'}
+        biopsy = act('E3', 'P3', 'biopsy', 'biopsies', status_words='were taken',
+                     technique=a('cold_forceps', 'Cold forceps', ['P3']),
+                     target=tg('', 'transverse_colon', 'transverse colon', ['P3']))
+        inv, text = colonoscopy(biopsy, lines=lines)
+        reading = events.Reading.of(inv)
+        self.assertEqual(coverage.bundled_reason(reading, reading.events['E3']), '')
+        result = run(inv, text, [('45385', POLYP), ('45380', lines['P3'])])
+        self.assertEqual([proposal(result, code).status for code in ('45385', '45380')], ['ready', 'ready'])
+
+
 class Coverage(SimpleTestCase):
     def test_a_reportable_act_no_code_covers_is_not_covered_and_marked_for_the_second_review(self):
         lines = {'P3': 'Cold forceps biopsies were taken from the transverse colon.'}

@@ -24,7 +24,11 @@ How a proposed code links to events (code_link; FINAL C7 as ADJUDICATION C-6 ame
 - (a) ``catalogue``: catalogue.code_profile(C) whose family is profiles.family_for_code(C). Its candidate kinds K(C) are
   its covers, an examination for a base code with none (the examination of C's family). C-1: the examination kinds are
   the SESSION, never an act - ``acts`` are the kinds besides them, and a code whose covers hold an examination kind and
-  others needs a supporting event of EACH of the others (read by the engine, slice S08).
+  others needs a supporting event of EACH of the others (read by the engine, slice S08). DECISIONS D27 (FINAL 7.3, the
+  defining kinds): D(C) is C's covers less every kind another code of C's family covers ALONE (a covers of one kind);
+  where D(C) is non-empty and smaller than C's covers (DEFINING, computed from the catalogue at import), C is matched
+  only by an event of a kind in D(C) - ``defining`` - so a balloon stone extraction never matches the lithotripsy code
+  43265, which 43264 accounts for alone. C-1's acts of an EUS code are its D(C) (pinned).
 - (b) ``unreconciled``: a code with no profile that catalogue.UNRECONCILED_ACTS names (46221): K(C) = code_acts(C), each
   candidate's verified target landmark mapped into UNRECONCILED_REGIONS[C] (in_regions).
 - (d) ``none``: every other code - no catalogue profile (``unprofiled``: "outside CPT Studio's coding profiles; review
@@ -250,6 +254,72 @@ def included(code: str, event: Mapping) -> bool:
     return bool(kind) and catalogue.includes_examination(code, kind)
 
 
+# --- the defining kinds of a code (DECISIONS D27; FINAL 7.3) -------------------------------------------------------------
+
+def _defining(code: str, profile: catalogue.CodeProfile) -> tuple:
+    """D(C): the kinds of C's covers that no other code of C's family covers ALONE (as its one covered kind), in covers
+    order; () unless that set is non-empty and smaller than C's covers (a code all of whose kinds are its own, or whose
+    every kind another code accounts for alone, is not narrowed)."""
+    alone = {other.covers[0] for other_code, other in catalogue.CODES.items()
+             if other_code != code and other.family == profile.family and len(other.covers) == 1}
+    kinds = tuple(kind for kind in profile.covers if kind not in alone)
+    return kinds if kinds and set(kinds) < set(profile.covers) else ()
+
+
+# code -> D(C), for every catalogue code D27 narrows (computed at import; tests/test_interpretation_mapping.py pins it:
+# 43265 lithotripsy, the EUS sampling, drainage and injection codes their act, 44365 hot_biopsy, 49440 peg).
+DEFINING = MappingProxyType({code: kinds for code, kinds in ((code, _defining(code, profile))
+                                                              for code, profile in catalogue.CODES.items()) if kinds})
+
+
+# --- the EUS examination class (DECISIONS D28; FINAL 7.2 R6) -------------------------------------------------------------
+
+FULL, LIMITED = 'full', 'limited'
+EXAMINATION_CLASSES = (FULL, LIMITED)  # catalogue.CodeProfile.exam
+# The verified reach of the session's EUS examination each class needs (D28): a FULL examination at or beyond the
+# duodenum - exactly D28's list: the duodenum, its bulb, its second portion, the ampulla, the jejunum; a LIMITED one
+# short of the duodenum - the landmarks of the tract before it, the esophagus's and the stomach's (D29's esophageal class
+# and the stomach's half of its gastric class). A reach at any other place (the small bowel named as such, an
+# anastomosis, an organ beside the tract) fits neither class, so either code holds on it, as on an unverified reach.
+FULL_REACH = frozenset({'duodenum', 'duodenal_bulb', 'second_portion_duodenum', 'ampulla', 'jejunum'})
+SHORT_OF_DUODENUM = frozenset({'esophagus', 'proximal_esophagus', 'mid_esophagus', 'distal_esophagus',
+                               'gastroesophageal_junction', 'stomach', 'gastric_cardia', 'gastric_fundus',
+                               'gastric_body', 'gastric_antrum', 'pylorus'})
+CLASS_REACH = MappingProxyType({FULL: FULL_REACH, LIMITED: SHORT_OF_DUODENUM})
+
+
+def examination_class(code: str) -> str:
+    """The EUS examination class the catalogue gives ``code`` ('full' | 'limited'), '' for a code with none."""
+    profile = catalogue.code_profile(code)
+    return profile.exam if profile is not None and profile.exam in EXAMINATION_CLASSES else ''
+
+
+# --- the site of a dilation (DECISIONS D29; FINAL 7.2 R4) ----------------------------------------------------------------
+
+ESOPHAGEAL, GASTRIC_DUODENAL = 'esophageal', 'gastric_duodenal'
+# Each site class's landmarks, exactly as D29 lists them (no containment is read: the GE junction is esophageal, the
+# ampulla, the jejunum and every surgically made place are in neither class).
+SITE_CLASSES = MappingProxyType({
+    ESOPHAGEAL: frozenset({'esophagus', 'proximal_esophagus', 'mid_esophagus', 'distal_esophagus',
+                           'gastroesophageal_junction'}),
+    GASTRIC_DUODENAL: frozenset({'stomach', 'gastric_cardia', 'gastric_fundus', 'gastric_body', 'gastric_antrum',
+                                 'pylorus', 'duodenum', 'duodenal_bulb', 'second_portion_duodenum'}),
+})
+# The site-specific dilation codes of the catalogue and their site class, by the structure their CPT descriptors name
+# (cited for the engineer, never shown to a customer; no descriptor is connected): 43213 esophagoscopy "with dilation of
+# esophagus, by balloon or dilator, retrograde"; 43214 esophagoscopy "with dilation of esophagus with balloon (30 mm
+# diameter or larger)"; 43220 esophagoscopy "with transendoscopic balloon dilation (less than 30 mm diameter)" and 43226
+# esophagoscopy "with insertion of guide wire followed by passage of dilator(s) over guide wire" (an esophagoscopy's
+# dilation is of the esophagus); 43233 EGD "with dilation of esophagus with balloon (30 mm diameter or larger)"; 43248
+# EGD "with insertion of guide wire followed by passage of dilator(s) through esophagus over guide wire"; 43249 EGD "with
+# transendoscopic balloon dilation of esophagus (less than 30 mm diameter)"; 43245 EGD "with dilation of gastric/duodenal
+# stricture(s) (eg, balloon, bougie)". Every other dilation code (the colon's, the enteroscopy's, the ERCP's) is not here.
+DILATION_SITES = MappingProxyType({
+    '43213': ESOPHAGEAL, '43214': ESOPHAGEAL, '43220': ESOPHAGEAL, '43226': ESOPHAGEAL, '43233': ESOPHAGEAL,
+    '43248': ESOPHAGEAL, '43249': ESOPHAGEAL, '43245': GASTRIC_DUODENAL,
+})
+
+
 # --- how a proposed code links to events (FINAL C7 as ADJUDICATION C-6 amends it) --------------------------------------
 
 CATALOGUE_ROUTE, UNRECONCILED_ROUTE, NO_ROUTE = 'catalogue', 'unreconciled', 'none'
@@ -264,7 +334,8 @@ class CodeLink:
     candidates; ``session`` the examination kind of the session it belongs to ('' for none); ``acts`` the kinds besides
     the examination kinds, each needing a supporting event of its own (C-1); ``regions`` route (b)'s regions. On route
     ``none`` every tuple is empty and ``reason`` says why. ``supported`` is the routed family's gi.profiles flag and
-    ``support`` its catalogue entry's support level ('' with no entry): the engine reads them."""
+    ``support`` its catalogue entry's support level ('' with no entry): the engine reads them. ``defining`` is D(C) (D27;
+    DEFINING), the only kinds that match the code where it narrows it, () otherwise."""
     code: str
     route: str
     family: str
@@ -279,6 +350,7 @@ class CodeLink:
     supported: bool = False
     support: str = ''
     reason: str = ''
+    defining: tuple = ()
 
     @property
     def linked(self) -> bool:
@@ -300,7 +372,8 @@ def code_link(code: str) -> CodeLink:
         kinds = tuple(profile.covers) or ((session,) if profile.base and session else ())
         return CodeLink(route=CATALOGUE_ROUTE, kinds=kinds, session=session,
                         acts=tuple(kind for kind in kinds if kind not in EXAMINATION_KINDS), base=profile.base,
-                        addon=profile.addon, technique=profile.technique, includes=tuple(profile.includes), **common)
+                        addon=profile.addon, technique=profile.technique, includes=tuple(profile.includes),
+                        defining=DEFINING.get(code, ()), **common)
     acts = catalogue.UNRECONCILED_ACTS.get(code)
     if acts:
         return CodeLink(route=UNRECONCILED_ROUTE, kinds=tuple(acts), acts=tuple(acts),
@@ -309,10 +382,10 @@ def code_link(code: str) -> CodeLink:
 
 
 def candidate(link: CodeLink, event: Mapping) -> bool:
-    """Whether ``event`` is a candidate of the linked code (FINAL 7.3): an event of a kind in K(C), or of an umbrella
-    that covers a kind of K(C), whose family is C's (route (a)); or, on route (b), an event of a kind in K(C) whose
-    VERIFIED target landmark lies in the code's regions, in any family. Never on route (d). Verification of the kind
-    and family is the consumer's (7.3 line 1)."""
+    """Whether ``event`` is a candidate of the linked code (FINAL 7.3): an event of a kind in K(C) - D(C) where D27
+    narrows it - or of an umbrella that covers such a kind, whose family is C's (route (a)); or, on route (b), an event
+    of a kind in K(C) whose VERIFIED target landmark lies in the code's regions, in any family. Never on route (d).
+    Verification of the kind and family is the consumer's (7.3 line 1)."""
     if not link.linked:
         return False
     kind = catalogue_kind(event)
@@ -320,4 +393,4 @@ def candidate(link: CodeLink, event: Mapping) -> bool:
         return kind in link.kinds and in_regions(target_landmark(event), link.regions)
     if event.get('family') != link.family:
         return False
-    return any(covers(kind, wanted) for wanted in link.kinds)
+    return any(covers(kind, wanted) for wanted in link.defining or link.kinds)

@@ -14,10 +14,10 @@ from types import SimpleNamespace
 from django.test import SimpleTestCase
 
 from studio.gi import catalogue
-from studio.interpretation import combination, coverage, events
+from studio.interpretation import combination, coverage, events, mapping
 from studio.validation import checks, engine
-from tests.test_interpretation_events import (COLONOSCOPE, EUS_LINES, FNA, L1, POLYP, asked, check, colonoscopy, eus,
-                                              exam, inventory, proposal, reached, removed, run)
+from tests.test_interpretation_events import (COLONOSCOPE, DUODENAL_REACH, EUS_LINES, FNA, L1, POLYP, asked, check,
+                                              colonoscopy, eus, exam, inventory, proposal, reached, removed, run)
 from tests.test_interpretation_identity import a, act, les, sc, tg
 
 MEMBER = {'setting': 'office', 'patient_status': 'established'}
@@ -75,8 +75,9 @@ class Base(SimpleTestCase):
     def test_an_examination_only_eus_code_beside_an_fna_code_of_its_session_is_held(self):
         """Base rule (a) over an examination-only EUS code (covers only eus_exam: FINAL 7.3 makes the EUS examination its
         act, so it is its family's base): beside the FNA code of its session it is held, so the EUS examination is
-        never accounted for twice. Each origin: both Corti's, or the examination code a participant's."""
-        inv, text = eus(FNA)
+        never accounted for twice. Each origin: both Corti's, or the examination code a participant's. The reach is the
+        duodenum, which both codes' full examination class needs (D28)."""
+        inv, text = eus(FNA, reach=[DUODENAL_REACH])
         result = run(inv, text, [('43242', EUS_LINES['P3']), ('43259', EUS_LINES['P1'])])
         p = proposal(result, '43259')
         self.assertEqual((p.status, asked(p)), ('needs_clarification', ['base_included']))
@@ -92,14 +93,15 @@ class Base(SimpleTestCase):
     def test_every_examination_only_eus_code_beside_an_uncovered_fna_is_held(self):
         """Base rule (b): the session's reportable FNA, which no counted code accounts for, holds every
         examination-only EUS code, as a colonoscopy's snare holds 45378; on an examination-only document each is
-        ready (the control)."""
+        ready (the control). The fixture states no reach of the EUS examination, so a code with an examination class
+        (43231 and 43237 limited, 43259 full) also asks it (D28)."""
         self.assertEqual(len(EXAM_ONLY), 6)
         with_fna, fna_text = eus(FNA)
         alone, alone_text = eus()
         for code in EXAM_ONLY:
             with self.subTest(code=code):
                 p = proposal(run(with_fna, fna_text, [(code, EUS_LINES['P1'])]), code)
-                self.assertEqual(asked(p), ['base_included'])
+                self.assertEqual(asked(p), ['base_included'] + (['extent'] if mapping.examination_class(code) else []))
                 self.assertIn('The documented endoscopic ultrasound includes fine-needle aspiration or biopsy, which '
                               'this diagnostic code does not account for', check(p, 'services.base_included').detail)
                 control = proposal(run(alone, alone_text, [(code, EUS_LINES['P1'])]), code)
@@ -166,7 +168,8 @@ class BaseWithin(SimpleTestCase):
         result = run(inv, text, [('43235', EGD_EUS['P1']), ('43242', EGD_EUS['P2'])])
         self.assertEqual(asked(proposal(result, '43235')), ['base_included'])
         p = proposal(run(inv, text, [('43259', EGD_EUS['P2'])]), '43259')
-        self.assertEqual(([item['id'] for item in p.support['acts']], asked(p)), (['E2'], ['base_included']))
+        # the reach stated is the EGD's (E1), not the EUS examination's own: 43259's full class asks it (D28)
+        self.assertEqual(([item['id'] for item in p.support['acts']], asked(p)), (['E2'], ['base_included', 'extent']))
 
     def test_c3_part_of_names_the_endoscopic_portion_too(self):
         inv, text = egd_eus(part_of='E2')
