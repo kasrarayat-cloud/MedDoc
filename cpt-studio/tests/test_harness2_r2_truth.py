@@ -17,8 +17,9 @@ from studio import jobs, models, reports, review, serializers
 from studio.types import RawExchange
 from tests.legacy_chain import applied
 from tests.support import factories as f
-from tests.test_harness2_pipeline import (ASTRA_READING, TWO_EXTENTS, ColonCase, Harness2Case, answered, asks,
-                                          facts_call, unknown)
+from tests.test_harness2_pipeline import (ASTRA_READING, TWO_EXTENTS, TWO_EXTENTS_INTERPRETATIONS, ColonCase,
+                                          Harness2Case, answered, asks, facts_call, two_extents_interpretation,
+                                          unknown)
 from tests.test_pipeline_api import RecordedInterpretation, drain
 
 
@@ -103,6 +104,8 @@ class PeerProposedPositionTests(ColonCase):
 NOT_CONNECTED = list(review.NOT_CONNECTED)
 NO_DATE = TWO_EXTENTS.replace('Date of service: 2026-10-14\n', '')
 OUTSIDE = TWO_EXTENTS.replace('Date of service: 2026-10-14', 'Date of service: 2025-03-02')  # before every release held
+# TWO_EXTENTS' recorded synthetic interpretations and OUTSIDE's (design/FINAL.md 14.6), its date the one it states
+OUTSIDE_INTERPRETATIONS = TWO_EXTENTS_INTERPRETATIONS + ((OUTSIDE, two_extents_interpretation('2025-03-02')),)
 NO_SOURCE_NO_DATE = ('No code was checked against the CMS reference files: no service date is established for this '
                      'encounter, so no dated CMS reference file applies.')
 NO_SOURCE_FOR_DATE = ('No code was checked against the CMS reference files: no installed CMS reference file applies '
@@ -130,8 +133,10 @@ class ReferenceValidationTruthMixin:
                              proposal.code)
 
 
-@applied
-class ReferenceValidationTruthTests(ReferenceValidationTruthMixin, ColonCase):
+class ReferenceValidationTruthTests(RecordedInterpretation, ReferenceValidationTruthMixin, ColonCase):
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
     def test_a_member_date_conflict_leaves_every_code_unchecked_and_the_row_says_so(self):
         encounter_id = self.create(TWO_EXTENTS)
         drain()
@@ -160,13 +165,15 @@ class ReferenceValidationTruthTests(ReferenceValidationTruthMixin, ColonCase):
                          {('selected', 'needs_clarification', 'participant')})
 
 
-@applied
 @override_settings(ASTRA_MODE='disabled', FABLE_MODE='disabled')
-class CortiOnlyReferenceValidationTruthTests(ReferenceValidationTruthMixin, ColonCase):
+class CortiOnlyReferenceValidationTruthTests(RecordedInterpretation, ReferenceValidationTruthMixin, ColonCase):
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation, and I1's chain is extract, interpret, analyze, predict and assess.
+    interpretations = OUTSIDE_INTERPRETATIONS
     def test_no_documented_date(self):
         encounter_id = self.create(NO_DATE)
         drain()
-        self.assertEqual(self.kinds(encounter_id), ['extract', 'analyze', 'predict', 'assess'])  # I1's chain
+        self.assertEqual(self.kinds(encounter_id), ['extract', 'interpret', 'analyze', 'predict', 'assess'])  # I1's chain
         self.assertNoCodeChecked(encounter_id, NO_SOURCE_NO_DATE)
 
     def test_a_documented_date_no_installed_release_covers(self):
@@ -246,20 +253,24 @@ class RetrievalFailureWordingMixin:
         return encounter_id
 
 
-@applied
-class RetrievalFailureWordingTests(RetrievalFailureWordingMixin, ColonCase):
+class RetrievalFailureWordingTests(RecordedInterpretation, RetrievalFailureWordingMixin, ColonCase):
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
     def test_with_both_participants_after_peer_review(self):
         encounter_id = self.run_tampered()
         self.assertEqual(self.client.get(f'/ops/api/encounters/{encounter_id}').json()['harness']['phase'], 2)
         self.assertSaysWhatFailed(encounter_id)
 
 
-@applied
 @override_settings(ASTRA_MODE='disabled', FABLE_MODE='disabled')
-class CortiOnlyRetrievalFailureWordingTests(RetrievalFailureWordingMixin, ColonCase):
+class CortiOnlyRetrievalFailureWordingTests(RecordedInterpretation, RetrievalFailureWordingMixin, ColonCase):
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation, and I1's chain is extract, interpret, analyze, predict and assess.
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
     def test_corti_only(self):
         encounter_id = self.run_tampered()
-        self.assertEqual(self.kinds(encounter_id), ['extract', 'analyze', 'predict', 'assess'])  # I1's chain
+        self.assertEqual(self.kinds(encounter_id), ['extract', 'interpret', 'analyze', 'predict', 'assess'])  # I1's chain
         self.assertSaysWhatFailed(encounter_id)
 
 

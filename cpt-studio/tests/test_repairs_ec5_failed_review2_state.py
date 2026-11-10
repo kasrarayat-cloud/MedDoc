@@ -16,14 +16,16 @@ from django.test import override_settings
 from django.utils import timezone
 
 from studio import models, review
-from tests.legacy_chain import applied
-from tests.test_pipeline_api import drain
+from tests.test_pipeline_api import RecordedInterpretation, drain
 from tests.test_repairs_ec5_sends import Base, LIVE
+from tests.test_services_second_review import REPORT_INTERPRETATIONS
 
 
-@applied
 @override_settings(**LIVE)
-class FailedSecondReviewStateTests(Base):
+class FailedSecondReviewStateTests(RecordedInterpretation, Base):
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = REPORT_INTERPRETATIONS
     def assert_states_the_assessment(self, encounter_id, own):
         encounter = self.encounter(encounter_id)
         review.refresh_state(encounter)

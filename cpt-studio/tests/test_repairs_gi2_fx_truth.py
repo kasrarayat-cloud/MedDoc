@@ -25,10 +25,10 @@ from django.utils import timezone
 
 from studio import jobs, models
 from tests.legacy_chain import applied
-from tests.test_pipeline_api import drain
+from tests.test_pipeline_api import RecordedInterpretation, drain
 from tests.test_repairs_7c8_p1sends import Steps
 from tests.test_repairs_ec5_reportfacts import browser
-from tests.test_services_second_review import LIVE, REPORT
+from tests.test_services_second_review import LIVE, REPORT, REPORT_INTERPRETATIONS
 
 QUEUE = '{queue: app.listBody("queue", data.rows), described: app.listDescription("queue", data.rows)}'
 OFFERED = 'Second review available'
@@ -211,12 +211,14 @@ class TheQueueOffersOnlyAnAskTheServerAcceptsTests(Steps):
         self.assert_resume_runs_it_once(encounter_id)
 
 
-@applied
 @override_settings(**LIVE)
-class OnePredicateTests(Steps):
+class OnePredicateTests(RecordedInterpretation, Steps):
     """The status the encounter view and the queue read is the predicate the ask is refused by: _second_review_blocker
     names a used key with request_second_review's own refusal, and only once every other bound passed, so no reason it
     gave before changes (the key is consulted last); the key is request_second_review's own (_second_review_key)."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = REPORT_INTERPRETATIONS
 
     def test_the_used_key_is_the_last_bound_and_its_reason_is_the_asks_refusal(self):
         encounter_id = self.create(REPORT)

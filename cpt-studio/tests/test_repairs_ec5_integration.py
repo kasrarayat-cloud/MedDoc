@@ -11,9 +11,9 @@ from studio import models
 from studio.gi import context as gi_context
 from studio.types import RawExchange
 from studio.validation import checks
-from tests.legacy_chain import applied
 from tests.support import factories as f
-from tests.test_pipeline_api import OFFICE_NOTE, drain
+from tests.test_pipeline_api import OFFICE_NOTE, RecordedInterpretation, drain
+from tests.test_repairs_pipeline import INTERPRETATIONS
 from tests.test_services_second_review import LIVE, TwoPassProvider
 
 BANNER = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n'
@@ -77,13 +77,15 @@ class FailingProvider(TwoPassProvider):
         return super().send(request, deadline_s=deadline_s)
 
 
-@applied
 @override_settings(**LIVE)
-class HeldRunIsNoRequestOutcomeTests(TestCase):
+class HeldRunIsNoRequestOutcomeTests(RecordedInterpretation, TestCase):
     """REPORTRUNS' skeptic, routed to sends (must-fix class 1, ARCHITECTURE 5.4: a failed or not-sent request is never
     re-sent behind a metadata save): a request failed, a member date conflict was held (a not-sent run with no
     request), and clearing the conflict SENT the byte-identical failed request again, because the held run stood as
     the run in use and answers no request."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = INTERPRETATIONS
 
     def setUp(self):
         self.ws = f.workspace()

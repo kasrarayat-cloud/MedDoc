@@ -43,7 +43,8 @@ from tests.test_harness2_r2_evidence import page
 from tests.test_harness2_r2_wording import R2WordingCase
 from tests.test_harness2_r4_conf import NOTE
 from tests.test_harness2_r5_row import CECUM, COLON, RowMixin
-from tests.test_pipeline_api import FakeProvider, drain
+from tests.test_pipeline_api import FakeProvider, RecordedInterpretation, drain, recorded_addendum
+from tests.test_harness_pipeline import COLON_INTERPRETATIONS
 
 ADDENDUM = 'The colonoscope was advanced to the cecum.'
 # The row while the current revision has no assessment, exactly as it reads where there is no assessment at all: no
@@ -76,6 +77,7 @@ class StaleMixin(RowMixin):
             response = self.client.post(f'/api/encounters/{encounter_id}/addenda', data=json.dumps(data),
                                         content_type='application/json')
         self.assertEqual(response.status_code, 201, response.content)
+        recorded_addendum(self, encounter_id, ADDENDUM)  # read from its own answer on the production chain
 
     def stop(self, encounter_id):
         self.assertEqual(self.client.post(f'/api/encounters/{encounter_id}/stop').status_code, 200)
@@ -179,12 +181,14 @@ class StaleRowTests(StaleMixin, ColonCase):
         self.assertEqual(counted, ['assess', 'astra_peer', 'fable_peer', 'assess'])
 
 
-@applied
 @override_settings(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
-class CortiOnlyStaleRowTests(OperatorReads, StaleMixin, TestCase):
+class CortiOnlyStaleRowTests(RecordedInterpretation, OperatorReads, StaleMixin, TestCase):
     """(B) Corti alone at the release default (Astra and Fable disabled, no confirmation offered): R5-ROW's
     CortiOnlyTests input - Corti selects 45385 on the snare and 45378 on the cecum, and the engine asks whether 45378 is
     reported separately from 45385 - then an addendum that answers no question (POST /addenda needs none)."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = COLON_INTERPRETATIONS
 
     def setUp(self):
         super().setUp()

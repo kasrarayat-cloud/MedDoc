@@ -28,8 +28,8 @@ from tests.legacy_chain import applied
 from tests.support.operator import OperatorReads
 from tests.support import factories as f
 from tests.support import pipeline_factories as pf
-from tests.test_harness2_pipeline import BIOPSY, LAND, SNARE, TWO_EXTENTS
-from tests.test_harness2_r2_truth import NO_DATE, OUTSIDE, tamper_one_passage
+from tests.test_harness2_pipeline import BIOPSY, LAND, SNARE, TWO_EXTENTS, TWO_EXTENTS_INTERPRETATIONS
+from tests.test_harness2_r2_truth import NO_DATE, OUTSIDE, OUTSIDE_INTERPRETATIONS, tamper_one_passage
 from tests.test_harness2_r2_wording import R2WordingCase, browser
 from tests.test_pipeline_api import RecordedInterpretation, drain
 
@@ -128,8 +128,10 @@ class RetrievalFailureWithoutSourceMixin:
                 self.assertNotIn(claim, said)
 
 
-@applied
-class RetrievalFailureWithoutSourceTests(RetrievalFailureWithoutSourceMixin, R2WordingCase):
+class RetrievalFailureWithoutSourceTests(RecordedInterpretation, RetrievalFailureWithoutSourceMixin, R2WordingCase):
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
     def test_no_documented_date_after_peer_review(self):
         encounter_id = self.run_tampered(NO_DATE)
         self.assertEqual(self.detail(encounter_id)['harness']['phase'], 2)
@@ -150,12 +152,14 @@ class RetrievalFailureWithoutSourceTests(RetrievalFailureWithoutSourceMixin, R2W
             self.assertEqual((statuses['pfs.presence'], statuses['mue.units']), ('pass', 'pass'), proposal.code)
 
 
-@applied
 @override_settings(ASTRA_MODE='disabled', FABLE_MODE='disabled')
-class CortiOnlyRetrievalFailureWithoutSourceTests(RetrievalFailureWithoutSourceMixin, R2WordingCase):
+class CortiOnlyRetrievalFailureWithoutSourceTests(RecordedInterpretation, RetrievalFailureWithoutSourceMixin, R2WordingCase):
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation, and I1's chain is extract, interpret, analyze, predict and assess.
+    interpretations = OUTSIDE_INTERPRETATIONS
     def test_no_documented_date(self):
         encounter_id = self.run_tampered(NO_DATE)
-        self.assertEqual(self.kinds(encounter_id), ['extract', 'analyze', 'predict', 'assess'])  # I1's chain
+        self.assertEqual(self.kinds(encounter_id), ['extract', 'interpret', 'analyze', 'predict', 'assess'])  # I1's chain
         self.assertSaysNoCodeWasChecked(encounter_id, None, NO_DATE_WHY)
 
     def test_a_documented_date_no_installed_release_covers(self):
@@ -334,17 +338,21 @@ class CortiUnlistedMixin:
         self.assertFalse([line for line in lines if line.startswith('    Not listed: ')])
 
 
-@applied
-class CortiUnlistedTests(CortiUnlistedMixin, R2WordingCase):
+class CortiUnlistedTests(RecordedInterpretation, CortiUnlistedMixin, R2WordingCase):
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
     pass
 
 
-@applied
 @override_settings(ASTRA_MODE='disabled', FABLE_MODE='disabled')
-class CortiOnlyUnlistedTests(CortiUnlistedMixin, R2WordingCase):
+class CortiOnlyUnlistedTests(RecordedInterpretation, CortiUnlistedMixin, R2WordingCase):
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation, and I1's chain is extract, interpret, analyze, predict and assess.
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
     def test_the_chain_is_i1_s(self):
         encounter_id, _ = self.run_with((LONG, SNARE))
-        self.assertEqual(self.kinds(encounter_id), ['extract', 'analyze', 'predict', 'assess'])
+        self.assertEqual(self.kinds(encounter_id), ['extract', 'interpret', 'analyze', 'predict', 'assess'])
 
 
 # --- truth-4: a reuse's REVIEW PARTICIPANTS never credits it with the retained run's exchanges ---------------------

@@ -12,15 +12,17 @@ from django.core.management.base import CommandError
 from django.test import override_settings
 
 from studio import models
-from tests.legacy_chain import applied
 from tests.test_cux_flow import TWO_EXTENTS, ColonCase
-from tests.test_pipeline_api import drain
+from tests.test_harness2_pipeline import TWO_EXTENTS_INTERPRETATIONS
+from tests.test_pipeline_api import RecordedInterpretation, drain
 
 
-@applied
-class ParticipantsTheWorkerRunsTests(ColonCase):
+class ParticipantsTheWorkerRunsTests(RecordedInterpretation, ColonCase):
     """tests/test_cux_flow.ReassessRetainedTests' chain (Corti the harness suite's fake, Astra and Fable the replay
     adapters), with its helpers and none of its tests."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
 
     def chain(self):
         encounter_id = self.create(TWO_EXTENTS)

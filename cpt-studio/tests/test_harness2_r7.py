@@ -47,10 +47,11 @@ from tests import test_harness2_r6_meaning as r6m
 from tests import test_harness2_r6_row as r6row
 from tests import test_pipeline_api
 from tests.legacy_chain import applied
+from tests.test_harness2_pipeline import TWO_EXTENTS_INTERPRETATIONS
 from tests.test_harness2_r2_evidence import page
 from tests.test_harness2_r2_wording import browser
 from tests.test_harness_engine import code, corti, read, run, service, span
-from tests.test_pipeline_api import drain
+from tests.test_pipeline_api import RecordedInterpretation, drain
 
 ACK = review.ACKNOWLEDGEMENTS['human']
 
@@ -480,9 +481,11 @@ NONE_MADE = ['No assessment of this revision was made.']
 COMING = ['The peer reviews and the second assessment follow the first assessment.']
 
 
-@applied
-class FinalRowTests(r6row.StaleMixin, r6m.MeaningCase):
+class FinalRowTests(RecordedInterpretation, r6row.StaleMixin, r6m.MeaningCase):
     """R6-ROW's input (TWO_EXTENTS, ColonCase's participants), without ColonCase's own tests."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
     corti_codes = (('45385', hp.SNARE), ('45380', hp.BIOPSY))
 
     def setUp(self):

@@ -36,12 +36,14 @@ from studio import customer_api, jobs, review
 from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
-from tests.test_harness2_pipeline import EMPTY_PEER, HEAD, SNARE, TWO_EXTENTS, ColonCase, answered, reading
+from tests.test_harness2_pipeline import (EMPTY_PEER, HEAD, SNARE, TWO_EXTENTS, TWO_EXTENTS_INTERPRETATIONS, ColonCase,
+                                          answered, reading)
 from tests.test_harness2_pipeline import Harness2Case as PipelineCase
 from tests.test_harness2_r2_evidence import page
 from tests.test_harness2_r2_wording import browser
 from tests.test_harness2_r4_conf import NOTE, clarification_row, reject_selected
-from tests.test_pipeline_api import FakeProvider, drain
+from tests.test_harness_pipeline import COLON_INTERPRETATIONS
+from tests.test_pipeline_api import FakeProvider, RecordedInterpretation, drain
 
 # What the row no longer says of an open question (D11): what it holds, whether its code can still be rejected, how it
 # is settled, or that no code carries its service.
@@ -76,12 +78,14 @@ class RowMixin:
         self.assertEqual((drawn, notes), (lines, [NOTE]))
 
 
-@applied
-class AfterRejectionTests(RowMixin, ColonCase):
+class AfterRejectionTests(RecordedInterpretation, RowMixin, ColonCase):
     """d8-1 (a), truth-4: R4-CONF's CodeQuestionTests input - TWO_EXTENTS, Corti's 45385 and 45380 and the 45378 Fable's
     peer review adds, four questions each about a code - and then reject_selected. Moved by refutation round 6
     (R6-MEANING, the session's D14): the 45378 Fable's peer review adds is its alternative, never a proposal, so its two
     questions are not asked: two questions, each about one of Corti's codes."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
 
     def test_every_code_rejected_and_the_encounter_reviewed_the_row_says_only_what_is_open(self):
         self.assertIs(review.confirmations_offered(), False)
@@ -115,10 +119,12 @@ class AfterRejectionTests(RowMixin, ColonCase):
         self.assert_counts(before, ['2 open questions are each about a code.'])
 
 
-@applied
-class StoppedTests(RowMixin, ColonCase):
+class StoppedTests(RecordedInterpretation, RowMixin, ColonCase):
     """d8-1 (b): the same case stopped after assess #1. That assessment owes its peer reviews, so it is not final: no
     action is offered and a decision is refused."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
 
     def test_a_run_stopped_before_its_peer_reviews_the_row_says_only_what_is_open(self):
         self.assertIs(review.confirmations_offered(), False)
@@ -153,13 +159,15 @@ COLON = (HEAD + 'Colonoscopy report (fictional)\nDate of service: 2026-10-21\n'
          'A 9 mm pedunculated polyp in the sigmoid colon was removed with a hot snare.\n')
 
 
-@applied
 @override_settings(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
-class CortiOnlyTests(OperatorReads, RowMixin, TestCase):
+class CortiOnlyTests(RecordedInterpretation, OperatorReads, RowMixin, TestCase):
     """parity-1: Corti alone at the release default (Astra and Fable disabled, no confirmation offered). Corti selects
     45385 on the snare and 45378 on the cecum, and the engine asks whether 45378 is reported separately from 45385 - a
     question about 45378. A reviewer approves 45385 and rejects 45378: the encounter is reviewed and the question is
     still open."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = COLON_INTERPRETATIONS
 
     def setUp(self):
         super().setUp()

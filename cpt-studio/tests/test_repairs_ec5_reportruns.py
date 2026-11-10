@@ -33,7 +33,8 @@ from studio.types import RawExchange
 from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
-from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider, drain
+from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider, RecordedInterpretation, drain
+from tests.test_repairs_pipeline import INTERPRETATIONS
 from tests.test_services_second_review import TwoPassProvider, ask
 
 LIVE = dict(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
@@ -529,12 +530,14 @@ class SecondReviewDescribedTests(Pipeline):
         self.assertEqual(len(usage_lines(self.draft(encounter_id))), 1)
 
 
-@applied
-class LatestStageExplainsTests(Pipeline):
+class LatestStageExplainsTests(RecordedInterpretation, Pipeline):
     """The "No proposals were requested" card explains itself with the stage that did not run: the LATEST predict. A
     date change re-requests proposals; when that predict fails (here the reviewer who changed the date lost the role
     before the worker ran it), the card had shown the first predict - which ran - and said "The provider step did not
     run for this revision"."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = INTERPRETATIONS
 
     def test_the_card_gives_the_failed_predicts_own_reason(self):
         self.use(FakeProvider(selections=[VISIT]))

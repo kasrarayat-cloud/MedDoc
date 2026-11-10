@@ -43,11 +43,11 @@ from tests import test_harness2_pipeline as hp
 from tests import test_harness_engine as he
 from tests.legacy_chain import applied
 from tests.support import factories as f
-from tests.test_harness2_pipeline import BIOPSY, LAND, SNARE, TWO_EXTENTS
+from tests.test_harness2_pipeline import BIOPSY, LAND, SNARE, TWO_EXTENTS, TWO_EXTENTS_INTERPRETATIONS
 from tests.test_harness2_r2_wording import R2WordingCase, browser
 from tests.test_harness2_r4_truth import LATER, LISTED, UNLOCATED, _block, _corti_item, _section
 from tests.test_participants_support import code, empty_reading, service
-from tests.test_pipeline_api import drain
+from tests.test_pipeline_api import RecordedInterpretation, drain
 
 UNLOCATED_DIAG = 'the colonoscope was advanced to the cecum without any difficulty'  # in no document: never located
 LISTED_WORDS = 'with no quote found verbatim in the document, so not proposed'
@@ -499,17 +499,19 @@ class AlternativeAccountTests(Surfaces, R2WordingCase):
         self.assertIn('    Additional code 45378 · units 1 — proposed after peer review, never independent', txt)
 
 
-@applied
 @override_settings(ASTRA_MODE='disabled', FABLE_MODE='disabled')
-class CortiOnlyListedByTests(Surfaces, R2WordingCase):
+class CortiOnlyListedByTests(RecordedInterpretation, Surfaces, R2WordingCase):
     """Corti only (I1): no participant's alternative exists, so listed_by is [] on every proposal and every trace
     reconciliation row, no participant row counts a code, and a report's snapshot carries no listed_by at all - a
     Corti-only report is harness@1's exactly (API.md)."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation, and I1's chain is extract, interpret, analyze, predict and assess.
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
 
     def test_corti_only_serves_no_lister_and_its_reports_carry_none(self):
         encounter_id = self.create(TWO_EXTENTS)
         drain()
-        self.assertEqual(self.kinds(encounter_id), ['extract', 'analyze', 'predict', 'assess'])
+        self.assertEqual(self.kinds(encounter_id), ['extract', 'interpret', 'analyze', 'predict', 'assess'])
         detail = self.detail(encounter_id)
         self.assertEqual(detail['harness']['phase'], 0)
         self.assertTrue(detail['assessment']['proposals'])
@@ -766,10 +768,12 @@ class HcpcsShapeTests(SimpleTestCase):
                               he.encounter_check(result, 'participants.summary').detail)
 
 
-@applied
-class HcpcsLedPipelineTests(Surfaces, R2WordingCase):
+class HcpcsLedPipelineTests(RecordedInterpretation, Surfaces, R2WordingCase):
     """falsegreen-1 through the pipeline: the value is counted, never listed or shown, and the longest - which a
     Proposal cannot hold - never fails the assess stage."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
 
     def check(self, value):
         self.adapters['astra'].first = [hp.answered('astra', hp.reading(codes=[('45385', SNARE), (value, BIOPSY)]))]
@@ -799,12 +803,14 @@ class HcpcsLedPipelineTests(Surfaces, R2WordingCase):
 
 # --- falsegreen-2: Corti's own rule beside D9's -------------------------------------------------------------------------
 
-@applied
-class CortiShortUnshapedTests(Surfaces, R2WordingCase):
+class CortiShortUnshapedTests(RecordedInterpretation, Surfaces, R2WordingCase):
     """falsegreen-2: Corti's unlisted count is the engine's own rule for the proposal provider (engine._listable: 1 to 10
     characters, I1), never D9's participant rule. Every round-4 pin used values both rules agree on, so a count by
     participant_listable passed them all, and Corti's row said 'W/LES(S)' (8 characters) could not be listed beside its
     own code list naming it."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
 
     def test_a_corti_code_of_ten_characters_or_fewer_in_no_code_s_shape_is_listed_and_not_counted(self):
         def edit(answer, text):

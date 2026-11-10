@@ -21,8 +21,8 @@ from tests.support.operator import OperatorReads
 from tests.support import operator as operator_access
 from tests.support import pipeline_factories as pf
 from tests.test_harness_pipeline import BOTH, TIME_QUOTE, HarnessCase, fake_passages
-from tests.test_pipeline_api import RecordedInterpretation, drain
-from tests.test_repairs_pipeline import LIVE
+from tests.test_pipeline_api import OFFICE_NOTE_STATE, RecordedInterpretation, drain
+from tests.test_repairs_pipeline import INTERPRETATIONS, LIVE
 
 PTP = 'NCCI procedure-to-procedure edits are not connected'
 # A synthetic stand-in for wording a participant might write into a field CPT Studio reads as a code or an id (never AMA
@@ -340,9 +340,12 @@ class EstimatedCostTests(FieldCase):
             self.assertIsNone(review.estimated_cost(self.make_run(usage={'input_tokens': 1200, 'output_tokens': 300})))
 
 
-@applied
 @override_settings(**LIVE, **BOTH)
-class HarnessBlockTests(OperatorReads, HarnessCase):
+class HarnessBlockTests(RecordedInterpretation, OperatorReads, HarnessCase):
+    """The harness block's rows (HARNESS.md 12.6). On the production chain (design/FINAL.md 14.6; slice S15): Gemini
+    reads OFFICE_NOTE from its recorded synthetic interpretation; the visit's setting and patient status are member
+    values there (DECISIONS D3), so its two questions are open and the final state needs clarification."""
+
     def detail(self, encounter_id):
         response = self.client.get(f'/ops/api/encounters/{encounter_id}')
         self.assertEqual(response.status_code, 200, response.content)
@@ -373,8 +376,8 @@ class HarnessBlockTests(OperatorReads, HarnessCase):
                          ({'input_tokens': 1200, 'output_tokens': 300}, stored.usage_basis, False))
         self.assertEqual(astra['run_id'], str(stored.pk))
         self.assertEqual(fable['state'], 'done')
-        self.assertEqual(harness['clarification'], {'open': 0})
-        self.assertEqual(harness['final'], {'state': 'ready_for_review', 'label': 'Ready for review'})
+        self.assertEqual(harness['clarification'], {'open': 2})
+        self.assertEqual(harness['final'], {'state': OFFICE_NOTE_STATE, 'label': 'Needs clarification'})
         # harness@2 (HARNESS.md 12.6): the final assessment read both peer reviews; each row names its own, and the
         # row's first-reading run stays the one it reports (its usage is that run's, never the peer review's)
         self.assertEqual(harness['phase'], 2)
@@ -411,8 +414,8 @@ class HarnessBlockTests(OperatorReads, HarnessCase):
         self.assertEqual({name: row['state'] for name, row in rows.items()},
                          {'corti': 'waiting', 'astra': 'waiting', 'fable': 'waiting'})
         self.assertEqual(self.detail(encounter_id)['harness']['reference_validation']['state'], 'waiting')
-        for _ in range(3):
-            jobs.run_job(jobs.claim_next())  # extract, analyze, predict
+        for _ in range(4):
+            jobs.run_job(jobs.claim_next())  # extract, interpret, analyze, predict
         rows = self.rows(encounter_id)
         self.assertEqual((rows['corti']['state'], rows['astra']['state'], rows['fable']['state']),
                          ('done', 'waiting', 'waiting'))
@@ -438,7 +441,7 @@ class HarnessBlockTests(OperatorReads, HarnessCase):
         row = self.rows(encounter_id)['astra']
         self.assertEqual((row['state'], row['detail']),
                          ('failed', 'The request failed (HTTP 529): Overloaded (synthetic).'))
-        self.assertEqual(self.detail(encounter_id)['harness']['final']['state'], 'ready_for_review')
+        self.assertEqual(self.detail(encounter_id)['harness']['final']['state'], OFFICE_NOTE_STATE)
         # a failed first assessment takes no part in peer review, and its row says so (HARNESS.md 11.1, 12.6)
         self.assertEqual((row['peer']['state'], row['peer']['run_id']), ('not_sent', None))
         self.assertTrue(row['peer']['detail'].startswith('Peer review: '), row['peer']['detail'])
@@ -474,8 +477,8 @@ class HarnessBlockTests(OperatorReads, HarnessCase):
 
     def test_a_stopped_chain_says_stopped(self):
         encounter_id = self.create()
-        for _ in range(3):
-            jobs.run_job(jobs.claim_next())  # extract, analyze, predict: the Astra stage waits in the queue
+        for _ in range(4):  # extract, interpret, analyze, predict: the Astra stage waits in the queue
+            jobs.run_job(jobs.claim_next())
         self.assertEqual(self.client.post(f'/api/encounters/{encounter_id}/stop').status_code, 200)
         rows = self.rows(encounter_id)
         self.assertEqual((rows['corti']['state'], rows['astra']['state'], rows['fable']['state']),
@@ -502,12 +505,14 @@ class HarnessBlockTests(OperatorReads, HarnessCase):
                          {'corti': 'done', 'astra': 'not_configured', 'fable': 'not_configured'})
 
 
-@applied
 @override_settings(**LIVE, **BOTH)
-class FrontendContractTests(OperatorReads, HarnessCase):
+class FrontendContractTests(RecordedInterpretation, OperatorReads, HarnessCase):
     """The operator console's contract constants (tests.test_frontend) are the operator serializer's own keys as /ops/
     serves them (refutation r1 FG-5; CORE-UX-DESIGN.md 5), and the customer contract (tests.test_customer_surface, the
     contract of CORE-UX-DESIGN.md 7) is exactly what /api/ serves the same member - none of the operator's keys."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = INTERPRETATIONS
 
     def test_the_contract_constants_are_the_keys_the_api_serves(self):
         from tests import test_frontend as contract
@@ -531,7 +536,10 @@ class FrontendContractTests(OperatorReads, HarnessCase):
         shapes = ([('harness', detail['harness'], contract.HARNESS_KEYS),
                    ('permissions', detail['permissions'], contract.PERMISSION_KEYS),
                    ('reference validation', detail['harness']['reference_validation'],
-                    contract.REFERENCE_VALIDATION_KEYS), ('trace', trace, contract.TRACE_KEYS)]
+                    contract.REFERENCE_VALIDATION_KEYS),
+                   # on the production chain the trace also carries the interpretation section of the new-path
+                   # assessment (serializers.trace; FINAL 8.3), a key the console's TRACE_KEYS does not list
+                   ('trace', trace, contract.TRACE_KEYS | {'interpretation'})]
                   + [('participant row', row, contract.PARTICIPANT_KEYS) for row in detail['harness']['participants']]
                   + [('provider run', run, contract.PROVIDER_RUN_KEYS) for run in detail['provider_runs']]
                   + [('retrieval item', item, contract.RETRIEVAL_ITEM_KEYS) for item in retrieval]
@@ -547,12 +555,12 @@ class FrontendContractTests(OperatorReads, HarnessCase):
         self.assertEqual((astra['requested_model'], astra['returned_model']), ('gpt-6-astra', 'gpt-6-astra'))
 
 
-@applied
-class FailedRetrievalTests(OperatorReads, HarnessCase):
+class FailedRetrievalTests(RecordedInterpretation, OperatorReads, HarnessCase):
     """A retrieval that raises (refutation round 1, parity-1) through the real pipeline: the assessment stands as made,
     and the harness block says reference validation failed with the note the assessment recorded - never 'not_run' or
     'done' - with Corti only (I1) and with both participants after peer review; the owner's trace serves the one failed
-    entry as recorded, and no code's retrieval reads it as its own."""
+    entry as recorded, and no code's retrieval reads it as its own. On the production chain (design/FINAL.md 14.6;
+    slice S15): Gemini reads OFFICE_NOTE from its recorded synthetic interpretation."""
 
     def failing(self):
         owner = f.member(self.ws, f.user('owner'), role=models.Membership.OWNER)
@@ -583,13 +591,13 @@ class FailedRetrievalTests(OperatorReads, HarnessCase):
     def test_corti_only(self):
         encounter, detail, trace = self.failing()
         self.assertShownFailed(encounter, detail, trace)
-        self.assertEqual((detail['harness']['phase'], encounter.state), (0, 'ready_for_review'))
+        self.assertEqual((detail['harness']['phase'], encounter.state), (0, OFFICE_NOTE_STATE))
 
     @override_settings(**LIVE, **BOTH)
     def test_both_participants_after_peer_review(self):
         encounter, detail, trace = self.failing()
         self.assertShownFailed(encounter, detail, trace)
-        self.assertEqual((detail['harness']['phase'], encounter.state), (2, 'ready_for_review'))
+        self.assertEqual((detail['harness']['phase'], encounter.state), (2, OFFICE_NOTE_STATE))
 
 
 @override_settings(**LIVE, **BOTH)

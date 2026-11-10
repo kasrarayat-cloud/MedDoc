@@ -41,14 +41,14 @@ from studio.types import RawExchange
 from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
-from tests.test_pipeline_api import drain
+from tests.test_pipeline_api import RecordedInterpretation, drain, recorded_addendum
 from tests.test_providers import FakeResponse, dotenv, token_response, write_file
 from tests.test_repairs_7c8_p1sends import DATE, UNDATED, Steps, installed_run_in_use
 from tests.test_repairs_7c8_p1sends import Provider as P1Provider
 from tests.test_repairs_ec5_reportruns import page
 from tests.test_repairs_ec5_sends import BANNER, BIOPSY, MEMBER, SNARE
 from tests.test_repairs_r1_m import install, run_app_script
-from tests.test_services_second_review import LIVE, REPORT, response
+from tests.test_services_second_review import LIVE, REPORT, REPORT_INTERPRETATION, REPORT_INTERPRETATIONS, response
 
 Run = models.ProviderRun
 NOT_SENT, CANCELLED, FAILED, UNKNOWN, SUCCEEDED = Run.NOT_SENT, Run.CANCELLED, Run.FAILED, Run.UNKNOWN, Run.SUCCEEDED
@@ -57,6 +57,11 @@ DOCUMENTED = ('Date of service: 2026-10-16',)  # REPORT's own date, as its reque
 # A document whose own dates disagree: its request is dateless and the date is asked (not a member conflict).
 TWO_DATES = REPORT.replace('Date of service: 2026-10-16\n', 'Date: 10/16/2026\nProcedure date: 10/14/2026\n')
 ADDENDUM_TEXT = 'Signed by the fictional endoscopist.'
+# The documents the production-chain classes here upload, each with its recorded synthetic interpretation (design/
+# FINAL.md 14.6): REPORT, UNDATED and the copies of REPORT tagged in their title line, whose lines are REPORT's.
+SENDS_INTERPRETATIONS = REPORT_INTERPRETATIONS + tuple(
+    (REPORT.replace('(fictional)', f'(fictional, {tag})', 1), REPORT_INTERPRETATION)
+    for tag in ('succeeded', 'not_sent', 'failed', 'unknown', 'answered', 'held', 'retried'))
 RUN_FIELDS = ('state', 'sent', 'http_status', 'provider_request_id', 'response_sha256', 'latency_ms', 'usage',
               'usage_basis', 'error', 'request_sha256', 'request_body', 'contexts', 'service_date', 'purpose', 'scope',
               'started_at', 'finished_at', 'reconciled_at', 'reused_from_id', 'revision_id', 'requested_by_id')
@@ -122,6 +127,7 @@ class LensSteps(Steps):
     def addendum(self, encounter_id, text=ADDENDUM_TEXT):
         reply = self.post(f'/api/encounters/{encounter_id}/addenda', {'text': text, 'synthetic_attestation': 'yes'})
         self.assertEqual(reply.status_code, 201, reply.content)
+        recorded_addendum(self, encounter_id, text)  # read from its own answer on the production chain
         drain()
 
     def held(self, run):
@@ -204,13 +210,15 @@ class _JumpingClock:
 
 # --- R1: a save that settles a member date conflict makes the request the hold deferred ------------------------------
 
-@applied
 @override_settings(**LIVE)
-class SettlingAMemberDateConflictMakesTheOwedRequestTests(LensSteps):
+class SettlingAMemberDateConflictMakesTheOwedRequestTests(RecordedInterpretation, LensSteps):
     """R1. The first attempt conclusively never reached the provider; a member's date conflicts with the documented
     date (held: nothing built or sent, interpretation 19); the member settles it - clears the date, or enters the
     documented one. The request the hold deferred is the byte-identical request the refused attempt carried: it is now
     made once, through every send rule, and the refused run and the hold are kept byte for byte."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation, and the runs these tests assert about are Corti's (LensSteps.runs).
+    interpretations = SENDS_INTERPRETATIONS
 
     def refused_then_held(self, outcomes=('not_sent',), text=REPORT):
         self.provider.outcomes = list(outcomes)
@@ -405,26 +413,6 @@ class SettlingAMemberDateConflictMakesTheOwedRequestTests(LensSteps):
         self.assertEqual([entry[1] for entry in self.provider.attempts(sha)], ['unknown', 'not_sent', 'succeeded'])
         self.assertEqual(len(self.provider.reached(sha)), 2)
 
-    def test_settling_onto_a_documents_own_date_question_reattempts_dateless(self):
-        # the document's dates disagree (a dateless request); the member's date matches neither (a member conflict);
-        # clearing it returns to the document's own question: the deferred request is the dateless one the refused
-        # attempt carried, made once - no date is invented, and the question still stands
-        self.provider.outcomes = ['not_sent']
-        encounter_id = self.create(TWO_DATES)
-        drain()
-        [refused] = self.runs(encounter_id)
-        self.assertEqual((refused.state, len(refused.contexts)), (NOT_SENT, 1))
-        self.context(encounter_id, service_date=MEMBER)
-        # the request has no date either way: the dateless run in use answers it, so this save re-checks with it - no
-        # hold row is recorded and nothing is sent (as installed)
-        self.assertEqual(self.runs(encounter_id), [refused])
-        self.assertTrue(self.member_conflict(encounter_id))
-        self.assertEqual(len(self.provider.log), 1)
-        self.context(encounter_id, service_date='')
-        self.assertEqual(self.provider.log, [(refused.request_sha256, 'not_sent', ()),
-                                             (refused.request_sha256, 'succeeded', ())])
-        self.assertTrue(self.date_question(encounter_id))
-
     def test_the_pinned_contract_is_unchanged(self):
         # no conflict was held: a save that leaves the request unchanged re-checks (5.4; round 3 pipeline3:0)
         self.provider.outcomes = ['not_sent']
@@ -458,9 +446,39 @@ class SettlingAMemberDateConflictMakesTheOwedRequestTests(LensSteps):
 
 @applied
 @override_settings(**LIVE)
-class TheRealAdaptersOutcomesDecideTests(LensSteps):
+class SettlingOntoADocumentsOwnDateQuestionTests(LensSteps):
+    """R1 on TWO_DATES (split from SettlingAMemberDateConflictMakesTheOwedRequestTests; design/FINAL.md 14.6): the
+    date question the LEGACY reader asks of a document whose own dates disagree. It runs under the test-only legacy
+    chain, verbatim."""
+
+    def test_settling_onto_a_documents_own_date_question_reattempts_dateless(self):
+        # the document's dates disagree (a dateless request); the member's date matches neither (a member conflict);
+        # clearing it returns to the document's own question: the deferred request is the dateless one the refused
+        # attempt carried, made once - no date is invented, and the question still stands
+        self.provider.outcomes = ['not_sent']
+        encounter_id = self.create(TWO_DATES)
+        drain()
+        [refused] = self.runs(encounter_id)
+        self.assertEqual((refused.state, len(refused.contexts)), (NOT_SENT, 1))
+        self.context(encounter_id, service_date=MEMBER)
+        # the request has no date either way: the dateless run in use answers it, so this save re-checks with it - no
+        # hold row is recorded and nothing is sent (as installed)
+        self.assertEqual(self.runs(encounter_id), [refused])
+        self.assertTrue(self.member_conflict(encounter_id))
+        self.assertEqual(len(self.provider.log), 1)
+        self.context(encounter_id, service_date='')
+        self.assertEqual(self.provider.log, [(refused.request_sha256, 'not_sent', ()),
+                                             (refused.request_sha256, 'succeeded', ())])
+        self.assertTrue(self.date_question(encounter_id))
+
+
+@override_settings(**LIVE)
+class TheRealAdaptersOutcomesDecideTests(RecordedInterpretation, LensSteps):
     """R1 through the REAL Corti adapter: only an outcome it records as not sent (the coding request provably never
     left) is attempted again by a settling save; one that may have reached Corti (unknown) or did (failed) never is."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation, and the runs these tests assert about are Corti's (LensSteps.runs).
+    interpretations = SENDS_INTERPRETATIONS
 
     def test_a_token_refusal_then_a_settled_conflict(self):
         corti = real_corti(self, [auth_refused(), answered()])
@@ -531,11 +549,13 @@ class TheRealAdaptersOutcomesDecideTests(LensSteps):
         self.assertEqual(self.encounter(encounter_id).state, 'provider_failed')
 
 
-@applied
 @override_settings(**LIVE)
-class ConcurrentSettlingSavesTests(OperatorReads, TransactionTestCase):
+class ConcurrentSettlingSavesTests(RecordedInterpretation, OperatorReads, TransactionTestCase):
     """R1 under concurrency: two members settle the same held conflict at once (separate database connections). The row
     lock and the busy check let one save through; the request is attempted once."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = REPORT_INTERPRETATIONS
 
     def setUp(self):
         self.ws = f.workspace()
@@ -746,14 +766,16 @@ class TheOfferRefusesAContextReadUnderEarlierRulesTests(LensSteps):
 
 # --- L1: a second review that conclusively never reached the provider leaves the ask open ----------------------------
 
-@applied
 @override_settings(**LIVE)
-class ASecondReviewNeverSentLeavesTheAskOpenTests(LensSteps):
+class ASecondReviewNeverSentLeavesTheAskOpenTests(RecordedInterpretation, LensSteps):
     """L1. The once-per-revision-and-date bound counts every second review that may have reached the provider; one the
     adapter recorded as not sent, one whose request could not be built, one a Stop cancelled before sending and one the
     stale sweep settled before sending never did, so the reviewer may ask again - explicitly: nothing is ever asked by
     itself. An unknown outcome still blocks every ask until reconciled, a failed or answered one still uses the bound, a
     retained identical answer is reused, and two asks at once queue one stage."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation, and the runs these tests assert about are Corti's (LensSteps.runs).
+    interpretations = SENDS_INTERPRETATIONS
 
     def assessed(self, outcomes=('succeeded',)):
         """REPORT: the primary answer names the snare removal and leaves the forceps biopsy without a proposal."""
@@ -983,6 +1005,11 @@ class ASecondReviewNeverSentLeavesTheAskOpenTests(LensSteps):
         self.assertEqual(len(keys), 4)
         self.assertLessEqual(max(len(key) for key in keys), 200)
 
+    # Under the test-only legacy chain (design/FINAL.md 14.6): it needs the second reviews of REPORT and of its tagged
+    # copies to be distinct requests. On the production chain a second review's excerpt is the unresolved event's own
+    # passages, which hold no title line, so the tagged copy's request is REPORT's and its retained answer is reused
+    # (measured: the second ask then finds no service left without a supported proposal).
+    @applied
     def test_rollback_reading_names_only_classes_the_installer_knows(self):
         # the same answered second review, made after one that was never sent or made directly, reads the same
         control = self.assessed(outcomes=('succeeded', 'succeeded'))
@@ -1007,11 +1034,13 @@ class ASecondReviewNeverSentLeavesTheAskOpenTests(LensSteps):
             self.assert_nothing_new_persisted(encounter_id)
 
 
-@applied
 @override_settings(**LIVE)
-class AnOutcomeMarkedSentIsNeverTrustedAsNeverSentTests(LensSteps):
+class AnOutcomeMarkedSentIsNeverTrustedAsNeverSentTests(RecordedInterpretation, LensSteps):
     """R1 and L1 trust only a 'not_sent' outcome whose run says sent=False: one an adapter marked sent is treated as a
     request that may have reached the provider - never attempted again by a settling save, and it uses up the bound."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation, and the runs these tests assert about are Corti's (LensSteps.runs).
+    interpretations = SENDS_INTERPRETATIONS
 
     provider_class = MarkedSentProvider
 
@@ -1042,11 +1071,13 @@ class AnOutcomeMarkedSentIsNeverTrustedAsNeverSentTests(LensSteps):
         self.assertEqual(len(self.provider.log), 2)
 
 
-@applied
 @override_settings(**LIVE)
-class ConcurrentAsksAfterANotSentSecondReviewTests(OperatorReads, TransactionTestCase):
+class ConcurrentAsksAfterANotSentSecondReviewTests(RecordedInterpretation, OperatorReads, TransactionTestCase):
     """L1 under concurrency: two reviewers ask at once after a second review that was never sent (separate database
     connections). The row lock and the busy check queue one stage; the request is sent once."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = REPORT_INTERPRETATIONS
 
     def setUp(self):
         self.ws = f.workspace()

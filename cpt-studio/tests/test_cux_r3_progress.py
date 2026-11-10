@@ -37,12 +37,16 @@ from tests.support.operator import OperatorReads
 from tests.test_cux_flow import ProgressCase, run_stages
 from tests.test_cux_r2_progress import LIVE, NOTE, TIME_QUOTE, CustomerReads
 from tests.test_harness_pipeline import BOTH, FakeParticipant, HarnessCase, ScriptedCorti
-from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider, drain
+from tests.test_pipeline_api import OFFICE_INTERPRETATION, OFFICE_NOTE, FakeProvider, RecordedInterpretation, drain
+from tests.test_repairs_7c8_p1reports import COLONOSCOPY_INTERPRETATIONS
 from tests.test_repairs_gi2_present import BIOPSY, SNARE, Harness
 from tests.test_services_second_review import TwoPassProvider
 
 APP = Path(__file__).resolve().parents[1] / 'studio' / 'static' / 'studio' / 'app.js'
 NO_PATIENT_STATUS = OFFICE_NOTE.replace('Patient status: Established patient, last seen 2026-03-02.\n', '')
+# Gemini's synthetic answer to NO_PATIENT_STATUS (design/FINAL.md 14.6): OFFICE_NOTE's, which cites no patient-status
+# line (a member value on the production chain, DECISIONS D3), so it is this note's own.
+NO_PATIENT_STATUS_INTERPRETATIONS = ((OFFICE_NOTE, OFFICE_INTERPRETATION), (NO_PATIENT_STATUS, OFFICE_INTERPRETATION))
 TO_START, NEXT_STEP = 'Waiting to start', 'Waiting for the next step'
 STEP_TEXT = {'done': 'Done', 'active': 'In progress', 'waiting': 'Waiting to start', 'not_started': 'Not started',
              'failed': 'Did not finish', 'stopped': 'Stopped', 'skipped': 'Not needed'}
@@ -348,11 +352,13 @@ class QueuedReading:
         return page
 
 
-@applied
 @override_settings(**LIVE)
-class QueuedTitleFlowTests(QueuedReading, CustomerReads, OperatorReads, TestCase):
+class QueuedTitleFlowTests(RecordedInterpretation, QueuedReading, CustomerReads, OperatorReads, TestCase):
     """The lens's inputs and the member's other re-runs of a revision, through the real endpoints: the first step each
     queues, drawn by the shipped page before the worker runs it."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads both notes from their recorded synthetic
+    # interpretations; the run reconciled is Corti's, beside the interpretation's own.
+    interpretations = NO_PATIENT_STATUS_INTERPRETATIONS
 
     def setUp(self):
         self.ws = f.workspace()
@@ -417,7 +423,7 @@ class QueuedTitleFlowTests(QueuedReading, CustomerReads, OperatorReads, TestCase
         self.provider.outcome = 'unknown'
         encounter_id = self.upload()
         drain()
-        (run,) = models.ProviderRun.objects.filter(encounter_id=encounter_id)
+        (run,) = models.ProviderRun.objects.filter(encounter_id=encounter_id, purpose=models.ProviderRun.PRIMARY)
         self.provider.outcome = 'succeeded'
         reply = self.post(f'/ops/api/encounters/{encounter_id}/reconcile', {'provider_run_id': str(run.pk),
                                                                            'note': NOTE})
@@ -429,8 +435,10 @@ class QueuedTitleFlowTests(QueuedReading, CustomerReads, OperatorReads, TestCase
         self.assertEqual(len(self.provider.sent), 2)  # the one attempt it released, sent once
 
 
-@applied
-class QueuedRecheckTests(QueuedReading, CustomerReads, Harness):
+class QueuedRecheckTests(RecordedInterpretation, QueuedReading, CustomerReads, Harness):
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = COLONOSCOPY_INTERPRETATIONS
     def test_a_re_check_of_what_is_still_open_waits_for_the_next_step(self):
         self.use(TwoPassProvider(first=[SNARE], later=[BIOPSY]))
         encounter_id = self.create()

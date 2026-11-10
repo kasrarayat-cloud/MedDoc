@@ -19,8 +19,8 @@ from studio.types import RawExchange
 from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
-from tests.test_pipeline_api import drain
-from tests.test_services_second_review import TwoPassProvider, ask
+from tests.test_pipeline_api import RecordedInterpretation, drain
+from tests.test_services_second_review import REPORT_INTERPRETATION, TwoPassProvider, ask
 
 LIVE = dict(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
 APP = Path(settings.BASE_DIR) / 'studio' / 'operator' / 'ops.js'
@@ -33,6 +33,9 @@ The colonoscope was advanced to the cecum and the examination was completed.
 A 6 mm polyp in the rectum was removed with a cold snare.
 A separate 10 mm flat lesion in the transverse colon was sampled with cold biopsy forceps; it was not removed.
 """
+# Gemini's synthetic answer to COLONOSCOPY (design/FINAL.md 14.6): its lines are tests.test_services_second_review.
+# REPORT's, so REPORT's answer is its own.
+COLONOSCOPY_INTERPRETATIONS = ((COLONOSCOPY, REPORT_INTERPRETATION),)
 COLONOSCOPY_THREE = COLONOSCOPY + 'A 20 mm sessile lesion in the ascending colon was dilated with a balloon to 15 mm.\n'
 SNARE = ('45385', 'was removed with a cold snare')
 BIOPSY = ('45380', 'was sampled with cold biopsy forceps')
@@ -428,13 +431,15 @@ DECIDED = "Every documented service has a proposal with a reviewer's decision, b
 CONTEXT_PENDING = 'The encounter context changed; re-assessment has not finished.'
 
 
-@applied
-class PendingReviewSaysWhatIsMissingTests(Harness):
+class PendingReviewSaysWhatIsMissingTests(RecordedInterpretation, Harness):
     """reports-3: both proposals approved, then a context change (the re-assessment queued) and a Stop. Coding
     completeness said "Every documented service has a proposal; each still needs a reviewer's decision" in the draft
     TXT, the draft CSV row, the API and the banner, while every proposal carried a current approval - which carried
     unchanged once resumed. pending_review names a missing decision only for the proposals that have none (counted as
     readiness counts them); when every proposal is decided it says what readiness still waits for."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = COLONOSCOPY_INTERPRETATIONS
 
     def approved(self, *codes):
         from tests.test_pipeline_api import FakeProvider
@@ -838,14 +843,16 @@ def panel_copy(html):
     return [text.replace('&#x27;', "'").replace('&quot;', '"').replace('&amp;', '&') for text in found]
 
 
-@applied
-class SecondReviewOutcomeIsStatedTests(Harness):
+class SecondReviewOutcomeIsStatedTests(RecordedInterpretation, Harness):
     """Skeptic of the reports-5 repair (0f44cf065): the primary response was read with no code, the colonoscopy was
     offered for the second review and a reviewer asked for it (201). With that review's outcome unknown (sent, no
     response read), failed (HTTP 500) or refused whole (65 codes, over the cap), the suggestions panel still said "No
     CPT codes were proposed for this document": emptySelectionCopy read only summary.provider_status, the primary's
     'succeeded'. The panel states the outcome of the second review made for the answer the assessment reads (the API
     names it: second_review.run) whenever its response was not read or not used."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = COLONOSCOPY_INTERPRETATIONS
 
     def asked(self, second, later=(('45378', SCOPE_SENTENCE),)):
         self.use(SecondOutcome([], list(later), second))
@@ -1032,12 +1039,14 @@ class RefusedResponseStateTests(Harness):
 READ_NONE = 'No CPT code was proposed in the response that was read'
 
 
-@applied
-class SecondReviewOutcomeBlockerTests(Harness):
+class SecondReviewOutcomeBlockerTests(RecordedInterpretation, Harness):
     """Found while refuting the two repairs above: with the primary response read with nothing selected and the second
     review's outcome unknown (sent, no response read) or failed, the readiness blocker - in the API, the draft TXT's
     review status and the export dialog - still said "No CPT code was proposed", of a document whose second review was
     never read. It says that no code was proposed in the response that was read, and how the second review ended."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = COLONOSCOPY_INTERPRETATIONS
 
     def asked(self, second, later=(('45378', SCOPE_SENTENCE),)):
         self.use(SecondOutcome([], list(later), second))

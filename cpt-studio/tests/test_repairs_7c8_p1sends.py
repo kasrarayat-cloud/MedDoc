@@ -12,15 +12,15 @@ from django.conf import settings
 from django.test import override_settings
 from django.utils import timezone
 
-from studio import jobs, models, review
+from studio import interpretation, jobs, models, review
 from studio.ingest import extract_paste
 from studio.providers import corti
 from studio.providers.base import canonical_body
 from studio.types import RawExchange
 from tests.legacy_chain import applied
-from tests.test_pipeline_api import drain
+from tests.test_pipeline_api import RecordedInterpretation, drain
 from tests.test_repairs_ec5_sends import BANNER, Base
-from tests.test_services_second_review import LIVE, REPORT, TwoPassProvider, response
+from tests.test_services_second_review import LIVE, REPORT, REPORT_INTERPRETATIONS, TwoPassProvider, response
 
 UNDATED = REPORT.replace('Date of service: 2026-10-16\n', '')
 DATE = '2026-10-16'
@@ -132,7 +132,10 @@ class Steps(Base):
         return [request.canonical_sha256 for request in self.provider.requests]
 
     def runs(self, encounter_id, **filters):
-        return list(models.ProviderRun.objects.filter(encounter_id=encounter_id, **filters).order_by('created_at'))
+        """The encounter's runs of Corti's requests, oldest first: the runs these tests assert about (on the production
+        chain the interpretation's own run stands beside them, design/FINAL.md 6.3; the legacy chain has none)."""
+        return list(models.ProviderRun.objects.filter(encounter_id=encounter_id, **filters)
+                    .exclude(purpose=interpretation.PURPOSE).order_by('created_at'))
 
     def assert_failed_run_stands(self, encounter_id, failed):
         """The send door met the request that failed and sent nothing: the predict recorded a run of its own - not
@@ -339,13 +342,15 @@ class FailedSecondReviewTests(Steps):
 
 # --- sends-2: a FAILED primary request is never sent again, whatever came between -------------------------------------
 
-@applied
 @override_settings(**LIVE)
-class FailedPrimaryRequestTests(Steps):
+class FailedPrimaryRequestTests(RecordedInterpretation, Steps):
     """sends-2: an undated report's request failed; a member's date was sent; going back (clearing the date, or the date
     of a request that failed) SENT the failed request again, byte-identical, because whether the request changed was
     decided against the newest run only and the retained-result lookup matches only a SUCCEEDED run. A reconciliation's
     one released attempt spent itself the same way."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads REPORT and its undated copy from their
+    # recorded synthetic interpretations, and the runs these tests assert about are Corti's (Steps.runs).
+    interpretations = REPORT_INTERPRETATIONS
 
     def test_a_cleared_member_date_after_a_failed_dateless_request(self):
         self.provider.outcomes = ['failed']
@@ -462,12 +467,14 @@ class FailedPrimaryRequestTests(Steps):
 
 # --- the one rule: whatever the failed request was made for, on whichever revision -----------------------------------
 
-@applied
 @override_settings(**LIVE)
-class WhateverItWasMadeForTests(Steps):
+class WhateverItWasMadeForTests(RecordedInterpretation, Steps):
     """The send door reads every run of the encounter that sent the request, whatever it was made for and on whichever
     revision. No upload or member action reaches these shapes today (an addendum's text extends its parent's, and a
     second review never repeats its own primary request), so each test records the failed run itself."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = REPORT_INTERPRETATIONS
 
     def failed_run(self, revision, request, purpose):
         return models.ProviderRun.objects.create(
@@ -517,6 +524,7 @@ class WhateverItWasMadeForTests(Steps):
         first = self.encounter(encounter_id).current_revision
         reply = self.post(f'/api/encounters/{encounter_id}/addenda', ADDENDUM)
         self.assertEqual(reply.status_code, 201, reply.content)
+        self.register_addendum_lines(encounter_id, ADDENDUM['text'])  # the addendum revision, read from its own answer
         drain()
         self.assertEqual(self.sent(), 2)  # the upload's request and the addendum revision's
         revision = self.encounter(encounter_id).current_revision

@@ -13,10 +13,9 @@ from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
 from studio import audit, jobs, models, review
-from tests.legacy_chain import applied
-from tests.test_pipeline_api import RecordedInterpretation, drain
+from tests.test_pipeline_api import OFFICE_NOTE_STATE, RecordedInterpretation, drain
 from tests.support.operator import OperatorReads
-from tests.test_repairs_pipeline import FIRST_DATE, LIVE, NO_DATE_NOTE, ApiHarness
+from tests.test_repairs_pipeline import FIRST_DATE, INTERPRETATIONS, LIVE, NO_DATE_NOTE, ApiHarness
 
 
 class _WorkerDied(BaseException):
@@ -27,14 +26,17 @@ def nested(depth, leaf='"x"'):
     return '[' * depth + leaf + ']' * depth
 
 
-@applied
 @override_settings(**LIVE)
-class SweptPredictSettlesByItsOutcomeTests(OperatorReads, ApiHarness, TestCase):
+class SweptPredictSettlesByItsOutcomeTests(RecordedInterpretation, OperatorReads, ApiHarness, TestCase):
     """pipeline3:1 — a predict whose provider outcome was recorded before its worker died is settled by that
     outcome by the stale sweep, never offered as a resumable stage that re-sends an identical failed request."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads both notes from their recorded synthetic
+    # interpretations.
+    interpretations = INTERPRETATIONS
 
     def predict_dies_after_the_outcome(self, encounter_id):
         jobs.run_job(jobs.claim_next())  # extract
+        jobs.run_job(jobs.claim_next())  # interpret
         jobs.run_job(jobs.claim_next())  # analyze
         job = jobs.claim_next()
         self.assertEqual(job.kind, models.Job.PREDICT)
@@ -72,7 +74,7 @@ class SweptPredictSettlesByItsOutcomeTests(OperatorReads, ApiHarness, TestCase):
         job = self.predict_dies_after_the_outcome(encounter_id)
         self.assertEqual(job.state, models.Job.SUCCEEDED)
         drain()
-        self.assertEqual(models.Encounter.objects.get(pk=encounter_id).state, 'ready_for_review')
+        self.assertEqual(models.Encounter.objects.get(pk=encounter_id).state, OFFICE_NOTE_STATE)
         self.assertEqual(len(self.provider.requests), 1)
 
     def test_a_predict_that_died_with_its_run_only_reserved_is_resumable(self):
@@ -81,13 +83,14 @@ class SweptPredictSettlesByItsOutcomeTests(OperatorReads, ApiHarness, TestCase):
         # provider had answered 'not sent'.
         encounter_id = self.create()
         jobs.run_job(jobs.claim_next())  # extract
+        jobs.run_job(jobs.claim_next())  # interpret
         jobs.run_job(jobs.claim_next())  # analyze
         job = jobs.claim_next()
         self.assertEqual(job.kind, models.Job.PREDICT)
         with mock.patch('studio.jobs.is_stopped', side_effect=_WorkerDied()):  # dies right after reserving
             with self.assertRaises(_WorkerDied):
                 jobs.run_job(job)
-        run = models.ProviderRun.objects.get(encounter_id=encounter_id)
+        run = models.ProviderRun.objects.get(encounter_id=encounter_id, purpose=models.ProviderRun.PRIMARY)
         self.assertEqual(run.state, models.ProviderRun.RESERVED)
         models.Job.objects.filter(pk=job.pk).update(started_at=timezone.now() - timedelta(minutes=11))
         jobs.mark_stale()
@@ -99,11 +102,12 @@ class SweptPredictSettlesByItsOutcomeTests(OperatorReads, ApiHarness, TestCase):
         self.assertEqual(self.client.post(f'/api/encounters/{encounter_id}/resume').status_code, 201)
         drain()
         self.assertEqual(len(self.provider.requests), 1)
-        self.assertEqual(models.Encounter.objects.get(pk=encounter_id).state, 'ready_for_review')
+        self.assertEqual(models.Encounter.objects.get(pk=encounter_id).state, OFFICE_NOTE_STATE)
 
     def test_a_predict_that_died_before_sending_is_still_resumable(self):
         encounter_id = self.create()
         jobs.run_job(jobs.claim_next())  # extract
+        jobs.run_job(jobs.claim_next())  # interpret
         jobs.run_job(jobs.claim_next())  # analyze
         job = jobs.claim_next()  # the predict is claimed and its worker dies before any run exists
         models.Job.objects.filter(pk=job.pk).update(started_at=timezone.now() - timedelta(minutes=11))
@@ -111,15 +115,17 @@ class SweptPredictSettlesByItsOutcomeTests(OperatorReads, ApiHarness, TestCase):
         self.assertEqual(models.Job.objects.get(pk=job.pk).state, models.Job.CANCELLED)
         self.assertEqual(self.client.post(f'/api/encounters/{encounter_id}/resume').status_code, 201)
         drain()
-        self.assertEqual(models.Encounter.objects.get(pk=encounter_id).state, 'ready_for_review')
+        self.assertEqual(models.Encounter.objects.get(pk=encounter_id).state, OFFICE_NOTE_STATE)
         self.assertEqual(len(self.provider.requests), 1)
 
 
-@applied
 @override_settings(**LIVE)
-class NonStringIdentifiersTests(OperatorReads, ApiHarness, TestCase):
+class NonStringIdentifiersTests(RecordedInterpretation, OperatorReads, ApiHarness, TestCase):
     """pipeline3:2 — a nested list in an identifier field answers the endpoint's JSON 404, never an HTML 500
     (the ORM lookup recursed once per level)."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads both notes from their recorded synthetic
+    # interpretations.
+    interpretations = INTERPRETATIONS
 
     def body(self, **fields):
         return '{' + ', '.join(f'"{name}": {value}' for name, value in fields.items()) + '}'
@@ -185,6 +191,7 @@ class NonStringIdentifiersTests(OperatorReads, ApiHarness, TestCase):
                 response = self.post(f'/api/encounters/{encounter_id}/addenda',
                                      {'text': 'Setting confirmed as office.', 'synthetic_attestation': 'yes', **extra})
                 self.assertEqual(response.status_code, 201, response.content)
+                self.register_addendum_lines(encounter_id, 'Setting confirmed as office.')  # read when drained
                 revision = models.Encounter.objects.get(pk=encounter_id).current_revision
                 self.assertIsNone(revision.answers_clarification)
 
@@ -192,9 +199,11 @@ class NonStringIdentifiersTests(OperatorReads, ApiHarness, TestCase):
         encounter_id = self.create()
         drain()
         proposal = models.Encounter.objects.get(pk=encounter_id).current_assessment.proposals.get(code='99213')
+        # on the production chain 99213 waits on the visit's member facts (DECISIONS D3): the decision it allows is a
+        # rejection, with its note - the identifier is what this test reads
         response = self.post(f'/api/encounters/{encounter_id}/decisions',
-                             {'proposal_id': str(proposal.pk), 'action': 'approve',
-                              'acknowledgement': review.ACKNOWLEDGEMENTS['human']})
+                             {'proposal_id': str(proposal.pk), 'action': 'reject',
+                              'note': 'Synthetic review: rejected by its string identifier.'})
         self.assertEqual(response.status_code, 201, response.content)
 
 
@@ -298,12 +307,14 @@ class SystemCancelledStagesAreNotMemberStopsTests(OperatorReads, ApiHarness, Tes
         self.assertIs(detail['pipeline']['stopped_by_member'], True)
 
 
-@applied
 @override_settings(**LIVE)
-class ContextChangeAfterACancelledAssessTests(OperatorReads, ApiHarness, TestCase):
+class ContextChangeAfterACancelledAssessTests(RecordedInterpretation, OperatorReads, ApiHarness, TestCase):
     """Round 3, orchestrator:0 — the run in use is the revision's newest finished request even when the assess that
     would have used it was cancelled (a member's Stop during the send, a swept or expired assess), so a setting or
     billing change, or a Resume after one, never re-sends an identical request that already failed."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads both notes from their recorded synthetic
+    # interpretations.
+    interpretations = INTERPRETATIONS
 
     def stop_during_the_send(self, encounter_id, outcome='failed'):
         """The member presses Stop while the provider request is in flight; the request then returns ``outcome``."""
@@ -341,7 +352,7 @@ class ContextChangeAfterACancelledAssessTests(OperatorReads, ApiHarness, TestCas
     def test_a_billing_change_after_a_swept_assess(self):
         self.provider.outcomes = ['failed']
         encounter_id = self.create()
-        for _ in range(3):  # extract, analyze, predict
+        for _ in range(4):  # extract, interpret, analyze, predict
             jobs.run_job(jobs.claim_next())
         assess = jobs.claim_next()  # its worker dies before it records anything
         self.assertEqual(assess.kind, models.Job.ASSESS)
@@ -354,7 +365,7 @@ class ContextChangeAfterACancelledAssessTests(OperatorReads, ApiHarness, TestCas
     def test_a_setting_change_after_an_expired_assess(self):
         self.provider.outcomes = ['failed']
         encounter_id = self.create()
-        for _ in range(3):
+        for _ in range(4):  # extract, interpret, analyze, predict
             jobs.run_job(jobs.claim_next())
         models.Job.objects.filter(encounter_id=encounter_id, kind=models.Job.ASSESS,
                                   state=models.Job.QUEUED).update(deadline_at=timezone.now() - timedelta(seconds=1))
@@ -400,7 +411,7 @@ class ContextChangeAfterACancelledAssessTests(OperatorReads, ApiHarness, TestCas
         self.assertEqual(len(self.provider.requests), 1)
         self.change(encounter_id, {'setting': 'office'})
         self.assertEqual(len(self.provider.requests), 2)
-        self.assertEqual(models.Encounter.objects.get(pk=encounter_id).state, 'ready_for_review')
+        self.assertEqual(models.Encounter.objects.get(pk=encounter_id).state, OFFICE_NOTE_STATE)
 
     def test_a_changed_service_date_still_requests_new_proposals(self):
         # a note with no date of its own, its date supplied by the member at upload: a member date that differs from a

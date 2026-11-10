@@ -28,11 +28,11 @@ from studio import reports
 from tests import test_harness2_pipeline as hp
 from tests import test_harness_engine as he
 from tests.legacy_chain import applied
-from tests.test_harness2_pipeline import BIOPSY, LAND, SNARE, TWO_EXTENTS
+from tests.test_harness2_pipeline import BIOPSY, LAND, SNARE, TWO_EXTENTS, TWO_EXTENTS_INTERPRETATIONS
 from tests.test_harness2_r2_wording import R2WordingCase, browser
 from tests.test_harness2_r4_truth import UNLOCATED, _block, _section
 from tests.test_harness2_r5_account import UNLOCATED_DIAG, Surfaces, csv_rows
-from tests.test_pipeline_api import drain
+from tests.test_pipeline_api import RecordedInterpretation, drain
 
 STATED_ONE = 'stated units 1; modifiers none; confidence high'
 STATED_TWO = 'stated units 1, 1; modifiers none; confidence high'
@@ -307,13 +307,15 @@ class EntryWordingTests(Surfaces, R2WordingCase):
 
 # --- account-5: a peer review the current assessment did not read is marked so, never "listed" ------------------------
 
-@applied
-class UnreadReviewTests(Surfaces, R2WordingCase):
+class UnreadReviewTests(RecordedInterpretation, Surfaces, R2WordingCase):
     """account-5: after a member's context change the new chain reuses the identical peer request, so the current
     assessment reads the reuse run, not the run that holds the bytes. The trace served '' for every additional code of
     that original run - "listed in peer review" beside a quote found in the document - while the reuse, the same bytes,
     was "proposed after peer review". The original's codes are now served phase None, and the page says the current
     assessment did not read them."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
 
     def fable_reviews(self, encounter_id):
         runs = next(item for item in self.trace(encounter_id)['participants'] if item['name'] == 'fable')['runs']

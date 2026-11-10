@@ -38,11 +38,12 @@ from studio.validation import engine
 from tests import test_harness_engine as he
 from tests.legacy_chain import applied
 from tests.support import factories as f
-from tests.test_harness2_pipeline import BIOPSY, EMPTY_PEER, PFS_KEY, SNARE, TWO_EXTENTS, answered, asks, reading
+from tests.test_harness2_pipeline import (BIOPSY, EMPTY_PEER, PFS_KEY, SNARE, TWO_EXTENTS, TWO_EXTENTS_INTERPRETATIONS,
+                                          answered, asks, reading)
 from tests.test_harness2_r2_peer import PeerMaterialCase
 from tests.test_participants_reading import NOTE, PAGES
 from tests.test_participants_support import OfflineTestCase, astra_with, code, empty_reading, service
-from tests.test_pipeline_api import drain
+from tests.test_pipeline_api import RecordedInterpretation, drain
 
 LES = 'W/LES(S)'  # 8 characters: the engine listed it (1 to 10), the trace's reading named it by its length
 REF = 'colonoscopy-flexible-with-biopsy-single-or-multiple'  # 51: CPT 45380's descriptor, its punctuation as hyphens
@@ -231,9 +232,11 @@ class ParticipantCodeShapeTests(ShapesCase):
         self.assertIn(f'  - {LES} · ', txt)  # Corti's excluded proposal, as harness@1 prints it
 
 
-@applied
-class TraceIdsTests(ShapesCase):
+class TraceIdsTests(RecordedInterpretation, ShapesCase):
     """shapes-2, truth-3: one name per withheld id for a participant across its reading and its peer review."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
 
     def test_a_peer_review_s_service_id_has_the_name_its_first_reading_gave_it(self):
         _, trace, _, _, _ = self.run_chain()
@@ -253,10 +256,12 @@ class TraceIdsTests(ShapesCase):
         self.assertEqual(len({name: None for name in names}), 3)  # three ids, three names, never one for two
 
 
-@applied
-class ReferenceShapeTests(ShapesCase):
+class ReferenceShapeTests(RecordedInterpretation, ShapesCase):
     """shapes-3: a reference the participant's own tool results never returned is shown only as a short id of letters
     and digits, otherwise by its length - in the API, the trace and both reports; a retrieved one as given."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
 
     def test_a_reference_never_retrieved_is_shown_only_as_a_short_id_or_by_its_length(self):
         _, trace, detail, txt, rows = self.run_chain()
@@ -295,10 +300,12 @@ class ReferenceShapeTests(ShapesCase):
                 self.assertNotIn(value, text, f'{value} in {where}')
 
 
-@applied
-class ToolArgumentShapeTests(ShapesCase):
+class ToolArgumentShapeTests(RecordedInterpretation, ShapesCase):
     """shapes-4: a tool call's arguments in the trace - codes in a code's shape, a date in its digits, a topic of the
     enumeration, a tool CPT Studio has - and anything else the participant wrote only by its length."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
 
     def test_the_trace_shows_a_tool_call_s_arguments_and_tool_only_in_their_shapes(self):
         _, trace, _, _, _ = self.run_chain()
@@ -319,11 +326,13 @@ class ToolArgumentShapeTests(ShapesCase):
             self.assertNotIn(value, text, value)
 
 
-@applied
-class TraceReviewShapeTests(ShapesCase):
+class TraceReviewShapeTests(RecordedInterpretation, ShapesCase):
     """falsegreen-2: the trace's peer review - its positions and its additional codes' codes and modifiers - in the
     strict shapes (serializers._code_entry), pinned on tokens of 20 characters or fewer with no whitespace, which round
     2's token rule served as written."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
 
     def test_the_trace_s_peer_review_shows_codes_and_modifiers_only_in_their_shapes(self):
         _, trace, _, _, _ = self.run_chain()

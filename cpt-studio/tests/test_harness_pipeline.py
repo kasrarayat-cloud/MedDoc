@@ -35,8 +35,9 @@ from tests.legacy_chain import applied
 from tests.support import docgen
 from tests.support.operator import OperatorReads
 from tests.support import factories as f
-from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider, drain
-from tests.test_repairs_pipeline import LIVE, RECONCILE_NOTE
+from tests.test_pipeline_api import (OFFICE_NOTE, OFFICE_NOTE_STATE, FakeProvider, RecordedInterpretation, drain,
+                                     synthetic_event, synthetic_interpretation, synthetic_lesion)
+from tests.test_repairs_pipeline import INTERPRETATIONS, LIVE, RECONCILE_NOTE
 
 TIME_QUOTE = 'Total time on the date of the encounter was 24 minutes.'
 PLAN_QUOTE = 'A colonoscopy is scheduled for 2026-12-01.'
@@ -483,9 +484,110 @@ class CortiOnlyParityTests(OperatorReads, HarnessCase):
 
 # --- the chain --------------------------------------------------------------------------------------------------------
 
+@override_settings(**LIVE, **BOTH)
+class ChainTests(RecordedInterpretation, OperatorReads, HarnessCase):
+    """The participants' stages in the chain (HARNESS.md 11, 12.1). On the production chain (design/FINAL.md 14.6;
+    slice S15): Gemini reads OFFICE_NOTE from its recorded synthetic interpretation, and the chain's stages are
+    extract, interpret, analyze, predict and the participants'."""
+
+
+    def test_a_participant_disabled_after_its_stage_was_queued_records_nothing_and_the_chain_goes_on(self):
+        encounter_id = self.create()
+        for _ in range(4):
+            jobs.run_job(jobs.claim_next())  # extract, interpret, analyze, predict: Astra's is queued
+        with override_settings(ASTRA_MODE='disabled'):
+            drain()
+        self.assertEqual([j.kind for j in self.jobs_of(encounter_id)][-5:],
+                         ['astra', 'fable', 'assess', 'fable_peer', 'assess'])
+        self.assertEqual(self.jobs_of(encounter_id)[4].result, {'participant': 'astra', 'state': 'disabled'})
+        self.assertEqual(self.runs_of(encounter_id, 'astra'), [])
+        self.assertEqual(len(self.adapters['fable'].sent), 1)
+        self.assertEqual(self.peer_sends(), (0, 1))
+
+    def test_an_unavailable_participant_blocks_only_itself(self):
+        # I10: its request cannot be built (e.g. no credentials) - a not-sent run with why; Corti and Fable run
+        with mock.patch.object(self.adapters['astra'], 'build_request',
+                               side_effect=ProviderUnavailable('Astra needs CPT_STUDIO_OPENAI_CREDENTIALS_FILE.')):
+            encounter_id = self.create()
+            drain()
+        astra = self.runs_of(encounter_id, 'astra')
+        self.assertEqual([(r.state, r.request_sha256, r.error) for r in astra],
+                         [('not_sent', '', 'Astra needs CPT_STUDIO_OPENAI_CREDENTIALS_FILE.')])
+        self.assertEqual(len(self.adapters['fable'].sent), 1)
+        records = self.records(encounter_id)
+        self.assertEqual((records['astra']['state'], records['astra']['reason'], records['fable']['state']),
+                         ('not_sent', 'Astra needs CPT_STUDIO_OPENAI_CREDENTIALS_FILE.', 'read'))
+        # its first assessment failed, so it never gets a peer review; Fable's still runs (HARNESS.md 11.1, I10)
+        self.assertEqual((records['astra']['peer_state'], records['astra']['peer_reason'],
+                          records['fable']['peer_state']), ('not_run', jobs.PEER_FIRST_NOT_READ, 'read'))
+        self.assertEqual(self.peer_sends(), (0, 1))
+        self.assertEqual(self.encounter(encounter_id).state, OFFICE_NOTE_STATE)
+
+    def test_a_misconfigured_participant_is_recorded_not_sent(self):
+        from studio import participants
+
+        def misconfigured(name):
+            if name == 'astra':
+                raise ProviderUnavailable('Live Astra needs CPT_STUDIO_OPENAI_CREDENTIALS_FILE.')
+            return self.adapters[name] if participants.participant_mode(name) != 'disabled' else None
+        with mock.patch('studio.participants.get_participant', side_effect=misconfigured):
+            encounter_id = self.create()
+            drain()
+        run = self.runs_of(encounter_id, 'astra')[0]
+        self.assertEqual((run.state, run.adapter_version, run.scope, run.started_at),
+                         ('not_sent', '', {'mode': 'replay'}, None))
+        self.assertEqual(self.records(encounter_id)['astra']['state'], 'not_sent')
+        self.assertEqual(self.encounter(encounter_id).state, OFFICE_NOTE_STATE)
+        self.assertEqual((self.runs_of(encounter_id, 'astra', 'peer_review'), self.peer_sends()), ([], (0, 1)))
+
+    def test_a_participant_failure_never_makes_the_encounter_provider_failed(self):
+        self.adapters['astra'].outcome = 'failed'
+        encounter_id = self.create()
+        drain()
+        astra = self.runs_of(encounter_id, 'astra')[0]
+        self.assertEqual((astra.state, astra.http_status), ('failed', 529))
+        self.assertEqual(self.records(encounter_id)['astra']['state'], 'failed')
+        self.assertEqual(self.encounter(encounter_id).state, OFFICE_NOTE_STATE)  # I10, never provider_failed
+        self.assertEqual(len(self.adapters['fable'].sent), 1)
+        self.assertEqual(self.peer_sends(), (0, 1))  # a failed first assessment takes no part in peer review
+
+    def test_the_live_gate_refuses_a_live_participant_and_only_it(self):
+        self.adapters['astra'].mode = 'live'
+        with override_settings(AUTHORIZATION_REF=''), mock.patch('studio.jobs.get_provider', return_value=None):
+            encounter_id = self.create()
+            drain()
+        run = self.runs_of(encounter_id, 'astra')[0]
+        self.assertEqual((run.state, run.sent), ('not_sent', False))
+        self.assertEqual(run.error, 'Nothing was sent: Live provider calls are not authorized on this installation.')
+        self.assertEqual(self.adapters['astra'].sent, [])
+        self.assertEqual(len(self.adapters['fable'].sent), 1)  # Fable (replay) still runs (I10)
+        self.assertEqual(self.encounter(encounter_id).current_assessment.provider_run, None)
+        self.assertEqual(self.peer_sends(), (0, 1))  # and its peer review: Astra's first assessment was never made
+
+    def test_corti_disabled_still_runs_the_participants(self):
+        with mock.patch('studio.jobs.get_provider', return_value=None):
+            encounter_id = self.create()
+            drain()
+        chain = self.jobs_of(encounter_id)
+        self.assertEqual([j.kind for j in chain], ['extract', 'interpret', 'analyze', 'predict', 'astra', 'fable',
+                                                   'assess', 'astra_peer', 'fable_peer', 'assess'])
+        self.assertIsNone(chain[-1].provider_run_id)
+        self.assertTrue(chain[6].idempotency_key.startswith(f'assess:{chain[3].context_id}:no-provider:p:'))
+        self.assertTrue(chain[-1].idempotency_key.startswith(f'assess:{chain[3].context_id}:no-provider:q:'))
+        self.assertEqual(self.encounter(encounter_id).state, 'provider_not_run')
+        self.assertEqual(self.records(encounter_id)['astra']['state'], 'read')
+        # with no Corti answer, a peer is shown the other model's frozen reading and no Corti conclusion
+        self.assertEqual(sorted(self.adapters['astra'].peer_built[0]['peers']), ['fable'])
+        self.assertEqual(self.peer_sends(), (1, 1))
+
+
 @applied
 @override_settings(**LIVE, **BOTH)
-class ChainTests(OperatorReads, HarnessCase):
+class LegacyEngineChainTests(OperatorReads, HarnessCase):
+    """ChainTests' cases that read the LEGACY engine (split from them; design/FINAL.md 14.6): what its assessments
+    record of the participants (summary participants_given and peers_given) and the chain a second review queues
+    after the legacy reading of REPORT. They run under the test-only legacy chain, verbatim."""
+
     def test_predict_then_astra_then_fable_then_assess(self):
         encounter_id = self.create()
         drain()
@@ -586,66 +688,6 @@ class ChainTests(OperatorReads, HarnessCase):
                 'fable')))
             self.assertEqual(self.peer_sends(), (1, 0))
 
-    def test_a_participant_disabled_after_its_stage_was_queued_records_nothing_and_the_chain_goes_on(self):
-        encounter_id = self.create()
-        for _ in range(3):
-            jobs.run_job(jobs.claim_next())  # extract, analyze, predict: the Astra stage is queued
-        with override_settings(ASTRA_MODE='disabled'):
-            drain()
-        self.assertEqual([j.kind for j in self.jobs_of(encounter_id)][-5:],
-                         ['astra', 'fable', 'assess', 'fable_peer', 'assess'])
-        self.assertEqual(self.jobs_of(encounter_id)[3].result, {'participant': 'astra', 'state': 'disabled'})
-        self.assertEqual(self.runs_of(encounter_id, 'astra'), [])
-        self.assertEqual(len(self.adapters['fable'].sent), 1)
-        self.assertEqual(self.peer_sends(), (0, 1))
-
-    def test_an_unavailable_participant_blocks_only_itself(self):
-        # I10: its request cannot be built (e.g. no credentials) - a not-sent run with why; Corti and Fable run
-        with mock.patch.object(self.adapters['astra'], 'build_request',
-                               side_effect=ProviderUnavailable('Astra needs CPT_STUDIO_OPENAI_CREDENTIALS_FILE.')):
-            encounter_id = self.create()
-            drain()
-        astra = self.runs_of(encounter_id, 'astra')
-        self.assertEqual([(r.state, r.request_sha256, r.error) for r in astra],
-                         [('not_sent', '', 'Astra needs CPT_STUDIO_OPENAI_CREDENTIALS_FILE.')])
-        self.assertEqual(len(self.adapters['fable'].sent), 1)
-        records = self.records(encounter_id)
-        self.assertEqual((records['astra']['state'], records['astra']['reason'], records['fable']['state']),
-                         ('not_sent', 'Astra needs CPT_STUDIO_OPENAI_CREDENTIALS_FILE.', 'read'))
-        # its first assessment failed, so it never gets a peer review; Fable's still runs (HARNESS.md 11.1, I10)
-        self.assertEqual((records['astra']['peer_state'], records['astra']['peer_reason'],
-                          records['fable']['peer_state']), ('not_run', jobs.PEER_FIRST_NOT_READ, 'read'))
-        self.assertEqual(self.peer_sends(), (0, 1))
-        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
-
-    def test_a_misconfigured_participant_is_recorded_not_sent(self):
-        from studio import participants
-
-        def misconfigured(name):
-            if name == 'astra':
-                raise ProviderUnavailable('Live Astra needs CPT_STUDIO_OPENAI_CREDENTIALS_FILE.')
-            return self.adapters[name] if participants.participant_mode(name) != 'disabled' else None
-        with mock.patch('studio.participants.get_participant', side_effect=misconfigured):
-            encounter_id = self.create()
-            drain()
-        run = self.runs_of(encounter_id, 'astra')[0]
-        self.assertEqual((run.state, run.adapter_version, run.scope, run.started_at),
-                         ('not_sent', '', {'mode': 'replay'}, None))
-        self.assertEqual(self.records(encounter_id)['astra']['state'], 'not_sent')
-        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
-        self.assertEqual((self.runs_of(encounter_id, 'astra', 'peer_review'), self.peer_sends()), ([], (0, 1)))
-
-    def test_a_participant_failure_never_makes_the_encounter_provider_failed(self):
-        self.adapters['astra'].outcome = 'failed'
-        encounter_id = self.create()
-        drain()
-        astra = self.runs_of(encounter_id, 'astra')[0]
-        self.assertEqual((astra.state, astra.http_status), ('failed', 529))
-        self.assertEqual(self.records(encounter_id)['astra']['state'], 'failed')
-        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')  # I10, never provider_failed
-        self.assertEqual(len(self.adapters['fable'].sent), 1)
-        self.assertEqual(self.peer_sends(), (0, 1))  # a failed first assessment takes no part in peer review
-
     def test_a_refused_reading_is_recorded_refused_and_never_read(self):
         self.adapters['fable'].returned_model = 'claude-other-model'  # I6: another model answered
         encounter_id = self.create()
@@ -659,35 +701,6 @@ class ChainTests(OperatorReads, HarnessCase):
         # a reading that was not read takes no part in peer review, and no peer is shown it (HARNESS.md 11.1)
         self.assertEqual((record['peer_state'], self.peer_sends()), ('not_run', (1, 0)))
         self.assertNotIn('fable', self.adapters['astra'].peer_built[0]['peers'])
-
-    def test_the_live_gate_refuses_a_live_participant_and_only_it(self):
-        self.adapters['astra'].mode = 'live'
-        with override_settings(AUTHORIZATION_REF=''), mock.patch('studio.jobs.get_provider', return_value=None):
-            encounter_id = self.create()
-            drain()
-        run = self.runs_of(encounter_id, 'astra')[0]
-        self.assertEqual((run.state, run.sent), ('not_sent', False))
-        self.assertEqual(run.error, 'Nothing was sent: Live provider calls are not authorized on this installation.')
-        self.assertEqual(self.adapters['astra'].sent, [])
-        self.assertEqual(len(self.adapters['fable'].sent), 1)  # Fable (replay) still runs (I10)
-        self.assertEqual(self.encounter(encounter_id).current_assessment.provider_run, None)
-        self.assertEqual(self.peer_sends(), (0, 1))  # and its peer review: Astra's first assessment was never made
-
-    def test_corti_disabled_still_runs_the_participants(self):
-        with mock.patch('studio.jobs.get_provider', return_value=None):
-            encounter_id = self.create()
-            drain()
-        chain = self.jobs_of(encounter_id)
-        self.assertEqual([j.kind for j in chain], ['extract', 'analyze', 'predict', 'astra', 'fable', 'assess',
-                                                   'astra_peer', 'fable_peer', 'assess'])
-        self.assertIsNone(chain[-1].provider_run_id)
-        self.assertTrue(chain[5].idempotency_key.startswith(f'assess:{chain[2].context_id}:no-provider:p:'))
-        self.assertTrue(chain[-1].idempotency_key.startswith(f'assess:{chain[2].context_id}:no-provider:q:'))
-        self.assertEqual(self.encounter(encounter_id).state, 'provider_not_run')
-        self.assertEqual(self.records(encounter_id)['astra']['state'], 'read')
-        # with no Corti answer, a peer is shown the other model's frozen reading and no Corti conclusion
-        self.assertEqual(sorted(self.adapters['astra'].peer_built[0]['peers']), ['fable'])
-        self.assertEqual(self.peer_sends(), (1, 1))
 
     def test_a_second_review_s_assess_reads_the_participants_as_they_are(self):
         from tests.test_services_second_review import REPORT, TwoPassProvider, ask
@@ -720,9 +733,13 @@ class ChainTests(OperatorReads, HarnessCase):
 
 # --- unknown outcomes, reuse, failures --------------------------------------------------------------------------------
 
-@applied
 @override_settings(**LIVE, **BOTH)
-class UnknownOutcomeTests(OperatorReads, HarnessCase):
+class UnknownOutcomeTests(RecordedInterpretation, OperatorReads, HarnessCase):
+    """A participant's unknown outcome, its reconciliation and a failed request (HARNESS.md 11). On the production
+    chain (design/FINAL.md 14.6; slice S15): Gemini reads OFFICE_NOTE and its undated twin from their recorded
+    synthetic interpretations."""
+    interpretations = INTERPRETATIONS
+
     def test_an_unknown_outcome_blocks_every_later_send_and_reconcile_resends_only_that_participant(self):
         self.adapters['astra'].outcomes = ['unknown']
         encounter_id = self.create()
@@ -750,14 +767,15 @@ class UnknownOutcomeTests(OperatorReads, HarnessCase):
         self.assertEqual(len(self.corti.requests), 1)
         corti = self.runs_of(encounter_id, 'corti')
         self.assertEqual([(r.state, r.sent, bool(r.reused_from_id)) for r in corti], [('succeeded', True, False)])
-        self.assertNotIn('predict', [j.kind for j in self.jobs_of(encounter_id)][3:])
+        self.assertNotIn('predict', [j.kind for j in self.jobs_of(encounter_id)][4:])  # after extract, interpret,
+        # analyze and the predict
         self.assertEqual(len(self.adapters['astra'].sent), 2)  # the unknown one, then once after the reconciliation
         self.assertEqual(len(self.adapters['fable'].sent), 1)  # never sent before: sent once now
         records = self.records(encounter_id)
         self.assertEqual((records['astra']['state'], records['fable']['state']), ('read', 'read'))
         self.assertEqual(self.peer_sends(), (1, 1))  # phase 2 runs for the new phase-1 set
         self.assertEqual((records['astra']['peer_state'], records['fable']['peer_state']), ('read', 'read'))
-        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
+        self.assertEqual(self.encounter(encounter_id).state, OFFICE_NOTE_STATE)
         reconciled = models.AuditEvent.objects.get(encounter_id=encounter_id, event='provider.reconciled')
         self.assertEqual(reconciled.data, {'run': str(astra[0].pk), 'provider': 'astra'})
         summaries = [row['summary'] for row in self.client.get(f'/ops/api/encounters/{encounter_id}').json()['activity']]
@@ -790,7 +808,7 @@ class UnknownOutcomeTests(OperatorReads, HarnessCase):
         self.assertEqual((len(self.corti.requests), len(self.adapters['astra'].sent), len(self.adapters['fable'].sent)),
                          (1, 1, 1))
         self.assertEqual(self.peer_sends(), (1, 1))
-        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
+        self.assertEqual(self.encounter(encounter_id).state, OFFICE_NOTE_STATE)
 
     def test_corti_unknown_blocks_both_participants(self):
         self.corti.outcomes = ['unknown']
@@ -809,7 +827,37 @@ class UnknownOutcomeTests(OperatorReads, HarnessCase):
         self.assertEqual((len(self.corti.requests), len(self.adapters['astra'].sent), len(self.adapters['fable'].sent)),
                          (2, 1, 1))
         self.assertEqual(self.peer_sends(), (1, 1))
-        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
+        self.assertEqual(self.encounter(encounter_id).state, OFFICE_NOTE_STATE)
+
+    def test_a_request_that_failed_is_never_sent_again(self):
+        self.adapters['astra'].outcome = 'failed'
+        encounter_id = self.create(OFFICE_NOTE.replace('Date of service: 2026-10-20\n', ''), service_date='2026-10-20')
+        drain()
+        self.assertEqual(len(self.adapters['astra'].sent), 1)
+        # a date change re-predicts (Corti's request carries the date); the participants' requests carry none
+        response = self.post(f'/api/encounters/{encounter_id}/context', {'service_date': '2026-10-21'})
+        self.assertEqual(response.status_code, 201, response.content)
+        drain()
+        self.assertEqual(len(self.corti.requests), 2)
+        self.assertEqual(len(self.adapters['astra'].sent), 1)  # failed before: never sent again
+        self.assertEqual(len(self.adapters['fable'].sent), 1)  # answered before: reused
+        astra = self.runs_of(encounter_id, 'astra')
+        self.assertEqual([r.state for r in astra], ['failed', 'not_sent'])
+        self.assertTrue(astra[1].error.startswith(jobs.FAILED_BEFORE_MESSAGE))
+        self.assertEqual((astra[1].request_sha256, astra[1].purpose), (astra[0].request_sha256, 'independent'))
+        self.assertEqual(self.records(encounter_id)['astra']['state'], 'not_sent')
+        self.assertEqual(self.records(encounter_id)['astra']['peer_state'], 'not_run')  # no first reading, no review
+        self.assertEqual(self.encounter(encounter_id).state, OFFICE_NOTE_STATE)
+
+
+@applied
+@override_settings(**LIVE, **BOTH)
+class UnknownOutcomeReuseTests(OperatorReads, HarnessCase):
+    """UnknownOutcomeTests' reuse cases (split from them; design/FINAL.md 14.6): each needs the peer request of a
+    second chain to repeat the first's, which holds where the reading leaves no open question - the LEGACY reading
+    of OFFICE_NOTE. On the production chain the visit's setting and patient status are member values (DECISIONS D3),
+    so its questions are open and each chain's peer request is its own. They run under the test-only legacy chain,
+    verbatim."""
 
     def test_a_retained_answer_is_reused_and_nothing_is_sent(self):
         first = self.create()
@@ -848,26 +896,6 @@ class UnknownOutcomeTests(OperatorReads, HarnessCase):
         self.assertEqual((peer.sent, peer.reused_from_id, peer.scope['mode']), (True, None, 'live'))
         self.assertEqual(self.peer_sends(), (2, 1))
 
-    def test_a_request_that_failed_is_never_sent_again(self):
-        self.adapters['astra'].outcome = 'failed'
-        encounter_id = self.create(OFFICE_NOTE.replace('Date of service: 2026-10-20\n', ''), service_date='2026-10-20')
-        drain()
-        self.assertEqual(len(self.adapters['astra'].sent), 1)
-        # a date change re-predicts (Corti's request carries the date); the participants' requests carry none
-        response = self.post(f'/api/encounters/{encounter_id}/context', {'service_date': '2026-10-21'})
-        self.assertEqual(response.status_code, 201, response.content)
-        drain()
-        self.assertEqual(len(self.corti.requests), 2)
-        self.assertEqual(len(self.adapters['astra'].sent), 1)  # failed before: never sent again
-        self.assertEqual(len(self.adapters['fable'].sent), 1)  # answered before: reused
-        astra = self.runs_of(encounter_id, 'astra')
-        self.assertEqual([r.state for r in astra], ['failed', 'not_sent'])
-        self.assertTrue(astra[1].error.startswith(jobs.FAILED_BEFORE_MESSAGE))
-        self.assertEqual((astra[1].request_sha256, astra[1].purpose), (astra[0].request_sha256, 'independent'))
-        self.assertEqual(self.records(encounter_id)['astra']['state'], 'not_sent')
-        self.assertEqual(self.records(encounter_id)['astra']['peer_state'], 'not_run')  # no first reading, no review
-        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
-
     def test_a_context_change_that_keeps_corti_s_request_reads_the_participants_as_they_are(self):
         encounter_id = self.create()
         drain()
@@ -891,19 +919,20 @@ class UnknownOutcomeTests(OperatorReads, HarnessCase):
         self.assertEqual(jobs.assessment_phase(self.encounter(encounter_id).current_assessment), 2)
 
 
-@applied
 @override_settings(**LIVE, **BOTH)
-class ProviderLockTests(OperatorReads, HarnessCase):
+class ProviderLockTests(RecordedInterpretation, OperatorReads, HarnessCase):
     """Refutation round 1, FG-4 (I8): a participant's send takes the same installation-wide advisory lock as Corti's; a
     stage that finds it held by another session reserves and sends nothing, and goes back to the queue."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads OFFICE_NOTE from its recorded synthetic
+    # interpretation.
 
     def test_a_participant_stage_waits_while_another_session_holds_the_provider_lock(self):
         from tests.test_pipeline_api import _OtherSession
 
         other = _OtherSession(self)
         encounter_id = self.create()
-        for _ in range(3):
-            jobs.run_job(jobs.claim_next())  # extract, analyze, predict: Astra's stage is queued
+        for _ in range(4):
+            jobs.run_job(jobs.claim_next())  # extract, interpret, analyze, predict: Astra's stage is queued
         self.assertTrue(other.try_lock())
         try:
             with mock.patch('studio.jobs.time.sleep'):
@@ -1022,16 +1051,17 @@ class NotSentAttemptTests(OperatorReads, HarnessCase):
         self.assertEqual(self.records(encounter_id)['fable']['peer_state'], 'read')
 
 
-@applied
 @override_settings(**LIVE, **BOTH)
-class MemberDateHoldTests(OperatorReads, HarnessCase):
+class MemberDateHoldTests(RecordedInterpretation, OperatorReads, HarnessCase):
     """Session interpretation 19: nothing is built, reused or sent while a member date conflict stands - the
     participants' requests included - and settling the date makes the request and gives the participants their turn."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads OFFICE_NOTE from its recorded synthetic
+    # interpretation.
 
     def test_a_held_encounter_sends_nothing_until_the_date_is_settled(self):
         encounter_id = self.create(service_date='2026-10-22')  # the note documents 2026-10-20: a member conflict
         drain()
-        self.assertEqual([j.kind for j in self.jobs_of(encounter_id)], ['extract', 'analyze', 'assess'])
+        self.assertEqual([j.kind for j in self.jobs_of(encounter_id)], ['extract', 'interpret', 'analyze', 'assess'])
         self.assertEqual(self.corti.requests + self.adapters['astra'].sent + self.adapters['fable'].sent, [])
         hold = self.runs_of(encounter_id, 'corti')
         self.assertEqual([(r.state, r.scope) for r in hold], [('not_sent', {'held': 'member_date_conflict'})])
@@ -1058,7 +1088,7 @@ class MemberDateHoldTests(OperatorReads, HarnessCase):
         records = self.records(encounter_id)
         self.assertEqual((records['astra']['state'], records['fable']['state']), ('read', 'read'))
         self.assertEqual(self.peer_sends(), (1, 1))  # settling the date gives the peer reviews their turn too
-        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
+        self.assertEqual(self.encounter(encounter_id).state, OFFICE_NOTE_STATE)
 
     def test_a_swept_predict_that_recorded_a_hold_queues_the_assess(self):
         encounter_id = self.create()
@@ -1081,9 +1111,11 @@ class MemberDateHoldTests(OperatorReads, HarnessCase):
 
 # --- the stale sweep, Stop and Resume ---------------------------------------------------------------------------------
 
-@applied
 @override_settings(**LIVE, **BOTH)
-class SweepAndResumeTests(OperatorReads, HarnessCase):
+class SweepAndResumeTests(RecordedInterpretation, OperatorReads, HarnessCase):
+    """The participants' stages swept, stopped and resumed (HARNESS.md 11). On the production chain (design/FINAL.md
+    14.6; slice S15): Gemini reads OFFICE_NOTE from its recorded synthetic interpretation."""
+
     def run_until(self, kind):
         while True:
             job = jobs.claim_next()
@@ -1119,7 +1151,7 @@ class SweepAndResumeTests(OperatorReads, HarnessCase):
         self.assertEqual((len(self.adapters['astra'].sent), len(self.adapters['fable'].sent)), (1, 1))
         self.assertEqual(self.records(encounter_id)['astra']['state'], 'read')
         self.assertEqual(self.peer_sends(), (1, 1))
-        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
+        self.assertEqual(self.encounter(encounter_id).state, OFFICE_NOTE_STATE)
 
     def test_a_participant_left_mid_send_is_unknown_and_reconcile_resends_only_it(self):
         encounter_id = self.create()
@@ -1140,7 +1172,7 @@ class SweepAndResumeTests(OperatorReads, HarnessCase):
         self.assertEqual(len(self.corti.requests), 1)  # Corti's identical request is reused
         self.assertEqual((len(self.adapters['astra'].sent), len(self.adapters['fable'].sent)), (1, 1))
         self.assertEqual(self.peer_sends(), (1, 1))
-        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
+        self.assertEqual(self.encounter(encounter_id).state, OFFICE_NOTE_STATE)
 
     def test_a_participant_that_died_with_its_run_only_reserved_is_resumable(self):
         encounter_id = self.create()
@@ -1165,7 +1197,7 @@ class SweepAndResumeTests(OperatorReads, HarnessCase):
         self.assertEqual(self.records(encounter_id)['astra']['run'],
                          str(self.runs_of(encounter_id, 'astra', 'independent')[1].pk))
         self.assertEqual(self.peer_sends(), (1, 1))
-        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
+        self.assertEqual(self.encounter(encounter_id).state, OFFICE_NOTE_STATE)
 
     def test_a_stop_before_the_participant_sends_cancels_it_and_resume_sends_once(self):
         encounter_id = self.create()
@@ -1180,7 +1212,7 @@ class SweepAndResumeTests(OperatorReads, HarnessCase):
         drain()
         self.assertEqual((len(self.adapters['astra'].sent), len(self.adapters['fable'].sent)), (1, 1))
         self.assertEqual(self.peer_sends(), (1, 1))
-        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
+        self.assertEqual(self.encounter(encounter_id).state, OFFICE_NOTE_STATE)
 
     def test_a_chain_the_upgrade_started_stops_where_a_participant_would_send(self):
         encounter_id = self.create()
@@ -1237,8 +1269,8 @@ class SweepAndResumeTests(OperatorReads, HarnessCase):
 
     def test_a_context_change_after_a_stop_gives_a_participant_with_no_outcome_its_turn(self):
         encounter_id = self.create()
-        for _ in range(3):
-            jobs.run_job(jobs.claim_next())  # extract, analyze, predict: Astra's stage waits in the queue
+        for _ in range(4):
+            jobs.run_job(jobs.claim_next())  # extract, interpret, analyze, predict: Astra's stage waits
         self.assertEqual(self.client.post(f'/api/encounters/{encounter_id}/stop').status_code, 200)
         # Corti's request is unchanged, so its answer stands; the participants recorded no outcome, so their chain runs
         # before the assess rather than an assess that reads them as 'not run' and leaves no way to run them
@@ -1255,7 +1287,7 @@ class SweepAndResumeTests(OperatorReads, HarnessCase):
         records = self.records(encounter_id)
         self.assertEqual((records['astra']['state'], records['fable']['state']), ('read', 'read'))
         self.assertEqual(self.peer_sends(), (1, 1))
-        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
+        self.assertEqual(self.encounter(encounter_id).state, OFFICE_NOTE_STATE)
 
     def test_a_participant_configured_since_gets_its_turn_and_the_other_reuses_its_answer(self):
         with override_settings(FABLE_MODE='disabled'):
@@ -1400,6 +1432,34 @@ COLON = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n'
          'A 9 mm pedunculated polyp in the sigmoid colon was removed with a hot snare.\n')
 REACHED = 'The colonoscope was advanced to the cecum and the examination was completed.'
 HOT_SNARE = 'was removed with a hot snare'
+COLD_BIOPSY = 'A separate 12 mm flat lesion in the ascending colon was biopsied with cold forceps.'
+
+
+def colon_interpretation(biopsy=False):
+    """Gemini's synthetic answer to COLON (design/FINAL.md 14.6; tests.test_pipeline_api.RecordedInterpretation) - and,
+    with ``biopsy``, to COLON followed by COLD_BIOPSY (tests.test_harness2_r2_parity.COLON): the colonoscopy to the
+    cecum, the sigmoid polyp's hot snare removal and the ascending lesion's cold forceps biopsy. Every claimed attribute
+    is verified by normalization (RecordedInterpretationTests)."""
+    lines = {'P1': 'Date of service: 2026-10-21', 'P2': REACHED,
+             'P3': 'A 9 mm pedunculated polyp in the sigmoid colon was removed with a hot snare.'}
+    lesions = [synthetic_lesion('L1', '9 mm pedunculated polyp', 'P3', 'sigmoid_colon', 'sigmoid colon', '9 mm')]
+    events = [synthetic_event('E1', ('colonoscopy', '', ''), ('examination', 'colonoscope', 'P2'),
+                              ('performed', 'was advanced', 'P2'), technique=('endoscope', 'colonoscope', 'P2')),
+              synthetic_event('E2', ('colonoscopy', '', ''), ('snare', 'removed', 'P3'),
+                              ('performed', 'was removed with a hot snare', 'P3'),
+                              technique=('hot_snare', 'hot snare', 'P3'),
+                              target=('L1', 'sigmoid_colon', '9 mm pedunculated polyp in the sigmoid colon', 'P3'))]
+    if biopsy:
+        lines['P4'] = COLD_BIOPSY
+        lesions.append(synthetic_lesion('L2', '12 mm flat lesion', 'P4', 'ascending_colon', 'ascending colon', '12 mm'))
+        events.append(synthetic_event('E3', ('colonoscopy', '', ''), ('biopsy', 'biopsied', 'P4'),
+                                      ('performed', 'was biopsied', 'P4'), technique=('cold_forceps', 'cold forceps', 'P4'),
+                                      target=('L2', 'ascending_colon', '12 mm flat lesion in the ascending colon', 'P4')))
+    return synthetic_interpretation(lines, date=('2026-10-21', '2026-10-21', 'P1'), reach=[('E1', 'cecum', 'cecum', 'P2')],
+                                    lesions=lesions, events=events)
+
+
+COLON_INTERPRETATIONS = ((COLON, colon_interpretation()),)
 # The round-4 head's (80f2f2dc8) assessment sha256 of COLON with Corti selecting 45378 and '4538²' beside the PFS
 # source install_endoscopy_pfs installs: the lens's and the verifier's measurement, which no step outside Corti may
 # change (I1).
@@ -1618,9 +1678,11 @@ class RetrievalFailureTests(OperatorReads, HarnessCase):
         self.assertIn(f'\n  - {note}\n', reports.render_txt(snap).decode('utf-8'))
 
 
-@applied
 @override_settings(**LIVE, **BOTH)
-class RetrievalFailureChainTests(OperatorReads, HarnessCase):
+class RetrievalFailureChainTests(RecordedInterpretation, OperatorReads, HarnessCase):
+    """A retrieval that fails is recorded on both assessments of the chain. On the production chain (design/FINAL.md
+    14.6; slice S15): Gemini reads OFFICE_NOTE from its recorded synthetic interpretation."""
+
     def test_both_assessments_of_the_chain_are_recorded_and_say_reference_validation_failed(self):
         tampered = ValueError('changed after import')
         with mock.patch('studio.jobs.reference_passages.load_passages', side_effect=tampered), \
@@ -1636,7 +1698,7 @@ class RetrievalFailureChainTests(OperatorReads, HarnessCase):
             # the stored passages could not be loaded, so the note names that step (refutation round 4, truth-5)
             self.assertEqual(assessment.retrieval, [jobs.retrieval_failure(date(2026, 10, 20), 'ValueError',
                                                                            step=jobs.RETRIEVAL_STEP_LOAD)])
-        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
+        self.assertEqual(self.encounter(encounter_id).state, OFFICE_NOTE_STATE)
         self.assertEqual(self.peer_sends(), (1, 1))
 
 

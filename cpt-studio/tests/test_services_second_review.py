@@ -17,7 +17,7 @@ from studio.types import ProviderRequest, RawExchange
 from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
-from tests.test_pipeline_api import drain
+from tests.test_pipeline_api import drain, synthetic_event, synthetic_interpretation, synthetic_lesion
 
 LIVE = dict(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
 
@@ -29,6 +29,44 @@ The colonoscope was advanced to the cecum and the examination was completed.
 A 6 mm polyp in the rectum was removed with a cold snare.
 A separate 10 mm flat lesion in the transverse colon was sampled with cold biopsy forceps; it was not removed.
 """
+UNDATED_REPORT = REPORT.replace('Date of service: 2026-10-16\n', '')
+
+
+def report_interpretation(dated=True):
+    """Gemini's synthetic answer to REPORT (design/FINAL.md 14.6; tests.test_pipeline_api.RecordedInterpretation) -
+    and to every report of its family, whose lines are REPORT's (UNDATED_REPORT without its date line; tests.
+    test_repairs_7c8_p1reports.COLONOSCOPY): the colonoscopy to the cecum, the rectal polyp's cold snare removal, and
+    the transverse lesion's cold forceps biopsy with its removal denied. Every claimed attribute is verified by
+    normalization (RecordedInterpretationTests)."""
+    lines = {'P1': 'Date of service: 2026-10-16',
+             'P2': 'The colonoscope was advanced to the cecum and the examination was completed.',
+             'P3': 'A 6 mm polyp in the rectum was removed with a cold snare.',
+             'P4': 'A separate 10 mm flat lesion in the transverse colon was sampled with cold biopsy forceps; it was '
+                   'not removed.'}
+    if not dated:
+        del lines['P1']
+    return synthetic_interpretation(
+        lines, date=('2026-10-16', '2026-10-16', 'P1') if dated else None, reach=[('E1', 'cecum', 'cecum', 'P2')],
+        lesions=[synthetic_lesion('L1', '6 mm polyp', 'P3', 'rectum', 'rectum', '6 mm'),
+                 synthetic_lesion('L2', '10 mm flat lesion', 'P4', 'transverse_colon', 'transverse colon', '10 mm')],
+        events=[synthetic_event('E1', ('colonoscopy', '', ''), ('examination', 'colonoscope', 'P2'),
+                                ('performed', 'was advanced', 'P2'), technique=('endoscope', 'colonoscope', 'P2')),
+                synthetic_event('E2', ('colonoscopy', '', ''), ('snare', 'removed', 'P3'),
+                                ('performed', 'was removed with a cold snare', 'P3'),
+                                technique=('cold_snare', 'cold snare', 'P3'),
+                                target=('L1', 'rectum', '6 mm polyp in the rectum', 'P3')),
+                synthetic_event('E3', ('colonoscopy', '', ''), ('biopsy', 'sampled', 'P4'),
+                                ('performed', 'was sampled', 'P4'),
+                                technique=('cold_forceps', 'cold biopsy forceps', 'P4'),
+                                target=('L2', 'transverse_colon', '10 mm flat lesion in the transverse colon', 'P4')),
+                synthetic_event('E4', ('colonoscopy', '', ''), ('removal', 'removed', 'P4'),
+                                ('not_performed', 'it was not removed', 'P4'), target=('L2', 'not_stated', 'it', 'P4'),
+                                scope=('single_target', 'it', 'P4'))])
+
+
+REPORT_INTERPRETATION = report_interpretation()
+UNDATED_REPORT_INTERPRETATION = report_interpretation(dated=False)
+REPORT_INTERPRETATIONS = ((REPORT, REPORT_INTERPRETATION), (UNDATED_REPORT, UNDATED_REPORT_INTERPRETATION))
 
 
 def ask(client, encounter_id):

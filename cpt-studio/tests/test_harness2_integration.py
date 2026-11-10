@@ -23,9 +23,8 @@ from tests.legacy_chain import applied
 from tests.test_harness2_pipeline import (EMPTY_PEER, HEAD, LAND, PFS_KEY, TWO_EXTENTS, ColonCase, Harness2Case,
                                           answered, asks, failed, open_questions, passages_call, peer_answer,
                                           reading)
-from tests.test_harness_pipeline import TIME_QUOTE
-from tests.test_harness_pipeline import _WorkerDied
-from tests.test_pipeline_api import RecordedInterpretation, drain
+from tests.test_harness_pipeline import TIME_QUOTE, _WorkerDied
+from tests.test_pipeline_api import OFFICE_NOTE_STATE, RecordedInterpretation, drain
 from tests.test_repairs_pipeline import RECONCILE_NOTE
 
 
@@ -464,8 +463,10 @@ class PeerRunRecordTests(Harness2Case):
 
 # --- the derived state of a peer stage that did not finish (HARNESS.md 12.1) ------------------------------------------
 
-@applied
-class PeerStageStateTests(Harness2Case):
+class PeerStageStateTests(RecordedInterpretation, Harness2Case):
+    """A peer stage that did not finish (HARNESS.md 12.1). On the production chain (design/FINAL.md 14.6; slice S15):
+    Gemini reads OFFICE_NOTE from its recorded synthetic interpretation."""
+
     def test_a_peer_stage_left_mid_send_is_the_encounter_wide_unknown_outcome_never_a_processing_failure(self):
         encounter_id = self.create()
         job = self.run_until('astra_peer')
@@ -481,7 +482,7 @@ class PeerStageStateTests(Harness2Case):
         self.assertEqual(self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                                    {'provider_run_id': str(peer.pk), 'note': RECONCILE_NOTE}).status_code, 201)
         drain()
-        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
+        self.assertEqual(self.encounter(encounter_id).state, OFFICE_NOTE_STATE)
 
     def test_a_peer_stage_that_failed_is_a_processing_failure_never_provider_failed(self):
         encounter_id = self.create()
@@ -497,12 +498,18 @@ class PeerStageStateTests(Harness2Case):
 
 # --- the stage order the API reads (HARNESS.md 12.1) ------------------------------------------------------------------
 
-@applied
-class StageOrderTests(Harness2Case):
+class StageOrderTests(RecordedInterpretation, Harness2Case):
+    """The harness block's stage order (serializers.STAGE_ORDER) against the chain the pipeline runs. On the production
+    chain (design/FINAL.md 14.6; slice S15) Gemini reads OFFICE_NOTE from its recorded synthetic interpretation, and
+    the chain's interpret stage is, like the second review's, a stage no harness row lists: it has no place in the
+    order (serializers._stage_index gives None), and the order is the chain's other stages."""
+
     def test_the_stage_order_is_the_order_the_pipeline_runs_and_assess_two_follows_the_peer_stages(self):
         encounter_id = self.create()
         drain()
-        chain = self.jobs_of(encounter_id)
+        [interpret] = [job for job in self.jobs_of(encounter_id) if job.kind == jobs.INTERPRET]
+        self.assertIsNone(serializers._stage_index(interpret))
+        chain = [job for job in self.jobs_of(encounter_id) if job.kind != jobs.INTERPRET]
         self.assertEqual([job.kind for job in chain], list(serializers.STAGE_ORDER))
         self.assertEqual([serializers._stage_index(job) for job in chain], list(range(len(chain))))
         self.assertEqual(serializers.PEER_STAGES, tuple(jobs.PEER_KIND[name] for name in ('astra', 'fable')))

@@ -38,9 +38,9 @@ from studio.types import EvidenceSpan, NormalizedResponse, ProviderCode, RawExch
 from studio.validation import checks
 from studio.validation.engine import MAX_LISTED_CODE, NO_EVIDENCE
 from tests.legacy_chain import applied
-from tests.test_pipeline_api import drain
-from tests.test_repairs_7c8_p1reports import (BIOPSY, COLONOSCOPY, COLONOSCOPY_THREE, DILATION, SNARE, Harness, page,
-                                              section)
+from tests.test_pipeline_api import RecordedInterpretation, drain
+from tests.test_repairs_7c8_p1reports import (BIOPSY, COLONOSCOPY, COLONOSCOPY_INTERPRETATIONS, COLONOSCOPY_THREE,
+                                              DILATION, SNARE, Harness, page, section)
 from tests.test_repairs_7c8_p2reports import EUS_WITH_EGD, FNA, unresolved_items
 from tests.test_services_reconcile import run, sel, span
 from tests.test_services_second_review import TwoPassProvider, ask
@@ -371,11 +371,13 @@ class MalformedSecondReview(ListingProvider):
                            usage={'creditsConsumed': 0.02}, usage_basis='provider_reported_credits_not_usd')
 
 
-@applied
-class TheSecondReviewsProblemsThroughThePipelineTests(Harness):
+class TheSecondReviewsProblemsThroughThePipelineTests(RecordedInterpretation, Harness):
     """F2 as stored: the second review's response is normalised by the adapter and its passages moved to the revision
     (jobs._second_inputs) before the merge; its problems and the code it returned that cannot be listed reach the stored
     provider.second_review check, the draft TXT and the Checks tab - never the primary's provider.problems."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = COLONOSCOPY_INTERPRETATIONS
 
     def test_the_stored_check_and_reports_say_them(self):
         self.use(MalformedSecondReview([SNARE], [BIOPSY]))
@@ -402,12 +404,14 @@ class TheSecondReviewsProblemsThroughThePipelineTests(Harness):
         self.assertIn(check['detail'], unescape(page(self.detail(encounter_id))['checks']))
 
 
-@applied
-class TheOriginOfASecondReviewCodeIsSaidTests(Harness):
+class TheOriginOfASecondReviewCodeIsSaidTests(RecordedInterpretation, Harness):
     """F4 and F5. The primary selects the snare polypectomy and lists 45378; a reviewer asks for the second review, which
     selects the biopsy (added, marked as from it) and lists 45381. On the Suggestions screen the alternative it listed
     says where it came from, as the TXT and the CSV do; a code of its the reviewer rejects keeps the Origin line in
     REJECTED, as in the approved and undecided lists, and the verifier still reads that list as exactly its codes."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = COLONOSCOPY_INTERPRETATIONS
 
     def reviewed(self, rejected):
         self.use(ListingProvider([SNARE], [BIOPSY], first_listed=['45378'], later_listed=['45381']))

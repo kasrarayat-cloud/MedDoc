@@ -18,14 +18,16 @@ from studio import customer_api, models, serializers
 from tests.legacy_chain import applied
 from tests.test_cux_flow import LIVE as FLOW_LIVE, MARA, pasted, run_stages
 from tests.support import factories as f
-from tests.test_pipeline_api import FakeProvider, drain
-from tests.test_repairs_7c8_p1reports import COLONOSCOPY
+from tests.test_pipeline_api import FakeProvider, RecordedInterpretation, drain
+from tests.test_repairs_7c8_p1reports import COLONOSCOPY, COLONOSCOPY_INTERPRETATIONS
 from tests.test_repairs_gi2_present import BIOPSY, LETTER, SNARE, UNDATED, VISIT_TIME, Harness
 from tests.test_services_second_review import TwoPassProvider
 
 
-@applied
-class RecheckTests(Harness):
+class RecheckTests(RecordedInterpretation, Harness):
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = COLONOSCOPY_INTERPRETATIONS
     def customer(self, encounter_id, client=None):
         reply = (client or self.client).get(f'/api/encounters/{encounter_id}')
         self.assertEqual(reply.status_code, 200, reply.content)

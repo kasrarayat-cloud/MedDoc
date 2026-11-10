@@ -23,8 +23,8 @@ from studio.providers.base import ProviderUnavailable
 from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
-from tests.test_pipeline_api import OFFICE_NOTE, drain
-from tests.test_services_second_review import LIVE, REPORT, TwoPassProvider, response
+from tests.test_pipeline_api import OFFICE_NOTE, RecordedInterpretation, drain
+from tests.test_services_second_review import LIVE, REPORT, REPORT_INTERPRETATIONS, TwoPassProvider, response
 
 BANNER = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE'
 SNARE = ('45385', 'was removed with a cold snare')
@@ -404,12 +404,14 @@ class PreUpgradeMemberDateTests(Base):
 
 # --- sends-2 / context-2: the paid second review stays with the request it answered -----------------------------------
 
-@applied
 @override_settings(**LIVE)
-class SecondReviewAcrossReuseTests(Base):
+class SecondReviewAcrossReuseTests(RecordedInterpretation, Base):
     """A date round trip (a member conflict cleared, or a member date changed and changed back) reuses the retained
     primary result; the second review made for that request on this revision and date is read again, whichever run
     carries the primary answer - never dropped from the decision set, never asked for twice."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = REPORT_INTERPRETATIONS
 
     def round_trip(self, encounter_id, values=(MEMBER, '')):
         for value in values:
@@ -861,9 +863,11 @@ class UpgradeStopsOnlyWhereItWouldSendTests(Base):
 
 # --- the reviewer-requested second review (8985dde42): never sent twice, never sent when it should not be -------------
 
-@applied
 @override_settings(**LIVE)
-class ReviewerSecondReviewTests(Base):
+class ReviewerSecondReviewTests(RecordedInterpretation, Base):
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = REPORT_INTERPRETATIONS
     def processed(self, text=REPORT, **extra):
         encounter_id = self.create(text, **extra)
         drain()
@@ -949,9 +953,11 @@ class ReviewerSecondReviewTests(Base):
 
 # --- migrate-3: the reviewer's second review never reaches a worker that cannot run it --------------------------------
 
-@applied
 @override_settings(**LIVE)
-class UndoClosesTheReviewersSecondReviewTests(Base):
+class UndoClosesTheReviewersSecondReviewTests(RecordedInterpretation, Base):
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = REPORT_INTERPRETATIONS
     def test_a_second_review_asked_on_the_new_pair_is_closed_before_the_installed_pair_returns(self):
         from tests.test_repairs_r1_m import install, run_app_script
         encounter_id = self.create()

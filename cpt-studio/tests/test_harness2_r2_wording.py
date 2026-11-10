@@ -23,8 +23,8 @@ from studio.validation import engine
 from tests import test_harness2_api as h2
 from tests import test_harness2_pipeline as hp
 from tests.legacy_chain import applied
-from tests.test_harness2_pipeline import BIOPSY, SNARE, TWO_EXTENTS
-from tests.test_pipeline_api import drain
+from tests.test_harness2_pipeline import BIOPSY, SNARE, TWO_EXTENTS, TWO_EXTENTS_INTERPRETATIONS
+from tests.test_pipeline_api import RecordedInterpretation, drain
 
 APP = Path(settings.BASE_DIR) / 'studio' / 'operator' / 'ops.js'
 # What node evaluates an expression over: app.js's exports, the payload, and the page's visible text and parts.
@@ -201,11 +201,13 @@ class CortiRelationTests(R2WordingCase):
 
 # --- truth-11: a participant row never says "It proposed no code" beside the codes it cannot list ---------------------
 
-@applied
-class UnlistedCodesTests(R2WordingCase):
+class UnlistedCodesTests(RecordedInterpretation, R2WordingCase):
     """truth-11 (HARNESS.md 7; the round-1 IND-1 repair's count sentence): a participant whose reading proposed only a
     code the engine cannot list read "It returned 1 code that cannot be listed ..." and then "It proposed no code." The
     row serves the count (unlisted_codes), and the page says what can be listed, never that it proposed nothing."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
 
     LONG = '45385-SYNTHETIC-LONG-VALUE'
 
@@ -444,12 +446,14 @@ class DocumentQuoteTests(R2WordingCase):
 
 # --- FG2-5: every real code card states the PTP limit once -----------------------------------------------------------
 
-@applied
-class ReferenceLineTests(R2WordingCase):
+class ReferenceLineTests(RecordedInterpretation, R2WordingCase):
     """FG2-5 (I4: PTP always "not verified"): the API's reference_check detail always ends with
     review.PTP_NOT_CONNECTED, and the page always appended its own "(NCCI procedure-to-procedure edits not verified:
     not connected)" too, so every real code card stated the PTP limit twice; only hand-written fixtures, whose details
     the API cannot produce, were tested. Each card the real API serves now states it exactly once."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
 
     def test_each_code_card_states_the_ptp_limit_once(self):
         encounter_id = self.create(TWO_EXTENTS)

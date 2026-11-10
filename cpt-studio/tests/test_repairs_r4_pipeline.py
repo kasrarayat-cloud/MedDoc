@@ -2,6 +2,7 @@
 
 Synthetic data only; the provider is an in-process fake and nothing leaves the process.
 """
+import copy
 from unittest import mock
 
 from django.test import TestCase, override_settings
@@ -9,8 +10,8 @@ from django.utils import timezone
 
 from studio import jobs, models, review
 from studio.providers.base import ProviderUnavailable
-from tests.legacy_chain import applied
-from tests.test_pipeline_api import OFFICE_NOTE, RecordedInterpretation, drain
+from tests.test_pipeline_api import (OFFICE_INTERPRETATION, OFFICE_NOTE, OFFICE_NOTE_STATE, RecordedInterpretation,
+                                     drain, synthetic_event)
 from tests.support.operator import OperatorReads
 from tests.test_repairs_pipeline import FIRST_DATE, INTERPRETATIONS, LIVE, NO_DATE_NOTE, ApiHarness
 
@@ -19,17 +20,37 @@ from tests.test_repairs_pipeline import FIRST_DATE, INTERPRETATIONS, LIVE, NO_DA
 NO_SETTING_NOTE = OFFICE_NOTE.replace('Place of service: Office, in-person outpatient visit\n', '')
 
 
+def _no_setting_interpretation():
+    """Gemini's synthetic answer to NO_SETTING_NOTE (design/FINAL.md 14.6): OFFICE_NOTE's, the place-of-service line
+    gone, so the visit is read from the follow-up its chief complaint states. Every claimed attribute is verified by
+    normalization (tests.test_pipeline_api.RecordedInterpretationTests)."""
+    answer = copy.deepcopy(OFFICE_INTERPRETATION)
+    answer['passages'] = [{'id': 'P1', 'text': 'Date of service: 2026-10-20'},
+                          {'id': 'P2', 'text': 'Follow-up of chronic constipation.'},
+                          {'id': 'P3', 'text': 'Total time on the date of the encounter was 24 minutes.'},
+                          {'id': 'P4', 'text': 'A colonoscopy is scheduled for 2026-12-01.'}]
+    answer['events'][0] = synthetic_event('E1', ('office_em', 'Follow-up', 'P2'), ('em_visit', 'Follow-up', 'P2'),
+                                          ('performed', 'Follow-up', 'P2'))
+    return answer
+
+
+# The notes the production-chain classes here upload, each with its recorded synthetic interpretation.
+R4_INTERPRETATIONS = INTERPRETATIONS + ((NO_SETTING_NOTE, _no_setting_interpretation()),)
+
+
 class _WorkerDied(BaseException):
     """Stands in for a SIGKILL: run_job records an Exception, never a BaseException."""
 
 
-@applied
 @override_settings(**LIVE)
-class SweptReservedRunIsNoOutcomeTests(OperatorReads, ApiHarness, TestCase):
+class SweptReservedRunIsNoOutcomeTests(RecordedInterpretation, OperatorReads, ApiHarness, TestCase):
     """Round 4, pipeline:2 — a predict whose worker died with its run only reserved is settled by the stale sweep as
     not sent, and stays resumable (round 3, evidence:3). That run never reached the send, so it is no provider
     outcome: a setting or billing change makes the one attempt it never made, exactly as a Resume does, instead of
     re-assessing with it as a failed request (cc78bc4c4)."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads each note from its recorded synthetic
+    # interpretation, and the run these tests reserve and sweep is Corti's, beside the interpretation's own.
+    interpretations = R4_INTERPRETATIONS
 
     def die_after_reserving(self, how='is_stopped'):
         """Claim the queued predict and kill its worker once its run is reserved; age it and run the sweep."""
@@ -63,6 +84,7 @@ class SweptReservedRunIsNoOutcomeTests(OperatorReads, ApiHarness, TestCase):
     def swept(self, how='is_stopped', text=OFFICE_NOTE):
         encounter_id = self.create(text)
         jobs.run_job(jobs.claim_next())  # extract
+        jobs.run_job(jobs.claim_next())  # interpret
         jobs.run_job(jobs.claim_next())  # analyze
         sends = len(self.provider.requests)
         self.die_after_reserving(how)
@@ -78,7 +100,7 @@ class SweptReservedRunIsNoOutcomeTests(OperatorReads, ApiHarness, TestCase):
     def assert_attempt_made(self, encounter_id, sends=1):
         encounter = models.Encounter.objects.get(pk=encounter_id)
         self.assertEqual(len(self.provider.requests), sends)
-        self.assertEqual(encounter.state, 'ready_for_review')
+        self.assertEqual(encounter.state, OFFICE_NOTE_STATE)
         self.assertEqual(encounter.current_assessment.provider_run.state, models.ProviderRun.SUCCEEDED)
         self.assertEqual(encounter.current_assessment.context_id, encounter.current_context_id)
         self.assertNotIn('The provider request failed', review.readiness(encounter)['blockers'])
@@ -149,7 +171,7 @@ class SweptReservedRunIsNoOutcomeTests(OperatorReads, ApiHarness, TestCase):
         self.provider.outcomes = ['not_sent']
         encounter_id = self.create()
         drain()
-        run = models.ProviderRun.objects.get(encounter_id=encounter_id)
+        run = models.ProviderRun.objects.get(encounter_id=encounter_id, purpose=models.ProviderRun.PRIMARY)
         self.assertEqual(run.state, models.ProviderRun.NOT_SENT)
         self.assertIsNotNone(run.started_at)
         self.change(encounter_id, {'setting': 'office'})
@@ -173,7 +195,7 @@ class SweptReservedRunIsNoOutcomeTests(OperatorReads, ApiHarness, TestCase):
         self.provider.build_request = unavailable_once
         encounter_id = self.create()
         drain()
-        run = models.ProviderRun.objects.get(encounter_id=encounter_id)
+        run = models.ProviderRun.objects.get(encounter_id=encounter_id, purpose=models.ProviderRun.PRIMARY)
         self.assertEqual((run.state, run.request_sha256, run.started_at), (models.ProviderRun.NOT_SENT, '', None))
         self.assertEqual(models.Encounter.objects.get(pk=encounter_id).state, 'provider_failed')
         self.change(encounter_id, {'setting': 'office'})

@@ -24,10 +24,16 @@ Nothing else is replaced: the stages, the doors, the send discipline and the rea
 The stage and context branches that dispatch on a gemini context are not seams, so a gemini context met under the chain
 still takes them (only nothing under the chain interprets a revision first, or makes a gemini context of its own).
 
-Which suites run here (FINAL 14.6, slice S15): the reading-outcome tests - and the mechanics tests whose assertions name
-the legacy chain's own stage order or the legacy reader's readings - each class marked where it is defined. The
-mechanics tests whose assertions hold on the production chain run there instead, with a recorded synthetic
-interpretation per fixture document (tests.test_pipeline_api.RecordedInterpretation).
+Which suites run here (FINAL 14.6, slice S15): the reading-outcome tests, each class marked where it is defined - what
+the legacy reader reads in a document (dates, routing, statuses, the questions it asks, the legacy engine's records and
+digests, the legacy reading a peer is shown) and the legacy records (contexts an earlier gi-context version recorded,
+the installed revision's rows, the upgrade and the undo). A reading-outcome test kept in a class of mechanics tests is
+marked by itself (``applied`` on the test method). The mechanics tests run the production chain instead, with a recorded
+synthetic interpretation per fixture document (tests.test_pipeline_api.RecordedInterpretation), their test-structure
+assumptions re-pointed to it: the interpret stage among the stages, Corti's runs beside the interpretation's own run,
+an addendum revision's own recorded interpretation, and the state a finished chain leaves the office note in
+(tests.test_pipeline_api.OFFICE_NOTE_STATE: its visit facts are member values there, DECISIONS D3). The mechanics
+classes still marked here are the ones not yet re-pointed; the S15 report lists them.
 
 Usage::
 
@@ -44,8 +50,13 @@ Usage::
     class OtherLegacyReadingTests(LegacyChain, TestCase):  # the mixin form of the same
         ...
 
-The chain is marked per class, where the class is defined, so a test added later to any of these modules runs the
-production chain unless it is marked too.
+    class SomeMechanicsTests(RecordedInterpretation, TestCase):
+        @applied
+        def test_a_legacy_reading(self):
+            ...  # only this test's body runs inside legacy_chain(); its class's setUp drives no stage
+
+The chain is marked per class (or per test), where it is defined, so a test added later to any of these modules runs
+the production chain unless it is marked too.
 """
 import contextlib
 import functools
@@ -133,7 +144,20 @@ def _enter_for_test(test):
 def applied(cls):
     """A TestCase class decorator: every test of ``cls`` runs inside legacy_chain(). It is entered before the class's
     setUpClass (so Django's setUpTestData reads and writes under it too) and left after its class cleanups, and entered
-    again before each test's own setUp - whether or not those call super() - and left after that test's cleanups."""
+    again before each test's own setUp - whether or not those call super() - and left after that test's cleanups.
+
+    On a test METHOD instead, only that test's body runs inside legacy_chain() - its class's setUp, setUpClass and
+    cleanups take the class's chain - for a reading-outcome test kept in a class of mechanics tests that runs the
+    production chain (FINAL 14.6). It is for a test whose class's setUp drives no stage."""
+    if not isinstance(cls, type):
+        test = cls
+
+        @functools.wraps(test)
+        def run(self, *args, **kwargs):
+            with legacy_chain():
+                return test(self, *args, **kwargs)
+        run.legacy_chain = True  # marked, for the triage's own counts
+        return run
     own_class_setup = cls.__dict__.get('setUpClass')
 
     def setUpClass(klass):

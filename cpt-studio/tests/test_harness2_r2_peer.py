@@ -49,14 +49,14 @@ from studio.types import (EvidenceSpan, ExtractionIssue, LocatedQuote, Participa
 from studio.validation import checks as validation_checks
 from tests.legacy_chain import applied
 from tests.test_harness2_pipeline import (ASTRA_READING, BIOPSY, CPT_STUDIO, EMPTY_PEER, FABLE_READING, HEAD, LAND,
-                                          SNARE, TWO_EXTENTS, ColonCase, Harness2Case, answered, asks,
-                                          document_sections, facts_call, peer_document, reading)
+                                          SNARE, TWO_EXTENTS, TWO_EXTENTS_INTERPRETATIONS, ColonCase, Harness2Case,
+                                          answered, asks, document_sections, facts_call, peer_document, reading)
 from tests.test_harness_pipeline import _WorkerDied
 from tests.test_participants_support import (CLIENT_REQUEST_ID, FACTS_ARGUMENTS, NOTE, PAGES, PASSAGES_ARGUMENTS,
                                              FakeExecutor, FakeResponse, FakeSession, OfflineTestCase,
                                              astra_tool_call, code, empty_reading, fixture_bytes, openai_env, service,
                                              write_file)
-from tests.test_pipeline_api import drain
+from tests.test_pipeline_api import OFFICE_NOTE_STATE, RecordedInterpretation, drain
 
 # --- FG2-3: Corti's units and CPT Studio's excluded codes, as a peer request shows them -------------------------------
 
@@ -108,13 +108,14 @@ def without_key(data, key):
     return json.dumps(envelope).encode()
 
 
-@applied
-class NullArgumentsTests(Harness2Case):
+class NullArgumentsTests(RecordedInterpretation, Harness2Case):
     """HARNESS.md 11.2 and 12.1: every exchange is a recorded ProviderExchange and every tool call a ToolCall row; the
     loop answers arguments that are not a usable object with CPT Studio's own sentence and goes on (loop.NOT_AN_OBJECT).
     ToolCall.arguments is NOT NULL, and a Python None there was SQL NULL: the record failed, and the whole run - its
     final answer, its usage and every exchange - was recorded unknown with nothing kept, blocking the other participant
     (I8, I10), and a reconciliation sent the identical, already answered request again (sends-r2-1)."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads OFFICE_NOTE from its recorded synthetic
+    # interpretation.
 
     def assertRecordedWhole(self, encounter_id, name, call_id, reading):
         run = self.runs_of(encounter_id, name, 'independent')[0]
@@ -130,7 +131,7 @@ class NullArgumentsTests(Harness2Case):
         for other in ('astra', 'fable'):
             self.assertEqual([r.state for r in self.runs_of(encounter_id, other, 'independent')], ['succeeded'])
             self.assertEqual([r.state for r in self.runs_of(encounter_id, other, 'peer_review')], ['succeeded'])
-        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')
+        self.assertEqual(self.encounter(encounter_id).state, OFFICE_NOTE_STATE)
         record = self.records(self.encounter(encounter_id).current_assessment)[name]
         self.assertEqual((record['state'], record['exchanges'], record['tool_calls']), ('read', 2, 1))
 
@@ -838,12 +839,14 @@ def worded_reading():
         references_used=[{'ref': CITED_REF, 'use': WORDS['use']}])
 
 
-@applied
-class OtherModelTests(PeerMaterialCase):
+class OtherModelTests(RecordedInterpretation, PeerMaterialCase):
     """I9: no CPT descriptor text sent or displayed; 11.1 and 12.7: never Corti's display text. The engine refuses to
     list a code over 10 characters, the trace names one by its length and the page withholds descriptor-like text, yet a
     peer request relayed the other model's reading as written (prompt.reading_answer) - a long code, a basis, every free
     text and unlocated quote - and any code string Corti selected, to the other vendor (IR2-3)."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
     corti_codes = (('45385', SNARE), ('45380', BIOPSY), (CORTI_LONG, BIOPSY))
 
     def setUp(self):

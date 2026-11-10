@@ -46,11 +46,12 @@ from studio.types import sha256_json
 from tests import test_harness2_api as h2
 from tests.legacy_chain import applied
 from tests.test_frontend import HARNESS2_SCENARIOS, _fixture
-from tests.test_harness2_pipeline import EMPTY_PEER, HEAD, TWO_EXTENTS, ColonCase, answered, reading
+from tests.test_harness2_pipeline import (EMPTY_PEER, HEAD, TWO_EXTENTS, TWO_EXTENTS_INTERPRETATIONS, ColonCase,
+                                          answered, reading)
 from tests.test_harness2_pipeline import Harness2Case as PipelineCase
 from tests.test_harness2_r2_evidence import NO_BASIS, PRIOR, VISIT, page
 from tests.test_participants_support import code as code_item, empty_reading, service as service_item
-from tests.test_pipeline_api import drain
+from tests.test_pipeline_api import RecordedInterpretation, drain
 
 ROOT = Path(settings.BASE_DIR)
 DORMANT = dict(STUDIO_OFFER_CONFIRMATIONS=True)  # the dormant confirmation path, as its own tests run it
@@ -227,12 +228,14 @@ class EncounterQuestionTests(h2.Harness2Case):
         self.assertEqual(review._review_state(self.encounter, self.final), 'needs_clarification')
 
 
-@applied
-class CodeQuestionTests(ColonCase):
+class CodeQuestionTests(RecordedInterpretation, ColonCase):
     """Two colonoscopy codes Corti selects on a note with no extent reached, and 45378 Fable's peer review adds: four
     questions, each about a code; none about the encounter. Moved by refutation round 6 (R6-MEANING, the session's D14):
     the 45378 Fable's peer review adds is its alternative, never a proposal, so two questions, each about one of Corti's
     codes."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
+    # recorded synthetic interpretation.
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
 
     def test_a_question_about_a_code_holds_that_code_which_can_still_be_rejected(self):
         encounter_id = self.create(TWO_EXTENTS)
