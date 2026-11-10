@@ -81,14 +81,17 @@ def base_within(members: Sequence[tuple], coding: Mapping) -> tuple:
     """engine.base_within: a base code whose session is the endoscopic portion of another (C3, C-4: an EGD inside an
     upper EUS) is held: (base code, the counted codes of that session that include the examination, or () when that
     session has no counted code). No entry when the code is no base, its session is part of no other, or that session's
-    counted codes include no such examination."""
+    counted codes include no such examination. DECISIONS D70: a session that may be the endoscopic portion of another
+    (``possibly_part_of``: that session's EUS examination is only possibly current) is held as one that is - fail-closed,
+    never READY - while nothing reads it as included; the overlay applies this rule at read time over the same record."""
     held = []
     for index, (code, family, session_id) in enumerate(members):
         session = _session(coding, session_id)
-        if not _base(code) or session is None or not session.get('part_of'):
+        whole = (session.get('part_of') or session.get('possibly_part_of')) if session is not None else ''
+        if not _base(code) or session is None or not whole:
             continue
         including = [other for position, (other, _family, other_session) in enumerate(members)
-                     if position != index and other_session == session['part_of']]
+                     if position != index and other_session == whole]
         if not including:
             held.append((code, ()))
             continue
@@ -167,6 +170,17 @@ def endoscopic_rows(pairs) -> dict:
 
 # --- the same-day E/M (D21 as ADJUDICATION C-3 amends it: by date of service) -------------------------------------------
 
+OTHER_GI = 'gi.other'  # engine.OTHER_GI
+# DECISIONS D81 (the round-3 refutation, finding 20): the families whose events make a procedure day. FINAL 7.2 R8 copies
+# the legacy same-day rule, and engine._same_day_family counts a routed family that is a procedure profile
+# (gi.profiles procedure=True: lexicon.PROCEDURAL_FAMILIES) or another GI service (gi.other: anoscopy, hemorrhoid
+# banding, rigid proctosigmoidoscopy, ...) - with no code its global period is unknown, so it counts as a code with no
+# fee-schedule row does (fail-closed). Reading the procedural families alone, a hemorrhoid banding done in the office
+# made no procedure day, separate_em was never asked and 99213 was READY. The pin holds it equal to the legacy rule over
+# gi.profiles.
+SAME_DAY_FAMILIES = lexicon.PROCEDURAL_FAMILIES | frozenset({OTHER_GI})
+
+
 @dataclass(frozen=True)
 class ProcedureDay:
     """``labels``: the procedure families documented as done on the date of service; ``possible``: those whose doing on
@@ -182,8 +196,9 @@ class ProcedureDay:
 
 
 def procedure_day(reading, effective, codes: Sequence[tuple] = ()) -> ProcedureDay:
-    """The procedure day by DATE OF SERVICE (C-3). Every procedure event (a procedural family, not an E/M visit) stated
-    done or in doubt, by any performer (as derived.procedure_day reads it, contract 8.3), is ON the date (facts.day_of:
+    """The procedure day by DATE OF SERVICE (C-3). Every procedure event (of a procedural family or gi.other -
+    SAME_DAY_FAMILIES, DECISIONS D81 - and not an E/M visit) stated done or in doubt, by any performer (as
+    derived.procedure_day reads it, contract 8.3, gi.other added by D81), is ON the date (facts.day_of:
     a usable current time, or a time whose own words or literals place it on the effective date), OFF it, or UNDATABLE.
     ON with status, time, performer and procedure usable and positive: done; ON otherwise: possible; UNDATABLE: listed
     for the E/M's time question. ``codes``: (code, family, state, procedural, label) of the counted codes - a counted
@@ -192,7 +207,7 @@ def procedure_day(reading, effective, codes: Sequence[tuple] = ()) -> ProcedureD
     labels, possible, undatable = [], [], []
     for event in reading.events.values():
         family = event.get('family') or ''
-        if family not in lexicon.PROCEDURAL_FAMILIES or events.value(event, 'kind') in lexicon.EM_KINDS:
+        if family not in SAME_DAY_FAMILIES or events.value(event, 'kind') in lexicon.EM_KINDS:  # D81: gi.other too
             continue
         status = events.value(event, 'status')
         if status not in verify.POSITIVE + ('uncertain',):

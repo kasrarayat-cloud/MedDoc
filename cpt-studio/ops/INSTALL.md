@@ -70,8 +70,9 @@ directory. Exit 0 = done; 1 = refused or failed (the receipt says which and why)
 | 13 | `verify` | — | nothing |
 
 `switch-back` returns to the pair this revision's last successful `app` replaced
-(its receipt's `replaced`; images are never removed) by the same switch in
-reverse, so the site is never interrupted: see **Switching back**.
+(its receipt's `replaced`; images are never removed; after a same-revision
+re-run, the pair an earlier `app` since the last `switch-back` replaced) by the
+same switch in reverse, so the site is never interrupted: see **Switching back**.
 `rollback-app` removes the web and worker containers - the site is down from
 that moment until a pair is installed again; prefer `switch-back` after a
 successful `app`. (In an undo's layout - the S4 keep layout, or the back layout
@@ -637,8 +638,19 @@ no longer answer as it recorded.
 revision) and returns to the pair this revision's last successful `app`
 replaced - its receipt's `replaced`, whose image is still present - with the
 modes given (the previous pair's, as its own `app` was given them; the
-credentials files are checked with the previous image's own loaders). It
-refuses, starting nothing, unless this revision's web serves the site through
+credentials files are checked with the previous image's own loaders). When that
+`app` replaced this same revision - a same-revision re-run: a provider-mode
+switch, an access check run again, or the re-run a failed `app`'s receipt asks
+for once its parked pair is removed - the pair is read instead from the newest
+`app` receipt of this revision written since its last successful `switch-back`
+that names another revision whose image is still present (DECISIONS D83): a
+successful one, or one that failed once its switch had finished (only such a
+receipt records the web it replaced: its recompute, the removal of the parked
+pair or its access check failed after the old web was parked). With none, there
+is nothing to switch back to: an `app` whose receipt records no replaced web
+(the S4 keep layout, an S5 failure, an undo) leaves none, so after the S4 keep
+layout's recovery the way back is `rollback-app`. It refuses, starting
+nothing, unless this revision's web serves the site through
 its HTTPS stage, and while this revision recorded what an older revision would
 act on, or show, wrongly (`rollback-app`'s check: **Reinstalling an older
 revision**). For a switch-back that check is read against the revision it
@@ -646,12 +658,20 @@ returns to (DECISIONS D51): a reason that revision reads is no hazard to it -
 participants and second reviews when its worker runs their stages, a member's
 answer and a chosen modifier when its own models read them - and an encounter
 with no record created since this revision replaced that pair holds only what
-that pair left there. That time is the one the same `app` receipt records for
-its phase (its `started_at`; DECISIONS D59), never the current containers'
-creation: a later `app` of this same revision that installed a pair and then
-failed made those, and what this revision wrote under its earlier pair is not
-the previous revision's own (the receipt's `touched_since` says which time was
-read). A reviewer's reinstatement on a new-path assessment is always named
+that pair left there. That time is the earliest `started_at` of the `app`
+receipt the pair is read from and of every successful `app` receipt of this
+revision that replaced the same pair - counting only those written after this
+revision's last successful `switch-back` to that pair (DECISIONS D59, D65 and
+D82). It never reaches across that `switch-back`: what the pair wrote while it
+served again after it, until an `app` replaced it once more, is its own. When
+the receipt the pair is read from is itself older than that `switch-back` (no
+successful `app` has replaced that pair since: a later one failed, or replaced
+another revision), the time is that `switch-back`'s own `started_at`. Never the
+current containers' creation: a later `app` of this same revision that
+installed a pair and then failed made those, and what this revision wrote under
+its earlier pair is not the previous revision's own (the receipt's
+`touched_since` says which time was read). A reviewer's reinstatement on a
+new-path assessment is always named
 (`reinstatement`: no older overlay adds the hold it brings back), and stays
 named once the reinstated code is approved - the normal end of a
 reinstatement: revoke that code's decision on this revision's web first. Then,

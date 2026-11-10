@@ -13,6 +13,8 @@ BUNDLING (7.7; COMMON_BUNDLED, catalogue.py:163-175):
 - procedural adjunct (DECISIONS D30): an ablation or a bleeding control verifiably part_of a current performed removal
   (snare, EMR, hot biopsy, ESD), or on that removal's verified lesion - the removal's adjunct coagulation, the control of
   bleeding it causes - is included in the removal and never reported alone (PROCEDURAL_ADJUNCT), as resection_technique.
+  D79: a removal attempted and not completed is such a whole too (adjunct_whole), for this bundling and for the
+  procedural_adjunct question (bundling_doubt).
 - biopsy_of_removed_lesion: a biopsy of the same verified lesion as a current performed removal (snare, EMR, hot biopsy,
   ESD) where that lesion is single, or - whatever the multiplicity (C-2) - where the two acts cite a passage in common;
   a group lesion whose two acts sit in separate passages has a bundling_identity relation instead.
@@ -76,23 +78,20 @@ CODING_VERSION = ENGINE_VERSION  # event_coding's version: its reader (overlay.p
 
 # --- bundling (7.7) -------------------------------------------------------------------------------------------------------
 
-# D62: the time reasons that place an event on another occasion rather than leave its time in doubt
-CONTRADICTED_TIME = frozenset({'date_mismatch', 'other_occasion'})
-
-
 def possibly_current(event: Mapping) -> bool:
-    """DECISIONS D62 (D54's review): whether Gemini gave ``event`` a current_encounter time, verified or not. A current
-    time left unverified - D35's other occasion, D54's unanchored words, words that do not bind - is a doubt about the
-    event's own code, never an absence for the rules that hold OTHER codes by it: a session's examinations, a removal
-    its parts are bundled into, the acts two codes compete for. Read as an absence, unverifying an aside's examination
-    resolved today's session to the other examination (45385 READY on the index colonoscopy's snare), and unverifying a
-    removal's time released the biopsy of the lesion it removed. An earlier or future time stays not current, verified
-    or not: Gemini did not say this encounter. So is a current time whose own words place the event on another
-    occasion - a date that differs from the service date (date_mismatch) or D35's marker (other_occasion): that is
-    evidence, not a doubt (the 2024 examination Gemini mislabelled current never takes today's session)."""
+    """DECISIONS D62 (D54's review), as D68 completes it: whether Gemini gave ``event`` a current_encounter time,
+    verified or not, WHATEVER its reasons. A current time left unverified - D35's other occasion, D54's unanchored
+    words, a date that differs from the service date or that no date checks (D67), words that do not bind - is a doubt
+    about the event's own code, never an absence for the rules that hold OTHER codes by it: a session's examinations, a
+    removal its parts are bundled into, the acts two codes compete for. Read as an absence, unverifying an aside's
+    examination resolved today's session to the other examination (45385 READY on the index colonoscopy's snare), and
+    unverifying a removal's time released the biopsy of the lesion it removed. D68: neither D35's marker nor a
+    date_mismatch proves another occasion - "Next", "Later in the procedure" and "At that time" are sequence words
+    within one procedure, and a clock time ("At 2030") reads as a year - so they are doubts too: the part stays held,
+    and a mislabelled examination beside today's leaves the session unresolved (asked, never the other examination's).
+    Only an earlier or future time is not current, verified or not: Gemini did not say this encounter."""
     time = event.get('time')
-    return (isinstance(time, Mapping) and time.get('value') == 'current_encounter'
-            and not set(time.get('reasons') or ()) & CONTRADICTED_TIME)
+    return isinstance(time, Mapping) and time.get('value') == 'current_encounter'
 
 
 def current_performed(event: Mapping) -> bool:
@@ -136,6 +135,17 @@ def duct_side(event: Mapping) -> str:
     return side if side in DUCT_SIDES else ''
 
 
+def adjunct_whole(event: Mapping) -> bool:
+    """DECISIONS D79 (the round-3 refutation, finding 12): a whole a removal's procedural adjunct (D30, D41) can belong
+    to - a removal current as current_performed reads it (D62: possibly_current), and performed OR begun and not
+    completed (status attempted_not_completed, usable). The bleeding an attempted snare causes, or the coagulation of an
+    attempted resection's margins, is that attempt's own (CPT: control of bleeding the procedure causes), so beside an
+    attempted removal the adjunct is asked (bundling_doubt) or bundled (bundled_reason) exactly as beside a performed
+    one - never READY alone. A statement, a planned act and an act on another occasion are no whole."""
+    return (events.usable(event, 'status') and events.value(event, 'status') in verify.POSITIVE
+            and possibly_current(event))
+
+
 def bundled_reason(reading, event: Mapping) -> str:
     """Why ``event`` is part of another documented act and never separately reported (module docstring), or ''."""
     kind = event.get('catalogue_kind') or ''
@@ -177,8 +187,11 @@ def bundled_reason(reading, event: Mapping) -> str:
             if whole.get('family') == ERCP and (not side or not other or side == other):
                 return STENT_INCLUDED
         return ''
-    if kind in ADJUNCT_KINDS:  # D30: a removal's procedural adjunct, by its verified part_of or the removal's lesion
-        for whole in _wholes(reading, event, mapping.REMOVAL_MEMBERS):
+    if kind in ADJUNCT_KINDS:  # D30: a removal's procedural adjunct, by its verified part_of or the removal's lesion -
+        for whole in reading.events.values():  # D79: of a removal performed or attempted (adjunct_whole)
+            if (whole is event or whole.get('catalogue_kind') not in mapping.REMOVAL_MEMBERS or not adjunct_whole(whole)
+                    or not _same_session(reading, whole, event)):
+                continue
             if whole_of == whole['id'] or (lesion and lesion == identity.verified_lesion(whole)):
                 return PROCEDURAL_ADJUNCT
         return ''
@@ -195,10 +208,12 @@ def bundled_reason(reading, event: Mapping) -> str:
 
 def bundling_doubt(reading, event: Mapping) -> Optional[dict]:
     """The bundling_identity relation that makes ``event``'s bundling depend on an identity not established, whose
-    whole is a current performed act (FINAL 7.7: asked, never READY), or None."""
+    whole is a current performed act (FINAL 7.7: asked, never READY) - or, for a removal's procedural adjunct, a removal
+    performed or attempted (D79: adjunct_whole) - or None."""
     for relation in reading.relations_of(event['id'], (relations.BUNDLING,)):
         whole = reading.events.get(relation['statement'])
-        if whole is not None and current_performed(whole):
+        if whole is not None and (current_performed(whole) or (relation.get('reason') == 'procedural_adjunct'
+                                                               and adjunct_whole(whole))):
             return relation
     return None
 
@@ -208,8 +223,10 @@ def bundling_doubt(reading, event: Mapping) -> Optional[dict]:
 @dataclass(frozen=True)
 class Session:
     """One family's documented service at this encounter: ``event`` its one current examination ('' for none, or when
-    two leave it ``unresolved``), ``part_of`` the session it is the endoscopic portion of, ``done`` whether the family
-    has a done event, ``incomplete`` whether its examination was begun and not completed."""
+    two leave it ``unresolved``), ``part_of`` the session it is the endoscopic portion of, ``possibly_part_of`` the
+    session it may be the endoscopic portion of (DECISIONS D70: that session's examination is only possibly current;
+    the base-within rule reads it, nothing reads the session as included), ``done`` whether the family has a done
+    event, ``incomplete`` whether its examination was begun and not completed."""
     id: str
     family: str
     kind: str
@@ -221,12 +238,27 @@ class Session:
     done: bool = False
     incomplete: bool = False
     events: tuple = ()
+    possibly_part_of: str = ''
 
 
-def _lower_eus(reading) -> bool:
-    for event in reading.events.values():
-        if event.get('family') != 'gi.eus':
-            continue
+def done_examinations(reading, family: str) -> list:
+    """DECISIONS D69-D71: the examinations of ``family`` done at this encounter, in the reading's order - done
+    (events.done: a usable performed or begun status, a usable current_encounter time and a usable documenting-team
+    performer), a usable kind, an examination kind, and no digital examination (FINAL 5.6 E13). These are the
+    examinations a session's own ``event`` is chosen from (sessions' ``exams``, pinned equal), never D62's possible
+    ones, nor a planned, historical, denied or doubted examination."""
+    return [event for event in reading.events.values() if event.get('family') == family and events.done(event)
+            and events.usable(event, 'kind') and event.get('catalogue_kind') in mapping.EXAMINATION_KINDS
+            and events.endoscopic_examination(event)]
+
+
+def _lower_eus(examinations) -> bool:
+    """Whether one of the EUS ``examinations`` is placed in the lower tract (LOWER_REGIONS) by its verified target or its
+    usable reach. DECISIONS D69 (the round-3 refutation, finding 2): C-4 reads only examinations it is given - today's
+    done ones (done_examinations) - never every EUS event of the reading: a planned ("Plan: rectal EUS ... in 2 weeks"),
+    historical ("a radial EUS of the rectum in 2024") or denied ("No rectal EUS was performed.") rectal EUS line made the
+    EUS session lower and freed 43235 beside 43242, where the installed release holds it."""
+    for event in examinations:
         places = [mapping.target_landmark(event)]
         extent = event.get('extent')
         if verify.usable(extent):
@@ -266,7 +298,18 @@ def sessions(reading) -> dict:
                               events.value(event, 'status') == 'attempted_not_completed' for event in exams),
                           events=tuple(event['id'] for event in members))
         found[family] = session
-    upper_eus = found.get('gi.eus') is not None and found['gi.eus'].examinations and not _lower_eus(reading)
+    # C-4 reads the gi.eus session's DONE examinations only (DECISIONS D69, D70): an EUS examination D62 reads as only
+    # possibly current is never the session (D62), so it never makes today's EGD the EUS's endoscopic portion - read as
+    # one, another occasion's EUS ("These were the findings at her index EUS") dropped the EGD's own no_proposal item and
+    # its second-review mark. Such an examination is a doubt instead: an upper EUS examination that may be this
+    # encounter's, beside no done one, leaves the EGD its own items and holds its base code as C-4 would
+    # (``possibly_part_of``, which only combination.base_within reads), never READY.
+    eus = found.get('gi.eus')
+    done_eus = done_examinations(reading, 'gi.eus') if eus is not None else []
+    done_ids = {event['id'] for event in done_eus}
+    possible_eus = [reading.events[eid] for eid in (eus.examinations if eus is not None else ()) if eid not in done_ids]
+    upper_eus = bool(done_eus) and not _lower_eus(done_eus)
+    possibly_upper = not upper_eus and bool(possible_eus) and not _lower_eus(done_eus + possible_eus)
     for family, session in list(found.items()):
         if not session.event:
             continue
@@ -278,6 +321,8 @@ def sessions(reading) -> dict:
             part_of = whole['family']  # C3: the endoscopic portion of another examination
         elif family == 'gi.egd' and upper_eus:
             part_of = 'gi.eus'  # C-4: structurally, an EGD within an upper EUS
+        elif family == 'gi.egd' and possibly_upper:
+            found[family] = replace(session, possibly_part_of='gi.eus')  # D70: within an upper EUS, possibly
         if part_of:
             found[family] = replace(session, part_of=part_of)
     return found
@@ -307,14 +352,26 @@ def doubted(reading, event: Mapping) -> bool:
     """A reportable-kind event in doubt (FINAL 7.9 base rule (c), the event form of listed_in_doubt and
     listed_contradicted; fail-closed): stated positive or uncertain, not verified at another time or by another performer,
     and its status uncertain, a CONTRADICTION, DOUBT or UNRESOLVED relation on it, or an attribute of its own statement
-    (kind, status, time, performer) unusable."""
+    (kind, status, time, performer) unusable - or (DECISIONS D75, round 3, finding 17) stated positive and possibly
+    current (D62) with its PROCEDURE not usable (unverified or opened: Gemini's 'EGD' heading cited for the biopsies
+    under it, too short to locate, with two current families the default does not settle) while its family has a
+    current session (a done examination). Such an act may belong to any current family, so it is never an absence: read
+    as one, it was neither reportable nor doubted and 43235 went READY beside four EGD biopsies, where the installed
+    release asks base_included. Unverified is a doubt, never an absence (D62's rule, for the procedure). This reads the
+    act in the session of the family its procedure names, the one session event_coding lists it in; an act whose
+    procedure is absent has no family and no session (the cross-family part of D75 is recorded, not built here)."""
     if not reportable_kind(event) or events.value(event, 'status') not in verify.POSITIVE + ('uncertain',):
         return False
     if events.verified_other_time(event) or events.verified_other_performer(event):
         return False
     if events.value(event, 'status') == 'uncertain' or reading.relations_of(event['id']):
         return True
-    return not all(events.usable(event, name) for name in ('kind', 'status', 'time', 'performer'))
+    if not all(events.usable(event, name) for name in ('kind', 'status', 'time', 'performer')):
+        return True
+    return (not events.usable(event, 'procedure') and possibly_current(event) and any(
+        other.get('family') == event.get('family') and events.done(other) and events.usable(other, 'kind')
+        and other.get('catalogue_kind') in mapping.EXAMINATION_KINDS and events.endoscopic_examination(other)
+        for other in reading.events.values()))
 
 
 def _entry(reading, event: Mapping) -> dict:
@@ -597,6 +654,7 @@ def event_coding(reading, sessions_: Mapping, codes: Mapping) -> dict:
         members = [reading.events[eid] for eid in session.events]
         coded_sessions[session.id] = {
             'family': session.family, 'event': session.event, 'part_of': session.part_of, 'label': session.label,
+            'possibly_part_of': session.possibly_part_of,  # D70: the base-within rule reads it at read time too
             'kind': session.kind, 'unresolved': session.unresolved, 'done': session.done,
             'incomplete': session.incomplete, 'examinations': list(session.examinations),
             # the session's own service is never an act beside itself: an office visit's visit event (lexicon.EM_KINDS)

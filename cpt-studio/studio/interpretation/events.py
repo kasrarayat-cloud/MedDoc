@@ -443,6 +443,8 @@ def evaluate(code: str, kept: Sequence, reading: Reading, link: Optional[mapping
         reason = wording.not_linked_reason(code, unprofiled)
         return Evaluation(code, family, link, 'uncertain', UNPROFILED if unprofiled else NOT_LINKED, reason,
                           question=Question('performed_status', wording.performed_question(code), reason, (), own))
+    if mapping.recognised_only(link):  # DECISIONS D80: recognised, not assessed - held, never READY, never excluded
+        return recognised_only_hold(code, link, own)
     supporting: list = []
     for group in requirements(link):
         found = [event for event in reading.events.values() if supports(reading, link, group, event)]
@@ -513,6 +515,26 @@ def evaluate(code: str, kept: Sequence, reading: Reading, link: Optional[mapping
     return Evaluation(code, family, link, 'performed', SUPPORTED, detail,
                       supporting=tuple(event['id'] for event in own_acts), read=read,
                       bundled=tuple((item['id'], reason) for item, reason in bundled))
+
+
+def recognised_only_hold(code: str, link: mapping.CodeLink, own: tuple) -> Evaluation:
+    """DECISIONS D80 (the round-3 refutation, finding 19): a code on the catalogue route of a RECOGNISED-ONLY family
+    (mapping.recognised_only: gi.sedation's 99152 and 99153) is not assessed by CPT Studio. Whatever the inventory
+    states - a sedation Gemini reads as performed by the documenting team today, one of 8 minutes with no observer, on a
+    3-year-old, or one stated not done - the code is held with the performed_status question
+    (wording.performed_question, the question route (d)'s hold asks under C-6), quoting its own cited passages;
+    never READY, and never excluded (only a member's answer or a reviewer's decision settles it). The service.status and
+    events.match checks carry the detail: the service is recognised and listed for review, not assessed, and the
+    catalogue's own list of what the family requires documented is named as not checked. It reads no event (``read``
+    is empty) and accounts for none (E* is empty), as route (d)'s hold: the decision is the family's, not the
+    document's."""
+    needs = mapping.documentation(link.family)
+    detail = (f'{wording.family_label(link.family)} is recognised by CPT Studio and listed for review, not assessed: no '
+              f'service profile in this release reconciles {code} with the documented acts.'
+              + (f' What it needs documented is not checked: {"; ".join(needs)}.' if needs else '')
+              + ' Held for the reviewer, not excluded.')
+    return Evaluation(code, link.family, link, 'uncertain', mapping.RECOGNISED_ONLY, detail,
+                      question=Question('performed_status', wording.performed_question(code), detail, (), own))
 
 
 def session_examination(event: Mapping, families) -> bool:
@@ -722,15 +744,34 @@ RELATION_FACTS = {'time': 'event_time', 'performer': 'event_performer', 'target'
 
 
 def _h3_unresolved(code, link, event, reading):
+    """FINAL 7.4 h3: the candidate is the positive side of an UNRESOLVED relation, which asks the fact of the attribute
+    it rests on (RELATION_FACTS) - unless, for a code, its statement is a DENIAL (DECISIONS D86): a statement whose
+    status is not_performed, in any state, or whose own status words hold a negator (verify's negation_marker literal).
+    The document then states the act done and states a denial that may be of it, and the code's one question is that
+    contradiction: whether the statement applies to the act (statement_scope, naming both), whatever attribute the
+    relation rests on. "No polypectomy was performed in the prior segment." beside a verified sigmoid snare had asked
+    which lesion the snare was done on (C1CL3-001), and "without submucosal injection" beside "Lift: submucosal
+    injection x2." which site the injection was done on. A doubt, a planned act a claim names and a positive event (a
+    claim that two acts are one) keep their attribute's question. So does focus_question's service-scope question about
+    an event no code depends on (FINAL 7.8; ``code`` ''): coverage.in_doubt_questions asks one question per family and
+    fact, so moving that question to statement_scope dropped it where the family's codes ask statement_scope (FRESH-2
+    C2MEM-031 r1: the balloon dilation's "done at this encounter?"). Only the question changes: the code is held as
+    before, never READY and never excluded."""
     for relation in reading.relations_of(event['id'], (relations.UNRESOLVED,)):
         found = _relation_question(reading, relation, event)
-        fact = RELATION_FACTS.get(relation['attribute'], 'performed_status')
+        statement = found['statement']
+        status = statement.get('status')
+        negating = isinstance(status, Mapping) and bool((status.get('literals') or {}).get('negators'))
+        if code and (value(statement, 'status') == 'not_performed' or negating):  # D86: a denial asks the contradiction
+            fact = 'statement_scope'
+        else:
+            fact = RELATION_FACTS.get(relation['attribute'], 'performed_status')
         act = event_label(reading, event)
         words = statement_text(reading, event)
         question, reason = _attribute_question(fact, act, words)
         if fact == 'statement_scope':
-            statement = statement_text(reading, found['statement'])
-            question, reason = wording.scope_question(statement, act, words), wording.scope_reason(statement, act)
+            said = statement_text(reading, statement)
+            question, reason = wording.scope_question(said, act, words), wording.scope_reason(said, act)
         return {'reason': UNRESOLVED, 'relation': relation,
                 'question': Question(fact, question, reason, found['events'], found['passages'])}
     return None

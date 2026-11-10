@@ -300,11 +300,24 @@ def _incomplete_session(family: str, reading: events.Reading, sessions_: Mapping
     """DECISIONS D61 (the round-2 refutation, finding 10): the completion words of ``family``'s session examination when
     its reach's completion is VERIFIED 'incomplete' ("The examination was incomplete because of poor preparation."),
     else None. Such a session's codes carry what an examination begun and not completed gives (ADJUDICATION R-4, C-9):
-    the service.incomplete warn worded from those words, and the 52/53 consideration - never a status change."""
-    exam = _session_examination(family, reading, sessions_)
-    if exam is None or not _stated_incomplete(exam):
+    the service.incomplete warn worded from those words, and the 52/53 consideration - never a status change.
+    DECISIONS D71 (the round-3 refutation, finding 4): read over every DONE examination of the session
+    (coverage.done_examinations), not only its one resolved examination - a possibly current aside examination ("These
+    were the findings at her index colonoscopy") leaves the session unresolved, and that removed both signals from every
+    code although its done examination is stated incomplete. A done examination whose status is a usable
+    attempted_not_completed (verified by its failure marker, as the base code's own state reads it) gives them too, in
+    its failure-marker words; a verified 'incomplete' completion's words come first."""
+    if family not in sessions_:
         return None
-    return _words_text(exam['completion'])
+    examinations = coverage.done_examinations(reading, family)
+    for exam in examinations:
+        if _stated_incomplete(exam):
+            return _words_text(exam['completion'])
+    for exam in examinations:
+        if events.value(exam, 'status') == 'attempted_not_completed':
+            words = events.words_of(exam, 'status')
+            return words['text'] if words else ''
+    return None
 
 
 def _reach(family: str, reading: events.Reading, sessions_: Mapping) -> tuple:
@@ -399,8 +412,12 @@ def _examination_class(selection: _Selection, reading: events.Reading, sessions_
     # class, whatever its reach; a colonoscopy through a stoma needs the encounter's verified stoma. D56 (the round-2
     # refutation, finding 3): an 'incomplete' completion in ANY state - verified, unverified or opened - does not fit
     # the full class (fail-closed), so Gemini's own doubt about the completion, or completion words that do not bind,
-    # never releases the hold a confident 'incomplete' sets
-    incomplete = exam_class == mapping.FULL and exam is not None and _said_incomplete(exam)
+    # never releases the hold a confident 'incomplete' sets. D72 (the round-3 refutation, finding 6): nor does an
+    # examination whose STATUS is attempted_not_completed, in any state - Gemini may state the incompleteness through the
+    # status ("The examination was incomplete: the esophagus and the stomach were not examined." read as begun and not
+    # completed; "The examination was aborted ...") rather than the completion; D56's question either way
+    attempted = exam is not None and events.value(exam, 'status') == 'attempted_not_completed'
+    incomplete = exam_class == mapping.FULL and exam is not None and (_said_incomplete(exam) or attempted)
     no_stoma = exam_class == mapping.STOMA and not mapping.has_stoma(reading.encounter)
     if landmark in mapping.CLASS_REACH[exam_class] and not incomplete and not no_stoma:
         return None
@@ -683,22 +700,31 @@ def _counted_pairs(enc: _Encounter) -> list:
 
 
 def _claims(selection: _Selection, reading: events.Reading) -> tuple:
-    """DECISIONS D55 (the round-2 refutation, finding 1): the documented acts a counted code claims for the competition
-    rule (FINAL 7.9 as D40 amends it) - its supporting events, plus, for a code D27 narrows (CodeLink.defining) that is
-    matched (its supporting events non-empty), every current performed event (coverage.current_performed) of its own
-    family of a kind its covers name besides its defining kinds. D27 narrows what MATCHES a code, never what it
-    accounts for: 43265 matched by its lithotripsy still accounts for the stone extraction 43264 accounts for alone, so
-    the two for one stone clearance compete, as the installed release holds them. Only 43265 (the stone extraction),
-    44365 (the ablation) and 49440 (the tube placement) gain claims; a code the per-code rule held claims nothing beyond
-    its E* (none), so 43265 held not documented leaves 43264 ready."""
+    """DECISIONS D55 (the round-2 refutation, finding 1) as D74 (round 3, finding 5) widens it: the documented acts a
+    counted code claims for the competition rule (FINAL 7.9 as D40 amends it) - its supporting events, plus, for a code
+    D27 narrows (CodeLink.defining), every current performed event (coverage.current_performed) of its own family of a
+    kind its covers name besides its defining kinds. D27 narrows what MATCHES a code, never what it accounts for: 43265
+    matched by its lithotripsy still accounts for the stone extraction 43264 accounts for alone, so the two for one stone
+    clearance compete, as the installed release holds them. D74: the narrowed code claims them whenever it is matched OR
+    its family has an event of a defining kind stated positive (verify.POSITIVE) and possibly current
+    (coverage.possibly_current, D62), in ANY verification state - a defining act only doubted (its time unanchored, its
+    status words not binding) is a doubt about the code, never an absence of it, so 43264 is never READY beside a held
+    43265 for one stone clearance. Only 43265 (the stone extraction), 44365 (the ablation) and 49440 (the tube placement)
+    gain claims; a narrowed code with no such defining event (not documented) claims nothing, so 43265 held not
+    documented leaves 43264 ready."""
     evaluation = selection.evaluation
     supporting = tuple(evaluation.supporting)
     link = evaluation.link
-    if not link.defining or not supporting:
+    if not link.defining:
+        return supporting
+    family = [event for event in reading.events.values() if event.get('family') == link.family]
+    stated = any((event.get('catalogue_kind') or '') in link.defining
+                 and events.value(event, 'status') in events.verify.POSITIVE and coverage.possibly_current(event)
+                 for event in family)
+    if not supporting and not stated:
         return supporting
     kinds = set(link.acts) - set(link.defining)
-    extra = tuple(event['id'] for event in reading.events.values()
-                  if event.get('family') == link.family and (event.get('catalogue_kind') or '') in kinds
+    extra = tuple(event['id'] for event in family if (event.get('catalogue_kind') or '') in kinds
                   and coverage.current_performed(event) and event['id'] not in supporting)
     return supporting + extra
 
@@ -1416,11 +1442,17 @@ def assess(*, inventory, context, normalized: Optional[NormalizedResponse], prov
     response = normalized if provider_status == 'succeeded' else None
     if provider_status == 'succeeded' and response is None:
         raise ValueError('A succeeded provider status needs its normalized response.')
-    reading = events.Reading.of(inventory)
     context = _context(context)
     if date_state is None:
         date_state = checks.service_date_state(context, _context_date(context))
     day = date_state.value
+    # DECISIONS D67(b) (contract 5.3): the engine reads every stored time re-judged against the effective date - a
+    # member's date decides a time's date literals as a normalized document date does - on a copy of the inventory's
+    # event records, so the stored inventory is never changed
+    stored = events.Reading.of(inventory)
+    reading = events.Reading({'passages': list(stored.passages.values()), 'lesions': list(stored.lesions.values()),
+                              'events': events.verify.rejudged(stored.events.values(), day),
+                              'relations': stored.relations}, stored.encounter, stored.open_questions)
     sources = tuple(reference.sources())
     provider = list(checks.provider_checks(provider_status, response))
     sessions_ = coverage.sessions(reading)
@@ -1455,7 +1487,7 @@ def assess(*, inventory, context, normalized: Optional[NormalizedResponse], prov
                                                               s.evaluation.supporting)
                                                         for key, s in zip(keys, selections) if s.decidable})
     bases, within = dict(combination.base_included(members, coding)), dict(combination.base_within(members, coding))
-    competes = combination.competition([(key, s.code, s.origin, _claims(s, reading)) for key, s in counted])  # D55
+    competes = combination.competition([(key, s.code, s.origin, _claims(s, reading)) for key, s in counted])  # D55, D74
     pfs_source = applied_sources(sources, day).get(PFS)
     procedural = [(s.code, s.family, s.evaluation.state, _procedural(s, refs[s.code]),
                    wording.service_name(s.code, s.family)) for _, s in counted]

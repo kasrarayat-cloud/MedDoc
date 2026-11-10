@@ -789,12 +789,14 @@ class Focused(SimpleTestCase):
         self.assert_question(p, 'performed_status', POLYP)
 
     def test_h3_unresolved_time(self):
+        # DECISIONS D86: the statement is a denial, so the code asks whether it applies to the act (statement_scope),
+        # whatever attribute the relation rests on; a doubt keeps the time question (test_interpretation_r3_questions)
         denial = act('E3', 'P3', 'removal', 'removed', status='not_performed', status_words='No polyp was removed',
                      scope=sc('all_of_kind', 'No', ['P3']), time=a('unknown'))
         inv, text = colonoscopy(denial, lines={'P3': 'No polyp was removed.'})
         p = proposal(run(inv, text, [('45385', POLYP)]), '45385')
-        self.assert_question(p, 'event_time')
-        self.assertIn('done at this encounter?', p.clarifications[0].question)
+        self.assert_question(p, 'statement_scope')
+        self.assertIn('Does “No polyp was removed” apply to the snare removal', p.clarifications[0].question)
         self.assertEqual(p.support['reason'], events.UNRESOLVED)
 
     def test_h3_unresolved_scope_asks_whether_the_statement_applies(self):

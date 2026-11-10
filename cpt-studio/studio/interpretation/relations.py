@@ -74,14 +74,20 @@ non-match (P3; review finding 4). On one verified single lesion the engine bundl
 own where neither names a lesion and they are stated apart (random biopsies told in their own sentence), and where one is
 verified to a lesion and the other names none (Gemini's own reading ties only that act to it).
 
-A REMOVAL'S PROCEDURAL ADJUNCT (DECISIONS D41, as D58 narrows what sets it apart): an ablation or a bleeding control
-beside a current positive removal of its session (snare, EMR, hot biopsy, ESD) that D30 does not bundle gets a
-``procedural_adjunct`` bundling identity - asked, never READY alone - unless something verified separates it from the
-removal: two distinct verified lesions; a verified part_of naming an ACT (names_an_act: an event with a catalogue kind
-that is neither an examination - the session, ADJUDICATION C-1 - nor an umbrella); or places that are verifiably apart
-(adjunct_apart, every pair): both on one of the tract's chains (TRACT_POSITION) and neither compatible nor ADJACENT
-(one step apart on a chain). A place on no chain - a region, an anastomosis (even one D34 places), an organ beside the
-tract - never sets it apart (fail-closed). The adjacency is this arm's alone; lexicon.compatible is unchanged.
+A REMOVAL'S PROCEDURAL ADJUNCT (DECISIONS D41, as D58 and D76-D78 narrow what sets it apart): an ablation or a bleeding
+control beside a current positive removal of its session (snare, EMR, hot biopsy, ESD; performed or - D79 - attempted
+and not completed) that D30 does not bundle gets a ``procedural_adjunct`` bundling identity - asked, never READY alone -
+unless something verified separates it from the removal: a verified part_of naming an ACT (names_an_act: an event with
+a catalogue kind that is neither an examination - the session, ADJUDICATION C-1 - nor an umbrella); or places that are
+verifiably apart (adjunct_apart, every pair): both on one of the tract's chains (TRACT_POSITION) and neither compatible
+nor ADJACENT - no full segment strictly between them (D77: a junction - the rectosigmoid, a flexure, the ileocecal
+valve, the gastroesophageal junction, the pylorus - is no full step, so the two segments meeting at it are adjacent;
+the stomach's cardia, fundus and body border one another). The removal is read at EVERY place it is verified to be at
+(D78: Context.places with ``every``), so a removal done at several places sets its adjunct apart only when the adjunct
+is apart from each. Two distinct verified lesions set it apart only through those places (D76): a distinctness by
+sizes, by passage or by description, or by landmarks that are adjacent, never does. A place on no chain - a region, an
+anastomosis (even one D34 places), an organ beside the tract - never sets it apart (fail-closed). The adjacency is
+this arm's alone; lexicon.compatible is unchanged.
 
 Pure and Django-free; imports nothing from studio.gi but through mapping's reference tables (FINAL 3.1).
 """
@@ -130,10 +136,11 @@ PROCEDURAL_ADJUNCTS = frozenset({'ablation', mapping.BLEEDING_CONTROL})
 # (ADJUDICATION C-1), and the umbrellas (a removal or an intervention whose method is not stated).
 NOT_ACTS = mapping.EXAMINATION_KINDS | frozenset(mapping.UMBRELLAS)
 # DECISIONS D58: the tract's anatomical order, read by the procedural_adjunct arm only (lexicon.compatible is not
-# changed). Two places one step apart on a chain are ADJACENT; the appendiceal orifice and the ileocecal valve are at
-# the cecum. A landmark on no chain - a region (the colon, the right colon, the stomach, the duodenum), a surgically
-# made place (an anastomosis, a stoma, a pouch), the ampulla, an organ beside the tract - has no position, so it never
-# sets an adjunct apart (fail-closed).
+# changed). Two places one step apart on a chain are ADJACENT (D77: so are two with only a junction between them, and
+# the stomach's cardia, fundus and body - JUNCTIONS and MUTUALLY_ADJACENT below); the appendiceal orifice and the
+# ileocecal valve are at the cecum. A landmark on no chain - a region (the colon, the right colon, the stomach, the
+# duodenum), a surgically made place (an anastomosis, a stoma, a pouch), the ampulla, an organ beside the tract - has
+# no position, so it never sets an adjunct apart (fail-closed).
 LOWER_TRACT = ('anal_canal', 'rectum', 'rectosigmoid', 'sigmoid_colon', 'descending_colon', 'splenic_flexure',
                'transverse_colon', 'hepatic_flexure', 'ascending_colon', 'cecum', 'terminal_ileum')
 UPPER_TRACT = ('proximal_esophagus', 'mid_esophagus', 'distal_esophagus', 'gastroesophageal_junction', 'gastric_cardia',
@@ -146,6 +153,16 @@ TRACT_POSITION = MappingProxyType({
     **{landmark: ('lower', LOWER_TRACT.index('cecum')) for landmark in AT_THE_CECUM},
     **{landmark: ('upper', index) for index, landmark in enumerate(UPPER_TRACT)},
 })
+# DECISIONS D77: the JUNCTIONS the chains hold - where two segments meet, not a full step of their own: the two segments
+# meeting at one touch each other, so they are adjacent to each other as well as to it (the sigmoid colon and the rectum
+# at the rectosigmoid; the descending and the transverse colon at the splenic flexure; the transverse and the ascending
+# colon at the hepatic flexure; the cecum and the terminal ileum at the ileocecal valve, which opens at the cecum; the
+# distal esophagus and the cardia at the gastroesophageal junction; the antrum and the duodenal bulb at the pylorus).
+JUNCTIONS = frozenset({'rectosigmoid', 'splenic_flexure', 'hepatic_flexure', 'ileocecal_valve',
+                       'gastroesophageal_junction', 'pylorus'})
+# DECISIONS D77: places of one chain that border one another whatever the chain's order: the stomach's cardia, fundus
+# and body (the cardia meets the body along the lesser curve; the fundus lies beside both, off that path).
+MUTUALLY_ADJACENT = (frozenset({'gastric_cardia', 'gastric_fundus', 'gastric_body'}),)
 
 
 @dataclass(frozen=True)
@@ -207,9 +224,16 @@ class Context:
         the encounter's one anastomosis takes (DECISIONS D34; mapping.compared_landmark), else as stated."""
         return mapping.compared_landmark(event, self.anastomosis)
 
-    def places(self, event: Mapping) -> frozenset:
+    def places(self, event: Mapping, every: bool = False) -> frozenset:
         """The places an event's target is verified to be at: its verified, placed target landmark (target_place: an
-        anastomosis at its D34 place) and its verified lesion's verified site."""
+        anastomosis at its D34 place) and its verified lesion's verified site.
+
+        With ``every`` (DECISIONS D78; read only by the procedural_adjunct arm, for the removal), ALL the places it is
+        verified to be at: besides those two, every landmark the words of its verified target name (the target's
+        literals) and every landmark its verified lesion's own words name (lexicon.landmarks_named over its description
+        and its site words: a group lesion's landmarks, identity.LesionFacts.sites) - a removal done at several places
+        is at each of them, not only at the one landmark Gemini chose for it. The other readers keep the two: their
+        rules compare EVERY pair as compatible, so more places there would set more acts apart."""
         found = set()
         own = self.target_place(event)
         if own:
@@ -217,6 +241,12 @@ class Context:
         lesion = identity.verified_lesion(event)
         if lesion and self.facts[lesion].landmark:
             found.add(self.facts[lesion].landmark)
+        if every:
+            target = event['target']
+            if verify.usable(target):
+                found.update(lexicon.landmarks_named(((target.get('words') or {}).get('text')) or ''))
+            if lesion:
+                found.update(self.facts[lesion].sites)
         return frozenset(found)
 
     def stated_places(self, *events) -> bool:
@@ -595,15 +625,24 @@ def names_an_act(context: Context, eid: str) -> bool:
 
 
 def adjacent(first: str, second: str) -> bool:
-    """D58: whether two landmarks lie on one chain of the tract at most one step apart (TRACT_POSITION)."""
+    """D58, as D77 reads the chains: whether two landmarks lie on one chain of the tract with no FULL SEGMENT strictly
+    between them (TRACT_POSITION) - one step apart, or two segments meeting at a junction (JUNCTIONS: a junction between
+    two places is not a full step) - or are two places that border one another (MUTUALLY_ADJACENT: the stomach's
+    cardia, fundus and body). Every pair D58 read as adjacent (one step apart) still is: D77 only adds adjacencies."""
     one, two = TRACT_POSITION.get(first), TRACT_POSITION.get(second)
-    return one is not None and two is not None and one[0] == two[0] and abs(one[1] - two[1]) <= 1
+    if one is None or two is None or one[0] != two[0]:
+        return False
+    if any(first in group and second in group for group in MUTUALLY_ADJACENT):
+        return True
+    low, high = sorted((one[1], two[1]))
+    return not any(chain == one[0] and low < index < high and landmark not in JUNCTIONS
+                   for landmark, (chain, index) in TRACT_POSITION.items())
 
 
 def adjunct_apart(first: str, second: str) -> bool:
     """D58: whether two places verifiably set a removal's adjunct apart from the removal: both on a chain of the tract,
-    neither compatible (lexicon.compatible: one place, or one a region containing the other) nor adjacent. A place on no
-    chain never sets it apart (fail-closed)."""
+    neither compatible (lexicon.compatible: one place, or one a region containing the other) nor adjacent - D77: at
+    least one full segment lies strictly between them. A place on no chain never sets it apart (fail-closed)."""
     return (first in TRACT_POSITION and second in TRACT_POSITION and not lexicon.compatible(first, second)
             and not adjacent(first, second))
 
@@ -611,9 +650,13 @@ def adjunct_apart(first: str, second: str) -> bool:
 def _adjunct_places_apart(context: Context, whole: Mapping, part: Mapping, places, part_places) -> bool:
     """D58: whether the removal's places and its adjunct's set the adjunct apart: every pair apart (adjunct_apart), and
     every place stated by its own event's or its lesion's words - an anastomosis D34 places is still an anastomosis, on
-    no chain (Context.stated_places)."""
+    no chain (Context.stated_places). D78: the removal is read at EVERY place it is verified to be at (Context.places
+    with ``every``: also each landmark its verified target's words and its verified lesion's words name), so a removal
+    done at several places sets its adjunct apart only when the adjunct is apart from each of them. Those places only
+    add pairs to the test: a removal and an adjunct with no place of their own (``places``, ``part_places``) are never
+    set apart by them."""
     return (bool(places) and bool(part_places) and context.stated_places(whole, part)
-            and all(adjunct_apart(one, two) for one in places for two in part_places))
+            and all(adjunct_apart(one, two) for one in context.places(whole, every=True) for two in part_places))
 
 
 def identity_in_doubt(context: Context, rule: str, whole: Mapping, part: Mapping) -> bool:
@@ -632,15 +675,21 @@ def identity_in_doubt(context: Context, rule: str, whole: Mapping, part: Mapping
         if lesion == other:  # one verified lesion: bundled - unless a biopsy and a removal of a group cite no passage
             return (rule == 'biopsy_of_removed_lesion' and not context.facts[lesion].single  # in common (C-2)
                     and not _own_passages(whole) & _own_passages(part))
-        return not context.distinct(lesion, other)
+        if rule != 'procedural_adjunct':  # D76: an adjunct's two distinct lesions set it apart only by their places
+            return not context.distinct(lesion, other)
     if rule == 'procedural_adjunct':
         # D41 (the S17 refutation of D30): a removal's adjunct is bundled only through a verified link (its part_of, or
         # the removal's verified lesion: coverage.bundled_reason). Beside a removal of its session, an ablation or a
         # bleeding control that names no lesion, names one not established, or stands at compatible, adjacent or unknown
         # places is set apart by nothing verified - so it is asked, never READY alone; only a verified part_of naming
-        # another ACT (above: places verifiably apart, D58; two distinct verified lesions) sets it apart. D58 (the S17
-        # round-2 refutation, finding 5): a part_of naming the examination - the session, never an act (ADJUDICATION
-        # C-1) - or an umbrella sets nothing apart. FINAL 5.7: a false READY is repaired.
+        # another ACT (above: places verifiably apart, D58) sets it apart. D58 (the S17 round-2 refutation, finding 5):
+        # a part_of naming the examination - the session, never an act (ADJUDICATION C-1) - or an umbrella sets nothing
+        # apart. D76 (the round-3 refutation, findings 8 and 9): two distinct verified lesions set it apart ONLY through
+        # the place test above - their verified sites are among both acts' places, so they must be on the tract's
+        # chains and neither compatible nor adjacent. A distinctness by sizes, by passage or by description, or by
+        # landmarks that are adjacent or on no chain, never does (a bleeding point Gemini registers as its own lesion
+        # at the polypectomy base is still the removal's own hemostasis): fail-closed, the question below. FINAL 5.7:
+        # a false READY is repaired.
         step = part.get('part_of')
         named = (step.get('value') or '') if isinstance(step, Mapping) and step.get('state') == 'verified' else ''
         return not (named and named != whole['id'] and names_an_act(context, named))
@@ -655,11 +704,10 @@ def identity_in_doubt(context: Context, rule: str, whole: Mapping, part: Mapping
 
 
 def _possibly_current(event: Mapping) -> bool:
-    """D62 (coverage.possibly_current, on a draft record): current, or a current_encounter time not verified."""
+    """D62 as D68 completes it (coverage.possibly_current, on a draft record): current, or a current_encounter time not
+    verified, whatever its reasons - D35's marker and a date_mismatch are doubts, never proof of another occasion."""
     return event['current'] == 'yes' or (event['current'] == 'unresolved'
-                                         and event['time'].get('value') == 'current_encounter'
-                                         and not set(event['time'].get('reasons') or ()) & {'date_mismatch',
-                                                                                            'other_occasion'})
+                                         and event['time'].get('value') == 'current_encounter')
 
 
 def _bundling(draft, context: Context) -> None:

@@ -733,6 +733,15 @@ class Draft:
                     entry['attached'] = True
                 else:
                     self.problems.append(f'{where} gives a second reach for one examination; the first is kept.')
+                    # DECISIONS D73 (the round-3 refutation, finding 7): the dropped entry's 'incomplete' completion is
+                    # never dropped with it. The kept examination takes it, unverified (second_reach), unless its own
+                    # completion already says 'incomplete': D56 and D72 read 'incomplete' in any state (fail-closed),
+                    # and D61's signals keep reading a verified one
+                    kept = event['completion']
+                    if completion_value == 'incomplete' and not (isinstance(kept, Mapping)
+                                                                 and kept.get('value') == 'incomplete'):
+                        _fail(completion, 'second_reach')
+                        event['completion'] = completion
             self.encounter['reach'].append(entry)
             self._tally('reach', extent)
             self._tally('completion', completion)

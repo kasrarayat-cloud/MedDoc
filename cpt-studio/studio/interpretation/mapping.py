@@ -35,6 +35,11 @@ How a proposed code links to events (code_link; FINAL C7 as ADJUDICATION C-6 ame
   required", never READY, C-6), or a profile of another family than the code routes to (``family_mismatch``). The engine
   holds it with ``performed_status``: which documented act it accounts for is not established.
 
+DECISIONS D80 (the round-3 refutation, finding 19): a code on route (a) of a RECOGNISED-ONLY family - one the catalogue
+recognises and lists for review but does not reconcile, or that gi.profiles marks not supported (recognised_only; today
+gi.sedation's 99152 and 99153) - is not assessed: the engine holds it with ``performed_status``, never READY and never
+excluded, whatever the inventory states.
+
 Pure and Django-free.
 """
 from __future__ import annotations
@@ -458,6 +463,29 @@ def code_link(code: str) -> CodeLink:
         return CodeLink(route=UNRECONCILED_ROUTE, kinds=tuple(acts), acts=tuple(acts),
                         regions=tuple(catalogue.UNRECONCILED_REGIONS.get(code, ())), **common)
     return CodeLink(route=NO_ROUTE, reason=UNPROFILED, **common)
+
+
+# --- codes of a recognised-only family (DECISIONS D80; the round-3 refutation, finding 19) -------------------------------
+
+RECOGNISED_ONLY = 'recognised_only'  # the reason (events.Evaluation.reason) of the hold D80 puts on such a code
+
+
+def recognised_only(link: CodeLink) -> bool:
+    """DECISIONS D80: whether ``link`` is a code on route (a) of a family CPT Studio RECOGNISES and lists for review but
+    does not ASSESS - the catalogue does not reconcile the family's acts with codes (its FamilyEntry.support is not
+    SUPPORTED: 'recognised', as gi.sedation's "moderate sedation is recognised and listed, not reconciled" and gi.other's,
+    'unsupported', or no catalogue entry), or gi.profiles marks the family not supported (gi.sedation: "Sedation checks
+    are not implemented in this release; review required."). Either one marks it (fail-closed). Today these are exactly
+    gi.sedation's 99152 and 99153, the only catalogue codes of such a family (pinned). CodeLink.supported and
+    CodeLink.support are read here. Route (b) (46221, C7 (b)'s own route) and route (d) (held already, C-6) are not."""
+    return link.route == CATALOGUE_ROUTE and not (link.supported and link.support == catalogue.SUPPORTED)
+
+
+def documentation(family: str) -> tuple:
+    """What the catalogue states ``family`` requires documented (FamilyEntry.documentation), () with no entry: the
+    D80 hold names what CPT Studio does not check for a recognised-only family's code."""
+    entry = catalogue.entry(family)
+    return tuple(entry.documentation) if entry is not None else ()
 
 
 def candidate(link: CodeLink, event: Mapping) -> bool:

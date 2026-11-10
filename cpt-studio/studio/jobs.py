@@ -1933,17 +1933,17 @@ def interpretation_effect(run) -> str:
 
 
 def released_for_retry(run) -> bool:
-    """Whether ``run``'s answer was released for one retry (FINAL 11.3: a member's or an operator's recorded act writes
-    RETRY_RELEASE_NOTE on the released run's reconciled_by, reconciled_at and reconciliation_note): on the run or on any
-    run carrying the same answer. DECISIONS D52: a run that already holds an operator's reconciliation keeps it, and its
-    release is the retry stage queued for it in the same transaction. DECISIONS D60 (the round-2 refutation, finding
-    15): that stage's key is 'retry-release:<run>', and only that key is read here - a retry that released nothing (an
-    answer still unread, which the retry reads again with nothing sent) is keyed 'retry:<run>' and is never a release,
-    so the stored-answer door still reuses that answer."""
+    """Whether ``run``'s answer was released for one retry (FINAL 11.3: a member's or an operator's recorded act): on
+    the run or on any run carrying the same answer. The release is the retry stage retry_reading queues for the run it
+    releases, in the same transaction, keyed 'retry-release:<run>' (DECISIONS D52, D60, D85) - a key only the system
+    writes, and the only mark read here. DECISIONS D85 (refutation round 3, finding 16): a run's reconciliation note is
+    never read as a release, whatever its text - an operator writes that column too, and a note reading exactly
+    RETRY_RELEASE_NOTE once made a usable stored answer pass for released, so it was paid for again; the note a retry
+    writes on a run nobody had reconciled is its record of who released it and when, never the release. A retry that
+    released nothing (an answer still unread, which the retry reads again with nothing sent) is keyed 'retry:<run>' and
+    is never a release, so the stored-answer door still reuses that answer (D60)."""
     runs = models.ProviderRun.objects.filter(_answer_runs(run), state__in=(models.ProviderRun.FAILED,
                                                                            models.ProviderRun.SUCCEEDED))
-    if runs.filter(reconciled_at__isnull=False, reconciliation_note=RETRY_RELEASE_NOTE).exists():
-        return True
     return any(Job.objects.filter(
         kind=INTERPRET, revision_id=item.revision_id,
         idempotency_key__startswith=_interpret_key(item.revision, f'{RETRY_RELEASE}:{item.pk}')).exists()
@@ -4129,18 +4129,19 @@ def retry_target(revision):
 
 def retry_reading(encounter, user, *, override=False):
     """The recorded retry (FINAL 11.3; D11): one more attempt at the current revision's reading. The run the
-    failed-before door would hold against it (retry_target) is released for that one attempt - written on its
-    reconciled_by, reconciled_at and reconciliation_note (RETRY_RELEASE_NOTE), which the failed-before door and the
-    stored-answer door read (released_for_retry) - and 'interpret:...:retry:<run>' is queued, audited
-    'interpretation.retry'. A run an operator had reconciled keeps that record, and its release is the stage's own key,
-    'interpret:...:retry-release:<run>' (DECISIONS D52, D60); a retry that releases nothing (a request that never left,
-    or an answer still unread) keeps 'retry:<run>', which is never read as a release, so the stored-answer door reads
-    that answer again with nothing sent. Refused (Refused) while a stage runs or an outcome is unknown, when the
-    revision was read or was never attempted, while a hold stands (an operator's release and a Resume end that), for a
-    document over the size bound or that cannot be prepared, and for an answer cut off at its output limit (C5: the
-    member is told the document is too long to be read in one piece) unless ``override`` - an operator's recorded
-    override, which the caller (the API's retry-reading door, slice S11) grants only to an operator. Returns the queued
-    job."""
+    failed-before door would hold against it (retry_target) is released for that one attempt: the release is the stage
+    queued for it, 'interpret:...:retry-release:<run>' (DECISIONS D52, D60, D85), the only mark the failed-before door
+    and the stored-answer door read (released_for_retry), audited 'interpretation.retry'. A run nobody had reconciled
+    also records who released it and when on its reconciled_by, reconciled_at and reconciliation_note
+    (RETRY_RELEASE_NOTE) - a record, never read as the release (D85: an operator writes that column too); a run an
+    operator had reconciled keeps that record (D52). A retry that releases nothing (a request that never left, an
+    answer still unread, or a run already released by its own stage) is keyed 'retry:<run>', which is never read as a
+    release, so the stored-answer door reads an unread answer again with nothing sent. Refused (Refused) while a stage
+    runs or an outcome is unknown, when the revision was read or was never attempted, while a hold stands (an
+    operator's release and a Resume end that), for a document over the size bound or that cannot be prepared, and for
+    an answer cut off at its output limit (C5: the member is told the document is too long to be read in one piece)
+    unless ``override`` - an operator's recorded override, which the caller (the API's retry-reading door, slice S11)
+    grants only to an operator. Returns the queued job."""
     with transaction.atomic():
         encounter = _locked(encounter)
         if busy(encounter):
@@ -4170,14 +4171,16 @@ def retry_reading(encounter, user, *, override=False):
             locked = models.ProviderRun.objects.select_for_update().get(pk=released.pk)
             # DECISIONS D52 (the S17 refutation, finding 0): a run an operator reconciled (an unknown outcome P-6 then
             # settled from its exchange) keeps that record - who, when and the note are its only copy, and the audit
-            # trail keeps no note text by design; the release is the retry stage queued below, under a mark of its own
-            # ('retry-release:<run>', D60), the only key released_for_retry reads as a release
+            # trail keeps no note text by design. On a run nobody reconciled, who released it and when are written
+            # there, as a record only
             if locked.reconciled_at is None:
                 locked.reconciled_by, locked.reconciled_at = user, timezone.now()
                 locked.reconciliation_note = RETRY_RELEASE_NOTE
                 locked.save(update_fields=['reconciled_by', 'reconciled_at', 'reconciliation_note'])
-            else:
-                mark = RETRY_RELEASE
+            # D85 (refutation round 3, finding 16): every release is the retry stage queued below, under a mark only
+            # this code writes ('retry-release:<run>', D60) - the only key released_for_retry reads - so no note an
+            # operator types is ever read as a release
+            mark = RETRY_RELEASE
         clear_stop(encounter)
         key = _interpret_key(revision, f'{mark}:{(released or newest).pk}')
         if Job.objects.filter(idempotency_key=key).exists():  # asked again for the same attempt: a stage of its own

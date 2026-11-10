@@ -690,8 +690,8 @@ class ReuseTests(InterpretCase):
     def test_p2_a_run_released_for_retry_is_never_reused(self):
         interpreter, encounter, revision, first = self.read_first()
         self.assertEqual(jobs._retained_interpretation(encounter, interpreter, self.request_for(revision)), first)
-        Run.objects.filter(pk=first.pk).update(reconciled_by=self.user, reconciled_at=timezone.now(),
-                                               reconciliation_note=jobs.RETRY_RELEASE_NOTE)
+        jobs.enqueue('interpret', encounter=encounter, revision=revision,  # D85: the release is its retry stage
+                     key=jobs._interpret_key(revision, f'retry-release:{first.pk}'), requested_by=self.user)
         self.assertIsNone(jobs._retained_interpretation(encounter, interpreter, self.request_for(revision)))
 
     def test_an_inventory_already_read_is_used_with_nothing_built_into_a_send(self):
@@ -812,7 +812,7 @@ class FailedBeforeAndRetryTests(InterpretCase):
         retry = jobs.retry_reading(encounter, self.user)
         failed.refresh_from_db()
         self.assertEqual((failed.reconciled_by_id, failed.reconciliation_note), (self.user.pk, jobs.RETRY_RELEASE_NOTE))
-        self.assertEqual(retry.idempotency_key, f'interpret:{revision.pk}:gemini-events@1:retry:{failed.pk}')
+        self.assertEqual(retry.idempotency_key, f'interpret:{revision.pk}:gemini-events@1:retry-release:{failed.pk}')
         self.assertTrue(models.AuditEvent.objects.filter(event='interpretation.retry', encounter=encounter).exists())
         job = self.run_next('interpret')
         self.assertEqual(job.state, models.Job.SUCCEEDED, job.error)
@@ -829,10 +829,13 @@ class FailedBeforeAndRetryTests(InterpretCase):
         self.run_next('interpret')
         first = self.interpret_runs(revision)[-1]
         retry = jobs.retry_reading(encounter, self.user)
-        # the retry stage stopped before it ran: asking again queues a stage of its own and releases nothing more
+        # the retry stage stopped before it ran: asking again queues a stage of its own and releases nothing more (D85:
+        # the release stands on the first stage's key, 'retry-release:<run>'; this one is 'retry:<run>', D60)
         models.Job.objects.filter(pk=retry.pk).update(state=models.Job.CANCELLED, error='Stopped by a workspace member.')
         again = jobs.retry_reading(encounter, self.user)
-        self.assertTrue(again.idempotency_key.startswith(f'{retry.idempotency_key}:resume:'))
+        self.assertEqual((retry.idempotency_key, again.idempotency_key),
+                         (jobs._interpret_key(revision, f'retry-release:{first.pk}'),
+                          jobs._interpret_key(revision, f'retry:{first.pk}')))
         self.assertEqual(models.ProviderRun.objects.filter(reconciliation_note=jobs.RETRY_RELEASE_NOTE).count(), 1)
         self.run_next('interpret')  # the one attempt the release allows: sent, and it fails again
         self.assertEqual(len(interpreter.sent), 2)

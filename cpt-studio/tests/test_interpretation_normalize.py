@@ -1592,6 +1592,9 @@ def every_reason_scenario() -> list:
     add('visit_not_permitted', visit_answer(attr('total_time', 'Total time spent: 45 minutes', ['P1']),
                                             attr('not_stated'), kind='examination'), visit_text)
     add('scope_not_permitted', e(scope=scope('single_target', 'sessile polyp', ['P2'])))
+    # DECISIONS D73: a second reach entry for one examination whose completion says 'incomplete'
+    add('second_reach', answer(encounter=encounter(reach=[encounter()['reach'][0], dict(
+        encounter()['reach'][0], completion=attr('incomplete', 'advanced to the cecum', ['P5']))])))
     return scenarios
 
 

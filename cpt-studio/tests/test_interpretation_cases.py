@@ -239,13 +239,21 @@ class SlipsContained(SimpleTestCase):
         line = 'Procedure: The colonoscope was advanced to the terminal ileum, which appeared normal.'
         _, alone = self.assessed('s1-e5-earlier-reach-alone', [('45378', line)])
         self.assertEqual(asked(proposal(alone, '45378')), ['extent'])  # the 2024 reach neither satisfies nor blocks
-        for name in ('s1-e5-earlier-reach-beside-current', 's1-e5-mislabelled-current-with-its-time-words',
-                     's1-twin-current-reach'):
+        for name in ('s1-e5-earlier-reach-beside-current', 's1-twin-current-reach'):
             with self.subTest(fixture=name):
                 _, result = self.assessed(name, [('45378', line)])
                 p = proposal(result, '45378')
                 self.assertEqual((p.status, acts_of(p)), ('ready', ['E2']))
                 self.assertIn('extent reached = terminal ileum', check(p, 'facts.required').detail)
+        # DECISIONS D68, the accepted fail-closed cost: the 2024 examination Gemini calls current ('in January 2024', a
+        # date_mismatch) is a doubt, never proof of another occasion - beside today's it leaves the session unresolved,
+        # so 45378 is asked the extent; its reach is still discarded, never the extent
+        with self.subTest(fixture='s1-e5-mislabelled-current-with-its-time-words'):
+            _, result = self.assessed('s1-e5-mislabelled-current-with-its-time-words', [('45378', line)])
+            p = proposal(result, '45378')
+            self.assertEqual((p.status, acts_of(p), asked(p)), ('needs_clarification', ['E2'], ['extent']))
+            self.assertEqual(result.completeness['event_coding']['sessions']['gi.colonoscopy']['event'], '')
+            self.assertNotIn('extent reached = cecum', check(p, 'facts.required').detail)
 
     def test_e13_the_digital_examination_is_no_session(self):
         line = 'The colonoscope was then advanced to the cecum.'

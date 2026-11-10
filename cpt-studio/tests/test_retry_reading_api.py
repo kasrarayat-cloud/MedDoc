@@ -2,8 +2,9 @@
 11.3; DECISIONS D11; contract C5): POST /api/encounters/<id>/retry-reading for an owner or a reviewer, and the operator
 console's retry (with its recorded override of a cut-off answer) and hold release under /ops/.
 
-- A failed reading is retried once: its run released (reconciled_by, reconciled_at, 'released for one retry'), an
-  'interpret:...:retry:<run>' stage queued, audited 'interpretation.retry'; nothing is sent by the request itself.
+- A failed reading is retried once: its run released - the 'interpret:...:retry-release:<run>' stage queued (DECISIONS
+  D85), with who and when recorded on the run (reconciled_by, reconciled_at, 'released for one retry') - audited
+  'interpretation.retry'; nothing is sent by the request itself.
 - DECISIONS D60: a retry of a usable answer whose reading failed on this server releases nothing; its stage reads the
   stored answer again and sends nothing - from the member's door and from the console's, on a run an operator had
   reconciled too, whose record stays as the operator wrote it.
@@ -76,7 +77,7 @@ class MemberRetryTests(RetryCase):
         failed.refresh_from_db()
         self.assertEqual((failed.reconciled_by_id, failed.reconciliation_note), (self.user.pk, jobs.RETRY_RELEASE_NOTE))
         [queued] = models.Job.objects.filter(encounter=encounter, state=models.Job.QUEUED)
-        self.assertEqual(queued.idempotency_key, f'interpret:{revision.pk}:gemini-events@1:retry:{failed.pk}')
+        self.assertEqual(queued.idempotency_key, f'interpret:{revision.pk}:gemini-events@1:retry-release:{failed.pk}')
         [audit] = models.AuditEvent.objects.filter(event='interpretation.retry', encounter=encounter)
         self.assertEqual((audit.actor_id, audit.data['run'], audit.data['released'], audit.data['override']),
                          (self.user.pk, str(failed.pk), True, False))
@@ -267,3 +268,130 @@ class UnreadAnswerRetryTests(RetryCase):
         job = self.run_next('interpret')
         self.assertEqual((job.state, job.result['provider']), (models.Job.SUCCEEDED, 'reused'), job.error)
         self.assertEqual(interpreter.sent, [])
+
+
+class OperatorNoteIsNoReleaseTests(RetryCase):
+    """DECISIONS D85 (refutation round 3, finding 16): released_for_retry never reads an operator's reconciliation note
+    as a release, whatever its text - an operator reconciling an unknown outcome with the note 'released for one retry'
+    made a usable stored answer pass for released, and it was paid for again. The release is the retry stage
+    retry_reading queues, keyed 'retry-release:<run>' - a key only the system writes - on a run nobody had reconciled
+    too; the note a retry writes there is its record of who released the run and when, never the release."""
+
+    COLLIDING = 'released for one retry'  # exactly the note a4dcbea72 read as a release
+
+    def unknown_holding_a_usable_answer(self, workspace=None):
+        """Decision (k), driven through the stage: the usable 200 answer arrived and its exchange was committed, then
+        the run's outcome write failed, so the run U is UNKNOWN with one send."""
+        interpreter = self.scripted(answered(envelope()), answered(envelope()))
+        encounter, revision = self.through_extract(workspace=workspace)
+        with self.outcome_write_fails_once(), self.assertLogs('studio.jobs', level='ERROR'):
+            self.run_next('interpret')
+        [run] = self.interpret_runs(revision)
+        self.assertEqual((run.state, list(run.exchanges.values_list('turn', 'state', 'http_status'))),
+                         ('unknown', [(1, 'succeeded', 200)]))
+        self.assertEqual(len(interpreter.sent), 1)
+        return interpreter, encounter, revision, run
+
+    def reconciled_by_the_operator(self, encounter, run, note):
+        """The operator's own door, POST /ops/api/encounters/<id>/reconcile, with ``note``."""
+        response = self.operator_client.post(f'/ops/api/encounters/{encounter.pk}/reconcile',
+                                             data=json.dumps({'provider_run_id': str(run.pk), 'note': note}),
+                                             content_type='application/json')
+        self.assertEqual(response.status_code, 201, response.content)
+        run.refresh_from_db()
+        self.assertEqual((run.reconciled_by_id, run.reconciliation_note), (self.operator_user.pk, note.strip()))
+
+    def test_d85_probe_a_an_operators_note_reading_released_for_one_retry_leaves_the_stored_answer_reusable(self):
+        for label, note in (('exactly', self.COLLIDING), ('padded', f'   {self.COLLIDING}   ')):
+            with self.subTest(note=label):
+                models.Job.objects.filter(state=models.Job.QUEUED).update(state=models.Job.CANCELLED)  # the last one's
+                workspace = f.workspace(f'Synthetic practice ({label})')
+                f.member(workspace, self.user)
+                interpreter, encounter, revision, run = self.unknown_holding_a_usable_answer(workspace)
+                self.reconciled_by_the_operator(encounter, run, note)
+                job = self.run_next('interpret')  # after-reconcile: settled from its exchange (P-6) and read
+                self.assertEqual(job.state, models.Job.SUCCEEDED, job.error)
+                run.refresh_from_db()
+                self.assertEqual((run.state, jobs.interpretation_effect(run), run.reconciliation_note),
+                                 ('succeeded', holds.ANSWERED, self.COLLIDING))
+                self.assertEqual(len(interpreter.sent), 1)
+                self.assertFalse(models.AuditEvent.objects.filter(event='interpretation.retry').exists())
+                models.Job.objects.filter(state=models.Job.QUEUED).update(state=models.Job.CANCELLED)
+                _, second = self.through_extract(workspace=workspace)  # the same text uploaded again there
+                job = self.run_next('interpret')
+                self.assertEqual((len(interpreter.sent), job.state, job.result['provider']),
+                                 (1, models.Job.SUCCEEDED, 'reused'), job.error)  # the stored answer: nothing sent
+                self.assertEqual(self.interpret_runs(second)[-1].reused_from_id, run.pk)
+                self.assertFalse(jobs.released_for_retry(run))  # no retry ever ran: nothing was released
+
+    def test_d85_probe_b_a_members_retry_after_the_reading_overran_reads_the_stored_answer_again(self):
+        interpreter, encounter, revision, run = self.unknown_holding_a_usable_answer()
+        self.reconciled_by_the_operator(encounter, run, self.COLLIDING)
+        with override_settings(JOB_DEADLINE_SECONDS={**settings.JOB_DEADLINE_SECONDS, 'analyze': 0}):
+            job = self.run_next('interpret')  # after-reconcile: settled from its exchange (P-6), its reading overran
+        self.assertEqual((job.state, job.error), (models.Job.FAILED, jobs.READ_OVERRUN_MESSAGE.format(reason='time')))
+        run.refresh_from_db()
+        self.assertEqual((run.state, jobs.interpretation_effect(run)), ('succeeded', holds.ANSWERED))
+        self.assertEqual(jobs.retry_target(revision), (run, None))  # nothing to release: the answer was never read
+        response = self.retry(encounter)
+        self.assertEqual((response.status_code, response.json()), (201, {'retrying': True}))
+        [queued] = models.Job.objects.filter(encounter=encounter, state=models.Job.QUEUED)
+        self.assertEqual(queued.idempotency_key, jobs._interpret_key(revision, f'retry:{run.pk}'))
+        self.assertEqual(models.AuditEvent.objects.get(event='interpretation.retry').data['released'], False)
+        job = self.run_next('interpret')
+        self.assertEqual((len(interpreter.sent), job.state, job.result['provider']),
+                         (1, models.Job.SUCCEEDED, 'reused'), job.error)  # D60's promise: read again, nothing sent
+        self.assertFalse(jobs.released_for_retry(run))
+        run.refresh_from_db()
+        self.assertEqual((run.reconciled_by_id, run.reconciliation_note), (self.operator_user.pk, self.COLLIDING))
+
+    def test_d85_only_the_system_written_retry_release_stage_is_a_release(self):
+        interpreter = self.scripted(answered(envelope()))
+        encounter, revision = self.through_extract()
+        self.run_next('interpret')
+        [run] = self.interpret_runs(revision)
+        request = self.request_for(revision)
+        Run.objects.filter(pk=run.pk).update(reconciled_by=self.operator_user, reconciled_at=run.created_at,
+                                             reconciliation_note=jobs.RETRY_RELEASE_NOTE)  # a note, whoever wrote it
+        self.assertFalse(jobs.released_for_retry(run))
+        self.assertEqual(jobs._retained_interpretation(encounter, interpreter, request), run)
+        jobs.enqueue('interpret', encounter=encounter, revision=revision,
+                     key=jobs._interpret_key(revision, f'retry:{run.pk}'), requested_by=self.user)
+        self.assertFalse(jobs.released_for_retry(run))  # a retry that released nothing (D60)
+        jobs.enqueue('interpret', encounter=encounter, revision=revision,
+                     key=jobs._interpret_key(revision, f'retry-release:{run.pk}'), requested_by=self.user)
+        self.assertTrue(jobs.released_for_retry(run))
+        self.assertIsNone(jobs._retained_interpretation(encounter, interpreter, request))
+
+    def test_d85_the_release_of_a_run_nobody_reconciled_is_its_retry_release_stage(self):
+        interpreter, encounter, revision = self.failed_reading(answered(envelope()))
+        [failed] = self.interpret_runs(revision)
+        job = jobs.retry_reading(encounter, self.user)
+        self.assertEqual(job.idempotency_key, jobs._interpret_key(revision, f'retry-release:{failed.pk}'))
+        failed.refresh_from_db()
+        self.assertEqual((failed.reconciled_by_id, failed.reconciliation_note), (self.user.pk, jobs.RETRY_RELEASE_NOTE))
+        # the note is the record of the act; the release stands on the stage's key whatever the note now says
+        Run.objects.filter(pk=failed.pk).update(reconciliation_note='Synthetic: rewritten by hand for the D85 pin.')
+        self.assertTrue(jobs.released_for_retry(failed))
+        self.assertEqual(self.run_next('interpret').state, models.Job.SUCCEEDED)  # the one attempt it allows: sent
+        self.assertEqual(len(interpreter.sent), 2)
+        self.assertEqual(models.EventInventory.objects.get(revision=revision).state, 'read')
+
+    def test_d85_a_release_written_only_as_the_note_is_none_and_the_next_retry_releases_it(self):
+        """The cost, fail-closed: a release a4dcbea72 wrote for a run nobody had reconciled - the note on the run and a
+        stage keyed 'retry:<run>' - is no release now. That stage stops at the failed-before door with nothing sent;
+        the next retry releases the run under 'retry-release:<run>' (keeping the note it finds) and sends once."""
+        interpreter, encounter, revision = self.failed_reading(answered(envelope()))
+        [failed] = self.interpret_runs(revision)
+        Run.objects.filter(pk=failed.pk).update(reconciled_by=self.user, reconciled_at=failed.created_at,
+                                                reconciliation_note=jobs.RETRY_RELEASE_NOTE)
+        jobs.enqueue('interpret', encounter=encounter, revision=revision,
+                     key=jobs._interpret_key(revision, f'retry:{failed.pk}'), requested_by=self.user)
+        job = self.run_next('interpret')
+        self.assertEqual((job.state, job.error), (models.Job.FAILED, jobs.INTERPRET_NOT_RESENT_MESSAGE))
+        self.assertEqual(len(interpreter.sent), 1)
+        retry = jobs.retry_reading(encounter, self.user)
+        self.assertEqual(retry.idempotency_key, jobs._interpret_key(revision, f'retry-release:{failed.pk}'))
+        self.assertEqual(Run.objects.get(pk=failed.pk).reconciled_by_id, self.user.pk)
+        self.assertEqual(self.run_next('interpret').state, models.Job.SUCCEEDED)
+        self.assertEqual(len(interpreter.sent), 2)

@@ -24,6 +24,10 @@ reading of the document:
   present-encounter frames (lexicon.current_frame); otherwise it is unverified (current_unanchored) - the words name an
   occasion, a period or a sequence without saying it is this one. An anchor word inside other words ("these were the
   findings at her index colonoscopy") and a year or a month ("in November 2026") anchor nothing.
+- DECISIONS D67: a date at day precision anchors a current time only against a service date. With none established it
+  anchors nothing (date_unchecked), and every assess re-judges the stored literals with the effective date
+  (time_state, on a copy of the inventory: rejudged) - so a member's date decides "On 03/14/2024" as a normalized
+  document date would, and never leaves it verified unchecked.
 
 What a failure does (contract 5.5): the attribute is unverified with its reasons, closed lists here. It never sets,
 changes or removes a value, never excludes a code, never creates a status, a contradiction or a hold. Consumers read an
@@ -60,6 +64,8 @@ REASONS = (
     'scope_target_mismatch', 'umbrella_on_positive', 'inconsistent_status_time', 'part_of_invalid',
     'claim_unknown_event', 'lesion_unknown', 'reach_not_permitted', 'reach_inferred', 'visit_not_permitted',
     'scope_not_permitted',
+    # DECISIONS D73: an 'incomplete' completion taken from a second reach entry for one examination
+    'second_reach',
 )
 # The identity rules' reasons (contract 6.2): identity.py gives them, in a target's identity_by.
 IDENTITY_REASONS = ('identity_not_in_statement', 'identity_no_tie', 'identity_literal_conflict', 'identity_ambiguous',
@@ -81,7 +87,8 @@ _ORDER = {reason: index for index, reason in enumerate(REASONS + IDENTITY_REASON
 POSITIVE = ('performed', 'attempted_not_completed')
 NEGATIVE = ('not_performed', 'uncertain')
 _TIME_WANTS = {'current_encounter': 0, 'earlier_encounter': -1, 'future': 1}
-# The reasons time_state recomputes: the only ones that depend on the service date.
+# The reasons time_state recomputes: the only ones that depend on the service date - date_unchecked for a current time
+# too since DECISIONS D67 (a day-precision literal with no service date to anchor it to).
 REEVALUATED = ('date_mismatch', 'date_unchecked')
 
 
@@ -131,8 +138,10 @@ def _date_record(literal: literals.DateLiteral) -> dict:
 def time_words(value: str, text: str, service_date: Optional[date]) -> Verdict:
     """time, stated (EB2): every date literal in the words compares, at its own precision, as ``value`` requires - the
     same for current_encounter, before for earlier_encounter, after for future (date_mismatch); a literal with no
-    service date established leaves an earlier or future time unverified (date_unchecked). With no date literal, an
-    earlier or future time needs a time marker in the words (time_marker_missing; C1, EB3).
+    service date established leaves an earlier or future time unverified (date_unchecked), and (DECISIONS D67) a
+    current_encounter time whose words carry a date at day precision too - that date is what would anchor it (D54,
+    D64), and with no service date it anchors nothing until time_state re-judges it with the effective date. With no
+    date literal, an earlier or future time needs a time marker in the words (time_marker_missing; C1, EB3).
     DECISIONS D35: a current_encounter time whose words carry a marker of another occasion (lexicon.other_occasion: a
     C1 earlier or future marker, or "original") is unverified (other_occasion), date literal or not - "At the original
     procedure" given as the words of a time Gemini calls current. The words are read for that marker only where they
@@ -176,7 +185,11 @@ def _date_reasons(value: str, records: Sequence[Mapping], service_date: Optional
     if not records or value not in _TIME_WANTS:
         return ()
     if service_date is None:
-        return ('date_unchecked',) if value != 'current_encounter' else ()
+        if value != 'current_encounter':
+            return ('date_unchecked',)
+        # DECISIONS D67(a): a day-precision literal, the one a current time's verification could rest on (D54's
+        # dated arm, D64), checks nothing with no service date: "On 03/14/2024" stays unverified until a date decides
+        return ('date_unchecked',) if any(record.get('precision') == literals.DAY for record in records) else ()
     want = _TIME_WANTS[value]
     for record in records:
         when = literals.stored_date(record.get('value'), record.get('precision'))
@@ -448,6 +461,30 @@ def time_state(attribute: Mapping, effective_date) -> dict:
     record['reasons'] = ordered(reasons)
     record['state'] = 'unverified' if record['reasons'] else 'verified'
     return record
+
+
+def currency(time) -> str:
+    """Whether an event is of this encounter, from its time as normalize._current derives it (pinned equal to it):
+    'yes' for a usable current_encounter time, 'no' for a usable earlier or future one, 'unresolved' otherwise."""
+    if not usable(time):
+        return 'unresolved'
+    return 'yes' if time['value'] == 'current_encounter' else 'no'
+
+
+def rejudged(records, effective_date) -> list:
+    """DECISIONS D67(b) (contract 5.3: "every later assess call verify.time_state with the effective date, so a
+    member-supplied date re-judges the stored literals"): a copy of an inventory's event ``records`` in which each
+    event's time is time_state(time, ``effective_date``) and its ``current`` follows from that time (currency). Each
+    record is a new dict and its time a new record; nothing stored is changed, no text is read, nothing is sent."""
+    out = []
+    for record in records:
+        time = record.get('time')
+        if isinstance(time, Mapping):
+            judged = time_state(time, effective_date)
+            out.append({**record, 'time': judged, 'current': currency(judged)})
+        else:
+            out.append(dict(record))
+    return out
 
 
 def _as_date(value) -> Optional[date]:

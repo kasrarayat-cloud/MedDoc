@@ -119,10 +119,11 @@ class Time(SimpleTestCase):
                 self.assertEqual(reasons(verify.time_words(value, text, SERVICE)), ('date_mismatch',))
 
     def test_a_literal_with_no_service_date(self):
-        # date_unchecked: unverified only for an earlier or a future time (contract 5.3).
+        # date_unchecked: unverified for an earlier or a future time (contract 5.3) - and, since DECISIONS D67, for a
+        # current time a date at day precision would anchor (test_interpretation_r3_currency pins the rule)
         self.assertEqual(reasons(verify.time_words('earlier_encounter', 'in 2024', None)), ('date_unchecked',))
         self.assertEqual(reasons(verify.time_words('future', 'in 2027', None)), ('date_unchecked',))
-        self.assertEqual(reasons(verify.time_words('current_encounter', 'on 11/09/2026', None)), ())
+        self.assertEqual(reasons(verify.time_words('current_encounter', 'on 11/09/2026', None)), ('date_unchecked',))
 
     def test_c1_time_marker_with_no_date_literal(self):
         for value, text in (('earlier_encounter', 'previously'), ('earlier_encounter', '2 years ago'),
@@ -669,7 +670,8 @@ class TimeState(SimpleTestCase):
 
     def test_a_current_encounter_date_follows_the_members_date(self):
         current = self.stated('current_encounter', 'on 11/09/2026', None)
-        self.assertEqual(current['state'], 'verified')
+        # DECISIONS D67: with no date to check it against, the day anchors nothing until a date decides
+        self.assertEqual((current['state'], current['reasons']), ('unverified', ['date_unchecked']))
         self.assertEqual(verify.time_state(current, date(2026, 11, 10))['reasons'], ['date_mismatch'])
         self.assertEqual(verify.time_state(current, SERVICE)['state'], 'verified')
 

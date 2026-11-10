@@ -563,10 +563,64 @@ def receipt_moments(record) -> list:
 
 def written_moment(path: Path):
     """When write_receipt wrote the receipt at ``path``: the stamp() its name carries, as an aware datetime, or None."""
-    match = re.fullmatch(r'.+-(\d{8}T\d{12}Z)\.json', path.name)
-    if match is None:
+    text = receipt_stamp(path)
+    if text is None:
         return None
-    return dt.datetime.strptime(match[1], '%Y%m%dT%H%M%S%fZ').replace(tzinfo=dt.timezone.utc)
+    return dt.datetime.strptime(text, '%Y%m%dT%H%M%S%fZ').replace(tzinfo=dt.timezone.utc)
+
+
+def receipt_stamp(path: Path):
+    """The stamp() write_receipt put in the name of the receipt at ``path`` ('<phase>-<stamp>.json'), or None. Phases
+    run one at a time on one receipts directory (main's lock), so it orders receipts of different phases."""
+    match = re.fullmatch(r'.+-(\d{8}T\d{12}Z)\.json', path.name)
+    return None if match is None else match[1]
+
+
+def written_after(path: Path, bound):
+    """DECISIONS D82, D83: whether the receipt at ``path`` was written after the receipt ``bound`` ((path, record); None:
+    after nothing), by the stamps their names carry - None when either carries none, so the order cannot be told."""
+    if bound is None:
+        return True
+    mine, theirs = receipt_stamp(path), receipt_stamp(bound[0])
+    if mine is None or theirs is None:
+        return None
+    return mine > theirs
+
+
+def replaced_web_entry(record) -> dict:
+    """What an app receipt records of the web its phase replaced ('details' 'replaced' 'web'), or {}."""
+    details = record.get('details') if isinstance(record, dict) else None
+    replaced = details.get('replaced') if isinstance(details, dict) else None
+    web = replaced.get('web') if isinstance(replaced, dict) else None
+    return web if isinstance(web, dict) else {}
+
+
+def replaced_web(record) -> tuple:
+    """(image, revision) of the web an app receipt says its phase replaced (the pair a switch-back returns to), when it
+    names both well formed; else (None, None). A receipt that failed records one only once its switch had finished -
+    the old web parked and this revision's pair serving (S5, or a swap's park; then the recompute, the removal of the
+    parked pair or an access check failed) - never after an undo."""
+    web = replaced_web_entry(record)
+    image, revision = web.get('image'), web.get('revision')
+    if (isinstance(image, str) and re.fullmatch(r'sha256:[0-9a-f]{64}', image) and isinstance(revision, str)
+            and SHA_RE.fullmatch(revision)):
+        return image, revision
+    return None, None
+
+
+def last_switch_back(ctx, target=None):
+    """DECISIONS D82, D83: (path, record) of the newest successful switch-back receipt of this revision - one that
+    returned to ``target`` (a revision) when it is given ('details' 'previous') - or None."""
+    for path in sorted(ctx.receipts.glob('switch-back-*.json'), reverse=True):
+        record = json.loads(path.read_text(encoding='utf-8'))
+        if not (isinstance(record, dict) and record.get('phase') == 'switch-back' and record.get('ok')
+                and record.get('revision') == ctx.revision):
+            continue
+        details = record.get('details')
+        previous = details.get('previous') if isinstance(details, dict) else None
+        if target is None or (isinstance(previous, dict) and previous.get('revision') == target):
+            return path, record
+    return None
 
 
 class Context:
@@ -4912,27 +4966,23 @@ def switched_summary(services) -> str:
 def phase_switch_back(ctx) -> dict:
     """Post-success rollback without interruption (ops/INSTALL.md, switch-back): back to the pair this revision's last
     successful app phase replaced (its receipt's 'replaced': the previous web's image and revision - images are never
-    removed), by the blue/green switch in reverse. rollback-app's checks run first and refuse, stopping nothing, while
+    removed; after a same-revision re-run, the pair switch_back_target reads, DECISIONS D83), by the blue/green switch
+    in reverse. rollback-app's checks run first and refuse, stopping nothing, while
     this revision recorded what an older revision would act on, or show, wrongly (undo_hazards). ``--provider-mode``,
     the participant modes and ``--interpreter-mode`` are the previous pair's, as its own app phase was given them (a
     revision before the Gemini migration has no interpreter: leave it disabled). What this revision made from event
     inventories is never a refusing reason: the receipt declares it in a note and the switch goes on (ADJUDICATION
-    P-1). DECISIONS D59: the encounters it refuses on are those this revision wrote a record for since it replaced that
-    pair - the time that same app receipt records (replaced_since), never the current containers' creation."""
+    P-1). DECISIONS D59, D65 and D82: the encounters it refuses on are those this revision wrote a record for since it
+    replaced that pair after it last returned to it - the earliest time the app receipts that replaced it since the
+    last successful switch-back to it record (replaced_since), never across that switch-back and never the current
+    containers' creation."""
     mode, reference = ctx.args.provider_mode, ctx.args.authorization_ref or ''
     modes = participant_modes(ctx.args)
     live = [name for name in PARTICIPANTS if modes[name] == 'live']
     interpreter = interpreter_mode(ctx.args)
-    entry = require_receipt_entry(ctx, 'app')
-    app = entry[1]
-    previous = ((app.get('details') or {}).get('replaced') or {}).get('web') or {}
-    prev_image, prev_revision = previous.get('image'), previous.get('revision')
-    if not (isinstance(prev_image, str) and re.fullmatch(r'sha256:[0-9a-f]{64}', prev_image)
-            and isinstance(prev_revision, str) and SHA_RE.fullmatch(prev_revision)):
-        raise InstallError("This revision's app receipt names no previous web (image and revision) to switch back to; "
-                           'nothing was changed.')
-    if prev_revision == ctx.revision:
-        raise InstallError('The pair the app phase replaced is this same revision: there is nothing to switch back to.')
+    # D83: the receipt the target is read from - the newest successful app receipt, or after a same-revision re-run the
+    # newest since the last switch-back naming another revision whose image is present - and the since is read from it
+    entry, prev_image, prev_revision = switch_back_target(ctx, require_receipt_entry(ctx, 'app'))
     if reference and run(['git', '-C', str(ROOT), 'cat-file', '-e', f'{prev_revision}:{reference}'],
                          check=False).returncode:
         raise InstallError('--authorization-ref is not a file tracked at the previous revision.')
@@ -4950,7 +5000,7 @@ def phase_switch_back(ctx) -> dict:
     check_credential_files(mode, live, interpreter)
     env = read_protected_env(APP_ENV, APP_ENV_KEYS)
     check_credential_parsing(prev_image, env, mode, live, interpreter)
-    since = replaced_since(ctx, entry)  # D59: the touched filter's since, read once for every check of this phase
+    since = replaced_since(ctx, entry)  # D59, D82: the touched filter's since, read once for every check of this phase
     reads = target_reads(prev_image, env, stage_kinds_of(prev_image, env))
     hazards = switch_back_hazards(undo_hazards(image_id, env, ctx.revision), reads,
                                   touched_encounters(image_id, env, since))  # D51
@@ -4975,6 +5025,43 @@ def phase_switch_back(ctx) -> dict:
                        f'{availability.get("non_200_count", 0)} not 200' + (f'; {note}' if note else '')}
 
 
+def switch_back_target(ctx, entry) -> tuple:
+    """DECISIONS D83 (refutation round 3, finding 14): (the app receipt the switch-back reads its target from, as (path,
+    record); the target web's image; its revision). ``entry`` is the newest successful app receipt of this revision
+    (require_receipt_entry), and the target is the web it replaced. When that web is this same revision - a
+    same-revision re-run: a provider-mode switch, an access check run again, the re-run a failed app's receipt asks for
+    once its parked pair is removed - the target is read instead from the newest app receipt of this revision written
+    since its last successful switch-back that names ANOTHER revision whose image is still present (newest first; a
+    receipt whose image is gone is passed over). That receipt is a successful one, or one that failed once its switch
+    had finished: it records the web it replaced (replaced_web) only when the old web was parked and this revision's
+    pair served - its recompute, the removal of the parked pair or an access check failed after it (finding 14 (b):
+    the first app over the target, failed so, then recovered and run again). With none, there is nothing to switch back
+    to: an app whose receipt records no replaced web (the S4 keep layout, an S5 failure, an undo) leaves none. The
+    receipt returned is the one replaced_since reads the since from."""
+    image, revision = replaced_web(entry[1])
+    if image is None:
+        raise InstallError("This revision's app receipt names no previous web (image and revision) to switch back to; "
+                           'nothing was changed.')
+    if revision != ctx.revision:
+        return entry, image, revision
+    bound = last_switch_back(ctx)
+    for path in sorted(ctx.receipts.glob('app-*.json'), reverse=True):
+        if written_after(path, bound) is not True:  # before that switch-back, or the order cannot be told
+            continue
+        record = json.loads(path.read_text(encoding='utf-8'))
+        if not (isinstance(record, dict) and record.get('phase') == 'app' and record.get('revision') == ctx.revision):
+            continue
+        image, revision = replaced_web(record)
+        if image is None or revision == ctx.revision:
+            continue
+        found = inspect('image', image)
+        if found is not None and labels_of(found).get(REVISION_LABEL) == revision and owned(found, 'app-image'):
+            return (path, record), image, revision
+    raise InstallError('The pair the app phase replaced is this same revision, and no app receipt of this revision '
+                       'since its last switch-back names another revision whose image is present: there is nothing to '
+                       'switch back to.')
+
+
 def pair_created_at():
     """When this revision's pair was created: the earliest creation time of its web and worker containers (the 'since'
     every close of an undo reads)."""
@@ -4983,32 +5070,41 @@ def pair_created_at():
 
 
 def replaced_since(ctx, entry) -> dt.datetime:
-    """DECISIONS D59 (the S17 refutation round 2, finding 12): the 'since' of a switch-back's touched filter
-    (touched_encounters; D51) - when this revision replaced the pair the switch-back returns to. ``entry`` is the
-    successful app receipt the switch-back reads that pair from (require_receipt_entry: the receipt latest_receipt
-    gives), and the since is the earliest time it records for its phase (receipt_moments: main's started_at, taken
-    before anything of that phase ran). Never the current containers' creation: a later app phase of this same revision
-    that installed a pair and then failed (its receipt not ok - a recompute that failed, or an access check: the pair
-    stays installed) created them, and what this revision wrote under its earlier pair is not the target's status quo.
-    A receipt that records no time falls back to the earliest creation time of this revision's containers
-    (pair_created_at) and of every app receipt of this revision written after it (the earliest time each records, else
-    when it was written) - fail-closed: an earlier since names more encounters. The closes of B4 and B7 keep their own
-    since (they close this pair's stages)."""
+    """DECISIONS D59 (the S17 refutation round 2, finding 12), D65 and D82: the 'since' of a switch-back's touched filter
+    (touched_encounters; D51) - when this revision replaced the pair the switch-back returns to, since it last returned
+    to that pair. ``entry`` is the app receipt the switch-back reads that pair from (switch_back_target, D83: the
+    newest successful one, or after a same-revision re-run the one it reads instead). The since is the earliest time
+    recorded for its phase (receipt_moments: main's started_at, taken before anything of that phase ran) by that receipt
+    and by every successful app receipt of this revision that replaced the same target revision (D65: the app run again
+    after a switch-back refused at B7 writes a newer receipt naming the same target, and what this revision wrote under
+    its earlier pair is no more the target's than before) - of those, only the ones written after this revision's
+    newest successful switch-back to that target (D82, refutation round 3, finding 13): that switch-back completed, so
+    what the target wrote while it served again, until an app replaced it once more, is its own status quo, and the
+    since never reaches across it. When ``entry`` itself is older than that switch-back (no successful app has replaced
+    the target since: a later app failed, or replaced another revision), the since is that switch-back's own start -
+    never across it, and fail-closed after it. Receipts are ordered by the stamps their names carry (written_after); one
+    whose order cannot be told is counted (fail-closed). Never the current containers' creation: a later app phase of
+    this same revision that installed a pair and then failed (its receipt not ok - a recompute that failed, or an
+    access check: the pair stays installed) created them, and what this revision wrote under its earlier pair is not
+    the target's status quo. A receipt that records no time falls back to the earliest creation time of this revision's
+    containers (pair_created_at) and of every app receipt of this revision written after it (the earliest time each
+    records, else when it was written) - fail-closed: an earlier since names more encounters. The closes of B4 and B7
+    keep their own since (they close this pair's stages)."""
     path, record = entry
-    # D65 (D59's review): the EARLIEST successful app receipt of this revision that replaced the same target revision
-    # counts too - an app phase run again (the recovery after a switch-back refused at B7) writes a newer receipt
-    # naming the same target, and what this revision wrote under its earlier pair is no more the target's than before
-    target = (((record.get('details') or {}).get('replaced') or {}).get('web') or {}).get('revision')
+    target = replaced_web_entry(record).get('revision')
+    bound = last_switch_back(ctx, target) if target else None  # D82
     earlier = []
     for other_path in sorted(ctx.receipts.glob('app-*.json')):
-        if other_path.name >= path.name:
-            continue
+        if other_path.name == path.name or written_after(other_path, bound) is False:
+            continue  # D82: a receipt written before the switch-back that last returned to this target is never read
         other = json.loads(other_path.read_text(encoding='utf-8'))
-        named = (((other.get('details') or {}).get('replaced') or {}).get('web') or {}).get('revision') \
-            if isinstance(other, dict) else None
         if (isinstance(other, dict) and other.get('phase') == 'app' and other.get('ok')
-                and other.get('revision') == ctx.revision and target and named == target):
+                and other.get('revision') == ctx.revision and target
+                and replaced_web_entry(other).get('revision') == target):
             earlier += receipt_moments(other) or [moment for moment in (written_moment(other_path),) if moment]
+    if written_after(path, bound) is False:  # D82: ``entry`` is older than the switch-back that returned to its target
+        # (that receipt's stamp is told, so written_moment gives a time when it records none)
+        return min(earlier + (receipt_moments(bound[1]) or [written_moment(bound[0])]))
     own = receipt_moments(record)
     if own:
         return min(own + earlier)
@@ -5046,13 +5142,13 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
       B9  remove this revision's parked pair (its image is kept)
     The baseline is read before anything starts too. Before B5 every failure resumes this revision's pair; from B5 on
     the previous web serves and the receipt says what is left. ``touched_since``: the since of every touched filter
-    (replaced_since, D59; read from the app receipt when not given) - the closes keep their own, this pair's creation
-    and B4's close."""
+    (replaced_since, D59 and D82; read from the app receipt switch_back_target gives, D83, when not given) - the closes
+    keep their own, this pair's creation and B4's close."""
     live, idle = plan['live'], plan['idle']
     current = {role: inspect('container', SERVICES[role]) for role in SERVICES}
     since = min(created_at(container) for container in current.values() if container is not None)
     if touched_since is None:
-        touched_since = replaced_since(ctx, require_receipt_entry(ctx, 'app'))
+        touched_since = replaced_since(ctx, switch_back_target(ctx, require_receipt_entry(ctx, 'app'))[0])
     kinds = stage_kinds_of(prev_image, env_bytes)
     reads = target_reads(prev_image, env_bytes, kinds) if reads is None else reads  # D51
 

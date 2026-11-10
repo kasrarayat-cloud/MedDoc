@@ -683,10 +683,10 @@ class AdjunctBesideARemoval(SimpleTestCase):
 
 
 class PossiblyCurrent(SimpleTestCase):
-    """DECISIONS D62 (D54's review): a current time left unverified is a doubt about the event's own code, never an
-    absence for the rules that hold OTHER codes by it - a session's examinations, the removal a biopsy is bundled into.
-    A current time whose own words place the event on another occasion (a differing date, D35's marker) is evidence,
-    and keeps the event out."""
+    """DECISIONS D62 (D54's review), as D68 completes it: a current time left unverified is a doubt about the event's
+    own code, never an absence for the rules that hold OTHER codes by it - a session's examinations, the removal a
+    biopsy is bundled into - WHATEVER its reasons: a differing date or D35's marker is a doubt too (D68; the sequence
+    words and the clock time are pinned in tests.test_interpretation_r3_currency)."""
 
     ASIDE = 'These were the findings at her index colonoscopy: a 12 mm sessile polyp in the ascending colon was removed.'
 
@@ -708,11 +708,13 @@ class PossiblyCurrent(SimpleTestCase):
         self.assertEqual(p.status, 'needs_clarification')  # never READY on the index colonoscopy's removal
 
     def test_an_examination_its_own_date_places_elsewhere_never_takes_the_session(self):
+        # D68: the differing date is a doubt, not proof of another occasion - the examination never takes the session,
+        # and beside today's it leaves the session unresolved (asked), never resolved to either
         inv, text = self.aside_session('at her index colonoscopy on 01/14/2024')
         reading = events.Reading.of(inv)
         self.assertIn('date_mismatch', reading.events['E3']['time']['reasons'])
         session = coverage.sessions(reading)['gi.colonoscopy']
-        self.assertEqual((session.event, session.unresolved), ('E1', False))
+        self.assertEqual((session.event, session.unresolved, session.examinations), ('', True, ('E1', 'E3')))
 
     def test_a_removal_with_an_unanchored_time_still_holds_the_biopsy_of_the_lesion_it_removed(self):
         line = 'During this colonoscopy, a 6 mm sessile polyp in the sigmoid colon was biopsied and then removed with a ' \
