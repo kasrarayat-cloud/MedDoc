@@ -186,7 +186,10 @@ EXEMPT_PATTERNS = {
 }
 # Denied code objects per file (a nested function, lambda or generator expression is its own code object), measured on
 # Python 3.12 (the image's and CI's): a different interpreter compiles a different number of code objects, and the
-# install then refuses rather than guess.
+# install then refuses rather than guess. ADJUDICATION R-2 (slice S11) re-homed nine code objects into
+# studio/code_shapes.py, imported back with identity preserved: engine.py 457 -> 452 (_listable, participant_listable,
+# participant_unlisted_count and its generator expression, participant_unlisted_codes), reconcile.py 109 -> 107
+# (act_label, kind_label), review_view.py 47 -> 45 (_field, service_answers).
 PINNED_SIZES = {
     'studio/gi/__init__.py': 0,
     'studio/gi/clauses.py': 31,
@@ -197,9 +200,9 @@ PINNED_SIZES = {
     'studio/gi/sections.py': 71,
     'studio/gi/services.py': 456,
     'studio/gi/structure.py': 152,
-    'studio/validation/engine.py': 457,
-    'studio/validation/reconcile.py': 109,
-    'studio/validation/review_view.py': 47,
+    'studio/validation/engine.py': 452,
+    'studio/validation/reconcile.py': 107,
+    'studio/validation/review_view.py': 45,
     'studio/validation/rationale.py': 7,
     'studio/candidates.py': 45,
     'studio/validation/checks.py': 164,

@@ -47,11 +47,13 @@ from typing import Optional
 from django.db import transaction
 
 from . import audit, jobs, models, review
+from .code_shapes import act_label  # the act labels, re-homed (ADJUDICATION R-2): reconcile's own object
 from .gi import context as gi_context
 from .gi.profiles import PROFILES
+from .interpretation import readers, sentinel
+from .interpretation.wording import MISSING as EVENT_FACTS_MISSING
 from .validation import questions
 from .validation.engine import COMPETING_FACT
-from .validation.reconcile import act_label
 
 NOT_DOCUMENTED, CANNOT_CONFIRM = models.MemberAnswer.NOT_DOCUMENTED, models.MemberAnswer.CANNOT_CONFIRM
 USE_DOCUMENT = 'use_document'
@@ -94,6 +96,16 @@ PROMPTS = {
     # harness repair 3 (HARNESS.md, P-ADMIT2): answered by the review decision, never by a detail answer
     COMPETING_FACT: 'More than one code is proposed for the same documented act. Reject the code the documentation '
                     'does not support; the code left is then ready for review.',
+    # the Gemini migration's facts (design/FINAL.md 7.4, 8.3; contract 9.4): the question each code is asked names the
+    # act and quotes its passage; the row's prompt is CPT Studio's general wording of the fact, and the answers allowed
+    # stay "Not documented" and "Cannot confirm"
+    'event_time': 'Was this act done at this encounter, on the date of service?',
+    'event_performer': 'Who performed this act?',
+    'act_target': 'Which lesion or site was this act done on?',
+    'technique': 'Which technique was used for this act?',
+    'statement_scope': 'Does the statement quoted apply to this act?',
+    'act_method': 'By which method was the lesion removed?',
+    'procedure': 'In which procedure was this act done?',
 }
 CONFLICT_PROMPT = 'The record has conflicting statements about the {act}. Which is right for this date?'
 DEFAULT_PROMPT = 'CPT Studio could not confirm a detail this code depends on.'  # U9: CPT Studio's reading
@@ -586,8 +598,10 @@ def _rows(encounter, assessment, view=None, states=None):
             row.prompt = CONFLICT_PROMPT.format(act=act_label(subject)) if subject else PROMPTS.get(row.fact,
                                                                                                    DEFAULT_PROMPT)
             # completion repair (2026-11-06, U10): the question shows the passages it concerns and names the fact
-            # CPT Studio could not confirm - never that the document leaves it out
-            row.missing = questions.missing(row.fact, act_label(subject) if subject else '')
+            # CPT Studio could not confirm - never that the document leaves it out (the new path's facts in their own
+            # words: interpretation.wording.MISSING)
+            row.missing = (EVENT_FACTS_MISSING.get(row.fact)
+                           or questions.missing(row.fact, act_label(subject) if subject else ''))
             row.statement = (CONFLICT_STATEMENT.format(act=act_label(subject)) if subject
                              else COMPETING_STATEMENT if row.fact == COMPETING_FACT
                              else CODING_STATEMENTS.get(row.fact) or STATEMENT.format(missing=row.missing))
@@ -733,7 +747,35 @@ def _in_effect(encounter, answers, fact, value):
     return any(answer.fact == fact and answer.value == value for answer in answers)
 
 
+ANSWER_GATE = 'answers.save_details'  # the sentinel write gates of a member answer on a new-path revision (FINAL 10.3)
+REVOKE_GATE = 'answers.revoke_answer'
+
+
+def _new_path(encounter) -> bool:
+    """Whether ``encounter``'s current revision is read on the new path (its current assessment the events engine's, or
+    its context derived from an event inventory): a member answer saved or withdrawn there is a gated write."""
+    return readers.label_of(encounter) == sentinel.NEW_PATH
+
+
 def save_details(encounter, user, items) -> dict:
+    """_save_details (below), and the Gemini migration's write gate (design/FINAL.md 10.3): on a new-path revision the
+    save runs in a new_path sentinel scope of its own, asked again as the last thing before its transaction commits -
+    when it counted an execution of the legacy reader, or this process cannot vouch for its count, nothing of it is
+    written, the trip is audited ('sentinel.tripped') and sentinel.Tripped is raised. A context save this save makes
+    and that its own gate refuses (jobs.change_context) rolled its audit row back with this save's work, so the row
+    is recorded again here, after the rollback (jobs.Refused.trip). A legacy revision's save is made exactly as before."""
+    parsed = _parse(items)
+    with readers.write_scope(ANSWER_GATE, _new_path(encounter)) as gate:
+        try:
+            return _save_details(encounter, user, parsed, gate)
+        except readers.GateClosed as closed:
+            readers.refuse(ANSWER_GATE, closed, encounter=encounter, actor=user)
+        except jobs.Refused as exc:
+            readers.record_trip(encounter, user, getattr(exc, 'trip', None))
+            raise
+
+
+def _save_details(encounter, user, parsed, gate) -> dict:
     """Save a member's answers to the details asked, in one transaction under the encounter's row lock: every answer
     is checked against the detail's own control before anything is written (InvalidAnswer: 400), the whole save is
     refused while processing runs or when a detail is no longer asked (jobs.Refused: 409). Context values are ONE
@@ -744,7 +786,6 @@ def save_details(encounter, user, items) -> dict:
     document's own dates in view is recorded as confirmed (a detail.answered row; nothing is re-assessed or sent). An
     answer already in effect is left as it is, so a repeated identical save makes nothing. Every save ends by
     re-deriving the stored list state (review.refresh_state), after its last row is written."""
-    parsed = _parse(items)
     with transaction.atomic():
         encounter = jobs._locked(encounter)
         if jobs.busy(encounter):
@@ -857,6 +898,7 @@ def save_details(encounter, user, items) -> dict:
         # one that also recorded an answer refreshed it before the confirmation was written, so a finished review read
         # "Ready for review" and stayed on the review queue).
         review.refresh_state(encounter)
+        readers.check(gate)  # the last thing before the commit (FINAL 10.3): a refusal rolls the save back whole
     withdrawn = [answer for answer in superseded if answer.fact not in changed]  # counted once with its value
     return {'saved': len(recorded) + len(changed) + len(withdrawn) + (1 if confirming is not None else 0),
             'unchanged': unchanged, 'answer_ids': saved_ids, 'reassessing': bool(changed) or recompute is not None}
@@ -878,6 +920,15 @@ def _siblings(encounter, answer):
 
 
 def revoke_answer(encounter, user, answer_id):
+    """_revoke_answer (below), gated on a new-path revision as save_details is (design/FINAL.md 10.3)."""
+    with readers.write_scope(REVOKE_GATE, _new_path(encounter)) as gate:
+        try:
+            return _revoke_answer(encounter, user, answer_id, gate)
+        except readers.GateClosed as closed:
+            readers.refuse(REVOKE_GATE, closed, encounter=encounter, actor=user)
+
+
+def _revoke_answer(encounter, user, answer_id, gate):
     """Withdraw one standing answer (a MemberAnswerRevocation, 'withdrawn') - and the same question's answer for the
     row's other codes: the detail is asked again. Refused while processing runs and for an answer already withdrawn
     (jobs.Refused: 409); MemberAnswer.DoesNotExist for an answer that is not this document's (404). Returns the
@@ -902,6 +953,7 @@ def revoke_answer(encounter, user, answer_id):
                 audit.record(encounter.workspace, 'assessment.recompute_queued', encounter=encounter, actor=user,
                              job=str(recompute.pk), withdrawn=[str(item.answer_id) for item in revocations])
         review.refresh_state(encounter)
+        readers.check(gate)  # the last thing before the commit (FINAL 10.3)
     return revocations[0]
 
 

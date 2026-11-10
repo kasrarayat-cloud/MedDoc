@@ -289,12 +289,12 @@ class WindowTests(TestCase):
         self.assertEqual((assessments['with_record_problems'], assessments['record_problems']),
                          (1, {'The assessment carries no interpretation record.': 1}))
         self.assertEqual((assessments['deny_sizes'], assessments['positive_controls'], assessments['tools']),
-                         ({'2548': 2}, {'ok': 2}, {'sys.monitoring': 2}))
+                         ({'2539': 2}, {'ok': 2}, {'sys.monitoring': 2}))
         self.assertEqual(found['trips'], {'total': 2, 'refused': 1, 'recorded': 1, 'by_reason': {'executed': 2},
                                           'by_entry': {'persist_assessment': 1, 'review view': 1},
                                           'unavailable': {'total': 0, 'refused': 0, 'recorded': 0, 'install': {}}})
         self.assertEqual({key: found['sentinel'][key] for key in ('state', 'deny_size', 'positive_control', 'tool')},
-                         {'state': 'ok', 'deny_size': 2548, 'positive_control': 'ok', 'tool': 'sys.monitoring'})
+                         {'state': 'ok', 'deny_size': 2539, 'positive_control': 'ok', 'tool': 'sys.monitoring'})
         self.assertEqual(set(found['sentinel']['totals']), set(sentinel.LABELS))
         hold = found['hold']
         self.assertEqual([item['id'] for item in hold['standing']], [str(self.hold.pk)])
@@ -429,7 +429,7 @@ class CommandTests(TestCase):
         lines = dict(line.split(': ', 1) for line in text.splitlines())
         self.assertTrue(all(lines[field].strip() for field in report.D22_FIELDS))  # each with its value
         self.assertEqual(lines['model'].split(' ')[0], 'gemini-4-argon')
-        self.assertIn('2548 code objects (pinned 2548', lines['sentinel deny-set size'])
+        self.assertIn('2539 code objects (pinned 2539', lines['sentinel deny-set size'])
         self.assertEqual(lines['sentinel positive control'], 'ok')
         self.assertTrue(lines['sentinel install'].startswith('ok; sys.monitoring tool 4 (cpt-studio-sentinel)'))
         self.assertEqual(lines['new-path assessments'], '1')

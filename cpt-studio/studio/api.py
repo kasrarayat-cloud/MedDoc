@@ -23,6 +23,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from . import answers, audit, client_contract, customer_api, intake, jobs, models, reports, review
 from .access import active_membership, scoped_encounter
+from .interpretation import readers, sentinel
 from .ingest import canonicalize
 from .storage import read_original
 
@@ -100,6 +101,10 @@ def api_view(view=None, *, contract=True):
             return JsonResponse({'error': customer_api.customer_error(' '.join(exc.messages))}, status=400)
         except ValidationError as exc:
             return JsonResponse({'error': customer_api.customer_error(' '.join(exc.messages))}, status=409)
+        except sentinel.Tripped as exc:
+            # a new-path write the legacy-call sentinel refused (design/FINAL.md 10.3): nothing was written, the trip is
+            # audited, and the member is told so in CPT Studio's own sentence (no module, provider or model is named)
+            return JsonResponse({'error': customer_api.customer_error(str(exc))}, status=409)
         except RecursionError:  # a backstop: a nested value that reached code recursing per level
             return JsonResponse({'error': 'The request is nested too deeply.'}, status=400)
     return wrapper
@@ -184,7 +189,8 @@ def encounters(request):
     if request.method == 'GET':
         rows = membership.workspace.encounters.select_related(
             'current_revision', 'current_context', 'current_assessment').order_by('-created_at')
-        return JsonResponse({'encounters': [customer_api.list_row(e) for e in rows]})
+        # R-6: each encounter's row read under its own label (readers.labelled), in a request that names no encounter
+        return JsonResponse({'encounters': [readers.labelled(customer_api.list_row, e) for e in rows]})
     if request.method != 'POST':
         raise ApiError(405, 'Method not allowed.')
     _require_reviewer(membership)
@@ -235,6 +241,18 @@ def encounter_detail(request, encounter_id):
 @api_view
 def decisions(request, encounter_id):
     data = _payload(request)
+    try:
+        return _decisions(request, encounter_id, data)
+    except sentinel.Tripped as exc:
+        # FINAL 10.3: the decision's gate refused it inside this request's transaction, which rolled the gate's audit
+        # row back with everything else: recorded again now, outside it, so the refusal is on record
+        encounter = models.Encounter.objects.select_related('workspace').filter(pk=encounter_id).first()
+        if encounter is not None:
+            readers.record_trip(encounter, request.user, exc.data)
+        raise
+
+
+def _decisions(request, encounter_id, data):
     with transaction.atomic():
         encounter, membership = scoped_encounter(request.user, encounter_id, for_update=True)
         _require_reviewer(membership)
@@ -441,6 +459,24 @@ def resume(request, encounter_id):
     if job is None:
         raise ApiError(409, 'There is no stopped stage to resume.')
     return JsonResponse({'resumed': True}, status=201)  # never the stage's kind: kinds name the participants
+
+
+@require_POST
+@api_view
+def retry_reading(request, encounter_id):
+    """The recorded retry of a failed reading (design/FINAL.md 11.3; D11): an owner or a reviewer asks for one more
+    attempt at the current document's reading (jobs.retry_reading: the failed attempt released for that one attempt,
+    audited 'interpretation.retry'). 409, with why in the member's words, while processing runs or an earlier outcome is
+    unknown, when the document was read or never attempted, while reading is paused on this installation, and for an
+    answer cut off at its output limit - never a member's paid retry (C5): the override of that is an operator's,
+    recorded, under /ops/. Nothing is sent here; the attempt is a stage of its own."""
+    encounter, membership = scoped_encounter(request.user, encounter_id)
+    _require_reviewer(membership)
+    try:
+        jobs.retry_reading(encounter, request.user)
+    except jobs.Refused as exc:
+        raise ApiError(409, customer_api.customer_error(str(exc)))
+    return JsonResponse({'retrying': True}, status=201)  # never the stage's kind
 
 
 @require_POST

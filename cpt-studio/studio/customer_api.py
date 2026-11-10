@@ -22,8 +22,10 @@ import re
 
 from django.conf import settings
 
-from . import answers, models, progress, review
+from . import answers, jobs, models, progress, review
 from .gi.profiles import PROFILES
+from .interpretation import readers, sentinel
+from .interpretation.wording import MISSING as EVENT_FACTS_MISSING
 from .models import Decision, Proposal, ProviderRun, ReportArtifact, SourceRevision
 from .validation import questions
 
@@ -70,7 +72,9 @@ FACT_WORDS = {'service_date': 'the date of service', 'setting': 'the place of se
               'target': 'the structure examined', 'cannulation': 'whether cannulation was achieved',
               'performed_status': 'whether the service was performed', 'base_included': 'how the codes are reported',
               'separate_em': 'a separate office visit',
-              'competing_codes': 'which of the codes proposed for the same act the documentation supports'}
+              'competing_codes': 'which of the codes proposed for the same act the documentation supports',
+              # the Gemini migration's facts (design/FINAL.md 7.4, 8.3), in their own words
+              **EVENT_FACTS_MISSING}
 LIMITATIONS = (
     'CPT descriptions are not shown: no licensed CPT descriptor is connected.',
     'CPT code-set membership for the date of service is not verified.',
@@ -82,12 +86,17 @@ NO_REFERENCE_FILE = 'No CMS fee-schedule file applies to the date of service, so
 REFERENCE_FAILED = 'The CMS reference check could not run for this document.'
 RECORDED_RESPONSE = 'These results come from a recorded test response, not a live check.'
 PARTIAL_READING = 'Part of the document could not be read; check the text against the original.'
+# The Gemini migration (design/FINAL.md 8.3): what a new-path assessment's reading can miss, naming no provider or model
+# (D22). It takes the place of LIMITATIONS' last sentence, which describes the earlier reading's wording checks.
+EVENTS_READING = ('The procedures documented were read by an automated interpreter, whose reading of each act is checked '
+                  "against the document's own words; it can still misread an act, so decide from the whole document.")
 
 # A server-composed customer string is refused when it carries any of these (the regex net of R4 6.6(3)): a label
 # built from the document's own words that matches falls back to CPT Studio's fixed sentence. The readers' own words
 # (routing, reader, cue, own passage: the engine's support details carry them) are machinery too.
 FORBIDDEN = re.compile(
-    r'(?i)\b(?:corti|astra|fable|openai|anthropic|claude)\b|\bgpt-\d|\bclaude-[a-z]|@cptstudio-|\bcpt-studio:[a-z]'
+    r'(?i)\b(?:corti|astra|fable|openai|anthropic|claude|gemini|google)\b|\bgpt-\d|\bclaude-[a-z]|\bgemini-\d'
+    r'|@cptstudio-|\bcpt-studio:[a-z]'
     r'|(?<![0-9a-f])[0-9a-f]{32,}(?![0-9a-f])|\b(?:participants?|peer[ -]reviews?|vendors?|tokens?|credits?|traces?'
     r'|sha256|tool calls?|request ids?|replay|providers?|routing|readers?|cues?|own passages?)\b'
     r'|\b[a-z]+[.-][a-z_]+@\d+\b')
@@ -119,7 +128,7 @@ def _family_label(slug):
 
 
 def _act_label(kind):
-    from .validation.reconcile import act_label  # local import: the reconciliation's own constant labels
+    from .code_shapes import act_label  # the reconciliation's own constant labels, re-homed (ADJUDICATION R-2)
     return act_label(kind) if isinstance(kind, str) and kind else 'act'
 
 
@@ -139,6 +148,17 @@ KNOWN_ERRORS = {
     'This document could not be read to the end, so its context cannot be changed and nothing is sent for it. '
     'Upload it again, shorter or split.': None,
     'Wait for processing to finish (or stop it) before resuming.': None,
+    # the recorded retry of a reading (jobs.retry_reading; FINAL 11.3), already in the member's words
+    jobs.RETRY_BUSY: None,
+    jobs.RETRY_NOTHING: None,
+    jobs.RETRY_READ: None,
+    jobs.RETRY_UNKNOWN: None,
+    jobs.RETRY_PAUSED: None,
+    jobs.RETRY_TOO_LONG: None,
+    jobs.RETRY_UNBUILT: None,
+    # a write the legacy-call sentinel refused (FINAL 10.3): CPT Studio's sentence, naming no module or provider
+    sentinel.MESSAGES['executed']: None,
+    sentinel.MESSAGES['unavailable']: None,
     'Wait for processing to finish (or stop it) before asking for a second review.': None,
     'There is no current assessment to review again.': None,
     'No documented service is left without a supported proposal.': None,
@@ -254,6 +274,7 @@ BLOCKER_EXACT = {
         'The service date you entered differs from the document; choose which date to use.',
     'The provider request failed': 'The coding service could not finish for this document.',
     'The provider response was not used': "The coding service's answer could not be used.",
+    review.UNREADABLE_EVENTS_BLOCKER: 'This document must be checked again before its codes can be approved or exported.',
 }
 BLOCKER_TEMPLATES = (
     (re.compile(r'Revision \d+ has not been assessed yet'), lambda m: 'The latest version of the document has not been '
@@ -776,12 +797,18 @@ def limitations(assessment, revision):
     """The concise, true limitations: what is never checked, plus what this assessment could not check."""
     from .serializers import retrieval_failed, source_applied  # local import: the operator serializer's predicates
     out = list(LIMITATIONS)
+    events = assessment is not None and readers.for_assessment(assessment).kind == readers.EVENTS
+    if events:
+        out[-1] = EVENTS_READING  # the new path's reading, in place of the wording checks' (FINAL 8.3)
     if assessment is not None:
         if any(retrieval_failed(entry) for entry in assessment.retrieval or []):
             out.append(REFERENCE_FAILED)
         elif not source_applied(assessment.reference_sources):
             out.append(NO_REFERENCE_FILE)
-        if assessment.provider_run is not None and review.run_mode(assessment.provider_run) == 'replay':
+        interpreted = (assessment.event_inventory.provider_run if events and assessment.event_inventory_id
+                       else None)
+        if any(run is not None and review.run_mode(run) == 'replay'
+               for run in (assessment.provider_run, interpreted)):
             out.append(RECORDED_RESPONSE)
     if revision is not None and revision.extraction_status == SourceRevision.PARTIAL:
         out.append(PARTIAL_READING)
@@ -953,7 +980,8 @@ def session_json(user, membership):
     workspace = membership.workspace
     encounters = list(workspace.encounters.select_related('current_revision', 'current_context',
                                                           'current_assessment'))
-    queued = sum(1 for encounter in encounters if in_queue(encounter))
+    # R-6: each encounter's row read under its own label (readers.labelled), as the list's rows are
+    queued = sum(1 for encounter in encounters if readers.labelled(in_queue, encounter))
     return {'user': {'id': str(user.pk), 'label': user.label(), 'initials': _initials(user),
                      'actor_kind': user.actor_kind},
             'workspace': {'id': str(workspace.pk), 'name': workspace.name},
@@ -1002,7 +1030,9 @@ def encounter_json(encounter, membership):
         codes, other_codes = code_rows(assessment, current, views, membership, details)
         codes = [{key: value for key, value in row.items() if not key.startswith('_')} for row in codes]
         completeness = review.reviewed_completeness(assessment, current) or {}
-        services = [service for service in (assessment.services or {}).get('services') or [] if isinstance(service, dict)]
+        # the documented services the reader of the assessment's engine gives (FINAL 8.3): the stored services record,
+        # or the sessions of the new path's event coding
+        services = readers.for_assessment(assessment).services_list(assessment)
     else:
         codes, other_codes, completeness, services = [], [], {}, []
     return {

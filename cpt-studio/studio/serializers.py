@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from django.conf import settings
 
-from . import models, participants, review
+from . import interpretation, models, participants, review
 from .gi.context import charge_date_problem, is_member_conflict
 from .gi.profiles import PROFILES, profile
 from .participants import peer as participant_peer
@@ -249,7 +249,12 @@ def _routing_json(encounter):
                           'span': m.get('span')} for m in finding.get('mentions', [])],
             'facts': finding.get('facts', []), 'missing': finding.get('missing', []),
         })
-    return {'version': run.version, 'document_kind': run.result.get('document_kind'), 'families': families}
+    # the Gemini migration (design/FINAL.md 4.3, 8.3): a gemini-routing@1 run is no reading - a stand-in derived from the
+    # event inventory (its families and statuses), which the console labels as such and names its inventory
+    derived = run.version == interpretation.ROUTING_VERSION
+    return {'version': run.version, 'document_kind': run.result.get('document_kind'), 'families': families,
+            'derived': derived, **({'derived_from': 'the event inventory', 'inventory': run.result.get('inventory'),
+                                    'inventory_sha256': run.result.get('inventory_sha256')} if derived else {})}
 
 
 def _decision_json(decision):
@@ -405,8 +410,17 @@ def _assessment_json(encounter, membership):
         # (review.reviewed_completeness; refutation P2FR, EUS-SECOND)
         'completeness': review.reviewed_completeness(assessment, current) or {},
         'second_run': str(assessment.second_run_id) if assessment.second_run_id else None,
+        # the operator's interpretation section (design/FINAL.md 3.1, 8.3), from the reader of the assessment's engine:
+        # a new-path assessment's D22 record, its event inventory (events, attribute states, verification report), the
+        # Gemini run with its usage and estimated cost and the hold it set; a legacy one is said to be one
+        'interpretation': _readers().for_assessment(assessment).interpretation_section(assessment),
     }
     return data, clarifications
+
+
+def _readers():
+    from .interpretation import readers  # local import: the one dispatch of read time (FINAL 8.2)
+    return readers
 
 
 def _phases(support):
@@ -675,8 +689,8 @@ def corti_unlisted_counts(assessment) -> tuple[int, int]:
     codes" for a candidate it returned too (refutation round 4, truth-4), and never say that it proposed no code, or
     that its codes were checked, beside codes that cannot be listed (refutation round 3, truth-3). An answer that
     cannot be read again counts none, and the error is logged: the page never fails on it."""
+    from .code_shapes import _listable  # the engine's own rule, re-homed (ADJUDICATION R-2)
     from .jobs import _provider_inputs  # local import: jobs imports this module's peers
-    from .validation import engine  # local import: only the engine's rule is needed here
 
     read_second = any(isinstance(check, dict) and check.get('id') == SECOND_REVIEW_CHECK
                       for check in assessment.encounter_checks or [])
@@ -692,7 +706,7 @@ def corti_unlisted_counts(assessment) -> tuple[int, int]:
                 logging.getLogger(__name__).exception('the answer of run %s could not be read again', run.pk)
                 normalized = None
             if normalized is not None and not normalized.refused:
-                count = sum(1 for item in normalized.codes if not engine._listable(item.code))
+                count = sum(1 for item in normalized.codes if not _listable(item.code))
         counts.append(count)
     return counts[0], counts[1]
 
@@ -703,16 +717,22 @@ def corti_unlisted(assessment) -> int:
     return sum(corti_unlisted_counts(assessment))
 
 
-def corti_unlisted_words(primary, second) -> str:
+def corti_unlisted_words(primary, second, *, events=False) -> str:
     """The engine's own sentences for the codes Corti's answers returned that cannot be listed ('' for none), each
     answer's count apart, as the engine says them: the primary answer's as provider.unlisted does ("It returned 2 codes
     that cannot be listed: ..."), then the bounded second review's as provider.second_review does ("Its second review
-    returned 1 code that cannot be listed: ..."), so the row and the reports say each number the Checks tab says."""
-    from .validation import checks, engine  # local import: only the engine's wording is needed here
+    returned 1 code that cannot be listed: ..."), so the row and the reports say each number the Checks tab says.
+    ``events``: an assessment of the events engine, worded by its own copy of the sentence (interpretation.wording,
+    pinned equal to checks.unlisted_codes), so the legacy reader's checks never run for it (FINAL 10.1)."""
+    from .code_shapes import MAX_LISTED_CODE  # the engine's own limit, re-homed (ADJUDICATION R-2)
 
-    words = [checks.unlisted_codes(primary, engine.MAX_LISTED_CODE, 'It')] if primary else []
+    if events:
+        from .interpretation import wording as unlisted
+    else:
+        from .validation import checks as unlisted  # local import: only the engine's wording is needed here
+    words = [unlisted.unlisted_codes(primary, MAX_LISTED_CODE, 'It')] if primary else []
     if second:
-        words.append(checks.unlisted_codes(second, engine.MAX_LISTED_CODE, 'Its second review'))
+        words.append(unlisted.unlisted_codes(second, MAX_LISTED_CODE, 'Its second review'))
     return ' '.join(words)
 
 
@@ -782,8 +802,9 @@ def _corti_row(encounter, assessment, jobs):
         if current:
             apart = bool(unlisted) and not codes and corti_listed_apart(assessment)
             words = corti_answered(bool(codes), unlisted, apart)
-            detail = f'{words[:1].upper()}{words[1:]}.' + (f' {corti_unlisted_words(primary, second)}' if unlisted
-                                                           else '')
+            events = interpretation.is_new_assessment(assessment)
+            detail = f'{words[:1].upper()}{words[1:]}.' + (f' {corti_unlisted_words(primary, second, events=events)}'
+                                                           if unlisted else '')
         else:
             detail = _run_detail(run)
         if run.reused_from_id:
@@ -819,9 +840,9 @@ def _participant_row(encounter, assessment, jobs, name, configured):
         # cannot be read again as recorded
         codes, unlisted = review.listed_codes(record), review.unlisted_count(assessment, record)
         if unlisted:
-            from .validation import engine  # local import: only the engine's wording is needed here
+            from .code_shapes import participant_unlisted_codes  # the engine's wording, re-homed (ADJUDICATION R-2)
 
-            detail = f'{detail} {engine.participant_unlisted_codes(unlisted)}'
+            detail = f'{detail} {participant_unlisted_codes(unlisted)}'
         return _row(name, label, vendor, model, RECORD_STATES.get(record.get('state'), 'unknown'), detail, run,
                     codes, int(record.get('unverified_quotes') or 0), unlisted)
     if newest is not None:

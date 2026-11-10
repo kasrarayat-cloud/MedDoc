@@ -376,7 +376,8 @@
      "extent"
     ]
    }
-  ]
+  ],
+  "derived": false
  },
  "pipeline": {
   "busy": false,
@@ -1411,7 +1412,12 @@
    "catalogue_version": "gi-catalogue@1",
    "inventory_problems": []
   },
-  "second_run": null
+  "second_run": null,
+  "interpretation": {
+   "engine": "legacy",
+   "engine_version": "cpt-studio-validation@6",
+   "record": null
+  }
  },
  "clarifications": [
   {

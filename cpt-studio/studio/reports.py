@@ -19,8 +19,9 @@ from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.utils import timezone
 
-from . import audit, candidates, participants, review
+from . import audit, candidates, interpretation, participants, review
 from . import answers as member_answers  # the details flow (P5)
+from .interpretation import readers
 from .gi.context import charge_date_problem, is_member_conflict
 from .gi.profiles import PROFILES
 from .models import Clarification, Decision, Encounter, Membership, Proposal, ProviderRun, ReportArtifact
@@ -275,7 +276,13 @@ def _services(assessment, text, rejected=frozenset(), completeness=None):
     as accounting for a service (refutation r1, report-6), nor as including another service's examination (refutation
     P2FR, EUS-SECOND: "included in S2: that service's code includes this examination" beside the rejected 43242, the
     only code of S2 that includes it). ``completeness``: the reconciliation as the review leaves it
-    (review.reviewed_completeness: a code the reviewer reinstated counts as a selected one), else as recorded."""
+    (review.reviewed_completeness: a code the reviewer reinstated counts as a selected one), else as recorded.
+
+    The Gemini migration (design/FINAL.md 8.3): a new-path assessment's documented services are its event coding's
+    sessions, from the reader of its engine (_event_services); a legacy assessment's are read below, as before."""
+    reader = readers.for_assessment(assessment)
+    if reader.kind == readers.EVENTS:
+        return _event_services(reader, assessment, text, rejected, completeness)
     inventory = assessment.services or {}
     completeness = (assessment.completeness or {}) if completeness is None else completeness
     # the selected codes of the service each included service is read as part of that include its examination, as the
@@ -316,6 +323,37 @@ def _services(assessment, text, rejected=frozenset(), completeness=None):
         'catalogue_version': completeness.get('catalogue_version', ''),
         'inventory_version': inventory.get('version', ''),
         'reconciliation': _reconciliation(inventory, completeness),
+    }
+
+
+# The reading line of a new-path assessment's DOCUMENTED SERVICES (the interpretation and inventory versions it was made
+# from, an operator's surface: interpretation.LABEL)
+EVENTS_INVENTORY_VERSION = f'the documented events ({interpretation.LABEL})'
+
+
+def _event_services(reader, assessment, text, rejected, completeness):
+    """_services for a new-path assessment (FINAL 8.3): the sessions of its event coding as the reader gives them
+    (EventReader.services_section), the unresolved items, bundled acts and sessions not listed of its coverage as the
+    review leaves it, and no conflict list - the new path records a contradiction as a relation, which its encounter
+    check 'services.conflicts' words (``conflict_note``). A coding this release cannot read is said to be one, and
+    nothing is reconciled from it (fail-closed)."""
+    completeness = (assessment.completeness or {}) if completeness is None else completeness
+    rows = reader.services_section(assessment, completeness, rejected)
+    reinstated = [code for code in completeness.get('reinstated') or [] if isinstance(code, str)]
+    check = next((c for c in assessment.encounter_checks or () if isinstance(c, dict)
+                  and c.get('id') == 'services.conflicts' and c.get('status') == 'warn'), None)
+    return {
+        **({'reinstated': reinstated} if reinstated else {}),
+        'services': [{**row, 'family_label': _family_label(row['family'])} for row in rows or ()],
+        'unresolved': [_unresolved_item(u, text) for u in completeness.get('unresolved_items') or []],
+        'not_listed': [n.get('label', '') for n in completeness.get('not_listed') or [] if n.get('label')],
+        'bundled': [{'label': b.get('label', ''), 'why': b.get('why', '')} for b in completeness.get('bundled') or []],
+        'conflicts': [], 'conflict_note': str(check.get('detail') or '') if check is not None else '',
+        'attributions': [],
+        'problems': [] if rows is not None else [review.UNREADABLE_EVENTS_BLOCKER],
+        'catalogue_version': completeness.get('catalogue_version', ''),
+        'inventory_version': EVENTS_INVENTORY_VERSION,
+        'reconciliation': 'missing' if not completeness or rows is None else 'reconciled',
     }
 
 
@@ -521,14 +559,41 @@ def _fact_title(fact):
 
 def _located(quotes, text, index):
     """The located spans of ``quotes`` that are exact slices of the revision text, each once, in text order, with
-    their page."""
+    their page. ``index``: _paging's (page index, page_of)."""
+    pages, page_of = index
     spans = {}
     for quote in quotes or ():
         for span in getattr(quote, 'spans', ()) or ():
             if _matches({'start': span.start, 'end': span.end, 'text': span.text}, text):
                 spans[(span.start, span.end)] = {'start': span.start, 'end': span.end, 'text': span.text,
-                                                 'page': candidates._page_of(index, span.start)}
+                                                 'page': page_of(pages, span.start)}
     return [spans[key] for key in sorted(spans)]
+
+
+def _paging(assessment, pages):
+    """(page index, page_of) of ``pages``: candidates._page_index and _page_of for a legacy assessment, as before; for
+    a new-path one the same reading made here (_page_index, _page_of: studio.candidates is the legacy reader's, and no
+    code of it runs on the new path, design/FINAL.md 10.1)."""
+    if readers.for_assessment(assessment).kind == readers.EVENTS:
+        return _page_index(pages), _page_of
+    return candidates._page_index(pages), candidates._page_of
+
+
+def _page_index(pages) -> tuple:
+    """(start, end, page) of each well-formed page span, by start (candidates._page_index's reading)."""
+    out = []
+    for page in pages or ():
+        if isinstance(page, dict):
+            start, end, number = page.get('start'), page.get('end'), page.get('page')
+        else:
+            start, end, number = getattr(page, 'start', None), getattr(page, 'end', None), getattr(page, 'page', None)
+        if type(start) is int and type(end) is int and type(number) is int and 0 <= start <= end:
+            out.append((start, end, number))
+    return tuple(sorted(out))
+
+
+def _page_of(index, position: int):
+    return next((number for start, end, number in index if start <= position < end), None)
 
 
 def _harness2(assessment):
@@ -558,7 +623,7 @@ def _peer_reviews(assessment, phase):
         return {'recorded': False, 'owed': due and not predates, 'predates': predates,
                 **({'held': True} if held else {}), **({'unowned': True} if unowned else {}), 'participants': []}
     revision = assessment.revision
-    text, index = revision.text, candidates._page_index(revision.pages)
+    text, index = revision.text, _paging(assessment, revision.pages)
     out = []
     for name in review.MODEL_PARTICIPANTS:
         record = records.get(name)
@@ -758,7 +823,29 @@ def snapshot(encounter, kind):
         'harness': bool(assessment.participants),
         # harness@2 (HARNESS.md 11-12), only where a model participant took part: a Corti-only snapshot is harness@1's
         **_harness2(assessment),
+        # the Gemini migration (design/FINAL.md 3.1, 8.3; D22): a new-path assessment's interpretation section, from the
+        # reader of its engine; a legacy snapshot carries none, so it is what it always was
+        **_interpretation(assessment),
     }
+
+
+def _interpretation(assessment) -> dict:
+    """{'interpretation': ...} of a new-path assessment for the operator's report - its D22 record, the event
+    inventory it was made from (id, versions, sha256, state) and the interpreter run that inventory was read from
+    (state, models, usage, estimated cost) - or {} for a legacy assessment."""
+    reader = readers.for_assessment(assessment)
+    if reader.kind != readers.EVENTS:
+        return {}
+    section = reader.interpretation_section(assessment)
+    inventory, run = section.get('inventory') or {}, section.get('run') or {}
+    return {'interpretation': {
+        'engine_version': section.get('engine_version', ''), 'record': section.get('record') or {},
+        'problems': list(section.get('problems') or ()),
+        'inventory': {key: inventory.get(key) for key in ('id', 'state', 'interpretation_version', 'inventory_version',
+                                                          'sha256')} if inventory else None,
+        'run': {key: run.get(key) for key in ('id', 'provider', 'state', 'requested_model', 'returned_model', 'usage',
+                                              'estimated_cost')} if run else None,
+        'hold': (section.get('hold') or {}).get('reason')}}
 
 
 def snapshot_digest(snap):
@@ -1189,7 +1276,8 @@ def _participants_section(snap):
             from .serializers import corti_unlisted_words  # local: the row's own sentences, each answer's count apart
 
             second = entry.get('unlisted_second_review') or 0
-            words = corti_unlisted_words(entry['unlisted_codes'] - second, second)
+            events = interpretation.is_new_assessment(_Engine(snap['assessment']['engine_version']))
+            words = corti_unlisted_words(entry['unlisted_codes'] - second, second, events=events)
             lines.append(f'    Not listed: {_indent(words, "      ")}')
         if entry['unverified_quotes']:
             lines.append(f'    Unverified quotes: {entry["unverified_quotes"]} (not found in the document; never used '
@@ -1544,6 +1632,8 @@ def _conflicts_section(snap):
         for side in conflict['sides']:
             lines.append(f'      {side["role"]} entry, {side["status"]}: ' + (f'"{_indent(side["text"], "        ")}"'
                                                                               if side['exact'] else NO_EXACT_PASSAGE))
+    if documented.get('conflict_note'):  # a new-path assessment's contradictions (its services.conflicts check)
+        lines.append(f'  - {_indent(documented["conflict_note"], "    ")}')
     closing = _unestablished(documented, 1, lines)
     if closing:
         return lines + [closing]
@@ -1590,6 +1680,36 @@ def _visible(part):
     return CONTROL.sub(lambda m: f'\\x{ord(m.group()):02x}', part)
 
 
+class _Engine:
+    """An engine version as interpretation.is_new_assessment reads one (a snapshot records the version only)."""
+
+    def __init__(self, engine_version):
+        self.engine_version = engine_version
+
+
+def _interpretation_section(snap):
+    section = snap['interpretation']
+    record, inventory, run = section.get('record') or {}, section.get('inventory') or {}, section.get('run') or {}
+    sentinel_record = record.get('sentinel') or {}
+    lines = [f'  Engine: {section.get("engine_version", "")} · interpretation {record.get("interpretation_version", "")}'
+             f' · inventory {record.get("inventory_version", "")}']
+    if inventory:
+        lines.append(f'  Event inventory: {inventory.get("id")} · {inventory.get("state")} · sha256 {inventory.get("sha256")}')
+    if run:
+        cost = run.get('estimated_cost')
+        lines.append(f'  Interpreter run: {run.get("id")} · {run.get("provider")} · {run.get("state")} · requested '
+                     f'{run.get("requested_model") or "-"} · returned {run.get("returned_model") or "-"}'
+                     + (f' · estimated cost USD {cost}' if cost else ''))
+    if sentinel_record:
+        lines.append(f'  Legacy-call sentinel: {sentinel_record.get("legacy_calls")} legacy calls recorded '
+                     f'(scope {sentinel_record.get("scope")}, {sentinel_record.get("tool")}, deny set '
+                     f'{sentinel_record.get("deny_size")}, positive control {sentinel_record.get("positive_control")})')
+    if section.get('hold'):
+        lines.append(f'  Interpreter hold set by this run: {section["hold"]}')
+    lines += [f'  Record problem: {problem}' for problem in section.get('problems') or ()]
+    return lines
+
+
 def render_txt(snap) -> bytes:
     kind = snap['kind']
     lines = [HEADLINES[kind], SYNTHETIC_LINE]
@@ -1621,6 +1741,8 @@ def render_txt(snap) -> bytes:
                  ('REVIEW PARTICIPANTS', _participants_section(snap))]
     if 'peer_review' in snap:
         sections += [(PEER_TITLE, _peer_section(snap)), (REFERENCES_TITLE, _references_section(snap))]
+    if 'interpretation' in snap:  # a new-path assessment's (FINAL 8.3), never in a legacy report
+        sections.append(('INTERPRETATION', _interpretation_section(snap)))
     sections += [('PROVIDER USAGE', _provider_section(snap)),
                  ('REFERENCE SOURCES', _reference_section(snap)),
                  ('REFERENCE RETRIEVAL', _retrieval_section(snap)),
@@ -1790,7 +1912,28 @@ def _filename(snap, fmt):
     return f'CPT-Studio-{snap["kind"]}-{snap["encounter"]["id"][:8]}-r{snap["revision"]["number"]}-{stamp}.{fmt}'
 
 
+OPERATOR_REPORT_GATE, CUSTOMER_REPORT_GATE = 'reports.generate', 'reports.generate_customer'  # FINAL 10.3
+
+
+def _new_path(encounter) -> bool:
+    """Whether the report would be made from a new-path assessment (the encounter's live assessment the events
+    engine's): its generation is then a write the legacy-call sentinel gates (FINAL 10.3)."""
+    return interpretation.is_new_assessment(review.live_assessment(encounter))
+
+
 def generate(encounter, kind, fmt, user, *, operator=False):
+    """_generate (below), gated on a new-path assessment (design/FINAL.md 10.3): its snapshot is made in a new_path
+    sentinel scope of its own, asked again as the last thing before the artifact's transaction commits - when it counted
+    an execution of the legacy reader, or this process cannot vouch for its count, nothing is stored, the trip is
+    audited ('sentinel.tripped') and sentinel.Tripped is raised. A legacy assessment's report is made as before."""
+    with readers.write_scope(OPERATOR_REPORT_GATE, _new_path(encounter)) as gate:
+        try:
+            return _generate(encounter, kind, fmt, user, operator=operator, gate=gate)
+        except readers.GateClosed as closed:
+            readers.refuse(OPERATOR_REPORT_GATE, closed, encounter=encounter, actor=user)
+
+
+def _generate(encounter, kind, fmt, user, *, operator, gate):
     """Snapshot -> render -> store the bytes once (immutable) with their sha256 and the snapshot digest. This is the
     operator's full report (audience 'operator'; CORE-UX-DESIGN.md 5): a member of the workspace may make one through
     this function, and a platform operator through /ops/ (``operator=True``: a grant, never a membership, is checked).
@@ -1816,6 +1959,7 @@ def generate(encounter, kind, fmt, user, *, operator=False):
             snapshot_sha256=snapshot_digest(snap), generated_by=user, audience=ReportArtifact.OPERATOR)
         audit.record(locked.workspace, 'report.generated', encounter=locked, actor=user, report=str(artifact.pk),
                      assessment=snap['assessment']['id'], kind=kind, fmt=fmt, audience=ReportArtifact.OPERATOR)
+        readers.check(gate)  # the last thing before the commit (FINAL 10.3): a refusal stores nothing
     return artifact
 
 
@@ -2010,6 +2154,15 @@ CUSTOMER_RENDERERS = {'txt': render_customer_txt, 'csv': render_customer_csv}
 
 
 def generate_customer(encounter, kind, fmt, user):
+    """_generate_customer (below), gated on a new-path assessment as generate is (design/FINAL.md 10.3)."""
+    with readers.write_scope(CUSTOMER_REPORT_GATE, _new_path(encounter)) as gate:
+        try:
+            return _generate_customer(encounter, kind, fmt, user, gate)
+        except readers.GateClosed as closed:
+            readers.refuse(CUSTOMER_REPORT_GATE, closed, encounter=encounter, actor=user)
+
+
+def _generate_customer(encounter, kind, fmt, user, gate):
     """The customer report: snapshot -> render -> store once with audience 'customer', its sha256 and the digest of
     its decision marker (customer_marker), read under the same encounter lock as the snapshot. Any active member of the
     workspace may make one (as before, viewers included)."""
@@ -2034,4 +2187,5 @@ def generate_customer(encounter, kind, fmt, user):
             generated_by=user, audience=ReportArtifact.CUSTOMER)
         audit.record(locked.workspace, 'report.generated', encounter=locked, actor=user, report=str(artifact.pk),
                      assessment=snap['assessment'], kind=kind, fmt=fmt, audience=ReportArtifact.CUSTOMER)
+        readers.check(gate)  # the last thing before the commit (FINAL 10.3)
     return artifact

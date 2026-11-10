@@ -195,6 +195,9 @@ STALE_ANSWER_BLOCKER = ('A detail answer was withdrawn or changed and the re-ass
                         'finished')
 DATE_CONFIRMATION_BLOCKER = ('The date of service entered at upload chooses between the dates the document states and '
                              'has not been confirmed')
+# The Gemini migration (design/FINAL.md 8.1; interpretation.overlay.UNREADABLE_BLOCKER, pinned equal by a test)
+UNREADABLE_EVENTS_BLOCKER = ("This assessment's record of the documented events could not be read; it cannot be approved "
+                             'or exported until it is assessed again.')
 
 
 def decision_holder(encounter, *, exclude=None):
@@ -254,30 +257,27 @@ def _standing(assessment):
 
 
 def _overlay_inputs(assessment, current):
-    """(proposals, stored rows, decided, keyword arguments) review_view.review_view reads ``assessment`` with: its stored
+    """(proposals, stored rows, decided, keyword arguments) the review overlay reads ``assessment`` with: its stored
     rows as they are. A code the engine excluded by a member's answer (questions.answered_away) reads as stored until
     the recompute an answer's withdrawal queued has run, whatever surface reads it - one source of truth (refutation
     cycle 2, answers W1, W5, W6: the cycle-1 reopen made this one row disagree with the five readers of the stored
     bucket). While that recompute is queued or stopped, a withdrawn answer the assessment read stays in effect; the
-    recompute is a visible job with Stop and Resume (API.md, the recorded limitation)."""
+    recompute is a visible job with Stop and Resume (API.md, the recorded limitation).
+
+    The Gemini migration (design/FINAL.md 8.2): the rows are read by the reader of the engine that made them
+    (interpretation.readers.for_assessment) - review_view's stored rows and the legacy services record for a legacy
+    assessment, exactly as before; the overlay's for a new-path one, over its event coding."""
+    from .interpretation import readers  # the one dispatch of read time (FINAL 8.2)
     from .jobs import context_service_date  # local import: jobs imports this module
-    from .validation import review_view  # local import: the validation layer is only needed with an assessment
 
     proposals = list(assessment.proposals.all())
     rows = {}
     for clarification in assessment.clarifications.all():  # every state: the open ones are the questions shown
         if clarification.proposal_id:
             rows.setdefault(clarification.proposal_id, []).append(clarification)
-    stored = [review_view.stored_from(proposal, rows.get(proposal.pk, [])) for proposal in proposals]
-    decided = {proposal.key: review_view.Decided(current[proposal.pk].action,
-                                                 tuple(current[proposal.pk].modifiers or ()))
-               for proposal in proposals if proposal.pk in current}
-    completeness = assessment.completeness or {}
-    # an inconsistent documented-service reading decided nothing (engine: usable is None), and nothing re-reads it here
-    services = None if completeness.get('inventory_problems') else assessment.services
-    return proposals, stored, decided, {'services': services, 'retrieval': assessment.retrieval,
-                                        'reference_sources': assessment.reference_sources,
-                                        'service_date': context_service_date(assessment.context)}
+    stored, decided, kwargs = readers.for_assessment(assessment).overlay_inputs(
+        assessment, proposals, rows, current, context_service_date(assessment.context))
+    return proposals, stored, decided, kwargs
 
 
 def question_pairs(assessment, proposals, views):
@@ -321,7 +321,7 @@ def answer_states(assessment, current=None, inputs=None):
     stored until the recompute that reads the new one has run); ``earlier``, (answer, why) of every other one: kept,
     shown as an earlier answer and never applied (answered to a question no longer asked, or asked differently).
     ([], [], []) for none. ``inputs``: _overlay_inputs(assessment, current), when the caller has them."""
-    from .validation import review_view  # local import: the validation layer is only needed with an assessment
+    from .interpretation import readers  # the one dispatch of read time (FINAL 8.2)
 
     if assessment is None or not getattr(assessment, 'pk', None):
         return [], [], []
@@ -336,7 +336,7 @@ def answer_states(assessment, current=None, inputs=None):
     if not rest:
         return applied, [], []
     proposals, stored, decided, kwargs = _overlay_inputs(assessment, current) if inputs is None else inputs
-    views = review_view.review_view(stored, decided, **kwargs, answers=())
+    views = readers.for_assessment(assessment).views(assessment, stored, decided, kwargs, answers=())
     bound, earlier = questions.bind(rest, questions.group(question_pairs(assessment, proposals, views)))
     unasked = [answer for answer, why in earlier if why == questions.NO_LONGER_ASKED]
     if unasked:
@@ -382,13 +382,13 @@ def _closed_pairs(assessment, proposals):
 def asked_fingerprints(assessment, current=None) -> dict:
     """{member key (code, family, fact): fingerprint} of every question ``assessment`` asks open, as the overlay asks
     it with the current decisions alone (question_pairs): what a member's answer saved now binds to (answers.py)."""
-    from .validation import review_view  # local import: the validation layer is only needed with an assessment
+    from .interpretation import readers  # the one dispatch of read time (FINAL 8.2)
 
     if assessment is None or not getattr(assessment, 'pk', None):
         return {}
     current = current_decisions(assessment) if current is None else current
     proposals, stored, decided, kwargs = _overlay_inputs(assessment, current)
-    views = review_view.review_view(stored, decided, **kwargs, answers=())
+    views = readers.for_assessment(assessment).views(assessment, stored, decided, kwargs, answers=())
     return questions.group(question_pairs(assessment, proposals, views))
 
 
@@ -414,15 +414,18 @@ def effective_view(assessment, current=None):
     """{proposal key: review_view.View} of ``assessment`` as its current decisions and member answers leave it
     (studio.validation.review_view): each proposal's status, checks, open questions, approve gate, readiness blocker,
     modifier review and summary. With no decision and no answer every view equals its stored proposal. ``current``:
-    current_decisions(assessment), when the caller has it. {} for no assessment, or one never persisted."""
-    from .validation import review_view  # local import: the validation layer is only needed with an assessment
+    current_decisions(assessment), when the caller has it. {} for no assessment, or one never persisted. The Gemini
+    migration (design/FINAL.md 8.1-8.2): read by the reader of the engine that made the assessment - review_view for a
+    legacy one, the new path's overlay for a new-path one - and the same View shape either way."""
+    from .interpretation import readers  # the one dispatch of read time (FINAL 8.2)
 
     if assessment is None or not getattr(assessment, 'pk', None):
         return {}
     current = current_decisions(assessment) if current is None else current
     inputs = _overlay_inputs(assessment, current)
     _, stored, decided, kwargs = inputs
-    return review_view.review_view(stored, decided, **kwargs, answers=_member_answers(assessment, current, inputs))
+    return readers.for_assessment(assessment).views(assessment, stored, decided, kwargs,
+                                                    answers=_member_answers(assessment, current, inputs))
 
 
 def open_questions_of(assessment, views=None):
@@ -430,11 +433,11 @@ def open_questions_of(assessment, views=None):
     scope, family, fact, question, reason, code}: the encounter's and the documented services' (one a member answered for
     the service is closed), each proposal's as its view leaves it (a released one dropped, a recomputed one in its new
     words), then each one the view adds (id '').  With no decision and no answer: every open Clarification row."""
-    from .validation import review_view  # local import
+    from .code_shapes import service_answers  # the one implementation, review_view's own (ADJUDICATION R-2)
 
     views = effective_view(assessment) if views is None else views
     proposals = {proposal.pk: proposal for proposal in assessment.proposals.all()}
-    closed = review_view.service_answers(_member_answers(assessment))  # bound to the question it answered (U11)
+    closed = service_answers(_member_answers(assessment))  # bound to the question it answered (U11)
     out = []
     for row in assessment.clarifications.filter(state=Clarification.OPEN).order_by('created_at', 'pk'):
         entry = {'id': str(row.pk), 'scope': row.scope, 'family': row.family, 'fact': row.fact,
@@ -680,10 +683,34 @@ def _chosen_modifiers(value):
     return chosen
 
 
+DECISION_GATE = 'review.record_decision'  # the sentinel write gate of a decision on a new-path assessment (FINAL 10.3)
+
+
 def record_decision(*, encounter, proposal, action, user, membership, note='', acknowledgement='', modifiers=()):
     """Append one decision after re-validating it under the encounter lock, against the review overlay as the current
     decisions leave it (effective_view). ``modifiers``: on an approval only, () or the ONE modifier the reviewer chose,
-    and only where the proposal's view offers a separate-lesion modifier review (CORE-UX-DESIGN.md 4); never prefilled."""
+    and only where the proposal's view offers a separate-lesion modifier review (CORE-UX-DESIGN.md 4); never prefilled.
+
+    The Gemini migration (design/FINAL.md 10.3): a decision on a new-path assessment is a write the legacy-call sentinel
+    gates. It is made in a new_path scope of its own, asked again as the last thing before its transaction commits: when
+    the scope (with the request's around it) counted an execution of the legacy reader, or this process cannot vouch
+    for its count, nothing is recorded, the trip is audited ('sentinel.tripped') and sentinel.Tripped is raised. The
+    rules are unchanged, and a decision on a legacy assessment is made exactly as before."""
+    from .interpretation import readers  # local import: the write gate of the new path
+
+    gated = interpretation_labels.is_new_assessment(proposal.assessment)
+    with readers.write_scope(DECISION_GATE, gated) as gate:
+        try:
+            return _record_decision(encounter=encounter, proposal=proposal, action=action, user=user,
+                                    membership=membership, note=note, acknowledgement=acknowledgement,
+                                    modifiers=modifiers, gate=gate)
+        except readers.GateClosed as closed:
+            readers.refuse(DECISION_GATE, closed, encounter=encounter, actor=user)
+
+
+def _record_decision(*, encounter, proposal, action, user, membership, note, acknowledgement, modifiers, gate):
+    from .interpretation import readers  # local import: the write gate of the new path
+
     chosen = _chosen_modifiers(modifiers)
     with transaction.atomic():
         locked = _lock(encounter)
@@ -724,6 +751,7 @@ def record_decision(*, encounter, proposal, action, user, membership, note='', a
                      proposal=str(proposal.pk), assessment=str(assessment.pk), action=action, code=proposal.code,
                      **({'modifiers': list(chosen)} if chosen else {}))
         encounter.state = refresh_state(locked)
+        readers.check(gate)  # the last thing before the commit: a refusal rolls the decision back whole
     return decision
 
 
@@ -1281,9 +1309,14 @@ def _reads_a_withdrawn_answer(assessment) -> bool:
 
 def _assessment_blockers(encounter, assessment):
     from . import answers  # local import: the details flow reads this module
+    from .interpretation import readers  # local import: the one dispatch of read time (FINAL 8.2)
     blockers = []
     if not is_final(assessment):
         blockers.append(NOT_FINAL_BLOCKER)
+    if readers.for_assessment(assessment).unreadable(assessment):
+        # FINAL 8.1: a new-path assessment whose record of the documented events this release cannot read is never
+        # approved or exported until it is assessed again (the overlay kept its stored checks, and released nothing)
+        blockers.append(UNREADABLE_EVENTS_BLOCKER)
     if answers.date_confirmation_open(encounter):
         blockers.append(DATE_CONFIRMATION_BLOCKER)
     if assessment.context_id != encounter.current_context_id:
@@ -1462,11 +1495,11 @@ def reviewed_completeness(assessment, current=None):
     reinstated = reinstated_codes(assessment, current) if completeness and getattr(assessment, 'pk', None) else []
     if not reinstated:
         return completeness
-    from .validation import engine  # local import: the engine is only needed when a code was reinstated
+    # the reader of the engine that made it (FINAL 8.1-8.2): engine.reviewed_completeness over the legacy services record,
+    # or coverage re-run over the new path's frozen event inventory
+    from .interpretation import readers  # local import: only needed when a code was reinstated
     proposals = list(assessment.proposals.exclude(bucket=ALTERNATIVE))
-    return engine.reviewed_completeness(
-        assessment.services, completeness, [(p.code, p.family) for p in proposals if p.bucket == SELECTED], reinstated,
-        [(p.support or {}).get('service') for p in proposals if (p.support or {}).get('service')])
+    return readers.for_assessment(assessment).reviewed_completeness(assessment, completeness, proposals, reinstated)
 
 
 def coding_completeness(encounter):
@@ -1807,11 +1840,12 @@ def participant_of(run):
 
 def run_mode(run):
     """'replay' for a recorded response, which never presents as live output: Corti's replay provider, or a harness
-    participant whose adapter ran in replay mode (its run's scope records the mode), in either phase; 'live'
-    otherwise."""
+    participant whose adapter ran in replay mode (its run's scope records the mode), in either phase, or the interpreter
+    in replay mode (the Gemini migration: an interpretation run's scope records its mode too); 'live' otherwise."""
     if run.provider == 'replay':
         return 'replay'
-    if run.purpose in (ProviderRun.INDEPENDENT, ProviderRun.PEER_REVIEW) and (run.scope or {}).get('mode') == 'replay':
+    if (run.purpose in (ProviderRun.INDEPENDENT, ProviderRun.PEER_REVIEW, interpretation_labels.PURPOSE)
+            and (run.scope or {}).get('mode') == 'replay'):
         return 'replay'
     return 'live'
 
@@ -1853,12 +1887,12 @@ def listed_codes(record):
     descriptor say, so it is never shown, never truncated (I9; refutation r1 IND-1: the participants row served whatever
     text a participant wrote as a code); how many there are is unlisted_count's. Read when serving, so records already
     stored are covered."""
-    from .validation import engine  # local import: only the engine's rule is needed here
+    from .code_shapes import participant_listable  # the engine's own rule, re-homed (ADJUDICATION R-2)
 
     codes = []
     for item in record.get('codes') or []:
         code = item.get('code') if isinstance(item, dict) else None
-        if engine.participant_listable(code) and code not in codes and item.get('quote'):
+        if participant_listable(code) and code not in codes and item.get('quote'):
             # a code its reading listed with no quote found in the document is not one it proposed (the engine counts
             # no such entry; refutation round 4, truth-2: "Codes it proposed: 45385, 45380." beside the card's "Astra
             # did not propose it")
@@ -1875,8 +1909,8 @@ def unlisted_count(assessment, record):
     so '45385-59' given twice was 1 on the row beside the summary's 2). 0 for an entry whose reading was not used (the
     engine read none of its codes). None when that reading cannot be read again as recorded: the row then states no
     count rather than another one."""
+    from .code_shapes import participant_unlisted_count  # the engine's own count, re-homed (ADJUDICATION R-2)
     from .jobs import recorded_reading  # local import: jobs imports this module
-    from .validation import engine  # local import: only the engine's count is needed here
 
     if record.get('state') != 'read':
         return 0
@@ -1885,7 +1919,7 @@ def unlisted_count(assessment, record):
         log.warning('the frozen reading of %s on assessment %s could not be read as recorded', record.get('name'),
                     assessment.pk)
         return None
-    return engine.participant_unlisted_count(reading.codes)
+    return participant_unlisted_count(reading.codes)
 
 
 def proposed_by(proposal):

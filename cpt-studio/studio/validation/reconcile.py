@@ -30,6 +30,9 @@ from studio.gi.services import (ACTS, FAMILY_REGIONS, INSTRUMENT_FAMILY, INSTRUM
                                  listed_in_doubt, reflow)
 from studio.types import Check, ClarificationSpec, EvidenceSpan, PageSpan, Span
 from studio.validation import checks
+# Gemini migration (design/ADJUDICATION.md R-2): the act and service-kind labels are re-homed in studio/code_shapes.py;
+# each name below is that module's own object, imported back so that every reader of this module reads the same one.
+from studio.code_shapes import ACT_LABELS, SERVICE_LABELS, act_label, kind_label
 
 SOURCE = f'cpt-studio:{catalogue.CATALOGUE_VERSION}'
 INVENTORY_SOURCE = 'cpt-studio:gi-services@7'  # the inventory's label (services.INVENTORY_VERSION)
@@ -43,36 +46,6 @@ FAILED_ATTEMPT = re.compile(r"\b(?:unable|could\s+not|couldn['\u2019]t|cannot|ca
 # Physiology studies whose coded act is the study itself (the act a code of the family accounts for is the service).
 STUDY_ACTS = {'gi.capsule': 'capsule_study', 'gi.motility': 'manometry', 'gi.reflux': 'ph_monitoring',
               'gi.anorectal': 'manometry'}
-ACT_LABELS = {
-    'biopsy': 'forceps biopsy', 'hot_biopsy': 'hot forceps removal', 'snare': 'snare removal', 'emr': 'endoscopic '
-    'mucosal resection', 'esd': 'endoscopic submucosal dissection', 'ablation': 'ablation', 'bleeding_control':
-    'bleeding control', 'clip': 'clip placement', 'tattoo': 'submucosal tattoo', 'injection': 'submucosal injection',
-    'band_ligation': 'band ligation', 'dilation': 'dilation', 'stent': 'stent placement', 'foreign_body':
-    'foreign-body removal', 'sphincterotomy': 'sphincterotomy', 'stone_extraction': 'stone removal', 'lithotripsy':
-    'lithotripsy', 'cholangioscopy': 'cholangioscopy', 'cannulation': 'cannulation', 'peg': 'gastrostomy (PEG) '
-    'placement', 'tube_replacement': 'feeding-tube replacement', 'tube_placement': 'tube placement', 'specimen': 'specimen collection',
-    'myotomy': 'myotomy', 'decompression': 'decompression', 'fundoplication': 'transoral fundoplication',
-    'capsule_study': 'capsule study', 'manometry': 'manometry', 'ph_monitoring': 'pH / impedance monitoring',
-    'rectal_sensation': 'rectal sensation and compliance testing', 'moderate_sedation': 'moderate sedation',
-    'fna': 'fine-needle aspiration or biopsy', 'eus_exam': 'endosonographic examination', 'em_visit': 'office visit',
-    'drainage': 'drainage', 'stent_removal': 'stent removal', 'stent_exchange': 'stent exchange',
-    'pressure_measurement': 'pressure measurement', 'balloon_expulsion': 'balloon expulsion test',
-}
-SERVICE_LABELS = {'egd': 'upper endoscopy', 'esophagoscopy': 'esophagoscopy', 'poem': 'peroral endoscopic myotomy',
-                  'colonoscopy': 'colonoscopy', 'flex_sig': 'flexible sigmoidoscopy', 'eus': 'endoscopic ultrasound',
-                  'ercp': 'ERCP', 'enteroscopy': 'enteroscopy', 'capsule': 'capsule endoscopy',
-                  'manometry': 'manometry', 'ph_study': 'pH / impedance study', 'anorectal_testing':
-                  'anorectal testing', 'feeding_tube': 'feeding-tube procedure', 'office_em': 'office / outpatient '
-                  'visit'}
-
-
-def act_label(kind: str) -> str:
-    return ACT_LABELS.get(kind, kind.replace('_', ' '))
-
-
-def kind_label(kind: str) -> str:
-    """A service kind's label, as service_label words a documented service's own kind."""
-    return SERVICE_LABELS.get(kind, kind.replace('_', ' '))
 
 
 def mention_label(kind: str) -> str:

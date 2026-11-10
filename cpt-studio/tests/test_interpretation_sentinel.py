@@ -57,8 +57,8 @@ NEW, LEGACY, OTHER = sentinel.NEW_PATH, sentinel.LEGACY_RECORD, sentinel.OTHER
 # takes a deliberate edit of both
 SIZES = {'studio/gi/__init__.py': 0, 'studio/gi/clauses.py': 31, 'studio/gi/context.py': 219, 'studio/gi/cues.py': 14,
          'studio/gi/detect.py': 766, 'studio/gi/purpose.py': 5, 'studio/gi/sections.py': 71,
-         'studio/gi/services.py': 456, 'studio/gi/structure.py': 152, 'studio/validation/engine.py': 457,
-         'studio/validation/reconcile.py': 109, 'studio/validation/review_view.py': 47,
+         'studio/gi/services.py': 456, 'studio/gi/structure.py': 152, 'studio/validation/engine.py': 452,
+         'studio/validation/reconcile.py': 107, 'studio/validation/review_view.py': 45,
          'studio/validation/rationale.py': 7, 'studio/candidates.py': 45, 'studio/validation/checks.py': 164,
          'studio/jobs.py': 5}
 # FINAL 7.1's pure, text-free checks, written out (R-4: incomplete_check is not among them)
@@ -140,7 +140,7 @@ class DenySetTests(SentinelCase):
         status = sentinel.status()
         self.assertEqual(sentinel.PINNED_SIZES, SIZES)
         self.assertEqual(status['sizes'], SIZES)
-        self.assertEqual((status['deny_size'], sentinel.DENY_SIZE), (2548, 2548))
+        self.assertEqual((status['deny_size'], sentinel.DENY_SIZE), (2539, 2539))
         self.assertEqual((status['positive_control'], status['tool'], status['tool_id']),
                          ('ok', 'sys.monitoring', 4))
         self.assertEqual(sys.monitoring.get_tool(4), 'cpt-studio-sentinel')
@@ -241,7 +241,7 @@ class DenySetTests(SentinelCase):
                                    cwd=APP, env=environment)
         self.assertEqual(completed.returncode, 0, completed.stderr[-2000:])
         found = json.loads(completed.stdout.strip().splitlines()[-1])
-        self.assertEqual((found['state'], found['reason'], found['size'], found['control']), ('ok', '', 2548, 'ok'))
+        self.assertEqual((found['state'], found['reason'], found['size'], found['control']), ('ok', '', 2539, 'ok'))
         self.assertEqual(found['after'], list(sentinel.DENY_MODULES) + [sentinel.CHECKS_MODULE, sentinel.JOBS_MODULE])
 
     def test_the_checks_split_is_the_final_allowlist_and_denies_final_10_1s_list(self):
@@ -314,7 +314,7 @@ class DenySetTests(SentinelCase):
         self.assertFalse(denied(review_view.View.__init__))  # building a View is allowed (dataclass-generated)
         # and what is denied, is: whole legacy modules, a nested code object, the checks readers, the archived stages
         for fn in (detect.route, services.build, gi_context.extract_context, engine.reviewed_completeness,
-                   reconcile.act_label, review_view.review_view, rationale.alternative_note, checks.evidence_readings,
+                   reconcile.mention_label, review_view.review_view, rationale.alternative_note, checks.evidence_readings,
                    jobs._assess_child, jobs._analyze_child, jobs._route_child, jobs.make_context, jobs._merged_facts):
             with self.subTest(fn.__qualname__):
                 self.assertTrue(denied(fn))
@@ -575,7 +575,7 @@ class GateTests(TestCase):
         self.assertEqual({key: data[key] for key in ('entry', 'reason', 'refused', 'scope', 'label', 'counts',
                                                      'install', 'deny_size')},
                          {'entry': 'persist_assessment', 'reason': 'executed', 'refused': True, 'scope': 'assess',
-                          'label': NEW, 'counts': {NEW: 1}, 'install': 'ok', 'deny_size': 2548})
+                          'label': NEW, 'counts': {NEW: 1}, 'install': 'ok', 'deny_size': 2539})
         self.assertEqual(len(data['entry_points']), 1)
         self.assertRegex(data['entry_points'][0], r'^tests/test_interpretation_sentinel\.py:\d+ legacy_call -> '
                                                   r'studio/gi/cues\.py:\d+ page_number_line$')
@@ -674,7 +674,7 @@ class GateTests(TestCase):
     def test_the_d22_record(self):
         with sentinel.scope(NEW, entry='assess') as opened:
             self.assertEqual(sentinel.record(), {'legacy_calls': 0, 'scope': 'assess', 'tool': 'sys.monitoring',
-                                                 'deny_size': 2548, 'positive_control': 'ok'})
+                                                 'deny_size': 2539, 'positive_control': 'ok'})
             with sentinel.scope(NEW, entry='child'):
                 legacy_call()
             legacy_call()
@@ -855,7 +855,7 @@ class CallCheckTests(SentinelCase):
         with sentinel.call_checks(), sentinel.scope(NEW, entry='the legacy chain') as opened:
             services.build(TEXT, service_date=None)
             detect.route(TEXT, None)
-            reconcile.act_label('cold_snare')
+            reconcile.mention_label('cold_snare')
             structure._course_start()
             structure._course_start()
         kinds = opened.by_kind()

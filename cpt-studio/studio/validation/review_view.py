@@ -47,6 +47,10 @@ from studio.gi.profiles import PROFILES
 from studio.reference.store import PFS
 from studio.types import CodeReference, ReferenceSourceInfo, from_jsonable, to_jsonable
 from studio.validation import checks, engine, reconcile
+# Gemini migration (design/ADJUDICATION.md R-2): the member answers that close a documented service's question are
+# re-homed in studio/code_shapes.py; each name below is that module's own object, imported back so that every reader of
+# this module reads the same one.
+from studio.code_shapes import UNAVAILABLE_ANSWERS, _field, service_answers
 
 APPROVE, REJECT, REINSTATE, REVOKE, CONFIRM = 'approve', 'reject', 'reinstate', 'revoke', 'confirm'
 SELECTED, EXCLUDED, ALTERNATIVE = 'selected', 'excluded', 'alternative'
@@ -63,7 +67,6 @@ SEPARATE_EM_FACT = 'separate_em'  # checks.separate_em_clarification's fact: the
 # leaves the effective set, needs no decision and is never approvable, until the answer is revoked. No other value is
 # read here (a context fact goes through the context path and a new assessment).
 DETAIL_UNAVAILABLE = 'detail_unavailable'
-UNAVAILABLE_ANSWERS = ('not_documented', 'cannot_confirm')
 ANSWER_WORDS = {'not_documented': 'not documented', 'cannot_confirm': 'cannot be confirmed'}
 # The checks the engine records after a base hold (engine._proposal): an added base check goes before the first of them.
 _AFTER_BASE = ('facts.required', 'em.same_day_coverage', SAME_DAY_EM_GATE, 'em.same_day_procedure', DATE_CHECK,
@@ -178,10 +181,6 @@ def _inventory(services):
         return None
 
 
-def _field(answer, name):
-    return answer.get(name) if isinstance(answer, Mapping) else getattr(answer, name, None)
-
-
 def proposal_answers(answers) -> dict:
     """{(code, family, fact): value} of the current member answers given for a code (P5 binds an answer to the code,
     family and fact it was asked of, never to a key) that leave its detail unavailable."""
@@ -191,13 +190,6 @@ def proposal_answers(answers) -> dict:
         if code and value in UNAVAILABLE_ANSWERS:
             out.setdefault((str(code), str(_field(answer, 'family') or ''), str(_field(answer, 'fact') or '')), value)
     return out
-
-
-def service_answers(answers) -> set:
-    """{(family, fact)} of the current member answers given for a documented service (no code): they close that
-    question and change nothing else."""
-    return {(str(_field(answer, 'family') or ''), str(_field(answer, 'fact') or '')) for answer in answers or ()
-            if not _field(answer, 'code') and _field(answer, 'value') in UNAVAILABLE_ANSWERS}
 
 
 def answered_by_engine(p: Stored) -> tuple[str, str]:

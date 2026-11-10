@@ -34,6 +34,10 @@ from studio.types import (CONFIDENCES, CONTEXT_FACTS, PARTICIPANT_STATES, PEER_P
                           ServiceMention, Span, sha256_json)
 from studio.gi.detect import DOUBT_PREFIX, UNESTABLISHED, closed_attempt_failure
 from studio.validation import checks, questions, rationale, reconcile
+# Gemini migration (design/ADJUDICATION.md R-2): the code shapes are re-homed in studio/code_shapes.py; each name below
+# is that module's own object, imported back so that every reader of this module reads the same one.
+from studio.code_shapes import (MAX_LISTED_CODE, _listable, participant_listable, participant_unlisted_codes,
+                                participant_unlisted_count)
 
 ENGINE_VERSION = 'cpt-studio-validation@10'  # @10: the walk round (2026-11-07: a cited failed attempt set aside beside
 # the code's own act, _set_aside_attempts)
@@ -45,7 +49,6 @@ READ_DOCUMENTED_SERVICES = True
 PROVIDER_STATUSES = ('succeeded', 'not_run', 'failed', 'unknown')
 EXTRACTION_STATUSES = ('ok', 'partial', 'failed')
 NO_EVIDENCE = 'No exact source evidence'
-MAX_LISTED_CODE = 10  # what a stored proposal code holds; codes are never truncated
 OTHER_GI = 'gi.other'
 # Families gi-profiles@3 carved out of earlier ones. Their codes keep the routing-era reading of the family they were
 # routed to before (gi.other's doubt guards, the upper GI finding), as the second opinion that can only hold.
@@ -3863,44 +3866,6 @@ LISTED_NOT_PROPOSED = 'with no quote found verbatim in the document, so not prop
 LISTED_IN_SUMMARY = 8  # codes a participant's summary sentence names; the rest are counted
 MODIFIER_SHAPE = re.compile(r'[A-Z0-9]{2}', re.A)  # a modifier as a participant may state one; anything else is counted
 OPEN_QUESTION = 'open question'  # the words review.coding_completeness drops a completeness reason for
-
-
-def _listable(code) -> bool:
-    return isinstance(code, str) and 0 < len(code) <= MAX_LISTED_CODE
-
-
-def participant_listable(code) -> bool:
-    """Whether the engine reads a model participant's ``code`` at all: only in a code's shape, a CPT code's or an HCPCS
-    Level II code's (participants.peer.code_shaped, the one rule by which a peer request and the owner's trace show a
-    code as given; refutation round 4, the session's D9). Any other code a participant gives is counted, as the proposal
-    provider's codes that cannot be listed are, and never listed: no proposal, alternative, position or summary names
-    it, so it reaches neither the reconciliation, the reference retrieval (recorded for proposals only), the page nor
-    the reports (shapes-1: 'W/LES(S)' passed _listable, the proposal provider's rule of 1 to MAX_LISTED_CODE characters,
-    and reached all of them as a participant's alternative). The proposal provider's own rule is I1's and does not
-    change."""
-    from studio.participants.peer import code_shaped  # local: the peer module's rule (it imports the HTTP layer)
-
-    return code_shaped(code)
-
-
-def participant_unlisted_count(entries) -> int:
-    """How many of a model participant's code entries - a reading's codes, or a peer review's additional codes - the
-    engine does not read (participant_listable): every entry, a value given twice counted twice, as the proposal
-    provider's codes that cannot be listed are counted one per code its answer returned. The one count of them
-    (refutation round 5, the session's D13): _Harness states it in participants.summary, and a participant row states it
-    re-read from the frozen reading (review.unlisted_count) - the row had counted the assessment's record of the reading,
-    which keeps one entry per code value, so '45385-59' given twice was 2 in the summary and 1 on the row."""
-    return sum(1 for item in entries if not participant_listable(item.code))
-
-
-def participant_unlisted_codes(count: int, who: str = 'It') -> str:
-    """The sentence for codes a model participant gave that the engine does not read (participant_listable): counted,
-    never named or truncated. The proposal provider's (checks.unlisted_codes: "empty, or longer than 10 characters") is
-    not true of a participant's 'W/LES(S)', 8 characters in no code's shape."""
-    pronoun = 'It is' if count == 1 else 'They are'
-    return (f'{who} returned {checks.plural(count, "code")} that cannot be listed: not in the shape of a CPT code '
-            '(four digits, then a digit or a capital letter) or of an HCPCS Level II code (a capital letter, then four '
-            f'digits). {pronoun} not shown and never truncated.')
 
 
 # A participant's position on a code only the proposal provider can list - one in no code's shape - when the participant

@@ -200,7 +200,7 @@ class Sentinel(SimpleTestCase):
 
     def test_the_instrument_is_live_a_planted_legacy_call_trips_it(self):
         with self.assertRaises(AssertionError) as caught, sentinel.strict('S08 positive control'):
-            reconcile.act_label('snare')  # a denied module's function, as a mutated engine would call it
+            reconcile.mention_label('snare')  # a denied module's function, as a mutated engine would call it
         self.assertIn('reconcile.py', str(caught.exception))
 
 
