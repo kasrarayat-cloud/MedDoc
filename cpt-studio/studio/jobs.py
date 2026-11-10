@@ -1,6 +1,7 @@
 """Pipeline jobs: extract -> interpret -> analyze -> predict [-> astra -> fable -> assess #1 -> astra_peer -> fable_peer]
 -> assess [-> review2 -> assess] (ARCHITECTURE section 5; the harness participants' stages, HARNESS.md 2, 11 and 12, run
-only when configured; the Gemini migration's interpret stage and derive-only analyze, design/FINAL.md 6.1-6.5, 6.9).
+only when configured; the Gemini migration's interpret stage and derive-only analyze, design/FINAL.md 6.1-6.5, 6.9, and
+its events assess, peers, second review, context save and recompute, 6.6-6.10).
 
 One worker claims queued jobs with SELECT ... FOR UPDATE SKIP LOCKED. Every
 stage is idempotent (unique idempotency key), must start before its deadline,
@@ -27,8 +28,10 @@ from django.utils import timezone
 
 from . import audit, bounded, interpretation, models, participants, review
 from .interpretation import adapter as interpretation_adapter
+from .interpretation import assess as events_engine
 from .interpretation import facts as interpretation_facts
 from .interpretation import holds as interpretation_holds
+from .interpretation import report as interpretation_report
 from .interpretation import sentinel
 from .interpretation import store as inventory_store
 from .gi import context as gi_context
@@ -41,6 +44,7 @@ from .providers.base import ProviderUnavailable
 from .participants import http as participant_http
 from .participants import loop as participant_loop
 from .participants import peer as participant_peer
+from .participants import prompt as participant_prompt
 from .reference import passages as reference_passages
 from .reference import tools as reference_tools
 from .reference.store import prefetched_lookup, selected_codes
@@ -1028,6 +1032,27 @@ def _earlier_reading(job):
     return None
 
 
+def _legacy_reading_allowed() -> bool:
+    """Whether the LEGACY chain may run on a context that is not a gemini context: never on this image (design/FINAL.md
+    6.7, 6.10 and 9). So an assess, a participant's first reading or peer review, or a second review given such a
+    context ends StageCancelled (_refuse_legacy_context; resumable: a member's Resume has the revision read again); a
+    context save on a revision with no gemini context stores the member's values and has the revision read
+    (change_context); an answer's recompute leaves the answer on the legacy overlay (recompute_after_answers); a
+    re-assessment from retained answers refuses a legacy final (reassess_retained); and no second review is offered on
+    one (_second_review_bounds). Replaced by the test-only legacy chain (tests/legacy_chain.py, slice S15: True), which
+    is the only way the legacy branches after each of those tests still run; no production switch exists (FINAL
+    16.14)."""
+    return False
+
+
+def _refuse_legacy_context(job):
+    """FINAL 6.7 and 9: a stage given no context, or one that is not a gemini context - queued before the install, a
+    Resume of one, a stale sweep's successor - ends StageCancelled (resumable) on this image: the legacy child never
+    runs and nothing is sent on it (_legacy_reading_allowed)."""
+    if (job.context is None or not interpretation.is_new_context(job.context)) and not _legacy_reading_allowed():
+        raise StageCancelled(EARLIER_READING_MESSAGE)
+
+
 def _route_by_stand_in(job, context, service_date):
     """The RoutingRun a predict on a gemini context needs for ``service_date`` (FINAL 6.5): the stand-in derived from the
     context's own inventory (Job.context names it: never the newest inventory), recorded once per inventory and date
@@ -1673,6 +1698,7 @@ def stage_participant(job):
         return {'skipped': 'a newer revision exists; nothing was sent'}
     if context is None or context.revision_id != revision.pk or encounter.current_context_id != context.pk:
         return {'skipped': 'the context is not the current one for this revision; nothing was sent'}
+    _refuse_legacy_context(job)  # FINAL 6.6 and 9: nothing is sent on a context that is not a gemini context
     try:
         participant = participants.get_participant(name)
     except ProviderUnavailable as exc:
@@ -2250,6 +2276,7 @@ def stage_peer(job):
         return {'skipped': 'a newer revision exists; nothing was sent'}
     if context is None or context.revision_id != revision.pk or encounter.current_context_id != context.pk:
         return {'skipped': 'the context is not the current one for this revision; nothing was sent'}
+    _refuse_legacy_context(job)  # FINAL 6.6 and 9: nothing is sent on a context that is not a gemini context
     first = _first_assessment(job)
     if first is None or first.context_id != context.pk:
         return {'peer': job.kind, 'state': 'not_run', 'reason': PEER_NEWER}
@@ -2277,8 +2304,11 @@ def stage_peer(job):
                                                      mode=participant.mode))
     kind, _, _ = _participant_document(revision)
     try:
-        request = participant.build_peer_request(revision.text, _participant_pages(revision), kind, own, peers,
-                                                 cpt_studio, frozen)
+        # FINAL 6.6 (D9): CPT Studio's reading after a new-path assess #1 is headed as what it is - its reading after
+        # its first assessment; a legacy assess #1's keeps the legacy heading, so its request is byte-identical
+        with participant_prompt.using_reading_heading(_peer_reading_heading(first)):
+            request = participant.build_peer_request(revision.text, _participant_pages(revision), kind, own, peers,
+                                                     cpt_studio, frozen)
     except ProviderUnavailable as exc:
         return _peer_done(job, first, _peer_not_sent(job, first, name, participant, None, str(exc), started=False,
                                                      mode=participant.mode))
@@ -2322,6 +2352,15 @@ def stage_peer(job):
                 scope={'mode': participant.mode, **scope}, execute_tool=reference_tools.executor(encounter.workspace),
                 continues=stopped)
     return _peer_done(job, first, run)
+
+
+def _peer_reading_heading(first) -> str:
+    """The heading of CPT Studio's reading in a peer request made for assess #1 ``first`` (FINAL 6.6, D9): the events
+    engine's assessment is CPT Studio's reading after its first assessment; any other keeps the legacy heading
+    (participants.prompt.READING_HEADINGS). The participants' adapter versions are not bumped: their stored answers are
+    read as before (prompt.py's recorded exception)."""
+    return (participant_prompt.EVENTS_READING_HEADING if interpretation.is_new_assessment(first)
+            else participant_prompt.READING_HEADING)
 
 
 def _pk(run):
@@ -2922,11 +2961,191 @@ def _provider_inputs(run):
     return 'succeeded', normalizer_for(run.provider)(request, data)
 
 
+# --- assess on the new path (design/FINAL.md 6.7, as design/ADJUDICATION.md amends it) -------------------------------
+#
+# stage_assess dispatches on the context it was given: a gemini context's assess is _assess_events - the events engine
+# (studio.interpretation.assess) over the context's EventInventory, in one bounded child counted against the stage's
+# new_path scope (sentinel.run_counted), its RoutingRun the context's derived stand-in for the date (looked up, never
+# recomputed), and the assessment recorded with its inventory and its D22 record through persist_assessment's sentinel
+# write gate. Any other context ends StageCancelled (resumable): this image never runs the legacy child
+# (_refuse_legacy_context). What an events assess reads, by its key's marks (_events_mode):
+# - FIRST: the inventory the context names, the Corti run (Job.provider_run), each configured participant's newest
+#   phase-1 run, the standing member answers; it queues the first owed peer stage, as before;
+# - FINAL (':q:'): what assess #1 read, by the ids it recorded, plus the peer runs made for it; assess #1 must have been
+#   made from the context's inventory, or a newer chain owns the revision (ASSESS_MOVED); it queues nothing;
+# - AGAIN (':c:': an answer's recompute, a retained re-assessment): the final's inventory and runs by id; nothing is
+#   sent and nothing queued (D8);
+# - REVIEW2 (':review2:', the follow-up of the bounded second review): as FINAL reads - the inputs the assessment it
+#   follows recorded, by id, its peer runs included - plus the second review, merged by the events engine (FINAL 7.10);
+#   it queues nothing.
+
+REVIEW2 = 'review2'  # what an assess reads (_events_mode): the follow-up of a bounded second review
+REVIEW2_MARK = ':review2:'
+ASSESS_SCOPE = 'assess'  # the D22 record's sentinel scope name (FINAL 10.3)
+CONTEXT_INVENTORY_MESSAGE = ('The context names no event inventory of this revision, so nothing was assessed from '
+                             'it.')
+CONTEXT_DERIVATION_MESSAGE = ('The context is not what its event inventory and its member values derive, so nothing '
+                              'was assessed from it.')
+STAND_IN_MISSING_MESSAGE = ('No derived routing record is stored for the context\'s date of service, so nothing was '
+                            'assessed. Resume to process the document again.')
+PROVIDER_DATE_MESSAGE = ('The provider result was requested for a different service date than this context; it was not '
+                         'used. Change the context again to request proposals for this date.')
+
+
+def _events_mode(job):
+    """What an events assess reads, from the key it was queued under (a Resume keeps the stage's own key as its prefix):
+    AGAIN (':c:'), FINAL (':q:'), REVIEW2 (':review2:') or FIRST - in that order, since a re-assessment's key keeps the
+    marks of the assessment it re-makes."""
+    key = job.idempotency_key
+    if AGAIN_MARK in key:
+        return AGAIN
+    if FINAL_MARK in key:
+        return FINAL
+    return REVIEW2 if REVIEW2_MARK in key else FIRST
+
+
+def _assess_child_events(stored, context, normalized, reference, provider_status, text, pages, extraction_status,
+                         extraction_messages, second=None, second_scope=None, participant_inputs=(), member_answers=()):
+    """The events engine's assessment of ``stored`` - the context's EventInventory as interpretation.store.load read it
+    - in one bounded child (DB-free; its denied executions counted by sentinel.run_counted): the engine reads the
+    inventory and the gemini context's facts for meaning, and the revision ``text`` only for the exactness of the
+    proposers' spans and the member answers' passages (studio/interpretation/assess.py)."""
+    return events_engine.assess(
+        inventory=stored, context=context, normalized=normalized, provider_status=provider_status, reference=reference,
+        text=text, pages=pages, extraction_status=extraction_status, extraction_messages=extraction_messages,
+        second=second, second_scope=second_scope, participants=participant_inputs, member_answers=member_answers)
+
+
+def _events_inventory(job):
+    """(the EventInventory row, its store.StoredInventory) that the events assess ``job`` reads: the one its gemini
+    context names (Job.context: never the newest inventory). One of other versions ends the stage resumable (the
+    revision is read again on Resume); one that is missing, not read or not this revision's fails it."""
+    context, revision = job.context, job.revision
+    inventory = (models.EventInventory.objects.select_related('provider_run')
+                 .filter(pk=context.event_inventory_id, encounter_id=job.encounter_id).first()
+                 if context.event_inventory_id else None)
+    if inventory is None or inventory.revision_id != revision.pk or context.revision_id != revision.pk:
+        raise StageFailure(CONTEXT_INVENTORY_MESSAGE)
+    if (inventory.interpretation_version, inventory.inventory_version) != _CURRENT_VERSIONS:
+        raise StageCancelled(EARLIER_READING_MESSAGE)
+    if inventory.state != models.EventInventory.READ:
+        raise StageFailure(INVENTORY_NOT_READ_MESSAGE)
+    return inventory, _stored_inventory(inventory, revision)
+
+
+def _member_date_state(context, stored):
+    """The contract 8.2 member_date_state row the gemini ``context``'s date came from (Assessment.interpretation's
+    member_date_state): derived again, purely, from the inventory and the member values the context recorded - and only
+    when that derivation gives the context's own date state, so the record never describes another derivation."""
+    try:
+        derived = interpretation_facts.derive(stored, dict(context.user_values or {}))
+    except (TypeError, ValueError):
+        raise StageFailure(CONTEXT_DERIVATION_MESSAGE) from None
+    if derived.member_date.state != ((context.facts or {}).get('service_date') or {}).get('state'):
+        raise StageFailure(CONTEXT_DERIVATION_MESSAGE)
+    return derived.member_date.as_record()
+
+
+def _events_stand_in(revision, inventory, service_date):
+    """The RoutingRun an events assessment records (FINAL 6.7 step 5): the gemini-routing@1 stand-in derived from
+    ``inventory`` for ``service_date``, as analyze, predict or a context save recorded it - looked up, never
+    recomputed here. None when there is none."""
+    return (models.RoutingRun.objects.filter(revision=revision, version=interpretation.ROUTING_VERSION,
+                                             service_date=service_date, result__inventory=str(inventory.pk))
+            .order_by('-created_at', '-pk').first())
+
+
+def _assess_events(job):
+    """The assess stage on a gemini context (FINAL 6.7; the section comment above): read what its mode reads, assess in
+    the bounded child, record the retrieval traces, take the context's stand-in for the date, and record the
+    assessment with its event inventory and its D22 interpretation record - the sentinel's record of the stage scope
+    taken just before persist_assessment, whose write gate refuses the insert when the scope counted a new_path
+    execution (a StageFailure, nothing recorded, the trip audited). Nothing is sent, and no legacy reader runs."""
+    revision, encounter, context, run = job.revision, job.encounter, job.context, job.provider_run
+    revision.refresh_from_db()
+    inventory, stored = _events_inventory(job)
+    if run is not None and run_service_date(run) != context_service_date(context):
+        raise StageFailure(PROVIDER_DATE_MESSAGE)
+    held = (run is not None and run.state == models.ProviderRun.NOT_SENT
+            and (run.scope or {}).get('held') == models.ProviderRun.HELD_MEMBER_DATE_CONFLICT)
+    names = participants.configured()
+    mode = _events_mode(job)
+    if mode == FIRST:  # assess #1: the participants' newest phase-1 runs (HARNESS.md 2, 12.1)
+        read = [_participant_input(encounter, revision, name, held=held) for name in names]
+    else:
+        # assess #2, a re-assessment and a second review's follow-up read the revision's newest assessment, which must
+        # be the one they were queued for - made on this context, Corti run and event inventory; a newer chain owns the
+        # revision otherwise, and nothing is assessed
+        basis = _newest_assessment(revision)
+        if (basis is None or basis.context_id != job.context_id or basis.provider_run_id != job.provider_run_id
+                or basis.event_inventory_id != inventory.pk
+                or (mode == FINAL and job.idempotency_key.split(':resume:', 1)[0] != _final_key(basis))):
+            return {'skipped': ASSESS_MOVED}
+        read = _reread(encounter, revision, basis, names, FINAL if mode == FINAL else AGAIN)
+    provider_status, normalized = _provider_inputs(run)
+    second = _second_run_for(revision, run)
+    second_normalized = _second_inputs(second) if second is not None else None
+    inputs = tuple(item for item, _ in read)
+    proposed = {code.code for item in inputs if item.reading is not None for code in item.reading.codes}
+    proposed |= {code.code for item in inputs if item.peer is not None for code in item.peer.additional_codes}
+    provider_codes = tuple(sorted(set(selected_codes(normalized)) | set(selected_codes(second_normalized))))
+    # every code the engine may look up, prefetched for the child, which has no database: a superset, never one missed
+    looked_up = set(events_engine.codes_to_look_up(normalized, second_normalized, inputs)) | set(provider_codes)
+    reference = prefetched_lookup(tuple(sorted(looked_up | proposed)))
+    service_date = context_service_date(context)
+    routing_run = _events_stand_in(revision, inventory, service_date)
+    if routing_run is None:
+        raise StageFailure(STAND_IN_MISSING_MESSAGE)
+    member_date_state = _member_date_state(context, stored)
+    release_routing_caches()  # FINAL 6.7 step 2: no cached legacy result answers for code (the scope clears too)
+    seconds = settings.JOB_DEADLINE_SECONDS['assess']
+    try:
+        result = sentinel.run_counted(
+            _assess_child_events, stored, dict(context.facts or {}), normalized, reference, provider_status,
+            revision.text, tuple(PageSpan(**p) for p in revision.pages), revision.extraction_status,
+            tuple(revision.messages), second_normalized, dict(second.scope) if second is not None else None, inputs,
+            member_answers_of(revision), seconds=seconds, memory_bytes=settings.ASSESS_MEMORY_BYTES)
+    except bounded.Overrun as exc:
+        raise StageFailure(OVERRUN_MESSAGES[exc.reason].format(seconds=seconds)) from None
+    retrieval = _retrieval(result, service_date, reference, provider_codes)  # a decidable code's only (r7, r8, r9)
+    records = {record['name']: record for _, record in read}
+    if names and mode != AGAIN:  # HARNESS.md 12.3: the frozen phase-1 outputs read, as assess #1 and #2 record them
+        frozen = _frozen(revision, run, records)
+        for record in records.values():
+            record['frozen'] = frozen
+    try:
+        record = interpretation_report.interpretation_record(
+            inventory=inventory, context=context, member_date_state=member_date_state,
+            sentinel_record=sentinel.record(name=ASSESS_SCOPE))
+        assessment = review.persist_assessment(
+            encounter=encounter, revision=revision, context=context, routing_run=routing_run, provider_run=run,
+            result=result, second_run=second, retrieval=retrieval,
+            participants=[records.get(name) or not_configured_record(name) for name in participants.PARTICIPANTS],
+            event_inventory=inventory, interpretation=record)
+    except sentinel.Tripped as exc:  # the write gate refused: nothing recorded, the trip audited (FINAL 10.3)
+        raise StageFailure(str(exc)) from None
+    except ValueError as exc:
+        raise StageFailure(f'The assessment was not recorded: {exc}') from exc
+    out = {'assessment': str(assessment.pk), 'provider_status': provider_status, 'inventory': str(inventory.pk),
+           'mode': mode}
+    if second is not None:
+        out['second_review'] = str(second.pk)
+    if names and mode == FIRST and owed_peer_stages(assessment):
+        # HARNESS.md 12.1, unchanged: assess #1 queues the first owed peer stage when a configured participant's first
+        # reading was read; otherwise it is the final assessment. Nothing is sent while a member date conflict holds it.
+        queued = _queue_peers(job, assessment, upgrade=_chain_upgrade(job))
+        out['peer_review'] = queued.kind
+    return out
+
+
 def stage_assess(job):
     revision, encounter, context, run = job.revision, job.encounter, job.context, job.provider_run
     encounter.refresh_from_db()
     if encounter.current_revision_id != revision.pk:
         return {'skipped': 'a newer revision exists'}
+    if context is not None and interpretation.is_new_context(context):
+        return _assess_events(job)  # FINAL 6.7: the events engine, over the context's event inventory
+    _refuse_legacy_context(job)  # FINAL 6.7 and 9: never the legacy child on this image (StageCancelled, resumable)
     if context is not None and encounter.current_context_id == context.pk:
         remade = _remade_context(job)
         if remade is not None:
@@ -3134,6 +3353,10 @@ def _second_review_bounds(encounter, revision, context, assessment):
     if (assessment is None or revision is None or context is None or assessment.revision_id != revision.pk
             or assessment.context_id != context.pk):
         return 'There is no current assessment to review again.'
+    if not interpretation.is_new_context(context) and not _legacy_reading_allowed():
+        # FINAL 6.8 and 9: stage_review2 sends nothing on a context that is not a gemini context (it ends cancelled), so
+        # the offer never accepts an ask the stage then refuses; a save or an addendum has the document read again
+        return SECOND_REVIEW_EARLIER_CONTEXT
     if context.version in EARLIER_CONTEXT_VERSIONS:
         # Repair gi2 (eus2 F3): stage_review2 sends nothing for a context an earlier version recorded, so the offer
         # never accepts an ask the stage then skips (after an install that bumped the context version, the ask was
@@ -3245,6 +3468,7 @@ def stage_review2(job):
         return {'skipped': 'a newer revision exists; nothing was sent'}
     if context is None or encounter.current_context_id != context.pk or context.version in EARLIER_CONTEXT_VERSIONS:
         return {'skipped': 'the context changed; nothing was sent'}
+    _refuse_legacy_context(job)  # FINAL 6.8 and 9: nothing is sent on a context that is not a gemini context
     assessment = encounter.current_assessment
     if (assessment is None or assessment.revision_id != revision.pk or assessment.context_id != context.pk
             or primary is None or assessment.provider_run_id != primary.pk):
@@ -3991,6 +4215,24 @@ def _settles_member_conflict(previous, context):
             and not gi_context.is_member_conflict((context.facts or {}).get('service_date')))
 
 
+CONTEXT_SAVE = 'context.save'  # a save on an event inventory: its sentinel scope's entry and write gate (FINAL 10.3)
+AFTER_SAVE = 'after-save'  # an interpret stage's key mark: a member's context save had the revision read (FINAL 9)
+CONTEXT_UNREAD_MESSAGE = ("This document's reading ended without a result and nothing is left to resume, so its "
+                          'context cannot be changed and nothing is sent for it. Ask for it to be read again, or '
+                          'upload it again.')
+CONTEXT_NONE_MESSAGE = ('This document has not been read yet, so it has no context to change. Resume processing to '
+                        'have it read.')
+
+
+class _SaveGateClosed(Exception):
+    """A context save the sentinel's write gate refuses (FINAL 10.3), raised inside the save's transaction so nothing of
+    it is written; change_context then asks the gate outside it, so the refusal's audit row survives the rollback."""
+
+    def __init__(self, scope):
+        super().__init__('the sentinel refuses this save')
+        self.scope = scope
+
+
 def change_context(encounter, user, values, *, confirmation=None):
     """Apply member-supplied metadata, snapshot a new context and re-assess.
 
@@ -4004,7 +4246,140 @@ def change_context(encounter, user, values, *, confirmation=None):
     ``confirmation``: the FindingConfirmation of a service date a reviewer confirmed (HARNESS.md 11.3, 12.5;
     review.confirm_finding), which enters here as the member's date, exactly as a member's save: its context.changed
     audit row names the confirmation. None for a member's own save, whose row is as before.
-    """
+
+    The Gemini migration (design/FINAL.md 6.10, 9 and 16.3-16.4; D8):
+    - a revision with an event inventory read at the current versions - the current gemini context's own, else the
+      revision's - is saved ON THAT FROZEN INVENTORY (_save_on_inventory): interpretation.facts.derive with the new
+      values is recorded as a new gemini-context@1 row bound to it, here under the row lock (pure: no text read for
+      meaning, no network, nothing sent to the interpreter), its routing stand-in recorded for a changed effective date,
+      under a new_path sentinel scope whose write gate refuses the save (Refused, audited) when it counted a legacy
+      execution or cannot vouch for itself; then the decision is exactly as before (_decide_after_save);
+    - any other revision (the legacy reader's, or one never read at the current versions) stores the values and has
+      the revision read, its first interpretation, in the worker (_save_before_reading): no context is made here, and
+      the current one is returned. Refused when its reading ended failed with nothing to resume
+      (CONTEXT_UNREAD_MESSAGE): the recorded retry or a new upload is the way, never a save.
+    The legacy flow below them runs only under the test-only legacy chain (_legacy_reading_allowed)."""
+    try:
+        return _change_context(encounter, user, values, confirmation)
+    except _SaveGateClosed as closed:
+        # the save's transaction rolled back whole; asked again outside it, the gate records why and refuses
+        try:
+            sentinel.gate(CONTEXT_SAVE, encounter=encounter, actor=user, scope_=closed.scope)
+        except sentinel.Tripped as exc:
+            raise Refused(str(exc)) from None
+        raise Refused(sentinel.MESSAGES['unavailable']) from None  # never reached: a refusal never lifts
+
+
+def _merge_values(encounter, values):
+    """The member's values merged into the encounter's (an empty value clears one), and saved."""
+    merged = dict(encounter.user_values or {})
+    for key, value in values.items():
+        if value:
+            merged[key] = value
+        else:
+            merged.pop(key, None)
+    encounter.user_values = merged
+    encounter.save(update_fields=['user_values', 'updated_at'])
+
+
+def _saved_inventory(revision, previous):
+    """The EventInventory a context save re-derives from (FINAL 6.10, D8): the one the current gemini context of this
+    revision names, when it was read at the current versions; else the revision's newest inventory read at them (its
+    analyze did not finish, or a legacy context is current); None when there is none - the revision is read first."""
+    if (previous is not None and previous.revision_id == revision.pk and interpretation.is_new_context(previous)
+            and previous.event_inventory_id):
+        own = (models.EventInventory.objects.select_related('provider_run')
+               .filter(pk=previous.event_inventory_id, revision=revision, state=models.EventInventory.READ,
+                       interpretation_version=interpretation.INTERPRETATION_VERSION,
+                       inventory_version=interpretation.INVENTORY_VERSION).first())
+        if own is not None:
+            return own
+    return _read_inventory(revision)
+
+
+def _save_on_inventory(encounter, user, revision, previous, inventory, values, confirmation):
+    """A context save on ``inventory``, frozen (change_context; FINAL 6.10): the values stored, the gemini-context@1 row
+    derived from the inventory with them (the same derivation analyze records), its stand-in for its effective date when
+    none is stored yet, the context made current, the audit row, and the decision exactly as before. All of it in one
+    new_path sentinel scope; the gate is asked after the derivation and before the first row is written (_SaveGateClosed
+    rolls the whole save back). Nothing is read, built or sent for the interpreter. Returns the new context."""
+    with sentinel.scope(sentinel.NEW_PATH, entry=CONTEXT_SAVE) as scope:
+        _merge_values(encounter, values)
+        try:
+            stored = _stored_inventory(inventory, revision)
+            derived = derived_facts(encounter, inventory, stored)
+        except StageFailure as exc:
+            raise Refused(str(exc)) from None
+        service_date = date.fromisoformat(derived.effective) if derived.effective else None
+        data = _stand_in(revision, inventory, stored, service_date)
+        if sentinel.refusal(scope) is not None:
+            raise _SaveGateClosed(scope)
+        context = record_derived_context(encounter, revision, inventory, derived, created_by=user)
+        if context_service_date(context) != service_date:  # one date: the context's and its stand-in's
+            raise Refused(CONTEXT_DATE_MESSAGE)
+        if _events_stand_in(revision, inventory, service_date) is None:
+            _record_routing(revision, data, service_date)
+        encounter.current_context = context
+        encounter.save(update_fields=['current_context', 'updated_at'])
+        audit.record(encounter.workspace, 'context.changed', encounter=encounter, actor=user,
+                     fields=sorted(values), context=str(context.pk),
+                     **({'confirmation': str(confirmation.pk)} if confirmation is not None else {}))
+        _decide_after_save(encounter, user, revision, previous, context)
+    return context
+
+
+def _save_before_reading(encounter, user, revision, values, confirmation):
+    """A context save on a revision with no event inventory read at the current versions (change_context; FINAL 6.10 and
+    9): the values are stored and the revision's interpretation is queued - its first, for a revision the legacy reader
+    read - keyed '<interpret key>:after-save:<uuid>', so a stage of its own runs whatever ran before; analyze then
+    derives the context with these values. No context is made here: the current one is returned - the legacy reader's,
+    or an earlier revision's - never taken for one this save made. Refused when the revision's reading ended FAILED with
+    nothing to resume (CONTEXT_UNREAD_MESSAGE: the recorded retry or a new upload is the way), and when the encounter has
+    no context at all (CONTEXT_NONE_MESSAGE: a Resume has it read; as before the migration, a document never read to the
+    end took no context save)."""
+    latest = review.latest_job(encounter)
+    if latest is not None and latest.kind == INTERPRET and latest.state == Job.FAILED:
+        raise Refused(CONTEXT_UNREAD_MESSAGE)
+    if encounter.current_context_id is None:
+        raise Refused(CONTEXT_NONE_MESSAGE)
+    _merge_values(encounter, values)
+    clear_stop(encounter)
+    job = enqueue(INTERPRET, encounter=encounter, revision=revision,
+                  key=_interpret_key(revision, f'{AFTER_SAVE}:{uuid.uuid4()}'), requested_by=user)
+    audit.record(encounter.workspace, 'context.changed', encounter=encounter, actor=user, fields=sorted(values),
+                 reading=str(job.pk), **({'confirmation': str(confirmation.pk)} if confirmation is not None else {}))
+    return encounter.current_context
+
+
+def _decide_after_save(encounter, user, revision, previous, context):
+    """What a context save queues once its new ``context`` is current (``previous``: the one it replaced), the same for
+    every context (FINAL 6.10: "decide exactly as today"):
+
+    Refutation p2 sends2-0 (repair gi2): a save that settles a held member date conflict makes the request the hold
+    deferred when the run in use is a primary attempt that conclusively never reached the provider. The settled context
+    asks for that attempt's own request, so re-checking with it left the hold's promise ("the request is made for the
+    agreed date") unkept and the encounter failed on a request never made. Only that save, once per such save: every
+    other save that leaves the request unchanged still re-checks (5.4; round 3 pipeline3:0), and the predict applies
+    every send rule (a retained answer reused, the unknown-outcome block, the failed-request door, single flight)."""
+    last_run = _run_in_use(revision)
+    clear_stop(encounter)
+    owed = _settles_member_conflict(previous, context) and _attempt_owed(encounter, last_run)
+    if _run_answers(last_run, revision, context) and not owed:
+        if _participants_owed(revision, context):
+            # A configured participant has no outcome for this revision - its stage was stopped, expired or swept
+            # before it recorded one, or it was configured since: the chain runs before the assess, under every
+            # send door, so it gets its turn and each participant that answered reuses its answer (HARNESS.md 2).
+            _after_predict(encounter, revision, context, last_run, key=f'assess:{context.pk}:{last_run.pk}',
+                           origin=f'context:{context.pk}', requested_by=user)
+        else:
+            # the participants' requests carry no context (HARNESS.md 2): the assess reads their answers as they are
+            enqueue(Job.ASSESS, encounter=encounter, revision=revision, context=context, provider_run=last_run,
+                    key=_assess_key(f'assess:{context.pk}:{last_run.pk}', revision), requested_by=user)
+    else:
+        _queue_predict(encounter, revision, context, key=f'predict:{context.pk}', requested_by=user)
+
+
+def _change_context(encounter, user, values, confirmation):
     with transaction.atomic():
         encounter = _locked(encounter)
         revision = encounter.current_revision
@@ -4013,6 +4388,17 @@ def change_context(encounter, user, values, *, confirmation=None):
             raise Refused('Context can be set once the document text has been extracted.')
         if busy(encounter):
             raise Refused('Wait for processing to finish (or stop it) before changing context.')
+        previous = encounter.current_context  # read before this save replaces it (_settles_member_conflict)
+        inventory = _saved_inventory(revision, previous)
+        if inventory is not None:
+            context = _save_on_inventory(encounter, user, revision, previous, inventory, values, confirmation)
+            review.refresh_state(encounter)
+            return context
+        if not _legacy_reading_allowed():
+            context = _save_before_reading(encounter, user, revision, values, confirmation)
+            review.refresh_state(encounter)
+            return context
+        # The legacy flow: only the test-only legacy chain reaches it (_legacy_reading_allowed).
         if not models.RoutingRun.objects.filter(revision=revision).exists() and not review.can_resume(encounter):
             # Its analysis overran or failed, so nothing may be sent for it, whatever the context says: the request
             # would answer a document the service could not read (round 5, pipeline:0). A stage that was only stopped
@@ -4022,15 +4408,7 @@ def change_context(encounter, user, values, *, confirmation=None):
             # document's own.
             raise Refused('This document could not be read to the end, so its context cannot be changed and nothing '
                           'is sent for it. Upload it again, shorter or split.')
-        previous = encounter.current_context  # read before this save replaces it (_settles_member_conflict)
-        merged = dict(encounter.user_values or {})
-        for key, value in values.items():
-            if value:
-                merged[key] = value
-            else:
-                merged.pop(key, None)
-        encounter.user_values = merged
-        encounter.save(update_fields=['user_values', 'updated_at'])
+        _merge_values(encounter, values)
         context = make_context(encounter, revision, created_by=user, seconds=settings.CONTEXT_REQUEST_SECONDS,
                                refusal=Refused)
         encounter.current_context = context
@@ -4038,29 +4416,7 @@ def change_context(encounter, user, values, *, confirmation=None):
         audit.record(encounter.workspace, 'context.changed', encounter=encounter, actor=user,
                      fields=sorted(values), context=str(context.pk),
                      **({'confirmation': str(confirmation.pk)} if confirmation is not None else {}))
-        last_run = _run_in_use(revision)
-        clear_stop(encounter)
-        # Refutation p2 sends2-0 (repair gi2): a save that settles a held member date conflict makes the request the
-        # hold deferred when the run in use is a primary attempt that conclusively never reached the provider. The
-        # settled context asks for that attempt's own request, so re-checking with it left the hold's promise ("the
-        # request is made for the agreed date") unkept and the encounter failed on a request never made. Only that
-        # save, once per such save: every other save that leaves the request unchanged still re-checks (5.4; round 3
-        # pipeline3:0), and the predict applies every send rule (a retained answer reused, the unknown-outcome block,
-        # the failed-request door, single flight).
-        owed = _settles_member_conflict(previous, context) and _attempt_owed(encounter, last_run)
-        if _run_answers(last_run, revision, context) and not owed:
-            if _participants_owed(revision, context):
-                # A configured participant has no outcome for this revision - its stage was stopped, expired or swept
-                # before it recorded one, or it was configured since: the chain runs before the assess, under every
-                # send door, so it gets its turn and each participant that answered reuses its answer (HARNESS.md 2).
-                _after_predict(encounter, revision, context, last_run, key=f'assess:{context.pk}:{last_run.pk}',
-                               origin=f'context:{context.pk}', requested_by=user)
-            else:
-                # the participants' requests carry no context (HARNESS.md 2): the assess reads their answers as they are
-                enqueue(Job.ASSESS, encounter=encounter, revision=revision, context=context, provider_run=last_run,
-                        key=_assess_key(f'assess:{context.pk}:{last_run.pk}', revision), requested_by=user)
-        else:
-            _queue_predict(encounter, revision, context, key=f'predict:{context.pk}', requested_by=user)
+        _decide_after_save(encounter, user, revision, previous, context)
         review.refresh_state(encounter)
     return context
 
@@ -4163,6 +4519,10 @@ def recompute_after_answers(encounter, user):
     if (revision is None or context is None or final is None or final.revision_id != revision.pk
             or final.context_id != context.pk or not review.is_final(final)):
         return None
+    if not interpretation.is_new_context(context) and not _legacy_reading_allowed():
+        # FINAL 6.10, 9 and 16.2: an answer on a revision the legacy reader read stands on its overlay and is not
+        # recomputed - re-assessing would have the document read again, which an answer never does (D7, D8)
+        return None
     if context.version in EARLIER_CONTEXT_VERSIONS:
         return None  # the stage would remake the context first and could send (reassess_retained's RETAINED_EARLIER)
     newest = _newest_assessment(revision)
@@ -4196,6 +4556,10 @@ RETAINED_PARTICIPANTS = ('The participants configured here are not the ones the 
 RETAINED_BYTES = 'A retained answer no longer matches its recorded sha256 (run {run}); it would not be read.'
 RETAINED_KEY = 'The re-assessment key would be longer than the job key column holds.'
 RETAINED_TAG = 'Give the release tag as 1 to 80 printable characters with no spaces.'
+# FINAL 6.10 (D16): a re-assessment from retained answers re-reads a final made from an event inventory only. A legacy
+# final is refused, so no installer phase can ever have a document read again, or cause a paid send.
+RETAINED_LEGACY = ('The current assessment was not made from an event inventory: re-assessing it would have the '
+                   'document read again, which only a member\'s explicit act does. Nothing was queued.')
 
 
 def _retained_runs(revision, final):
@@ -4244,6 +4608,9 @@ def reassess_retained(encounter, tag, *, user=None, dry_run=False, expected_part
             raise Refused(REASSESS_NONE)
         if final.context_id != context.pk:
             raise Refused(REASSESS_CONTEXT)
+        if (not (interpretation.is_new_context(context) and interpretation.is_new_assessment(final))
+                and not _legacy_reading_allowed()):
+            raise Refused(RETAINED_LEGACY)  # FINAL 6.10: new-path finals only (D16)
         if not review.is_final(final):
             raise Refused(RETAINED_NOT_FINAL)
         if _newest_assessment(revision).pk != final.pk:

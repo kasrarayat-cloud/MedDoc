@@ -27,10 +27,12 @@ from django.http import Http404
 from django.utils import timezone
 
 from . import audit, candidates, participants
+from . import interpretation as interpretation_labels  # the Gemini migration's labels only (no module of it loads)
 from .gi.context import charge_date_problem
 from .participants import loop as participant_loop
-from .models import (Assessment, Clarification, Decision, DecisionInvalidation, Encounter, FindingConfirmation, Job,
-                     MemberAnswer, Proposal, ProviderExchange, ProviderRun, SourceRevision, ToolCall)
+from .models import (Assessment, Clarification, Decision, DecisionInvalidation, Encounter, EventInventory,
+                     FindingConfirmation, Job, MemberAnswer, Proposal, ProviderExchange, ProviderRun, SourceRevision,
+                     ToolCall)
 from .types import sha256_json, to_jsonable
 from .validation import questions
 
@@ -793,11 +795,13 @@ def _check_result(result, text):
 
 
 def _same_assessment(previous, digest, revision, context, routing_run, provider_run, second_run=None, participants=None,
-                     retrieval=None):
+                     retrieval=None, event_inventory=None):
     """Whether ``previous`` already is this assessment: the same result (its sha256) on the same inputs - the revision,
-    the context, the routing run, the Corti run and the second-review run, exactly what the round-4 head compared (I1) -
-    and, while a model participant is configured, the same participant runs: each entry's name, state and run and, on an
-    assess #2 or its re-assessments, its peer state and peer run (HARNESS.md 12.3).
+    the context, the routing run, the Corti run and the second-review run, exactly what the round-4 head compared (I1),
+    and the event inventory it was made from (the Gemini migration, design/FINAL.md 8.3: None for a legacy assessment,
+    so a legacy one compares exactly as before) - and, while a model participant is configured, the same participant
+    runs: each entry's name, state and run and, on an assess #2 or its re-assessments, its peer state and peer run
+    (HARNESS.md 12.3).
 
     Nothing else recorded beside the result decides it (refutation round 2, parity-r2-2; the round-2 plan's D6). Never
     the retrieval traces (``retrieval`` is not read): they read the CMS passages installed at the time, so an identical
@@ -808,7 +812,8 @@ def _same_assessment(previous, digest, revision, context, routing_run, provider_
     if not (previous is not None and previous.sha256 == digest and previous.revision_id == revision.pk
             and previous.context_id == context.pk and previous.routing_id == routing_run.pk
             and previous.provider_run_id == (provider_run.pk if provider_run else None)
-            and previous.second_run_id == (second_run.pk if second_run else None)):
+            and previous.second_run_id == (second_run.pk if second_run else None)
+            and previous.event_inventory_id == (event_inventory.pk if event_inventory is not None else None)):
         return False
 
     def runs(record):
@@ -941,8 +946,20 @@ def _provider_identity(assessment):
     return None if run is None else (run.state, run.response_sha256)
 
 
+INTERPRETATION_CHANGED = 'the interpretation changed'  # design/FINAL.md 8.3 and 9 (D7): _what_changed's phrase
+
+
+def _engine_family(version) -> str:
+    """An engine version's family - 'cpt-studio-events' of 'cpt-studio-events@1' - so two versions of one engine are
+    one family and the legacy engine and the events engine are two."""
+    return str(version or '').partition('@')[0]
+
+
 def _what_changed(previous, current):
-    """Short phrases naming what differs between two assessments of the same revision."""
+    """Short phrases naming what differs between two assessments of the same revision. The Gemini migration (design/
+    FINAL.md 8.3 and 9; D7): 'the interpretation changed' when they were made from different event inventories - a
+    legacy assessment names none - or by engines of different families, so a decision that does not carry from the
+    legacy engine's assessment to the events engine's says so."""
     changes = []
     before, after = previous.context.facts or {}, current.context.facts or {}
     for name in sorted(set(before) | set(after)):
@@ -961,6 +978,9 @@ def _what_changed(previous, current):
         changes.append(f'profiles {previous.profiles_version} → {current.profiles_version}')
     if previous.engine_version != current.engine_version:
         changes.append(f'engine {previous.engine_version} → {current.engine_version}')
+    if (previous.event_inventory_id != current.event_inventory_id
+            or _engine_family(previous.engine_version) != _engine_family(current.engine_version)):
+        changes.append(INTERPRETATION_CHANGED)
     if sha256_json(previous.reference_sources) != sha256_json(current.reference_sources):
         changes.append('reference sources')
     return changes
@@ -1058,8 +1078,47 @@ def _carry_decisions(previous, assessment, proposals, revision, context):
     return carried, len(ordered) - carried
 
 
+ASSESSMENT_GATE = 'assessment.persist'  # the sentinel write gate of a new-path assessment's insert (FINAL 10.3)
+
+
+def _new_path(result, context, event_inventory, record) -> bool:
+    """Whether ``result`` is a new-path assessment - the events engine's (interpretation.is_new_assessment) - checked
+    against what it is recorded with (design/FINAL.md 4.2, 6.7, 8.2; P7: the two engines' rows never cross): a new-path
+    result is recorded with the EventInventory it was made from, its interpretation record
+    (report.interpretation_record) and a context derived from an inventory; a legacy result with none of the three.
+    ValueError otherwise."""
+    if interpretation_labels.is_new_assessment(result):
+        if event_inventory is None or not isinstance(record, dict):
+            raise ValueError('An assessment of the events engine is recorded with the event inventory it was made from '
+                             'and its interpretation record.')
+        if not interpretation_labels.is_new_context(context):
+            raise ValueError('An assessment of the events engine is made on a context derived from an event '
+                             'inventory.')
+        return True
+    if event_inventory is not None or record is not None:
+        raise ValueError('An assessment of the legacy engine names no event inventory and no interpretation record.')
+    if interpretation_labels.is_new_context(context):
+        raise ValueError('An assessment made on a context derived from an event inventory is the events engine\'s.')
+    return False
+
+
+def _check_event_inputs(encounter, revision, context, routing_run, event_inventory):
+    """A new-path assessment's own inputs, under the encounter lock (design/FINAL.md 4.2-4.3, 6.7): the EventInventory
+    is this encounter's and this revision's, read, and the one the context was derived from; the routing run is that
+    inventory's derived stand-in (gemini-routing@1 naming it), never a legacy routing."""
+    if event_inventory.encounter_id != encounter.pk or event_inventory.revision_id != revision.pk:
+        raise ValueError('The event inventory was read for another revision.')
+    if event_inventory.state != EventInventory.READ:
+        raise ValueError('The event inventory was not read whole, so nothing is assessed from it.')
+    if context.event_inventory_id != event_inventory.pk:
+        raise ValueError('The encounter context was not derived from this event inventory.')
+    if (routing_run.version != interpretation_labels.ROUTING_VERSION
+            or (routing_run.result or {}).get('inventory') != str(event_inventory.pk)):
+        raise ValueError('The routing record is not the one derived from this event inventory.')
+
+
 def persist_assessment(*, encounter, revision, context, routing_run, provider_run, result, second_run=None,
-                       participants=(), retrieval=()):
+                       participants=(), retrieval=(), event_inventory=None, interpretation=None):
     """Record an AssessmentResult as the encounter's current assessment, in one transaction.
 
     Creates the immutable Assessment and Proposal rows and the Clarification
@@ -1069,16 +1128,33 @@ def persist_assessment(*, encounter, revision, context, routing_run, provider_ru
     assessment unchanged. ``participants`` (one entry per harness participant,
     its state and run) and ``retrieval`` (the reference retrieval traces) are
     recorded beside the result, outside its sha256 (HARNESS.md 6, I1).
+
+    The Gemini migration (design/FINAL.md 4.2, 6.7, 8.3, 10.3): a new-path result - the events engine's - is recorded
+    with ``event_inventory``, the EventInventory it was made from (Assessment.event_inventory, set at insert), and
+    ``interpretation``, its D22 operator record (Assessment.interpretation: report.interpretation_record, outside the
+    result's sha256). Its insert is gated by the legacy-call sentinel BEFORE the transaction opens: when the open scope
+    counted a new_path execution - or this process's sentinel cannot vouch for the scope - sentinel.gate records the
+    AuditEvent 'sentinel.tripped' and raises sentinel.Tripped, and nothing is recorded (the caller fails its stage). The
+    record must then describe the assessment it is stored on (report.record_problems: its inventory, run, versions,
+    context, and a sentinel record counting no legacy execution), or nothing is recorded (ValueError). A legacy result
+    is recorded exactly as before, with neither; the two never cross (_new_path).
     """
+    new_path = _new_path(result, context, event_inventory, interpretation)
+    if new_path:
+        from .interpretation import sentinel  # local import: read where a new-path assessment is written
+
+        sentinel.gate(ASSESSMENT_GATE, encounter=encounter)  # before the transaction, so its audit row is kept
     digest = sha256_json(result)
     participants, retrieval = to_jsonable(list(participants)), to_jsonable(list(retrieval))
     with transaction.atomic():
         locked = _lock(encounter)
         revision = SourceRevision.objects.get(pk=revision.pk)
         _check_inputs(locked, revision, context, routing_run, provider_run)
+        if new_path:
+            _check_event_inputs(locked, revision, context, routing_run, event_inventory)
         previous = locked.current_assessment
         if _same_assessment(previous, digest, revision, context, routing_run, provider_run, second_run, participants,
-                            retrieval):
+                            retrieval, event_inventory=event_inventory):
             encounter.state = refresh_state(locked)
             return previous
         _check_result(result, revision.text)
@@ -1089,7 +1165,14 @@ def persist_assessment(*, encounter, revision, context, routing_run, provider_ru
             encounter_checks=to_jsonable(result.encounter_checks), unsupported=to_jsonable(result.unsupported),
             summary=to_jsonable(result.summary), services=to_jsonable(result.services),
             completeness=to_jsonable(result.completeness), participants=participants, retrieval=retrieval,
-            sha256=digest)
+            sha256=digest, event_inventory=event_inventory if new_path else None,
+            interpretation=interpretation if new_path else None)
+        if new_path:
+            from .interpretation import report as interpretation_report  # local import, as above
+
+            problems = interpretation_report.record_problems(assessment)
+            if problems:
+                raise ValueError(f'Its interpretation record does not describe it: {problems[0]}')
         # One INSERT for every proposal (round 6 bounded:5): a row per query held the assess stage in the worker.
         rows = Proposal.objects.bulk_create([
             Proposal(
