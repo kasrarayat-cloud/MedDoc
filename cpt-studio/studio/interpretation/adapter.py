@@ -15,7 +15,7 @@ key) and travels ONLY in the x-goog-api-key header. The URL is a constant, so Pr
 THE SEND. One POST under the participants' discipline (participants.http.post: no retry, no redirect, no environment
 proxies or .netrc, a watched socket, capped reads, the deadline checked per chunk; not_sent only while the request
 provably has not left, unknown after that, failed for a non-200 with its body kept, succeeded for a 200), with connect
-10 s, read 300 s and a send deadline of 330 s that no caller's deadline can stretch (D12). ``send_loop`` is the run the
+10 s, read 480 s and a send deadline of 510 s that no caller's deadline can stretch (D12 as D49 sets them). ``send_loop`` is the run the
 pipeline makes (jobs._send's looped branch): participants.loop.run with exactly one exchange, so the exchange is recorded
 as turn 1 as a participant's are, and an orphan is settled by the same rule (jobs.may_have_reached_vendor). A member's
 Stop is asked once, right before the request is sent: a Stop, or a check that cannot be made, sends nothing. Gemini is
@@ -66,8 +66,12 @@ ENDPOINT = f'https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:gen
 KEY_HEADER = 'x-goog-api-key'
 CREDENTIAL_KEY = 'GEMINI_API_KEY'
 CONNECT_TIMEOUT_SECONDS = 10
-READ_TIMEOUT_SECONDS = 300
-SEND_DEADLINE_SECONDS = 330  # settings.INTERPRETER_SEND_DEADLINE_SECONDS; below the stale-stage sweep (600 s)
+# D49 (the S17 refutation, finding 19): a unary answer arrives whole, so the read timeout bounds its generation. A cut-off
+# answer of 32,768 output tokens at the slowest measured rate (82.4 tok/s, FRESH-2) needs about 398 s, and D25's p99 STOP
+# answer at the size bound (27,378 tokens) about 332 s: at 300 s both were recorded UNKNOWN (an operator's reconcile, a
+# paid resend) instead of TOO_LONG or read. 480 s covers them; the send deadline keeps D12's 30 s above it.
+READ_TIMEOUT_SECONDS = 480
+SEND_DEADLINE_SECONDS = 510  # settings.INTERPRETER_SEND_DEADLINE_SECONDS; below the stale-stage sweep (600 s)
 # A request is the instructions, the schema and the framed text (the size bound, settings.INTERPRET_MAX_CHARS, refuses a
 # long document before one is built); an answer is at most 32,768 output tokens. Both are refused over these, never cut.
 DEFAULT_MAX_REQUEST_BYTES = 4 * 1024 * 1024
@@ -597,7 +601,7 @@ def get_interpreter(mode: Optional[str] = None) -> Optional[Interpreter]:
             raise ProviderUnavailable('Live interpretation needs CPT_STUDIO_GEMINI_CREDENTIALS_FILE.')
         return GeminiInterpreter(settings.GEMINI_CREDENTIALS_FILE,
                                  connect_timeout=settings.PARTICIPANT_CONNECT_TIMEOUT_SECONDS,
-                                 read_timeout=settings.PARTICIPANT_READ_TIMEOUT_SECONDS, **limits)
+                                 read_timeout=settings.INTERPRETER_READ_TIMEOUT_SECONDS, **limits)
     if mode == 'replay':
         if not settings.GEMINI_REPLAY_DIR:
             raise ProviderUnavailable('Replay interpretation needs CPT_STUDIO_GEMINI_REPLAY_DIR.')

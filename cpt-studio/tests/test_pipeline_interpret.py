@@ -1288,9 +1288,9 @@ class SendPurposeTests(InterpretCase):
         _, revision = self.through_extract()
         job = models.Job.objects.get(revision=revision, kind='interpret')
         job.started_at = timezone.now() - timedelta(seconds=30)
-        jobs._check_loop_time(job, interpretation.PURPOSE)  # 30 + 330 + 15 = 375 <= 380
+        jobs._check_loop_time(job, interpretation.PURPOSE)  # 30 + 510 + 15 = 555 <= 560 (D49)
         job.started_at = timezone.now() - timedelta(seconds=40)
-        with self.assertRaises(jobs.Requeue):  # 40 + 330 + 15 = 385 > 380
+        with self.assertRaises(jobs.Requeue):  # 40 + 510 + 15 = 565 > 560
             jobs._check_loop_time(job, interpretation.PURPOSE)
         job.kind = 'astra'
         job.started_at = timezone.now() - timedelta(seconds=20)
@@ -1337,7 +1337,7 @@ class ReviewAndProgressTests(InterpretCase):
 
     def test_the_step_and_its_wording(self):
         self.assertEqual((progress.STEP_OF['interpret'], progress.DETAILS['interpret'],
-                          progress.stage_bound('interpret')), ('identifying', 'Reading the documented procedures', 380))
+                          progress.stage_bound('interpret')), ('identifying', 'Reading the documented procedures', 560))
         encounter, revision = self.through_extract()
         job = jobs.claim_next()
         block = progress.encounter_progress(encounter)

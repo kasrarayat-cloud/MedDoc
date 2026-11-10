@@ -201,7 +201,10 @@ PARTICIPANT_MAX_TOOL_RESULT_BYTES = 256 * 1024  # one tool result, as returned t
 # no caller's deadline stretches. Its stage (JOB_DEADLINE_SECONDS['interpret'] below) covers it, the 15 s kept for
 # recording its outcome (jobs.LOOP_RECORDING_SECONDS) and the stage's own work, and ends well before
 # STALE_RUNNING_SECONDS.
-INTERPRETER_SEND_DEADLINE_SECONDS = 330
+INTERPRETER_SEND_DEADLINE_SECONDS = 510  # D49
+# D49: the interpreter's own read timeout - a unary answer arrives whole, so it bounds the generation (adapter.py); the
+# participants' 300 s is too short for a cut-off answer of 32,768 tokens at the slowest measured rate (about 398 s).
+INTERPRETER_READ_TIMEOUT_SECONDS = 480
 # The size bound (D4, FINAL C9 as DECISIONS D25 sets it from the S16 measurement): a revision longer than this, or with
 # more pages, is not sent to the interpreter, and its stage says so plainly. Measured on the 179 FRESH answers of
 # 2026-11-10: output tokens = 2,173 + 1.081 x input characters (residual p99 3,593); the 14 runs at 19,398-19,460
@@ -221,7 +224,7 @@ INTERPRET_MAX_PAGES = 40
 # STALE_RUNNING_SECONDS (600), where the stale-stage sweep takes a stage for dead, so a live stage is never swept. The
 # worker's stop timeout (ops/install.py, 600 s) outlasts it.
 JOB_DEADLINE_SECONDS = {'extract': 300, 'analyze': 60, 'predict': 180, 'assess': 120, 'review2': 180,
-                        'astra': 580, 'fable': 580, 'astra_peer': 580, 'fable_peer': 580, 'interpret': 380}
+                        'astra': 580, 'fable': 580, 'astra_peer': 580, 'fable_peer': 580, 'interpret': 560}
 # Routing and context extraction run in a forked child under these (studio/bounded.py): the stage's deadline
 # above, this growth of address space past what the worker already uses, and a shorter wall clock when a
 # member's context change runs the extraction inside a web request.

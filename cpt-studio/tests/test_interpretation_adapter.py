@@ -206,7 +206,7 @@ class RequestTests(OfflineTestCase):
                          (interpretation.PROVIDER, interpretation.ADAPTER_VERSION, interpretation.MODEL))
         self.assertEqual(adapter.ENDPOINT, ENDPOINT)
         self.assertEqual((adapter.CONNECT_TIMEOUT_SECONDS, adapter.READ_TIMEOUT_SECONDS,
-                          adapter.SEND_DEADLINE_SECONDS), (10, 300, 330))  # D12
+                          adapter.SEND_DEADLINE_SECONDS), (10, 480, 510))  # D12, as D49 sets them
         self.assertLessEqual(len(adapter.ENDPOINT), 200)  # ProviderRun.endpoint
         self.assertLessEqual(len(adapter.NAME), 20)  # ProviderRun.provider
         self.assertLessEqual(len(adapter.ADAPTER_VERSION), 40)  # ProviderRun.adapter_version
@@ -283,11 +283,11 @@ class SendTests(_Clocked):
         session = FakeSession(self.ok())
         interpreter, _ = self.make(session)
         request = interpreter.build_request(NOTE, PAGES, 'paste')
-        interpreter.send(request, deadline_s=330, client_request_id='', original_bytes=None)
+        interpreter.send(request, deadline_s=510, client_request_id='', original_bytes=None)
         (call,) = session.calls
         self.assertEqual(call, {'url': ENDPOINT, 'data': canonical_body(request.body),
                                 'headers': {'x-goog-api-key': GEMINI_KEY, 'content-type': 'application/json'},
-                                'timeout': (10, 300), 'allow_redirects': False, 'stream': True})
+                                'timeout': (10, 480), 'allow_redirects': False, 'stream': True})  # D49
         self.assertEqual(hashlib.sha256(call['data']).hexdigest(), request.canonical_sha256)
 
     def test_the_key_travels_only_in_the_header_and_the_endpoint_never_carries_it(self):
@@ -388,11 +388,11 @@ class SendTests(_Clocked):
 
     def test_the_send_deadline_bounds_every_caller(self):
         def slow_session():
-            self.clock.advance(325)
+            self.clock.advance(505)
             return session
         session = FakeSession(self.ok())
         interpreter = GeminiInterpreter(self.credentials, session_factory=slow_session)
-        # the caller offers 600 s; 330 s is the most a send may take (D12), so 5 s are left, not 275
+        # the caller offers 600 s; 510 s is the most a send may take (D12, D49), so 5 s are left, not 95
         interpreter.send(interpreter.build_request(NOTE, PAGES, 'paste'), deadline_s=600)
         self.assertEqual(session.calls[0]['timeout'], (5.0, 5.0))
         _, session = self.send(self.ok(), deadline_s=20, read_timeout=15)
@@ -400,7 +400,7 @@ class SendTests(_Clocked):
 
     def test_the_deadline_passing_before_the_post_is_not_sent(self):
         def slow_session():
-            self.clock.advance(331)
+            self.clock.advance(511)  # past the 510 s send deadline (D49)
             return session
         session = FakeSession(self.ok())
         interpreter = GeminiInterpreter(self.credentials, session_factory=slow_session)
@@ -681,13 +681,13 @@ class RunTests(_Clocked):
 
     def test_the_run_deadline_is_the_send_deadline(self):
         def slow_session():
-            self.clock.advance(325)
+            self.clock.advance(505)
             return session
         session = FakeSession(self.ok())
         interpreter = GeminiInterpreter(self.credentials, session_factory=slow_session)
         outcome, *_ = self.run_loop(interpreter=interpreter, deadline_s=540)
         self.assertEqual(outcome.outcome, 'succeeded')
-        self.assertEqual(session.calls[0]['timeout'], (5.0, 5.0))  # 330 s, not the 540 s the caller offered
+        self.assertEqual(session.calls[0]['timeout'], (5.0, 5.0))  # 510 s (D49), not the 540 s the caller offered
 
     def test_no_answer_asks_for_a_tool_and_the_executor_is_never_called(self):
         executor = mock.Mock(return_value=({'codes': []}, []))
@@ -1212,7 +1212,7 @@ class ConfiguredTests(SimpleTestCase):
             live = adapter.get_interpreter()  # the file is read at send time, never here
         self.assertIsInstance(live, GeminiInterpreter)
         self.assertEqual((live.mode, live.endpoint, live.credentials_path, live.connect_timeout, live.read_timeout,
-                          live.send_deadline), ('live', ENDPOINT, '/nonexistent/gemini.env', 10, 300, 330))
+                          live.send_deadline), ('live', ENDPOINT, '/nonexistent/gemini.env', 10, 480, 510))
         with override_settings(GEMINI_MODE='replay', GEMINI_REPLAY_DIR=''):
             with self.assertRaisesMessage(ProviderUnavailable, 'Replay interpretation needs CPT_STUDIO_GEMINI_REPLAY_DIR.'):
                 adapter.get_interpreter()
@@ -1220,7 +1220,7 @@ class ConfiguredTests(SimpleTestCase):
             replayed = adapter.get_interpreter()
         self.assertIsInstance(replayed, ReplayInterpreter)
         self.assertEqual((replayed.mode, replayed.endpoint, replayed.replay_dir, replayed.send_deadline),
-                         ('replay', '', Path('/nonexistent/recordings'), 330))
+                         ('replay', '', Path('/nonexistent/recordings'), 510))
         with override_settings(GEMINI_MODE='live', GEMINI_CREDENTIALS_FILE='/x.env'):
             self.assertIsNone(adapter.get_interpreter('disabled'))  # an explicit mode wins
         with self.assertRaises(ValueError):
@@ -1231,8 +1231,10 @@ class ConfiguredTests(SimpleTestCase):
 
         self.assertEqual(settings.GEMINI_MODE, 'disabled')  # the default: nothing is sent
         self.assertEqual(settings.INTERPRETER_SEND_DEADLINE_SECONDS, adapter.SEND_DEADLINE_SECONDS)
+        self.assertEqual(settings.INTERPRETER_READ_TIMEOUT_SECONDS, adapter.READ_TIMEOUT_SECONDS)  # D49
+        self.assertLess(settings.INTERPRETER_READ_TIMEOUT_SECONDS, settings.INTERPRETER_SEND_DEADLINE_SECONDS)
         interpret = settings.JOB_DEADLINE_SECONDS['interpret']
-        self.assertEqual(interpret, 380)
+        self.assertEqual(interpret, 560)  # D49
         # FINAL 6.3: the send and its recording fit the stage, and the stage ends before the stale-stage sweep
         self.assertLess(settings.INTERPRETER_SEND_DEADLINE_SECONDS + jobs.LOOP_RECORDING_SECONDS, interpret)
         self.assertLess(interpret, settings.STALE_RUNNING_SECONDS)
@@ -1250,7 +1252,7 @@ class ConfiguredTests(SimpleTestCase):
                     pass
         self.assertEqual((literals['INTERPRETER_SEND_DEADLINE_SECONDS'], literals['INTERPRET_MAX_CHARS'],
                           literals['INTERPRET_MAX_PAGES'], literals['JOB_DEADLINE_SECONDS']['interpret']),
-                         (330, 20_000, 40, 380))
+                         (510, 20_000, 40, 560))
 
     def run_settings(self, **environment):
         script = 'import cptstudio.settings as s\nprint(s.GEMINI_MODE)\n'

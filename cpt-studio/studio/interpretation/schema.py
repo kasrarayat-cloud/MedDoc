@@ -224,7 +224,10 @@ BOUNDS = MappingProxyType({
     'contradicts': 8,              # per event
     'scope_targets': 16,
     'question_ids': 64,            # ids in each of an open question's events, lesions and passages lists
-    'words_chars': 300,            # characters of one ``words``, ``site_words`` or ``size_words``
+    # D48 (the S17 refutation, finding 18): D33 asks for the whole framing sentence as the time and performer words, and
+    # a real framing sentence can pass 300 characters (one of 343 refused the whole answer); a words value is located in
+    # its passage, so its bound is one passage's (600). The longest measured is 189 (FRESH-2, 15,949 words values).
+    'words_chars': 600,            # characters of one ``words``, ``site_words`` or ``size_words``
     'sequence': (0, 999),
     'cited_passages': 4000,        # passage ids cited in the whole answer, every ``passages`` list counted
 })

@@ -1362,8 +1362,8 @@ def _check_loop_time(job, purpose=None):
     STALE_RUNNING_SECONDS, where the stale-stage sweep takes a stage for dead - covers the tool loop's own deadline
     (PARTICIPANT_LOOP_DEADLINE_SECONDS) plus the stage's bookkeeping. A stage that has already used so much of it that a
     whole loop and its recording would no longer fit reserves and sends nothing: it is queued again (Requeue) and starts
-    afresh. The deadline is the purpose's (FINAL 6.3): INTERPRETER_SEND_DEADLINE_SECONDS (330 s) for an interpretation,
-    whose stage has JOB_DEADLINE_SECONDS['interpret'] (380 s), and the participants' 540 s otherwise."""
+    afresh. The deadline is the purpose's (FINAL 6.3): INTERPRETER_SEND_DEADLINE_SECONDS (510 s, D49) for an
+    interpretation, whose stage has JOB_DEADLINE_SECONDS['interpret'] (560 s), and the participants' 540 s otherwise."""
     if job.started_at is None:
         return
     budget = min(settings.JOB_DEADLINE_SECONDS.get(job.kind, settings.STALE_RUNNING_SECONDS),

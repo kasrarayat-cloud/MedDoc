@@ -397,7 +397,7 @@ class BoundTests(ReadTestCase):
                 node = value
                 for step in where[:-1]:
                     node = node[step]
-                node[where[-1]] = ('synthetic words ' * 30)[:n]
+                node[where[-1]] = ('synthetic words ' * 60)[:n]
                 return value
             return build
 
@@ -407,7 +407,7 @@ class BoundTests(ReadTestCase):
                       ('encounter', 'reach', 0, 'completion', 'words')):
             path = '.'.join(f'[{step}]' if isinstance(step, int) else step for step in where).replace('.[', '[')
             with self.subTest(words=path):
-                self.at_and_past(at(where), 300, f'{path} has {{n}} characters, more than the {{limit}} one words field '
+                self.at_and_past(at(where), 600, f'{path} has {{n}} characters, more than the {{limit}} one words field '
                                                  'may have')
 
     def test_the_sequence(self):
@@ -545,7 +545,7 @@ class WordingTests(ReadTestCase):
             return value
 
         planted = {
-            'a words field too long': change(lambda v: v['events'][1]['time'].update(words=MODEL_TEXT * 13)),
+            'a words field too long': change(lambda v: v['events'][1]['time'].update(words=MODEL_TEXT * 25)),
             'a passage too long': change(lambda v: v['passages'][1].update(text=MODEL_TEXT * 25)),
             'an id that is not one': change(lambda v: v['events'][1].update(id=MODEL_TEXT + '-NOT-AN-ID')),
             'a repeated id': change(lambda v: [item.update(id=MODEL_TEXT[:24]) for item in v['events'][:2]]),

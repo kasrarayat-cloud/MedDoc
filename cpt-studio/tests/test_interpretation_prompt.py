@@ -43,7 +43,7 @@ PINS = {
         'INSTRUCTIONS': '00da58c5a8f0f5deca4ee0dd8259bb7065ee6dd551e408e3257bd33b4eee14b1',
         'LOCAL_SCHEMA': '93574cacb4dc3d9fb0c3ed7789a8c2f7c708bf94176b53f1dd850fcd0214ccc3',
         'RESPONSE_SCHEMA': '7bb3057d724012910b4210272c31480eacb6fc6fe6dbacbce4415c61592d2537',
-        'BOUNDS': '1465ca8d83ec9337e7c13245571fc01112c820cf2f2f98438e9a52039654dc4b',
+        'BOUNDS': '509c31cb56233b2827a2927fe903259714a680d57e0dbc28c7b7b7289d2e22d1',  # D48: words_chars 600
     },
 }
 # The generated schema, measured (canonical bytes: keys sorted, no spaces). The contract's own enumerations, run through
@@ -402,7 +402,7 @@ class SchemaTests(SimpleTestCase):
         self.assertEqual(dict(schema.BOUNDS), {
             'passages': 400, 'passage_chars': (1, 600), 'lesions': 64, 'events': 200, 'open_questions': 32,
             'anatomy': 16, 'reach': 16, 'visit_facts': 8, 'team': 8, 'other_dates': 16, 'attribute_passages': 32,
-            'contradicts': 8, 'scope_targets': 16, 'question_ids': 64, 'words_chars': 300, 'sequence': (0, 999),
+            'contradicts': 8, 'scope_targets': 16, 'question_ids': 64, 'words_chars': 600, 'sequence': (0, 999),
             'cited_passages': 4000})
         self.assertEqual(schema.BOUNDS['passage_chars'][1], reading.MAX_QUOTE_CHARS)  # reading.py:58, as the contract says
         with self.assertRaises(TypeError):

@@ -219,6 +219,10 @@ class StopTimeoutTests(unittest.TestCase):
                          [str(install.STOP_SECONDS['worker'])])
         # the access check sends once and must not be cut off before the send deadline
         self.assertGreater(install.ACCESS_CHECK_SECONDS, participant)
+        # D49: the interpreter's stage (its 510 s send and recording) ends before the worker is stopped
+        self.assertGreater(install.STOP_SECONDS['worker'], settings_value('JOB_DEADLINE_SECONDS')['interpret'])
+        self.assertGreater(settings_value('JOB_DEADLINE_SECONDS')['interpret'],
+                           settings_value('INTERPRETER_SEND_DEADLINE_SECONDS'))
 
     def test_the_worker_outlasts_a_whole_tool_loop_and_stops_at_the_stale_sweeps_bound(self):
         # harness@2 (HARNESS.md 11.2): one participant phase is a loop of at most PARTICIPANT_MAX_EXCHANGES exchanges
