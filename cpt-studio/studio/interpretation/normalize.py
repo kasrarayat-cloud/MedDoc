@@ -37,10 +37,10 @@ occurrence is kept with ``occurrences: n``; the words record is always the revis
 in a passage the attribute does not cite never count. The basis is ``stated`` (words located), ``default`` (no words,
 and a frame default: time current_encounter, performer documenting_team - EB2, accepted with no guard - or a procedure
 the single-family guard settles) or ``absent`` (the not-stated value). A default value whose words fail to locate falls
-back to the default, the problem recorded - unless those words hold a date that is not the service date (time) or a
-name that is not a team member's (performer): EB2 reads given words whether or not they locate, for that literal only
-(the procedure default falls back whatever its unlocated words lack), and nothing of them is stored. Any other value
-with no words, or words that do not locate, is unverified.
+back to the default, the problem recorded - unless those words hold a date that is not the service date or (DECISIONS
+D35) a marker of another occasion (time), or a name that is not a team member's (performer): EB2 reads given words
+whether or not they locate, for that literal only (the procedure default falls back whatever its unlocated words lack),
+and nothing of them is stored. Any other value with no words, or words that do not locate, is unverified.
 
 Normalization never merges, splits, renumbers or drops an event or a lesion; an event every check fails stays, with its
 states and reasons. No model-written string is stored: every value is an enumeration value, a defined id, an ISO date or
@@ -129,9 +129,9 @@ class Inventory:
 class _Default:
     """Whether a value with no words (or unlocated words) may be accepted as a frame default, with the guard's checks
     and, when it may not, why. ``deny`` reads the words Gemini gave for a default value that do not locate, for the one
-    literal EB2 lets deny the default: a date in a time's words that is not the service date, a name in a performer's
-    words that is not a team member's. None where no given word denies the default (the procedure default, contract
-    5.2)."""
+    literal EB2 lets deny the default: a date in a time's words that is not the service date - or (DECISIONS D35) a
+    marker of another occasion in them - and a name in a performer's words that is not a team member's. None where no
+    given word denies the default (the procedure default, contract 5.2)."""
     allowed: bool
     checks: tuple = ()
     reasons: tuple = ()
@@ -327,9 +327,11 @@ class Draft:
         would have been accepted with no words at all - unless the words Gemini gave state, by their own literal, what
         the default denies (EB2, which governs: "where Gemini DID give time words, a date literal in those words that
         differs from the service date leaves the time unverified", and so for a name in performer words that is not a
-        team member's). Only that literal is read (``default.deny``), never the attribute's other checks: the procedure
-        default an E/M visit's kind settles falls back whatever its unlocated words lack. Nothing of the words is
-        stored. Anything else is unverified with the failure."""
+        team member's, and - DECISIONS D35 - for a marker of another occasion in time words: "At the original
+        procedure" given for a current time denies it whether or not it locates). Only that literal is read
+        (``default.deny``), never the attribute's other checks: the procedure default an E/M visit's kind settles falls
+        back whatever its unlocated words lack. Nothing of the words is stored. Anything else is unverified with the
+        failure."""
         if default is not None and default.allowed:
             verdict = default.deny(words) if default.deny is not None else verify.Verdict()
             if verdict.reasons:

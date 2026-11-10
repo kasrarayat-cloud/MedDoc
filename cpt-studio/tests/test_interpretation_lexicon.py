@@ -321,6 +321,22 @@ class Markers(SimpleTestCase):
         with self.assertRaises(KeyError):
             lexicon.markers('negation', 'no')
 
+    def test_d35_a_marker_of_another_occasion(self):
+        # DECISIONS D35: every C1 earlier and future marker, the future period, and "original"; each once, in order.
+        for entry in lexicon.EARLIER_MARKERS + lexicon.FUTURE_MARKERS + lexicon.OTHER_OCCASION + ('in 4 to 6 weeks',):
+            with self.subTest(entry):
+                self.assertTrue(lexicon.other_occasion(f'the act {entry} today'))
+        self.assertEqual(lexicon.other_occasion('At the original procedure'), ('original',))
+        self.assertEqual(lexicon.other_occasion('the previously planned repeat, as at the original'),
+                         ('previously', 'planned', 'repeat', 'original'))
+        for text in ('today', 'On withdrawal', 'during the procedure', 'originally', 'the originating lesion',
+                     'At this procedure'):
+            with self.subTest(text):
+                self.assertEqual(lexicon.other_occasion(text), ())
+        # "original" is no C1 earlier marker: EB3's exclusion path reads exactly what it read before D35.
+        self.assertNotIn('original', lexicon.EARLIER_MARKERS)
+        self.assertEqual(lexicon.markers('earlier', 'At the original procedure'), ())
+
 
 class PersonWords(SimpleTestCase):
     def test_titles_credentials_role_facility_and_function_words_are_never_names(self):

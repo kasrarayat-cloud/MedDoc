@@ -690,6 +690,22 @@ class Focused(SimpleTestCase):
         self.assert_question(p, 'statement_scope')
         self.assertIn('Does “No polyp was removed” apply to the snare removal', p.clarifications[0].question)
 
+    ORIGINAL = 'At the original procedure, a 6 mm sessile polyp in the sigmoid colon was removed with a cold snare.'
+
+    def test_d35_a_current_time_whose_own_words_name_another_occasion_asks_the_time(self):
+        # DECISIONS D35 (FRESH-2 aside-of-twins-023 r1, r2): Gemini calls the removal current and gives "At the
+        # original procedure" as its time words. The time is unverified: the time question, never READY, never excluded.
+        polyp = removed(time=a('current_encounter', 'At the original procedure', ['P2']))
+        inv, text = colonoscopy(polyp=polyp, lines={'P2': self.ORIGINAL})
+        p = proposal(run(inv, text, [('45385', self.ORIGINAL)]), '45385')
+        self.assert_question(p, 'event_time', self.ORIGINAL)
+        self.assertNotEqual(p.bucket, 'excluded')
+        # Time words naming no other occasion leave the same act READY.
+        line = self.ORIGINAL.replace('At the original procedure', 'At this procedure')
+        polyp = removed(time=a('current_encounter', 'At this procedure', ['P2']))
+        inv, text = colonoscopy(polyp=polyp, lines={'P2': line})
+        self.assertEqual(proposal(run(inv, text, [('45385', line)]), '45385').status, 'ready')
+
     def test_h4_each_unusable_attribute_of_lines_1_to_3(self):
         cases = {'event_time': removed(time=a('unknown')), 'event_performer': removed(performer=a('unknown')),
                  'performed_status': removed(status_words='was excised')}

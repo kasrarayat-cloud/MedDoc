@@ -13,8 +13,12 @@ reading of the document:
   service date leaves the time unverified; where it gave performer words, a name in them that is not the documenting
   endoscopist or a listed team member leaves the performer unverified.
 - EB3. C1's markers read only the words of a value that could EXCLUDE: status planned or attempted_not_completed, time
-  earlier_encounter or future with no date literal, performer other_facility with no person name. They never touch the
-  READY path (performed, current_encounter, documenting_team).
+  earlier_encounter or future with no date literal, performer other_facility with no person name. A missing marker
+  never touches the READY path (performed, current_encounter, documenting_team).
+- DECISIONS D35 narrows EB3 for the time alone: a current_encounter time whose OWN words carry a marker of another
+  occasion - a C1 earlier or future marker, or "original" (lexicon.other_occasion) - is unverified (other_occasion),
+  because Gemini's own words contradict Gemini's own value. A time question, never an exclusion: no exclusion reads a
+  current time, and the earlier and future values' markers are read exactly as EB3 reads them.
 
 What a failure does (contract 5.5): the attribute is unverified with its reasons, closed lists here. It never sets,
 changes or removes a value, never excludes a code, never creates a status, a contradiction or a hold. Consumers read an
@@ -44,8 +48,8 @@ REASONS = (
     'date_mismatch', 'date_unchecked', 'name_mismatch', 'name_not_other', 'size_missing', 'landmark_missing',
     'landmark_conflict', 'device_reach', 'device_missing', 'procedure_name_missing', 'procedure_unsettled',
     'negation_missing', 'quantifier_missing', 'duration_missing', 'label_missing',
-    # the C1 markers (FINAL 5.2, 5.5; EB3)
-    'planning_missing', 'failure_missing', 'time_marker_missing', 'facility_marker_missing',
+    # the C1 markers (FINAL 5.2, 5.5; EB3), and a current time's words naming another occasion (DECISIONS D35)
+    'planning_missing', 'failure_missing', 'time_marker_missing', 'facility_marker_missing', 'other_occasion',
     # structural (contract 5.4)
     'scope_target_mismatch', 'umbrella_on_positive', 'inconsistent_status_time', 'part_of_invalid',
     'claim_unknown_event', 'lesion_unknown', 'reach_not_permitted', 'visit_not_permitted', 'scope_not_permitted',
@@ -60,7 +64,7 @@ CHECKS = (
     'passages_located', 'passage_places', 'words_in_own_passage', 'default', 'default_after_unlocated_words', 'single_family',
     'date_literal', 'name_tokens', 'size_literal', 'landmark_words', 'reach_device', 'device_words', 'procedure_name',
     'negation_marker', 'quantifier', 'duration_literal', 'label_words', 'planning_marker', 'failure_marker',
-    'time_marker', 'facility_marker', 'scope_permitted', 'scope_target', 'umbrella', 'status_time', 'part_of_reference',
+    'time_marker', 'occasion_marker', 'facility_marker', 'scope_permitted', 'scope_target', 'umbrella', 'status_time', 'part_of_reference',
     'lesion_reference', 'reach_permitted', 'visit_permitted', 'lesion_site',
 )
 _ORDER = {reason: index for index, reason in enumerate(REASONS + IDENTITY_REASONS)}
@@ -119,17 +123,27 @@ def time_words(value: str, text: str, service_date: Optional[date]) -> Verdict:
     """time, stated (EB2): every date literal in the words compares, at its own precision, as ``value`` requires - the
     same for current_encounter, before for earlier_encounter, after for future (date_mismatch); a literal with no
     service date established leaves an earlier or future time unverified (date_unchecked). With no date literal, an
-    earlier or future time needs a time marker in the words (time_marker_missing; C1, EB3)."""
+    earlier or future time needs a time marker in the words (time_marker_missing; C1, EB3).
+    DECISIONS D35: a current_encounter time whose words carry a marker of another occasion (lexicon.other_occasion: a
+    C1 earlier or future marker, or "original") is unverified (other_occasion), date literal or not - "At the original
+    procedure" given as the words of a time Gemini calls current. The words are read for that marker only where they
+    contradict the value; an earlier or future time is read exactly as before, so no exclusion changes (EB3)."""
     found = literals.dates(text)
     records = [_date_record(item) for item in found]
     if found:
-        return _verdict(('date_literal',), {'dates': records}, _date_reasons(value, records, service_date))
-    if value in ('earlier_encounter', 'future'):
+        verdict = _verdict(('date_literal',), {'dates': records}, _date_reasons(value, records, service_date))
+    elif value in ('earlier_encounter', 'future'):
         kind = 'earlier' if value == 'earlier_encounter' else 'future'
         marks = lexicon.markers(kind, text)
         return _verdict(('date_literal', 'time_marker'), {'markers': list(marks)},
                         () if marks else ('time_marker_missing',))
-    return _verdict(('date_literal',), {})
+    else:
+        verdict = _verdict(('date_literal',), {})
+    if value != 'current_encounter':
+        return verdict
+    marks = lexicon.other_occasion(text)
+    return _verdict(verdict.checks + ('occasion_marker',), {**verdict.literals, 'markers': list(marks)},
+                    verdict.reasons + (('other_occasion',) if marks else ()))
 
 
 def _date_reasons(value: str, records: Sequence[Mapping], service_date: Optional[date]) -> tuple:

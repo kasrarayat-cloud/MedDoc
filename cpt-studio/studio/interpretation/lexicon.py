@@ -10,10 +10,13 @@ flexure" names the flexure and never the liver as well.
 
 What a list is for (EB1): a check reads ONLY the cited words of the attribute it verifies, and these lists confirm the
 literal content of those words - a landmark, a device, a procedure's name, a negator, a quantifier, a duration's unit,
-a visit label, and (EB3) a C1 marker on a value that could decide an exclusion. No list reads a passage, a heading or
+a visit label, (EB3) a C1 marker on a value that could decide an exclusion, and (DECISIONS D35) a marker of another
+occasion in the words of a time stated current, which leaves that time unverified. No list reads a passage, a heading or
 the document, no list produces a value, and a word missing from a list leaves its attribute unverified: a focused
-question, never an exclusion and never READY. A list is widened only under a new INVENTORY_VERSION, by re-normalizing
-the stored answers with no new request (contract 1).
+question, never an exclusion and never READY - except D35's, the one list a word must be ABSENT from: a marker of
+another occasion it lacks leaves the current time Gemini's reading (EB2), as before D35, and one it holds leaves that
+time unverified. A list is widened only under a new INVENTORY_VERSION, by re-normalizing the stored answers with no new
+request (contract 1).
 
 Pure: imports nothing from studio.gi (FINAL 3.1). PROCEDURAL_FAMILIES and FAMILY_OF are this module's own copies of
 the families gi.profiles marks procedural and of the family slugs, pinned equal to gi.profiles by a test.
@@ -502,6 +505,23 @@ def markers(kind: str, text: str) -> tuple[str, ...]:
     found_ = list(found(text, lists[kind]))
     if kind == 'future':
         found_ += [match.group(0) for match in _IN_PERIOD.finditer(fold(text)) if match.group(0) not in found_]
+    return tuple(found_)
+
+
+# DECISIONS D35: the words of a time Gemini calls current_encounter must not name another occasion - a C1 earlier or
+# future marker, or "original" ("At the original procedure": the occasion a reproduced report narrates, FRESH-2
+# aside-of-twins-023). Read only in that time's own words (verify.time_words), never in a passage. "original" is NOT an
+# earlier marker: an earlier time its words alone carry still lacks one, so no exclusion changes (EB3).
+OTHER_OCCASION = ('original',)
+
+
+def other_occasion(text: str) -> tuple[str, ...]:
+    """D35: the markers of another occasion ``text`` holds - the earlier markers, the future markers (with "in N
+    weeks"), then OTHER_OCCASION - each once, in that order."""
+    found_ = []
+    for entry in markers('earlier', text) + markers('future', text) + found(text, OTHER_OCCASION):
+        if entry not in found_:
+            found_.append(entry)
     return tuple(found_)
 
 

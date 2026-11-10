@@ -46,6 +46,7 @@ class ClosedLists(SimpleTestCase):
     def test_every_check_a_verdict_names_is_in_the_closed_list(self):
         verdicts = [verify.date_words('2026-11-09', '11/09/2026'), verify.time_words('future', 'next year', SERVICE),
                     verify.time_words('earlier_encounter', 'in 2024', SERVICE),
+                    verify.time_words('current_encounter', 'At the original procedure', SERVICE),
                     verify.performer_words('other_facility', 'an outside hospital', TEAM),
                     verify.size_words('7 mm'), verify.landmark_words('cecum', 'cecum'),
                     verify.reach_words('cecum', 'to the cecum'), verify.device_words('balloon', 'CRE balloon'),
@@ -135,11 +136,72 @@ class Time(SimpleTestCase):
             with self.subTest(value=value, text=text):
                 self.assertEqual(reasons(verify.time_words(value, text, SERVICE)), ('time_marker_missing',))
 
-    def test_eb3_markers_never_touch_the_ready_path(self):
-        # A current_encounter time is never asked for a marker, whatever its words hold.
-        verdict = verify.time_words('current_encounter', 'previously', SERVICE)
-        self.assertEqual(reasons(verdict), ())
-        self.assertNotIn('time_marker', verdict.checks)
+    def test_eb3_a_missing_marker_never_touches_the_ready_path(self):
+        # A current_encounter time is never asked FOR a marker: words naming no occasion leave it Gemini's reading.
+        for text in ('today', 'On withdrawal', 'during the procedure', 'At this procedure', 'this morning',
+                     'on 11/09/2026', 'November 2026'):
+            with self.subTest(text):
+                verdict = verify.time_words('current_encounter', text, SERVICE)
+                self.assertEqual(reasons(verdict), ())
+                self.assertIn('occasion_marker', verdict.checks)  # D35's check ran, and found nothing
+                self.assertNotIn('time_marker', verdict.checks)
+                self.assertNotIn('markers', verdict.literals)
+
+    def test_d35_a_current_time_whose_own_words_name_another_occasion_is_unverified(self):
+        # DECISIONS D35 (FRESH-2 aside-of-twins-023): the C1 earlier and future markers, and "original".
+        for text, marks in (('At the original procedure', ['original']), ('previously', ['previously']),
+                            ('at the prior colonoscopy', ['prior']), ('2 years ago', ['ago']),
+                            ('repeat colonoscopy', ['repeat']), ('in 3 months', ['in 3 months']),
+                            ('will be done', ['will']), ('on 11/09/2026, at the original procedure', ['original'])):
+            with self.subTest(text):
+                verdict = verify.time_words('current_encounter', text, SERVICE)
+                self.assertEqual(reasons(verdict), ('other_occasion',))
+                self.assertIn('occasion_marker', verdict.checks)
+                self.assertEqual(verdict.literals['markers'], marks)
+                record = {'value': 'current_encounter', 'state': 'unverified', 'basis': 'stated',
+                          'literals': dict(verdict.literals), 'reasons': list(verdict.reasons)}
+                self.assertEqual(verify.exclusion_basis('time', record), '')  # a question, never an exclusion
+        # a date literal's own failure stands beside it
+        self.assertEqual(reasons(verify.time_words('current_encounter', 'previously, on 12/01/2026', SERVICE)),
+                         ('date_mismatch', 'other_occasion'))
+
+    def test_d35_leaves_the_earlier_and_future_values_as_eb3_reads_them(self):
+        # "original" is no earlier marker: the exclusion path is unchanged (EB3).
+        self.assertEqual(reasons(verify.time_words('earlier_encounter', 'At the original procedure', SERVICE)),
+                         ('time_marker_missing',))
+        for value, text in (('earlier_encounter', 'previously'), ('future', 'repeat colonoscopy')):
+            with self.subTest(value=value):
+                verdict = verify.time_words(value, text, SERVICE)
+                self.assertEqual((reasons(verdict), verdict.checks), ((), ('date_literal', 'time_marker')))
+                record = {'value': value, 'state': 'verified', 'basis': 'stated', 'literals': dict(verdict.literals),
+                          'reasons': []}
+                self.assertEqual(verify.exclusion_basis('time', record), 'marker')  # still able to exclude
+        # With a date literal, an earlier or future time is read by the literal alone, whatever marker stands beside it.
+        for value, text in (('earlier_encounter', 'previously, in 2024'), ('earlier_encounter', 'in the next 2024 visit'),
+                            ('future', 'repeat on 12/01/2026'), ('future', 'previously planned for 12/01/2026')):
+            with self.subTest(value=value, text=text):
+                verdict = verify.time_words(value, text, SERVICE)
+                self.assertEqual((reasons(verdict), verdict.checks), ((), ('date_literal',)))
+                self.assertNotIn('markers', verdict.literals)
+
+    def test_a_current_time_is_never_an_exclusions_basis_whatever_its_literals(self):
+        # FINAL C1: only an earlier or future time decides an exclusion. A usable current time's date literal is none,
+        # nor a stored marker (D35 never stores one on a usable current time: it leaves that time unverified).
+        verdict = verify.time_words('current_encounter', 'on 11/09/2026', SERVICE)
+        record = {'value': 'current_encounter', 'state': 'verified', 'basis': 'stated',
+                  'literals': dict(verdict.literals), 'reasons': []}
+        self.assertEqual(record['literals'], {'dates': [{'value': '2026-11-09', 'precision': 'day'}]})
+        self.assertEqual(verify.exclusion_basis('time', record), '')
+        self.assertEqual(verify.exclusion_basis('time', dict(record, literals={'markers': ['original']})), '')
+
+    def test_d35_time_state_keeps_the_other_occasion(self):
+        # time_state recomputes only the date reasons; the words' marker of another occasion stays.
+        verdict = verify.time_words('current_encounter', 'at the original procedure on 11/09/2026', SERVICE)
+        record = {'value': 'current_encounter', 'state': 'unverified', 'basis': 'stated',
+                  'literals': dict(verdict.literals), 'reasons': list(verdict.reasons)}
+        self.assertEqual(verify.time_state(record, date(2026, 11, 9))['reasons'], ['other_occasion'])
+        self.assertEqual(verify.time_state(record, date(2026, 11, 10))['reasons'], ['date_mismatch', 'other_occasion'])
+        self.assertEqual(verify.time_state(record, date(2026, 11, 9))['state'], 'unverified')
 
     def test_a_date_literal_decides_without_a_marker(self):
         verdict = verify.time_words('earlier_encounter', 'in 2024', SERVICE)

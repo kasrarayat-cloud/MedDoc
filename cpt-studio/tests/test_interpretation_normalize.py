@@ -326,7 +326,9 @@ class Bases(SimpleTestCase):
                                                     performer=attr('documenting_team', 'Dr. Patel', ['P9'])),
                                denial()])
         snare = ev(run(value), 'E1')
-        self.assertEqual(state(snare['time']), ('unverified', 'absent', ['words_unlocated', 'date_mismatch']))
+        # "scheduled" is also a marker of another occasion (DECISIONS D35): both readings of the words deny the default
+        self.assertEqual(state(snare['time']), ('unverified', 'absent',
+                                                ['words_unlocated', 'date_mismatch', 'other_occasion']))
         self.assertEqual(state(snare['performer']), ('unverified', 'absent', ['passage_unknown', 'name_mismatch']))
         for name in ('time', 'performer'):
             self.assertEqual((snare[name]['words'], snare[name]['literals']), (None, {}))
@@ -444,9 +446,47 @@ class EB(SimpleTestCase):
     def test_but_given_time_words_holding_that_date_leave_the_time_unverified(self):
         value, text = self.tattoo(time=attr('current_encounter', 'scheduled on 12/01/2026', ['P1']))
         tattoo = ev(run(value, text), 'E1')
-        self.assertEqual(state(tattoo['time']), ('unverified', 'stated', ['date_mismatch']))
-        self.assertEqual(tattoo['time']['literals'], {'dates': [{'value': '2026-12-01', 'precision': 'day'}]})
+        # the date literal, and (DECISIONS D35) "scheduled", a marker of another occasion, each leave it unverified
+        self.assertEqual(state(tattoo['time']), ('unverified', 'stated', ['date_mismatch', 'other_occasion']))
+        self.assertEqual(tattoo['time']['literals'], {'dates': [{'value': '2026-12-01', 'precision': 'day'}],
+                                                      'markers': ['scheduled']})
         self.assertEqual(tattoo['current'], 'unresolved')
+
+    ORIGINAL = 'At the original procedure, a 6 mm polyp was removed with a cold snare.'
+
+    def test_d35_given_time_words_naming_another_occasion_leave_a_current_time_unverified(self):
+        # DECISIONS D35 (FRESH-2 aside-of-twins-023): "At the original procedure" given as the words of a time Gemini
+        # calls current. Located in the act's own passage, they leave it unverified: a time question, never an
+        # exclusion.
+        value, text = self.dated(self.ORIGINAL, time=attr('current_encounter', 'At the original procedure', ['P1']))
+        snare = ev(run(value, text), 'E1')
+        self.assertEqual(state(snare['time']), ('unverified', 'stated', ['other_occasion']))
+        self.assertEqual(snare['time']['literals'], {'markers': ['original']})
+        self.assertIn('occasion_marker', snare['time']['checks'])
+        self.assertEqual(snare['current'], 'unresolved')
+        self.assertEqual(verify.exclusion_basis('time', snare['time']), '')
+        # Unlocated, the same marker denies the default as a date literal does (EB2 reads given words, for it only).
+        value, text = self.dated(self.ORIGINAL, time=attr('current_encounter', 'at the original colonoscopy', ['P1']))
+        snare = ev(run(value, text), 'E1')
+        self.assertEqual(state(snare['time']), ('unverified', 'absent', ['words_unlocated', 'other_occasion']))
+        self.assertEqual((snare['time']['words'], snare['time']['literals']), (None, {}))
+
+    def test_d35_reads_only_the_times_own_words_and_leaves_an_earlier_time_as_before(self):
+        # EB1: a marker elsewhere in the passage is never read; words naming no occasion still verify a current time.
+        sentence = 'Today, a 6 mm polyp was removed with a cold snare; it had previously been biopsied.'
+        value, text = self.dated(sentence, time=attr('current_encounter', 'Today', ['P1']))
+        snare = ev(run(value, text), 'E1')
+        self.assertEqual(state(snare['time']), ('verified', 'stated', []))
+        self.assertEqual(snare['current'], 'yes')
+        # An earlier time worded by a C1 marker still verifies, and can still exclude (EB3 unchanged).
+        value, text = self.dated('Previously, a 6 mm polyp was removed with a cold snare.',
+                                 time=attr('earlier_encounter', 'Previously', ['P1']))
+        snare = ev(run(value, text), 'E1')
+        self.assertEqual(state(snare['time']), ('verified', 'stated', []))
+        self.assertEqual(verify.exclusion_basis('time', snare['time']), 'marker')
+        # "original" alone is no earlier marker: an earlier time it alone words still lacks one (a question, as before).
+        value, text = self.dated(self.ORIGINAL, time=attr('earlier_encounter', 'At the original procedure', ['P1']))
+        self.assertEqual(state(ev(run(value, text), 'E1')['time']), ('unverified', 'stated', ['time_marker_missing']))
 
     def test_a_referring_physician_named_in_the_passage_does_not_fail_the_performer_default(self):
         # The pin is the verified team (refuter C-14: "Dr. Patel is titled, is not in the team and performs no
@@ -1412,6 +1452,7 @@ def every_reason_scenario() -> list:
     add('planning_missing', e(status=attr('planned', 'was removed', ['P2'])))
     add('failure_missing', e(status=attr('attempted_not_completed', 'was removed', ['P2'])))
     add('time_marker_missing', e(time=attr('earlier_encounter', 'removed', ['P2'])))
+    add('other_occasion', e(time=attr('current_encounter', 'at the original procedure', ['P2'])))  # D35, unlocated
     add('facility_marker_missing', e(performer=attr('other_facility', 'sessile polyp', ['P2'])))
     add('scope_target_mismatch', answer(events=[examination(), event(), denial(
         scope=scope('single_target', 'No other', ['P3']))]))
