@@ -15,6 +15,8 @@ from datetime import date
 from pathlib import Path
 from unittest import mock
 
+from django.db import transaction
+
 from studio import interpretation, jobs, models
 from studio.context_facts import USER_CONFLICT_NOTE, is_member_conflict
 from studio.gi import cues
@@ -199,7 +201,38 @@ class GateTests(ContextSaveCase):
         self.assertEqual((trip.data['entry'], trip.data['reason'], trip.data['refused'], trip.data['label']),
                          ('context.save', 'executed', True, 'new_path'))
         self.assertEqual((trip.encounter_id, trip.actor_id), (encounter.pk, self.user.pk))
+        self.assertEqual(refused.exception.trip, trip.data)  # the refusal carries the row it recorded
         self.assertFalse(models.AuditEvent.objects.filter(event='context.changed').exists())
+
+    def test_a_save_refused_inside_a_callers_transaction_carries_its_trip_for_that_caller_to_record(self):
+        """FINAL 10.3 asks for a recorded refusal. change_context records the trip after its own save rolled back, but
+        a caller that holds a transaction of its own around the call - answers.save_details and review.confirm_finding
+        do - rolls that row back with its own work when it lets the refusal propagate: the Refused carries the trip
+        (``trip``), so such a caller records it once it has left its transaction (S10 review round 2, finding 3; the
+        callers are slice S11's)."""
+        encounter, revision = self.assessed()
+        real = jobs.derived_facts
+
+        def planted(*args, **kwargs):
+            cues.page_number_line('3')  # a denied function, run in the save's scope before its first row
+            return real(*args, **kwargs)
+
+        with mock.patch.object(jobs, 'derived_facts', side_effect=planted), \
+                self.assertRaises(jobs.Refused) as refused:
+            with transaction.atomic():  # a caller's own transaction around the save, as save_details holds one
+                self.save(encounter, {'setting': 'asc'})
+        self.assertEqual(str(refused.exception), sentinel.MESSAGES['executed'])
+        self.assertFalse(models.AuditEvent.objects.filter(event=sentinel.TRIPPED).exists())  # rolled back with it
+        trip = refused.exception.trip
+        self.assertEqual((trip['entry'], trip['reason'], trip['refused'], trip['label'], trip['scope']),
+                         ('context.save', 'executed', True, 'new_path', jobs.CONTEXT_SAVE))
+        self.assertTrue(any('studio/gi/cues.py' in line for line in trip['executed']), trip)
+        # the caller, outside its transaction, records the row the gate would have kept
+        from studio import audit
+
+        audit.record(encounter.workspace, sentinel.TRIPPED, encounter=encounter, actor=self.user, **trip)
+        [row] = models.AuditEvent.objects.filter(event=sentinel.TRIPPED)
+        self.assertEqual((row.data, row.encounter_id, row.actor_id), (trip, encounter.pk, self.user.pk))
 
     def test_a_clean_save_runs_in_its_own_new_path_scope_with_nothing_counted(self):
         encounter, revision = self.assessed()

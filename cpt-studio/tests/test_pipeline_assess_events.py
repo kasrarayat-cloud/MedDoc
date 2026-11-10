@@ -447,12 +447,35 @@ class SentinelTests(EventsCase):
         self.assert_refused_by_the_gate(job, encounter)
 
     def test_an_assessment_is_never_recorded_outside_a_scope_the_sentinel_vouches_for(self):
+        """The write gate is what refuses: the stage runs with no scope open and is given the D22 record a vouched scope
+        makes, so nothing but persist_assessment's gate stands between it and the insert (S10 review round 2, finding
+        2: without the record, the stage stopped at sentinel.record and never reached the gate)."""
+        encounter, _ = self.through_predict()
+        job = jobs.claim_next()
+        self.assertEqual(job.kind, Job.ASSESS)
+        vouched = {'legacy_calls': 0, 'scope': jobs.ASSESS_SCOPE, 'tool': sentinel.TOOL,
+                   'deny_size': sentinel.DENY_SIZE, 'positive_control': 'ok'}
+        with mock.patch.object(jobs, '_stage_scope', return_value=ExitStack()), \
+                mock.patch.object(sentinel, 'record', return_value=vouched) as made:  # a stage run with no scope open
+            job = jobs.run_job(job)
+        made.assert_called_once_with(name=jobs.ASSESS_SCOPE)  # the stage reached its record, the gate after it
+        self.assertEqual((job.state, job.error), (Job.FAILED, sentinel.MESSAGES['unavailable']))
+        self.assertEqual(self.assessments(encounter), [])
+        encounter.refresh_from_db()
+        self.assertIsNone(encounter.current_assessment_id)
+        [trip] = models.AuditEvent.objects.filter(event=sentinel.TRIPPED)
+        self.assertEqual((trip.data['entry'], trip.data['reason'], trip.data['refused'], trip.data['label'],
+                          trip.data['scope']), ('assessment.persist', 'unscoped', True, sentinel.UNSCOPED, ''))
+        self.assertEqual(trip.encounter_id, encounter.pk)
+
+    def test_a_stage_run_outside_any_scope_makes_no_sentinel_record_and_records_nothing(self):
         encounter, _ = self.through_predict()
         job = jobs.claim_next()
         self.assertEqual(job.kind, Job.ASSESS)
         with mock.patch.object(jobs, '_stage_scope', return_value=ExitStack()):  # a stage run with no scope open
             job = jobs.run_job(job)
-        self.assertEqual(job.state, Job.FAILED)
+        self.assertEqual((job.state, job.error), (Job.FAILED, 'The assessment was not recorded: The sentinel record is '
+                                                              'made inside the scope whose work it records.'))
         self.assertEqual(self.assessments(encounter), [])
 
 
@@ -619,6 +642,75 @@ class SecondReviewParticipantTests(SecondReviewCase):
         self.assertEqual((jobs.assessment_phase(followed), review.is_final(followed)), (2, True))
         self.assertEqual(self.proposal(followed, '45385').support['origin'], 'second_review')
         self.assertIsNone(jobs.claim_next())
+
+
+@override_settings(ASTRA_MODE='replay', FABLE_MODE='replay')
+class InterruptedPeerChainTests(SecondReviewCase):
+    """FINAL 6.7-6.8: the follow-up re-reads what the assessment it follows read and queues nothing, so on the new path
+    the ask is taken only on its chain's final assessment. An assess #1 whose peer chain was stopped, expired or swept
+    is resumed first (S10 review round 2, finding 1: a follow-up made from it owed the same peer stages and nothing
+    queued them, so Resume was no longer offered, no answer was recomputed and no decision could be recorded)."""
+    participant_codes = (('45378', 'The colonoscope was advanced to the cecum'),)
+
+    def test_no_second_review_is_taken_on_an_assess_1_whose_peer_chain_was_stopped(self):
+        encounter, revision = self.upload(one_colonoscopy)
+        for kind in ('interpret', 'analyze', 'predict', 'astra', 'fable', 'assess'):
+            self.assertEqual(self.run_next(kind).state, Job.SUCCEEDED, kind)
+        [first] = self.assessments(encounter)
+        self.assertEqual((jobs.assessment_phase(first), jobs.owed_peer_stages(first)),
+                         (1, [Job.ASTRA_PEER, Job.FABLE_PEER]))
+        marked = [item['reason'] for item in first.completeness['unresolved_items'] if item.get('second_review')]
+        self.assertEqual(marked, ['not_covered'])  # what a second review would ask about, were it taken
+        jobs.stop_encounter(encounter, self.user)  # the queued astra_peer is cancelled before the chain's final
+        encounter.refresh_from_db()
+        self.assertEqual((encounter.current_assessment_id, review.can_resume(encounter)), (first.pk, True))
+        status = jobs.second_review_status(encounter)
+        self.assertEqual((status['available'], status['reason']), (False, jobs.SECOND_REVIEW_NOT_FINAL))
+        with self.assertRaises(jobs.Refused) as refused:
+            jobs.request_second_review(encounter, self.user)
+        self.assertEqual(str(refused.exception), jobs.SECOND_REVIEW_NOT_FINAL)
+        self.assertFalse(Job.objects.filter(encounter=encounter, kind=Job.REVIEW2).exists())
+        self.assertTrue(review.can_resume(encounter))  # the member's way on is still offered
+        # Resume finishes the peer chain; the second review is then taken on its final, and its follow-up is final
+        resumed = jobs.resume(encounter, self.user)
+        self.assertEqual(resumed.kind, Job.ASTRA_PEER)
+        with self.legacy_reader_fails():
+            ran = self.drain()
+        self.assertEqual([(job.kind, job.state) for job in ran],
+                         [('astra_peer', 'succeeded'), ('fable_peer', 'succeeded'), ('assess', 'succeeded')])
+        final = self.asked(encounter)
+        self.assertEqual((jobs.assessment_phase(final), self.assessments(encounter)[-1].pk), (2, final.pk))
+        with self.legacy_reader_fails():
+            ran = self.drain()
+        self.assertEqual([(job.kind, job.state) for job in ran], [('review2', 'succeeded'), ('assess', 'succeeded')])
+        self.assertEqual(ran[1].result['mode'], 'review2')
+        followed = self.assessments(encounter)[-1]
+        self.assert_new_path(followed, encounter)
+        self.assertEqual((jobs.assessment_phase(followed), review.is_final(followed)), (2, True))
+        self.assertEqual(self.proposal(followed, '45385').support['origin'], 'second_review')
+        self.assertIsNone(jobs.claim_next())
+        for name in MODULES:  # each peer review was asked once, for assess #1
+            self.assertEqual((len(self.adapters[name].sent('first')), len(self.adapters[name].sent('peer'))), (1, 1))
+
+    def test_a_bound_a_finished_chain_still_meets_is_said_first(self):
+        """An unknown outcome is reconciled before anything is asked again - its reconciliation restarts the chain,
+        which ends at a final - so that bound, which would stand once the peer chain finished, is the one said."""
+        encounter, revision = self.upload(one_colonoscopy)
+        for kind in ('interpret', 'analyze', 'predict', 'astra', 'fable', 'assess'):
+            self.assertEqual(self.run_next(kind).state, Job.SUCCEEDED, kind)
+        [first] = self.assessments(encounter)
+        jobs.stop_encounter(encounter, self.user)
+        # the stale sweep's mark on a peer review its dead worker left in flight: an outcome nobody knows
+        astra = Run.objects.get(encounter=encounter, provider='astra', purpose=Run.INDEPENDENT)
+        Run.objects.create(encounter=encounter, revision=revision, provider='astra',
+                           adapter_version=astra.adapter_version, request_sha256='5' * 64, request_body={},
+                           contexts=[], state=Run.UNKNOWN, error='The worker stopped while the request was in flight.',
+                           authorization_ref=AUTH, requested_by=self.user, service_date=astra.service_date,
+                           purpose=Run.PEER_REVIEW, scope={'assessment': str(first.pk)}, finished_at=first.created_at)
+        encounter.refresh_from_db()
+        status = jobs.second_review_status(encounter)
+        self.assertEqual((status['available'], status['reason']),
+                         (False, 'A previous request has an unknown outcome; reconcile it before asking again.'))
 
 
 # --- a legacy context: never assessed, sent on, recomputed or re-assessed on this image (FINAL 6.7-6.10, 9) -----------

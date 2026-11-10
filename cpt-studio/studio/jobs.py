@@ -3229,6 +3229,12 @@ SECOND_REVIEW_MAX_CHARS = 20_000  # a longer excerpt is not sent (a second revie
 NEVER_SENT_STATES = (models.ProviderRun.NOT_SENT, models.ProviderRun.CANCELLED)
 SECOND_REVIEW_EARLIER_CONTEXT = ('This document was read under earlier context rules: save a change to the encounter '
                                  'context (or add an addendum) so it is read under the current ones, then ask.')
+# FINAL 6.7-6.8: on a gemini context the follow-up re-reads what the assessment it follows read and queues nothing, so
+# the ask is taken only on its chain's final assessment (review.is_final). An assess #1 whose peer stages were stopped,
+# expired or swept is resumed first: its follow-up owed the same peer stages and nothing queued them, so Resume was no
+# longer offered, no answer was recomputed and no decision could be recorded (S10 review round 2, finding 1).
+SECOND_REVIEW_NOT_FINAL = ('The peer reviews of this document have not finished: resume processing to finish them, '
+                           'then ask for a second review.')
 
 
 def _second_review_items(assessment):
@@ -3346,8 +3352,9 @@ def _second_review_bounds(encounter, revision, context, assessment):
     automatic second review kept (interpretations 10, 19, 22): once per revision and service date whatever its outcome
     - only a reconciled unknown one, or one that conclusively never reached the provider (NEVER_SENT_STATES, not sent),
     releases another ask - only for the current assessment of a usable primary response read under the current context
-    rules, only with a known, unconflicted service date, never while a request has an unknown outcome. stage_review2
-    checks them again when it runs. Cheap checks first: the encounter view reads this on every refresh."""
+    rules - on a gemini context, only its chain's final assessment (SECOND_REVIEW_NOT_FINAL: the follow-up queues
+    nothing) -, only with a known, unconflicted service date, never while a request has an unknown outcome.
+    stage_review2 checks them again when it runs. Cheap checks first: the encounter view reads this on every refresh."""
     if busy(encounter):
         return 'Wait for processing to finish (or stop it) before asking for a second review.'
     if (assessment is None or revision is None or context is None or assessment.revision_id != revision.pk
@@ -3384,6 +3391,11 @@ def _second_review_bounds(encounter, revision, context, assessment):
         return 'A second review was already requested for this document and date.'
     if _unreconciled_unknown(encounter):
         return 'A previous request has an unknown outcome; reconcile it before asking again.'
+    if interpretation.is_new_context(context) and not review.is_final(assessment):
+        # FINAL 6.7-6.8: Resume finishes the peer chain, and the ask is taken on its final. Asked after the bounds a
+        # finished chain still meets (the items, the date, one per revision and date, an unknown outcome to
+        # reconcile first) and before the request is built, since one that cannot be built accepts the ask
+        return SECOND_REVIEW_NOT_FINAL
     provider = get_provider()
     if provider is None:
         return 'The provider is not configured on this installation.'
@@ -4226,7 +4238,12 @@ CONTEXT_NONE_MESSAGE = ('This document has not been read yet, so it has no conte
 
 class _SaveGateClosed(Exception):
     """A context save the sentinel's write gate refuses (FINAL 10.3), raised inside the save's transaction so nothing of
-    it is written; change_context then asks the gate outside it, so the refusal's audit row survives the rollback."""
+    it is written; change_context then asks the gate outside that transaction, so the refusal's audit row is written
+    after the save's own rollback. The row is kept only when no transaction of the CALLER's is open around
+    change_context (api.context): a caller that holds one and lets the refusal propagate (answers.save_details,
+    review.confirm_finding) rolls the row back with its own work. The Refused therefore carries the row's data as
+    ``trip``, for such a caller to record once it has left its transaction (slice S11; S10 review round 2,
+    finding 3)."""
 
     def __init__(self, scope):
         super().__init__('the sentinel refuses this save')
@@ -4252,8 +4269,10 @@ def change_context(encounter, user, values, *, confirmation=None):
       revision's - is saved ON THAT FROZEN INVENTORY (_save_on_inventory): interpretation.facts.derive with the new
       values is recorded as a new gemini-context@1 row bound to it, here under the row lock (pure: no text read for
       meaning, no network, nothing sent to the interpreter), its routing stand-in recorded for a changed effective date,
-      under a new_path sentinel scope whose write gate refuses the save (Refused, audited) when it counted a legacy
-      execution or cannot vouch for itself; then the decision is exactly as before (_decide_after_save);
+      under a new_path sentinel scope whose write gate refuses the save (Refused; its trip audited once the save rolled
+      back - kept only when no transaction of the caller's is open, and carried on the Refused as ``trip`` for a
+      caller that holds one: _SaveGateClosed) when it counted a legacy execution or cannot vouch for itself; then the
+      decision is exactly as before (_decide_after_save);
     - any other revision (the legacy reader's, or one never read at the current versions) stores the values and has
       the revision read, its first interpretation, in the worker (_save_before_reading): no context is made here, and
       the current one is returned. Refused when its reading ended failed with nothing to resume
@@ -4262,11 +4281,14 @@ def change_context(encounter, user, values, *, confirmation=None):
     try:
         return _change_context(encounter, user, values, confirmation)
     except _SaveGateClosed as closed:
-        # the save's transaction rolled back whole; asked again outside it, the gate records why and refuses
+        # the save's transaction rolled back whole; asked again outside it, the gate records why and refuses (a
+        # caller's own transaction, when one is open, still holds that row: the Refused carries it as ``trip``)
         try:
             sentinel.gate(CONTEXT_SAVE, encounter=encounter, actor=user, scope_=closed.scope)
         except sentinel.Tripped as exc:
-            raise Refused(str(exc)) from None
+            refused = Refused(str(exc))
+            refused.trip = exc.data  # the audit row's data (sentinel.TRIPPED), as the gate recorded it
+            raise refused from None
         raise Refused(sentinel.MESSAGES['unavailable']) from None  # never reached: a refusal never lifts
 
 
