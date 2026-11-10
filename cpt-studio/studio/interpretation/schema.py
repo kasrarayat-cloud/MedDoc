@@ -21,8 +21,11 @@ The enumerations are the contract's lists, verbatim and in their order (contract
   (contract 1 and appendix B), versioned by INVENTORY_VERSION, not by this module.
 
 Everything here is part of gemini-events@1: a changed byte of LOCAL_SCHEMA or RESPONSE_SCHEMA changes the request's
-sha256 and needs a new INTERPRETATION_VERSION and new pins (studio/interpretation/__init__.py); a changed bound changes
-what is read and needs one too.
+sha256 and needs a new INTERPRETATION_VERSION and new pins (studio/interpretation/__init__.py). BOUNDS is read, never
+sent: no request carries it, so a changed bound leaves every request's sha256 as it was and changes only what is read -
+once the product has recorded answers under this version, a changed bound needs a new version too. Before that, a
+bound is corrected under @1 like the other pre-recording corrections (FINAL 5.2): DECISIONS D32 (S16) raised
+attribute_passages from 8 to 32 and question_ids from 16 to 64, measured on the FRESH recordings.
 """
 from __future__ import annotations
 
@@ -214,10 +217,13 @@ BOUNDS = MappingProxyType({
     'visit_facts': 8,
     'team': 8,
     'other_dates': 16,
-    'attribute_passages': 8,       # passage ids in one ``passages`` list, other than an open question's
+    # D32 (S16): a 20,000-character report cites one lesion from up to 13 passages and lists up to 18 events in one open
+    # question (FRESH-C: N8-CF2 r1, C2MEM-031 r1, C2MEM-032 r1, W1S-222 r1 were refused whole at 8 and 16). The bounds
+    # refuse a pathological answer, never a long document: about 2.5 and 3.5 times the largest measured.
+    'attribute_passages': 32,      # passage ids in one ``passages`` list, other than an open question's
     'contradicts': 8,              # per event
     'scope_targets': 16,
-    'question_ids': 16,            # ids in each of an open question's events, lesions and passages lists
+    'question_ids': 64,            # ids in each of an open question's events, lesions and passages lists
     'words_chars': 300,            # characters of one ``words``, ``site_words`` or ``size_words``
     'sequence': (0, 999),
     'cited_passages': 4000,        # passage ids cited in the whole answer, every ``passages`` list counted

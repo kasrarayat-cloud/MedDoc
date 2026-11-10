@@ -115,7 +115,7 @@ def cited(value: dict) -> int:
 
 
 def with_cited(total: int) -> dict:
-    """answer() with events added so that it cites exactly ``total`` passage ids (each list at most 8)."""
+    """answer() with events added so that it cites exactly ``total`` passage ids (each list within its bound)."""
     value = answer()
     need, added = total - cited(value), 0
     while need > 0:
@@ -346,17 +346,17 @@ class BoundTests(ReadTestCase):
 
         question = {'about': 'identity', 'events': [], 'lesions': [], 'passages': []}
         cases = (
-            (('events', 1, 'kind', 'passages'), 8, 'events[1].kind.passages lists {n} passage ids, more than the {limit} '
-                                                   'one passages list may have'),
-            (('events', 1, 'target', 'passages'), 8, 'events[1].target.passages lists {n} passage ids, more than the '
-                                                     '{limit} one passages list may have'),
-            (('lesions', 0, 'passages'), 8, 'lesions[0].passages lists {n} passage ids, more than the {limit} one '
-                                            'passages list may have'),
-            (('encounter', 'date_of_service', 'passages'), 8, 'encounter.date_of_service.passages lists {n} passage '
-                                                              'ids, more than the {limit} one passages list may have'),
-            (('encounter', 'reach', 0, 'completion', 'passages'), 8, 'encounter.reach[0].completion.passages lists {n} '
-                                                                     'passage ids, more than the {limit} one passages '
-                                                                     'list may have'),
+            (('events', 1, 'kind', 'passages'), 32, 'events[1].kind.passages lists {n} passage ids, more than the '
+                                                    '{limit} one passages list may have'),
+            (('events', 1, 'target', 'passages'), 32, 'events[1].target.passages lists {n} passage ids, more than the '
+                                                      '{limit} one passages list may have'),
+            (('lesions', 0, 'passages'), 32, 'lesions[0].passages lists {n} passage ids, more than the {limit} one '
+                                             'passages list may have'),
+            (('encounter', 'date_of_service', 'passages'), 32, 'encounter.date_of_service.passages lists {n} passage '
+                                                               'ids, more than the {limit} one passages list may have'),
+            (('encounter', 'reach', 0, 'completion', 'passages'), 32, 'encounter.reach[0].completion.passages lists '
+                                                                      '{n} passage ids, more than the {limit} one '
+                                                                      'passages list may have'),
             (('events', 1, 'contradicts'), 8, 'events[1].contradicts lists {n} contradictions, more than the {limit} '
                                               'one event may have'),
             (('events', 2, 'scope', 'targets'), 16, 'events[2].scope.targets lists {n} targets, more than the {limit} '
@@ -371,8 +371,8 @@ class BoundTests(ReadTestCase):
             value['events'][1]['contradicts'] = [{'event': 'E2', 'passages': ['P3'] * n}]
             return value
 
-        self.at_and_past(contradiction_passages, 8, 'events[1].contradicts[0].passages lists {n} passage ids, more '
-                                                    'than the {limit} one passages list may have')
+        self.at_and_past(contradiction_passages, 32, 'events[1].contradicts[0].passages lists {n} passage ids, more '
+                                                     'than the {limit} one passages list may have')
         for key in ('events', 'lesions', 'passages'):
             with self.subTest(open_question=key):
                 def build(n, key=key):
@@ -380,8 +380,15 @@ class BoundTests(ReadTestCase):
                     value['open_questions'][0][key] = {'events': ['E1'], 'lesions': ['L1'], 'passages': ['P2']}[key] * n
                     return value
 
-                self.at_and_past(build, 16, f'open_questions[0].{key} lists {{n}} ids, more than the {{limit}} one '
+                self.at_and_past(build, 64, f'open_questions[0].{key} lists {{n}} ids, more than the {{limit}} one '
                                             'open question list may have')
+
+    def test_the_long_reports_s16_refused_are_read(self):
+        # DECISIONS D32 (S16, FRESH-C): Note #8's 19.4k-character variants cited one lesion from 9, 10 and 13 passages
+        # and named 18 events in one open question; at 8 and 16 the whole answer was refused. Those shapes now read.
+        value = answer(open_questions=[{'about': 'other', 'events': ['E1'] * 18, 'lesions': [], 'passages': []}])
+        value['lesions'][0]['passages'] = ['P2'] * 13
+        self.accepted(value)
 
     def test_every_words_field(self):
         def at(where):
@@ -426,7 +433,7 @@ class BoundTests(ReadTestCase):
 
     def test_a_top_level_bound_is_named_before_an_item_bound(self):
         value = answer(events=[event(f'E{i}') for i in range(201)])
-        value['events'][0]['kind']['passages'] = ['P2'] * 9
+        value['events'][0]['kind']['passages'] = ['P2'] * 33
         self.refused(value, 'bounds', 'it lists 201 events, more than the 200 this contract accepts')
 
 
@@ -516,7 +523,7 @@ class DateRowTests(ReadTestCase):
 class OrderTests(ReadTestCase):
     def test_the_first_failing_step_refuses_the_whole_answer(self):
         both = answer()
-        both['events'][1]['kind']['passages'] = ['P2'] * 9  # a bound
+        both['events'][1]['kind']['passages'] = ['P2'] * 33  # a bound
         both['events'][1]['id'] = 'E0'  # and a repeated id
         self.assertEqual(read.read(text(both)).stage, 'bounds')
         ids = answer()
@@ -525,7 +532,7 @@ class OrderTests(ReadTestCase):
         self.assertEqual(read.read(text(ids)).stage, 'ids')
         schema_first = answer()
         schema_first['events'][1]['sequence'] = True
-        schema_first['events'][1]['kind']['passages'] = ['P2'] * 9
+        schema_first['events'][1]['kind']['passages'] = ['P2'] * 33
         self.assertEqual(read.read(text(schema_first)).stage, 'schema')
         self.assertEqual(read.read(text(answer())[:-1]).stage, 'json')
 

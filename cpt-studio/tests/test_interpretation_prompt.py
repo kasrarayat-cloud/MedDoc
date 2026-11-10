@@ -35,13 +35,15 @@ PACKAGE = APP / 'studio' / 'interpretation'
 SLICE_MODULES = ('__init__', 'prompt', 'schema', 'read', 'store')
 
 # The pins, keyed by the version they belong to: a changed byte without a new version fails here, and a new version
-# without its own pins fails too (KeyError). BOUNDS is pinned as well: it is part of what gemini-events@1 reads.
+# without its own pins fails too (KeyError). BOUNDS is pinned as well: it is part of what gemini-events@1 reads (never
+# sent: DECISIONS D32 raised attribute_passages 8 -> 32 and question_ids 16 -> 64 before any product recording, and every
+# FRESH request's sha256 still matches its record).
 PINS = {
     'gemini-events@1': {
         'INSTRUCTIONS': '7bdaae793599415f9d60bb16b66e0a07c8dece5e2a5485f94d8777f3152c1bad',
         'LOCAL_SCHEMA': '93574cacb4dc3d9fb0c3ed7789a8c2f7c708bf94176b53f1dd850fcd0214ccc3',
         'RESPONSE_SCHEMA': '7bb3057d724012910b4210272c31480eacb6fc6fe6dbacbce4415c61592d2537',
-        'BOUNDS': '80c4244370fbacf0f5c7919e094bc169a58063a8b1c85eca20e5c97038c1cc72',
+        'BOUNDS': '1465ca8d83ec9337e7c13245571fc01112c820cf2f2f98438e9a52039654dc4b',
     },
 }
 # The generated schema, measured (canonical bytes: keys sorted, no spaces). The contract's own enumerations, run through
@@ -380,8 +382,8 @@ class SchemaTests(SimpleTestCase):
     def test_the_bounds_are_the_contracts(self):
         self.assertEqual(dict(schema.BOUNDS), {
             'passages': 400, 'passage_chars': (1, 600), 'lesions': 64, 'events': 200, 'open_questions': 32,
-            'anatomy': 16, 'reach': 16, 'visit_facts': 8, 'team': 8, 'other_dates': 16, 'attribute_passages': 8,
-            'contradicts': 8, 'scope_targets': 16, 'question_ids': 16, 'words_chars': 300, 'sequence': (0, 999),
+            'anatomy': 16, 'reach': 16, 'visit_facts': 8, 'team': 8, 'other_dates': 16, 'attribute_passages': 32,
+            'contradicts': 8, 'scope_targets': 16, 'question_ids': 64, 'words_chars': 300, 'sequence': (0, 999),
             'cited_passages': 4000})
         self.assertEqual(schema.BOUNDS['passage_chars'][1], reading.MAX_QUOTE_CHARS)  # reading.py:58, as the contract says
         with self.assertRaises(TypeError):

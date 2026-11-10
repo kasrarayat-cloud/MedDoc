@@ -8,9 +8,11 @@ gi.profiles and gi.catalogue (D17); these four import none of it.
 
 The versions (contract 1, with FINAL C4's two columns):
 - INTERPRETATION_VERSION names what is asked and how an answer is structurally read: prompt.INSTRUCTIONS,
-  schema.LOCAL_SCHEMA, schema.RESPONSE_SCHEMA, schema.BOUNDS and read.py's rules. Any changed byte of them changes the
-  request's sha256 and needs a new version. The three pins beside it are checked whenever a request is built
-  (prompt.check_pins) or an answer is read (read.check_pin), so whatever carries this label asks and reads exactly this.
+  schema.LOCAL_SCHEMA, schema.RESPONSE_SCHEMA, schema.BOUNDS and read.py's rules. A changed byte of the first three
+  changes the request's sha256 and needs a new version; BOUNDS and read.py's rules are read, never sent, and change what
+  is read (a new version once the product has recorded answers under this one; DECISIONS D32 raised two bounds before
+  that, schema.py). The three pins beside it are checked whenever a request is built (prompt.check_pins) or an answer
+  is read (read.check_pin), so whatever carries this label asks and reads exactly this.
 - INVENTORY_VERSION names normalization, verification, the lexicons and the identity and pairing rules. A new one
   re-reads a stored answer into a new EventInventory row with no new request.
 - LABEL names the pair in the verification report. EventInventory stores the two versions in two columns (FINAL 4.1).
