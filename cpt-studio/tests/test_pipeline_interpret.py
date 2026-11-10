@@ -443,6 +443,29 @@ class PauseTests(InterpretCase):
         self.assertEqual(models.InterpreterHold.objects.get().reason, 'quota')
         self.assertEqual(self.state(encounter)[0], 'stopped')
 
+    def test_a_spending_cap_refusal_with_no_quota_detail_sets_the_quota_hold_and_stops_sending(self):
+        """D39, measured live on 2026-11-10: the project's monthly spending cap answers 429 RESOURCE_EXHAUSTED with a
+        message and no QuotaFailure. It is a quota hold, so the next upload - in any workspace - sends nothing until an
+        operator releases it (the directive: quota failures must stop requests)."""
+        encounter, revision = self.through_extract()
+        body = json.dumps({'error': {'code': 429, 'status': 'RESOURCE_EXHAUSTED',
+                                     'message': 'Your project has exceeded its monthly spending cap. (synthetic copy)'}}).encode()
+        interpreter = self.scripted(answered(body, status=429), answered(envelope()))
+        self.run_next('interpret')
+        [run] = self.interpret_runs(revision)
+        self.assertEqual((run.state, run.sent, run.http_status, run.scope['effect']), ('failed', True, 429, 'hold'))
+        [hold] = models.InterpreterHold.objects.all()
+        self.assertEqual((hold.reason, hold.http_status, hold.vendor_status, hold.run_id),
+                         ('quota', 429, 'RESOURCE_EXHAUSTED', run.pk))
+        self.assertEqual(self.state(encounter)[0], 'stopped')
+        other_ws = f.workspace('Other synthetic practice')
+        f.member(other_ws, self.user)
+        _, second = self.upload(workspace=other_ws)
+        self.run_next('extract')
+        self.run_next('interpret')
+        self.assertEqual(self.interpret_runs(second)[-1].scope.get('held'), holds.HELD_HOLD)
+        self.assertEqual(len(interpreter.sent), 1)
+
     def test_an_answer_naming_another_model_is_never_read_and_holds(self):
         """P-5: a substituted model is refused and never read (a 'refused' inventory row), and sets the model hold."""
         encounter, revision = self.through_extract()

@@ -962,13 +962,26 @@ class ClassificationTests(SimpleTestCase):
                 result = self.assertKind(adapter.classify('failed', 429, raw), adapter.HOLD, adapter.QUOTA)
                 self.assertEqual((result.violations, result.retry_delay), (tuple(violations), '60s'))
 
-    def test_a_429_with_no_quota_detail_fails_the_attempt(self):
-        for raw in (error_body(429, 'RESOURCE_EXHAUSTED'), error_body(429, 'RESOURCE_EXHAUSTED', quota_failure()),
+    def test_a_429_with_no_quota_detail_is_a_quota_hold(self):
+        # fail-closed (2026-11-10, measured): the project's monthly spending cap was exhausted and Google answered 429
+        # RESOURCE_EXHAUSTED with a message and no QuotaFailure - the exact body below - which the earlier rule read as
+        # a per-minute rate limit, so every later upload was sent and refused again. Only a violation naming a
+        # per-minute paid-tier limit above 0 refuses just this attempt.
+        spend_cap = json.dumps({'error': {'code': 429, 'message': 'Your project has exceeded its monthly spending cap. '
+                                          'Please go to AI Studio at https://ai.studio/spend to manage your project '
+                                          'spend cap. Learn more at https://ai.google.dev/gemini-api/docs/billing'
+                                          '#project-spend-caps', 'status': 'RESOURCE_EXHAUSTED'}}).encode()
+        for raw in (spend_cap, error_body(429, 'RESOURCE_EXHAUSTED'), error_body(429, 'RESOURCE_EXHAUSTED', quota_failure()),
                     error_body(429, 'RESOURCE_EXHAUSTED', retry_info('5s')), b'<html>Too many requests</html>', b''):
             with self.subTest(raw=raw[:40]):
-                self.assertKind(adapter.classify('failed', 429, raw), adapter.FAILED)
+                result = self.assertKind(adapter.classify('failed', 429, raw), adapter.HOLD, adapter.QUOTA)
+                self.assertTrue(result.why.startswith('A quota or spending limit was exhausted (HTTP 429'), result.why)
+                self.assertTrue(result.why.endswith('and no per-minute limit was named: every request would be '
+                                                    'refused until an operator acts.'), result.why)
         self.assertEqual(adapter.classify('failed', 429, error_body(429, 'RESOURCE_EXHAUSTED', retry_info('5s')))
                          .retry_delay, '5s')
+        # a RESOURCE_EXHAUSTED status with another HTTP status is read the same way
+        self.assertKind(adapter.classify('failed', 400, error_body(400, 'RESOURCE_EXHAUSTED')), adapter.HOLD, adapter.QUOTA)
         for delay in ('5 seconds', '5', '-5s', 5, None):
             with self.subTest(delay=delay):
                 raw = error_body(429, 'RESOURCE_EXHAUSTED', retry_info(delay))

@@ -16,10 +16,11 @@ THE TABLE (FINAL 11.1, as P-3, P-4, P-5 and C5 amend it). An interpretation run'
 | adapter.classify says HOLD - auth (401; API_KEY_INVALID, API_KEY_EXPIRED,        | HOLD       | an operator's release |
 | UNAUTHENTICATED), permission (403; API_KEY_SERVICE_BLOCKED, SERVICE_DISABLED,   |            | (interpreter_hold     |
 | PERMISSION_DENIED, FAILED_PRECONDITION), quota (BILLING_DISABLED; a 429 whose   |            | --release), then      |
-| QuotaFailure names a daily, zero, free-tier or unnamed window) or model (a 200  |            | members Resume        |
-| naming another model, or none: P-5)                                             |            |                       |
-| adapter.classify says FAILED - a per-minute 429, a 429 with no QuotaFailure,     | FAILED     | the recorded retry    |
-| a 5xx, a 400 without the names above, any other refusal of the request, or an   |            | (FINAL 11.3)          |
+| QuotaFailure names a daily, zero, free-tier or unnamed window, or a 429 with no |            | members Resume        |
+| QuotaFailure at all - D39) or model (a 200 naming another model, or none: P-5)  |            |                       |
+| adapter.classify says FAILED - a 429 whose every violation is a per-minute     | FAILED     | the recorded retry    |
+| paid-tier limit above 0, a 5xx, a 400 without the names above, any other       |            | (FINAL 11.3)          |
+| refusal of the request, or an                                                   |            |                       |
 | envelope the reader refuses (finish reason, candidates, parts, not JSON)        |            |                       |
 | adapter.classify says ANSWERED, but the reading was refused (read.Refusal: the  | FAILED     | the recorded retry    |
 | schema, bounds or ids of the answer; an EventInventory in state 'refused')      |            |                       |
@@ -66,7 +67,7 @@ REASONS = (AUTH, PERMISSION, QUOTA, MODEL)  # P-5 adds 'model'; adapter.HOLD_REA
 REASON_TEXT = {
     AUTH: 'the key was refused',
     PERMISSION: 'the key may not use the model or the service',
-    QUOTA: 'a daily, zero or unbilled quota is exhausted, or billing is not enabled',
+    QUOTA: 'a quota or spending limit is exhausted (daily, zero, unbilled or not named), or billing is not enabled',
     MODEL: 'an answer named a model other than the one asked for, and was not read',
 }
 

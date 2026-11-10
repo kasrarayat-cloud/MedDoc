@@ -455,11 +455,14 @@ def classify(outcome: str, http_status, response_bytes) -> Optional[Classificati
     status (P-3): API_KEY_INVALID, API_KEY_EXPIRED, UNAUTHENTICATED or 401 is a HOLD (auth); BILLING_DISABLED a HOLD
     (quota); API_KEY_SERVICE_BLOCKED, SERVICE_DISABLED, PERMISSION_DENIED, FAILED_PRECONDITION or 403 a HOLD
     (permission). Then a 429, or RESOURCE_EXHAUSTED, by its QuotaFailure violations' quotaId or quotaMetric (P-4):
-    FAILED, with RetryInfo kept, only when there are none or every one is a per-minute quota on a paid tier stating a
-    limit above 0; any daily quota, a limit of 0 - which Google's JSON states by leaving quotaValue out - or one left
-    out or unreadable, a free-tier quota (gemini-4-argon has none: billing is not enabled) or a window the violation
-    does not name is a HOLD (quota). Everything else - a 400 INVALID_ARGUMENT with none of those names, a 404, a 5xx, an
-    unread redirect, a body that is not JSON - is FAILED."""
+    FAILED, with RetryInfo kept, only when there is at least one violation and every one is a per-minute quota on a
+    paid tier stating a limit above 0; any daily quota, a limit of 0 - which Google's JSON states by leaving quotaValue
+    out - or one left out or unreadable, a free-tier quota (gemini-4-argon has none: billing is not enabled), a window
+    the violation does not name, or NO violation at all is a HOLD (quota). The last is fail-closed and measured: on
+    2026-11-10 the project's monthly spending cap was exhausted, and Google answered 429 RESOURCE_EXHAUSTED with only a
+    message and no QuotaFailure, which this rule had read as a per-minute rate limit - so every later upload was sent
+    and refused again, where an exhausted quota must stop requests. Everything else - a 400 INVALID_ARGUMENT with none
+    of those names, a 404, a 5xx, an unread redirect, a body that is not JSON - is FAILED."""
     if outcome == 'succeeded':
         status = http_status if isinstance(http_status, int) and not isinstance(http_status, bool) else None
         _, code, why = _envelope(response_bytes)
@@ -489,7 +492,9 @@ def classify(outcome: str, http_status, response_bytes) -> Optional[Classificati
         return Classification(HOLD, hold=hold, why=_HOLD_WHY[hold].format(said=said), **found)
     if status == 429 or error['status'] == RESOURCE_EXHAUSTED:
         violations = error['violations']
-        if violations and not all(_rate_only(violation) for violation in violations):
+        if not violations:
+            return Classification(HOLD, hold=QUOTA, why=_HOLD_WHY['quota-unstated'].format(said=said), **found)
+        if not all(_rate_only(violation) for violation in violations):
             return Classification(HOLD, hold=QUOTA, why=_HOLD_WHY['quota-window'].format(said=said), **found)
         later = f' It may be tried again after {error["retry_delay"]}.' if error['retry_delay'] else ''
         return Classification(FAILED, why=f'A rate limit refused this attempt{said}.{later}', **found)
@@ -503,6 +508,8 @@ _HOLD_WHY = {
     QUOTA: 'Billing is not enabled for the key{said}: every request would be refused until an operator acts.',
     'quota-window': 'A daily, zero or unbilled quota was exhausted{said}: every request would be refused until an '
                     'operator acts.',
+    'quota-unstated': 'A quota or spending limit was exhausted{said} and no per-minute limit was named: every request '
+                      'would be refused until an operator acts.',
 }
 
 
