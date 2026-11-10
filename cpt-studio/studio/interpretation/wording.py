@@ -275,6 +275,26 @@ def status_reason(act: str) -> str:
     return f'CPT Studio could not confirm from the document that the {act} was done.'
 
 
+def session_question(about: str, service: str, words: str) -> tuple[str, str]:
+    """(question, reason) of a code held because CPT Studio's reading asks about the whole session it belongs to
+    (DECISIONS D31): who performed it, when, or whether it was done - the attribute's own question about the session -
+    or, for a doubt of no named attribute, whether it was done as this encounter's service. ``words`` is the passage
+    the reading's question quotes."""
+    if about == 'performer':
+        return (performer_question(service, words),
+                f'{performer_reason(service)} Every code of that session is held until it is confirmed.')
+    if about == 'time':
+        return (time_question(service, words),
+                f'{time_reason(service)} Every code of that session is held until it is confirmed.')
+    if about == 'status':
+        return (status_question(service, words),
+                f'{status_reason(service)} Every code of that session is held until it is confirmed.')
+    return (f'Confirm whether the {service} ({quote(words, 120)}) was done on the date of service by the documenting '
+            'endoscopist or the endoscopy team.',
+            f"CPT Studio's reading of the document leaves the {service} in doubt: {quote(words, 140)}. Every code of "
+            'that session is held until it is confirmed.')
+
+
 def target_question(act: str, words: str) -> str:
     return f'Which lesion or site was the {act} ({quote(words, 120)}) done on?'
 

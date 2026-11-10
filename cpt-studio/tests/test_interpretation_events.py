@@ -876,6 +876,84 @@ class Exclusion(SimpleTestCase):
                          'Confirm whether 45386 is supported by what was done on the date of service.')
 
 
+# --- DECISIONS D31: Gemini's open question on a session's examination holds the session ---------------------------------
+
+class SessionQuestion(SimpleTestCase):
+    """D31 (S16, FRESH-C PAR-006 r3): an open question about the performer, the time, the status or 'other' that names a
+    session's examination holds every code that session supports, asking that question; an act-level question (kind,
+    target, technique) holds its own act only, as before; a question naming no examination of the code's session - only
+    its acts, an earlier examination, another family's - holds nothing of it; an exclusion is not D31's."""
+    DOUBT = 'Both were done by her previous gastroenterologist.'
+    HISTORY = 'In 2023 a colonoscopy was normal.'
+
+    def assessed(self, about: str, *named: str, more=(), lines=None, code: str = '45385', cited: str = POLYP):
+        question = {'about': about, 'events': list(named or ('E1',)), 'lesions': [], 'passages': ['P3']}
+        inv, text = colonoscopy(*more, lines={'P3': self.DOUBT, **(lines or {})}, open_questions=[question])
+        return proposal(run(inv, text, [(code, cited)]), code)
+
+    def test_without_a_question_the_code_is_ready(self):  # the control: the fixture is READY by itself
+        inv, text = colonoscopy(lines={'P3': self.DOUBT})
+        self.assertEqual(proposal(run(inv, text, [('45385', POLYP)]), '45385').status, 'ready')
+
+    def test_a_question_on_the_examination_holds_the_sessions_act_code_asking_it(self):
+        # (the fact, how the question ends, what else is asked): a performer, time or status question opens that
+        # attribute of the examination, so the session's reach is no longer read and its extent is asked as well
+        expected = {'performer': ('event_performer', 'done by the documenting endoscopist or the endoscopy team?',
+                                  ['extent']),
+                    'time': ('event_time', 'done at this encounter?', ['extent']),
+                    'status': ('performed_status', 'done on the date of service?', ['extent']),
+                    'other': ('performed_status', 'was done on the date of service by the documenting endoscopist '
+                                                  'or the endoscopy team.', [])}
+        for about, (fact, words, also) in expected.items():
+            with self.subTest(about=about):
+                p = self.assessed(about)  # names the examination E1 only, never the snare E2
+                self.assertEqual((p.bucket, p.status, asked(p)), ('selected', 'needs_clarification', [fact] + also))
+                self.assertEqual((p.support['state'], p.support['reason']), ('uncertain', events.SESSION))
+                question = p.clarifications[0]
+                self.assertIn(f'the colonoscopy (“{self.DOUBT}”)', question.question)
+                self.assertTrue(question.question.endswith(words), question.question)
+                self.assertTrue(question.reason.endswith('Every code of that session is held until it is confirmed.'))
+                self.assertEqual([span['text'] for span in p.support['source']], [self.DOUBT])
+                self.assertEqual(p.support['question_events'], ['E1'])
+
+    def test_the_base_code_of_the_session_is_held_too(self):
+        p = self.assessed('other', code='45378', cited=COLONOSCOPE)  # (base_included: the snare is its session's act)
+        self.assertEqual((p.status, asked(p), p.support['reason']),
+                         ('needs_clarification', ['performed_status', 'base_included'], events.SESSION))
+
+    def test_an_act_level_question_on_the_examination_holds_nothing_of_the_session(self):
+        self.assertEqual(self.assessed('target').status, 'ready')
+
+    def test_a_question_naming_only_an_act_is_not_a_session_question(self):
+        self.assertEqual(self.assessed('other', 'E2').status, 'ready')  # 'other' opens nothing; no examination named
+        p = self.assessed('performer', 'E2')  # it opens the snare's own performer: its own act is held, as before
+        self.assertEqual((asked(p), p.support['reason']), (['event_performer'], events.UNVERIFIED))
+
+    def test_a_question_on_an_earlier_examination_holds_nothing(self):
+        history = exam('E3', 'P4', words='colonoscopy', status_words='was normal',
+                       time=a('earlier_encounter', 'In 2023', ['P4']))
+        p = self.assessed('other', 'E3', more=(history,), lines={'P4': self.HISTORY})
+        self.assertEqual(p.status, 'ready')
+
+    def test_a_question_on_another_familys_examination_holds_nothing_of_this_session(self):
+        lines = {'P0b': 'EGD: the gastroscope was advanced to the duodenum.', 'P1': 'Colonoscopy: ' + COLONOSCOPE,
+                 'P2': POLYP, 'P3': self.DOUBT}
+        question = {'about': 'other', 'events': ['E0'], 'lesions': [], 'passages': ['P3']}
+        named = a('colonoscopy', 'Colonoscopy', ['P1'])
+        inv, text = inventory(lines, lesions=[L1], reach=[reached()], open_questions=[question], events=[
+            exam('E0', 'P0b', words='gastroscope', procedure=a('egd', 'EGD', ['P0b'])), exam(procedure=named),
+            removed(procedure=named)])
+        self.assertEqual(proposal(run(inv, text, [('45385', POLYP)]), '45385').status, 'ready')
+        self.assertIsNotNone(events.session_doubt(events.Reading.of(inv), [events.Reading.of(inv).events['E0']]))
+
+    def test_an_exclusion_is_not_held(self):
+        line = 'No dilation was performed.'
+        denial = act('E3', 'P4', 'dilation', 'dilation', status='not_performed', status_words='No dilation was performed',
+                     scope=sc('all_of_kind', 'No', ['P4']))
+        p = self.assessed('other', more=(denial,), lines={'P4': line}, code='45386', cited=line)
+        self.assertEqual((p.bucket, p.status), ('excluded', 'excluded'))
+
+
 class Helpers(SimpleTestCase):
     def test_within_words_ignores_spaces_and_punctuation(self):
         span = {'start': 10, 'end': 25, 'text': 'No polyp, today'}

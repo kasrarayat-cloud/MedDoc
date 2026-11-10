@@ -65,6 +65,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import Optional
 
 from studio.interpretation import identity, lexicon, mapping, relations, verify, wording
@@ -86,6 +87,15 @@ CONFLICT, DOUBT, UNRESOLVED, UNVERIFIED, ATTEMPTED, METHOD = (
 EXCLUDED, STATEMENT_SCOPE, NOT_DOCUMENTED = 'excluded', 'statement_scope', 'not_documented'
 TECHNIQUE, ANOTHER_TECHNIQUE, BUNDLED, BUNDLING_IDENTITY = 'technique', 'another_technique', 'bundled', 'bundling'
 SITE, ANOTHER_SITE = 'site', 'another_site'  # D29: a dilation's site not established, or verified outside the class
+SESSION = 'session'  # D31: a supported code whose session's examination an open question of Gemini's names
+
+# DECISIONS D31: who did a session, when, and whether it was done are properties of the SESSION, and Gemini's doubt of no
+# named attribute ('other') is a doubt of whatever it names. An open question about one of these that names a session's
+# examination event holds every code that session supports, asking that question (the fact each asks). An act-level
+# question (kind, target, technique, ...) holds its own act only, as before: it opens that attribute of each event it
+# names (normalize._read_openings).
+SESSION_ABOUT = MappingProxyType({'performer': 'event_performer', 'time': 'event_time', 'status': 'performed_status',
+                                  'other': 'performed_status'})
 
 
 # --- the stored inventory, as this engine reads it -------------------------------------------------------------------
@@ -438,6 +448,9 @@ def evaluate(code: str, kept: Sequence, reading: Reading, link: Optional[mapping
         if not found:
             return _without_support(code, link, group, kept, own, reading)
         supporting.extend(event for event in found if event not in supporting)
+    doubt = session_doubt(reading, supporting)
+    if doubt is not None:  # DECISIONS D31: Gemini's open question on the session's examination holds the session
+        return _session_hold(code, link, supporting, reading, *doubt)
     name = service_label(family)
     if link.technique:  # R4: the device class of a technique-specific code
         fitting = [event for event in supporting if mapping.code_technique(event) == link.technique]
@@ -499,6 +512,47 @@ def evaluate(code: str, kept: Sequence, reading: Reading, link: Optional[mapping
     return Evaluation(code, family, link, 'performed', SUPPORTED, detail,
                       supporting=tuple(event['id'] for event in own_acts), read=read,
                       bundled=tuple((item['id'], reason) for item, reason in bundled))
+
+
+def session_examination(event: Mapping, families) -> bool:
+    """D31: whether ``event`` is the examination of a session of one of ``families`` as Gemini states it - an
+    examination (or the EUS examination) of that family, stated performed or begun at this encounter. Its VALUES are
+    read, not their states: the open question itself may leave them open. A digital examination is no session (FINAL
+    5.6, E13)."""
+    return (event.get('family') in families and event.get('catalogue_kind') in mapping.EXAMINATION_KINDS
+            and value(event, 'status') in verify.POSITIVE and value(event, 'time') == 'current_encounter'
+            and endoscopic_examination(event))
+
+
+def session_doubt(reading: Reading, supporting: Sequence) -> Optional[tuple]:
+    """D31: (the open question, the examination event it names) of the first of Gemini's open questions, in its order,
+    that is about the performer, the time, the status or 'other' (SESSION_ABOUT) and names the examination of the
+    session a supporting event belongs to (its family's); None when none does. A question about another attribute, or
+    naming only acts, holds nothing here: it opens the attributes it names, as before."""
+    families = frozenset(event.get('family') for event in supporting if event.get('family'))
+    for question in reading.open_questions:
+        if question.get('about') not in SESSION_ABOUT:
+            continue
+        for eid in question.get('events') or ():
+            event = reading.events.get(eid)
+            if event is not None and session_examination(event, families):
+                return question, event
+    return None
+
+
+def _session_hold(code: str, link: mapping.CodeLink, supporting: Sequence, reading: Reading, question: Mapping,
+                  examination: Mapping) -> Evaluation:
+    """D31: the code is held with Gemini's own question about its session, asked of the session - who performed it,
+    when, whether it was done, or (an unnamed doubt) whether it was done as documented - quoting the question's own
+    passages (else the examination's own statement). Never excluded and never READY; the acts stay its reading."""
+    about = question['about']
+    service = service_label(examination.get('family', ''))
+    places = reading.places(question.get('passages') or ()) or anchors(reading, examination)
+    words = places[0]['text'] if places else statement_text(reading, examination)
+    text, reason = wording.session_question(about, service, words)
+    read = tuple(dict.fromkeys([examination['id']] + [event['id'] for event in supporting]))
+    return Evaluation(code, link.family, link, 'uncertain', SESSION, reason, read=read,
+                      question=Question(SESSION_ABOUT[about], text, reason, (examination['id'],), _spans(places)))
 
 
 def _technique_hold(code: str, link: mapping.CodeLink, supporting: Sequence, reading: Reading, own: tuple,
