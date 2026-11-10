@@ -284,6 +284,23 @@ class Participants(SimpleTestCase):
             self.assertEqual(asked(p), ['competing_codes'])
             self.assertEqual(p.support['competes'], [rival])
 
+    def test_two_codes_the_provider_alone_selects_for_one_dilation_compete(self):
+        """D40 (S17 refutation, fb02's shape): Corti alone selects 43249 and 43233 for one balloon dilation; the installed
+        release holds both as competing, and so does the new path."""
+        line = 'The distal esophageal stricture was dilated with a through-the-scope balloon to 18 mm.'
+        inv, text = inventory({'G1': EGD_LINES['G1'], 'G2': line}, events=[
+            exam('E0', 'G1', words='gastroscope', procedure=a('egd')),
+            act('E2', 'G2', 'dilation', 'dilated', procedure=a('egd'), technique=a('balloon', 'balloon', ['G2']),
+                target=tg('', 'distal_esophagus', 'distal esophageal', ['G2']))],
+            reach=[reached('E0', 'second_portion_duodenum', 'second portion of the duodenum', 'G1')])
+        result = run(inv, text, [('43249', line), ('43233', line)])
+        for code, rival in (('43249', '43233'), ('43233', '43249')):
+            p = proposal(result, code)
+            self.assertEqual((p.status, asked(p)), ('needs_clarification', ['competing_codes']))
+            self.assertEqual(p.support['competes'], [rival])
+        alone = proposal(run(inv, text, [('43249', line)]), '43249')
+        self.assertEqual((alone.status, asked(alone)), ('ready', []))  # the control: one code for the act
+
     def test_a_disagreement_is_shown_and_changes_no_status(self):
         inv, text = colonoscopy()
         dissent = participant('astra', text, not_coded=[ParticipantNotCoded(
@@ -471,8 +488,8 @@ class ExaminationClass(SimpleTestCase):
 
     def test_a_reach_into_the_duodenum_fits_the_full_code_and_holds_the_limited_one(self):
         inv, text = eus_reaching('second_portion_duodenum', 'second portion of the duodenum', FNA)
-        result = run(inv, text, [('43242', EUS_LINES['P3']), ('43238', EUS_LINES['P3'])])
-        full, limited = proposal(result, '43242'), proposal(result, '43238')
+        full = proposal(run(inv, text, [('43242', EUS_LINES['P3'])]), '43242')
+        limited = proposal(run(inv, text, [('43238', EUS_LINES['P3'])]), '43238')
         self.assertEqual((full.status, check(full, 'facts.examination_class')), ('ready', None))
         self.assertIn('extent reached = second portion duodenum', check(full, 'facts.required').detail)
         self.assertEqual((limited.bucket, limited.status, asked(limited), limited.support['reason']),
@@ -486,11 +503,20 @@ class ExaminationClass(SimpleTestCase):
                                    'reached the second portion duodenum. Was a limited endoscopic ultrasound examination '
                                    '(short of the duodenum) performed on the date of service?')
 
+    def test_both_class_siblings_for_one_fna_compete(self):
+        """D40: proposed together for one FNA, the two class siblings compete as the installed release holds them
+        (CPT Studio never chooses between two codes for one act); the misfit also asks its class."""
+        inv, text = eus_reaching('second_portion_duodenum', 'second portion of the duodenum', FNA)
+        result = run(inv, text, [('43242', EUS_LINES['P3']), ('43238', EUS_LINES['P3'])])
+        self.assertEqual({code: (proposal(result, code).status, asked(proposal(result, code)))
+                          for code in ('43242', '43238')},
+                         {'43242': ('needs_clarification', ['competing_codes']),
+                          '43238': ('needs_clarification', ['competing_codes', 'extent'])})
+
     def test_a_reach_short_of_the_duodenum_fits_the_limited_code_and_holds_the_full_one(self):
         inv, text = eus_reaching('gastric_antrum', 'gastric antrum', FNA)
-        result = run(inv, text, [('43242', EUS_LINES['P3']), ('43238', EUS_LINES['P3'])])
-        self.assertEqual(proposal(result, '43238').status, 'ready')
-        full = proposal(result, '43242')
+        self.assertEqual(proposal(run(inv, text, [('43238', EUS_LINES['P3'])]), '43238').status, 'ready')
+        full = proposal(run(inv, text, [('43242', EUS_LINES['P3'])]), '43242')
         self.assertEqual((full.status, asked(full)), ('needs_clarification', ['extent']))
         self.assertIn('accounts for a full endoscopic ultrasound examination (to the duodenum or beyond)',
                       full.clarifications[0].reason)
@@ -501,25 +527,22 @@ class ExaminationClass(SimpleTestCase):
         for landmark, words in (('small_bowel', 'small bowel'), ('anastomosis', 'anastomosis')):
             inv, text = eus_reaching(landmark, words, FNA)
             self.assertEqual(inv.encounter_facts['reach'][0]['state'], 'verified')
-            result = run(inv, text, [('43242', EUS_LINES['P3']), ('43238', EUS_LINES['P3'])])
             for code in ('43242', '43238'):
-                p = proposal(result, code)
+                p = proposal(run(inv, text, [(code, EUS_LINES['P3'])]), code)
                 with self.subTest(reach=landmark, code=code):
                     self.assertEqual((p.bucket, p.status, asked(p)), ('selected', 'needs_clarification', ['extent']))
                     self.assertEqual(check(p, 'facts.examination_class').status, 'warn')
 
     def test_an_unverified_reach_asks_the_extent_and_never_excludes(self):
         inv, text = eus(FNA)
-        result = run(inv, text, [('43242', EUS_LINES['P3']), ('43238', EUS_LINES['P3']), ('45342', EUS_LINES['P3'])])
         for code in ('43242', '43238'):
-            p = proposal(result, code)
+            p = proposal(run(inv, text, [(code, EUS_LINES['P3'])]), code)
             with self.subTest(code=code):
                 self.assertEqual((p.bucket, p.status, asked(p)), ('selected', 'needs_clarification', ['extent']))
                 self.assertEqual(p.clarifications[0].question, 'Endoscopic ultrasound: confirm the furthest extent '
                                                                'reached.')
                 self.assertEqual(check(p, 'facts.required').status, 'warn')
                 self.assertIsNone(check(p, 'facts.examination_class'))
-        self.assertEqual(proposal(result, '45342').status, 'ready')  # a code with no class is unaffected
 
     def test_the_examination_only_codes(self):
         inv, text = eus(reach=[DUODENAL_REACH])
@@ -538,15 +561,20 @@ class ExaminationClass(SimpleTestCase):
         self.assertEqual(check(p, 'review.reinstatement').status, 'warn')
 
 
-def colonoscopy_reaching(landmark: str, words: str, incomplete: bool = False):
+def colonoscopy_reaching(landmark: str, words: str, incomplete: bool = False, anatomy: str = ''):
     """A colonoscopy (E1) whose colonoscope was advanced to ``words`` (its verified reach, ``landmark``), with the cold
-    snare removal of L1 (E2); ``incomplete``: the reach's completion stated as incomplete in its own line (P3)."""
+    snare removal of L1 (E2); ``incomplete``: the reach's completion stated as incomplete in its own line (P3);
+    ``anatomy``: the words of the encounter's one altered-anatomy anastomosis entry, in its own line (P4)."""
     lines = {'P1': f'The colonoscope was advanced to the {words}.', 'P2': POLYP}
     reach = reached('E1', landmark, words, 'P1')
     if incomplete:
         lines['P3'] = 'The examination was incomplete because of poor preparation.'
         reach['completion'] = {'value': 'incomplete', 'words': 'incomplete', 'passages': ['P3']}
-    return inventory(lines, events=[exam(), removed()], lesions=[L1], reach=[reach])
+    extra = {}
+    if anatomy:
+        lines['P4'] = f'Anatomy: status post resection with a {anatomy}.'
+        extra['anatomy'] = [{'state': 'altered', 'landmark': 'anastomosis', 'words': anatomy, 'passages': ['P4']}]
+    return inventory(lines, events=[exam(), removed()], lesions=[L1], reach=[reach], **extra)
 
 
 class ColonoscopyReach(SimpleTestCase):
@@ -581,6 +609,26 @@ class ColonoscopyReach(SimpleTestCase):
         p = proposal(run(inv, text, [('45385', POLYP)]), '45385')
         self.assertNotIn('extent', asked(p))
         self.assertIn('extent reached = transverse colon', check(p, 'facts.required').detail)
+
+    def test_an_anastomosis_completes_the_reach_only_on_the_right_colon_side(self):
+        """D44 (the S17 refutation of D38): the colonoscope advanced to the anastomosis is the full colonoscopy reach only
+        when the encounter's one anastomosis is placed on the right colon side (D34: ileocolonic or ileocolic); a
+        colorectal, coloanal or ileorectal one (the rectum) or one with no type word asks the extent."""
+        for anatomy, full in (('stapled ileocolic anastomosis', True), ('ileocolonic anastomosis', True),
+                              ('stapled colorectal anastomosis', False), ('coloanal anastomosis', False),
+                              ('ileorectal anastomosis', False), ('stapled anastomosis', False)):
+            inv, text = colonoscopy_reaching('anastomosis', 'anastomosis', anatomy=anatomy)
+            with self.subTest(anatomy=anatomy):
+                self.assertEqual(inv.encounter_facts['anatomy'][0]['state'], 'verified')
+                p = proposal(run(inv, text, [('45385', POLYP)]), '45385')
+                if full:
+                    self.assertEqual((p.status, asked(p)), ('ready', []))
+                    self.assertIn('extent reached = anastomosis', check(p, 'facts.required').detail)
+                else:
+                    self.assertEqual((p.status, asked(p)), ('needs_clarification', ['extent']))
+        inv, text = colonoscopy_reaching('anastomosis', 'anastomosis', incomplete=True,
+                                         anatomy='stapled colorectal anastomosis')
+        self.assertNotIn('extent', asked(proposal(run(inv, text, [('45385', POLYP)]), '45385')))
 
     def test_another_family_is_unaffected(self):
         inv, text = eus_reaching('gastric_antrum', 'gastric antrum', FNA)

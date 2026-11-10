@@ -115,11 +115,12 @@ class Base(SimpleTestCase):
 
     def test_two_em_codes_of_one_visit_hold_each_other(self):
         """The legacy base rule reads E/M profiles as base codes that cover the visit (R3 Q7), and an office visit's own
-        event is never an act beside itself."""
+        event is never an act beside itself. D40: the two also compete for the one visit, as the installed release asks
+        (measured on c2e53f8e's engine: both needs_clarification with base_included and competing_codes)."""
         inv, text = office()
         result = run(inv, text, [('99213', VISIT_LINE), ('99214', TIME_LINE)], user_values=MEMBER)
         self.assertEqual([asked(proposal(result, code)) for code in ('99213', '99214')],
-                         [['base_included'], ['base_included']])
+                         [['base_included', 'competing_codes'], ['base_included', 'competing_codes']])
         alone = run(inv, text, [('99213', VISIT_LINE)], user_values=MEMBER)
         self.assertEqual(proposal(alone, '99213').status, 'ready')
 
@@ -197,9 +198,17 @@ class Competition(SimpleTestCase):
                    ('sel:2', '43239', 'primary', ('E3',))]
         self.assertEqual(combination.competition(entries), {'sel:0': ('43248',), 'sel:1': ('43249',)})
 
-    def test_two_primary_codes_never_compete(self):
+    def test_two_codes_for_one_act_compete_whoever_proposed_them(self):
+        """D40 (the S17 refutation): the installed engine's completion repair - two codes the proposal provider alone
+        selected for one act compete as any other two do (engine._competition)."""
         self.assertEqual(combination.competition([('sel:0', '45380', 'primary', ('E2',)),
-                                                  ('sel:1', '45385', 'primary', ('E2',))]), {})
+                                                  ('sel:1', '45385', 'primary', ('E2',))]),
+                         {'sel:0': ('45385',), 'sel:1': ('45380',)})
+
+    def test_codes_for_different_acts_and_one_code_twice_never_compete(self):
+        self.assertEqual(combination.competition([('sel:0', '45380', 'primary', ('E2',)),
+                                                  ('sel:1', '45385', 'primary', ('E3',)),
+                                                  ('sel:2', '45385', 'participant', ('E3',))]), {})
 
     def test_the_hold_is_worded_as_the_engines(self):
         service = SimpleNamespace(kind='egd')

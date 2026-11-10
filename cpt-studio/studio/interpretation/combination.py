@@ -144,14 +144,17 @@ def competing_hold(code: str, family: str, key: str, rivals: Sequence[str], labe
 
 
 def competition(entries: Sequence[tuple]) -> dict:
-    """FINAL 7.9 Competing (P-ADMIT2): ``entries`` (key, code, origin, E* event ids) of the decidable codes; two of them
-    with different codes, at least one a participant's admitted code, whose E* sets intersect are each held with one
-    question naming the others. {key: (the rival codes, in entry order)} of every held code."""
+    """FINAL 7.9 Competing, as the installed engine's completion repair (2026-11-06; engine._competition) and DECISIONS
+    D40 amend P-ADMIT2: ``entries`` (key, code, origin, E* event ids) of the decidable codes; two of them with different
+    codes whose E* sets intersect - the same documented act - are each held with one question naming the others,
+    WHOEVER proposed either: two codes the proposal provider alone selected for one act compete as any other two do
+    (the S17 refutation: Corti's 43249 and 43233 for one dilation were both READY here, where the installed release
+    holds both). ``origin`` is kept in the entry and no longer read. {key: (the rival codes, in entry order)} of every
+    held code."""
     out: dict = {}
-    for key, code, origin, supporting in entries:
-        rivals = [other_code for other_key, other_code, other_origin, other_events in entries
-                  if other_key != key and other_code != code and set(supporting) & set(other_events)
-                  and 'participant' in (origin, other_origin)]
+    for key, code, _origin, supporting in entries:
+        rivals = [other_code for other_key, other_code, _other_origin, other_events in entries
+                  if other_key != key and other_code != code and set(supporting) & set(other_events)]
         if rivals:
             out[key] = tuple(dict.fromkeys(rivals))
     return out

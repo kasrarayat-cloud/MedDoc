@@ -228,7 +228,22 @@ def _span_of(record: Optional[Mapping]):
 # R6 asks it (FRESH-2 W1S-112 r1: a reach Gemini took from "Moderate diverticulosis in the sigmoid and descending colon."
 # made 45385 READY; the registry, and the installed release, hold it). A stated incomplete examination keeps its reach.
 COLONOSCOPY_FULL_REACH = frozenset({'cecum', 'appendiceal_orifice', 'ileocecal_valve', 'terminal_ileum', 'ileum',
-                                    'neo_terminal_ileum', 'small_bowel', 'anastomosis'})
+                                    'neo_terminal_ileum', 'small_bowel'})
+# DECISIONS D44 (the S17 refutation of D38): a reach to an anastomosis completes a colonoscopy only where the colon
+# proximal to it is gone - the encounter's one anastomosis placed on the right colon side (D34, mapping.anastomosis_place:
+# an ileocolonic or ileocolic one). A colorectal, coloanal or ileorectal one is placed in the rectum, and D38 reads a
+# rectal reach as short of the cecum ("The colonoscope was advanced to the colorectal anastomosis." at 12 cm is a
+# sigmoidoscopy's reach); an unplaced one (no type word, an unknown type, several) does not establish the extent either.
+# Fail-closed: R6 asks the extent (an ileorectal one, arguably complete, is asked too).
+COLONOSCOPY_FULL_ANASTOMOSIS = frozenset({'right_colon'})
+
+
+def _full_colonoscopy_reach(value: str, reading: events.Reading) -> bool:
+    """Whether a verified colonoscopy reach ``value`` is the full colonoscopy reach (D38 as D44 amends it)."""
+    if value in COLONOSCOPY_FULL_REACH:
+        return True
+    return (value == mapping.ANASTOMOSIS
+            and mapping.anastomosis_place(reading.encounter) in COLONOSCOPY_FULL_ANASTOMOSIS)
 
 
 def _stated_incomplete(examination: Mapping) -> bool:
@@ -246,7 +261,7 @@ def _reach(family: str, reading: events.Reading, sessions_: Mapping) -> tuple:
     exam = reading.events.get(session.event) if session is not None and session.event else None
     extent = exam.get('extent') if exam is not None else None
     if exam is not None and events.verify.usable(extent) and wording.landmark_label(extent.get('value', '')):
-        if (family == 'gi.colonoscopy' and extent['value'] not in COLONOSCOPY_FULL_REACH
+        if (family == 'gi.colonoscopy' and not _full_colonoscopy_reach(extent['value'], reading)
                 and not _stated_incomplete(exam)):
             return '', extent
         return extent['value'], extent
