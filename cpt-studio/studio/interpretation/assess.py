@@ -18,9 +18,14 @@ What it does, per proposed code (events.evaluate for R1-R5, then here):
   code with the extent question in another_technique's form (facts.examination_class); never an exclusion, never READY;
 - R7 the date of service (checks.service_date_state over the gemini context; PROPOSAL_DATE_CHECK and the encounter's
   question);
-- R8 the combination holds (combination.py): base, base-within, competing, the same-day E/M by date of service (C-3);
+- R8 the combination holds (combination.py): base, base-within, competing (over each counted code's claims, DECISIONS
+  D55: its E* and, for a matched code D27 narrows, the current performed acts of the kinds its covers name beside its
+  defining kinds), the same-day E/M by date of service (C-3);
 - R9 the reference checks (PFS, MUE, the endoscopic family), recorded and never making a code ready; a failed MUE is
-  shown and does not hold.
+  shown and does not hold;
+- (DECISIONS D61) a code of a session whose examination's completion is verified 'incomplete' carries the
+  service.incomplete warn and the 52/53 consideration an examination begun and not completed gives (R-4, C-9): a warn
+  and a consideration, never a status.
 Status: ``excluded`` when R1 or 7.5 decides (or a member's answer); ``needs_clarification`` when any hold or question
 stands or the date is unknown; otherwise ``ready``. READY is never approval (P5): no input to the readiness rule names a
 proposer, and a Decision is still required.
@@ -53,7 +58,8 @@ from typing import Optional
 
 from studio.gi import catalogue
 from studio.gi.profiles import PROFILES, PROFILES_VERSION, family_for_code
-from studio.interpretation import ENGINE_VERSION, combination, coverage, events, facts, identity, mapping, wording
+from studio.interpretation import (ENGINE_VERSION, combination, coverage, events, facts, identity, lexicon, mapping,
+                                   wording)
 from studio.participants import LABELS as PARTICIPANT_LABELS, PARTICIPANTS as PARTICIPANT_ORDER
 from studio.reference.store import PFS, applied_sources
 from studio.types import (CONTEXT_FACTS, PARTICIPANT_STATES, AssessmentResult, Check, ClarificationSpec, EvidenceSpan,
@@ -238,18 +244,67 @@ COLONOSCOPY_FULL_REACH = frozenset({'cecum', 'appendiceal_orifice', 'ileocecal_v
 COLONOSCOPY_FULL_ANASTOMOSIS = frozenset({'right_colon'})
 
 
-def _full_colonoscopy_reach(value: str, reading: events.Reading) -> bool:
-    """Whether a verified colonoscopy reach ``value`` is the full colonoscopy reach (D38 as D44 amends it)."""
+def _words_text(record: Optional[Mapping]) -> str:
+    words = record.get('words') if isinstance(record, Mapping) else None
+    return (words.get('text') or '') if isinstance(words, Mapping) else ''
+
+
+def _full_colonoscopy_reach(extent: Mapping, reading: events.Reading) -> bool:
+    """Whether a verified colonoscopy reach ``extent`` (the examination's extent record) is the full colonoscopy reach
+    (D38 as D44 and D57 amend it). D57 (the round-2 refutation, findings 4 and 9): an 'anastomosis' reach also reads its
+    OWN words, as D34's compared_landmark reads an act's target - "The colonoscope was advanced to the colorectal
+    anastomosis at 15 cm." beside one ileocolic anatomy entry is the far anastomosis, in the rectum, not the right colon
+    side's: its words naming an anastomosis type of another place (lexicon.anastomosis_type_places) or several
+    anastomoses (lexicon.ANASTOMOSES) keep it short of the full reach, so R6 asks the extent unless the examination is
+    stated incomplete (fail-closed; EB1: the literal type words of the reach's own words only)."""
+    value = extent.get('value', '')
     if value in COLONOSCOPY_FULL_REACH:
         return True
-    return (value == mapping.ANASTOMOSIS
-            and mapping.anastomosis_place(reading.encounter) in COLONOSCOPY_FULL_ANASTOMOSIS)
+    if value != mapping.ANASTOMOSIS:
+        return False
+    place = mapping.anastomosis_place(reading.encounter)
+    if place not in COLONOSCOPY_FULL_ANASTOMOSIS:
+        return False
+    words = _words_text(extent)
+    # D63 (D57's review, fail-closed): the reach's own words must NAME the right colon side's type - "the ileocolic
+    # anastomosis" - and no other: a bare "anastomosis" (bound inside "colorectal anastomosis"), or a type word missing
+    # from the closed list ("colocolonic", "rectal anastomosis", "anastomosis in the rectum"), establishes nothing, so
+    # the extent is asked. Every recorded reach at an anastomosis names its type (FRESH-1 and FRESH-2: 6 of 6
+    # "ileocolic anastomosis").
+    places = lexicon.anastomosis_places(words)
+    return (places == (place,) and set(lexicon.anastomosis_type_places(words)) == {place}
+            and not lexicon.holds(words, lexicon.ANASTOMOSES))
 
 
 def _stated_incomplete(examination: Mapping) -> bool:
     """Whether ``examination``'s completion is verified as incomplete (the reach's completion, contract 5.4)."""
     completion = examination.get('completion')
     return events.verify.usable(completion) and completion.get('value') == 'incomplete'
+
+
+def _said_incomplete(examination: Mapping) -> bool:
+    """DECISIONS D56: whether ``examination``'s completion has the value 'incomplete' in ANY state - verified,
+    unverified (its words did not bind) or opened by Gemini's own question about it (contract 5.5). Fail-closed: a
+    doubted 'incomplete' never fits a code a confident one holds."""
+    completion = examination.get('completion')
+    return isinstance(completion, Mapping) and completion.get('value') == 'incomplete'
+
+
+def _session_examination(family: str, reading: events.Reading, sessions_: Mapping) -> Optional[Mapping]:
+    """The one current examination of ``family``'s session (None when it has none, or two leave it unresolved)."""
+    session = sessions_.get(family)
+    return reading.events.get(session.event) if session is not None and session.event else None
+
+
+def _incomplete_session(family: str, reading: events.Reading, sessions_: Mapping) -> Optional[str]:
+    """DECISIONS D61 (the round-2 refutation, finding 10): the completion words of ``family``'s session examination when
+    its reach's completion is VERIFIED 'incomplete' ("The examination was incomplete because of poor preparation."),
+    else None. Such a session's codes carry what an examination begun and not completed gives (ADJUDICATION R-4, C-9):
+    the service.incomplete warn worded from those words, and the 52/53 consideration - never a status change."""
+    exam = _session_examination(family, reading, sessions_)
+    if exam is None or not _stated_incomplete(exam):
+        return None
+    return _words_text(exam['completion'])
 
 
 def _reach(family: str, reading: events.Reading, sessions_: Mapping) -> tuple:
@@ -261,7 +316,7 @@ def _reach(family: str, reading: events.Reading, sessions_: Mapping) -> tuple:
     exam = reading.events.get(session.event) if session is not None and session.event else None
     extent = exam.get('extent') if exam is not None else None
     if exam is not None and events.verify.usable(extent) and wording.landmark_label(extent.get('value', '')):
-        if (family == 'gi.colonoscopy' and not _full_colonoscopy_reach(extent['value'], reading)
+        if (family == 'gi.colonoscopy' and not _full_colonoscopy_reach(extent, reading)
                 and not _stated_incomplete(exam)):
             return '', extent
         return extent['value'], extent
@@ -339,11 +394,13 @@ def _examination_class(selection: _Selection, reading: events.Reading, sessions_
     landmark, extent = _reach(selection.family, reading, sessions_)
     if not landmark:
         return None
-    session = sessions_.get(selection.family)
-    exam = reading.events.get(session.event) if session is not None and session.event else None
+    exam = _session_examination(selection.family, reading, sessions_)
     # D43: a full examination stated incomplete ("The examination was limited to the ampulla ...") does not fit the full
-    # class, whatever its reach; a colonoscopy through a stoma needs the encounter's verified stoma
-    incomplete = exam_class == mapping.FULL and exam is not None and _stated_incomplete(exam)
+    # class, whatever its reach; a colonoscopy through a stoma needs the encounter's verified stoma. D56 (the round-2
+    # refutation, finding 3): an 'incomplete' completion in ANY state - verified, unverified or opened - does not fit
+    # the full class (fail-closed), so Gemini's own doubt about the completion, or completion words that do not bind,
+    # never releases the hold a confident 'incomplete' sets
+    incomplete = exam_class == mapping.FULL and exam is not None and _said_incomplete(exam)
     no_stoma = exam_class == mapping.STOMA and not mapping.has_stoma(reading.encounter)
     if landmark in mapping.CLASS_REACH[exam_class] and not incomplete and not no_stoma:
         return None
@@ -416,6 +473,7 @@ def _spec(question: events.Question, family: str, key: str) -> ClarificationSpec
 
 
 STATUS_CHECKS = {'performed': 'pass', 'incomplete': 'pass', 'not_performed': 'fail', 'uncertain': 'warn'}
+INCOMPLETE_CHECK = 'service.incomplete'  # wording.incomplete_check's id
 
 
 def _summary_sentence(selection: _Selection, reading: events.Reading) -> str:
@@ -505,6 +563,16 @@ def _proposal(selection: _Selection, key: str, enc: _Encounter, reading: events.
         considerations.append(wording.incomplete_consideration(selection.code, ref.pfs, release))
     elif evaluation.attempted:
         considerations.append(wording.incomplete_consideration(selection.code, ref.pfs, release))
+    # D61: a code of a session whose examination's completion is verified 'incomplete' carries the same check and
+    # consideration (each once), whatever its own state; a code excluded carries neither, as an excluded code's
+    # examination begun and not completed gives it neither. Never a status: a warn and a consideration only.
+    completion_words = None if excluded else _incomplete_session(selection.family, reading, enc.sessions)
+    if completion_words is not None:
+        if not any(item.id == INCOMPLETE_CHECK for item in found):
+            found.append(wording.incomplete_check(completion_words))
+        consideration = wording.incomplete_consideration(selection.code, ref.pfs, release)
+        if consideration not in considerations:
+            considerations.append(consideration)
     states = _fact_states(selection, enc.context, reading, enc.sessions)
     exam_class = _examination_class(selection, reading, enc.sessions, key)  # D28 (R6)
     if not excluded:
@@ -612,6 +680,27 @@ def _proposal(selection: _Selection, key: str, enc: _Encounter, reading: events.
 
 def _counted_pairs(enc: _Encounter) -> list:
     return [(key, record['code']) for key, record in enc.coding.get('_counted', {}).items()]
+
+
+def _claims(selection: _Selection, reading: events.Reading) -> tuple:
+    """DECISIONS D55 (the round-2 refutation, finding 1): the documented acts a counted code claims for the competition
+    rule (FINAL 7.9 as D40 amends it) - its supporting events, plus, for a code D27 narrows (CodeLink.defining) that is
+    matched (its supporting events non-empty), every current performed event (coverage.current_performed) of its own
+    family of a kind its covers name besides its defining kinds. D27 narrows what MATCHES a code, never what it
+    accounts for: 43265 matched by its lithotripsy still accounts for the stone extraction 43264 accounts for alone, so
+    the two for one stone clearance compete, as the installed release holds them. Only 43265 (the stone extraction),
+    44365 (the ablation) and 49440 (the tube placement) gain claims; a code the per-code rule held claims nothing beyond
+    its E* (none), so 43265 held not documented leaves 43264 ready."""
+    evaluation = selection.evaluation
+    supporting = tuple(evaluation.supporting)
+    link = evaluation.link
+    if not link.defining or not supporting:
+        return supporting
+    kinds = set(link.acts) - set(link.defining)
+    extra = tuple(event['id'] for event in reading.events.values()
+                  if event.get('family') == link.family and (event.get('catalogue_kind') or '') in kinds
+                  and coverage.current_performed(event) and event['id'] not in supporting)
+    return supporting + extra
 
 
 def _support(selection: _Selection, evaluation: events.Evaluation, shown: dict, reading: events.Reading,
@@ -1366,7 +1455,7 @@ def assess(*, inventory, context, normalized: Optional[NormalizedResponse], prov
                                                               s.evaluation.supporting)
                                                         for key, s in zip(keys, selections) if s.decidable})
     bases, within = dict(combination.base_included(members, coding)), dict(combination.base_within(members, coding))
-    competes = combination.competition([(key, s.code, s.origin, s.evaluation.supporting) for key, s in counted])
+    competes = combination.competition([(key, s.code, s.origin, _claims(s, reading)) for key, s in counted])  # D55
     pfs_source = applied_sources(sources, day).get(PFS)
     procedural = [(s.code, s.family, s.evaluation.state, _procedural(s, refs[s.code]),
                    wording.service_name(s.code, s.family)) for _, s in counted]

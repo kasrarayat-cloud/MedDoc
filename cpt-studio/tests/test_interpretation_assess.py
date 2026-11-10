@@ -34,9 +34,9 @@ from studio.types import (AssessmentResult, CodePosition, EvidenceSpan, LocatedQ
                           ProviderCode, ReferenceSourceInfo, Span, from_jsonable, to_jsonable)
 from studio.validation import checks, engine, questions, rationale, reconcile, review_view
 from tests.test_interpretation_events import (COLONOSCOPE, DUODENAL_REACH, EUS_LINES, FNA, L1, LOOKUP, NO_FNA, POLYP,
-                                              asked, check, colonoscopy, eus, exam, inventory, proposal, reached,
-                                              removed, response, run)
-from tests.test_interpretation_identity import a, act, les, sc, tg
+                                              ROWS, asked, check, colonoscopy, eus, exam, inventory, proposal,
+                                              reached, removed, response, run)
+from tests.test_interpretation_identity import a, act, les, sc, snare, tg
 from tests.test_interpretation_no_gi import scan, violations
 
 APP = Path(__file__).resolve().parents[1]
@@ -470,10 +470,11 @@ class CustomerWords(SimpleTestCase):
 
 # --- DECISIONS D28: the EUS examination class (R6) ---------------------------------------------------------------------
 
-def eus_reaching(landmark: str, words: str, *more, incomplete: bool = False):
+def eus_reaching(landmark: str, words: str, *more, incomplete: bool = False, completion=None, open_questions=()):
     """An upper EUS whose echoendoscope was advanced to ``words`` (its verified reach, ``landmark``), the pancreatic head
     examined, with ``more`` events (each in its EUS_LINES passage); ``incomplete``: the examination stated limited and
-    incomplete in its own line (P9, the reach's completion)."""
+    incomplete in its own line (P9, the reach's completion - Gemini's ``completion`` record when given); and Gemini's
+    ``open_questions``."""
     lines = {'P1': f'A linear echoendoscope was advanced to the {words}.', 'P2': EUS_LINES['P2']}
     lines.update({event['status']['passages'][0]: EUS_LINES[event['status']['passages'][0]] for event in more})
     examination = exam(words='echoendoscope', procedure=a('eus'), target=tg('', 'pancreas', 'pancreatic head', ['P2']))
@@ -481,8 +482,8 @@ def eus_reaching(landmark: str, words: str, *more, incomplete: bool = False):
     reach = reached('E1', landmark, words, 'P1')
     if incomplete:
         lines['P9'] = 'The examination was incomplete: the esophagus and the stomach were not examined.'
-        reach['completion'] = {'value': 'incomplete', 'words': 'incomplete', 'passages': ['P9']}
-    return inventory(lines, events=[examination, *more], reach=[reach])
+        reach['completion'] = completion or {'value': 'incomplete', 'words': 'incomplete', 'passages': ['P9']}
+    return inventory(lines, events=[examination, *more], reach=[reach], open_questions=list(open_questions))
 
 
 LOWER_EUS_LINES = {'P2': 'A perirectal lymph node was examined.',
@@ -636,6 +637,43 @@ class ExaminationClass(SimpleTestCase):
         self.assertIn('is stated to be incomplete', p.clarifications[0].question)
         self.assertIsNotNone(exam_event)
 
+    def test_d56_a_doubted_or_unbound_incomplete_completion_holds_the_full_class_code(self):
+        """DECISIONS D56 (the round-2 refutation, finding 3): an 'incomplete' completion does not fit the full class in
+        ANY state, fail-closed - Gemini's own open question about the completion (with or without passages), or
+        completion words that do not bind (not located in the cited passage, cited in a passage that does not hold them,
+        or missing), hold 43259 as the verified 'incomplete' does, with D43's 'stated to be incomplete' question; the
+        participants (Astra proposing 43259 on the same span, Fable nothing) change nothing. The installed release holds
+        this input too."""
+        doubted = {'about': 'completion', 'events': ['E1'], 'lesions': [], 'passages': ['P9']}
+        cases = {
+            'opened, with passages': ((), (doubted,), ('verified', True, [])),
+            'opened, no passages': ((), (dict(doubted, passages=[]),), ('verified', True, [])),
+            'words not in their passage': ({'value': 'incomplete', 'words': 'the examination could not be completed',
+                                            'passages': ['P9']}, (), ('unverified', False, ['words_unlocated'])),
+            'words cited elsewhere': ({'value': 'incomplete', 'words': 'incomplete', 'passages': ['P1']}, (),
+                                      ('unverified', False, ['words_unlocated'])),
+            'no words': ({'value': 'incomplete', 'words': '', 'passages': ['P9']}, (),
+                         ('unverified', False, ['words_missing']))}
+        for name, (completion, questions_, shape) in cases.items():
+            inv, text = eus_reaching('second_portion_duodenum', 'second portion of the duodenum', incomplete=True,
+                                     completion=completion or None, open_questions=questions_)
+            record = inv.events['events'][0]['completion']
+            astra = participant('astra', text, codes=[('43259', EUS_LINES['P2'])])
+            fable = participant('fable', text)
+            for participants in ((), (astra, fable)):
+                p = proposal(run(inv, text, [('43259', EUS_LINES['P2'])], participants=participants), '43259')
+                with self.subTest(case=name, participants=len(participants)):
+                    self.assertEqual((record['value'], record['state'], record['open'], record['reasons']),
+                                     ('incomplete',) + shape)
+                    self.assertEqual((p.bucket, p.status, asked(p)), ('selected', 'needs_clarification', ['extent']))
+                    self.assertIn('is stated to be incomplete', p.clarifications[0].question)
+                    self.assertEqual(check(p, 'facts.examination_class').status, 'warn')
+        # the limited class reads its reach only, as before: an unverified 'incomplete' leaves 43238 on an antral reach
+        # ready
+        inv, text = eus_reaching('gastric_antrum', 'gastric antrum', FNA, incomplete=True,
+                                 completion={'value': 'incomplete', 'words': 'incomplete', 'passages': ['P1']})
+        self.assertEqual(proposal(run(inv, text, [('43238', EUS_LINES['P3'])]), '43238').status, 'ready')
+
     def test_an_excluded_class_code_waits_on_its_class_when_reinstated(self):
         inv, text = eus(NO_FNA, reach=[DUODENAL_REACH])
         p = proposal(run(inv, text, [('43238', 'No fine-needle aspiration was performed')]), '43238')
@@ -698,11 +736,17 @@ class ColonoscopyReach(SimpleTestCase):
         """D44 (the S17 refutation of D38): the colonoscope advanced to the anastomosis is the full colonoscopy reach only
         when the encounter's one anastomosis is placed on the right colon side (D34: ileocolonic or ileocolic); a
         colorectal, coloanal or ileorectal one (the rectum) or one with no type word asks the extent."""
-        for anatomy, full in (('stapled ileocolic anastomosis', True), ('ileocolonic anastomosis', True),
-                              ('stapled colorectal anastomosis', False), ('coloanal anastomosis', False),
-                              ('ileorectal anastomosis', False), ('stapled anastomosis', False)):
-            inv, text = colonoscopy_reaching('anastomosis', 'anastomosis', anatomy=anatomy)
-            with self.subTest(anatomy=anatomy):
+        # D63: the reach's own words name the anatomy's type ("the ileocolic anastomosis"), as every recorded reach does;
+        # with no type word in them (the last row), a right colon side anatomy does not make the reach full
+        for anatomy, reach_words, full in (('stapled ileocolic anastomosis', 'ileocolic anastomosis', True),
+                                           ('ileocolonic anastomosis', 'ileocolonic anastomosis', True),
+                                           ('stapled colorectal anastomosis', 'colorectal anastomosis', False),
+                                           ('coloanal anastomosis', 'coloanal anastomosis', False),
+                                           ('ileorectal anastomosis', 'ileorectal anastomosis', False),
+                                           ('stapled anastomosis', 'anastomosis', False),
+                                           ('stapled ileocolic anastomosis', 'anastomosis', False)):
+            inv, text = colonoscopy_reaching('anastomosis', reach_words, anatomy=anatomy)
+            with self.subTest(anatomy=anatomy, reach=reach_words):
                 self.assertEqual(inv.encounter_facts['anatomy'][0]['state'], 'verified')
                 p = proposal(run(inv, text, [('45385', POLYP)]), '45385')
                 if full:
@@ -714,9 +758,166 @@ class ColonoscopyReach(SimpleTestCase):
                                          anatomy='stapled colorectal anastomosis')
         self.assertNotIn('extent', asked(proposal(run(inv, text, [('45385', POLYP)]), '45385')))
 
+    def test_d57_a_reach_whose_own_words_name_the_other_anastomosis_asks_the_extent(self):
+        """DECISIONS D57 (the round-2 refutation, findings 4 and 9): the anastomosis reach reads its OWN words too, as
+        D34's compared_landmark reads an act's. A history of a right hemicolectomy (one ileocolic anastomosis entry)
+        and a sigmoid colectomy, the colonoscope advanced to the COLORECTAL anastomosis: its words name a type of
+        another place, the rectum, so it is not the full reach and the extent is asked (the installed release asks
+        it). So are words naming several anastomoses, or a coloanal one; words naming the ileocolic one, or no type,
+        keep D44's full reach."""
+        rectal = 'A 6 mm sessile polyp in the rectum was removed with a cold snare.'
+        cases = (  # (the history line, the reach line, the reach's own words, full)
+            ('History: right hemicolectomy with an ileocolic anastomosis in 2019; sigmoid colectomy in 2022.',
+             'Procedure: The colonoscope was advanced to the colorectal anastomosis at 15 cm.',
+             'colorectal anastomosis', False),  # finding 4
+            ('History: right hemicolectomy with an ileocolic anastomosis; later sigmoid colectomy.',
+             'The colonoscope was advanced to the colorectal anastomosis.', 'colorectal anastomosis',
+             False),  # finding 9
+            ('History: right hemicolectomy with an ileocolic anastomosis; later sigmoid colectomy.',
+             'The colonoscope was advanced to the coloanal anastomosis.', 'coloanal anastomosis', False),
+            ('History: right hemicolectomy with an ileocolic anastomosis; later sigmoid colectomy.',
+             'The colonoscope was advanced through both anastomoses.', 'anastomoses', False),
+            ('History: right hemicolectomy with an ileocolic anastomosis in 2019.',
+             'The colonoscope was advanced to the ileocolic anastomosis.', 'ileocolic anastomosis', True),
+            ('History: right hemicolectomy with an ileocolic anastomosis in 2019.',
+             'The colonoscope was advanced to the anastomosis.', 'anastomosis', False),  # D63: no type word
+            ('History: right hemicolectomy with an ileocolic anastomosis; later sigmoid colectomy.',
+             'The colonoscope was advanced to the colocolonic anastomosis.', 'colocolonic anastomosis',
+             False))  # D63: a type no list holds establishes nothing
+        for history, line, words, full in cases:
+            lines = {'P1': history, 'P2': line, 'P3': rectal}
+            lesion = les('L1', '6 mm sessile polyp', 'P3', landmark='rectum', site_words='rectum', size_words='6 mm')
+            polypectomy = snare('E2', 'P3', target=tg('L1', 'rectum', '6 mm sessile polyp in the rectum', ['P3']))
+            inv, text = inventory(
+                lines, lesions=[lesion], reach=[reached('E1', 'anastomosis', words, 'P2')],
+                anatomy=[{'state': 'altered', 'landmark': 'anastomosis', 'words': 'ileocolic anastomosis',
+                          'passages': ['P1']}],
+                events=[exam('E1', 'P2'), polypectomy])
+            p = proposal(run(inv, text, [('45385', rectal)]), '45385')
+            with self.subTest(reach=line):
+                self.assertEqual((inv.encounter_facts['reach'][0]['state'], inv.encounter_facts['anatomy'][0]['state']),
+                                 ('verified', 'verified'))
+                if full:
+                    self.assertEqual((p.status, asked(p)), ('ready', []))
+                    self.assertIn('extent reached = anastomosis', check(p, 'facts.required').detail)
+                else:
+                    self.assertEqual((p.bucket, p.status, asked(p)), ('selected', 'needs_clarification', ['extent']))
+                    self.assertEqual(check(p, 'facts.required').status, 'warn')
+
     def test_another_family_is_unaffected(self):
         inv, text = eus_reaching('gastric_antrum', 'gastric antrum', FNA)
         self.assertEqual(proposal(run(inv, text, [('43238', EUS_LINES['P3'])]), '43238').status, 'ready')
+
+
+# --- DECISIONS D61: a session whose examination's completion is verified incomplete -------------------------------
+
+FINDING10_HEAD = {'H1': 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE',
+                  'H2': 'Colonoscopy report (fictional)', 'H3': 'Endoscopist: Synthetic Endoscopist, MD (fictional)',
+                  'H4': 'Procedure: Colonoscopy'}
+INCOMPLETE_LINE = 'The examination was incomplete because of poor preparation.'
+
+
+def stated_incomplete(landmark: str = 'transverse_colon', words: str = 'transverse colon', *more, completion=None,
+                      examination=None, lines=None):
+    """The round-2 refutation's finding 10: a headed colonoscopy whose colonoscope was advanced to ``words`` (P1, the
+    verified reach ``landmark``), the sigmoid polyp's cold snare removal (P2) and the examination stated incomplete in
+    its own line (P3, the reach's completion - Gemini's ``completion`` record when given); the examination performed
+    (or ``examination``), with ``more`` events in ``lines``."""
+    text_lines = {**FINDING10_HEAD, 'P1': f'The colonoscope was advanced to the {words}.', 'P2': POLYP,
+                  'P3': INCOMPLETE_LINE, **(lines or {})}
+    reach = reached('E1', landmark, words, 'P1')
+    reach['completion'] = completion or {'value': 'incomplete', 'words': 'incomplete', 'passages': ['P3']}
+    return inventory(text_lines, events=[examination or exam(), removed(), *more], lesions=[L1], reach=[reach])
+
+
+class IncompleteCompletion(SimpleTestCase):
+    """DECISIONS D61 (the round-2 refutation, finding 10): Gemini states an examination's incompleteness through its
+    reach's completion (all 4 such answers on FRESH-2, none through attempted_not_completed). A code of a session whose
+    examination's completion is VERIFIED 'incomplete' carries what an examination begun and not completed gives
+    (ADJUDICATION R-4, C-9): the service.incomplete warn, worded from the completion's own words, and the 52/53
+    consideration in the installed release's words - once each, whatever the code's own state, and never on an excluded
+    code. Neither changes a status."""
+
+    @staticmethod
+    def carried(p) -> tuple:
+        found = [item for item in p.checks if item.id == 'service.incomplete']
+        return (p.status, asked(p), p.modifier_considerations, [(item.status, item.detail) for item in found])
+
+    @staticmethod
+    def expected(code: str, status: str, questions_, words: str = 'incomplete') -> tuple:
+        consideration = checks.incomplete_consideration(code, ROWS.get(code), 'RVU26D')  # the installed release's own
+        return (status, questions_, (consideration,),
+                [('warn', f'Documented as incomplete: “{words}”. Kept for review: not treated as completed and not '
+                          'excluded.')])
+
+    def test_d61_finding_10_both_codes_carry_the_check_and_the_consideration(self):
+        inv, text = stated_incomplete()
+        self.assertEqual(inv.events['events'][0]['completion']['state'], 'verified')
+        for participants in ((participant('astra', text),), ()):
+            result = run(inv, text, [('45385', POLYP), ('45378', 'The colonoscope was advanced to the transverse '
+                                                                 'colon.')], participants=participants)
+            with self.subTest(participants=len(participants)):
+                self.assertEqual(self.carried(proposal(result, '45385')), self.expected('45385', 'ready', []))
+                self.assertEqual(self.carried(proposal(result, '45378')),
+                                 self.expected('45378', 'needs_clarification', ['base_included']))
+                self.assertTrue(proposal(result, '45385').modifier_considerations[0].startswith(
+                    'Incomplete procedure: whether modifier 52 or 53 applies'))
+
+    def test_d61_a_full_reach_stated_incomplete_carries_them_too(self):
+        inv, text = stated_incomplete('cecum', 'cecum')
+        p = proposal(run(inv, text, [('45385', POLYP)]), '45385')
+        self.assertEqual(self.carried(p), self.expected('45385', 'ready', []))
+
+    def test_d61_every_code_of_the_session_carries_them_once_whatever_its_state(self):
+        """An examination ALSO stated begun and not completed: its base code keeps the one check (its failure-marker
+        words) and the one consideration; the act code carries the completion's; a code held by its own act's doubt
+        carries them and stays held; an excluded code carries neither."""
+        examination = exam()
+        examination['status'] = a('attempted_not_completed', 'was incomplete', ['P3'])
+        lines = {'P4': 'Cold forceps biopsies of the transverse colon may have been taken.',
+                 'P5': 'No dilation was performed.'}
+        doubted = act('E3', 'P4', 'biopsy', 'biopsies', status='uncertain', status_words='may have been taken',
+                      technique=a('cold_forceps', 'Cold forceps', ['P4']),
+                      target=tg('', 'transverse_colon', 'transverse colon', ['P4']))
+        denial = act('E4', 'P5', 'dilation', 'dilation', status='not_performed',
+                     status_words='No dilation was performed', scope=sc('all_of_kind', 'No', ['P5']))
+        inv, text = stated_incomplete('transverse_colon', 'transverse colon', doubted, denial, examination=examination,
+                                      lines=lines)
+        result = run(inv, text, [('45378', 'The colonoscope was advanced to the transverse colon.'), ('45385', POLYP),
+                                 ('45380', lines['P4']), ('45386', 'No dilation was performed')])
+        base = proposal(result, '45378')
+        self.assertEqual((base.support['state'], self.carried(base)),
+                         ('incomplete', self.expected('45378', 'needs_clarification', ['base_included'],
+                                                      'was incomplete')))
+        self.assertEqual(self.carried(proposal(result, '45385')), self.expected('45385', 'ready', []))
+        self.assertEqual(self.carried(proposal(result, '45380')),
+                         self.expected('45380', 'needs_clarification', ['performed_status']))
+        excluded = proposal(result, '45386')
+        self.assertEqual((excluded.bucket, excluded.modifier_considerations, check(excluded, 'service.incomplete')),
+                         ('excluded', (), None))
+
+    def test_d61_only_a_verified_completion_and_only_its_own_session(self):
+        """A completion whose words do not bind adds nothing (D38 then asks the short reach's extent); an incomplete
+        upper examination gives its own codes the check and the consideration, never the colonoscopy's."""
+        inv, text = stated_incomplete(completion={'value': 'incomplete', 'words': 'incomplete', 'passages': ['P1']})
+        p = proposal(run(inv, text, [('45385', POLYP)]), '45385')
+        self.assertEqual((p.status, asked(p), p.modifier_considerations, check(p, 'service.incomplete')),
+                         ('needs_clarification', ['extent'], (), None))
+        lines = {'G1': EGD_LINES['G1'], 'G2': 'The upper examination was incomplete because of retained food.',
+                 'P1': EGD_LINES['P1'], 'P2': POLYP}
+        upper = reached('E0', 'second_portion_duodenum', 'second portion of the duodenum', 'G1')
+        upper['completion'] = {'value': 'incomplete', 'words': 'incomplete because of retained food',
+                               'passages': ['G2']}
+        named = a('colonoscopy', 'Colonoscopy', ['P1'])
+        inv, text = inventory(lines, lesions=[L1], reach=[upper, reached()], events=[
+            exam('E0', 'G1', words='gastroscope', procedure=a('egd', 'EGD', ['G1'])), exam(procedure=named),
+            removed(procedure=named)])
+        result = run(inv, text, [('43235', EGD_LINES['G1']), ('45385', POLYP)])
+        self.assertEqual(self.carried(proposal(result, '43235')),
+                         self.expected('43235', 'ready', [], 'incomplete because of retained food'))
+        colonoscopy_code = proposal(result, '45385')
+        self.assertEqual((colonoscopy_code.status, colonoscopy_code.modifier_considerations,
+                          check(colonoscopy_code, 'service.incomplete')), ('ready', (), None))
 
 
 # --- the copied legacy words, pinned ------------------------------------------------------------------------------------

@@ -20,7 +20,8 @@ from django.test import SimpleTestCase
 from studio.gi import catalogue
 from studio.interpretation import assess, events, facts, mapping, normalize
 from studio.reference.store import InMemoryReferenceLookup
-from studio.types import EvidenceSpan, NormalizedResponse, PageSpan, ProviderCode, ReferenceSourceInfo
+from studio.types import (EvidenceSpan, NormalizedResponse, PageSpan, ParticipantInput, ParticipantReading,
+                          ProviderCode, ReferenceSourceInfo)
 from tests.test_interpretation_identity import a, accepted, act, answer, les, sc, snare, tg
 
 # --- the shared builders -----------------------------------------------------------------------------------------------
@@ -427,12 +428,96 @@ class DefiningKinds(SimpleTestCase):
         self.assertEqual([(item['act'], item['reason']) for item in result.completeness['unresolved_items']],
                          [('stone_extraction', 'not_covered')])
 
-    def test_the_lithotripsy_code_with_its_lithotripsy_is_ready(self):
+    def test_d55_the_lithotripsy_code_with_its_lithotripsy_is_ready_alone_and_competes_beside_43264(self):
+        """DECISIONS D55 (the round-2 refutation, finding 1): matched by its lithotripsy, 43265 still accounts for the
+        stone extraction 43264 accounts for alone, so the two proposed for one stone clearance compete - held, each
+        naming the other, as the installed release holds them - while its acts (E*) stay the lithotripsy. Alone it is
+        ready."""
         inv, text = ercp(LITHOTRIPSY)
+        alone = proposal(run(inv, text, [('43265', ERCP_LINES['P4'])]), '43265')
+        self.assertEqual((alone.status, [item['id'] for item in alone.support['acts']]), ('ready', ['E4']))
         result = run(inv, text, [('43264', ERCP_LINES['P3']), ('43265', ERCP_LINES['P4'])])
-        p = proposal(result, '43265')
-        self.assertEqual((p.status, [item['id'] for item in p.support['acts']]), ('ready', ['E4']))
-        self.assertEqual(proposal(result, '43264').status, 'ready')
+        for code, rival in (('43264', '43265'), ('43265', '43264')):
+            p = proposal(result, code)
+            with self.subTest(code=code):
+                self.assertEqual((p.status, asked(p), p.support.get('competes')),
+                                 ('needs_clarification', ['competing_codes'], [rival]))
+                self.assertEqual(check(p, 'proposals.competing').status, 'warn')
+        self.assertEqual([item['id'] for item in proposal(result, '43265').support['acts']], ['E4'])
+        self.assertEqual([item['id'] for item in proposal(result, '43264').support['acts']], ['E3'])
+
+    def test_d55_one_stone_clearance_with_the_participants_configured(self):
+        """D55, finding 1's own input: one 15 mm stone fragmented by mechanical lithotripsy, its fragments then
+        extracted with a balloon; Corti proposes 43264 (the extraction line) and 43265 (the lithotripsy line), Astra and
+        Fable are read and propose nothing. The installed release holds both codes, asking only competing_codes; so
+        does this engine, with or without the participants."""
+        lines = {'P1': 'Procedure: The duodenoscope was advanced to the major papilla.',
+                 'P2': 'Deep biliary cannulation was achieved with a sphincterotome and a guidewire.',
+                 'P3': 'A 15 mm stone in the common bile duct was fragmented with mechanical lithotripsy.',
+                 'P4': 'The stone fragments were extracted from the bile duct with an extraction balloon.'}
+        inv, text = inventory(lines, events=[
+            exam('E1', 'P1', words='duodenoscope', procedure=a('ercp')),
+            act('E2', 'P2', 'cannulation', 'cannulation', status_words='was achieved', procedure=a('ercp'),
+                target=tg('', 'bile_duct', 'biliary', ['P2']), technique=a('sphincterotome', 'sphincterotome', ['P2'])),
+            act('E3', 'P3', 'lithotripsy', 'lithotripsy', status_words='was fragmented', procedure=a('ercp'),
+                target=tg('', 'common_bile_duct', 'common bile duct', ['P3']),
+                technique=a('lithotripter', 'lithotripsy', ['P3'])),
+            act('E4', 'P4', 'stone_extraction', 'extracted', status_words='were extracted', procedure=a('ercp'),
+                target=tg('', 'bile_duct', 'bile duct', ['P4']),
+                technique=a('extraction_balloon', 'extraction balloon', ['P4']))])
+        read_nothing = tuple(ParticipantInput(name, 'read', ParticipantReading(
+            provider=name, adapter_version=f'{name}@test', reading_version='harness-reading@2', requested_model='model',
+            returned_model='model', codes=(), not_coded=())) for name in ('astra', 'fable'))
+        for participants in ((), read_nothing):
+            result = run(inv, text, [('43264', lines['P4']), ('43265', lines['P3'])], participants=participants)
+            with self.subTest(participants=len(participants)):
+                self.assertEqual({code: (proposal(result, code).status, asked(proposal(result, code)),
+                                         [item['id'] for item in proposal(result, code).support['acts']])
+                                  for code in ('43264', '43265')},
+                                 {'43264': ('needs_clarification', ['competing_codes'], ['E4']),
+                                  '43265': ('needs_clarification', ['competing_codes'], ['E3'])})
+
+    def test_d55_the_hot_forceps_code_competes_for_the_ablation_it_accounts_for(self):
+        """D55 for 44365 (its covers: the hot forceps removal and the ablation; D27 narrows it to the removal): matched
+        by its hot forceps removal, it claims the session's ablation too, so 44369 proposed for that ablation competes
+        with it (the installed release reads both covers). The ablation is verified at another place than the removal,
+        so it is no adjunct of it (D41; D58: the gastric antrum is four steps from the jejunum on the tract's chain): each
+        code alone is ready."""
+        lines = {'P1': 'The enteroscope was advanced to the jejunum.',
+                 'P2': 'Two gastric antral angioectasias were treated with argon plasma coagulation.',
+                 'P3': 'A 5 mm jejunal polyp was removed with hot biopsy forceps.'}
+        inv, text = inventory(lines, reach=[reached(landmark='jejunum', words='jejunum')], events=[
+            exam(words='enteroscope', procedure=a('enteroscopy')),
+            act('E2', 'P2', 'ablation', 'argon plasma coagulation', status_words='were treated',
+                procedure=a('enteroscopy'), technique=a('argon_plasma', 'argon plasma coagulation', ['P2']),
+                target=tg('', 'gastric_antrum', 'gastric antral', ['P2'])),
+            act('E3', 'P3', 'hot_biopsy', 'hot biopsy forceps', status_words='was removed', procedure=a('enteroscopy'),
+                technique=a('hot_forceps', 'hot biopsy forceps', ['P3']), target=tg('', 'jejunum', 'jejunal', ['P3']))])
+        for code, line in (('44365', lines['P3']), ('44369', lines['P2'])):
+            with self.subTest(alone=code):
+                self.assertEqual(proposal(run(inv, text, [(code, line)]), code).status, 'ready')
+        result = run(inv, text, [('44365', lines['P3']), ('44369', lines['P2'])])
+        self.assertEqual({code: (proposal(result, code).status, asked(proposal(result, code)))
+                          for code in ('44365', '44369')},
+                         {'44365': ('needs_clarification', ['competing_codes']),
+                          '44369': ('needs_clarification', ['competing_codes'])})
+
+    def test_d55_the_gastrostomy_code_competes_for_the_tube_placement_it_accounts_for(self):
+        """D55 for 49440 (its covers: the gastrostomy and a tube placement; D27 narrows it to the gastrostomy): matched
+        by its gastrostomy, it claims the encounter's percutaneous tube placement too, so 49441 proposed for that
+        jejunostomy tube competes with it; held by the per-code rule (no gastrostomy), 49440 claims nothing and 49441
+        stays ready (the test above)."""
+        lines = {'P1': 'A 14 Fr jejunostomy tube was placed percutaneously under fluoroscopic guidance.',
+                 'P2': 'A 20 Fr gastrostomy tube was placed percutaneously under fluoroscopic guidance.'}
+        inv, text = inventory(lines, events=[
+            act('E1', 'P1', 'tube_placement', 'jejunostomy tube', status_words='was placed',
+                procedure=a('feeding_tube')),
+            act('E2', 'P2', 'peg', 'gastrostomy tube', status_words='was placed', procedure=a('feeding_tube'))])
+        result = run(inv, text, [('49440', lines['P2']), ('49441', lines['P1'])])
+        self.assertEqual({code: (proposal(result, code).status, asked(proposal(result, code)))
+                          for code in ('49440', '49441')},
+                         {'49440': ('needs_clarification', ['competing_codes']),
+                          '49441': ('needs_clarification', ['competing_codes'])})
 
     def test_r3s_failure_path_reads_the_defining_kinds_only(self):
         """A denial of the defining act the code cites excludes it (7.5, reinstatable); a denial of the act another

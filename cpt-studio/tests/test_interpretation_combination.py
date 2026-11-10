@@ -14,7 +14,8 @@ from types import SimpleNamespace
 from django.test import SimpleTestCase
 
 from studio.gi import catalogue
-from studio.interpretation import combination, coverage, events, mapping
+from studio.interpretation import assess, combination, coverage, events, mapping
+from studio.types import EvidenceSpan
 from studio.validation import checks, engine
 from tests.test_interpretation_events import (COLONOSCOPE, DUODENAL_REACH, EUS_LINES, FNA, L1, POLYP, asked, check,
                                               colonoscopy, eus, exam, inventory, proposal, reached, removed, run)
@@ -209,6 +210,40 @@ class Competition(SimpleTestCase):
         self.assertEqual(combination.competition([('sel:0', '45380', 'primary', ('E2',)),
                                                   ('sel:1', '45385', 'primary', ('E3',)),
                                                   ('sel:2', '45385', 'participant', ('E3',))]), {})
+
+    def test_d55_a_narrowed_code_claims_the_acts_its_covers_name_beside_its_defining_kinds(self):
+        """DECISIONS D55 (the round-2 refutation, finding 1): the competition reads each counted code's CLAIMS - its E*
+        and, for a matched code D27 narrows, every current performed act of its family of a kind its covers name beside
+        its defining kinds. Exactly three codes have such kinds (43265 the stone extraction, 44365 the ablation, 49440
+        the tube placement; the EUS codes' acts are their defining kinds). A held code claims nothing beyond its E*, an
+        act not current and performed is never claimed, and a code D27 does not narrow claims its E* alone."""
+        extra = {code: tuple(kind for kind in mapping.code_link(code).acts if kind not in kinds)
+                 for code, kinds in mapping.DEFINING.items()}
+        self.assertEqual({code: kinds for code, kinds in extra.items() if kinds},
+                         {'43265': ('stone_extraction',), '44365': ('ablation',), '49440': ('tube_placement',)})
+        from tests.test_interpretation_events import ERCP_LINES, LITHOTRIPSY, ercp
+        inv, text = ercp(LITHOTRIPSY)
+        reading = events.Reading.of(inv)
+
+        def claims(code: str, line: str) -> tuple:
+            start = text.index(line)
+            kept = (EvidenceSpan(0, start, start + len(line), line, True),)
+            selection = SimpleNamespace(evaluation=events.evaluate(code, kept, reading))
+            return assess._claims(selection, reading)
+
+        self.assertEqual(claims('43265', ERCP_LINES['P4']), ('E4', 'E3'))  # its lithotripsy, then the extraction
+        self.assertEqual(claims('43264', ERCP_LINES['P3']), ('E3',))
+        inv, text = ercp()  # no lithotripsy: 43265 is held (not documented) and claims nothing
+        reading = events.Reading.of(inv)
+        self.assertEqual(claims('43265', ERCP_LINES['P3']), ())
+        lithotripsy = act('E4', 'P4', 'lithotripsy', 'lithotripsy', status_words='was performed', procedure=a('ercp'))
+        old = act('E3', 'P3', 'stone_extraction', 'extracted', status_words='were extracted', procedure=a('ercp'),
+                  time=a('earlier_encounter', 'In 2024', ['P3']))
+        lines = {'P1': ERCP_LINES['P1'], 'P3': 'In 2024 three stones were extracted from the bile duct.',
+                 'P4': ERCP_LINES['P4']}
+        inv, text = inventory(lines, events=[exam(words='duodenoscope', procedure=a('ercp')), old, lithotripsy])
+        reading = events.Reading.of(inv)
+        self.assertEqual(claims('43265', ERCP_LINES['P4']), ('E4',))  # an earlier extraction is not claimed
 
     def test_the_hold_is_worded_as_the_engines(self):
         service = SimpleNamespace(kind='egd')
