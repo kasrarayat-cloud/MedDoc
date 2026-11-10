@@ -114,6 +114,8 @@ CLAIM_STATEMENTS = ('not_performed', 'uncertain', 'planned')
 DEVICE_CONTAINS = {'snare': frozenset({'cold_snare', 'hot_snare'}), 'forceps': frozenset({'cold_forceps', 'hot_forceps'})}
 RESECTIONS = frozenset({'emr', 'esd'})
 RESECTION_TECHNIQUES = frozenset({'snare', 'hot_biopsy'})
+# DECISIONS D30 and D41: the kinds a removal's procedural adjunct can be (coverage.ADJUNCT_KINDS is this set)
+PROCEDURAL_ADJUNCTS = frozenset({'ablation', mapping.BLEEDING_CONTROL})
 
 
 @dataclass(frozen=True)
@@ -539,6 +541,8 @@ def bundling_rule(context: Context, whole: Mapping, part: Mapping) -> str:
         return 'resection_technique'
     if of in RESECTIONS and kind == 'injection' and part['kind']['value'] == 'injection':
         return 'lift_injection'
+    if of in mapping.REMOVAL_MEMBERS and kind in PROCEDURAL_ADJUNCTS:  # D41
+        return 'procedural_adjunct'
     return ''
 
 
@@ -565,6 +569,15 @@ def identity_in_doubt(context: Context, rule: str, whole: Mapping, part: Mapping
             return (rule == 'biopsy_of_removed_lesion' and not context.facts[lesion].single  # in common (C-2)
                     and not _own_passages(whole) & _own_passages(part))
         return not context.distinct(lesion, other)
+    if rule == 'procedural_adjunct':
+        # D41 (the S17 refutation of D30): a removal's adjunct is bundled only through a verified link (its part_of, or
+        # the removal's verified lesion: coverage.bundled_reason). Beside a removal of its session, an ablation or a
+        # bleeding control that names no lesion, names one not established, or stands at compatible or unknown places is
+        # set apart by nothing verified - so it is asked, never READY alone; only a verified part_of naming another act
+        # (above: incompatible places; two distinct verified lesions) sets it apart. FINAL 5.7: a false READY is repaired.
+        step = part.get('part_of')
+        return not (isinstance(step, Mapping) and step.get('state') == 'verified' and step.get('value')
+                    and step.get('value') != whole['id'])
     identities = (whole['target']['identity'], part['target']['identity'])
     if rule == 'lift_injection':  # C-5: its lesion or its site unresolved
         return identity.UNRESOLVED in identities or not known

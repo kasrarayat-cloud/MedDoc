@@ -326,20 +326,30 @@ def _fact_states(selection: _Selection, context: Mapping, reading: events.Readin
 
 def _examination_class(selection: _Selection, reading: events.Reading, sessions_: Mapping,
                        key: str) -> Optional[tuple]:
-    """D28 (FINAL 7.2 R6): (check, clarification) of a code with an EUS examination class whose session's verified
-    reach - the reach the extent fact reads - does not fit it: a full examination needs the reach at or beyond the
-    duodenum (mapping.FULL_REACH), a limited one short of it (mapping.SHORT_OF_DUODENUM); a reach in neither fits
-    neither. None when it fits, when the code has no class, or when the reach is not verified (the extent fact the
-    class adds to the code's required facts is then missing, and asked). Never an exclusion."""
+    """D28 (FINAL 7.2 R6), as D43 widens it: (check, clarification) of a code with an EUS examination class whose
+    session's verified reach - the reach the extent fact reads - does not fit it: a full examination needs the reach at
+    or beyond the duodenum (mapping.FULL_REACH) and an examination not stated incomplete, a limited one a reach short of
+    it (mapping.SHORT_OF_DUODENUM); a lower-tract EUS code the reach of its endoscopy (mapping.SIGMOIDOSCOPIC_REACH,
+    COLONOSCOPIC_REACH, and for a stoma code STOMA_REACH with the encounter's verified stoma); a reach in no class of the
+    code fits none. None when it fits, when the code has no class, or when the reach is not verified (the extent fact
+    the class adds to the code's required facts is then missing, and asked). Never an exclusion."""
     exam_class = mapping.examination_class(selection.code)
     if not exam_class:
         return None
     landmark, extent = _reach(selection.family, reading, sessions_)
-    if not landmark or landmark in mapping.CLASS_REACH[exam_class]:
+    if not landmark:
+        return None
+    session = sessions_.get(selection.family)
+    exam = reading.events.get(session.event) if session is not None and session.event else None
+    # D43: a full examination stated incomplete ("The examination was limited to the ampulla ...") does not fit the full
+    # class, whatever its reach; a colonoscopy through a stoma needs the encounter's verified stoma
+    incomplete = exam_class == mapping.FULL and exam is not None and _stated_incomplete(exam)
+    no_stoma = exam_class == mapping.STOMA and not mapping.has_stoma(reading.encounter)
+    if landmark in mapping.CLASS_REACH[exam_class] and not incomplete and not no_stoma:
         return None
     words = extent['words']['text'] if isinstance(extent.get('words'), Mapping) else ''
     reason, question = wording.examination_class_hold(selection.code, exam_class, wording.landmark_label(landmark),
-                                                      words)
+                                                      words, incomplete=incomplete)
     return (Check(*wording.EXAMINATION_CLASS_CHECK, 'warn', reason, wording.SOURCE),
             ClarificationSpec(scope='proposal', fact='extent', question=question, reason=reason,
                               family=selection.family, proposal_key=key))

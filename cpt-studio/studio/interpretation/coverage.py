@@ -16,6 +16,11 @@ BUNDLING (7.7; COMMON_BUNDLED, catalogue.py:163-175):
 - biopsy_of_removed_lesion: a biopsy of the same verified lesion as a current performed removal (snare, EMR, hot biopsy,
   ESD) where that lesion is single, or - whatever the multiplicity (C-2) - where the two acts cite a passage in common;
   a group lesion whose two acts sit in separate passages has a bundling_identity relation instead.
+- stent_included (DECISIONS D45): an ERCP sphincterotomy or dilation beside a current performed ERCP stent placement or
+  exchange of its session is part of the stent act of its duct (43274 and 43276 include "sphincterotomy, when performed"
+  and pre- and post-dilation); both acts' ducts verified and different (a biliary sphincterotomy beside a pancreatic
+  stent) keep it a separate service, and a duct verified on neither act - or the ampulla, which opens on both - never
+  sets them apart (fail-closed: held as part of the stent, never READY alone).
 - clip and cannulation: never separately reported (NOT_REPORTED); a clip whose hemostasis purpose is verified is
   bleeding control (its catalogue kind). Each family entry's own bundled kinds as the catalogue states them (the ERCP's
   contrast injection).
@@ -51,10 +56,18 @@ COMMON = dict(catalogue.COMMON_BUNDLED)
 RESECTIONS = frozenset({'emr', 'esd'})
 # D30: the kinds a removal's procedural adjunct can be, and why such an adjunct is never separately reported (CPT Studio's
 # own rule over the event structure, in COMMON_BUNDLED's form; the catalogue's table is the legacy one and is not edited)
-ADJUNCT_KINDS = frozenset({'ablation', mapping.BLEEDING_CONTROL})
+ADJUNCT_KINDS = relations.PROCEDURAL_ADJUNCTS
 PROCEDURAL_ADJUNCT = ('An ablation or a control of bleeding done as part of a removal at the same session - on the lesion '
                       'it removes, or of the bleeding it causes - is part of that removal, not a separate service '
                       '(internal profile rule).')
+# D45: an ERCP stent placement or exchange includes a sphincterotomy and a dilation of its own duct.
+ERCP = 'gi.ercp'
+STENT_KINDS = frozenset({'stent', 'stent_exchange'})
+STENT_INCLUDED_KINDS = frozenset({'sphincterotomy', 'dilation'})
+DUCT_SIDES = frozenset({'biliary', 'pancreas'})
+STENT_INCLUDED = ('A sphincterotomy or a dilation done at the same ERCP as a stent placement or exchange in the same duct '
+                  'is part of that stent service (the stent code includes sphincterotomy and pre- and post-dilation, '
+                  'when performed); one of the other duct is a separate service (internal profile rule).')
 # The regions of the lower tract: an EUS event placed there is a lower EUS, of which no EGD is the endoscopic portion.
 LOWER_REGIONS = frozenset({'colon', 'rectum', 'anus'})
 NOT_ACT_KINDS = mapping.EXAMINATION_KINDS | frozenset(mapping.UMBRELLAS)
@@ -93,6 +106,16 @@ def _compatible(first, second) -> bool:
     return bool(first) and bool(second) and all(lexicon.compatible(one, two) for one in first for two in second)
 
 
+def duct_side(event: Mapping) -> str:
+    """D45: the duct an ERCP event's verified target lies in - 'biliary' or 'pancreas' - else '': a target that is not
+    verified or not placed, the ampulla (it opens on both ducts), or a place that is no duct."""
+    landmark = mapping.target_landmark(event)
+    if not landmark or landmark == 'ampulla':
+        return ''
+    side = mapping.region(landmark)
+    return side if side in DUCT_SIDES else ''
+
+
 def bundled_reason(reading, event: Mapping) -> str:
     """Why ``event`` is part of another documented act and never separately reported (module docstring), or ''."""
     kind = event.get('catalogue_kind') or ''
@@ -126,6 +149,13 @@ def bundled_reason(reading, event: Mapping) -> str:
             other = identity.verified_lesion(whole)
             if whole_of == whole['id'] or (lesion and lesion == other):
                 return COMMON['resection_technique']
+        return ''
+    if event.get('family') == ERCP and kind in STENT_INCLUDED_KINDS:  # D45: part of the stent act of its duct
+        side = duct_side(event)
+        for whole in _wholes(reading, event, STENT_KINDS):
+            other = duct_side(whole)
+            if whole.get('family') == ERCP and (not side or not other or side == other):
+                return STENT_INCLUDED
         return ''
     if kind in ADJUNCT_KINDS:  # D30: a removal's procedural adjunct, by its verified part_of or the removal's lesion
         for whole in _wholes(reading, event, mapping.REMOVAL_MEMBERS):

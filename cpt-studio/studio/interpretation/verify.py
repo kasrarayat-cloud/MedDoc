@@ -19,6 +19,9 @@ reading of the document:
   occasion - a C1 earlier or future marker, or "original" (lexicon.other_occasion) - is unverified (other_occasion),
   because Gemini's own words contradict Gemini's own value. A time question, never an exclusion: no exclusion reads a
   current time, and the earlier and future values' markers are read exactly as EB3 reads them.
+- DECISIONS D42 completes D35 fail-closed: a current_encounter time whose OWN words (no date literal in them) hold no
+  anchor of this encounter (lexicon.current_anchors) is unverified (current_unanchored) - the words name an occasion
+  without saying it is this one. Words with no anchor and no marker no longer release the READY path.
 
 What a failure does (contract 5.5): the attribute is unverified with its reasons, closed lists here. It never sets,
 changes or removes a value, never excludes a code, never creates a status, a contradiction or a hold. Consumers read an
@@ -50,6 +53,7 @@ REASONS = (
     'negation_missing', 'quantifier_missing', 'duration_missing', 'label_missing',
     # the C1 markers (FINAL 5.2, 5.5; EB3), and a current time's words naming another occasion (DECISIONS D35)
     'planning_missing', 'failure_missing', 'time_marker_missing', 'facility_marker_missing', 'other_occasion',
+    'current_unanchored',
     # structural (contract 5.4)
     'scope_target_mismatch', 'umbrella_on_positive', 'inconsistent_status_time', 'part_of_invalid',
     'claim_unknown_event', 'lesion_unknown', 'reach_not_permitted', 'reach_inferred', 'visit_not_permitted',
@@ -65,7 +69,8 @@ CHECKS = (
     'passages_located', 'passage_places', 'words_in_own_passage', 'default', 'default_after_unlocated_words',
     'single_family', 'date_literal', 'name_tokens', 'size_literal', 'landmark_words', 'reach_device', 'device_words',
     'procedure_name', 'negation_marker', 'quantifier', 'duration_literal', 'label_words', 'planning_marker',
-    'failure_marker', 'time_marker', 'occasion_marker', 'facility_marker', 'scope_permitted', 'scope_target',
+    'failure_marker', 'time_marker', 'occasion_marker', 'current_anchor', 'facility_marker', 'scope_permitted',
+    'scope_target',
     'umbrella', 'status_time', 'part_of_reference', 'lesion_reference', 'reach_permitted', 'reach_source',
     'visit_permitted', 'lesion_site',
 )
@@ -129,7 +134,11 @@ def time_words(value: str, text: str, service_date: Optional[date]) -> Verdict:
     DECISIONS D35: a current_encounter time whose words carry a marker of another occasion (lexicon.other_occasion: a
     C1 earlier or future marker, or "original") is unverified (other_occasion), date literal or not - "At the original
     procedure" given as the words of a time Gemini calls current. The words are read for that marker only where they
-    contradict the value; an earlier or future time is read exactly as before, so no exclusion changes (EB3)."""
+    contradict the value; an earlier or future time is read exactly as before, so no exclusion changes (EB3).
+    DECISIONS D42: a current_encounter time given words with no date literal is verified only when those words anchor it
+    to this encounter (lexicon.current_anchors: "today", "this examination", "during the present encounter", "on
+    withdrawal"); otherwise it is unverified (current_unanchored). A current time given NO words stays Gemini's reading
+    (EB2)."""
     found = literals.dates(text)
     records = [_date_record(item) for item in found]
     if found:
@@ -144,8 +153,13 @@ def time_words(value: str, text: str, service_date: Optional[date]) -> Verdict:
     if value != 'current_encounter':
         return verdict
     marks = lexicon.other_occasion(text)
-    return _verdict(verdict.checks + ('occasion_marker',), {**verdict.literals, 'markers': list(marks)},
-                    verdict.reasons + (('other_occasion',) if marks else ()))
+    # D42: worded, with no date literal and no marker of another occasion (D35's reason then stands alone), a current
+    # time needs an anchor of this encounter in its own words
+    unanchored = (bool(lexicon.fold(text).strip()) and not found and not marks
+                  and not lexicon.current_anchors(text))
+    return _verdict(verdict.checks + ('occasion_marker', 'current_anchor'), {**verdict.literals, 'markers': list(marks)},
+                    verdict.reasons + (('other_occasion',) if marks else ()) + (('current_unanchored',) if unanchored
+                                                                                else ()))
 
 
 def _date_reasons(value: str, records: Sequence[Mapping], service_date: Optional[date]) -> tuple:

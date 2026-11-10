@@ -257,16 +257,28 @@ class CodeLinks(SimpleTestCase):
         self.assertEqual({code: mapping.examination_class(code) for code in catalogue.CODES
                           if mapping.examination_class(code)},
                          {'43231': 'limited', '43232': 'limited', '43237': 'limited', '43238': 'limited',
-                          '43242': 'full', '43259': 'full'})
+                          '43242': 'full', '43259': 'full',
+                          # D43: the lower-tract EUS codes, which the catalogue gives no class
+                          '45341': 'sigmoidoscopic', '45342': 'sigmoidoscopic', '45391': 'colonoscopic',
+                          '45392': 'colonoscopic', '44406': 'stoma', '44407': 'stoma'})
         self.assertEqual(mapping.FULL_REACH, {'duodenum', 'duodenal_bulb', 'second_portion_duodenum', 'ampulla',
                                               'jejunum'})
         # short of the duodenum: the tract before it - D29's esophageal class and the stomach's half of its gastric one
         self.assertEqual(mapping.SHORT_OF_DUODENUM, mapping.SITE_CLASSES[mapping.ESOPHAGEAL]
                          | (mapping.SITE_CLASSES[mapping.GASTRIC_DUODENAL] - {'duodenum', 'duodenal_bulb',
                                                                               'second_portion_duodenum'}))
-        self.assertEqual(dict(mapping.CLASS_REACH), {'full': mapping.FULL_REACH, 'limited': mapping.SHORT_OF_DUODENUM})
+        self.assertEqual(dict(mapping.CLASS_REACH), {'full': mapping.FULL_REACH, 'limited': mapping.SHORT_OF_DUODENUM,
+                                                     'sigmoidoscopic': mapping.SIGMOIDOSCOPIC_REACH,
+                                                     'colonoscopic': mapping.COLONOSCOPIC_REACH,
+                                                     'stoma': mapping.STOMA_REACH})
         self.assertFalse(mapping.FULL_REACH & mapping.SHORT_OF_DUODENUM)
-        self.assertLessEqual(mapping.FULL_REACH | mapping.SHORT_OF_DUODENUM, set(schema.LANDMARKS))
+        self.assertFalse(mapping.SIGMOIDOSCOPIC_REACH & mapping.COLONOSCOPIC_REACH)
+        # D43: the splenic flexure is the boundary, so it fits neither lower class; no lower class holds an upper place
+        self.assertNotIn('splenic_flexure', mapping.SIGMOIDOSCOPIC_REACH | mapping.COLONOSCOPIC_REACH)
+        self.assertFalse((mapping.SIGMOIDOSCOPIC_REACH | mapping.COLONOSCOPIC_REACH | mapping.STOMA_REACH)
+                         & (mapping.FULL_REACH | mapping.SHORT_OF_DUODENUM))
+        for reach in mapping.CLASS_REACH.values():
+            self.assertLessEqual(reach, set(schema.LANDMARKS))
 
     def test_d29_the_site_specific_dilation_codes(self):
         """DECISIONS D29: the table lives here (never in studio.gi), names only the catalogue's EGD-family dilation

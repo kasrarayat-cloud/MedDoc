@@ -783,8 +783,11 @@ class BundlingIdentity(SimpleTestCase):
         self.assertEqual(asked(inventory('A submucosal injection was given in the rectum.',
                                          target=tg('', 'rectum', 'rectum', ['P2']))), [])  # another place
         self.assertEqual(asked(inventory('A tattoo was given.', kind='tattoo', words='tattoo')), [])
+        # a hemostasis injection is bleeding control, never a lift injection (C-5); beside the EMR, with no part_of and
+        # no place, D41 asks whether it is the resection's own (the S17 refutation: it was READY beside 45390)
         self.assertEqual(asked(inventory('An injection was given for hemostasis.',
-                                         purpose=a('hemostasis', 'for hemostasis', ['P2']))), [])
+                                         purpose=a('hemostasis', 'for hemostasis', ['P2']))),
+                         [('E1', 'E2', 'procedural_adjunct')])
 
     def test_a_snare_beside_an_emr_of_a_lesion_it_is_not_verified_to_be(self):
         lines = {'P1': 'A 20 mm flat polyp was seen in the cecum.', 'P2': 'It was resected by EMR.',

@@ -1527,6 +1527,7 @@ def every_reason_scenario() -> list:
     add('failure_missing', e(status=attr('attempted_not_completed', 'was removed', ['P2'])))
     add('time_marker_missing', e(time=attr('earlier_encounter', 'removed', ['P2'])))
     add('other_occasion', e(time=attr('current_encounter', 'at the original procedure', ['P2'])))  # D35, unlocated
+    add('current_unanchored', e(time=attr('current_encounter', 'sessile polyp', ['P2'])))  # D42: no anchor, no marker
     add('facility_marker_missing', e(performer=attr('other_facility', 'sessile polyp', ['P2'])))
     add('scope_target_mismatch', answer(events=[examination(), event(), denial(
         scope=scope('single_target', 'No other', ['P3']))]))

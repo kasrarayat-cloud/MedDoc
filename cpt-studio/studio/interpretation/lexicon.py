@@ -525,6 +525,27 @@ def other_occasion(text: str) -> tuple[str, ...]:
     return tuple(found_)
 
 
+# DECISIONS D42 (the S17 refutation of D35, finding 7): D35's list is one a word must be ABSENT from, so every wording of
+# another occasion it lacks ("At the index procedure", "At that procedure", "At her first colonoscopy", "Back then",
+# "over the summer") left a current time verified - a false READY by omission. D42 inverts the default for a current
+# time's own words: they are SAFE only where they anchor the time to THIS encounter - a deictic of the present
+# (CURRENT_ANCHORS) or a phase of the procedure being reported (PROCEDURE_PHASES); a date literal is read by its own
+# check (verify.time_words). Words with none of these leave the time unverified (current_unanchored): a time question,
+# never an exclusion and never READY. A word missing here asks; it never releases (an inclusion list that decides safety
+# names what is safe). Measured on every current time FRESH-1 and FRESH-2 recorded: 1,079 + 991 events, 860 + 872 with
+# no words; the worded ones use 19 + 17 distinct texts, and the only ones left unanchored are the index colonoscopy,
+# "over the summer", "initially", "then" and a bare "findings" heading. D35's markers stay: a safe word beside one of
+# them does not make the time current.
+CURRENT_ANCHORS = ('today', 'this', 'these', 'present', 'current', 'currently', 'now', 'same', 'date of service',
+                   'day of service', 'this date', 'the date of the encounter')
+PROCEDURE_PHASES = ('on withdrawal', 'withdrawal', 'on insertion', 'insertion', 'on retroflexion', 'retroflexion')
+
+
+def current_anchors(text: str) -> tuple[str, ...]:
+    """D42: the anchors of the present encounter ``text`` holds (CURRENT_ANCHORS, PROCEDURE_PHASES), in order."""
+    return found(text, CURRENT_ANCHORS + PROCEDURE_PHASES)
+
+
 # --- the words a person name is not (contract 5.3: names tokenized without titles, credentials and role words) --------
 
 TITLES = ('dr', 'doctor', 'prof', 'professor', 'mr', 'mrs', 'ms', 'miss', 'mx')

@@ -137,9 +137,11 @@ class Time(SimpleTestCase):
                 self.assertEqual(reasons(verify.time_words(value, text, SERVICE)), ('time_marker_missing',))
 
     def test_eb3_a_missing_marker_never_touches_the_ready_path(self):
-        # A current_encounter time is never asked FOR a marker: words naming no occasion leave it Gemini's reading.
-        for text in ('today', 'On withdrawal', 'during the procedure', 'At this procedure', 'this morning',
-                     'on 11/09/2026', 'November 2026'):
+        # A current_encounter time is never asked FOR a C1 marker: words anchored to this encounter (D42) or carrying a
+        # date literal leave it Gemini's reading.
+        for text in ('today', 'On withdrawal', 'At this procedure', 'this morning', 'on 11/09/2026', 'November 2026',
+                     'during the present encounter', 'same session', 'this time as well.',
+                     'during the single date of service stated at the top of this report'):
             with self.subTest(text):
                 verdict = verify.time_words('current_encounter', text, SERVICE)
                 self.assertEqual(reasons(verdict), ())
@@ -164,6 +166,33 @@ class Time(SimpleTestCase):
         # a date literal's own failure stands beside it
         self.assertEqual(reasons(verify.time_words('current_encounter', 'previously, on 12/01/2026', SERVICE)),
                          ('date_mismatch', 'other_occasion'))
+
+    def test_d42_worded_current_time_with_no_anchor_of_this_encounter_is_unverified(self):
+        # DECISIONS D42 (the S17 refutation of D35, finding 7): the words name an occasion, or a sequence, without saying
+        # it is this encounter - fail-closed, a time question, never an exclusion
+        for text in ('At the index procedure', 'At that procedure', 'At the first procedure', 'At the initial procedure',
+                     'At her first colonoscopy', 'During that examination', 'On that occasion', 'Back then',
+                     'Initially', 'then', 'over the summer', 'those were the findings at her index colonoscopy.',
+                     'during the procedure', 'findings', 'at the outside hospital', 'at the referring facility'):
+            with self.subTest(text):
+                verdict = verify.time_words('current_encounter', text, SERVICE)
+                self.assertEqual(reasons(verdict), ('current_unanchored',))
+                self.assertIn('current_anchor', verdict.checks)
+                record = {'value': 'current_encounter', 'state': 'unverified', 'basis': 'stated',
+                          'literals': dict(verdict.literals), 'reasons': list(verdict.reasons)}
+                self.assertEqual(verify.exclusion_basis('time', record), '')
+                self.assertEqual(verify.time_state(record, date(2026, 11, 9))['reasons'], ['current_unanchored'])
+        # D35's marker stands alone where it is found; a safe word beside it does not make the time current
+        self.assertEqual(reasons(verify.time_words('current_encounter', 'At the original procedure', SERVICE)),
+                         ('other_occasion',))
+        self.assertEqual(reasons(verify.time_words('current_encounter', 'this, at her prior colonoscopy', SERVICE)),
+                         ('other_occasion',))
+        # no words: Gemini's reading (EB2); a date literal is read by its own check
+        self.assertEqual(reasons(verify.time_words('current_encounter', '', SERVICE)), ())
+        self.assertEqual(reasons(verify.time_words('current_encounter', 'at the index colonoscopy on 11/09/2026',
+                                                   SERVICE)), ())
+        self.assertEqual(reasons(verify.time_words('current_encounter', 'at the index colonoscopy on 12/01/2026',
+                                                   SERVICE)), ('date_mismatch',))
 
     def test_d35_leaves_the_earlier_and_future_values_as_eb3_reads_them(self):
         # "original" is no earlier marker: the exclusion path is unchanged (EB3).

@@ -387,3 +387,178 @@ class Record(SimpleTestCase):
 
     def test_the_bundled_reasons_are_the_catalogues(self):
         self.assertEqual(coverage.COMMON, dict(catalogue.COMMON_BUNDLED))
+
+
+ERCP_STENT_LINES = {'P1': 'The duodenoscope was advanced to the major papilla.',
+                    'P2': 'Deep biliary cannulation was achieved with a sphincterotome and a guidewire.',
+                    'P3': 'A biliary sphincterotomy was performed with blended current.',
+                    'P4': 'A 10 Fr by 7 cm plastic biliary stent was placed in the common bile duct with good drainage.',
+                    'P5': 'A 5 Fr pancreatic stent was placed in the pancreatic duct.',
+                    'P6': 'A papillotomy was performed.',
+                    'P7': 'The distal common bile duct stricture was dilated with a 6 mm balloon.',
+                    'P8': 'The existing biliary stent was removed and exchanged for a new 10 Fr stent in the common bile '
+                          'duct.',
+                    'P9': 'Stones were extracted from the bile duct with an extraction balloon.',
+                    'PA': 'A pancreatic duct stent will be placed at the next ERCP.'}
+ERCP_EXAM = exam(words='duodenoscope', procedure=a('ercp'))
+ERCP_CANNULATION = act('E2', 'P2', 'cannulation', 'cannulation', status_words='was achieved', procedure=a('ercp'),
+                       target=tg('', 'bile_duct', 'biliary', ['P2']))
+BILIARY_SPHINCTEROTOMY = act('E3', 'P3', 'sphincterotomy', 'sphincterotomy', status_words='was performed',
+                             procedure=a('ercp'), target=tg('', 'bile_duct', 'biliary', ['P3']))
+PAPILLOTOMY = act('E3', 'P6', 'sphincterotomy', 'papillotomy', status_words='was performed', procedure=a('ercp'),
+                  target=tg('', 'ampulla', 'papillotomy', ['P6']))
+UNPLACED_SPHINCTEROTOMY = act('E3', 'P6', 'sphincterotomy', 'papillotomy', status_words='was performed',
+                              procedure=a('ercp'))
+BILIARY_STENT = act('E4', 'P4', 'stent', 'stent', status_words='was placed', procedure=a('ercp'),
+                    technique=a('stent', 'plastic biliary stent', ['P4']),
+                    target=tg('', 'common_bile_duct', 'common bile duct', ['P4']))
+PANCREATIC_STENT = act('E4', 'P5', 'stent', 'stent', status_words='was placed', procedure=a('ercp'),
+                       technique=a('stent', 'pancreatic stent', ['P5']),
+                       target=tg('', 'pancreatic_duct', 'pancreatic duct', ['P5']))
+PLANNED_STENT = act('E4', 'PA', 'stent', 'pancreatic duct stent', status='planned', status_words='will be placed',
+                    procedure=a('ercp'), time=a('future', 'at the next ERCP', ['PA']),
+                    target=tg('', 'pancreatic_duct', 'pancreatic duct', ['PA']))
+DUCT_DILATION = act('E3', 'P7', 'dilation', 'dilated', status_words='was dilated', procedure=a('ercp'),
+                    technique=a('balloon', 'balloon', ['P7']), target=tg('', 'common_bile_duct', 'common bile duct',
+                                                                         ['P7']))
+STENT_EXCHANGE = act('E4', 'P8', 'stent_exchange', 'exchanged', status_words='was removed and exchanged',
+                     procedure=a('ercp'), technique=a('stent', '10 Fr stent', ['P8']),
+                     target=tg('', 'common_bile_duct', 'common bile duct', ['P8']))
+STONE_EXTRACTION = act('E4', 'P9', 'stone_extraction', 'extracted', status_words='were extracted', procedure=a('ercp'),
+                       technique=a('extraction_balloon', 'extraction balloon', ['P9']),
+                       target=tg('', 'bile_duct', 'bile duct', ['P9']))
+
+
+def ercp_with(*acts):
+    lines = {pid: ERCP_STENT_LINES[pid] for pid in ['P1', 'P2'] + [item['status']['passages'][0] for item in acts]}
+    return inventory(lines, events=[ERCP_EXAM, ERCP_CANNULATION, *acts])
+
+
+class StentIncluded(SimpleTestCase):
+    """DECISIONS D45 (the S17 refutation, finding 10): an ERCP stent placement or exchange code includes "sphincterotomy,
+    when performed" and pre- and post-dilation (43274, 43276), so a sphincterotomy or a dilation beside a current
+    performed stent act of its duct at the same ERCP is part of it - R5's "part of another documented act" hold, never
+    READY alone. Both ducts verified and different keep it a separate service; a duct verified on neither act, or the
+    ampulla (it opens on both ducts), never sets the two apart."""
+
+    def assert_held_as_part_of_the_stent(self, result, code):
+        p = proposal(result, code)
+        self.assertEqual((p.bucket, p.status, asked(p), p.support['reason']),
+                         ('selected', 'needs_clarification', ['performed_status'], events.BUNDLED))
+        self.assertIn('which is part of another documented act: ' + coverage.STENT_INCLUDED,
+                      check(p, 'service.status').detail)
+
+    def test_a_sphincterotomy_of_the_stented_duct_is_part_of_the_stent(self):
+        inv, text = ercp_with(BILIARY_SPHINCTEROTOMY, BILIARY_STENT)
+        reading = events.Reading.of(inv)
+        self.assertEqual((coverage.duct_side(reading.events['E3']), coverage.duct_side(reading.events['E4'])),
+                         ('biliary', 'biliary'))
+        self.assertEqual(coverage.bundled_reason(reading, reading.events['E3']), coverage.STENT_INCLUDED)
+        result = run(inv, text, [('43262', ERCP_STENT_LINES['P3']), ('43274', ERCP_STENT_LINES['P4'])])
+        self.assert_held_as_part_of_the_stent(result, '43262')
+        self.assertEqual(proposal(result, '43274').status, 'ready')
+        self.assertIn('E3', [item['event'] for item in result.completeness['bundled']])
+
+    def test_the_stent_code_alone_leaves_no_act_open(self):
+        inv, text = ercp_with(BILIARY_SPHINCTEROTOMY, BILIARY_STENT)
+        result = run(inv, text, [('43274', ERCP_STENT_LINES['P4'])])
+        self.assertEqual(proposal(result, '43274').status, 'ready')
+        self.assertEqual(result.completeness['unresolved_items'], [])
+
+    def test_a_sphincterotomy_of_the_other_duct_is_a_separate_service(self):
+        inv, text = ercp_with(BILIARY_SPHINCTEROTOMY, PANCREATIC_STENT)
+        reading = events.Reading.of(inv)
+        self.assertEqual(coverage.bundled_reason(reading, reading.events['E3']), '')
+        result = run(inv, text, [('43262', ERCP_STENT_LINES['P3']), ('43274', ERCP_STENT_LINES['P5'])])
+        self.assertEqual({code: proposal(result, code).status for code in ('43262', '43274')},
+                         {'43262': 'ready', '43274': 'ready'})
+
+    def test_a_duct_not_established_never_sets_the_two_apart(self):
+        for name, sphincterotomy in (('the ampulla', PAPILLOTOMY), ('no target', UNPLACED_SPHINCTEROTOMY)):
+            inv, text = ercp_with(sphincterotomy, PANCREATIC_STENT)
+            reading = events.Reading.of(inv)
+            with self.subTest(sphincterotomy=name):
+                self.assertEqual(coverage.duct_side(reading.events['E3']), '')
+                self.assertEqual(coverage.bundled_reason(reading, reading.events['E3']), coverage.STENT_INCLUDED)
+                result = run(inv, text, [('43262', ERCP_STENT_LINES['P6']), ('43274', ERCP_STENT_LINES['P5'])])
+                self.assert_held_as_part_of_the_stent(result, '43262')
+
+    def test_a_dilation_of_the_stented_duct_and_a_stent_exchange(self):
+        inv, text = ercp_with(DUCT_DILATION, BILIARY_STENT)
+        result = run(inv, text, [('43277', ERCP_STENT_LINES['P7']), ('43274', ERCP_STENT_LINES['P4'])])
+        self.assert_held_as_part_of_the_stent(result, '43277')
+        inv, text = ercp_with(BILIARY_SPHINCTEROTOMY, STENT_EXCHANGE)
+        result = run(inv, text, [('43262', ERCP_STENT_LINES['P3']), ('43276', ERCP_STENT_LINES['P8'])])
+        self.assert_held_as_part_of_the_stent(result, '43262')
+        self.assertEqual(proposal(result, '43276').status, 'ready')
+
+    def test_no_stent_act_of_this_ercp_leaves_the_sphincterotomy_alone(self):
+        for name, other, code, line in (('a stone extraction', STONE_EXTRACTION, '43264', 'P9'),
+                                        ('a planned stent', PLANNED_STENT, '', 'PA')):
+            inv, text = ercp_with(BILIARY_SPHINCTEROTOMY, other)
+            reading = events.Reading.of(inv)
+            with self.subTest(beside=name):
+                self.assertEqual(coverage.bundled_reason(reading, reading.events['E3']), '')
+                codes = [('43262', ERCP_STENT_LINES['P3'])] + ([(code, ERCP_STENT_LINES[line])] if code else [])
+                self.assertEqual(proposal(run(inv, text, codes), '43262').status, 'ready')
+
+
+HEMOCLIPS = 'Immediate oozing from the polypectomy site was controlled with two hemoclips for hemostasis.'
+DIVERTICULUM = 'A bleeding diverticulum in the ascending colon was controlled with two hemoclips for hemostasis.'
+
+
+def hemoclips(line: str = HEMOCLIPS, **changes) -> dict:
+    """A bleeding control (E3): two clips whose hemostasis purpose is verified, in its own line (P3)."""
+    options = {'technique': a('clip', 'hemoclips', ['P3']), 'purpose': a('hemostasis', 'for hemostasis', ['P3']),
+               **changes}
+    return act('E3', 'P3', 'clip', 'hemoclips', status_words='was controlled', **options)
+
+
+class AdjunctBesideARemoval(SimpleTestCase):
+    """DECISIONS D41 (the S17 refutation, finding 6): beside a current performed removal of its session, an ablation or a
+    bleeding control that D30 does not bundle - no verified part_of, no lesion, at compatible or unknown places - is
+    asked (act_target, the procedural_adjunct bundling identity), never READY alone. Verified places that are not
+    compatible, two distinct verified lesions, or a verified part_of naming another act set it apart."""
+
+    def assert_asked(self, result, code):
+        p = proposal(result, code)
+        self.assertEqual((p.bucket, p.status, asked(p), p.support['reason']),
+                         ('selected', 'needs_clarification', ['act_target'], events.BUNDLING_IDENTITY))
+        self.assertIn('done as part of the removal', p.clarifications[0].question)
+
+    def test_a_bleeding_control_naming_nothing_beside_a_polypectomy_is_asked(self):
+        inv, text = colonoscopy(hemoclips(), lines={'P3': HEMOCLIPS})
+        reading = events.Reading.of(inv)
+        self.assertEqual((reading.events['E3']['catalogue_kind'], reading.events['E3']['part_of']['value'],
+                          coverage.bundled_reason(reading, reading.events['E3'])), ('bleeding_control', '', ''))
+        self.assertEqual(coverage.bundling_doubt(reading, reading.events['E3'])['reason'], 'procedural_adjunct')
+        result = run(inv, text, [('45385', POLYP), ('45382', HEMOCLIPS)])
+        self.assertEqual(proposal(result, '45385').status, 'ready')
+        self.assert_asked(result, '45382')
+
+    def test_an_ablation_of_the_resection_margins_with_no_part_of_is_asked(self):
+        inv, text, lines = adjunct(part_of='')
+        reading = events.Reading.of(inv)
+        self.assertEqual(coverage.bundled_reason(reading, reading.events['E3']), '')
+        result = run(inv, text, [('45390', lines['P2']), ('45388', lines['P3'])])
+        self.assertEqual(proposal(result, '45390').status, 'ready')
+        self.assert_asked(result, '45388')
+
+    def test_a_bleeding_control_at_another_verified_place_is_its_own_act(self):
+        inv, text = colonoscopy(hemoclips(DIVERTICULUM, target=tg('', 'ascending_colon', 'ascending colon', ['P3'])),
+                                lines={'P3': DIVERTICULUM})
+        reading = events.Reading.of(inv)
+        self.assertIsNone(coverage.bundling_doubt(reading, reading.events['E3']))
+        result = run(inv, text, [('45385', POLYP), ('45382', DIVERTICULUM)])
+        self.assertEqual([proposal(result, code).status for code in ('45385', '45382')], ['ready', 'ready'])
+
+    def test_a_verified_part_of_another_act_sets_it_apart(self):
+        biopsy_line = 'Cold forceps biopsies were taken from the sigmoid colon.'
+        clip_line = 'The biopsy site oozing was controlled with two hemoclips for hemostasis.'
+        biopsy = act('E4', 'P4', 'biopsy', 'biopsies', status_words='were taken',
+                     technique=a('cold_forceps', 'Cold forceps', ['P4']),
+                     target=tg('', 'sigmoid_colon', 'sigmoid colon', ['P4']))
+        inv, text = colonoscopy(hemoclips(clip_line, part_of='E4'), biopsy, lines={'P3': clip_line, 'P4': biopsy_line})
+        reading = events.Reading.of(inv)
+        self.assertEqual(reading.events['E3']['part_of']['value'], 'E4')
+        self.assertIsNone(coverage.bundling_doubt(reading, reading.events['E3']))

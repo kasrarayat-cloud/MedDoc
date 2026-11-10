@@ -15964,8 +15964,8 @@
         "claimed": 3,
         "discarded": 0,
         "open": 0,
-        "unverified": 0,
-        "verified": 3
+        "unverified": 2,
+        "verified": 1
        }
       }
      },
@@ -27887,8 +27887,8 @@
         "claimed": 11,
         "discarded": 0,
         "open": 1,
-        "unverified": 0,
-        "verified": 11
+        "unverified": 1,
+        "verified": 10
        }
       }
      },

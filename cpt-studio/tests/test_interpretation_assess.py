@@ -470,14 +470,45 @@ class CustomerWords(SimpleTestCase):
 
 # --- DECISIONS D28: the EUS examination class (R6) ---------------------------------------------------------------------
 
-def eus_reaching(landmark: str, words: str, *more):
+def eus_reaching(landmark: str, words: str, *more, incomplete: bool = False):
     """An upper EUS whose echoendoscope was advanced to ``words`` (its verified reach, ``landmark``), the pancreatic head
-    examined, with ``more`` events (each in its EUS_LINES passage)."""
+    examined, with ``more`` events (each in its EUS_LINES passage); ``incomplete``: the examination stated limited and
+    incomplete in its own line (P9, the reach's completion)."""
     lines = {'P1': f'A linear echoendoscope was advanced to the {words}.', 'P2': EUS_LINES['P2']}
     lines.update({event['status']['passages'][0]: EUS_LINES[event['status']['passages'][0]] for event in more})
     examination = exam(words='echoendoscope', procedure=a('eus'), target=tg('', 'pancreas', 'pancreatic head', ['P2']))
     examination['target']['passages'] = ['P2']
-    return inventory(lines, events=[examination, *more], reach=[reached('E1', landmark, words, 'P1')])
+    reach = reached('E1', landmark, words, 'P1')
+    if incomplete:
+        lines['P9'] = 'The examination was incomplete: the esophagus and the stomach were not examined.'
+        reach['completion'] = {'value': 'incomplete', 'words': 'incomplete', 'passages': ['P9']}
+    return inventory(lines, events=[examination, *more], reach=[reach])
+
+
+LOWER_EUS_LINES = {'P2': 'A perirectal lymph node was examined.',
+                   'P3': 'The node was sampled with a 22-gauge needle, three passes.',
+                   'P4': 'Anatomy: status post end colostomy; the echoendoscope was introduced through the stoma.'}
+
+
+def lower_eus_reaching(landmark: str, words: str, stoma: bool = False, fna: bool = True):
+    """A lower EUS (E1) whose radial echoendoscope was advanced to ``words`` (its verified reach, ``landmark``), a
+    perirectal lymph node examined (P2) and, with ``fna``, sampled (E2, P3); ``stoma``: a verified altered-anatomy stoma
+    (P4)."""
+    lines = {'P1': f'A radial echoendoscope was advanced to the {words}.', **LOWER_EUS_LINES}
+    examination = exam(words='echoendoscope', procedure=a('eus'),
+                       target=tg('', 'lymph_node', 'perirectal lymph node', ['P2']))
+    examination['target']['passages'] = ['P2']
+    fna_event = act('E2', 'P3', 'fna', 'sampled', status_words='was sampled with a 22-gauge needle',
+                    technique=a('needle', '22-gauge needle', ['P3']), procedure=a('eus'))
+    extra = {}
+    if stoma:
+        extra['anatomy'] = [{'state': 'altered', 'landmark': 'stoma', 'words': 'end colostomy', 'passages': ['P4']}]
+    else:
+        del lines['P4']
+    if not fna:
+        del lines['P3']
+    return inventory(lines, events=[examination] + ([fna_event] if fna else []),
+                     reach=[reached('E1', landmark, words, 'P1')], **extra)
 
 
 class ExaminationClass(SimpleTestCase):
@@ -550,7 +581,60 @@ class ExaminationClass(SimpleTestCase):
                                                                                                  '43231', '45341')}
         self.assertEqual({code: (p.status, asked(p)) for code, p in statuses.items()},
                          {'43259': ('ready', []), '43237': ('needs_clarification', ['extent']),
-                          '43231': ('needs_clarification', ['extent']), '45341': ('ready', [])})
+                          '43231': ('needs_clarification', ['extent']),
+                          # D43: a sigmoidoscopic EUS code on an echoendoscope advanced to the duodenum
+                          '45341': ('needs_clarification', ['extent'])})
+
+    def test_d43_a_lower_tract_eus_code_on_an_upper_eus_is_held(self):
+        """D43 (the S17 refutation, finding 8 b): fb12's upper EUS-FNA through the duodenum, with a sigmoidoscopic or a
+        colonoscopic EUS-FNA code proposed alone for the FNA: held, never READY."""
+        inv, text = eus_reaching('second_portion_duodenum', 'second portion of the duodenum', FNA)
+        for code, exam_class in (('45342', 'sigmoidoscopic'), ('45392', 'colonoscopic'), ('44407', 'stoma')):
+            p = proposal(run(inv, text, [(code, EUS_LINES['P3'])]), code)
+            with self.subTest(code=code):
+                self.assertEqual((p.bucket, p.status, asked(p)), ('selected', 'needs_clarification', ['extent']))
+                self.assertIn(wording.EXAMINATION_CLASS_WORDS[exam_class], p.clarifications[0].question)
+
+    def test_d43_a_lower_eus_fits_the_class_of_its_reach(self):
+        """D43 (finding 8 c): a rectal EUS advanced to the rectosigmoid fits the sigmoidoscopic codes only; one advanced
+        to the cecum the colonoscopic codes only; the splenic flexure, the boundary, fits neither."""
+        for landmark, words, fits, misfits in (
+                ('rectosigmoid', 'rectosigmoid junction at 18 cm', ('45341', '45342'), ('45391', '45392')),
+                ('sigmoid_colon', 'sigmoid colon', ('45342',), ('45392',)),
+                ('cecum', 'cecum', ('45391', '45392'), ('45341', '45342')),
+                ('splenic_flexure', 'splenic flexure', (), ('45342', '45392'))):
+            for code in fits + misfits:
+                sampled = code in ('45342', '45392')  # the EUS-FNA codes; the others are examination only
+                inv, text = lower_eus_reaching(landmark, words, fna=sampled)
+                line = LOWER_EUS_LINES['P3'] if sampled else LOWER_EUS_LINES['P2']
+                p = proposal(run(inv, text, [(code, line)]), code)
+                with self.subTest(reach=landmark, code=code):
+                    if code in fits:
+                        self.assertEqual((p.status, asked(p)), ('ready', []))
+                    else:
+                        self.assertEqual((p.status, asked(p)), ('needs_clarification', ['extent']))
+
+    def test_d43_a_stoma_code_needs_the_encounters_verified_stoma(self):
+        inv, text = lower_eus_reaching('transverse_colon', 'transverse colon')
+        self.assertEqual(asked(proposal(run(inv, text, [('44407', LOWER_EUS_LINES['P3'])]), '44407')), ['extent'])
+        inv, text = lower_eus_reaching('transverse_colon', 'transverse colon', stoma=True)
+        self.assertEqual(proposal(run(inv, text, [('44407', LOWER_EUS_LINES['P3'])]), '44407').status, 'ready')
+
+    def test_d43_a_full_examination_stated_incomplete_does_not_fit_the_full_class(self):
+        """D43 (finding 8 a, the reading where the limitation is the examination's stated completion): the full code is
+        held whatever the reach, as the installed release holds it; the limited code stays held by its reach."""
+        inv, text = eus_reaching('second_portion_duodenum', 'second portion of the duodenum')
+        exam_event = inv.events['events'][0]
+        self.assertEqual(proposal(run(inv, text, [('43259', EUS_LINES['P2'])]), '43259').status, 'ready')  # control
+        inv, text = eus_reaching('second_portion_duodenum', 'second portion of the duodenum', incomplete=True)
+        self.assertEqual(inv.events['events'][0]['completion']['state'], 'verified')
+        for code in ('43259', '43237'):
+            p = proposal(run(inv, text, [(code, EUS_LINES['P2'])]), code)
+            with self.subTest(code=code):
+                self.assertEqual((p.status, asked(p)), ('needs_clarification', ['extent']))
+        p = proposal(run(inv, text, [('43259', EUS_LINES['P2'])]), '43259')
+        self.assertIn('is stated to be incomplete', p.clarifications[0].question)
+        self.assertIsNotNone(exam_event)
 
     def test_an_excluded_class_code_waits_on_its_class_when_reinstated(self):
         inv, text = eus(NO_FNA, reach=[DUODENAL_REACH])

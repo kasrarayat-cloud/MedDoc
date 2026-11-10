@@ -321,6 +321,21 @@ class Markers(SimpleTestCase):
         with self.assertRaises(KeyError):
             lexicon.markers('negation', 'no')
 
+    def test_d42_the_anchors_of_this_encounter(self):
+        self.assertEqual(lexicon.CURRENT_ANCHORS, ('today', 'this', 'these', 'present', 'current', 'currently', 'now',
+                                                   'same', 'date of service', 'day of service', 'this date',
+                                                   'the date of the encounter'))
+        self.assertEqual(lexicon.PROCEDURE_PHASES, ('on withdrawal', 'withdrawal', 'on insertion', 'insertion',
+                                                    'on retroflexion', 'retroflexion'))
+        self.assertEqual(lexicon.current_anchors('Today, on withdrawal'), ('today', 'on withdrawal'))
+        # word-bounded: no anchor inside another word
+        for text in ('known', 'presentation', 'samesite', 'thistle', 'nowhere', 'currents', 'index', 'that'):
+            with self.subTest(text):
+                self.assertEqual(lexicon.current_anchors(text), ())
+        # no anchor is an earlier or future marker, and none is "original"
+        self.assertFalse(set(lexicon.CURRENT_ANCHORS + lexicon.PROCEDURE_PHASES)
+                         & set(lexicon.EARLIER_MARKERS + lexicon.FUTURE_MARKERS + lexicon.OTHER_OCCASION))
+
     def test_d35_a_marker_of_another_occasion(self):
         # DECISIONS D35: every C1 earlier and future marker, the future period, and "original"; each once, in order.
         for entry in lexicon.EARLIER_MARKERS + lexicon.FUTURE_MARKERS + lexicon.OTHER_OCCASION + ('in 4 to 6 weeks',):

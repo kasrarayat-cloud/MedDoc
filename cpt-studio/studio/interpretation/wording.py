@@ -309,6 +309,8 @@ BUNDLING_QUESTIONS = {
     'resection_technique': 'Was the {act} ({part}) part of the resection of that lesion ({whole}), or of another lesion?',
     'lift_injection': 'Was the {act} ({part}) made to lift the lesion that was resected ({whole}), or given for another '
                       'reason or lesion?',
+    'procedural_adjunct': 'Was the {act} ({part}) done as part of the removal ({whole}) - at the site it removed, or for '
+                          'the bleeding it caused - or on another lesion or site?',
 }
 
 
@@ -367,15 +369,27 @@ def site_reason(act: str, required: str) -> str:
 
 
 EXAMINATION_CLASS_WORDS = {'full': 'a full endoscopic ultrasound examination (to the duodenum or beyond)',
-                           'limited': 'a limited endoscopic ultrasound examination (short of the duodenum)'}
+                           'limited': 'a limited endoscopic ultrasound examination (short of the duodenum)',
+                           'sigmoidoscopic': 'an endoscopic ultrasound examination through a flexible sigmoidoscopy (the '
+                                             'rectum and the sigmoid colon, up to part of the descending colon)',
+                           'colonoscopic': 'an endoscopic ultrasound examination through a colonoscopy (beyond the '
+                                           'splenic flexure)',
+                           'stoma': 'an endoscopic ultrasound examination through a colonoscopy by way of a stoma'}
 EXAMINATION_CLASS_CHECK = ('facts.examination_class', 'Endoscopic ultrasound examination class')
 
 
-def examination_class_hold(code: str, exam_class: str, reached: str, words: str) -> tuple[str, str]:
+def examination_class_hold(code: str, exam_class: str, reached: str, words: str,
+                           incomplete: bool = False) -> tuple[str, str]:
     """(reason, question) of a code whose EUS examination class the verified reach of its session does not fit
-    (DECISIONS D28), in another_technique's form: the code is held, never excluded, by it."""
+    (DECISIONS D28, D43), in another_technique's form: the code is held, never excluded, by it. ``incomplete``: the
+    examination is stated incomplete (D43), whatever its reach."""
     required = EXAMINATION_CLASS_WORDS[exam_class]
     said, shown = (f' ({quote(words)})', f' ({quote(words, 120)})') if words else ('', '')
+    if incomplete:
+        return (f'The endoscopic ultrasound examination is documented as reaching the {reached}{said} and as incomplete; '
+                f'{code} accounts for {required}, which CPT Studio could not find in the document.',
+                f'The documented endoscopic ultrasound examination{shown} is stated to be incomplete. Was {required} '
+                'performed on the date of service?')
     return (f'The endoscopic ultrasound examination is documented as reaching the {reached}{said}; {code} accounts for '
             f'{required}, which CPT Studio could not find in the document.',
             f'The documented endoscopic ultrasound examination{shown} reached the {reached}. Was {required} performed '

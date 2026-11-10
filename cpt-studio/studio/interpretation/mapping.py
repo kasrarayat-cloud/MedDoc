@@ -339,13 +339,38 @@ FULL_REACH = frozenset({'duodenum', 'duodenal_bulb', 'second_portion_duodenum', 
 SHORT_OF_DUODENUM = frozenset({'esophagus', 'proximal_esophagus', 'mid_esophagus', 'distal_esophagus',
                                'gastroesophageal_junction', 'stomach', 'gastric_cardia', 'gastric_fundus',
                                'gastric_body', 'gastric_antrum', 'pylorus'})
-CLASS_REACH = MappingProxyType({FULL: FULL_REACH, LIMITED: SHORT_OF_DUODENUM})
+# DECISIONS D43 (the S17 refutation, finding 8): the lower-tract EUS codes, to which the catalogue gives no class, take
+# the class of the lower endoscopy they are done through, read from the same verified reach: a flexible sigmoidoscopy
+# examines the rectum and the sigmoid colon and may include a portion of the descending colon; a colonoscopy goes
+# beyond the splenic flexure, to the cecum (the CPT definitions); a colonoscopy through a stoma also needs the encounter's
+# verified stoma. A reach of the upper tract, the splenic flexure itself, an anastomosis or an organ beside the tract fits
+# none of them - so 45392 on an echoendoscope in the duodenum, or at the rectosigmoid, is held, never READY.
+SIGMOIDOSCOPIC, COLONOSCOPIC, STOMA = 'sigmoidoscopic', 'colonoscopic', 'stoma'
+LOWER_EUS_CLASS = MappingProxyType({'45341': SIGMOIDOSCOPIC, '45342': SIGMOIDOSCOPIC, '45391': COLONOSCOPIC,
+                                    '45392': COLONOSCOPIC, '44406': STOMA, '44407': STOMA})
+SIGMOIDOSCOPIC_REACH = frozenset({'rectum', 'rectosigmoid', 'sigmoid_colon', 'descending_colon', 'left_colon',
+                                  'distal_colon'})
+COLONOSCOPIC_REACH = frozenset({'transverse_colon', 'hepatic_flexure', 'ascending_colon', 'right_colon', 'proximal_colon',
+                                'cecum', 'appendiceal_orifice', 'ileocecal_valve', 'terminal_ileum', 'ileum',
+                                'neo_terminal_ileum'})
+STOMA_REACH = SIGMOIDOSCOPIC_REACH | COLONOSCOPIC_REACH | frozenset({'colon', 'stoma'})
+CLASS_REACH = MappingProxyType({FULL: FULL_REACH, LIMITED: SHORT_OF_DUODENUM, SIGMOIDOSCOPIC: SIGMOIDOSCOPIC_REACH,
+                                COLONOSCOPIC: COLONOSCOPIC_REACH, STOMA: STOMA_REACH})
 
 
 def examination_class(code: str) -> str:
-    """The EUS examination class the catalogue gives ``code`` ('full' | 'limited'), '' for a code with none."""
+    """The EUS examination class of ``code``: the catalogue's ('full' | 'limited'), or D43's lower-tract class
+    ('sigmoidoscopic' | 'colonoscopic' | 'stoma'); '' for a code with none."""
     profile = catalogue.code_profile(code)
-    return profile.exam if profile is not None and profile.exam in EXAMINATION_CLASSES else ''
+    if profile is not None and profile.exam in EXAMINATION_CLASSES:
+        return profile.exam
+    return LOWER_EUS_CLASS.get(code, '')
+
+
+def has_stoma(encounter: Mapping) -> bool:
+    """D43: whether the encounter's anatomy holds a usable (verified, not opened) altered-anatomy stoma entry."""
+    return any(isinstance(entry, Mapping) and entry.get('value') == 'stoma' and entry.get('anatomy') == 'altered'
+               and verify.usable(entry) for entry in (encounter.get('anatomy') or ()))
 
 
 # --- the site of a dilation (DECISIONS D29; FINAL 7.2 R4) ----------------------------------------------------------------
