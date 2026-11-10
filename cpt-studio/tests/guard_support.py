@@ -1032,6 +1032,12 @@ class World:
         self.case.assertEqual(sorted(pk for pk, reasons in hazards.items() if 'member_answer' in reasons),
                               sorted(standing), hazards)
         self.matrix.script('UNRUNNABLE_STAGES', {})
+        # DECISIONS D51: the switch-back's two reads, run as every other in-image script - what an image's own models
+        # read of the review records (here this image's: both), and the encounters with a record created since the
+        # world began (every one of them)
+        self.case.assertEqual(sorted(self.matrix.script('TARGET_MODEL_READS', {})['reads']), ['member_answer', 'modifier'])
+        touched = self.matrix.script('TOUCHED_SINCE_READ', {'since': self.started.isoformat()})['touched']
+        self.case.assertLessEqual(set(every), set(touched), touched)
         made = self.matrix.script('INTERPRETATION_MADE', {})['interpretation']
         derived = {str(pk) for pk in models.EncounterContext.objects.filter(event_inventory__isnull=False)
                    .values_list('encounter_id', flat=True)}
