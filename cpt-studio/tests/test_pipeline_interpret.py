@@ -467,6 +467,26 @@ class PauseTests(InterpretCase):
         self.assertEqual(self.interpret_runs(second)[-1].scope.get('held'), holds.HELD_HOLD)
         self.assertEqual(len(interpreter.sent), 1)
 
+    def test_d53_a_hold_an_unsettled_answer_sets_is_recorded_before_the_next_send(self):
+        """D53 (the S17 refutation, finding 16): an answer naming another model whose reading child died (the stage
+        failed before settling: no hold) - the next document's stage, in another workspace, records that answer's hold at
+        its door and sends nothing; a failed 401 run left unsettled likewise."""
+        encounter, revision = self.through_extract()
+        interpreter = self.scripted(answered(envelope(model='gemini-4-argon-preview')), answered(envelope()))
+        with mock.patch.object(jobs, '_read_answer', side_effect=jobs.StageFailure('synthetic: the reading child died')):
+            self.run_next('interpret')
+        [run] = self.interpret_runs(revision)
+        self.assertNotIn('effect', run.scope)  # never settled
+        self.assertFalse(models.InterpreterHold.objects.exists())
+        other_ws = f.workspace('Other synthetic practice')
+        f.member(other_ws, self.user)
+        _, second = self.upload(workspace=other_ws)
+        self.run_next('extract')
+        self.run_next('interpret')
+        self.assertEqual(models.InterpreterHold.objects.get().reason, 'model')
+        self.assertEqual(self.interpret_runs(second)[-1].scope.get('held'), holds.HELD_HOLD)
+        self.assertEqual(len(interpreter.sent), 1)
+
     def test_an_answer_naming_another_model_is_never_read_and_holds(self):
         """P-5: a substituted model is refused and never read (a 'refused' inventory row), and sets the model hold."""
         encounter, revision = self.through_extract()

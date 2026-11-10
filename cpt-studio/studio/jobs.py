@@ -2236,6 +2236,13 @@ def stage_interpret(job):
             _interpretation_not_sent(job, f'Nothing was sent: {exc}', mode=interpreter.mode, interpreter=interpreter,
                                      request=request, started=True, refused=refused, effect=interpretation_holds.NONE)
             raise
+    # D53: the last ask before a request leaves - a hold an answer no stage settled sets is recorded now, and then stops
+    # this send as any standing hold does (every door above sends nothing, so none of them is stopped by it)
+    _record_unsettled_holds()
+    if interpretation_holds.is_held():
+        _interpretation_not_sent(job, interpretation_holds.PAUSED_MESSAGE, mode=interpreter.mode,
+                                 held=interpretation_holds.HELD_HOLD)
+        raise StageCancelled(interpretation_holds.PAUSED_MESSAGE)
     run = _send(job, interpreter, request, service_date=None, purpose=INTERPRETATION, scope={'mode': interpreter.mode})
     return _settle_interpretation(job, run)
 
@@ -3652,6 +3659,22 @@ def may_have_reached_vendor(runs):
 
 
 STALE_INTERPRETATION = 'the worker stopped after the interpretation outcome was recorded'
+
+
+def _record_unsettled_holds():
+    """DECISIONS D53 (the S17 refutation, finding 16): every sent interpretation run with a definite outcome that no stage
+    settled (no effect on its scope: its worker died between the run's outcome and the settle, or its reading child was
+    killed before it) and whose own bytes classify as a HOLD - a substituted model, a refused key, an exhausted quota - has
+    that hold recorded now (holds.record: one per answer, never a second), before any interpret stage asks whether it
+    may send. Before this, such an answer set no hold, and the next document's stage, or the member's retry of the same
+    reading, sent again. Nothing is read, sent or marked: the stage that owns the run still settles it."""
+    runs = models.ProviderRun.objects.filter(provider=interpretation.PROVIDER, purpose=INTERPRETATION, sent=True,
+                                             state__in=(models.ProviderRun.SUCCEEDED, models.ProviderRun.FAILED)
+                                             ).exclude(scope__has_key='effect')
+    for run in runs:
+        outcome = interpretation_holds.classify_run(run)
+        if outcome.effect == interpretation_holds.HOLD:
+            interpretation_holds.record(run, outcome)
 
 
 def _stale_interpretation(job, run):
