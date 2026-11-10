@@ -614,6 +614,26 @@ test('the bounded second review is offered to a reviewer as a request, never sho
   assert.ok(!none.includes('Second provider review'));
 });
 
+test('a new-path assessment, which records no services, still shows and offers the second review on its own', () => {
+  // the events engine's assessment has an empty services stub (studio/interpretation/assess.py SERVICES_STUB)
+  const base = { assessment: { services: { services: [] }, completeness: { unresolved_items: [
+    { label: 'forceps biopsy of the <b>lesion</b>', reason: 'not_covered', second_review: true }] } } };
+  const offered = { available: true, reason: '', items: ['forceps biopsy of the <b>lesion</b>'], can_request: true };
+  const reviewer = app.documentedServices({ ...base, permissions: { can_review: true }, second_review: offered });
+  assert.equal(count(reviewer, 'data-action="second-review"'), 1);
+  assert.ok(reviewer.includes('Second provider review available'));
+  assert.ok(reviewer.includes('<h2>Second review</h2>'));
+  assert.ok(!reviewer.includes('Documented services'));
+  assert.ok(reviewer.includes('&lt;b&gt;lesion&lt;/b&gt;') && !reviewer.includes('<b>lesion</b>'));
+  const viewer = app.documentedServices({ ...base, permissions: { can_review: false },
+    second_review: { ...offered, can_request: false } });
+  assert.equal(count(viewer, 'data-action="second-review"'), 0);
+  // nothing to ask about: no section at all, as before
+  assert.equal(app.documentedServices({ ...base, permissions: { can_review: true },
+    second_review: { available: false, reason: '', items: [], can_request: true } }), '');
+  assert.equal(app.documentedServices({ assessment: {}, permissions: { can_review: true } }), '');
+});
+
 // Repair round ec5 (REPORTRUNS): the page says which provider request each run was, and describes a second review a
 // reviewer asked for until its own outcome is recorded (refutation r1 report-10; the 8985dde42 request re-checked).
 test('provider runs name the second review and what it asked about, as both reports do', () => {

@@ -1417,7 +1417,13 @@ function documentedServices(doc) {
   const assessment = doc.assessment || {};
   const inventory = assessment.services || {};
   const services = Array.isArray(inventory.services) ? inventory.services : [];
-  if (!services.length) return '';
+  if (!services.length) {
+    // A new-path assessment records no documented-service inventory (the events engine's services stub is empty), yet the
+    // bounded second review is still offered and its states still described: shown on its own (the Gemini migration,
+    // S15 follow-up's finding: the card was drawn only beside the services, so it vanished on every new-path encounter).
+    const review = secondReviewItem(doc);
+    return review ? `${sectionHeading('Second review', 1)}<div class="check-list-card">${review}</div>` : '';
+  }
   const completeness = assessment.completeness || {};
   const unresolved = Array.isArray(completeness.unresolved_items) ? completeness.unresolved_items : [];
   const bundled = Array.isArray(completeness.bundled) ? completeness.bundled : [];
