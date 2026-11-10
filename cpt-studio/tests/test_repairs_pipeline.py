@@ -32,7 +32,9 @@ RECONCILE_NOTE = 'Checked the provider console: no response was recorded.'
 
 def _no_date_interpretation():
     """Gemini's synthetic answer to NO_DATE_NOTE (design/FINAL.md 14.6): OFFICE_NOTE's, the date line and its date
-    gone - the date of service not stated."""
+    gone - the date of service not stated. Normalized, the visit's attributes are verified as in OFFICE_NOTE's; the
+    scheduled colonoscopy's time stays unverified (date_unchecked: with no date of service there is nothing to check
+    the date in its words against), as the contract leaves it."""
     answer = copy.deepcopy(OFFICE_INTERPRETATION)
     answer['passages'] = [item for item in answer['passages'] if item['text'] != 'Date of service: 2026-10-20']
     answer['encounter']['date_of_service'] = {'value': '', 'state': 'not_stated', 'words': '', 'passages': [],
