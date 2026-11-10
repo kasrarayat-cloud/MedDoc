@@ -239,6 +239,10 @@ class Session:
     incomplete: bool = False
     events: tuple = ()
     possibly_part_of: str = ''
+    # DECISIONS D87 (integration of round 3): the examinations D62 reads as only POSSIBLY this encounter's. They are
+    # doubts and never facts: ``examinations`` holds the done ones alone, so no reader takes a fact (a target, a reach, a
+    # class) from an examination that may be another occasion's; ``unresolved`` and ``event`` still count them (D62)
+    possible: tuple = ()
 
 
 def done_examinations(reading, family: str) -> list:
@@ -292,7 +296,8 @@ def sessions(reading) -> dict:
         session = Session(id=family, family=family, kind=service,
                           label=wording.kind_label(service) if service else wording.family_label(family),
                           event=exams[0]['id'] if len(exams) == 1 and not possible else '',
-                          examinations=tuple(event['id'] for event in exams + possible),
+                          examinations=tuple(event['id'] for event in exams),
+                          possible=tuple(event['id'] for event in possible),  # D87
                           unresolved=len(exams) + len(possible) >= 2,
                           done=bool(done), incomplete=bool(exams) and all(
                               events.value(event, 'status') == 'attempted_not_completed' for event in exams),
@@ -307,13 +312,24 @@ def sessions(reading) -> dict:
     eus = found.get('gi.eus')
     done_eus = done_examinations(reading, 'gi.eus') if eus is not None else []
     done_ids = {event['id'] for event in done_eus}
-    possible_eus = [reading.events[eid] for eid in (eus.examinations if eus is not None else ()) if eid not in done_ids]
-    upper_eus = bool(done_eus) and not _lower_eus(done_eus)
-    possibly_upper = not upper_eus and bool(possible_eus) and not _lower_eus(done_eus + possible_eus)
+    possible_eus = [reading.events[eid] for eid in (eus.possible if eus is not None else ()) if eid not in done_ids]
+    # D88 (integration of D69/D70): the lower tract is read from every DONE EUS event - its acts' verified places as
+    # well as its examinations' (a radial EUS naming no place whose done FNA samples a perirectal node is lower) - and
+    # never from a POSSIBLE examination: a possible rectal aside cancelled D70's doubt and made 43235 READY beside 43242.
+    # D70's doubt stands while some possible EUS examination is not itself placed lower and no done EUS event is
+    done_events = [event for event in reading.events.values() if event.get('family') == 'gi.eus'
+                   and events.done(event) and events.usable(event, 'kind')] if eus is not None else []
+    lower = _lower_eus(done_events)
+    upper_eus = bool(done_eus) and not lower
+    possibly_upper = not upper_eus and not lower and any(not _lower_eus([event]) for event in possible_eus)
     for family, session in list(found.items()):
-        if not session.event:
+        # D87: a session left unresolved only by POSSIBLE examinations keeps the structure of its one done examination
+        # (C3, C-4) - read without it, an aside EGD ("Previously, ...") beside today's EGD within an upper EUS asked
+        # 43235's extent instead of its base_included question
+        own = session.event or (session.examinations[0] if len(session.examinations) == 1 else '')
+        if not own:
             continue
-        exam = reading.events[session.event]
+        exam = reading.events[own]
         whole = reading.events.get(_part_of(exam))
         part_of = ''
         if whole is not None and whole.get('family') in found and whole.get('family') != family \
@@ -528,7 +544,11 @@ def reconcile(reading, counted: Sequence[Counted], *, procedure_day: bool = Fals
         else:
             merged[key]['events'] = list(dict.fromkeys(merged[key]['events'] + item['events']))
     out.unresolved = list(merged.values())
-    out.in_doubt = [(item, eid) for item, eid in out.in_doubt if any(item is kept for kept in out.unresolved)]
+    # D89 (integration of round 3): every in_doubt event of a merged item keeps its question - kept only for the item
+    # that survived the merge, a newly doubted act listed first took the service question of another (an unsettled
+    # procedure's "procedure" displaced "Earlier that day, ... biopsies"'s "done at this encounter?")
+    out.in_doubt = [(merged[(item['service'], item['act'])], eid) for item, eid in out.in_doubt
+                    if (item['service'], item['act']) in merged]
     listed = {item['service'] for item in out.unresolved}
     for session in sessions_.values():  # reconcile.uncounted: a session done with no proposal, not listed or included
         if session.id in out.covered and not out.covered[session.id] and not session.part_of \
@@ -573,11 +593,16 @@ def unresolved_record(items: Sequence[dict]) -> list:
 def in_doubt_questions(reading, coverage: Coverage, asked=()) -> list:
     """A service-scope question for each in_doubt item, with the fact of 7.4 for its event (FINAL 7.8), once per (family,
     fact), never one a proposal of the family already asks (``asked``: (family, fact) pairs)."""
-    seen = set(asked)
+    # D89: ``asked`` holds (family, fact, question) of the proposals' questions; a code's question suppresses a service
+    # question only when it IS that question (its fact and its words, which name the act) - a code asking
+    # statement_scope about its snare no longer silences the service's statement_scope about another act's denial
+    codes_asked = {tuple(entry) for entry in asked}
+    seen = set()
     out = []
     for item, eid in coverage.in_doubt:
         question = events.focus_question(reading, reading.events[eid])
-        if question is None or (item['family'], question.fact) in seen:
+        if question is None or (item['family'], question.fact) in seen \
+                or (item['family'], question.fact, question.question) in codes_asked:
             continue
         seen.add((item['family'], question.fact))
         out.append(ClarificationSpec(scope='service', fact=question.fact, question=question.question,
@@ -657,6 +682,7 @@ def event_coding(reading, sessions_: Mapping, codes: Mapping) -> dict:
             'possibly_part_of': session.possibly_part_of,  # D70: the base-within rule reads it at read time too
             'kind': session.kind, 'unresolved': session.unresolved, 'done': session.done,
             'incomplete': session.incomplete, 'examinations': list(session.examinations),
+            'possible': list(session.possible),
             # the session's own service is never an act beside itself: an office visit's visit event (lexicon.EM_KINDS)
             'reportable': [_entry(reading, event) for event in members if reportable(reading, event)
                            and events.value(event, 'kind') not in lexicon.EM_KINDS],

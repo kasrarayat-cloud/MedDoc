@@ -200,8 +200,12 @@ class Context:
             event['family'] for event in events if event['status']['value'] in verify.POSITIVE
             and event['time']['value'] == 'current_encounter' and event['family'] in lexicon.PROCEDURAL_FAMILIES)
         exams = Counter(event['family'] for event in events if event['kind']['value'] == 'examination'
-                        and event['status']['value'] in verify.POSITIVE and _possibly_current(event)
-                        and event['family'])  # D62: an unverified current time counts toward two examinations
+                        and event['status']['value'] in verify.POSITIVE and event['current'] == 'yes'
+                        and event['family'])
+        # D87 (integration of round 3): a session the pairing table reads as unresolved holds two VERIFIED current
+        # examinations. A possibly current one (D62) leaves the session unresolved in coverage.sessions, which holds
+        # every code of it; read here too, it turned a pairing into session_unresolved and the contradiction ("No stent
+        # was placed." beside the stent placement) was never asked - a doubt never takes another doubt's question
         self.unresolved_sessions = frozenset(family for family, count in exams.items() if count >= 2)
         self.facts = identity.lesion_facts(draft)
         self.kinds = {eid: mapping.catalogue_kind(event) for eid, event in draft.events.items()}
@@ -675,7 +679,9 @@ def identity_in_doubt(context: Context, rule: str, whole: Mapping, part: Mapping
         if lesion == other:  # one verified lesion: bundled - unless a biopsy and a removal of a group cite no passage
             return (rule == 'biopsy_of_removed_lesion' and not context.facts[lesion].single  # in common (C-2)
                     and not _own_passages(whole) & _own_passages(part))
-        if rule != 'procedural_adjunct':  # D76: an adjunct's two distinct lesions set it apart only by their places
+        if rule != 'procedural_adjunct' or not context.distinct(lesion, other):
+            # D76: an adjunct's two DISTINCT lesions set it apart only by their places (below); two lesions not
+            # established distinct (possibly the same: "polypectomy site") stay a doubt, as before (D90, integration)
             return not context.distinct(lesion, other)
     if rule == 'procedural_adjunct':
         # D41 (the S17 refutation of D30): a removal's adjunct is bundled only through a verified link (its part_of, or

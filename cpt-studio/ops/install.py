@@ -5062,6 +5062,14 @@ def switch_back_target(ctx, entry) -> tuple:
                        'switch back to.')
 
 
+def _parked_anything(record) -> bool:
+    """D95: whether an app receipt records that its phase parked any role of the previous pair ('details' 'replaced'
+    non-empty): this revision's pair then served, if only until an undo."""
+    details = record.get('details') if isinstance(record, dict) else None
+    replaced = details.get('replaced') if isinstance(details, dict) else None
+    return isinstance(replaced, dict) and bool(replaced)
+
+
 def pair_created_at():
     """When this revision's pair was created: the earliest creation time of its web and worker containers (the 'since'
     every close of an undo reads)."""
@@ -5098,9 +5106,14 @@ def replaced_since(ctx, entry) -> dt.datetime:
         if other_path.name == path.name or written_after(other_path, bound) is False:
             continue  # D82: a receipt written before the switch-back that last returned to this target is never read
         other = json.loads(other_path.read_text(encoding='utf-8'))
-        if (isinstance(other, dict) and other.get('phase') == 'app' and other.get('ok')
-                and other.get('revision') == ctx.revision and target
-                and replaced_web_entry(other).get('revision') == target):
+        # D95 (integration of D82/D83, the round-3 review): every app receipt of this revision written after that bound
+        # whose phase served - a successful one, or one that parked anything (its 'replaced' names a role) - counts,
+        # whatever it replaced and however it ended. Counting only successful ones replacing the same target dropped
+        # the window of a failed first app (path P: D83 reads such a receipt as the target) and of an app undone after
+        # its switch (it records replaced={'worker'}): a reinstatement written through this revision's web in either
+        # window was handed to the target. An earlier since names more encounters (fail-closed)
+        if (isinstance(other, dict) and other.get('phase') == 'app' and other.get('revision') == ctx.revision
+                and (other.get('ok') or _parked_anything(other))):
             earlier += receipt_moments(other) or [moment for moment in (written_moment(other_path),) if moment]
     if written_after(path, bound) is False:  # D82: ``entry`` is older than the switch-back that returned to its target
         # (that receipt's stamp is told, so written_moment gives a time when it records none)

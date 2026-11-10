@@ -1522,7 +1522,7 @@ def assess(*, inventory, context, normalized: Optional[NormalizedResponse], prov
                                sessions_=sessions_)
     if merge is not None:
         provider.append(_second_review_check(merge, final.unresolved))
-    asked = {(c.family, c.fact) for p in unanswered for c in p.clarifications}
+    asked = {(c.family, c.fact, c.question) for p in unanswered for c in p.clarifications}  # D89
     service_questions = coverage.in_doubt_questions(reading, final, asked)
     unsupported = _unsupported(selections)
     answered = response is not None or (harness is not None and any(p.state == 'read' for p in harness.inputs))

@@ -407,7 +407,9 @@ class D68Finding18(SimpleTestCase):
                               reach=[reached('E1', 'second_portion_duodenum', 'second portion of the duodenum', 'P1'),
                                      reached('E2', 'second_portion_duodenum', 'second portion of the duodenum', 'P2')])
         sessions_ = coverage.sessions(events.Reading.of(inv))
-        self.assertEqual((sessions_['gi.eus'].examinations, sessions_['gi.egd'].part_of), (('E2',), 'gi.eus'))
+        # D87/D70: the 'Next' EUS examination is possible, never done: the EGD may be its endoscopic portion
+        self.assertEqual((sessions_['gi.eus'].examinations, sessions_['gi.eus'].possible, sessions_['gi.egd'].part_of,
+                          sessions_['gi.egd'].possibly_part_of), ((), ('E2',), '', 'gi.eus'))
         result = run(inv, text, [('43235', egd_line), ('43242', fna_line)])
         p = proposal(result, '43235')
         self.assertEqual(p.status, 'needs_clarification')

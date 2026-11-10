@@ -762,7 +762,8 @@ def _h3_unresolved(code, link, event, reading):
         statement = found['statement']
         status = statement.get('status')
         negating = isinstance(status, Mapping) and bool((status.get('literals') or {}).get('negators'))
-        if code and (value(statement, 'status') == 'not_performed' or negating):  # D86: a denial asks the contradiction
+        if (code and relation['attribute'] == 'target'
+                and (value(statement, 'status') == 'not_performed' or negating)):  # D86, narrowed at integration (D91)
             fact = 'statement_scope'
         else:
             fact = RELATION_FACTS.get(relation['attribute'], 'performed_status')

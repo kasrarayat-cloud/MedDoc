@@ -2365,13 +2365,18 @@ class SwitchBackSinceTests(TemporaryDirectoryTest):
         entry = install.require_receipt_entry(ctx, 'app')
         self.assertEqual(entry[1]['started_at'], '2026-11-03T10:06:30Z')  # the receipt the target is read from: R3
         self.assertEqual(install.replaced_since(ctx, entry), at('10:02:30'))
-        # an earlier receipt that replaced ANOTHER target, failed, or is another revision's does not move the since
-        for name, started, target, ok, revision in (
-                ('app-20261103T100100000000Z.json', '2026-11-03T10:01:00Z', 'c' * 40, True, REVISION),
-                ('app-20261103T100110000000Z.json', '2026-11-03T10:01:10Z', OLD, False, REVISION),
-                ('app-20261103T100120000000Z.json', '2026-11-03T10:01:20Z', OLD, True, 'e' * 40)):
-            put(name, started, target, ok, revision)
+        # another revision's receipt, and one of this revision that parked nothing and failed, never move the since
+        put('app-20261103T100120000000Z.json', '2026-11-03T10:01:20Z', OLD, True, 'e' * 40)
+        (self.tmp / 'app-20261103T100115000000Z.json').write_text(json.dumps(
+            {'phase': 'app', 'ok': False, 'revision': REVISION, 'started_at': '2026-11-03T10:01:15Z',
+             'details': {'replaced': {}}}))
         self.assertEqual(install.replaced_since(ctx, install.require_receipt_entry(ctx, 'app')), at('10:02:30'))
+        # D95: one of this revision that served - failed once it had parked the old web, or successful over ANOTHER
+        # target - moves it: what this revision wrote from then on was never the target's
+        put('app-20261103T100110000000Z.json', '2026-11-03T10:01:10Z', OLD, False, REVISION)
+        self.assertEqual(install.replaced_since(ctx, install.require_receipt_entry(ctx, 'app')), at('10:01:10'))
+        put('app-20261103T100100000000Z.json', '2026-11-03T10:01:00Z', 'c' * 40, True, REVISION)
+        self.assertEqual(install.replaced_since(ctx, install.require_receipt_entry(ctx, 'app')), at('10:01:00'))
 
     def test_d59_a_receipt_that_records_no_time_falls_back_to_the_pair_and_the_later_app_receipts(self):
         world = BlueGreenWorld(self.tmp, live=9151, serving=(REVISION, IMAGE))  # this revision's pair: 10:01, 10:02
@@ -2404,9 +2409,11 @@ class SwitchBackSinceTests(TemporaryDirectoryTest):
             self.assertEqual(since(), at('10:00:30'))
             put('app-20261103T100010000000Z.json', ok=False)  # records nothing: when it was written
             self.assertEqual(since(), at('10:00:10'))
-            # a receipt that records its time: that time, whatever the containers or the later receipts say
+            # a receipt that records its time: that time, whatever the containers or the later receipts say - and,
+            # D95, no later than an earlier SUCCESSFUL receipt of this revision (it served): here the first one, which
+            # records no time, counts from when it was written
             put('app-20261103T100900000000Z.json', ok=True, started_at='2026-11-03T10:30:00Z', details={'replaced': {}})
-            self.assertEqual(since(), at('10:30:00'))
+            self.assertEqual(since(), at('10:00:00'))
         finally:
             for patcher in reversed(patches):
                 patcher.stop()
@@ -2744,3 +2751,65 @@ class SwitchBackRound3Tests(TemporaryDirectoryTest):
                 'With none, there is nothing to switch back to'):
             self.assertIn(phrase, switch)
         self.assertNotIn('the one the same `app` receipt records for its phase', switch)  # D59's wording, before D82
+
+
+class D95SinceAcrossServedAppsTests(TemporaryDirectoryTest):
+    """DECISIONS D95 (the round-3 review of D82/D83): every app of this revision that served after the last completed
+    switch-back sets the since - a failed first app whose switch had finished (D83 reads it as the target), and an app
+    undone after its switch (it records replaced={'worker'}). Both sequences run through the real install.main; the
+    safety property is that no switch-back completes while a reinstatement this revision's web wrote stands."""
+
+    def setUp(self):
+        super().setUp()
+        self.receipts = self.tmp / 'receipts'
+        self.receipts.mkdir(mode=0o700)
+        os.chmod(self.receipts, 0o700)
+
+    def main(self, world, phase, clock):
+        return SwitchBackSinceTests.main(self, world, phase, clock)
+
+    def test_d95_path_p_a_failed_first_apps_window_is_never_dropped(self):
+        world = BlueGreenWorld(self.receipts)
+        world.fail[('recompute', IMAGE, 'all')] = install.InstallError('the recompute failed (synthetic)')
+        code, a0 = self.main(world, 'app', '2026-11-03T10:02:30Z')
+        self.assertFalse(a0['ok'])
+        for name in (WEB + '-previous', WORKER + '-previous'):
+            world.containers.pop(name, None)
+        self.main(world, 'app', '2026-11-03T10:10:00Z')
+        world.record_times = {'e1': [at('10:21:00')]}  # a reinstatement written while SB1 drains this revision's web
+        answers = iter([{'closed': 0, 'kinds': [], 'hazards': {}, 'relabel': []},
+                        {'closed': 0, 'kinds': [], 'hazards': {'e1': ['reinstatement']}, 'relabel': []}])
+        real_close = world.close
+
+        def close(*args):
+            world.act('close', args[0], tuple(args[5]))
+            world.closes.append(args)
+            return world.done(next(answers))
+        world.close = close
+        code, sb1 = self.main(world, 'switch-back', '2026-11-03T10:20:00Z')
+        world.close = real_close
+        self.assertFalse(sb1['ok'])
+        for name in (WEB + '-previous', WORKER + '-previous'):
+            world.containers.pop(name, None)
+        self.main(world, 'app', '2026-11-03T10:30:00Z')
+        world.hazards_answer = {'e1': ['reinstatement']}  # it still stands
+        code, sb2 = self.main(world, 'switch-back', '2026-11-03T10:40:00Z')
+        self.assertFalse(sb2['ok'])
+        self.assertEqual((sb2.get('details') or {}).get('hazards'), {'e1': ['reinstatement']})
+
+    def test_d95_an_app_undone_after_its_switch_still_counts(self):
+        world = BlueGreenWorld(self.receipts)
+        self.main(world, 'app', '2026-11-03T10:02:30Z')
+        code, sb1 = self.main(world, 'switch-back', '2026-11-03T10:07:00Z')
+        self.assertTrue(sb1['ok'])
+        world.record_times = {'e1': [at('10:31:00')]}  # written through A2's web before its undo
+        world.close_answer = {'closed': 1, 'kinds': [], 'hazards': {'e1': ['reinstatement']}, 'relabel': []}
+        world.fail[('https', 9151)] = install.InstallError('https://cpt.quillmd.com/health/ did not serve it (synthetic)')
+        code, a2 = self.main(world, 'app', '2026-11-03T10:30:00Z')
+        self.assertFalse(a2['ok'])
+        self.assertTrue(((a2.get('details') or {}).get('replaced') or {}))  # it parked something before its undo
+        self.main(world, 'app', '2026-11-03T10:40:00Z')
+        world.hazards_answer = {'e1': ['reinstatement']}  # it still stands
+        code, sb2 = self.main(world, 'switch-back', '2026-11-03T10:50:00Z')
+        self.assertFalse(sb2['ok'])
+        self.assertEqual((sb2.get('details') or {}).get('hazards'), {'e1': ['reinstatement']})

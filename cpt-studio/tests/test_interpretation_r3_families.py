@@ -217,10 +217,12 @@ class SameDayOtherGI(SimpleTestCase):
         """SAME_DAY_FAMILIES equals engine._same_day_family over every gi.profiles family: a procedure profile, or
         gi.other."""
         legacy = {slug for slug in profiles.PROFILES if engine._same_day_family(FamilyFinding(slug, 'performed', ()))}
-        self.assertEqual(set(combination.SAME_DAY_FAMILIES), legacy)
+        # D94 (integration): plus gi.unsupported - the installed routing reads a procedure outside the GI profiles
+        # ("Excision of a 1 cm sebaceous cyst ... in the office today") as gi.other, where Gemini says not_gi
+        self.assertEqual(set(combination.SAME_DAY_FAMILIES), legacy | {'gi.unsupported'})
         self.assertIn('gi.other', combination.SAME_DAY_FAMILIES)
         self.assertTrue(set(lexicon.PROCEDURAL_FAMILIES) < set(combination.SAME_DAY_FAMILIES))
-        for family in ('gi.office_em', 'gi.em_other', 'gi.sedation', 'gi.unsupported'):
+        for family in ('gi.office_em', 'gi.em_other', 'gi.sedation'):
             self.assertNotIn(family, combination.SAME_DAY_FAMILIES)
 
     def test_d81_finding_20_an_office_banding_asks_separate_em(self):

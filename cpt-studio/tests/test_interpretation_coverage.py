@@ -703,7 +703,9 @@ class PossiblyCurrent(SimpleTestCase):
         reading = events.Reading.of(inv)
         self.assertEqual(reading.events['E3']['time']['reasons'], ['current_unanchored'])
         session = coverage.sessions(reading)['gi.colonoscopy']
-        self.assertEqual((session.event, session.unresolved, session.examinations), ('', True, ('E1', 'E3')))
+        # D87: the possible examination is a doubt, never a fact - listed apart from the done one
+        self.assertEqual((session.event, session.unresolved, session.examinations, session.possible),
+                         ('', True, ('E1',), ('E3',)))
         p = proposal(run(inv, text, [('45385', self.ASIDE)]), '45385')
         self.assertEqual(p.status, 'needs_clarification')  # never READY on the index colonoscopy's removal
 
@@ -714,7 +716,9 @@ class PossiblyCurrent(SimpleTestCase):
         reading = events.Reading.of(inv)
         self.assertIn('date_mismatch', reading.events['E3']['time']['reasons'])
         session = coverage.sessions(reading)['gi.colonoscopy']
-        self.assertEqual((session.event, session.unresolved, session.examinations), ('', True, ('E1', 'E3')))
+        # D87: the possible examination is a doubt, never a fact - listed apart from the done one
+        self.assertEqual((session.event, session.unresolved, session.examinations, session.possible),
+                         ('', True, ('E1',), ('E3',)))
 
     def test_a_removal_with_an_unanchored_time_still_holds_the_biopsy_of_the_lesion_it_removed(self):
         line = 'During this colonoscopy, a 6 mm sessile polyp in the sigmoid colon was biopsied and then removed with a ' \

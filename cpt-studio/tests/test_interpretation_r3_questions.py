@@ -133,8 +133,9 @@ class RecordedRows(SimpleTestCase):
                                                    ('45385', 'was removed with a cold snare', 275)])
         self.assertEqual(unresolved(inventory), [('E4', 'E2', 'status', 'status_unresolved', 'not_performed')])
         p = proposal(result, '45385')
-        self.assert_scope_question(p, 'No polypectomy was performed', 'snare removal', 'was removed')
-        self.assertIn('No polypectomy was performed on the polyp noted previously.', sources(p))
+        # D91: a status relation keeps the question the expectation names (performed_status), as at a4dcbea72
+        self.assertEqual((p.status, asked(p), p.support['reason']),
+                         ('needs_clarification', ['performed_status'], events.UNRESOLVED))
 
     def test_d86_v4_r1_a_denial_whose_own_words_hold_no_negator_asks_the_contradiction(self):
         # FRESH-A v4 (an earlier denial extended to today, "This time as well."): the statement is not_performed with
@@ -147,9 +148,9 @@ class RecordedRows(SimpleTestCase):
         self.assertEqual((statement['state'], statement['reasons'], statement['literals']),
                          ('unverified', ['negation_missing'], {}))
         p = proposal(result, '45385')
-        self.assert_scope_question(p, 'This time as well.', 'snare removal',
-                                   'was removed with a cold snare and retrieved')
-        self.assertIn('This time as well.', sources(p))
+        # D91: a status relation keeps performed_status, as at a4dcbea72
+        self.assertEqual((p.status, asked(p), p.support['reason']),
+                         ('needs_clarification', ['performed_status'], events.UNRESOLVED))
 
     def test_d86_c2cl_013_keeps_its_scope_question(self):
         # the control the spec names: an UNRESOLVED(scope) relation already asked statement_scope, and still does
@@ -229,11 +230,16 @@ class SyntheticPairs(SimpleTestCase):
         self.assertEqual((status['value'], status['reasons'], status['literals']),
                          ('not_performed', ['negation_missing'], {}))
         p = proposal(run(inv, text, [('45385', POLYP)]), '45385')
-        self.held_by(p, 'status', inv, 'E3')
-        self.assertTrue(p.clarifications[0].question.startswith('Does “This time as well” apply to the snare removal'),
-                        p.clarifications[0].question)
+        found = [(item['statement'], item['event'], item['attribute']) for item in inv.events['relations']
+                 if item['type'] == 'unresolved']
+        self.assertIn(('E3', 'E2', 'status'), found)
+        # D91: a status relation keeps performed_status, the question the expectations name for a contradiction
+        self.assertEqual((p.status, asked(p), p.support['reason']),
+                         ('needs_clarification', ['performed_status'], events.UNRESOLVED))
 
-    def test_d86_whatever_attribute_the_relation_rests_on(self):
+    def test_d91_only_a_target_relation_asks_the_denial_every_other_attribute_keeps_its_question(self):
+        # DECISIONS D91 (integration of D86): 'whatever attribute' moved questions the expectations name (C1CL2-002 and
+        # C2CL-008's performed_status; a time question the act really lacks), so D86 reaches the target attribute alone
         denied = 'No polyp was removed.'
         base = dict(status='not_performed', status_words='No polyp was removed', scope=sc('all_of_kind', 'No', ['P3']))
         contradiction = {'about': 'contradiction', 'events': ['E2', 'E3'], 'lesions': [], 'passages': ['P2', 'P3']}
@@ -258,10 +264,11 @@ class SyntheticPairs(SimpleTestCase):
                 polyp = removed(technique=a('not_stated')) if attribute == 'technique' else None
                 inv, text = colonoscopy(denial, lines={'P3': line}, polyp=polyp, open_questions=list(questions))
                 p = proposal(run(inv, text, [('45385', POLYP)]), '45385')
-                self.held_by(p, attribute, inv, 'E3')
-                said = denial['status']['words']
-                self.assertTrue(p.clarifications[0].question.startswith(f'Does “{said}” apply to the snare removal'),
-                                p.clarifications[0].question)
+                found = [(item['statement'], item['event'], item['attribute']) for item in inv.events['relations']
+                         if item['type'] == 'unresolved']
+                self.assertIn(('E3', 'E2', attribute), found)
+                self.assertEqual((p.status, asked(p), p.support['reason']),
+                                 ('needs_clarification', [before], events.UNRESOLVED))
 
 
 class Boundaries(SimpleTestCase):
@@ -285,7 +292,8 @@ class Boundaries(SimpleTestCase):
                                 target=tg('', 'sigmoid_colon', 'the prior segment', ['P3'])), 'act_target'),
                 ('time', dict(scope=sc('all_of_kind', 'clip', ['P3']), time=a('unknown')), 'event_time')):
             for status, words, asked_now in (('uncertain', 'It is unclear whether a clip was placed', fact),
-                                             ('not_performed', 'No clip was placed', 'statement_scope')):
+                                             ('not_performed', 'No clip was placed',
+                                              'statement_scope' if attribute == 'target' else fact)):  # D91
                 with self.subTest(attribute=attribute, status=status):
                     statement = act('E3', 'P3', 'clip', 'clip', status=status, status_words=words, **changes)
                     inv, p = self.clip_beside(statement, f'{words} in the prior segment.')

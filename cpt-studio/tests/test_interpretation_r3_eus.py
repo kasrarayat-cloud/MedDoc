@@ -43,9 +43,9 @@ def done_examinations_pinned(test, reading) -> None:
     and its one ``event`` is the one done examination when nothing possible stands beside it."""
     for family, session in coverage.sessions(reading).items():
         ids = [event['id'] for event in coverage.done_examinations(reading, family)]
-        test.assertEqual(ids, list(session.examinations[:len(ids)]), family)
-        test.assertFalse(any(events.done(reading.events[eid]) for eid in session.examinations[len(ids):]), family)
-        test.assertEqual(session.event, ids[0] if len(ids) == 1 == len(session.examinations) else '', family)
+        test.assertEqual(ids, list(session.examinations), family)  # D87: the done ones alone
+        test.assertFalse(any(events.done(reading.events[eid]) for eid in session.possible), family)
+        test.assertEqual(session.event, ids[0] if len(ids) == 1 and not session.possible else '', family)
 
 
 # --- D69: the round-3 refutation, finding 2 ----------------------------------------------------------------------------
@@ -110,7 +110,7 @@ class LowerEusReadsDoneExaminations(SimpleTestCase):
                     rectal = reading.events['E5']
                     self.assertEqual((rectal['family'], rectal['catalogue_kind'], mapping.target_landmark(rectal),
                                       rectal['status']['state'], events.done(rectal),
-                                      'E5' in sessions['gi.eus'].examinations),
+                                      'E5' in sessions['gi.eus'].examinations + sessions['gi.eus'].possible),
                                      ('gi.eus', 'eus_exam', 'rectum', 'verified', False, False))
                 self.assertEqual((sessions['gi.eus'].event, sessions['gi.egd'].part_of,
                                   sessions['gi.egd'].possibly_part_of), ('E2', 'gi.eus', ''))
@@ -181,8 +181,8 @@ class PossibleUpperEus(SimpleTestCase):
         self.assertEqual((index['time']['state'], index['time']['reasons'], events.done(index),
                           coverage.possibly_current(index)), ('unverified', ['current_unanchored'], False, True))
         sessions = coverage.sessions(reading)
-        self.assertEqual((sessions['gi.eus'].event, sessions['gi.eus'].examinations, sessions['gi.eus'].done),
-                         ('', ('E2',), False))
+        self.assertEqual((sessions['gi.eus'].event, sessions['gi.eus'].examinations, sessions['gi.eus'].possible,
+                          sessions['gi.eus'].done), ('', (), ('E2',), False))  # D87
         self.assertEqual((sessions['gi.egd'].part_of, sessions['gi.egd'].possibly_part_of), ('', 'gi.eus'))
         result = run(inv, text, [])
         self.assertEqual(egd_item(result), ('no_proposal', True))  # installed and b3f3bedba keep it
@@ -288,7 +288,8 @@ class DoneExaminationsCarryD61(SimpleTestCase):
             result = run(inv, text, [('45385', POLYP), ('45378', TRANSVERSE)])
             with self.subTest(aside=name):
                 self.assertEqual((reading.events['E5']['time']['reasons'], session.event, session.unresolved,
-                                  session.examinations), (['current_unanchored'], '', True, ('E1', 'E5')))
+                                  session.examinations, session.possible),
+                                 (['current_unanchored'], '', True, ('E1',), ('E5',)))  # D87
                 for code in ('45385', '45378'):
                     p = proposal(result, code)
                     self.assertEqual(carried(p), signals(code, 'incomplete'), code)

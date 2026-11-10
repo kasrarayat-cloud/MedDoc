@@ -178,7 +178,7 @@ OTHER_GI = 'gi.other'  # engine.OTHER_GI
 # fee-schedule row does (fail-closed). Reading the procedural families alone, a hemorrhoid banding done in the office
 # made no procedure day, separate_em was never asked and 99213 was READY. The pin holds it equal to the legacy rule over
 # gi.profiles.
-SAME_DAY_FAMILIES = lexicon.PROCEDURAL_FAMILIES | frozenset({OTHER_GI})
+SAME_DAY_FAMILIES = lexicon.PROCEDURAL_FAMILIES | frozenset({OTHER_GI, 'gi.unsupported'})  # D94: a non-GI procedure too
 
 
 @dataclass(frozen=True)

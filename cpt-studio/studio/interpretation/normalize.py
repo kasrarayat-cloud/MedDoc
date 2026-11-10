@@ -335,8 +335,11 @@ class Draft:
         failure."""
         if default is not None and default.allowed:
             verdict = default.deny(words) if default.deny is not None else verify.Verdict()
-            if verdict.reasons:
-                return self._failed(record, failure + list(verdict.reasons), verdict.checks)
+            # D92 (integration of D67(a)): 'date_unchecked' denies nothing - unlocated words are not the document's,
+            # nothing of them is stored, and no effective date could re-judge them, so it never fails the default
+            denied = [reason for reason in verdict.reasons if reason != 'date_unchecked']
+            if denied:
+                return self._failed(record, failure + denied, verdict.checks)
             self.problems.append(f'{where}: its words were not found in its own passages, so the frame default was '
                                  'accepted.')
             return self._defaulted(record, default, ('default_after_unlocated_words',))
@@ -742,6 +745,16 @@ class Draft:
                                                                  and kept.get('value') == 'incomplete'):
                         _fail(completion, 'second_reach')
                         event['completion'] = completion
+            elif event is not None and completion_value == 'incomplete':
+                # D93 (integration of D73): a reach entry naming no landmark still states the examination incomplete;
+                # its completion is never dropped (D56 and D72 read 'incomplete' in any state)
+                kept = event['completion']
+                if not (isinstance(kept, Mapping) and kept.get('value') == 'incomplete'):
+                    if kept is not None:
+                        _fail(completion, 'second_reach')
+                    event['completion'] = completion
+                self.problems.append(f'{where} gives a reach that names no landmark; its incomplete completion is '
+                                     'kept.')
             self.encounter['reach'].append(entry)
             self._tally('reach', extent)
             self._tally('completion', completion)
