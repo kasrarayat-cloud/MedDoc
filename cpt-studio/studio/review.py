@@ -1313,9 +1313,13 @@ def _assessment_blockers(encounter, assessment):
     blockers = []
     if not is_final(assessment):
         blockers.append(NOT_FINAL_BLOCKER)
-    if readers.for_assessment(assessment).unreadable(assessment):
+    current = current_decisions(assessment)
+    reader = readers.for_assessment(assessment)
+    if reader.unreadable(assessment, reinstated_codes(assessment, current) if reader.kind == readers.EVENTS else ()):
         # FINAL 8.1: a new-path assessment whose record of the documented events this release cannot read is never
-        # approved or exported until it is assessed again (the overlay kept its stored checks, and released nothing)
+        # approved or exported until it is assessed again: its event coding (the overlay kept its stored checks, and
+        # released nothing), or - with a code a reviewer reinstated - the frozen event inventory its reviewed coverage
+        # is re-run over (reviewed_completeness shows the recorded coverage, without the reinstated code, and says so)
         blockers.append(UNREADABLE_EVENTS_BLOCKER)
     if answers.date_confirmation_open(encounter):
         blockers.append(DATE_CONFIRMATION_BLOCKER)
@@ -1338,7 +1342,6 @@ def _assessment_blockers(encounter, assessment):
         if clarification.scope == 'encounter' and clarification.proposal_id is None:
             blockers.append(f'Open clarification: {_human(clarification.fact)}')
     asked = {item.proposal_id for item in open_clarifications if item.proposal_id}
-    current = current_decisions(assessment)
     # The review overlay (CORE-UX-DESIGN.md 4): each proposal's status and open questions as the current decisions and
     # member answers leave them, and the blocker of a decision the view no longer supports (D14: an approval of a base
     # code a reinstatement holds again waits until it is revoked).

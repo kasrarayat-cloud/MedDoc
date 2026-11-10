@@ -159,6 +159,9 @@ KNOWN_ERRORS = {
     # a write the legacy-call sentinel refused (FINAL 10.3): CPT Studio's sentence, naming no module or provider
     sentinel.MESSAGES['executed']: None,
     sentinel.MESSAGES['unavailable']: None,
+    # a gated write refused because a reading finished between its request's read of the encounter and its row lock
+    # (readers.moved; the Gemini migration's review, finding 3): retried by the member
+    readers.MOVED: None,
     'Wait for processing to finish (or stop it) before asking for a second review.': None,
     'There is no current assessment to review again.': None,
     'No documented service is left without a supported proposal.': None,

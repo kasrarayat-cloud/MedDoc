@@ -99,6 +99,14 @@ CODING_VERSION = coverage.CODING_VERSION
 # FINAL 8.1: the readiness blocker of a new-path assessment whose record of the documented events cannot be read.
 UNREADABLE_BLOCKER = ("This assessment's record of the documented events could not be read; it cannot be approved or "
                       'exported until it is assessed again.')
+# The coverage reason of a reviewed coverage that could not be re-run, because the frozen event inventory a reinstated
+# code's coverage is re-run over cannot be read (readers.EventReader.reviewed_completeness): the coverage stands as the
+# assessment recorded it, without the reinstated codes, and readiness adds UNREADABLE_BLOCKER (readers.EventReader.
+# unreadable), so the block it states is enforced. A clause, as every completeness reason is: the statement that joins
+# the reasons ends it (coverage.completeness, review.coding_completeness).
+UNREADABLE_COVERAGE_REASON = ("this assessment's record of the documented events could not be read, so the coverage "
+                              'shown does not count the reinstated codes; it cannot be approved or exported until it is '
+                              'assessed again')
 # The reinstatement wait the engine records for an unknown date of service (assess._proposal): the encounter's own date
 # question asks it of every code, so it is never asked of a reinstated code again (review_view's DATE_WAIT rule).
 DATE_WAIT_FACT = 'service_date'

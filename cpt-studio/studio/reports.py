@@ -98,7 +98,10 @@ class ReportNotReady(ValueError):
 
     def __init__(self, blockers):
         self.blockers = list(blockers)
-        super().__init__('The reviewed report is not available: ' + '; '.join(self.blockers) + '.')
+        # each blocker a clause; one worded as a sentence (review.UNREADABLE_EVENTS_BLOCKER, FINAL 8.1's own) loses its
+        # full stop here, so the message ends with one (the Gemini migration's review, finding 2: no doubled period)
+        super().__init__('The reviewed report is not available: ' + '; '.join(
+            blocker[:-1] if blocker.endswith('.') else blocker for blocker in self.blockers) + '.')
 
 
 def _ts(value):
@@ -1925,7 +1928,9 @@ def generate(encounter, kind, fmt, user, *, operator=False):
     """_generate (below), gated on a new-path assessment (design/FINAL.md 10.3): its snapshot is made in a new_path
     sentinel scope of its own, asked again as the last thing before the artifact's transaction commits - when it counted
     an execution of the legacy reader, or this process cannot vouch for its count, nothing is stored, the trip is
-    audited ('sentinel.tripped') and sentinel.Tripped is raised. A legacy assessment's report is made as before."""
+    audited ('sentinel.tripped') and sentinel.Tripped is raised. The scope is opened from ``encounter`` as the request
+    read it and decided again from the locked row, first: when a reading finished in between and the two differ, nothing
+    is made and readers.PathMoved (a ValueError: 409) is raised. A legacy assessment's report is made as before."""
     with readers.write_scope(OPERATOR_REPORT_GATE, _new_path(encounter)) as gate:
         try:
             return _generate(encounter, kind, fmt, user, operator=operator, gate=gate)
@@ -1951,6 +1956,10 @@ def _generate(encounter, kind, fmt, user, *, operator, gate):
         raise PermissionDenied('Only an active member of this workspace can generate its reports.')
     with transaction.atomic():
         locked = Encounter.objects.select_for_update().get(pk=encounter.pk)
+        if readers.moved(gate, _new_path(locked)):
+            # the gate decided from the LOCKED row (review finding 3): a reading finished since the request read the
+            # encounter moved it to the other path, and nothing is computed or stored under a scope that does not fit it
+            raise readers.PathMoved()
         snap = snapshot(locked, kind)
         content = RENDERERS[fmt](snap)
         artifact = ReportArtifact.objects.create(
@@ -2175,6 +2184,8 @@ def _generate_customer(encounter, kind, fmt, user, gate):
         raise PermissionDenied('Only an active member of this workspace can create its exports.')
     with transaction.atomic():
         locked = Encounter.objects.select_for_update().get(pk=encounter.pk)
+        if readers.moved(gate, _new_path(locked)):  # the gate decided from the LOCKED row (review finding 3), as generate
+            raise readers.PathMoved()
         snap = customer_snapshot(locked, kind)
         now = timezone.now()
         generated = {'at': _ts(now), 'by': user.label()}

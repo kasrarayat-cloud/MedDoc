@@ -763,7 +763,9 @@ def save_details(encounter, user, items) -> dict:
     when it counted an execution of the legacy reader, or this process cannot vouch for its count, nothing of it is
     written, the trip is audited ('sentinel.tripped') and sentinel.Tripped is raised. A context save this save makes
     and that its own gate refuses (jobs.change_context) rolled its audit row back with this save's work, so the row
-    is recorded again here, after the rollback (jobs.Refused.trip). A legacy revision's save is made exactly as before."""
+    is recorded again here, after the rollback (jobs.Refused.trip). The scope is opened from ``encounter`` as the request
+    read it and decided again from the locked row, first: when a reading that finished in between moved the row to the
+    other path, nothing is saved (jobs.Refused, readers.MOVED: 409). A legacy revision's save is made exactly as before."""
     parsed = _parse(items)
     with readers.write_scope(ANSWER_GATE, _new_path(encounter)) as gate:
         try:
@@ -790,6 +792,10 @@ def _save_details(encounter, user, parsed, gate) -> dict:
         encounter = jobs._locked(encounter)
         if jobs.busy(encounter):
             raise jobs.Refused(BUSY)
+        if readers.moved(gate, _new_path(encounter)):
+            # the gate decided from the LOCKED row (review finding 3): a reading that finished since the request read
+            # the encounter moved it to the other path; nothing is read or written under a scope that does not fit it
+            raise jobs.Refused(readers.MOVED)
         assessment = review.live_assessment(encounter)
         states = _states(encounter, assessment)
         rows = {row.id: row for row in _rows(encounter, assessment, effective_view(assessment), states)}
@@ -937,6 +943,8 @@ def _revoke_answer(encounter, user, answer_id, gate):
         encounter = jobs._locked(encounter)
         if jobs.busy(encounter):
             raise jobs.Refused(BUSY)
+        if readers.moved(gate, _new_path(encounter)):  # the gate decided from the LOCKED row (review finding 3)
+            raise jobs.Refused(readers.MOVED)
         answer = models.MemberAnswer.objects.select_for_update().get(pk=answer_id, encounter=encounter)
         if models.MemberAnswerRevocation.objects.filter(answer=answer).exists():
             raise jobs.Refused(ALREADY_WITHDRAWN)

@@ -25,6 +25,8 @@ from a new-path assessment each run in a new_path scope of their own (``write_sc
 transaction commits (``check``: GateClosed rolls the write back whole), then refused outside it by the sentinel's gate
 (``refuse``: the AuditEvent 'sentinel.tripped' and sentinel.Tripped, which the API answers 409 with CPT Studio's own
 sentence). A caller that held a transaction of its own records the trip again once it has left it (``record_trip``).
+A report or member-answer write whose scope was opened from the row its request read is decided again from its LOCKED
+row (``moved``), and refused (MOVED, a 409) when a reading finished in between moved the row to the other path.
 
 Nothing here reads the revision text, and nothing here imports the legacy reader at load: LegacyReader imports it where
 it calls it.
@@ -126,7 +128,7 @@ class LegacyReader(_Reader):
             return [service for service in (assessment.services or {}).get('services') or []
                     if isinstance(service, dict)]
 
-    def unreadable(self, assessment) -> bool:
+    def unreadable(self, assessment, reinstated=()) -> bool:
         """The legacy reader keeps its own fail-closed reading of an unreadable record (review_view._inventory)."""
         self._own(assessment)
         return False
@@ -166,17 +168,26 @@ class EventReader(_Reader):
         inventory the assessment was made from, with the reinstated codes counted. The inventory is read through
         interpretation.store's versioned reader against its revision's text sha256 and its run's stored bytes (P6:
         the stored row, never the text). One this release cannot read leaves the recorded coverage as it is and says
-        so: the coding is incomplete, with UNREADABLE_BLOCKER among its reasons (fail-closed)."""
+        so: the coding is incomplete, its reasons end with overlay.UNREADABLE_COVERAGE_REASON and its statement is
+        worded from them as the engine words one (coverage.completeness) - and readiness blocks (``unreadable``), so
+        nothing is approved or exported on a coverage that does not count the reinstated codes (fail-closed)."""
         with self.row(assessment):
-            if not completeness or not isinstance(completeness.get('covered'), dict):
+            if not self._recounted(completeness):
                 return completeness
             reading = self.reading(assessment)
             if reading is None:
-                reasons = [*(completeness.get('reasons') or ()), overlay.UNREADABLE_BLOCKER]
-                return {**completeness, 'state': 'incomplete', 'reasons': reasons}
+                reasons = [*(completeness.get('reasons') or ()), overlay.UNREADABLE_COVERAGE_REASON]
+                return {**completeness, 'state': 'incomplete', 'reasons': reasons,
+                        'statement': 'Coding for this encounter is incomplete: ' + '; '.join(reasons) + '.'}
             keys = {p.key for p in proposals if p.bucket == EXCLUDED and (p.code, p.family) in set(reinstated)}
             counted = overlay.counted_codes(proposals, keys, reading)
             return overlay.reviewed_completeness(completeness, reading, counted, reinstated)
+
+    @staticmethod
+    def _recounted(completeness) -> bool:
+        """Whether a reviewed coverage is re-run for a reinstated code: the assessment recorded a coverage (its covered
+        map) to re-run."""
+        return bool(completeness) and isinstance(completeness.get('covered'), dict)
 
     def reading(self, assessment):
         """events.Reading of the assessment's EventInventory as interpretation.store reads and checks it, or None when
@@ -235,10 +246,16 @@ class EventReader(_Reader):
                             'included_in': session['part_of'], 'included_by': including})
             return out
 
-    def unreadable(self, assessment) -> bool:
-        """Whether its event coding cannot be read (FINAL 8.1: readiness then adds overlay.UNREADABLE_BLOCKER)."""
-        self._own(assessment)
-        return overlay.coding_of(assessment.completeness) is None
+    def unreadable(self, assessment, reinstated=()) -> bool:
+        """Whether a record the review of ``assessment`` reads cannot be read (FINAL 8.1: readiness then adds
+        overlay.UNREADABLE_BLOCKER): its event coding, or - while a reviewer has reinstated a code (``reinstated``:
+        review.reinstated_codes) - the frozen event inventory its reviewed coverage is re-run over (reviewed_completeness
+        then shows the recorded coverage, without the reinstated codes, and says so)."""
+        with self.row(assessment):
+            if overlay.coding_of(assessment.completeness) is None:
+                return True
+            return (bool(reinstated) and self._recounted(assessment.completeness or {})
+                    and self.reading(assessment) is None)
 
     def interpretation_section(self, assessment) -> dict:
         """The operator's interpretation section (report.interpretation_section): its D22 record, the event inventory,
@@ -358,6 +375,28 @@ def check(scope_) -> None:
     back. Nothing for a write with no scope (not a new-path write)."""
     if scope_ is not None and sentinel.refusal(scope_) is not None:
         raise GateClosed(scope_)
+
+
+# The gate is decided again from the LOCKED row (the Gemini migration's review, finding 3). A write opens its scope from
+# the encounter its request read, before the row lock; a reading that finished in between (a legacy encounter's first
+# interpretation, FINAL 9) leaves the locked row on the other path, and the write would then be made from a new-path
+# assessment with no gate - or from a row its scope does not describe. Asked first under the lock, before anything is
+# computed or written, the write is refused instead (a 409 in these words), and the member's retry is decided from the
+# row as it then stands.
+MOVED = 'Nothing was saved: the reading of this document changed during this step. Reload the page and try again.'
+
+
+class PathMoved(ValueError):
+    """A gated write whose locked row reads on another path than the one its scope was opened for (``moved``)."""
+
+    def __init__(self):
+        super().__init__(MOVED)
+
+
+def moved(scope_, new_path: bool) -> bool:
+    """Whether the write's scope (``scope_``: write_scope's, None for a write opened as not new-path) is not the one its
+    LOCKED row calls for (``new_path``: that row read on the new path)."""
+    return (scope_ is not None) != bool(new_path)
 
 
 def refuse(entry: str, closed: GateClosed, *, encounter, actor=None):

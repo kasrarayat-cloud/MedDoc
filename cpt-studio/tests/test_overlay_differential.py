@@ -6,11 +6,14 @@ field, under every decision and member answer the scenario's own suites exercise
 
 The scenarios are the suites' own: tests.test_cux_r2_overlay's inputs (tests.test_cux_review's shapes - denied, the
 misread box, selected, siblings, the pair, the EGD, the two E/M levels - and the hedged snare, the office visits beside a
-denied colonoscopy, the anoscopy), R8 D15's EGD inside an upper EUS (tests.test_cux_hold) and P-ADMIT2's competition
-(tests.test_h3_repairs). They cover the refutation cases review_view's comments name: L7-01 (a member's answer never lifts
-a hold), L3-8 (a reinstated code asks what its gate waits for), L4-5 (a rival a member answered away), B-05 (the
-same-day visit a reinstated procedure holds), D14 (a reinstated therapeutic code holds the base), R8 D15 (the base
-within an EUS) and P-ADMIT2 (the competing hold released by a rejection).
+denied colonoscopy, the anoscopy), R8 D15's EGD inside an upper EUS (tests.test_cux_hold), P-ADMIT2's competition
+(tests.test_h3_repairs) and L4-5's (tests.test_h3_refutation_r1.CompetitionReleaseTests: two balloon dilation codes for
+one dilation, each also asking its own extent). They cover the refutation cases review_view's comments name, and the
+test asserts each is reached (EXERCISED, EXERCISED_STATES): L7-01 (a member's answer never lifts a hold), L3-8 (a
+reinstated code asks what its gate waits for), L4-5 (a competing hold released, with no rejection, because a member's
+answer to one of the rival's OWN questions left the rival unavailable), B-05 (the same-day visit a reinstated procedure
+holds), D14 (a reinstated therapeutic code holds the base), R8 D15 (the base within an EUS) and P-ADMIT2 (the competing
+hold released by a rejection).
 
 What the projection carries is what the events engine stores (FINAL 7.8, 7.11): a session per documented service with
 its label, kind, inclusion and its reportable and doubted acts (as engine.base_included reads them); each decidable code's
@@ -173,6 +176,19 @@ def scenarios():
     competition.setUp()
     yield Scenario('P-ADMIT2 competing codes', competition.rows, to_jsonable(competition.result.services), (),
                    to_jsonable(competition.result.reference_sources))
+    # L4-5 (tests.test_h3_refutation_r1.CompetitionReleaseTests, its own document and engine run): 43233 and 43249 for
+    # one balloon dilation, each held by the other and each asking its own extent - the member's answer to 43233's
+    # extent leaves 43233 unavailable, which releases 43249's competing hold with no rejection recorded
+    from tests.test_h3_refutation_r1 import CompetitionReleaseTests
+    from tests.test_harness_engine import code as participant_code
+    from tests.test_harness_engine import corti, read
+    from tests.test_harness_engine import run as engine_run
+    from tests.test_harness_engine import span as engine_span
+    text = CompetitionReleaseTests.EGD + CompetitionReleaseTests.DILATION + '\n'
+    result = engine_run(text, corti(('43233', engine_span(text, CompetitionReleaseTests.DILATION))),
+                        [read('astra', [participant_code(text, '43249', CompetitionReleaseTests.DILATION)])])
+    yield Scenario('L4-5 a rival answered away', [review_view.stored_from(p) for p in result.proposals],
+                   to_jsonable(result.services), (), to_jsonable(result.reference_sources))
 
 
 # What each compared state exercised, so a harness that agrees only on states where nothing moves fails here (each
@@ -195,9 +211,29 @@ EXERCISED = {
 }
 
 
+def _rival_answered_away(scenario, views, decisions) -> bool:
+    """L4-5 (refutation round 1 of harness repair 3): a code's competing hold released with NO rejection recorded,
+    because a rival it names is out of review - left unavailable by a member's answer to one of the rival's OWN questions
+    (never the competing question itself, which never counts)."""
+    if any(overlay._decided(value).action == overlay.REJECT for value in decisions.values()):
+        return False
+    gone = {view.code for view in views.values()
+            if view.reason == overlay.DETAIL_UNAVAILABLE and view.answered not in ('', overlay.COMPETING_FACT)}
+    rivals = {p.key: set((p.support or {}).get('competes') or ()) for p in scenario.stored}
+    return any(overlay.COMPETING_FACT in view.released and rivals.get(key, set()) & gone
+               for key, view in views.items())
+
+
+# What a whole state exercised, where one view cannot tell (the decisions recorded, and the other codes' views)
+EXERCISED_STATES = {
+    'L4-5: a competing hold released by a rival a member answered away, with no rejection': _rival_answered_away,
+}
+
+
 class DifferentialTests(SimpleTestCase):
     def test_the_two_overlays_agree_field_by_field_on_every_scenario_state(self):
-        compared, failures, by_scenario, exercised = 0, [], {}, {name: 0 for name in EXERCISED}
+        compared, failures, by_scenario = 0, [], {}
+        exercised = {name: 0 for name in [*EXERCISED, *EXERCISED_STATES]}
         for scenario in scenarios():
             for decisions, answers in scenario.states():
                 differences = scenario.differences(decisions, answers)
@@ -205,12 +241,14 @@ class DifferentialTests(SimpleTestCase):
                 by_scenario[scenario.name] = by_scenario.get(scenario.name, 0) + 1
                 if differences:
                     failures.append((scenario.name, decisions, answers, differences[:3]))
-                views = scenario.new(decisions, answers).values()
+                views = scenario.new(decisions, answers)
                 for name, seen in EXERCISED.items():
-                    exercised[name] += any(seen(view) for view in views)
+                    exercised[name] += any(seen(view) for view in views.values())
+                for name, seen in EXERCISED_STATES.items():
+                    exercised[name] += bool(seen(scenario, views, decisions))
         self.assertEqual(failures[:5], [], f'{len(failures)} of {compared} states differ')
         self.assertGreaterEqual(compared, 300)
-        self.assertEqual(len(by_scenario), len(INPUTS) + 3)
+        self.assertEqual(len(by_scenario), len(INPUTS) + 4)
         self.assertEqual([name for name, n in exercised.items() if not n], [], exercised)
 
     def test_the_harness_is_live_a_projection_that_drops_what_the_overlay_reads_differs(self):

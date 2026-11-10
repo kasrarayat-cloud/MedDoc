@@ -1389,7 +1389,10 @@ def trace_json(encounter):
     endpoint, models, usage, cost, raw-response hash, its exchanges and tool calls, and its full normalized reading or
     peer review - then each assessment of the revision with its phase and the frozen phase-1 outputs it recorded
     (12.3), the retrieval traces and the reconciliation table, which keeps proposed, reference-checked and approved
-    apart (I4)."""
+    apart (I4). The Gemini migration (design/FINAL.md 3.1, 8.3): for a new-path live assessment, also its interpretation
+    section - the D22 record, the event inventory it was made from (events, attribute states, verification report) and
+    the Gemini run that inventory was read from (request identity, models, usage, estimated cost, response hash) with the
+    hold it set - as the console's detail and the operator's report carry it; a legacy encounter's trace is as it was."""
     revision = encounter.current_revision
     runs = (list(encounter.provider_runs.filter(revision=revision).select_related('requested_by')
                  .order_by('created_at', 'pk')) if revision else [])
@@ -1404,7 +1407,7 @@ def trace_json(encounter):
                      'positions': review.participant_positions(proposal, assessment.participants),
                      'reference_check': review.reference_check(proposal),
                      'approved': decision is not None and decision.action == models.Decision.APPROVE})
-    return {
+    trace = {
         'encounter': {'id': str(encounter.pk), 'title': encounter.title},
         'revision': {'id': str(revision.pk), 'number': revision.number, 'text_sha256': revision.text_sha256}
         if revision is not None else None,
@@ -1416,6 +1419,11 @@ def trace_json(encounter):
         'retrieval': assessment.retrieval if assessment is not None else [],
         'reconciliation': rows,
     }
+    if assessment is not None and interpretation.is_new_assessment(assessment):
+        # the Gemini run that decided every new-path code, with its inventory (review finding 4): the section the
+        # detail serves, from the reader of the assessment's engine (FINAL 8.2)
+        trace['interpretation'] = _readers().for_assessment(assessment).interpretation_section(assessment)
+    return trace
 
 
 def _trace_assessment(assessment, encounter):

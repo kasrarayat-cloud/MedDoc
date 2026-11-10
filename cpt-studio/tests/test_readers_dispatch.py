@@ -11,7 +11,13 @@ R-2 and R-6 amend them; DECISIONS D17 and D22): the one dispatch, every consumer
   checks on - and the same consumers on a legacy encounter read through the legacy reader under its own label.
 - FINAL 10.3 and R-6: a request naming an encounter runs under that encounter's label, one naming none under 'other' with
   its rows labelled each; reads record and never refuse; the decision, member-answer and report write gates refuse on a
-  planted legacy execution, record the trip and write nothing.
+  planted legacy execution, record the trip and write nothing; a report or member-answer write is decided again from
+  its LOCKED row, and refused when a reading that finished since its request read the encounter moved it (review
+  finding 3).
+- FINAL 8.1: an unreadable record blocks readiness - the event coding, and (review finding 2) the frozen event inventory
+  a reinstated code's reviewed coverage is re-run over, whose coverage then says so in one clause.
+- FINAL 3.1: the operator's interpretation section on the console's detail, the trace (review finding 4) and the report;
+  and a Corti code that cannot be listed said on a new-path console and report with no legacy execution (finding 5).
 - D22: the customer's JSON and exports name no provider or model (gemini, google, the model id), while argon plasma
   coagulation stays GI vocabulary.
 
@@ -27,17 +33,18 @@ from unittest import mock
 
 from django.test import Client, SimpleTestCase, TestCase
 
-from studio import (answers, api, code_shapes, customer_api, interpretation, models, operator, progress, reports,
+from studio import (answers, api, code_shapes, customer_api, interpretation, jobs, models, operator, progress, reports,
                     review, serializers)
 from studio.gi import cues
-from studio.interpretation import overlay, readers, sentinel
+from studio.interpretation import adapter, overlay, readers, sentinel
 from studio.validation import engine, reconcile, review_view
 from tests.support import factories as f
 from tests.support import operator as ops
 from tests.support import pipeline_factories as pf
-from tests.test_interpretation_events import COLONOSCOPE, exam, reached
+from tests.test_interpretation_events import COLONOSCOPE, POLYP, exam, reached
 from tests.test_interpretation_identity import a, act, sc
-from tests.test_pipeline_assess_events import TWO_CODES, EventsCase, document, two_procedures
+from tests.test_pipeline_assess_events import (TWO_CODES, EventsCase, document, envelope, legacy_encounter,
+                                               two_procedures)
 
 APP = Path(__file__).resolve().parents[1]
 # ADJUDICATION R-2's helpers, with the module each came from and the sha256 of its definition's source lines there
@@ -398,6 +405,31 @@ class NewPathParticipantConsumerTests(NewPathCase):
         self.assertIn(b'PEER REVIEW', served['operator_txt'])
 
 
+LONG = '45385-SYNTHETIC-LONG-VALUE'  # longer than any code a proposal holds: counted, never named (I9)
+UNLISTED_ONE = ('It returned 1 code that cannot be listed: empty, or longer than 10 characters (a CPT code has five). '
+                'It is not shown and never truncated.')
+
+
+class NewPathUnlistedCodeTests(NewPathCase):
+    """Review finding 5: Corti returns a code it cannot list on a new-path encounter. The console's Corti row and the
+    operator's report say the engine's sentence for it from the events engine's own copy (serializers.
+    corti_unlisted_words(events=True): interpretation.wording.unlisted_codes), never by checks.unlisted_codes, which the
+    sentinel denies on the new path - so the consumer matrix runs with zero new_path executions, and states it."""
+    corti_groups = ((*TWO_CODES, (LONG, POLYP)),)
+
+    def test_the_unlisted_sentence_is_said_on_the_console_and_in_the_report_with_no_legacy_code(self):
+        encounter = self.new_path_encounter()
+        with sentinel.strict('S11 a Corti code that cannot be listed, on a new-path encounter') as opened:
+            served = read_everything(self, encounter, self.membership, self.user)
+        self.assertEqual(opened.count(sentinel.NEW_PATH), 0)
+        row = next(item for item in served['operator']['harness']['participants'] if item['name'] == 'corti')
+        self.assertEqual((row['unlisted_codes'], row['codes']), (1, ['43239', '45385']))
+        self.assertTrue(row['detail'].endswith(f'. {UNLISTED_ONE}'), row['detail'])
+        self.assertIn(f'    Not listed: {UNLISTED_ONE}'.encode(), served['operator_txt'])
+        self.assertNotIn(LONG, json.dumps(served['operator']))
+        self.assertNotIn(LONG.encode(), served['operator_txt'])
+
+
 # --- the legacy reader keeps reading the legacy records, under its own label --------------------------------------------
 
 class LegacyConsumerTests(TestCase):
@@ -626,6 +658,99 @@ class ScopeTests(NewPathCase):
         self.assertFalse(models.Decision.objects.filter(encounter=encounter).exists())
 
 
+def planted(target, name):
+    """``target.name`` patched to run a legacy reader's function first (as a consumer that bypassed the dispatch)."""
+    real = getattr(target, name)
+
+    def call(*args, **kwargs):
+        reconcile.mention_label('snare')
+        return real(*args, **kwargs)
+
+    return mock.patch.object(target, name, side_effect=call)
+
+
+class GateUnderTheLockTests(NewPathCase):
+    """FINAL 10.3, decided under the row lock (review finding 3). A report or member-answer write opens its scope from
+    the encounter its request read; a reading that finished before the write took its row lock - here a legacy
+    encounter's first interpretation (FINAL 9) - moved the row to the new path. The gate is decided again from the
+    LOCKED row and the write is refused (readers.MOVED, a 409) before anything is computed or written: before the fix it
+    was made from the new-path assessment with no gate, a planted legacy execution and all. The member's retry is
+    decided from the row as it then stands."""
+
+    def read_then_interpreted(self):
+        """(the encounter as it stands, the same row as a request read it before its lock): a legacy encounter
+        (tests.test_pipeline_assess_events.legacy_encounter), read; then a member's context save has its revision's
+        first interpretation run, to a new-path assessment."""
+        encounter, revision, _, _ = legacy_encounter(self.ws, self.user)
+        stale = models.Encounter.objects.get(pk=encounter.pk)
+        jobs.change_context(encounter, self.user, {'setting': 'asc'})
+        value, _ = two_procedures()
+        request = adapter.build_request(revision.text, jobs._participant_pages(revision),
+                                        jobs._participant_document(revision)[0])
+        folder = Path(self.replay) / adapter.NAME
+        folder.mkdir(exist_ok=True)
+        (folder / f'{request.canonical_sha256}.json').write_bytes(envelope(value))
+        self.settle()
+        encounter.refresh_from_db()
+        self.assertTrue(interpretation.is_new_assessment(review.live_assessment(encounter)))
+        # the request's row still reads as the legacy record it was: its gates open no scope
+        self.assertEqual((readers.label_of(stale), reports._new_path(stale)), (sentinel.LEGACY_RECORD, False))
+        return encounter, stale
+
+    def test_the_reports_are_decided_from_the_locked_row(self):
+        encounter, stale = self.read_then_interpreted()
+        with planted(reports, 'customer_marker_digest'), self.assertRaises(readers.PathMoved) as moved:
+            reports.generate_customer(stale, reports.DRAFT, 'txt', self.user)
+        self.assertEqual(str(moved.exception), readers.MOVED)
+        with planted(reports, 'snapshot_digest'), self.assertRaises(readers.PathMoved):
+            reports.generate(stale, reports.DRAFT, 'txt', self.user)
+        self.assertFalse(models.ReportArtifact.objects.filter(encounter=encounter).exists())
+        self.assertFalse(models.AuditEvent.objects.filter(event=sentinel.TRIPPED).exists())  # refused before any work
+        self.assertEqual(customer_api.customer_error(readers.MOVED), readers.MOVED)  # the 409's own words
+        # the retry, from the row as it stands: gated, so the same planted execution is refused and on record
+        with planted(reports, 'customer_marker_digest'), self.assertRaises(sentinel.Tripped):
+            reports.generate_customer(encounter, reports.DRAFT, 'txt', self.user)
+        self.assertFalse(models.ReportArtifact.objects.filter(encounter=encounter).exists())
+        self.assertEqual([t.data['entry'] for t in models.AuditEvent.objects.filter(event=sentinel.TRIPPED)],
+                         [reports.CUSTOMER_REPORT_GATE])
+        self.assertEqual(reports.generate_customer(encounter, reports.DRAFT, 'txt', self.user).encounter_id,
+                         encounter.pk)
+
+    def test_a_scope_opened_for_the_new_path_is_refused_once_the_locked_row_left_it(self):
+        # the other direction of the same rule: the request read a new-path encounter, and before the write's lock a new
+        # revision (an addendum not read yet) left the row with no live assessment - the new_path scope the write opened
+        # does not fit the row it would read, so nothing is made from it
+        encounter = self.new_path_encounter()
+        stale = models.Encounter.objects.get(pk=encounter.pk)
+        f.pasted_revision(encounter, self.user, 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - ADDENDUM\n',
+                          extract=False)
+        self.assertEqual((reports._new_path(stale), reports._new_path(models.Encounter.objects.get(pk=encounter.pk))),
+                         (True, False))
+        for make in (reports.generate_customer, reports.generate):
+            with self.subTest(make=make.__name__), self.assertRaises(readers.PathMoved):
+                make(stale, reports.DRAFT, 'txt', self.user)
+        self.assertFalse(models.ReportArtifact.objects.filter(encounter=encounter).exists())
+
+    def test_a_member_answer_and_its_withdrawal_are_decided_from_the_locked_row(self):
+        encounter, stale = self.read_then_interpreted()
+        rows = answers.details_needed(encounter, review.live_assessment(encounter))
+        row = next(item for item in rows if '45385' in item['affects'] and 'not_documented' in item['allow'])
+        given = [{'id': row['id'], 'fact': row['fact'], 'value': 'not_documented'}]
+        with planted(review, 'refresh_state'), self.assertRaises(jobs.Refused) as refused:
+            answers.save_details(stale, self.user, given)
+        self.assertEqual(str(refused.exception), readers.MOVED)
+        self.assertFalse(models.MemberAnswer.objects.filter(encounter=encounter).exists())
+        self.assertFalse(models.Job.objects.filter(encounter=encounter, state=models.Job.QUEUED).exists())
+        saved = answers.save_details(encounter, self.user, given)  # the retry, from the row as it stands
+        self.assertTrue(saved['answer_ids'])
+        self.settle()  # the recompute the answer queued
+        with planted(review, 'refresh_state'), self.assertRaises(jobs.Refused) as refused:
+            answers.revoke_answer(stale, self.user, saved['answer_ids'][0])
+        self.assertEqual(str(refused.exception), readers.MOVED)
+        self.assertFalse(models.MemberAnswerRevocation.objects.filter(answer__encounter=encounter).exists())
+        self.assertFalse(models.AuditEvent.objects.filter(event=sentinel.TRIPPED).exists())
+
+
 # --- D22: no provider or model is named to a customer -------------------------------------------------------------------
 
 class CustomerNamesNoProviderTests(NewPathCase):
@@ -678,6 +803,40 @@ class UnreadableRecordTests(NewPathCase):
                          (False, [customer_api.BLOCKER_EXACT[review.UNREADABLE_EVENTS_BLOCKER]]))
         self.assertFalse(models.ReportArtifact.objects.filter(encounter=encounter).exists())
 
+    def test_a_reinstated_codes_coverage_that_cannot_be_re_run_blocks_what_it_says_it_blocks(self):
+        # review finding 2: the frozen event inventory a reinstated code's coverage is re-run over cannot be read (an
+        # inventory version this release no longer reads, run bytes or a text sha256 that do not match: EventReader.
+        # reading gives None). The coverage shown is the recorded one, without the reinstated code, and says so in one
+        # clause; readiness blocks, so the approval and the exports are withheld, as that clause says. Before the fix,
+        # readiness passed (reviewed, no blocker) beside a coverage reason claiming the block, ending '..'.
+        encounter = self.new_path_encounter(denied_removal)
+        self.decide(encounter, '45385', 'reinstate')
+        self.decide(encounter, '45385', 'approve')
+        self.decide(encounter, '45378', 'reject')
+        self.assertEqual(review.readiness(encounter), {'draft': True, 'reviewed': True, 'blockers': []})  # it reads
+        with mock.patch.object(readers.EventReader, 'reading', return_value=None):
+            ready = review.readiness(encounter)
+            customer = customer_api.readiness(encounter)
+            coding = review.coding_completeness(encounter)
+            completeness = review.reviewed_completeness(review.live_assessment(encounter))
+            with self.assertRaises(reports.CustomerExportNotReady):
+                reports.generate_customer(encounter, reports.APPROVED, 'txt', self.user)
+            with self.assertRaises(reports.ReportNotReady) as refused:
+                reports.generate(encounter, reports.REVIEWED, 'txt', self.user)
+        self.assertEqual((ready['reviewed'], ready['blockers']), (False, [review.UNREADABLE_EVENTS_BLOCKER]))
+        self.assertEqual((customer['approved'], customer['blockers']),
+                         (False, [customer_api.BLOCKER_EXACT[review.UNREADABLE_EVENTS_BLOCKER]]))
+        self.assertFalse(models.ReportArtifact.objects.filter(encounter=encounter).exists())
+        self.assertEqual((completeness['state'], completeness['reasons'][-1], completeness['statement']),
+                         ('incomplete', overlay.UNREADABLE_COVERAGE_REASON,
+                          'Coding for this encounter is incomplete: ' + '; '.join(completeness['reasons']) + '.'))
+        self.assertNotIn('45385', completeness['covered'].get('gi.colonoscopy', []))  # the recorded coverage, as said
+        self.assertEqual(coding['state'], 'incomplete')
+        self.assertIn(f'{overlay.UNREADABLE_COVERAGE_REASON}. Supported proposals stay available', coding['statement'])
+        for said in (coding['statement'], completeness['statement'], str(refused.exception)):
+            with self.subTest(said=said[:40]):
+                self.assertNotIn('..', said)
+
 
 class OperatorSectionTests(NewPathCase):
     """FINAL 3.1 and 8.3: the operator's interpretation section on the console's detail and in the operator's report -
@@ -719,6 +878,30 @@ class OperatorSectionTests(NewPathCase):
         self.assertIn('  Legacy-call sentinel: 0 legacy calls recorded', text)
         self.assertIn(f'Read by {reports.EVENTS_INVENTORY_VERSION}', text)
 
+    def test_the_trace_carries_the_interpretation_section(self):
+        # review finding 4 (FINAL 3.1: the section on the detail, the trace and the report): the trace names the Gemini
+        # run that decided every new-path code - its request identity, models, usage, cost and response hash - and the
+        # event inventory read from it
+        encounter = self.new_path_encounter()
+        response = self.operator_client.get(f'/ops/api/encounters/{encounter.pk}/trace')
+        self.assertEqual(response.status_code, 200, response.content)
+        section = response.json()['interpretation']
+        detail = self.operator_client.get(f'/ops/api/encounters/{encounter.pk}').json()
+        self.assertEqual(section, detail['assessment']['interpretation'])
+        inventory = models.EventInventory.objects.select_related('provider_run').get(
+            pk=review.live_assessment(encounter).event_inventory_id)
+        run = inventory.provider_run
+        self.assertEqual((section['inventory']['id'], section['inventory']['sha256']), (str(inventory.pk),
+                                                                                       inventory.sha256))
+        self.assertEqual((section['run']['id'], section['run']['request_sha256'], section['run']['response_sha256'],
+                          section['run']['requested_model'], section['run']['returned_model']),
+                         (str(run.pk), run.request_sha256, run.response_sha256, interpretation.MODEL,
+                          run.returned_model))
+        self.assertEqual(set(section['run']), {'id', 'provider', 'purpose', 'state', 'sent', 'http_status',
+                                               'requested_model', 'returned_model', 'adapter_version',
+                                               'request_sha256', 'response_sha256', 'usage', 'estimated_cost',
+                                               'reused_from', 'started_at', 'finished_at', 'latency_ms'})
+
     def test_a_legacy_encounter_s_console_and_report_are_as_they_were(self):
         s = pf.scenario()
         pf.assess(s.encounter, pf.standard_result())
@@ -726,6 +909,9 @@ class OperatorSectionTests(NewPathCase):
         self.assertEqual(payload['assessment']['interpretation'],
                          {'engine': 'legacy', 'engine_version': pf.ENGINE_VERSION, 'record': None})
         self.assertFalse(payload['routing']['derived'])
+        trace = self.operator_client.get(f'/ops/api/encounters/{s.encounter.pk}/trace').json()
+        self.assertEqual(set(trace), {'encounter', 'revision', 'participants', 'assessments', 'retrieval',
+                                      'reconciliation'})  # as it was: no interpretation key on a legacy trace
         snap = reports.snapshot(s.encounter, reports.DRAFT)
         self.assertNotIn('interpretation', snap)
         self.assertNotIn(b'\nINTERPRETATION\n', reports.render_txt(snap))
