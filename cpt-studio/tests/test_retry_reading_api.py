@@ -4,6 +4,9 @@ console's retry (with its recorded override of a cut-off answer) and hold releas
 
 - A failed reading is retried once: its run released (reconciled_by, reconciled_at, 'released for one retry'), an
   'interpret:...:retry:<run>' stage queued, audited 'interpretation.retry'; nothing is sent by the request itself.
+- DECISIONS D60: a retry of a usable answer whose reading failed on this server releases nothing; its stage reads the
+  stored answer again and sends nothing - from the member's door and from the console's, on a run an operator had
+  reconciled too, whose record stays as the operator wrote it.
 - Every refusal reaches the member in CPT Studio's own words (customer_api.KNOWN_ERRORS), naming no provider or model:
   busy, nothing to retry, already read, an unknown outcome, a paused interpreter, and an answer cut off at its output
   limit (MAX_TOKENS; C5: never a member's paid retry).
@@ -16,7 +19,8 @@ Synthetic data only, no network: the interpreter is the production adapter's Int
 """
 import json
 
-from django.test import Client
+from django.conf import settings
+from django.test import Client, override_settings
 
 from studio import jobs, models, progress
 from studio.interpretation import holds
@@ -207,3 +211,59 @@ class OperatorConsoleTests(RetryCase):
         self.assertFalse(self.operator_client.get('/ops/api/interpreter').json()['held'])
         # the member may retry now the hold is released
         self.assertEqual(self.retry(encounter).status_code, 201)
+
+
+class UnreadAnswerRetryTests(RetryCase):
+    """DECISIONS D60 (the round-2 refutation, finding 15): the retry door on a usable answer whose reading failed on
+    this server - the reading child overran (a genuine bounded.Overrun: no reading time for that stage only) - releases
+    nothing, so its stage reads the stored answer again: one send in all."""
+
+    NOTE = 'Synthetic operator note: the vendor console shows one answered request (D60 pin).'
+
+    def no_reading_time(self):
+        return override_settings(JOB_DEADLINE_SECONDS={**settings.JOB_DEADLINE_SECONDS, 'analyze': 0})
+
+    def test_d60_a_members_retry_of_an_answer_whose_reading_overran_sends_nothing(self):
+        interpreter = self.scripted(answered(envelope()), answered(envelope()))
+        encounter, revision = self.through_extract()
+        with self.no_reading_time():
+            self.assertEqual(self.run_next('interpret').state, models.Job.FAILED)
+        [run] = self.interpret_runs(revision)
+        response = self.retry(encounter)
+        self.assertEqual((response.status_code, response.json()), (201, {'retrying': True}))
+        [queued] = models.Job.objects.filter(encounter=encounter, state=models.Job.QUEUED)
+        self.assertEqual(queued.idempotency_key, f'interpret:{revision.pk}:gemini-events@1:retry:{run.pk}')
+        [audit] = models.AuditEvent.objects.filter(event='interpretation.retry', encounter=encounter)
+        self.assertEqual((audit.data['run'], audit.data['released'], audit.data['effect']),
+                         (str(run.pk), False, holds.ANSWERED))
+        self.assertIsNone(Run.objects.get(pk=run.pk).reconciled_at)
+        job = self.run_next('interpret')
+        self.assertEqual((job.state, job.result['provider']), (models.Job.SUCCEEDED, 'reused'), job.error)
+        self.assertEqual(len(interpreter.sent), 1)
+        self.assertEqual(models.EventInventory.objects.get(revision=revision).state, 'read')
+
+    def test_d60_an_operators_retry_of_a_reconciled_answer_whose_reading_overran_sends_nothing(self):
+        """Finding 15 on D52's own path: an unknown outcome holding a usable answer, reconciled by an operator; the
+        reconciliation's stage settles it from its exchange (P-6) and its reading overruns. The console's retry keeps
+        the operator's record, releases nothing, and its stage reads the stored answer again: nothing is sent."""
+        interpreter = self.scripted()
+        encounter, revision = self.through_extract()
+        models.Job.objects.filter(state=models.Job.QUEUED).update(state=models.Job.CANCELLED)
+        run = self.unknown_holding_an_answer(encounter, revision)
+        self.assertTrue(jobs.reconcile(encounter, run, self.operator_user, self.NOTE))
+        with self.no_reading_time():
+            self.assertEqual(self.run_next('interpret').state, models.Job.FAILED)
+        run.refresh_from_db()
+        recorded = (run.reconciled_by_id, run.reconciled_at, run.reconciliation_note)
+        self.assertEqual((run.state, recorded[0], recorded[2]), ('succeeded', self.operator_user.pk, self.NOTE))
+        self.assertEqual(jobs.retry_target(revision), (run, None))
+        response = self.operator_retry(encounter)
+        self.assertEqual(response.status_code, 201, response.content)
+        run.refresh_from_db()
+        self.assertEqual((run.reconciled_by_id, run.reconciled_at, run.reconciliation_note), recorded)
+        [queued] = models.Job.objects.filter(encounter=encounter, state=models.Job.QUEUED)
+        self.assertEqual(queued.idempotency_key, f'interpret:{revision.pk}:gemini-events@1:retry:{run.pk}')
+        self.assertFalse(jobs.released_for_retry(run))
+        job = self.run_next('interpret')
+        self.assertEqual((job.state, job.result['provider']), (models.Job.SUCCEEDED, 'reused'), job.error)
+        self.assertEqual(interpreter.sent, [])

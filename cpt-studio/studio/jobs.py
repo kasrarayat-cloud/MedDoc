@@ -1764,8 +1764,9 @@ def stage_participant(job):
 # --- the interpret stage (design/FINAL.md 6.1-6.3, 6.9 and 11, as design/ADJUDICATION.md P-2 and P-6 amend them) -------
 #
 # extract -> interpret -> analyze. One stage per revision and INTERPRETATION_VERSION, keyed
-# 'interpret:<revision>:<version>' - a recorded retry adds ':retry:<run>', a reconciliation ':after-reconcile:<run>', the
-# stale sweep ':settled:<run>' - whose every outcome is a ProviderRun(provider 'gemini', purpose 'interpretation',
+# 'interpret:<revision>:<version>' - a recorded retry adds ':retry:<run>' (':retry-release:<run>' when it released a run
+# an operator had reconciled: DECISIONS D60), a reconciliation ':after-reconcile:<run>', the stale sweep
+# ':settled:<run>' - whose every outcome is a ProviderRun(provider 'gemini', purpose 'interpretation',
 # adapter_version ADAPTER_VERSION), and whose every answer read is an EventInventory row: 'read' queues
 # 'analyze:<revision>:<inventory>', 'refused' ends the stage failed with the retry door (FINAL 11.3). Gemini is the only
 # interpreter: nothing here calls the legacy reader, the stage runs under a new_path sentinel scope (run_job), its reading
@@ -1796,6 +1797,9 @@ READ_OVERRUN_MESSAGE = 'The stored answer could not be read within the {reason} 
 READ_FAILED_MESSAGE = ('The stored answer could not be read: the reader stopped with an unexpected error (logged), so '
                        'nothing from it was used.')
 RETRY_RELEASE_NOTE = 'released for one retry'  # FINAL 11.3: the note a retry writes on the run it releases
+# DECISIONS D60: the key mark of a retry stage that RELEASED a run an operator had reconciled (D52: the run keeps the
+# operator's record, so the release is this key); a retry that released nothing is keyed 'retry' and is never a release
+RETRY, RETRY_RELEASE = 'retry', 'retry-release'
 # scope['refused'] of a run the stage kept unsent: the size bound, a text that cannot be framed, the failed-before door,
 # the live gate, a sentinel that cannot vouch for the write the answer would need (NOT_RUN: no request could be made)
 SIZE, UNBUILT, FAILED_BEFORE, LIVE_GATE, SENTINEL = 'size', 'unbuilt', 'failed_before', 'live_gate', 'sentinel'
@@ -1806,16 +1810,16 @@ SETTLED_FROM_EXCHANGE = 'settled_from_exchange'  # scope key of a run P-6 settle
 
 def _interpret_key(revision, suffix=''):
     """The interpret stage's key (FINAL 6.1): 'interpret:<revision>:<INTERPRETATION_VERSION>', plus ':<suffix>' -
-    'retry:<run>', 'after-reconcile:<run>' or 'settled:<run>' - always on the base, so suffixes never chain (a Resume
-    adds its own, which resume keeps to one). At most 115 characters before a Resume's 44, inside the 200 the column
-    holds."""
+    'retry:<run>', 'retry-release:<run>' (DECISIONS D60), 'after-reconcile:<run>' or 'settled:<run>' - always on the
+    base, so suffixes never chain (a Resume adds its own, which resume keeps to one). At most 115 characters before a
+    Resume's 44, inside the 200 the column holds."""
     base = f'{INTERPRET}:{revision.pk}:{interpretation.INTERPRETATION_VERSION}'
     return f'{base}:{suffix}' if suffix else base
 
 
 def _keyed_run(job, mark):
-    """The run of this encounter that ``job``'s key names after ':<mark>:' ('after-reconcile', 'retry', 'settled'), or
-    None."""
+    """The run of this encounter that ``job``'s key names after ':<mark>:' ('after-reconcile', 'retry', 'retry-release',
+    'settled'), or None. The marks are distinct words: ':retry:' never matches a ':retry-release:' key (D60)."""
     _, found, tail = job.idempotency_key.split(':resume:', 1)[0].partition(f':{mark}:')
     if not found:
         return None
@@ -1932,14 +1936,18 @@ def released_for_retry(run) -> bool:
     """Whether ``run``'s answer was released for one retry (FINAL 11.3: a member's or an operator's recorded act writes
     RETRY_RELEASE_NOTE on the released run's reconciled_by, reconciled_at and reconciliation_note): on the run or on any
     run carrying the same answer. DECISIONS D52: a run that already holds an operator's reconciliation keeps it, and its
-    release is the retry stage queued for it in the same transaction (its key, 'retry:<run>')."""
+    release is the retry stage queued for it in the same transaction. DECISIONS D60 (the round-2 refutation, finding
+    15): that stage's key is 'retry-release:<run>', and only that key is read here - a retry that released nothing (an
+    answer still unread, which the retry reads again with nothing sent) is keyed 'retry:<run>' and is never a release,
+    so the stored-answer door still reuses that answer."""
     runs = models.ProviderRun.objects.filter(_answer_runs(run), state__in=(models.ProviderRun.FAILED,
                                                                            models.ProviderRun.SUCCEEDED))
     if runs.filter(reconciled_at__isnull=False, reconciliation_note=RETRY_RELEASE_NOTE).exists():
         return True
-    return any(Job.objects.filter(kind=INTERPRET, revision_id=item.revision_id,
-                                  idempotency_key__startswith=_interpret_key(item.revision, f'retry:{item.pk}'))
-               .exists() for item in runs.select_related('revision').only('pk', 'revision_id', 'revision'))
+    return any(Job.objects.filter(
+        kind=INTERPRET, revision_id=item.revision_id,
+        idempotency_key__startswith=_interpret_key(item.revision, f'{RETRY_RELEASE}:{item.pk}')).exists()
+        for item in runs.select_related('revision').only('pk', 'revision_id', 'revision'))
 
 
 def _read_inventory(revision, mode=None):
@@ -1999,25 +2007,36 @@ def _interpretation_failed_before(encounter, interpreter, request):
     return None
 
 
+def _turn_one_exchange(run):
+    """The one exchange of interpretation run ``run`` as ADJUDICATION P-6 reads it: the run's only exchange, turn 1,
+    whose response bytes are there and whose sha256 checks against the exchange's record, answering the run's own
+    request - or None. Its state and HTTP status are its reader's to judge: P-6 settles only a 200 answer from it
+    (_settle_from_exchange), and DECISIONS D53b records the hold any answer in it sets (_record_unsettled_holds)."""
+    exchanges = list(run.exchanges.order_by('turn')[:2])
+    if len(exchanges) != 1:
+        return None
+    exchange = exchanges[0]
+    data = bytes(exchange.response_bytes or b'')
+    if (exchange.turn != 1 or not data or hashlib.sha256(data).hexdigest() != exchange.response_sha256
+            or exchange.request_sha256 != run.request_sha256):
+        return None
+    return exchange
+
+
 def _settle_from_exchange(run) -> bool:
     """ADJUDICATION P-6: an interpretation run left 'sending' by a dead worker or by a stage that no longer runs, or
     recorded unknown and reconciled, whose one exchange (turn 1) was recorded succeeded with HTTP 200 and response bytes
-    whose sha256 checks, is settled SUCCEEDED from that exchange - the answer it holds - and its settled path reads it,
-    or records its hold, or fails its refused reading (_settled_answer, _settle_interpretation): nothing is sent. The
-    effect a stage recorded on it ('unknown') is dropped, since it described the run as it was and never its answer
-    (refutation of S09, finding 1). Every other run is left as it is (False)."""
+    whose sha256 checks (_turn_one_exchange), is settled SUCCEEDED from that exchange - the answer it holds - and its
+    settled path reads it, or records its hold, or fails its refused reading (_settled_answer, _settle_interpretation):
+    nothing is sent. The effect a stage recorded on it ('unknown') is dropped, since it described the run as it was and
+    never its answer (refutation of S09, finding 1). Every other run is left as it is (False)."""
     if (run.provider != interpretation.PROVIDER or run.purpose != INTERPRETATION
             or run.state not in (models.ProviderRun.SENDING, models.ProviderRun.UNKNOWN)):
         return False
-    exchanges = list(run.exchanges.order_by('turn')[:2])
-    if len(exchanges) != 1:
+    exchange = _turn_one_exchange(run)
+    if exchange is None or exchange.state != models.ProviderRun.SUCCEEDED or exchange.http_status != 200:
         return False
-    exchange = exchanges[0]
     data = bytes(exchange.response_bytes or b'')
-    if (exchange.turn != 1 or exchange.state != models.ProviderRun.SUCCEEDED or exchange.http_status != 200 or not data
-            or hashlib.sha256(data).hexdigest() != exchange.response_sha256
-            or exchange.request_sha256 != run.request_sha256):
-        return False
     _, model, response_id = interpretation_adapter.describe(data)
     usage = dict(exchange.usage or {})
     scope = {key: value for key, value in (run.scope or {}).items() if key != 'effect'}
@@ -2236,8 +2255,9 @@ def stage_interpret(job):
             _interpretation_not_sent(job, f'Nothing was sent: {exc}', mode=interpreter.mode, interpreter=interpreter,
                                      request=request, started=True, refused=refused, effect=interpretation_holds.NONE)
             raise
-    # D53: the last ask before a request leaves - a hold an answer no stage settled sets is recorded now, and then stops
-    # this send as any standing hold does (every door above sends nothing, so none of them is stopped by it)
+    # D53: the last ask before a request leaves - a hold an answer no stage settled sets is recorded now (D53b: one kept
+    # only in an unknown or sending run's exchange too), and then stops this send as any standing hold does (every door
+    # above sends nothing, so none of them is stopped by it)
     _record_unsettled_holds()
     if interpretation_holds.is_held():
         _interpretation_not_sent(job, interpretation_holds.PAUSED_MESSAGE, mode=interpreter.mode,
@@ -3667,7 +3687,15 @@ def _record_unsettled_holds():
     killed before it) and whose own bytes classify as a HOLD - a substituted model, a refused key, an exhausted quota - has
     that hold recorded now (holds.record: one per answer, never a second), before any interpret stage asks whether it
     may send. Before this, such an answer set no hold, and the next document's stage, or the member's retry of the same
-    reading, sent again. Nothing is read, sent or marked: the stage that owns the run still settles it."""
+    reading, sent again. Nothing is read, sent or marked: the stage that owns the run still settles it.
+
+    DECISIONS D53b (the round-2 refutation, finding 16): so does an answer kept only in a run's recorded exchange - a
+    sent run left UNKNOWN (decision (k): the exchange was committed as it ended, then the run's outcome write failed,
+    so the run holds no bytes of its own) or still 'sending' (its worker died between the two, and the stale sweep has
+    not settled it yet). Its turn-1 exchange, read as P-6 reads it (_turn_one_exchange) and recorded with an HTTP
+    status, is classified from its outcome, status and bytes (adapter.classify, through holds.classify), and a HOLD is
+    recorded against the run. A run left sending counts as sent by may_have_reached_vendor's rule - the one the stale
+    sweep settles it by - for the hold only. Nothing else changes: the run is neither settled, marked nor written."""
     runs = models.ProviderRun.objects.filter(provider=interpretation.PROVIDER, purpose=INTERPRETATION, sent=True,
                                              state__in=(models.ProviderRun.SUCCEEDED, models.ProviderRun.FAILED)
                                              ).exclude(scope__has_key='effect')
@@ -3675,6 +3703,18 @@ def _record_unsettled_holds():
         outcome = interpretation_holds.classify_run(run)
         if outcome.effect == interpretation_holds.HOLD:
             interpretation_holds.record(run, outcome)
+    unsettled = models.ProviderRun.objects.filter(provider=interpretation.PROVIDER, purpose=INTERPRETATION)
+    for kept in (unsettled.filter(state=models.ProviderRun.UNKNOWN, sent=True),
+                 may_have_reached_vendor(unsettled.filter(state=models.ProviderRun.SENDING))):
+        for run in kept:
+            exchange = _turn_one_exchange(run)
+            if exchange is None or exchange.http_status is None:
+                continue
+            outcome = interpretation_holds.classify(exchange.state, exchange.http_status,
+                                                    bytes(exchange.response_bytes or b''))
+            if outcome.effect == interpretation_holds.HOLD:
+                run.sent = True  # a run left sending: may_have_reached_vendor's rule, in memory only (never saved)
+                interpretation_holds.record(run, outcome)
 
 
 def _stale_interpretation(job, run):
@@ -4092,11 +4132,15 @@ def retry_reading(encounter, user, *, override=False):
     failed-before door would hold against it (retry_target) is released for that one attempt - written on its
     reconciled_by, reconciled_at and reconciliation_note (RETRY_RELEASE_NOTE), which the failed-before door and the
     stored-answer door read (released_for_retry) - and 'interpret:...:retry:<run>' is queued, audited
-    'interpretation.retry'. Refused (Refused) while a stage runs or an outcome is unknown, when the revision was read or
-    was never attempted, while a hold stands (an operator's release and a Resume end that), for a document
-    over the size bound or that cannot be prepared, and for an answer cut off at its output limit (C5: the member is
-    told the document is too long to be read in one piece) unless ``override`` - an operator's recorded override, which
-    the caller (the API's retry-reading door, slice S11) grants only to an operator. Returns the queued job."""
+    'interpretation.retry'. A run an operator had reconciled keeps that record, and its release is the stage's own key,
+    'interpret:...:retry-release:<run>' (DECISIONS D52, D60); a retry that releases nothing (a request that never left,
+    or an answer still unread) keeps 'retry:<run>', which is never read as a release, so the stored-answer door reads
+    that answer again with nothing sent. Refused (Refused) while a stage runs or an outcome is unknown, when the
+    revision was read or was never attempted, while a hold stands (an operator's release and a Resume end that), for a
+    document over the size bound or that cannot be prepared, and for an answer cut off at its output limit (C5: the
+    member is told the document is too long to be read in one piece) unless ``override`` - an operator's recorded
+    override, which the caller (the API's retry-reading door, slice S11) grants only to an operator. Returns the queued
+    job."""
     with transaction.atomic():
         encounter = _locked(encounter)
         if busy(encounter):
@@ -4121,17 +4165,21 @@ def retry_reading(encounter, user, *, override=False):
         effect = interpretation_effect(released or newest)
         if effect == interpretation_holds.TOO_LONG and not override:
             raise Refused(RETRY_TOO_LONG)
+        mark = RETRY
         if released is not None and not released_for_retry(released):
             locked = models.ProviderRun.objects.select_for_update().get(pk=released.pk)
             # DECISIONS D52 (the S17 refutation, finding 0): a run an operator reconciled (an unknown outcome P-6 then
             # settled from its exchange) keeps that record - who, when and the note are its only copy, and the audit
-            # trail keeps no note text by design; the release is the retry stage queued below ('retry:<run>')
+            # trail keeps no note text by design; the release is the retry stage queued below, under a mark of its own
+            # ('retry-release:<run>', D60), the only key released_for_retry reads as a release
             if locked.reconciled_at is None:
                 locked.reconciled_by, locked.reconciled_at = user, timezone.now()
                 locked.reconciliation_note = RETRY_RELEASE_NOTE
                 locked.save(update_fields=['reconciled_by', 'reconciled_at', 'reconciliation_note'])
+            else:
+                mark = RETRY_RELEASE
         clear_stop(encounter)
-        key = _interpret_key(revision, f'retry:{(released or newest).pk}')
+        key = _interpret_key(revision, f'{mark}:{(released or newest).pk}')
         if Job.objects.filter(idempotency_key=key).exists():  # asked again for the same attempt: a stage of its own
             key = f'{key}:resume:{uuid.uuid4()}'
         job = enqueue(INTERPRET, encounter=encounter, revision=revision, key=key, requested_by=user)

@@ -18,6 +18,7 @@ from datetime import timezone as dt_timezone
 from pathlib import Path
 from unittest import mock
 
+from django.conf import settings
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
@@ -38,6 +39,9 @@ TEXT = FIXTURE['text']  # a SYNTHETIC colonoscopy report dated November 9, 2026
 ANSWER = json.loads(FIXTURE['response']['candidates'][0]['content']['parts'][0]['text'])
 TRIAL_429 = (Path(__file__).parent / 'fixtures' / 'interpretation' / 'adapter'
              / 'trial-attempt1-note8-429.json').read_bytes()
+# D39: the monthly spending cap's 429 - RESOURCE_EXHAUSTED with a message and no QuotaFailure - is a quota hold
+SPENDING_CAP_429 = json.dumps({'error': {'code': 429, 'status': 'RESOURCE_EXHAUSTED', 'message': (
+    'Your project has exceeded its monthly spending cap. (synthetic copy)')}}).encode()
 USAGE = {'promptTokenCount': 1000, 'candidatesTokenCount': 200, 'totalTokenCount': 1200}
 NOTE = 'Confirmed with the synthetic vendor log: the request was not answered.'
 Run = models.ProviderRun
@@ -151,6 +155,26 @@ class InterpretCase(TestCase):
 
     def interpret_runs(self, revision):
         return list(Run.objects.filter(revision=revision, purpose=interpretation.PURPOSE).order_by('created_at', 'pk'))
+
+    def outcome_write_fails_once(self):
+        """Decision (k), driven through the stage: the run's first outcome write fails (_finish_run raises once), after
+        its one exchange was committed as it ended, so _finish_loop records the run unknown with no bytes of its own."""
+        real, calls = jobs._finish_run, []
+
+        def fails_once(run, exchange):
+            calls.append(exchange.outcome)
+            if len(calls) == 1:
+                raise RuntimeError('synthetic: the outcome write failed')
+            return real(run, exchange)
+        return mock.patch.object(jobs, '_finish_run', side_effect=fails_once)
+
+    def in_another_workspace(self):
+        """A member's upload of the same text in another workspace, through extract: (encounter, revision)."""
+        other_ws = f.workspace('Other synthetic practice')
+        f.member(other_ws, self.user)
+        encounter, revision = self.upload(workspace=other_ws)
+        self.run_next('extract')
+        return encounter, revision
 
     def through_extract(self, **kwargs):
         encounter, revision = self.upload(**kwargs)
@@ -486,6 +510,114 @@ class PauseTests(InterpretCase):
         self.assertEqual(models.InterpreterHold.objects.get().reason, 'model')
         self.assertEqual(self.interpret_runs(second)[-1].scope.get('held'), holds.HELD_HOLD)
         self.assertEqual(len(interpreter.sent), 1)
+
+    def test_d53b_a_hold_kept_only_in_an_unknown_runs_exchange_stops_the_next_send(self):
+        """D53b (the round-2 refutation, finding 16, case A): an answer naming another model arrived and its exchange
+        was committed (turn 1, HTTP 200), then the run's outcome write failed (decision (k)): the run is UNKNOWN with no
+        bytes of its own, and no hold was set. The next document's stage, in another workspace, records the hold that
+        exchange sets against that run at its door and sends nothing; the run itself is not written."""
+        interpreter = self.scripted(answered(envelope(model='gemini-4-argon-preview')), answered(envelope()))
+        encounter, revision = self.through_extract()
+        with self.outcome_write_fails_once(), self.assertLogs('studio.jobs', level='ERROR'):
+            self.run_next('interpret')
+        [run] = self.interpret_runs(revision)
+        kept = (run.state, run.sent, bytes(run.response_bytes or b''), run.http_status, run.scope, run.reconciled_at)
+        self.assertEqual(kept, ('unknown', True, b'', None, {'mode': 'replay', 'effect': 'unknown'}, None))
+        self.assertEqual(list(run.exchanges.values_list('turn', 'state', 'http_status')), [(1, 'succeeded', 200)])
+        self.assertFalse(models.InterpreterHold.objects.exists())
+        _, second = self.in_another_workspace()
+        job = self.run_next('interpret')
+        self.assertEqual((job.state, job.error), (models.Job.CANCELLED, holds.PAUSED_MESSAGE))
+        hold = models.InterpreterHold.objects.get()
+        self.assertEqual((hold.reason, hold.http_status, hold.run_id), ('model', 200, run.pk))
+        self.assertEqual(self.interpret_runs(second)[-1].scope.get('held'), holds.HELD_HOLD)
+        self.assertEqual(len(interpreter.sent), 1)
+        run.refresh_from_db()
+        self.assertEqual((run.state, run.sent, bytes(run.response_bytes or b''), run.http_status, run.scope,
+                          run.reconciled_at), kept)
+
+    def test_d53b_a_hold_kept_only_in_a_dead_workers_exchange_stops_the_next_send_before_the_sweep(self):
+        """D53b (finding 16, case B): the worker died after the run's exchange was committed and before its outcome was
+        written, so the run is still 'sending' - marked unsent until the stale sweep settles it, 600 s on - and that
+        exchange is the spending cap's 429 (a quota hold, D39). Before the sweep, the next document's stage, in another
+        workspace, records that hold against the run (sent by may_have_reached_vendor's rule) and sends nothing; the
+        run is not written. The sweep then settles the run unknown, and its answer never sets a second hold: the
+        member's reconciliation of it pauses while the hold stands, and sends nothing."""
+        interpreter = self.scripted(answered(envelope()))
+        encounter, revision = self.through_extract()
+        dead = models.Job.objects.get(revision=revision, kind='interpret')
+        models.Job.objects.filter(pk=dead.pk).update(state=models.Job.RUNNING, started_at=timezone.now(), attempts=1)
+        run = self.unknown_holding_an_answer(encounter, revision, state=Run.SENDING, body=SPENDING_CAP_429)
+        Run.objects.filter(pk=run.pk).update(sent=False)  # as _send leaves a run in flight
+        models.ProviderExchange.objects.filter(run=run).update(state='failed', http_status=429, usage={})
+        jobs.mark_stale()  # the restart sweep: the dead stage is not stale yet, so its run stays 'sending'
+        self.assertEqual((Run.objects.get(pk=run.pk).state, models.InterpreterHold.objects.count()), ('sending', 0))
+        _, second = self.in_another_workspace()
+        job = self.run_next('interpret')
+        self.assertEqual((job.state, job.error), (models.Job.CANCELLED, holds.PAUSED_MESSAGE))
+        hold = models.InterpreterHold.objects.get()
+        self.assertEqual((hold.reason, hold.http_status, hold.vendor_status, hold.run_id),
+                         ('quota', 429, 'RESOURCE_EXHAUSTED', run.pk))
+        self.assertEqual(self.interpret_runs(second)[-1].scope.get('held'), holds.HELD_HOLD)
+        self.assertEqual(interpreter.sent, [])
+        stored = Run.objects.get(pk=run.pk)
+        self.assertEqual((stored.state, stored.sent, stored.scope, stored.finished_at), ('sending', False,
+                                                                                         {'mode': 'replay'}, None))
+        models.Job.objects.filter(pk=dead.pk).update(started_at=timezone.now() - timedelta(seconds=700))
+        jobs.mark_stale()  # once the stage is stale: the run is settled unknown, sent (it reached the vendor)
+        stored.refresh_from_db()
+        self.assertEqual((stored.state, stored.sent), ('unknown', True))
+        self.assertTrue(jobs.reconcile(encounter, stored, self.user, NOTE))
+        job = self.run_next('interpret')  # after-reconcile: P-6 settles no 429, and the hold stands
+        self.assertEqual((job.state, job.error), (models.Job.CANCELLED, holds.PAUSED_MESSAGE))
+        self.assertEqual((models.InterpreterHold.objects.count(), interpreter.sent), (1, []))
+
+    def test_d53b_a_reconciled_unknown_runs_hold_pauses_its_own_after_reconcile_stage(self):
+        """D53b reads a run left UNKNOWN whether or not it was reconciled: the spending cap's 429 kept only in the
+        exchange of a run whose outcome write failed (decision (k)) is a quota hold, so the member's reconciliation of
+        that run - P-6 settles no 429 - pauses its own stage at the door, holding against that run, and sends nothing
+        more, where it used to send again."""
+        interpreter = self.scripted(answered(SPENDING_CAP_429, status=429), answered(envelope()))
+        encounter, revision = self.through_extract()
+        with self.outcome_write_fails_once(), self.assertLogs('studio.jobs', level='ERROR'):
+            self.run_next('interpret')
+        [run] = self.interpret_runs(revision)
+        self.assertEqual((run.state, models.InterpreterHold.objects.count()), ('unknown', 0))
+        self.assertTrue(jobs.reconcile(encounter, run, self.user, NOTE))
+        job = self.run_next('interpret')
+        self.assertEqual((job.state, job.error), (models.Job.CANCELLED, holds.PAUSED_MESSAGE))
+        hold = models.InterpreterHold.objects.get()
+        self.assertEqual((hold.reason, hold.vendor_status, hold.run_id), ('quota', 'RESOURCE_EXHAUSTED', run.pk))
+        self.assertEqual(len(interpreter.sent), 1)
+        self.assertEqual(Run.objects.get(pk=run.pk).state, 'unknown')
+
+    def test_d53b_reads_an_unsettled_exchange_only_as_p6_reads_it_and_records_only_a_hold(self):
+        """D53b's control: an unsettled run's exchange sets a hold only when it is a hold read as P-6 reads it. None is
+        set by an exchange whose bytes no longer match their sha256, nor by one that answers another request, nor by a
+        run that called no vendor (a replay: no endpoint), nor by an answer that is no hold (a usable 200, a 503) - and
+        the next document's stage sends."""
+        interpreter = self.scripted(answered(envelope()))
+        encounter, revision = self.through_extract()
+        models.Job.objects.filter(state=models.Job.QUEUED).update(state=models.Job.CANCELLED)
+        unauthenticated = json.dumps({'error': {'code': 401, 'status': 'UNAUTHENTICATED'}}).encode()
+        failure = json.dumps({'error': {'code': 503, 'status': 'UNAVAILABLE'}}).encode()
+        for state, body, status, change in (
+                (Run.UNKNOWN, unauthenticated, 401, {'response_sha256': '0' * 64}),
+                (Run.SENDING, unauthenticated, 401, {'request_sha256': 'a' * 64}),
+                (Run.UNKNOWN, envelope(), 200, {}),
+                (Run.SENDING, failure, 503, {})):
+            run = self.unknown_holding_an_answer(encounter, revision, state=state, body=body)
+            models.ProviderExchange.objects.filter(run=run).update(
+                state='succeeded' if status == 200 else 'failed', http_status=status, **change)
+        for state in (Run.UNKNOWN, Run.SENDING):  # a replay calls no vendor: never sent, whatever its exchange says
+            replayed = self.unknown_holding_an_answer(encounter, revision, state=state, body=SPENDING_CAP_429)
+            Run.objects.filter(pk=replayed.pk).update(endpoint='', sent=False)
+            models.ProviderExchange.objects.filter(run=replayed).update(state='failed', http_status=429)
+        _, second = self.in_another_workspace()
+        self.assertEqual(self.run_next('interpret').state, models.Job.SUCCEEDED)
+        self.assertFalse(models.InterpreterHold.objects.exists())
+        self.assertEqual(len(interpreter.sent), 1)
+        self.assertEqual(models.EventInventory.objects.get(revision=second).state, 'read')
 
     def test_an_answer_naming_another_model_is_never_read_and_holds(self):
         """P-5: a substituted model is refused and never read (a 'refused' inventory row), and sets the model hold."""
@@ -1371,12 +1503,13 @@ class ReviewAndProgressTests(InterpretCase):
 class ReconciledRetryTests(InterpretCase):
     """DECISIONS D52 (the S17 refutation, finding 0): an operator's recorded reconciliation of an unknown outcome - who,
     when and the note, whose only copy is the run (the audit trail keeps no note text) - survives a retry release of the
-    same run; the release is then the retry stage queued for it ('retry:<run>'), which every door reads as the release."""
+    same run; the release is then the retry stage queued for it, keyed 'retry-release:<run>' (D60), which every door
+    reads as the release."""
 
     NOTE = 'Synthetic operator note: the vendor console shows one answered request (D52 pin).'
 
-    def unknown_after_outcome_write_failure(self):
-        interpreter = self.scripted(answered(envelope(text='{"passages": "not the schema"}')))
+    def unknown_after_outcome_write_failure(self, *after):
+        interpreter = self.scripted(answered(envelope(text='{"passages": "not the schema"}')), *after)
         encounter, revision = self.through_extract()
         real, calls = jobs._finish_run, []
 
@@ -1407,9 +1540,98 @@ class ReconciledRetryTests(InterpretCase):
         run.refresh_from_db()
         self.assertEqual((run.reconciled_by_id, run.reconciled_at, run.reconciliation_note), recorded)
         self.assertTrue(jobs.released_for_retry(run))  # the release, read from the retry stage
-        self.assertIn(f'retry:{run.pk}', job.idempotency_key)
+        self.assertEqual(job.idempotency_key, jobs._interpret_key(revision, f'retry-release:{run.pk}'))  # D60
         # a second retry finds it released and writes nothing over the operator's record either
         models.Job.objects.filter(state=models.Job.QUEUED).update(state=models.Job.CANCELLED)
         jobs.retry_reading(encounter, self.user)
         run.refresh_from_db()
         self.assertEqual((run.reconciled_by_id, run.reconciled_at, run.reconciliation_note), recorded)
+
+    def test_d60_a_reconciled_runs_release_is_its_retry_release_stage_and_lets_one_attempt_send(self):
+        """D60 on D52's own path: the release of a run an operator reconciled is the retry stage keyed
+        'retry-release:<run>' - the only key released_for_retry reads as a release - so the failed-before door lets that
+        retry send its one attempt, and the operator's record is never written over."""
+        operator_user = f.user('d60-operator')
+        ops.grant(operator_user)
+        interpreter, encounter, revision, run = self.unknown_after_outcome_write_failure(answered(envelope()))
+        self.assertTrue(jobs.reconcile(encounter, run, operator_user, self.NOTE))
+        self.run_next('interpret')  # after-reconcile: settled from its exchange (P-6), the reading refused
+        run.refresh_from_db()
+        recorded = (run.reconciled_by_id, run.reconciled_at, run.reconciliation_note)
+        self.assertEqual((run.state, jobs.interpretation_effect(run), jobs.retry_target(revision)),
+                         ('succeeded', 'failed', (run, run)))
+        retry = jobs.retry_reading(encounter, self.user)
+        key = jobs._interpret_key(revision, f'retry-release:{run.pk}')
+        self.assertEqual(retry.idempotency_key, key)
+        self.assertLessEqual(len(key) + len(':resume:') + 36, models.Job._meta.get_field('idempotency_key').max_length)
+        self.assertTrue(jobs.released_for_retry(run))
+        self.assertEqual(models.AuditEvent.objects.get(event='interpretation.retry').data['released'], True)
+        job = self.run_next('interpret')  # the one attempt the release allows: sent, and read
+        self.assertEqual(job.state, models.Job.SUCCEEDED, job.error)
+        self.assertEqual(len(interpreter.sent), 2)
+        self.assertEqual(models.EventInventory.objects.get(revision=revision, state='read').provider_run_id,
+                         self.interpret_runs(revision)[-1].pk)
+        run.refresh_from_db()
+        self.assertEqual((run.reconciled_by_id, run.reconciled_at, run.reconciliation_note), recorded)
+
+
+class UnreadAnswerRetryTests(InterpretCase):
+    """DECISIONS D60 (the round-2 refutation, finding 15): only a retry that RELEASED a run reads as a release. A usable
+    answer whose reading failed on this server has nothing to release (retry_target); its retry is keyed 'retry:<run>',
+    which is never read as a release - nor is a Resume of it - so the stored-answer door reads the answer again with
+    nothing sent, and a later upload of the same text in the workspace reuses it too, whether or not that retry ran."""
+
+    def overran(self):
+        """A usable answer, sent and stored, whose reading overran on this server (a genuine bounded.Overrun: no reading
+        time, for this stage only): the stage failed, nothing was read, and the answer stays reusable (_read_answer)."""
+        interpreter = self.scripted(answered(envelope()), answered(envelope()))
+        encounter, revision = self.through_extract()
+        with override_settings(JOB_DEADLINE_SECONDS={**settings.JOB_DEADLINE_SECONDS, 'analyze': 0}):
+            job = self.run_next('interpret')
+        self.assertEqual((job.state, job.error), (models.Job.FAILED, jobs.READ_OVERRUN_MESSAGE.format(reason='time')))
+        [run] = self.interpret_runs(revision)
+        self.assertEqual((run.state, run.sent, jobs.interpretation_effect(run)), ('succeeded', True, 'answered'))
+        self.assertNotIn('effect', run.scope)
+        self.assertFalse(models.EventInventory.objects.exists())
+        self.assertEqual(self.state(encounter), ('processing_failed', None))
+        self.assertEqual(jobs.retry_target(revision), (run, None))  # nothing to release: the answer was never read
+        return interpreter, encounter, revision, run
+
+    def test_d60_a_retry_of_a_usable_answer_whose_reading_overran_reads_it_again_with_nothing_sent(self):
+        interpreter, encounter, revision, run = self.overran()
+        retry = jobs.retry_reading(encounter, self.user)
+        self.assertEqual(retry.idempotency_key, jobs._interpret_key(revision, f'retry:{run.pk}'))
+        run.refresh_from_db()
+        self.assertIsNone(run.reconciled_at)
+        self.assertFalse(jobs.released_for_retry(run))
+        self.assertEqual(jobs._retained_interpretation(encounter, interpreter, self.request_for(revision)), run)
+        job = self.run_next('interpret')
+        self.assertEqual((job.state, job.result['provider']), (models.Job.SUCCEEDED, 'reused'), job.error)
+        self.assertEqual(len(interpreter.sent), 1)  # one send in all: the retry read the stored answer
+        inventory = models.EventInventory.objects.get(revision=revision)
+        self.assertEqual((inventory.state, Run.objects.get(pk=inventory.provider_run_id).reused_from_id),
+                         ('read', run.pk))
+
+    def test_d60_a_stopped_retry_leaves_the_unread_answer_reusable_by_a_new_upload(self):
+        interpreter, encounter, revision, run = self.overran()
+        retry = jobs.retry_reading(encounter, self.user)
+        self.assertEqual(jobs.stop_encounter(encounter, self.user), 1)  # stopped before it ran
+        retry.refresh_from_db()
+        self.assertEqual(retry.state, models.Job.CANCELLED)
+        self.assertFalse(jobs.released_for_retry(run))
+        _, second = self.through_extract()  # the same text, uploaded again in the workspace
+        job = self.run_next('interpret')
+        self.assertEqual((job.state, job.result['provider']), (models.Job.SUCCEEDED, 'reused'), job.error)
+        self.assertEqual(self.interpret_runs(second)[-1].reused_from_id, run.pk)
+        self.assertEqual(len(interpreter.sent), 1)
+
+    def test_d60_a_resume_of_that_retry_is_no_release_either(self):
+        interpreter, encounter, revision, run = self.overran()
+        retry = jobs.retry_reading(encounter, self.user)
+        jobs.stop_encounter(encounter, self.user)
+        resumed = jobs.resume(encounter, self.user)
+        self.assertEqual(resumed.idempotency_key.split(':resume:')[0], retry.idempotency_key)
+        self.assertFalse(jobs.released_for_retry(run))
+        job = self.run_next('interpret')
+        self.assertEqual((job.state, job.result['provider']), (models.Job.SUCCEEDED, 'reused'), job.error)
+        self.assertEqual(len(interpreter.sent), 1)
