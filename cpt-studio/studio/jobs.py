@@ -1764,8 +1764,8 @@ def stage_participant(job):
 # --- the interpret stage (design/FINAL.md 6.1-6.3, 6.9 and 11, as design/ADJUDICATION.md P-2 and P-6 amend them) -------
 #
 # extract -> interpret -> analyze. One stage per revision and INTERPRETATION_VERSION, keyed
-# 'interpret:<revision>:<version>' - a recorded retry adds ':retry:<run>' (':retry-release:<run>' when it released a run
-# an operator had reconciled: DECISIONS D60), a reconciliation ':after-reconcile:<run>', the stale sweep
+# 'interpret:<revision>:<version>' - a recorded retry adds ':retry:<run>' (':retry-release:<run>' when it released a
+# run: DECISIONS D60, D85 - the only release mark), a reconciliation ':after-reconcile:<run>', the stale sweep
 # ':settled:<run>' - whose every outcome is a ProviderRun(provider 'gemini', purpose 'interpretation',
 # adapter_version ADAPTER_VERSION), and whose every answer read is an EventInventory row: 'read' queues
 # 'analyze:<revision>:<inventory>', 'refused' ends the stage failed with the retry door (FINAL 11.3). Gemini is the only
@@ -1796,9 +1796,10 @@ STORED_ANSWER_CHANGED = 'The stored answer no longer matches its recorded hash; 
 READ_OVERRUN_MESSAGE = 'The stored answer could not be read within the {reason} limit; nothing from it was used.'
 READ_FAILED_MESSAGE = ('The stored answer could not be read: the reader stopped with an unexpected error (logged), so '
                        'nothing from it was used.')
-RETRY_RELEASE_NOTE = 'released for one retry'  # FINAL 11.3: the note a retry writes on the run it releases
-# DECISIONS D60: the key mark of a retry stage that RELEASED a run an operator had reconciled (D52: the run keeps the
-# operator's record, so the release is this key); a retry that released nothing is keyed 'retry' and is never a release
+RETRY_RELEASE_NOTE = 'released for one retry'  # FINAL 11.3: the note a retry writes on the run it releases - its
+# record of who released it and when, never read as the release (DECISIONS D85: an operator writes that column too)
+# DECISIONS D60, D85: the key mark of a retry stage that RELEASED a run - the only release released_for_retry reads; a
+# retry that released nothing is keyed 'retry' and is never a release
 RETRY, RETRY_RELEASE = 'retry', 'retry-release'
 # scope['refused'] of a run the stage kept unsent: the size bound, a text that cannot be framed, the failed-before door,
 # the live gate, a sentinel that cannot vouch for the write the answer would need (NOT_RUN: no request could be made)

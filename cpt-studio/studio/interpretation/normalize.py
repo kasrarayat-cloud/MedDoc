@@ -732,7 +732,13 @@ class Draft:
                     entry.update(state='discarded', reasons=extent['reasons'])
                     self.discarded.append({'where': where, 'reason': 'reach_not_permitted'})
                 elif event['extent'] is None:
-                    event['extent'], event['completion'] = extent, completion
+                    kept = event['completion']
+                    event['extent'] = extent
+                    # D93 (the pins' review): an 'incomplete' an unplaced entry attached BEFORE this one is never
+                    # overwritten by this entry's other completion - in either order the examination stays incomplete
+                    if not (isinstance(kept, Mapping) and kept.get('value') == 'incomplete'
+                            and completion_value != 'incomplete'):
+                        event['completion'] = completion
                     entry['attached'] = True
                 else:
                     self.problems.append(f'{where} gives a second reach for one examination; the first is kept.')

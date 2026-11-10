@@ -179,6 +179,7 @@ OTHER_GI = 'gi.other'  # engine.OTHER_GI
 # made no procedure day, separate_em was never asked and 99213 was READY. The pin holds it equal to the legacy rule over
 # gi.profiles.
 SAME_DAY_FAMILIES = lexicon.PROCEDURAL_FAMILIES | frozenset({OTHER_GI, 'gi.unsupported'})  # D94: a non-GI procedure too
+UNIDENTIFIED_PROCEDURE = 'A procedure CPT Studio could not identify'  # D94: the label of an act of family ''
 
 
 @dataclass(frozen=True)
@@ -207,12 +208,14 @@ def procedure_day(reading, effective, codes: Sequence[tuple] = ()) -> ProcedureD
     labels, possible, undatable = [], [], []
     for event in reading.events.values():
         family = event.get('family') or ''
-        if family not in SAME_DAY_FAMILIES or events.value(event, 'kind') in lexicon.EM_KINDS:  # D81: gi.other too
-            continue
+        if (family not in SAME_DAY_FAMILIES and family != '') or events.value(event, 'kind') in lexicon.EM_KINDS:
+            continue  # D81: gi.other too; D94: gi.unsupported, and an act whose procedure Gemini left 'unknown' (family
+            # '') - never done, its procedure unusable, so only a possible same-day procedure (fail-closed)
         status = events.value(event, 'status')
         if status not in verify.POSITIVE + ('uncertain',):
             continue
-        label = profiles.PROFILES[family].label if family in profiles.PROFILES else family
+        label = (profiles.PROFILES[family].label if family in profiles.PROFILES
+                 else family or UNIDENTIFIED_PROCEDURE)  # D94
         day = facts.day_of(event, effective)
         if day == facts.ON:
             if status in verify.POSITIVE and all(events.usable(event, name)
