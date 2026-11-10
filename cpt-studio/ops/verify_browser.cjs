@@ -4515,7 +4515,10 @@ async function verifyDocument(page, opts, manifest, item, sink, sessions = {}) {
   // the negative scans, once the operator view (and so every identifier it holds) is known
   try {
     await readPage(page, ctx).catch(() => null);
-    const sc = scanContext({ documentText: opView?.revision?.text || '', denyValues: opView ? denyValuesFrom(opView, trace) : [], allowed: [new URL(opts.baseUrl).host] });
+    // the member's own uploaded file name, which the page, the document's name and the original's download header
+    // echo back, is the member's input and not the site's machinery: it is removed before scanning, like the host
+    // (gi-10-ercp-sphincterotomy-stone-extraction.txt: "extraction.txt" reads as a rule id; Gemini walk 2026-11-10)
+    const sc = scanContext({ documentText: opView?.revision?.text || '', denyValues: opView ? denyValuesFrom(opView, trace) : [], allowed: [new URL(opts.baseUrl).host, item.delivery.file] });
     add(scanDocument(ctx, sc, record, opts.out));
   } catch (error) {
     add([check('scan.json', 'hard', false, `the scans could not run: ${String(error && error.message || error)}`)]);

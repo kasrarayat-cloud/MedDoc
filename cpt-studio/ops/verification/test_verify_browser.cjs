@@ -1953,6 +1953,15 @@ test('scanJson: the customer sample is clean against every operator identifier; 
   assert.deepEqual(hitIds(vb.scanJson({ summary: 'Dr Claude Fable reviewed the codes.' }, named)), ['provider_name']);
   // the site's own host is no rule id
   assert.deepEqual(vb.scanText('Questions: support@cpt.quillmd.com', vb.scanContext({ allowed: ['cpt.quillmd.com'] }), 'dom'), []);
+  // nor is the member's own uploaded file name, which the walk passes as allowed (verifyDocument): "extraction.txt"
+  // reads as a rule id; a real rule id beside it is still a hit
+  const upload = 'gi-10-ercp-sphincterotomy-stone-extraction.txt';
+  assert.deepEqual(hitIds(vb.scanText(`${upload} · 2 KB`, vb.scanContext(), 'dom')), ['rule_id']);
+  assert.deepEqual(vb.scanText(`${upload} · 2 KB`, vb.scanContext({ allowed: [upload] }), 'dom'), []);
+  assert.deepEqual(hitIds(vb.scanText(`${upload} failed services.base_included`, vb.scanContext({ allowed: [upload] }), 'dom')),
+                   ['rule_id']);
+  const source = fs.readFileSync(path.join(__dirname, '..', 'verify_browser.cjs'), 'utf8');
+  assert.ok(source.includes('allowed: [new URL(opts.baseUrl).host, item.delivery.file]'), 'the walk allows the upload\'s own name');
 });
 
 test('scanFile and scanHeaders: a customer report quoting the document is clean; a provider line, a hash or X-Content-SHA256 is a hit', () => {
