@@ -3,20 +3,25 @@ D17 and D22). Synthetic data only; nothing is sent.
 
 Legacy records are read by the legacy code, unchanged (P7). The legacy encounters here are made through the test-only
 legacy chain (tests/legacy_chain.py, FINAL 14.6: every document uploaded through POST /api/encounters and read by the
-legacy stages), with a member's acts on them - an approval, a rejection, a member's answer, a reinstatement and an
-approval with a modifier where the legacy reading offers them (tests/guard_support.LegacyWorld). Then:
+legacy stages, one with Astra and Fable configured) in the states FINAL 10.4(1) names, each act asserted offered by the
+legacy reading and made, never skipped where a reading does not offer it (tests/guard_support.LegacyWorld.check): an
+approval and a rejection, a reinstatement, a member's answer that stands and one withdrawn, an approval carrying the
+reviewer's modifier, and the participants' readings and peer reviews with the second review that reading offers, asked
+and run. Then:
 - LegacyLabelTests: the new-path matrix's reads on those encounters - the customer's detail, list and session, the
-  operator's detail, trace and report list, the exports and their downloads, and the in-image scripts and commands -
-  run legacy code ONLY as legacy_record: no denied execution under new_path, other or unscoped, and none of them trips a
-  gate. And the legacy reader did serve them (the detail of each encounter counted legacy_record executions).
+  operator's detail, trace and report list, the exports and their downloads, and the in-image scripts and commands
+  (which meet the standing answer, and name it) - run legacy code ONLY as legacy_record: no denied execution under
+  new_path, other or unscoped, and none of them trips a gate. And the legacy reader did serve them (the detail of each
+  encounter counted legacy_record executions).
 - LegacyByteIdentityTests: the same reads are BYTE-IDENTICAL to the c2e53f8e code's - the rollback image's - output on
   the same committed rows: the customer's detail, list and session as served, the review overlay's views, the reviewed
   coverage, the readiness, and both report renderers (the operator's and the customer's; FINAL 14.3's list). Each tree
   reads in a process of its own, at one instant held for both (a page states the server's time), and this tree reads
   again afterwards, so a read that is not stable cannot pass as identical. The c2e53f8e code is ``git archive`` of the
-  commit when this repository's history holds it, or the tree CPT_STUDIO_BASELINE_TREE names - checked against pinned
-  sha256 of its files either way. A clone with no history (CI's shallow checkout) has neither: the test then SKIPS and
-  says why, and FINAL 14.3's parity on the restored dump (slice S17) is that comparison's evidence there.
+  commit when this repository's history holds it, or the tree CPT_STUDIO_BASELINE_TREE names - checked WHOLE against
+  the pinned manifest of the archive either way (every file by path and sha256, none missing, none added, no link;
+  BaselineTests). A clone with no history (CI's shallow checkout) has neither: the test then SKIPS and says why, and
+  FINAL 14.3's parity on the restored dump (slice S17) is that comparison's evidence there.
 """
 from __future__ import annotations
 
@@ -61,7 +66,7 @@ class LegacyLabelTests(GuardCase):
             for name in names:
                 world.reads(name)
                 world.exports(name)
-            world.in_image(reassess='L1')
+            world.in_image(reassess='L1', answered=LegacyWorld.ANSWERED)
         self.assertLessEqual(READS, matrix.keys())
         self.assertEqual(matrix.red((NEW, OTHER, UNSCOPED)), [], matrix.report((NEW, OTHER, UNSCOPED)))
         self.assertFalse(models.AuditEvent.objects.filter(event=sentinel.TRIPPED).exists())
@@ -155,3 +160,52 @@ class BaselineTests(SimpleTestCase):
                 self.skipTest(how)
             self.assertEqual(guard_support._pinned(tree), [])
             self.assertTrue(guard_support._pinned(APP))  # this tree is not that code
+            # the whole archive is the pinned manifest: every one of its files, by path and sha256
+            self.assertEqual(guard_support.manifest(tree),
+                             (guard_support.BASELINE_MANIFEST, guard_support.BASELINE_FILES, []))
+            self.assertNotEqual(guard_support.manifest(APP)[0], guard_support.BASELINE_MANIFEST)
+
+    def test_a_named_tree_is_the_c2e53f8e_code_only_when_every_file_is(self):
+        # the review of S12, finding 6: a tree CPT_STUDIO_BASELINE_TREE names is compared with only when it holds every
+        # file of the c2e53f8e archive, unchanged, and nothing else - a later serializers.py (no pin names it), a file
+        # added or removed, or a link in place of a file is refused
+        with tempfile.TemporaryDirectory() as scratch:
+            archive, how = baseline_tree(Path(scratch) / 'archive')
+            if archive is None:
+                self.skipTest(how)
+            made = []
+
+            def named(change):
+                tree = Path(scratch) / f'named-{len(made)}'
+                made.append(tree)
+                shutil.copytree(archive, tree)
+                change(tree)
+                with mock.patch.object(guard_support, 'BASELINE', '0' * 40), \
+                        mock.patch.dict('os.environ', {'CPT_STUDIO_BASELINE_TREE': str(tree)}):
+                    return baseline_tree(Path(scratch) / 'unused')
+
+            def later(tree):
+                (tree / 'studio' / 'serializers.py').write_bytes((APP / 'studio' / 'serializers.py').read_bytes())
+
+            def added(tree):
+                (tree / 'studio' / '__pycache__').mkdir()
+                (tree / 'studio' / '__pycache__' / 'serializers.cpython-312.pyc').write_bytes(b'synthetic')
+
+            def removed(tree):
+                (tree / 'studio' / 'answers.py').unlink()
+
+            def linked(tree):
+                kept = Path(scratch) / 'api-copy.py'
+                kept.write_bytes((tree / 'studio' / 'api.py').read_bytes())
+                (tree / 'studio' / 'api.py').unlink()
+                (tree / 'studio' / 'api.py').symlink_to(kept)
+
+            tree, why = named(lambda tree: None)
+            self.assertEqual(tree, made[-1], why)  # the archive itself, named: compared with
+            for what, change in (('a later serializers.py', later), ('a file added', added),
+                                 ('a file removed', removed), ('a link in place of a file', linked)):
+                with self.subTest(what):
+                    self.assertEqual(guard_support._pinned(archive), [])
+                    tree, why = named(change)
+                    self.assertIsNone(tree, f'{what}: accepted as the c2e53f8e code')
+                    self.assertIn('is not the c2e53f8e code', why)

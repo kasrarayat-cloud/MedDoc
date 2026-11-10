@@ -7,9 +7,9 @@ WHAT THE MATRIX IS GENERATED FROM (FINAL 10.4(1)), never hand-listed: every patt
 (``url_routes``), every key of jobs.STAGES (``stage_kinds``) and every in-image installer script - read from
 ops/install.py's own source (``in_image``): each body it runs by app_script (RECOMPUTE_STATES, CLOSE_STAGES,
 UNDO_HAZARDS_READ = UNDO_HAZARDS + its print, ...), each ``manage shell -c`` script and each management command it runs
-in an image - and the worker's own entry, mark_stale (``WORKER``). A generated item with no observation fails the
-matrix, unless it is pinned in IN_IMAGE_EXEMPT with why it reads no encounter row; a pin naming nothing the installer
-runs fails too.
+in an image, in whatever form the call names it, and a form it cannot read raises naming its line (fail-closed) - and
+the worker's own entry, mark_stale (``WORKER``). A generated item with no observation fails the matrix, unless it is
+pinned in IN_IMAGE_EXEMPT with why it reads no encounter row; a pin naming nothing the installer runs fails too.
 
 THE RECORDER (``observing``) reads what the sentinel counted while one matrix entry ran, under the labels production
 gives it - a request's web scope and its readers' row labels, a stage's own scope, nothing for an in-image script (its
@@ -24,10 +24,12 @@ every one of those acts is a matrix entry (``Matrix``). Its new-path encounters 
 participants configured and not; a held code, an excluded code and a reinstated one; an approved code with a modifier; a
 member answer, its recompute and its withdrawal; a second review; a failed reading and its retries; an unknown outcome
 and its reconciliation; a dead worker's stale stage; a context save that re-checks and one that re-predicts on a new
-date; an addendum; a Stop and a Resume; an interpreter hold and its release. ``FACETS`` names FINAL 10.4(1)'s list, each
-satisfied by the observations that exercised it. With ``legacy_rows`` the database also holds encounters the legacy
-reader read (through the test-only legacy chain, tests/legacy_chain.py), so the list, session and operator-list loops
-and the in-image scripts meet both kinds of row.
+date; an addendum; a Stop and a Resume; an interpreter hold and its release; and two members' answers left standing,
+so the in-image scripts, which run last, meet new-path encounters holding a member answer (UNDO_HAZARDS names exactly
+the standing answers, CLOSE_STAGES' written_since those given since the world began). ``FACETS`` names FINAL 10.4(1)'s
+list, each satisfied by the observations that exercised it. With ``legacy_rows`` the database also holds encounters the
+legacy reader read (through the test-only legacy chain, tests/legacy_chain.py; ``LegacyWorld``), so the list, session
+and operator-list loops and the in-image scripts meet both kinds of row.
 
 THE LEGACY CHAIN: ``legacy_chain()`` is tests/legacy_chain.py's, with jobs._legacy_reading_allowed patched True as well
 - the seam slice S15 adds to that module (S10 named it); patching it here too changes nothing once S15's lands.
@@ -110,6 +112,22 @@ def two_lesions():
                     events=[exam(), removal, biopsy, denial], reach=[reached()])
 
 
+PAIR_BIOPSY = 'A 3 mm sessile polyp in the ascending colon was biopsied with cold forceps.'
+PAIR_SNARE = 'A 9 mm sessile polyp in the sigmoid colon was removed with a cold snare.'
+PAIR_CODES = (('45380', PAIR_BIOPSY), ('45385', PAIR_SNARE))  # Corti's on legacy_pair()
+
+
+def legacy_pair():
+    """A colonoscopy to the cecum with a biopsy of one polyp and the snare removal of another, at two sites (tests/
+    test_cux_review.py's 'pair' shape): the LEGACY reading holds both codes ready and offers the separate-lesion
+    modifier review, so an approval on a legacy record can carry the reviewer's modifier. Read by the legacy chain
+    only, which interprets nothing: no interpretation answer is recorded for it (its answer is an empty one)."""
+    lines = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE', 'Colonoscopy report (fictional)',
+             'Date of service: 11/09/2026.', 'Place of service: Ambulatory surgery center', 'Procedure: Colonoscopy',
+             'The colonoscope was advanced to the cecum and the examination was completed.', PAIR_BIOPSY, PAIR_SNARE)
+    return {}, '\n'.join(lines) + '\n'
+
+
 def sigmoidoscopy():
     """A document whose recorded answer the reading refuses whole (the failed-reading encounter's)."""
     lines = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE', 'Date of service: 11/09/2026.',
@@ -147,48 +165,147 @@ def installer():
     return install
 
 
-def _dotted(node) -> str:
-    parts = []
-    while isinstance(node, ast.Attribute):
-        parts.append(node.attr)
-        node = node.value
-    if isinstance(node, ast.Name):
-        parts.append(node.id)
-    return '.'.join(reversed(parts))
+# deploy/entrypoint.sh's roles a one-shot may be given other than `manage <command>`, each with what it runs (a test
+# reads the entrypoint, so the pin cannot drift from it): `migrate` execs `python manage.py migrate --noinput`
+ENTRYPOINT_ROLES = {'migrate': ('command', 'migrate')}
+DOORS = ('app_script', 'oneshot')  # the installer's ways into an image of the app
 
 
 def in_image(source: str = None) -> dict:
     """What ops/install.py runs in an image of the app, read from its source (``source``: its text, by default the
-    file's): {('script', name): how} for every module-level script body it hands app_script (its third argument) or
-    ``manage shell -c`` (the fourth item of the command list), and {('command', name): how} for every other management
-    command it names in a ['manage', name, ...] list. A name that is not one of the module's own strings (a local
-    variable) is the wrapper's plumbing, not a script."""
+    file's): {('script', name): how} for every module-level script body it hands app_script (its third argument, or
+    ``body=``) or ``manage shell -c`` (the fourth item of the command list), and {('command', name): how} for every
+    management command a one-shot runs - a ['manage', name, ...] list, or an entrypoint role (ENTRYPOINT_ROLES) -
+    whether the call spells the list out, names a local the function assigns one to, or calls a function of the module
+    that returns one.
+
+    FAIL-CLOSED (the review of S12, finding 3): an app_script or oneshot call, or a list that begins 'manage', that does
+    not resolve to a module-level script or a literal command - a concatenated body, a starred or computed command, a
+    role the entrypoint pin does not know, a command passed in or bound by a loop, an alias or a partial of either
+    door - raises ValueError naming its line. What the generator cannot read the matrix cannot drive, and a dropped
+    item would leave the matrix green over a script it never ran. The one exception is app_script's own `manage shell
+    -c <source>`: the wrapper's plumbing, whose scripts are read at each call of it."""
     module = installer()
     tree = ast.parse(source if source is not None else INSTALL.read_text(encoding='utf-8'))
+    functions = {node.name: node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    owner = {item: fn for fn in functions.values() for item in ast.walk(fn)}  # a node -> its module-level function
+    parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
     found = {}
 
-    def script_name(node):
-        if isinstance(node, ast.Subscript):
-            node = node.value
-        if isinstance(node, ast.Name) and isinstance(getattr(module, node.id, None), (str, dict)):
-            return node.id
-        return None
+    def refuse(node, what):
+        raise ValueError(f'ops/install.py:{getattr(node, "lineno", "?")}: {what} - the matrix cannot tell what it runs '
+                         f'in an image ({ast.unparse(node)[:160]})')
+
+    def script(node, call):
+        """The module-level script ``node`` names: one of the module's strings, or an entry of a dict of them."""
+        target, kind = (node.value, dict) if isinstance(node, ast.Subscript) else (node, str)
+        if isinstance(target, ast.Name) and isinstance(getattr(module, target.id, None), kind):
+            return target.id
+        refuse(call, "a script body that is not one of the module's own scripts")
+
+    def argument(call, position, keyword):
+        if any(isinstance(item, ast.Starred) for item in call.args[:position + 1]):
+            refuse(call, 'a starred argument')
+        if len(call.args) > position:
+            return call.args[position]
+        for item in call.keywords:
+            if item.arg == keyword:
+                return item.value
+        refuse(call, f'no {keyword} the call names')
+
+    def assigned(name, scope, call):
+        """What the module-level function ``scope`` assigns ``name`` (every plain assignment); a name bound any other
+        way - a parameter, a loop, a with, an unpacking, a walrus - or never assigned cannot be read."""
+        args = scope.args
+        if name in {item.arg for item in (*args.posonlyargs, *args.args, *args.kwonlyargs, args.vararg, args.kwarg)
+                    if item is not None}:
+            refuse(call, f'a command passed in ({name})')
+        values = []
+        for item in ast.walk(scope):
+            other = ((item.asname or item.name).split('.')[0] if isinstance(item, ast.alias)
+                     else item.name if isinstance(item, (ast.ExceptHandler, ast.MatchAs, ast.MatchStar, ast.FunctionDef,
+                                                         ast.AsyncFunctionDef, ast.ClassDef))
+                     else item.rest if isinstance(item, ast.MatchMapping) else None)
+            if other == name and item is not scope:  # bound by a handler, an import, a pattern or a definition
+                refuse(call, f'a command bound otherwise than by an assignment ({name})')
+            if not (isinstance(item, ast.Name) and item.id == name and isinstance(item.ctx, ast.Store)):
+                continue
+            parent = parents.get(item)
+            if isinstance(parent, ast.Assign) and item in parent.targets:
+                values.append(parent.value)
+            elif isinstance(parent, ast.AnnAssign) and parent.value is not None:
+                values.append(parent.value)
+            elif not isinstance(parent, ast.AugAssign):  # `command += [...]` keeps the command it extends
+                refuse(call, f'a command bound otherwise than by an assignment ({name})')
+        if not values:
+            refuse(call, f'a command {scope.name} never assigns ({name})')
+        return values
+
+    def lists(node, scope, call, seen=frozenset()):
+        """The list displays a command expression evaluates to (``seen``: the names and returns being read, so a
+        `command = command + [...]` extends what the name's other assignments spell out instead of recursing)."""
+        if isinstance(node, ast.List):
+            return [node]
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):  # [...] + [...]: the head decides
+            return lists(node.left, scope, call, seen)
+        if isinstance(node, ast.Name) and scope is not None:
+            key = (scope.name, node.id)
+            if key in seen:
+                return []
+            return [item for value in assigned(node.id, scope, call)
+                    for item in lists(value, scope, call, seen | {key})]
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in functions:
+            fn = functions[node.func.id]
+            if (fn.name, None) in seen:
+                return []
+            values = [item.value for item in ast.walk(fn) if isinstance(item, ast.Return) and item.value is not None]
+            if not values:
+                refuse(call, f'{fn.name} returns no command')
+            return [item for value in values for item in lists(value, fn, call, seen | {(fn.name, None)})]
+        refuse(call, 'a command that is not a list the installer spells out')
+
+    def command(display, call):
+        """What one command list runs, recorded."""
+        head = display.elts[0] if display.elts else None
+        if not (isinstance(head, ast.Constant) and isinstance(head.value, str)):
+            refuse(call, 'a command whose entrypoint role is not spelled out')
+        if head.value != 'manage':
+            if head.value not in ENTRYPOINT_ROLES:
+                refuse(call, f'an entrypoint role the pin does not know ({head.value})')
+            found.setdefault(ENTRYPOINT_ROLES[head.value], 'oneshot')
+            return
+        name = display.elts[1] if len(display.elts) > 1 else None
+        if not (isinstance(name, ast.Constant) and isinstance(name.value, str)):
+            refuse(call, 'a management command that is not spelled out')
+        if name.value != 'shell':
+            found.setdefault(('command', name.value), 'manage')
+            return
+        body = display.elts[3] if len(display.elts) > 3 else None
+        inside = owner.get(display)
+        if inside is not None and inside.name == 'app_script' and isinstance(body, ast.Name):
+            return  # app_script's own `manage shell -c <source>`: the wrapper's plumbing
+        if body is None or any(isinstance(item, ast.Starred) for item in display.elts[:4]):
+            refuse(call, 'a shell script that is not spelled out')
+        found.setdefault(('script', script(body, call)), 'manage shell -c')
 
     for node in ast.walk(tree):
-        if isinstance(node, ast.Call) and _dotted(node.func) == 'app_script' and len(node.args) >= 3:
-            name = script_name(node.args[2])
-            if name:
-                found[('script', name)] = 'app_script'
-        elif isinstance(node, ast.List) and len(node.elts) >= 2 and all(
-                isinstance(item, ast.Constant) and isinstance(item.value, str) for item in node.elts[:2]) \
+        if isinstance(node, ast.Name) and node.id in DOORS and isinstance(node.ctx, ast.Load):
+            parent = parents.get(node)
+            if not (isinstance(parent, ast.Call) and parent.func is node):
+                refuse(node, f'{node.id} named but not called (an alias or a partial runs what is never read)')
+        if isinstance(node, ast.Call):
+            door = node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, 'id', '')
+            if door == 'app_script':
+                found.setdefault(('script', script(argument(node, 2, 'body'), node)), 'app_script')
+            elif door == 'oneshot':
+                displays = lists(argument(node, 1, 'command'), owner.get(node), node)
+                if not displays:
+                    refuse(node, 'a command the installer never spells out')
+                for display in displays:
+                    command(display, node)
+        elif isinstance(node, ast.List) and node.elts and isinstance(node.elts[0], ast.Constant) \
                 and node.elts[0].value == 'manage':
-            command = node.elts[1].value
-            if command == 'shell':
-                name = script_name(node.elts[3]) if len(node.elts) >= 4 else None
-                if name:
-                    found[('script', name)] = 'manage shell -c'
-            else:
-                found[('command', command)] = 'manage'
+            command(node, node)
     return found
 
 
@@ -521,6 +638,8 @@ FACETS = (
     ('RECOMPUTE_STATES', lambda item: item.key == ('script', 'RECOMPUTE_STATES')),
     ('CLOSE_STAGES', lambda item: item.key == ('script', 'CLOSE_STAGES')),
     ('UNDO_HAZARDS', lambda item: item.key == ('script', 'UNDO_HAZARDS_READ')),
+    ('the in-image scripts beside a standing member answer',
+     lambda item: item.key == ('script', 'UNDO_HAZARDS_READ') and item.detail.get('standing answers', 0) > 0),
 )
 
 
@@ -539,7 +658,7 @@ def legacy_chain():
 class GuardCase(EventsCase):
     """EventsCase (tests/test_pipeline_assess_events.py: Gemini replayed, Corti faked, Astra and Fable scripted) whose
     Corti answers every document the world uploads: the first group whose quotes all appear in its request."""
-    corti_groups = (TWO_CODES, DENIED_CODES, MODIFIER_CODES, PRIMARY_45378, SECOND_45385)
+    corti_groups = (TWO_CODES, DENIED_CODES, MODIFIER_CODES, PRIMARY_45378, SECOND_45385, PAIR_CODES)
     participant_codes = (('45378', 'The colonoscope was advanced to the cecum'),)
 
     def setUp(self):
@@ -684,6 +803,7 @@ class World:
         self.stale_stage()
         self.addendum()
         self.interpreter_hold()
+        self.standing_answers()
         self.sign_out()
         self.in_image()
         return self
@@ -741,7 +861,7 @@ class World:
     def participants_and_second_review(self):
         """E2: a colonoscopy whose polyp removal no proposal covers, read with Astra and Fable configured (assess #1,
         the peer requests, assess #2); the bounded second review offered, asked, run and followed up."""
-        with override_settings(ASTRA_MODE='replay', FABLE_MODE='replay'):
+        with participants():
             pk = self.upload('E2', tagged(one_colonoscopy, 'E2'))
             self.drain('E2 participants')
             payload = self.reads('E2', 'offer')
@@ -856,6 +976,22 @@ class World:
         self.get('/ops/api/session', client=self.operator, tag='released')
         self.get('/ops/api/encounters', client=self.operator, tag='every encounter')
 
+    def standing_answers(self):
+        """E5 and E8: a member's answer to a question each still asks - 'cannot confirm' on E5's, 'not documented' on
+        E8's - with the recompute it queues, left standing: the in-image scripts then meet new-path encounters holding
+        a member answer (FINAL 10.4(1); the review of S12, finding 4: E1's, the world's only other one, is withdrawn
+        before they run)."""
+        for name, value in (('E5', 'cannot_confirm'), ('E8', 'not_documented')):
+            pk = self.ids[name]
+            rows = [item for item in self.detail(name, tag='before a standing answer')['details_needed']
+                    if value in item['allow']]
+            self.case.assertTrue(rows, f'{name} asks nothing a member can answer {value!r}')
+            self.post(f'/api/encounters/{pk}/details',
+                      {'answers': [{'id': rows[0]['id'], 'fact': rows[0]['fact'], 'value': value}]},
+                      tag=f'{name} standing answer')
+            self.drain(f'{name} standing answer')
+            self.reads(name, 'standing answer')
+
     def sign_out(self):
         """A sign-in through the form and a sign-out (their own client)."""
         user = f.user('s12-sign-in')
@@ -865,16 +1001,36 @@ class World:
                   expect=(302,))
         self.post('/logout/', client=client, expect=(302,))
 
-    def in_image(self, *, reassess='E1'):
+    @staticmethod
+    def standing() -> dict:
+        """{encounter id: [when each was given]} of the members' answers that stand on an encounter's current revision -
+        read from the rows, never through a reader (what the in-image scripts must name)."""
+        out = {}
+        for pk, revision, current, when in models.MemberAnswer.objects.filter(revocation__isnull=True).values_list(
+                'encounter_id', 'revision_id', 'encounter__current_revision_id', 'answered_at'):
+            if revision == current:
+                out.setdefault(str(pk), []).append(when)
+        return out
+
+    def in_image(self, *, reassess='E1', answered=('E5', 'E8')):
         """Every in-image installer script and command the matrix drives (IN_IMAGE_EXEMPT: the others), each as the
-        installer runs it; CLOSE_STAGES last, since it closes what is open."""
+        installer runs it; CLOSE_STAGES last, since it closes what is open. ``answered``: the encounters whose member's
+        answer stands while they run (FINAL 10.4(1): each script runs on encounters holding 'a member answer'), which
+        UNDO_HAZARDS names - exactly the standing answers - and CLOSE_STAGES' written_since names when given since the
+        world began."""
         install = installer()
         every = [str(pk) for pk in models.Encounter.objects.order_by('created_at').values_list('pk', flat=True)]
+        standing = self.standing()
+        for name in answered:
+            self.case.assertIn(self.ids[name], standing, f'{name} holds no standing answer when the scripts run')
         # each script read every encounter row (none answers about nothing)
         self.case.assertEqual(self.matrix.script('RECOMPUTE_STATES', {})['encounters'], len(every))
         self.case.assertEqual(self.matrix.script('RECOMPUTE_STATES', {'encounters': every}, tag='named')['encounters'],
                               len(every))
-        self.case.assertIsInstance(self.matrix.script('UNDO_HAZARDS_READ', {})['hazards'], dict)
+        hazards = self.matrix.script('UNDO_HAZARDS_READ', {})['hazards']
+        self.matrix.observations[-1].detail['standing answers'] = len(standing)
+        self.case.assertEqual(sorted(pk for pk, reasons in hazards.items() if 'member_answer' in reasons),
+                              sorted(standing), hazards)
         self.matrix.script('UNRUNNABLE_STAGES', {})
         made = self.matrix.script('INTERPRETATION_MADE', {})['interpretation']
         derived = {str(pk) for pk in models.EncounterContext.objects.filter(event_inventory__isnull=False)
@@ -902,6 +1058,11 @@ class World:
                                                      'note': 'Closed by the synthetic undo.',
                                                      'kinds': list(install.COMMON_STAGE_KINDS)})
         self.case.assertGreaterEqual(closed['closed'], 1)  # the stage left queued above, at least
+        # written_since's member-answer arm on the answers given since the world began (its window), none before
+        written = sorted(pk for pk, reasons in (closed.get('written_since') or {}).items()
+                         if 'member_answer' in reasons)
+        self.case.assertEqual(written, sorted(pk for pk, times in self.standing().items()
+                                              if max(times) >= self.started), closed.get('written_since'))
 
 
 def sending_with_an_answer(job, body: bytes, user):
@@ -933,10 +1094,18 @@ def in_process_children():
 
 class LegacyWorld:
     """Encounters the legacy reader read, made through the test-only legacy chain (``legacy_chain``): each document
-    uploaded through POST /api/encounters and read by the legacy stages, then a member's acts on the legacy records - an
-    approval and a rejection, a member's answer, a reinstatement and an approval with a modifier where the legacy
-    reading offers them. Built through a World over ``matrix`` (an unobserved one by default), with the chain on."""
-    SCENARIOS = (('L1', two_procedures), ('L2', denied_removal), ('L3', one_colonoscopy), ('L4', two_lesions))
+    uploaded through POST /api/encounters and read by the legacy stages - L5 with Astra and Fable configured - then a
+    member's acts on the legacy records, the states FINAL 10.4(1) names, each one asserted offered by the legacy reading
+    and made (``check``; never skipped where a reading does not offer it): on L1 an approval and a rejection, on L2 the
+    reinstatement of its excluded code, on L3 a member's answer that stands, on L4 an answer given and withdrawn, on L6
+    an approval carrying the reviewer's modifier, and on L5 the second review its reading offers, asked and run. Built
+    through a World over ``matrix`` (an unobserved one by default), with the chain on."""
+    SCENARIOS = (('L1', two_procedures), ('L2', denied_removal), ('L3', one_colonoscopy), ('L4', two_lesions),
+                 ('L5', one_colonoscopy), ('L6', legacy_pair))
+    PARTICIPANTS = ('L5',)  # read with Astra and Fable configured: their readings, peer reviews and a second review
+    ANSWERED = ('L3',)  # a member's answer that stands when the reads run
+    WITHDRAWN = ('L4',)  # a member's answer given and withdrawn
+    MODIFIER = 'L6'  # an approval carrying the reviewer's chosen modifier
 
     def __init__(self, case, matrix=None, *, operator=None):
         self.world = World(case, matrix if matrix is not None else Matrix(case), operator=operator)
@@ -945,13 +1114,40 @@ class LegacyWorld:
         world = self.world
         with legacy_chain():
             for name, scenario in self.SCENARIOS:
-                world.upload(name, tagged(scenario, name))
-                world.drain(name)
+                with participants() if name in self.PARTICIPANTS else contextlib.nullcontext():
+                    world.upload(name, tagged(scenario, name))
+                    world.drain(name)
                 assessment = world.encounter(name).current_assessment
                 world.case.assertIsNotNone(assessment, name)
                 world.case.assertFalse(interpretation.is_new_assessment(assessment), name)
             self.act(world)
+        self.check(world)
         return world
+
+    def check(self, world):
+        """That every act on the legacy records happened (the review of S12, finding 1: an act the reading did not
+        offer was skipped in silence): a member's answer that stands and one withdrawn, an approval, a rejection, a
+        reinstatement and an approval with the reviewer's modifier, the participants' readings and peer reviews and a
+        second review - and every current assessment still the legacy reader's."""
+        case, ids = world.case, {name: world.ids.get(name) for name, _ in self.SCENARIOS}
+        answers = models.MemberAnswer.objects.filter(encounter_id__in=[pk for pk in ids.values() if pk])
+        case.assertEqual(sorted(str(pk) for pk in answers.filter(revocation__isnull=True)
+                                .values_list('encounter_id', flat=True)),
+                         sorted(ids[name] for name in self.ANSWERED), 'the standing answers on the legacy records')
+        case.assertEqual(sorted(str(pk) for pk in answers.filter(revocation__isnull=False)
+                                .values_list('encounter_id', flat=True)),
+                         sorted(ids[name] for name in self.WITHDRAWN), 'the withdrawn answers on the legacy records')
+        decisions = models.Decision.objects.filter(encounter_id__in=[pk for pk in ids.values() if pk])
+        case.assertLessEqual({'approve', 'reject', 'reinstate'}, set(decisions.values_list('action', flat=True)))
+        case.assertTrue([item for item in decisions.filter(action='approve', encounter_id=ids[self.MODIFIER])
+                         if item.modifiers], 'no approval with a modifier on the legacy records')
+        purposes = set(Run.objects.filter(encounter_id__in=[ids[name] for name in self.PARTICIPANTS],
+                                          state=Run.SUCCEEDED).values_list('purpose', flat=True))
+        case.assertLessEqual({Run.PRIMARY, Run.INDEPENDENT, Run.PEER_REVIEW, Run.SECOND_REVIEW}, purposes)
+        for name, pk in ids.items():
+            assessment = models.Encounter.objects.get(pk=pk).current_assessment
+            case.assertIsNotNone(assessment, name)
+            case.assertFalse(interpretation.is_new_assessment(assessment), name)
 
     @staticmethod
     def allowed(world, name, action):
@@ -960,26 +1156,49 @@ class LegacyWorld:
         return [row for row in payload['codes'] if action in row['allowed_actions']], payload
 
     def act(self, world):
-        approvable, _ = self.allowed(world, 'L1', 'approve')
-        world.case.assertTrue(approvable, 'the legacy reading of L1 offers no approval')
-        world.decide('L1', approvable[0]['code'], 'approve', tag='legacy')
-        rejectable = [row for row in self.allowed(world, 'L1', 'reject')[0] if row['code'] != approvable[0]['code']]
-        if rejectable:
-            world.decide('L1', rejectable[0]['code'], 'reject', tag='legacy')
-        rows = [item for item in world.detail('L1', tag='legacy answer')['details_needed']
+        case = world.case
+        [approvable] = self.allowed(world, 'L1', 'approve')[0]
+        world.decide('L1', approvable['code'], 'approve', tag='legacy')
+        rejectable = [row for row in self.allowed(world, 'L1', 'reject')[0] if row['code'] != approvable['code']]
+        case.assertTrue(rejectable, 'the legacy reading of L1 offers no rejection')
+        world.decide('L1', rejectable[0]['code'], 'reject', tag='legacy')
+        reinstatable = self.allowed(world, 'L2', 'reinstate')[0]
+        case.assertTrue(reinstatable, 'the legacy reading of L2 offers no reinstatement')
+        world.decide('L2', reinstatable[0]['code'], 'reinstate', tag='legacy')
+        for name in self.ANSWERED + self.WITHDRAWN:
+            answer_id = self.answer(world, name)
+            if name in self.WITHDRAWN:
+                world.post(f'/api/encounters/{world.ids[name]}/details/{answer_id}/revoke', tag=f'{name} legacy')
+                world.drain(f'{name} legacy answer withdrawn')
+        offered = [row for row in self.allowed(world, self.MODIFIER, 'approve')[0] if row.get('modifier_review')]
+        case.assertTrue(offered, f'the legacy reading of {self.MODIFIER} offers no approval with a modifier')
+        world.decide(self.MODIFIER, offered[0]['code'], 'approve', tag='legacy modifier',
+                     modifiers=[offered[0]['modifier_review']['options'][0]])
+        with participants():
+            for name in self.PARTICIPANTS:
+                payload = world.detail(name, tag='legacy second-review offer')
+                case.assertTrue(payload['recheck']['available'], (name, payload['recheck']))
+                world.post(f'/api/encounters/{world.ids[name]}/second-review', tag=f'{name} legacy')
+                world.drain(f'{name} legacy second review')
+
+    @staticmethod
+    def answer(world, name) -> str:
+        """A member's 'not documented' to the first question ``name``'s legacy reading asks that takes one, with the
+        recompute it queues run; the answer's id."""
+        rows = [item for item in world.detail(name, tag='legacy answer')['details_needed']
                 if 'not_documented' in item['allow']]
-        if rows:
-            world.post(f'/api/encounters/{world.ids["L1"]}/details',
-                       {'answers': [{'id': rows[0]['id'], 'fact': rows[0]['fact'], 'value': 'not_documented'}]},
-                       tag='L1 legacy answer', expect=(200, 201))
-            world.drain('L1 legacy answer')
-        for row in self.allowed(world, 'L2', 'reinstate')[0][:1]:
-            world.decide('L2', row['code'], 'reinstate', tag='legacy')
-        payload = world.detail('L4', tag='legacy modifier')
-        for row in [item for item in payload['codes'] if item.get('modifier_review')
-                    and 'approve' in item['allowed_actions']][:1]:
-            world.decide('L4', row['code'], 'approve', tag='legacy modifier',
-                         modifiers=[row['modifier_review']['options'][0]])
+        world.case.assertTrue(rows, f'the legacy reading of {name} asks nothing a member can answer')
+        saved = world.post(f'/api/encounters/{world.ids[name]}/details',
+                           {'answers': [{'id': rows[0]['id'], 'fact': rows[0]['fact'], 'value': 'not_documented'}]},
+                           tag=f'{name} legacy answer')
+        world.drain(f'{name} legacy answer')
+        [answer_id] = saved.json()['answer_ids']
+        return answer_id
+
+
+def participants():
+    """Astra and Fable configured (their scripted replay adapters, GuardCase's participant_codes)."""
+    return override_settings(ASTRA_MODE='replay', FABLE_MODE='replay')
 
 
 # --- a TransactionTestCase with EventsCase's fixtures (the byte-identity test reads committed rows) -------------------
@@ -1007,8 +1226,16 @@ class Pipeline:
 # --- the c2e53f8e code, and the reads both trees make (FINAL 10.4(2), 14.3) ------------------------------------------
 
 BASELINE = 'c2e53f8e7d33732d5badd4ce9b681f274eb5c471'  # the rollback image cpt-studio:c2e53f8e7d33 (DECISIONS D15)
-# sha256 of files of the c2e53f8e app, so a tree given by CPT_STUDIO_BASELINE_TREE (or archived from git) is known to be
-# that code before anything is compared with it
+# The c2e53f8e app code, whole: the sha256 of its MANIFEST (``manifest``: every file under cpt-studio/studio, cptstudio
+# and manage.py, as `git archive` of the commit extracts them, by path and sha256) and its file count, computed once
+# from the archive. A tree is that code only when every file it holds there is that code's and nothing else is (the
+# review of S12, finding 6: seven pinned files let a tree with a later serializers.py - or a file added, removed or
+# linked - pass as that code).
+BASELINE_ROOTS = ('studio', 'cptstudio', 'manage.py')
+BASELINE_MANIFEST = 'affd84a34c84e8affd7d945eb3965fb7a32e3db2f7135bd5a9066937271a884a'
+BASELINE_FILES = 115
+# sha256 of the files of the c2e53f8e app the reads lean on most: no longer what decides (BASELINE_MANIFEST is), they
+# say WHICH of them differ when a tree is refused
 BASELINE_PINS = {
     'studio/models.py': '828129928b9465dc4e024d5f56b0d29429cfaa57dfdec5e2b2fc0d2f095dd5e1',
     'studio/review.py': '227ef6c26e08c5bc1ab7a3ecd2bb8e337037a6247295867a6d2d6b67ccf78014',
@@ -1030,10 +1257,51 @@ def _pinned(tree: Path) -> list:
     return wrong
 
 
+def manifest(tree: Path):
+    """(the sha256 of ``tree``'s manifest, its file count, what it holds that is no file): every regular file under
+    BASELINE_ROOTS as one 'sha256  path' line, sorted by path. A link (or anything else that is no file or folder) is
+    never a file of the archive: it is listed apart, never followed, so a tree holding one is refused."""
+    files, odd = [], []
+    for root in BASELINE_ROOTS:
+        top = tree / root
+        if top.is_symlink() or not top.exists():
+            odd += [root] if top.is_symlink() else []
+            continue
+        if top.is_file():
+            files.append((root, hashlib.sha256(top.read_bytes()).hexdigest()))
+            continue
+        for folder, folders, names in os.walk(top):  # never into a linked folder: os.walk does not follow links
+            for name in folders + names:
+                path = Path(folder) / name
+                relative = path.relative_to(tree).as_posix()
+                if path.is_symlink() or not (path.is_dir() or path.is_file()):
+                    odd.append(relative)
+                elif path.is_file():
+                    files.append((relative, hashlib.sha256(path.read_bytes()).hexdigest()))
+    text = ''.join(f'{digest}  {name}\n' for name, digest in sorted(files))
+    return hashlib.sha256(text.encode()).hexdigest(), len(files), sorted(odd)
+
+
+def _not_baseline(tree: Path) -> str:
+    """'' when ``tree`` is the c2e53f8e code, file for file; else why it is not."""
+    digest, count, odd = manifest(tree)
+    why = []
+    if odd:
+        why.append(f'it holds {len(odd)} link(s) or other non-file(s), {odd[:3]}')
+    if (digest, count) != (BASELINE_MANIFEST, BASELINE_FILES):
+        why.append(f'its {count} files hash to {digest[:16]}, not the c2e53f8e code\'s {BASELINE_FILES} '
+                   f'({BASELINE_MANIFEST[:16]})')
+    wrong = _pinned(tree) if why else []
+    if wrong:
+        why.append(f'of the pinned files, these differ: {wrong}')
+    return '; '.join(why)
+
+
 def baseline_tree(scratch: Path):
     """(the c2e53f8e app code as a directory, where it came from), or (None, why not): ``git archive`` of the commit
-    when this repository's history holds it, else the tree CPT_STUDIO_BASELINE_TREE names - either one checked against
-    BASELINE_PINS. A CI clone may hold no history: then nothing is compared, and the caller says so."""
+    when this repository's history holds it, else the tree CPT_STUDIO_BASELINE_TREE names - either one checked whole
+    against BASELINE_MANIFEST (every file, nothing missing, nothing added, no link). A CI clone may hold no history:
+    then nothing is compared, and the caller says so."""
     repo = APP.parent
     try:
         found = subprocess.run(['git', '-C', str(repo), 'rev-parse', '--verify', '--quiet', f'{BASELINE}^{{commit}}'],
@@ -1047,15 +1315,15 @@ def baseline_tree(scratch: Path):
             with tarfile.open(fileobj=io.BytesIO(archive.stdout)) as tar:
                 tar.extractall(scratch, filter='data')
             tree = scratch / 'cpt-studio'
-            wrong = _pinned(tree)
-            if wrong:
-                return None, f'the archive differs from its pins: {wrong}'
+            problem = _not_baseline(tree)
+            if problem:
+                return None, f'the archive of {BASELINE} is not the c2e53f8e code pinned here: {problem}'
             return tree, f'git archive {BASELINE}'
     named = os.environ.get('CPT_STUDIO_BASELINE_TREE', '')
     if named:
-        wrong = _pinned(Path(named))
-        return (Path(named), f'CPT_STUDIO_BASELINE_TREE={named}') if not wrong else \
-            (None, f'CPT_STUDIO_BASELINE_TREE is not the c2e53f8e code: {wrong}')
+        problem = _not_baseline(Path(named))
+        return (Path(named), f'CPT_STUDIO_BASELINE_TREE={named}') if not problem else \
+            (None, f'CPT_STUDIO_BASELINE_TREE is not the c2e53f8e code: {problem}')
     return None, (f'this repository holds no commit {BASELINE} and CPT_STUDIO_BASELINE_TREE names no tree (a shallow '
                   'clone): the reads are not compared with the c2e53f8e code here')
 

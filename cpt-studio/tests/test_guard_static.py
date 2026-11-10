@@ -3,9 +3,11 @@ design/ADJUDICATION.md R-5 amends them; DECISIONS D17). Read from the source, ne
 (tests/test_guard_matrix_new_path.py) cannot see is a reference no world it builds reaches.
 
 The rules, each judged over a scoped reading of every reference (``references``: imports, and loads through a name an
-import bound in that scope - a parameter or a local of the same name shadows it, as Python's own scoping does), and each
-only about the modules the sentinel denies (studio.gi but its reference tables, studio.validation's engine, reconcile,
-review_view and rationale, studio.candidates, and studio.validation.checks by function):
+import bound in that scope - a parameter or a local of the same name shadows it, as Python's own scoping does: a
+comprehension's targets are its own, a function or comprehension nested in a class reads past the class's names, and a
+class body's own binding is never trusted to shadow, the safe way round), and each only about the modules the sentinel
+denies (studio.gi but its reference tables, studio.validation's engine, reconcile, review_view and rationale,
+studio.candidates, and studio.validation.checks by function):
 - THE NEW PACKAGE (studio/interpretation/*): of studio.gi only the reference tables gi.profiles and gi.catalogue - never
   gi.context: the re-homed predicates are studio.context_facts' (S04), and the new code imports them from there; of
   studio.validation.checks only FINAL 7.1's names (R-5: an allowlist, without incomplete_check, R-4); of the other
@@ -22,8 +24,10 @@ review_view and rationale, studio.candidates, and studio.validation.checks by fu
   and only the pinned call sites (LEGACY_CALL_SITES, each on a branch this image refuses: jobs._refuse_legacy_context,
   jobs._legacy_reading_allowed) name an archived stage or a legacy branch (JOBS_LEGACY_BRANCHES). Importing the modules
   at load is not calling them (D17).
-- THE EDITED CONSUMERS (R-5): of studio.validation.checks only FINAL 7.1's names, the helpers the allowlist reaches and
-  its constants that are no pattern - or a pinned legacy branch (CONSUMER_LEGACY_CHECKS).
+- THE EDITED CONSUMERS (R-5): of studio.validation.checks only FINAL 7.1's names - or a pinned legacy branch
+  (CONSUMER_LEGACY_CHECKS), or a name pinned to its consumer with why it is no reading (CONSUMER_CHECKS_NAMES: review's
+  modifier options, reports' fact labels); no cue constant of any denied module (CONSUMER_CUE_NAMES pins the one wording
+  string the cue scan misreads by its name); no import by a computed name but the two CONSUMER_DYNAMIC pins.
 - THE DENY SET'S SIZE is pinned per module (FINAL 10.4(5)), named here again.
 Every pin is used (a stale one fails), and every rule refuses a planted control, so none of them passes by reading
 nothing.
@@ -102,6 +106,29 @@ CONSUMER_LEGACY_CHECKS = {
     ('serializers', 'corti_unlisted_words', 'unlisted_codes'): "a legacy assessment's unlisted-code sentence; a "
                                                                'new-path one is worded by interpretation.wording (S11)',
 }
+# R-5: of checks.py the edited consumers name FINAL 7.1's names only - and these, each pinned to its consumer with why
+# it is no reading (the review of S12, finding 2: the rule had let through every helper the allowlist reaches and every
+# constant that is no pattern - the legacy reader's word lists among them, string sets no runtime count sees):
+# (module, name) -> why
+CONSUMER_CHECKS_NAMES = {
+    ('review', 'DISTINCT_LESION_OPTIONS'): "the two modifiers ('59', 'XS') a reviewer's chosen modifier is checked "
+                                           'against (review._chosen_modifiers): a constant pair of modifier codes',
+    ('reports', 'fact_label'): "a fact's display label in the reports (checks.FACT_LABELS by the fact's name): "
+                               'wording, and a helper FINAL 7.1 reaches, so never denied',
+}
+# a name the cue scan (FINAL 10.1) reads as a cue constant, which an edited consumer names and which is none - pinned
+# with why: (module, target) -> why
+CONSUMER_CUE_NAMES = {
+    ('reports', 'studio.validation.engine.LISTED_NOT_PROPOSED'): "a wording string (the reports' clause for a code a "
+                                                                 'reader listed with no quote), never a pattern: only '
+                                                                 'its name begins LISTED_',
+}
+# an edited consumer's import by a name it computes, pinned with what it imports - none a module the sentinel denies
+# (asserted): (module, scope) -> why
+CONSUMER_DYNAMIC = {
+    ('review', 'estimated_cost'): "the pricing module, review.PRICING_MODULE ('studio.participants.pricing')",
+    ('operator', '_as_an_unknown_url'): "Django's session engine (settings.SESSION_ENGINE)",
+}
 # FINAL 10.4(5): "the deny set's size is pinned per module" - named here again, so shrinking it takes an edit of both
 SIZES = {'studio/gi/__init__.py': 0, 'studio/gi/clauses.py': 31, 'studio/gi/context.py': 219, 'studio/gi/cues.py': 14,
          'studio/gi/detect.py': 766, 'studio/gi/purpose.py': 5, 'studio/gi/sections.py': 71,
@@ -115,10 +142,31 @@ Ref = namedtuple('Ref', 'scope target kind line')
 
 # --- the scoped reading ----------------------------------------------------------------------------------------------
 
+COMPREHENSIONS = (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
+
+
+def _walrus(node) -> set:
+    """The names the assignment expressions inside a comprehension bind: the scope around it binds them (PEP 572),
+    through nested comprehensions, never through a nested function or lambda."""
+    names = set()
+
+    def walk(item):
+        if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
+            return
+        if isinstance(item, ast.NamedExpr) and isinstance(item.target, ast.Name):
+            names.add(item.target.id)
+        for child in ast.iter_child_nodes(item):
+            walk(child)
+
+    walk(node)
+    return names
+
+
 def _bound(node) -> set:
     """The names a function, lambda or class body binds of its own (parameters, assignments, loop, with and walrus
-    targets, handlers, nested definitions, imports), not descending into nested scopes; global and nonlocal names are
-    the enclosing scopes'."""
+    targets, handlers, nested definitions, imports), not descending into nested scopes - a comprehension is one: its
+    targets are its own (the review of S12, finding 5), and only a walrus inside it binds here; global and nonlocal
+    names are the enclosing scopes'."""
     names, outer = set(), set()
     args = getattr(node, 'args', None)
     if isinstance(args, ast.arguments):
@@ -132,6 +180,9 @@ def _bound(node) -> set:
             names.add(item.name)
             return
         if isinstance(item, ast.Lambda):
+            return
+        if isinstance(item, COMPREHENSIONS):
+            names.update(_walrus(item))
             return
         if isinstance(item, (ast.Global, ast.Nonlocal)):
             outer.update(item.names)
@@ -152,7 +203,8 @@ def _bound(node) -> set:
 class _Finder(ast.NodeVisitor):
     def __init__(self, package: str):
         self.package = package
-        self.scopes = [({}, set())]  # per scope: (import aliases: name -> target, names it binds otherwise)
+        # per scope: (import aliases: name -> target, names it binds otherwise, its kind)
+        self.scopes = [({}, set(), 'module')]
         self.where = []
         self.found = []
 
@@ -161,15 +213,21 @@ class _Finder(ast.NodeVisitor):
             self.found.append(Ref('.'.join(self.where) or '<module>', target, kind, getattr(node, 'lineno', 0)))
 
     def _lookup(self, name):
-        for aliases, bound in reversed(self.scopes):
+        """What ``name`` names here, by Python's rules: the innermost scope, then the enclosing ones - but never a class
+        body's names from a scope nested in it (a method or a comprehension reads past its class to the module). A class
+        body's own binding is not trusted to shadow at all, the safe way round: its statements read a name before its
+        assignment from the module."""
+        for depth, (aliases, bound, kind) in enumerate(reversed(self.scopes)):
+            if kind == 'class' and depth:
+                continue
             if name in aliases:
                 return aliases[name]
-            if name in bound:
+            if name in bound and kind != 'class':
                 return None
         return None
 
     def _alias(self, name, target):
-        aliases, bound = self.scopes[-1]
+        aliases, bound, _ = self.scopes[-1]
         aliases[name] = target
         bound.discard(name)
 
@@ -196,7 +254,7 @@ class _Finder(ast.NodeVisitor):
         if isinstance(args, ast.arguments):
             for default in (*args.defaults, *[item for item in args.kw_defaults if item is not None]):
                 self.visit(default)
-        self.scopes.append(({}, _bound(node)))
+        self.scopes.append(({}, _bound(node), 'class' if isinstance(node, ast.ClassDef) else 'function'))
         self.where.append(name)
         for statement in (node.body if isinstance(node.body, list) else [node.body]):
             self.visit(statement)
@@ -215,6 +273,24 @@ class _Finder(ast.NodeVisitor):
 
     def visit_Lambda(self, node):
         self._scope(node, '<lambda>')
+
+    def _comprehension(self, node):
+        """A comprehension's own scope (its targets bound there; the review of S12, finding 5), its first iterable read
+        in the scope around it, as Python reads it. Its references keep the enclosing function's name."""
+        self.visit(node.generators[0].iter)
+        targets = {item.id for generator in node.generators for item in ast.walk(generator.target)
+                   if isinstance(item, ast.Name) and isinstance(item.ctx, ast.Store)}
+        self.scopes.append(({}, targets, 'comprehension'))
+        for number, generator in enumerate(node.generators):
+            if number:
+                self.visit(generator.iter)
+            for condition in generator.ifs:
+                self.visit(condition)
+        for element in ((node.key, node.value) if isinstance(node, ast.DictComp) else (node.elt,)):
+            self.visit(element)
+        self.scopes.pop()
+
+    visit_ListComp = visit_SetComp = visit_DictComp = visit_GeneratorExp = _comprehension
 
     def visit_Attribute(self, node):
         chain, base = [], node
@@ -382,20 +458,37 @@ def jobs_violations(source: str, used=None) -> list:
 
 
 def consumer_violations(module: str, refs, used=None) -> list:
-    """R-5 in an edited consumer: what its checks.py references break. ``used``: as above."""
+    """R-5 in an edited consumer: of checks.py only FINAL 7.1's names, a pinned legacy branch (CONSUMER_LEGACY_CHECKS)
+    or a pinned name of its own (CONSUMER_CHECKS_NAMES); no cue constant of any denied module (the cue scan, as for the
+    new package; CONSUMER_CUE_NAMES pins a name it misreads); and no import by a computed name, which no reading of the
+    source can judge (CONSUMER_DYNAMIC pins the two it meets). ``used``: as above."""
     used = set() if used is None else used
-    allowed = set(sentinel.CHECKS_ALLOWLIST) | set(sentinel.CHECKS_ALLOWED_HELPERS)
+    final = set(sentinel.CHECKS_ALLOWLIST) | set(sentinel.CHECKS_ALLOWLIST_CONSTANTS)
     out = []
     for ref in refs:
+        where = f'{module}.{ref.scope}:{ref.line}'
+        if ref.kind == 'dynamic':
+            if (module, ref.scope) in CONSUMER_DYNAMIC:
+                used.add((module, ref.scope))
+            else:
+                out.append(f'{where} imports by a name it computes ({ref.target})')
+            continue
+        if cue(ref.target):
+            if (module, ref.target) in CONSUMER_CUE_NAMES:
+                used.add((module, ref.target))
+            else:
+                out.append(f'{where} names the cue constant {ref.target}')
+            continue
         if not _under(ref.target, CHECKS) or ref.target == CHECKS:
             continue
         name = _name(ref.target, CHECKS)
-        value = getattr(checks, name, None)
-        pin = (module, ref.scope.split('.')[0], name)
-        if pin in CONSUMER_LEGACY_CHECKS:
-            used.add(pin)
-        elif not (name in allowed or (not callable(value) and not _patterns(value))):
-            out.append(f'{module}.{ref.scope}:{ref.line} names {ref.target}, which R-5 does not allow')
+        branch = (module, ref.scope.split('.')[0], name)
+        if branch in CONSUMER_LEGACY_CHECKS:
+            used.add(branch)
+        elif (module, name) in CONSUMER_CHECKS_NAMES:
+            used.add((module, name))
+        elif name not in final:
+            out.append(f'{where} names {ref.target}, which R-5 does not allow')
     return out
 
 
@@ -497,8 +590,38 @@ class ConsumerTests(SimpleTestCase):
             judged += sum(1 for ref in refs if _under(ref.target, CHECKS))
             found += consumer_violations(stem, refs, used)
         self.assertEqual(found, [])
-        self.assertEqual(used, set(CONSUMER_LEGACY_CHECKS))  # no stale pin
+        self.assertEqual(used, set(CONSUMER_LEGACY_CHECKS) | set(CONSUMER_CHECKS_NAMES) | set(CONSUMER_CUE_NAMES)
+                         | set(CONSUMER_DYNAMIC))  # no stale pin
         self.assertGreater(judged, 3)
+
+    def test_each_pinned_name_is_no_reading(self):
+        status = sentinel.install()
+        self.assertEqual(status['state'], 'ok', status['reason'])
+        denied_codes = sentinel.deny_set()
+        self.assertIn(id(checks.status_check.__code__), denied_codes)  # the control: the deny set is armed
+        for (module, name), why in CONSUMER_CHECKS_NAMES.items():
+            with self.subTest(pin=(module, name)):
+                value = getattr(checks, name)
+                self.assertIn(module, CONSUMERS)
+                self.assertTrue(why.strip())
+                self.assertNotIn(name, sentinel.CHECKS_ALLOWLIST + sentinel.CHECKS_ALLOWLIST_CONSTANTS)
+                self.assertFalse(cue(f'{CHECKS}.{name}'))
+                if callable(value):  # a helper the allowlist reaches through checks.py's own calls: never denied
+                    self.assertIn(name, sentinel.CHECKS_ALLOWED_HELPERS)
+                    self.assertNotIn(id(value.__code__), denied_codes)
+                else:
+                    self.assertFalse(_patterns(value))
+        for (module, target), why in CONSUMER_CUE_NAMES.items():
+            with self.subTest(pin=(module, target)):
+                self.assertIn(module, CONSUMERS)
+                self.assertTrue(why.strip())
+                self.assertIsInstance(_object(target), str)  # a plain string: never a pattern, nor a container of one
+        from django.conf import settings
+
+        computed = (importlib.import_module('studio.review').PRICING_MODULE, settings.SESSION_ENGINE)
+        self.assertEqual(computed[0], 'studio.participants.pricing')
+        self.assertFalse([name for name in computed
+                          if denied(name) or any(_under(name, root) for root in LEGACY_ROOTS)])
 
 
 class DenySetPinTests(SimpleTestCase):
@@ -555,6 +678,43 @@ class PlantedTests(SimpleTestCase):
             self.assertNotIn(allowed, joined)
         self.assertNotIn('planted.g:', joined)  # parameters named checks and reconcile are not the modules
 
+    def test_the_scoping_is_pythons_comprehensions_and_class_bodies_included(self):
+        # the review of S12, finding 5: a comprehension's target is the comprehension's own, never a local of the
+        # function around it; and a function nested in a class does not see the class's names
+        planted = ('from studio.validation import checks\n'
+                   'from studio.gi import detect\n'
+                   'def f(rows, text):\n'
+                   '    labels = [checks for checks in rows]\n'
+                   '    seen = {detect for detect in rows}\n'
+                   '    pairs = {checks: detect for checks, detect in rows}\n'
+                   '    lazy = list(checks for checks in rows)\n'
+                   '    return checks.status_check(text), detect.route(text, None)\n'
+                   'def g(rows, text):\n'
+                   '    return [checks.status_check(text) for checks in rows], [1 for detect in detect.route(text)]\n'
+                   'def h(rows, text):\n'
+                   '    [(checks := row) for row in rows]\n'
+                   '    return checks.status_check(text)\n'
+                   'class A:\n'
+                   '    checks = None\n'
+                   '    def m(self, text):\n'
+                   '        return checks.status_check(text)\n'
+                   '    listed = [checks.cite(text) for text in ()]\n'
+                   '    direct = checks.restated\n')
+        found = new_package_violations('overlay', references(planted, 'studio.interpretation'))
+        expected = ('overlay.f:8 names studio.validation.checks.status_check',
+                    'overlay.f:8 names studio.gi.detect.route', 'overlay.g:10 names studio.gi.detect.route',
+                    'overlay.A.m:17 names studio.validation.checks.status_check',
+                    'overlay.A:18 names studio.validation.checks.cite',
+                    # a class body's own binding is not trusted to shadow (it reads a name before its assignment from
+                    # the module): read as the module's, the safe way round
+                    'overlay.A:19 names studio.validation.checks.restated')
+        for line in expected:
+            with self.subTest(expected=line):
+                self.assertTrue(any(item.startswith(line) for item in found), found)
+        # within its own comprehension the target is the comprehension's, and a walrus there binds the function's name
+        self.assertFalse([item for item in found if item.startswith('overlay.g:10 names studio.validation.checks')])
+        self.assertFalse([item for item in found if item.startswith('overlay.h:')], found)
+
     def test_the_legacy_reader_exception_is_the_legacy_readers_alone(self):
         planted = ('class LegacyReader:\n'
                    '    def views(self):\n'
@@ -592,12 +752,59 @@ class PlantedTests(SimpleTestCase):
                    '    return checks.unlisted_codes(n)\n'
                    'def elsewhere(n):\n'
                    '    return (checks.unlisted_codes(n), checks.status_check(n), checks.code_scope(n),\n'
-                   '            checks.fact_label)\n')
+                   '            checks.NOT_CONNECTED_CHECKS)\n')
         found = consumer_violations('serializers', references(planted, 'studio'))
         self.assertEqual(len(found), 2, found)
         self.assertTrue(all('serializers.elsewhere' in item for item in found))
         self.assertTrue(any('unlisted_codes' in item for item in found))
         self.assertTrue(any('status_check' in item for item in found))
+
+    def test_the_consumer_rule_allows_only_the_final_7_1_names_and_its_pins(self):
+        # the review of S12, finding 2: R-5 lets an edited consumer name FINAL 7.1's checks only - never a word list of
+        # the legacy reader (a string tuple or set, which no runtime count sees), an unpinned helper or constant, or a
+        # cue constant of any denied module
+        planted = ('from .validation import checks\n'
+                   'from .validation.checks import fact_label\n'
+                   'from .validation.engine import LISTED_NOT_PROPOSED\n'
+                   'from .gi.cues import PAGE_NUMBER_LINE\n'
+                   'def code_rows(text):\n'
+                   '    return any(w in text.lower().split() for w in checks._V2_NEG_BEFORE '
+                   '| set(checks._V2_NEG_AFTER))\n'
+                   'def sections(text):\n'
+                   '    return [name for name in checks._V2_UNREAD_SECTIONS if name in text]\n'
+                   'def others(text):\n'
+                   '    return (checks.DISTINCT_LESION_OPTIONS, checks.fact_label(text), checks.code_scope(text),\n'
+                   '            checks.NOT_CONNECTED_CHECKS, LISTED_NOT_PROPOSED, PAGE_NUMBER_LINE.search(text))\n'
+                   'def computed(name):\n'
+                   '    return __import__(name)\n')
+        found = consumer_violations('customer_api', references(planted, 'studio'))
+        expected = ('customer_api.code_rows:6 names studio.validation.checks._V2_NEG_BEFORE',
+                    'customer_api.code_rows:6 names studio.validation.checks._V2_NEG_AFTER',
+                    'customer_api.sections:8 names studio.validation.checks._V2_UNREAD_SECTIONS',
+                    'customer_api.others:10 names studio.validation.checks.DISTINCT_LESION_OPTIONS',
+                    'customer_api.others:10 names studio.validation.checks.fact_label',
+                    'customer_api.<module>:2 names studio.validation.checks.fact_label',
+                    'customer_api.<module>:3 names the cue constant studio.validation.engine.LISTED_NOT_PROPOSED',
+                    'customer_api.others:11 names the cue constant studio.validation.engine.LISTED_NOT_PROPOSED',
+                    'customer_api.<module>:4 names the cue constant studio.gi.cues.PAGE_NUMBER_LINE',
+                    'customer_api.computed:13 imports by a name it computes (name)')
+        for line in expected:
+            with self.subTest(expected=line):
+                self.assertTrue(any(item.startswith(line) for item in found), found)
+        self.assertEqual(len(found), len(expected), found)
+        joined = '\n'.join(found)
+        self.assertNotIn('code_scope', joined)  # FINAL 7.1's
+        self.assertNotIn('NOT_CONNECTED_CHECKS', joined)
+        # the pins are each consumer's own: review's options and reports' labels and wording, nowhere else
+        pinned = ('from .validation.checks import fact_label\n'
+                  'from .validation.engine import LISTED_NOT_PROPOSED\n'
+                  'def _fact_title(fact):\n'
+                  '    return fact_label(fact), LISTED_NOT_PROPOSED\n'
+                  'def _chosen_modifiers(value):\n'
+                  '    from .validation.checks import DISTINCT_LESION_OPTIONS\n'
+                  '    return DISTINCT_LESION_OPTIONS\n')
+        self.assertEqual(len(consumer_violations('reports', references(pinned, 'studio'))), 2)  # the options
+        self.assertEqual(len(consumer_violations('review', references(pinned, 'studio'))), 4)  # labels and wording
 
     def test_the_cue_scan(self):
         for target in ('studio.gi.services.LISTED_DOUBTED_CUE', 'studio.validation.reconcile.FAILED_ATTEMPT',

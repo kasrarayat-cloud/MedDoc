@@ -8,12 +8,15 @@ production sentinel - its CALL-level checks on, as tests run it - counts what ra
 What each class proves:
 - GeneratedTests: the matrix is generated, never hand-listed - from cptstudio/urls.py's patterns, jobs.STAGES' keys and
   the scripts and commands ops/install.py runs in an image of the app - so a pattern, a stage kind or an in-image script
-  added there and not driven is reported missing (a planted one of each is); an exemption names something the installer
-  runs and says why it reads no encounter row.
+  added there and not driven is reported missing (a planted one of each is, in every form the installer can name one:
+  positional or keyword, a list spelled out, a local assigned one, a function returning one, an entrypoint role); a form
+  the generator cannot read raises naming its line, never dropped (fail-closed: a planted one of each); an exemption
+  names something the installer runs and says why it reads no encounter row.
 - NewPathOnlyDatabaseTests (R-6): on a database that holds ONLY new-path encounters, every generated item runs and the
   sentinel counts NOTHING under any label - new_path, other, unscoped, or legacy_record - so neither the list, session
-  and operator-list loops (which label per row) nor the in-image scripts (which run with no scope) run legacy code on a
-  new-path row; FINAL 10.4(1)'s list (FACETS) is met entry by entry, and no write gate tripped.
+  and operator-list loops (which label per row) nor the in-image scripts (which run with no scope, and meet two members'
+  answers left standing: UNDO_HAZARDS names exactly those) run legacy code on a new-path row; FINAL 10.4(1)'s list
+  (FACETS) is met entry by entry, and no write gate tripped.
 - BesideLegacyRecordsTests: the same matrix where the database also holds encounters the legacy reader read (the
   test-only legacy chain): zero new_path executions, and nothing under other or unscoped either, while the legacy
   rows' own reads in the matrix's lists ran legacy code as legacy_record (the archived reader serving the records it
@@ -26,6 +29,7 @@ What each class proves:
 """
 from __future__ import annotations
 
+import re
 from unittest import mock
 
 from django.http import HttpResponse
@@ -36,9 +40,10 @@ from studio import customer_api, jobs, models, review
 from studio.gi import cues, structure
 from studio.interpretation import readers, sentinel
 from studio.validation import reconcile
-from tests.guard_support import (CACHE, CODE, IN_IMAGE_EXEMPT, INSTALL, LABELS, LEGACY, NEW, OTHER, REGEX, UNSCOPED,
-                                 WORKER, GuardCase, Matrix, World, generated, in_image, in_process_children, installer,
-                                 legacy_chain, stage_kinds, tagged, url_routes)
+from tests import guard_support
+from tests.guard_support import (APP, CACHE, CODE, IN_IMAGE_EXEMPT, INSTALL, LABELS, LEGACY, NEW, OTHER, REGEX,
+                                 UNSCOPED, WORKER, GuardCase, LegacyWorld, Matrix, World, generated, in_image,
+                                 in_process_children, installer, legacy_chain, stage_kinds, tagged, url_routes)
 from tests.support import factories as f
 from tests.test_pipeline_assess_events import two_procedures
 
@@ -76,19 +81,76 @@ class GeneratedTests(SimpleTestCase):
         from cptstudio import urls
 
         planted_view = path('planted-s12/', lambda request: HttpResponse('planted'))
+        # each form the installer can name a script or a command in: positional and keyword, a list, a local bound to
+        # one, a function returning one, and the entrypoint's own migrate role
         source = INSTALL.read_text(encoding='utf-8') + (
             "\n\ndef planted_phase(image_id, env):\n"
             "    app_script(image_id, env, APP_SCRIPT_ANSWER, {}, what='a planted script')\n"
-            "    return oneshot(image_id, ['manage', 'planted_command'], env)\n")
+            "    app_script(image_id, env, body=APP_SCRIPT_PRELUDE, params={}, what='a planted keyword script')\n"
+            "    oneshot(image_id, command=['manage', 'planted_keyword_command'], env_bytes=env)\n"
+            "    command = ['manage', 'planted_local_command', '--flag']\n"
+            "    oneshot(image_id, command, env)\n"
+            "    oneshot(image_id, planted_command_list('x'), env)\n"
+            "    extended = ['manage', 'planted_extended_command']\n"
+            "    extended = extended + ['--flag']\n"
+            "    oneshot(image_id, extended, env)\n"
+            "    return oneshot(image_id, ['manage', 'planted_command'], env)\n"
+            "\n\ndef planted_command_list(value):\n"
+            "    return ['manage', 'planted_returned_command', value] + []\n")
         with mock.patch.object(urls, 'urlpatterns', urls.urlpatterns + [planted_view]), \
                 mock.patch.dict(jobs.STAGES, {'planted': lambda job: {}}):
             missing = set(matrix.missing(source))
         for item in (('url', 'planted-s12/'), ('stage', 'planted'), ('script', 'APP_SCRIPT_ANSWER'),
-                     ('command', 'planted_command')):
+                     ('script', 'APP_SCRIPT_PRELUDE'), ('command', 'planted_keyword_command'),
+                     ('command', 'planted_local_command'), ('command', 'planted_returned_command'),
+                     ('command', 'planted_extended_command'), ('command', 'planted_command')):
             with self.subTest(item=item):
                 self.assertIn(item, missing)
         matrix.observations.append(type('Seen', (), {'key': ('url', 'no-such-route/')})())
         self.assertEqual(matrix.unknown(), [('url', 'no-such-route/')])
+
+    def test_a_form_the_generator_cannot_read_fails_closed(self):
+        # the review of S12, finding 3: an in-image script or command the generator cannot resolve to a module-level
+        # script or a literal command raises, naming its line - it is never dropped (the matrix would stay green over a
+        # script it never ran)
+        base = INSTALL.read_text(encoding='utf-8')
+        forms = {
+            'a concatenated body': "app_script(image_id, env, UNDO_HAZARDS + APP_SCRIPT_ANSWER, {}, what='x')",
+            'a starred command': "oneshot(image_id, [*['manage'], 'planted_command'], env)",
+            'a computed command name': "oneshot(image_id, ['manage', name], env)",
+            'a starred argument before the body': "app_script(*arguments, what='x')",
+            'a body passed by **': 'app_script(image_id, env, **options)',
+            'a manage list with no command': "oneshot(image_id, ['manage'] + rest, env)",
+            'a shell script that is no module script': "oneshot(image_id, ['manage', 'shell', '-c', body], env)",
+            'an entrypoint role it does not know': "oneshot(image_id, ['planted_role'], env)",
+            'a command passed in': 'oneshot(image_id, command, env)',
+            'a command bound by a loop': 'for each in commands:\n        oneshot(image_id, each, env)',
+            'a command bound by a handler': 'try:\n        pass\n    except Exception as caught:\n'
+                                            '        oneshot(image_id, caught, env)',
+            'a command that only extends itself': "grown = grown + ['--flag']\n    oneshot(image_id, grown, env)",
+            'an alias of oneshot': "run_once = oneshot\n    run_once(image_id, ['manage', 'planted_alias'], env)",
+            'a partial of app_script': 'functools.partial(app_script, image_id)',
+        }
+        for what, statement in forms.items():
+            with self.subTest(form=what):
+                source = base + ('\n\ndef planted_phase(image_id, env, name, body, arguments, options, rest, command, '
+                                 f'commands):\n    {statement}\n')
+                with self.assertRaisesRegex(ValueError, r'ops/install\.py:\d+: .* the matrix cannot tell what'):
+                    in_image(source)
+        self.assertTrue(in_image())  # the installer's own source reads whole
+
+    def test_the_entrypoint_roles_it_resolves_are_the_images_own(self):
+        # a one-shot given an entrypoint role (deploy/entrypoint.sh) runs what that role execs: each role the generator
+        # resolves is a `python manage.py <command>` arm of the entrypoint, and the item is that command
+        text = (APP / 'deploy' / 'entrypoint.sh').read_text(encoding='utf-8')
+        arms = dict(re.findall(r'^ {4}([a-z]+)\)\n(?: {8}.*\n)*? {8}exec (.*)$', text, re.MULTILINE))
+        self.assertEqual(set(arms), {'web', 'worker', 'migrate', 'manage'})
+        self.assertTrue(guard_support.ENTRYPOINT_ROLES)
+        for role, item in guard_support.ENTRYPOINT_ROLES.items():
+            with self.subTest(role=role):
+                self.assertEqual(item[0], 'command')
+                self.assertTrue(arms[role].startswith(f'python manage.py {item[1]} '), arms[role])
+                self.assertIn(item, in_image())
 
 
 class NewPathOnlyDatabaseTests(GuardCase):
@@ -116,7 +178,7 @@ class BesideLegacyRecordsTests(GuardCase):
         with sentinel.call_checks():
             world = World(self, matrix, legacy_rows=True).run()
         legacy = models.Encounter.objects.filter(pk__in=world.legacy_ids)
-        self.assertEqual(legacy.count(), 4)
+        self.assertEqual(legacy.count(), len(LegacyWorld.SCENARIOS))
         self.assertEqual({readers.label_of(item) for item in legacy}, {LEGACY})
         self.assertEqual(matrix.missing(), [])
         self.assertEqual([name for name, found in matrix.satisfied().items() if not found], [])
