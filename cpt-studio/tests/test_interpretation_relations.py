@@ -12,7 +12,7 @@ import sys
 
 from django.test import SimpleTestCase
 
-from studio.interpretation import normalize, relations, store
+from studio.interpretation import lexicon, normalize, relations, schema, store
 from tests.test_interpretation_identity import (a, accepted, act, answer, les, normalized, relations_of, sc, snare,
                                               tg)
 
@@ -881,6 +881,169 @@ class BundlingIdentity(SimpleTestCase):
         self.assertEqual((target['identity'], target['identity_by']['reasons']),
                          ('unresolved', ['identity_literal_conflict']))
         self.assertEqual(asked, [])
+
+
+ADJUNCT = ('E1', 'E2', 'procedural_adjunct')
+
+
+def adjunct_inventory(removal=('sigmoid_colon', 'sigmoid colon'), clip=('not_stated', ''), *,
+                      procedure: str = 'colonoscopy', part_of: str = '', more=(), lesions=(), **options):
+    """The inventory of a cold snare removal (E1, P1) of a polyp at ``removal`` (landmark, words) beside a hemostatic
+    clip (E2, P2) at ``clip`` - naming no lesion - with ``part_of`` and ``more`` events (D41, D58)."""
+    lines = {'P1': f'A 6 mm polyp in the {removal[1]} was removed with a cold snare.',
+             'P2': ('Oozing at the polypectomy site' + (f' in the {clip[1]}' if clip[1] else '')
+                    + ' was controlled with a clip for hemostasis.'), **options.pop('lines', {})}
+    events = [snare('E1', 'P1', procedure=a(procedure), target=tg('', removal[0], removal[1], ['P1'])),
+              act('E2', 'P2', 'clip', 'clip', status_words='was controlled', procedure=a(procedure),
+                  technique=a('clip', 'clip', ['P2']), purpose=a('hemostasis', 'for hemostasis', ['P2']),
+                  target=tg('', clip[0], clip[1], ['P2']) if clip[1] else tg(), part_of=part_of), *more]
+    inventory = normalized(lines, events=events, lesions=list(lesions), **options)
+    removal_event, clip_event = inventory.events['events'][:2]
+    assert clip_event['catalogue_kind'] == 'bleeding_control', clip_event['catalogue_kind']
+    for event, (landmark, words) in ((removal_event, removal), (clip_event, clip)):  # never a vacuous place
+        if words:
+            assert (event['target']['value'], event['target']['state']) == (landmark, 'verified'), event['target']
+    if part_of:
+        assert (clip_event['part_of']['value'], clip_event['part_of']['state']) == (part_of, 'verified')
+    return inventory
+
+
+def adjunct_asked(*args, **options) -> list:
+    """The bundling identities of adjunct_inventory(*args, **options)."""
+    inventory = adjunct_inventory(*args, **options)
+    return [(item['statement'], item['event'], item['reason']) for item in relations_of(inventory)
+            if item['type'] == 'bundling_identity']
+
+
+class AdjunctSetApart(SimpleTestCase):
+    """DECISIONS D58 (the S17 round-2 refutation, finding 5): what sets a removal's procedural adjunct apart from the
+    removal (relations.identity_in_doubt, rule procedural_adjunct). Places only when they are verifiably apart - both on
+    one of the tract's chains (relations.TRACT_POSITION), neither compatible nor ADJACENT (one step apart); a place on
+    no chain never. A verified part_of only when it names an ACT - never the examination (the session, ADJUDICATION
+    C-1), an umbrella, or an event with no catalogue kind. Two distinct verified lesions as before (D41). The adjacency
+    is this arm's alone: lexicon.compatible is unchanged."""
+
+    def test_d58_the_tracts_chains(self):
+        self.assertEqual(relations.LOWER_TRACT, (
+            'anal_canal', 'rectum', 'rectosigmoid', 'sigmoid_colon', 'descending_colon', 'splenic_flexure',
+            'transverse_colon', 'hepatic_flexure', 'ascending_colon', 'cecum', 'terminal_ileum'))
+        self.assertEqual(relations.UPPER_TRACT, (
+            'proximal_esophagus', 'mid_esophagus', 'distal_esophagus', 'gastroesophageal_junction', 'gastric_cardia',
+            'gastric_fundus', 'gastric_body', 'gastric_antrum', 'pylorus', 'duodenal_bulb', 'second_portion_duodenum',
+            'jejunum'))  # the jejunum an enteroscopy reaches; the ileum, beside the cecum, stays on no chain
+        cecum = relations.TRACT_POSITION['cecum']
+        self.assertEqual({place: relations.TRACT_POSITION[place] for place in relations.AT_THE_CECUM},
+                         {'appendiceal_orifice': cecum, 'ileocecal_valve': cecum})
+        self.assertEqual(set(relations.TRACT_POSITION),
+                         set(relations.LOWER_TRACT) | set(relations.UPPER_TRACT) | set(relations.AT_THE_CECUM))
+        self.assertLessEqual(set(relations.TRACT_POSITION), set(schema.LANDMARKS))
+        self.assertFalse(lexicon.compatible('rectosigmoid', 'sigmoid_colon'))  # the comparisons' own rule is unchanged
+        apart = {
+            ('rectosigmoid', 'sigmoid_colon'): False, ('hepatic_flexure', 'transverse_colon'): False,  # adjacent
+            ('cecum', 'ascending_colon'): False, ('ileocecal_valve', 'terminal_ileum'): False,
+            ('appendiceal_orifice', 'ileocecal_valve'): False, ('appendiceal_orifice', 'ascending_colon'): False,
+            ('anal_canal', 'rectum'): False, ('gastroesophageal_junction', 'gastric_cardia'): False,
+            ('gastric_body', 'gastric_antrum'): False, ('pylorus', 'duodenal_bulb'): False,
+            ('cecum', 'ileocecal_valve'): False, ('distal_esophagus', 'gastroesophageal_junction'): False,  # compatible
+            ('sigmoid_colon', 'sigmoid_colon'): False,
+            ('rectosigmoid', 'descending_colon'): True, ('sigmoid_colon', 'ascending_colon'): True,  # apart
+            ('appendiceal_orifice', 'hepatic_flexure'): True, ('mid_esophagus', 'gastroesophageal_junction'): True,
+            ('gastric_body', 'pylorus'): True, ('sigmoid_colon', 'gastric_body'): True,  # two chains
+            ('right_colon', 'sigmoid_colon'): False, ('colon', 'cecum'): False, ('stomach', 'mid_esophagus'): False,
+            ('anastomosis', 'sigmoid_colon'): False, ('stoma', 'cecum'): False, ('pancreas', 'gastric_body'): False,
+            ('ampulla', 'gastric_antrum'): False, ('ileum', 'cecum'): False, ('other', 'rectum'): False,  # no chain
+            ('second_portion_duodenum', 'jejunum'): False, ('gastric_antrum', 'jejunum'): True,  # the jejunum's place
+        }
+        for (one, two), expected in apart.items():
+            with self.subTest(one=one, two=two):
+                self.assertEqual((relations.adjunct_apart(one, two), relations.adjunct_apart(two, one)),
+                                 (expected, expected))
+
+    def test_d58_adjacent_places_never_set_an_adjunct_apart(self):
+        # each pair is not compatible (lexicon.compatible), so each was set apart, and its clip's code READY
+        lower = ((('rectosigmoid', 'rectosigmoid junction'), ('sigmoid_colon', 'distal sigmoid colon')),
+                 (('hepatic_flexure', 'hepatic flexure'), ('transverse_colon', 'proximal transverse colon')),
+                 (('cecum', 'cecum'), ('ascending_colon', 'ascending colon')),
+                 (('terminal_ileum', 'terminal ileum'), ('ileocecal_valve', 'ileocecal valve')),
+                 (('rectum', 'rectum'), ('anal_canal', 'anal canal')))
+        upper = ((('gastric_body', 'gastric body'), ('gastric_antrum', 'antrum')),
+                 (('gastroesophageal_junction', 'gastroesophageal junction'), ('gastric_cardia', 'cardia')),
+                 (('pylorus', 'pylorus'), ('duodenal_bulb', 'duodenal bulb')))
+        for procedure, pairs in (('colonoscopy', lower), ('egd', upper)):
+            for removal, clip in pairs:
+                with self.subTest(removal=removal[0], clip=clip[0]):
+                    self.assertFalse(lexicon.compatible(removal[0], clip[0]))
+                    self.assertEqual(adjunct_asked(removal, clip, procedure=procedure), [ADJUNCT])
+                    self.assertEqual(adjunct_asked(clip, removal, procedure=procedure), [ADJUNCT])
+
+    def test_d58_control_places_two_steps_apart_set_an_adjunct_apart(self):
+        for procedure, removal, clip in (
+                ('colonoscopy', ('rectosigmoid', 'rectosigmoid junction'), ('descending_colon', 'descending colon')),
+                ('colonoscopy', ('sigmoid_colon', 'sigmoid colon'), ('ascending_colon', 'ascending colon')),
+                ('egd', ('gastric_body', 'gastric body'), ('pylorus', 'pylorus'))):
+            with self.subTest(removal=removal[0], clip=clip[0]):
+                self.assertEqual(adjunct_asked(removal, clip, procedure=procedure), [])
+        self.assertEqual(adjunct_asked(clip=('sigmoid_colon', 'sigmoid colon')), [ADJUNCT])  # one place: asked (D41)
+        self.assertEqual(adjunct_asked(), [ADJUNCT])  # no place: asked (D41)
+
+    def test_d58_a_place_on_no_chain_never_sets_an_adjunct_apart(self):
+        # a region, an anastomosis, and an anastomosis D34 places at the rectum (the encounter's one colorectal
+        # anastomosis) three steps from the descending colon: each was set apart as not compatible
+        self.assertEqual(adjunct_asked(('right_colon', 'right colon'), ('sigmoid_colon', 'sigmoid colon')), [ADJUNCT])
+        self.assertEqual(adjunct_asked(clip=('anastomosis', 'anastomosis')), [ADJUNCT])
+        self.assertEqual(adjunct_asked(('stomach', 'stomach'), ('mid_esophagus', 'mid esophagus'), procedure='egd'),
+                         [ADJUNCT])
+        history = {'P3': 'History: low anterior resection with a colorectal anastomosis.'}
+        entry = {'state': 'altered', 'landmark': 'anastomosis', 'words': 'colorectal anastomosis', 'passages': ['P3']}
+        found = adjunct_asked(('descending_colon', 'descending colon'), ('anastomosis', 'colorectal anastomosis'),
+                              lines=history, anatomy=[entry])
+        self.assertEqual(found, [ADJUNCT])
+
+    def test_d58_every_pair_of_places_must_be_apart(self):
+        # the removal is verified at the colon (its target) and at the sigmoid colon (its lesion's site): its colon,
+        # a region on no chain, does not set the clip in the ascending colon apart, though its sigmoid colon would -
+        # fail-closed (it was set apart, the pair (sigmoid colon, ascending colon) being not compatible)
+        lesion = les('L1', '6 mm polyp', 'P1', landmark='sigmoid_colon', site_words='sigmoid colon', size_words='6 mm')
+        lines = {'P1': 'A 6 mm polyp in the sigmoid colon was removed with a cold snare.',
+                 'P2': 'A bleeding diverticulum in the ascending colon was controlled with a clip for hemostasis.'}
+        for target, expected in ((tg('L1', 'colon', '6 mm polyp in the sigmoid colon', ['P1']), [ADJUNCT]),
+                                 (tg('L1', 'sigmoid_colon', '6 mm polyp in the sigmoid colon', ['P1']), [])):
+            inventory = normalized(lines, lesions=[lesion], events=[
+                snare('E1', 'P1', target=target),
+                act('E2', 'P2', 'clip', 'clip', status_words='was controlled', technique=a('clip', 'clip', ['P2']),
+                    purpose=a('hemostasis', 'for hemostasis', ['P2']),
+                    target=tg('', 'ascending_colon', 'ascending colon', ['P2']))])
+            removal, clip = inventory.events['events'][:2]
+            with self.subTest(target=target['landmark']):
+                self.assertEqual((removal['target']['identity'], clip['target']['state']), ('verified', 'verified'))
+                self.assertEqual([(item['statement'], item['event'], item['reason']) for item in relations_of(inventory)
+                                  if item['type'] == 'bundling_identity'], expected)
+
+    def test_d58_a_part_of_naming_no_act_sets_nothing_apart(self):
+        # the examination (finding 5, variant 3), an umbrella, an event of no catalogue kind, and a biopsy whose kind is
+        # not verified (its words are not in its passage): each was set apart
+        exam = act('E3', 'P3', 'examination', 'colonoscope', status_words='was advanced',
+                   technique=a('endoscope', 'colonoscope', ['P3']))
+        umbrella = act('E3', 'P3', 'removal', 'removed', status_words='was removed')  # the method not stated
+        other = act('E3', 'P3', 'other', 'endoscopic suturing', status_words='was performed')
+        unverified = act('E3', 'P3', 'biopsy', 'biopsies', status_words='were taken',
+                         target=tg('', 'sigmoid_colon', 'sigmoid colon', ['P3']))
+        for name, event, line, kind in (
+                ('examination', exam, 'The colonoscope was advanced to the cecum.', ('examination', 'verified')),
+                ('umbrella', umbrella, 'The polyp was removed.', ('removal', 'verified')),
+                ('no catalogue kind', other, 'Endoscopic suturing was performed.', ('', 'verified')),
+                ('a kind not verified', unverified, 'Samples were taken from the sigmoid colon.',
+                 ('biopsy', 'unverified'))):
+            with self.subTest(name):
+                inventory = adjunct_inventory(part_of='E3', more=[event], lines={'P3': line})
+                named = inventory.events['events'][2]
+                self.assertEqual((named['catalogue_kind'], named['kind']['state']), kind)
+                self.assertEqual([(item['statement'], item['event'], item['reason']) for item in relations_of(inventory)
+                                  if item['type'] == 'bundling_identity'], [ADJUNCT])
+        biopsy = act('E3', 'P3', 'biopsy', 'biopsies', status_words='were taken',
+                     target=tg('', 'sigmoid_colon', 'sigmoid colon', ['P3']))
+        self.assertEqual(adjunct_asked(part_of='E3', more=[biopsy],  # the control D41 keeps: an act sets it apart
+                                       lines={'P3': 'Biopsies were taken from the sigmoid colon.'}), [])
 
 
 def stored_scenarios() -> list:

@@ -14,8 +14,8 @@ from django.test import SimpleTestCase
 from studio.gi import catalogue
 from studio.interpretation import coverage, events
 from studio.validation import engine, reconcile
-from tests.test_interpretation_events import (COLONOSCOPE, L1, POLYP, asked, check, colonoscopy, exam, inventory,
-                                              proposal, reached, removed, run)
+from tests.test_interpretation_events import (COLONOSCOPE, L1, POLYP, anatomy_entry, asked, check, colonoscopy, exam,
+                                              inventory, proposal, reached, removed, run)
 from tests.test_interpretation_identity import a, act, les, sc, snare, tg
 
 EMR_LINE = ('A submucosal injection of saline with methylene blue was given in the cecum, and the 20 mm flat polyp '
@@ -168,6 +168,17 @@ def adjunct(**changes):
     return inv, text, ADJUNCT_LINES
 
 
+def standalone_ablation(landmark: str, words: str):
+    """(inventory, text, line) of a colonoscopy whose cecal EMR (E2) is beside an argon plasma coagulation (E3) of two
+    angioectasias at ``landmark``, named by ``words``: no lesion, no part_of."""
+    line = f'Two angioectasias in the {words} were treated with argon plasma coagulation.'
+    inv, text = colonoscopy(act('E3', 'P3', 'ablation', 'argon plasma coagulation', status_words='were treated',
+                                technique=a('argon_plasma', 'argon plasma coagulation', ['P3']),
+                                target=tg('', landmark, words, ['P3'])),
+                            polyp=emr(), lesions=(CECAL,), lines={'P2': ADJUNCT_LINES['P2'], 'P3': line})
+    return inv, text, line
+
+
 class ProceduralAdjuncts(SimpleTestCase):
     """DECISIONS D30 (note8 r1: 45388 READY on the snare-tip soft coagulation Gemini verified as part_of the EMR): an
     ablation or a bleeding control verifiably part_of a current performed removal, or on that removal's verified
@@ -204,13 +215,12 @@ class ProceduralAdjuncts(SimpleTestCase):
         self.assertEqual(proposal(result, '45382').support['reason'], events.BUNDLED)
 
     def test_a_standalone_ablation_stays_its_codes(self):
-        line = 'Two angioectasias in the ascending colon were treated with argon plasma coagulation.'
-        inv, text = colonoscopy(act('E3', 'P3', 'ablation', 'argon plasma coagulation', status_words='were treated',
-                                    technique=a('argon_plasma', 'argon plasma coagulation', ['P3']),
-                                    target=tg('', 'ascending_colon', 'ascending colon', ['P3'])),
-                                polyp=emr(), lesions=(CECAL,), lines={'P2': ADJUNCT_LINES['P2'], 'P3': line})
+        # DECISIONS D58: in the transverse colon, three steps from the cecum on the tract - the same ablation in the
+        # ascending colon, one step from the resection, is asked (test_d58_a_standalone_ablation_one_step_from_...)
+        inv, text, line = standalone_ablation('transverse_colon', 'transverse colon')
         reading = events.Reading.of(inv)
         self.assertEqual(coverage.bundled_reason(reading, reading.events['E3']), '')
+        self.assertIsNone(coverage.bundling_doubt(reading, reading.events['E3']))
         result = run(inv, text, [('45390', ADJUNCT_LINES['P2']), ('45388', line)])
         self.assertEqual([proposal(result, code).status for code in ('45390', '45388')], ['ready', 'ready'])
 
@@ -505,6 +515,13 @@ class StentIncluded(SimpleTestCase):
 
 HEMOCLIPS = 'Immediate oozing from the polypectomy site was controlled with two hemoclips for hemostasis.'
 DIVERTICULUM = 'A bleeding diverticulum in the ascending colon was controlled with two hemoclips for hemostasis.'
+# DECISIONS D58: the S17 round-2 refutation's finding 5, its inputs
+RS_POLYP = 'A 12 mm sessile polyp at the rectosigmoid junction was removed with a hot snare.'
+RS_CLIP = ('Immediate oozing from the polypectomy site in the distal sigmoid colon was controlled with two hemoclips '
+           'for hemostasis.')
+HF_POLYP = 'A 12 mm sessile polyp at the hepatic flexure was removed with a hot snare.'
+HF_CLIP = ('Immediate oozing from the polypectomy site in the proximal transverse colon was controlled with two '
+           'hemoclips for hemostasis.')
 
 
 def hemoclips(line: str = HEMOCLIPS, **changes) -> dict:
@@ -514,11 +531,29 @@ def hemoclips(line: str = HEMOCLIPS, **changes) -> dict:
     return act('E3', 'P3', 'clip', 'hemoclips', status_words='was controlled', **options)
 
 
+def hot_snared(clip: dict, clip_line: str, polyp_line: str = RS_POLYP, landmark: str = 'rectosigmoid',
+               site_words: str = 'rectosigmoid junction', **options):
+    """(inventory, text, result) of a colonoscopy to the cecum (E1) whose 12 mm polyp L1 at ``landmark`` is removed
+    with a hot snare (E2, ``polyp_line``), beside ``clip`` (``clip_line``, P3); Corti proposes 45385 and 45382."""
+    lesion = les('L1', '12 mm sessile polyp', 'P2', landmark=landmark, site_words=site_words, size_words='12 mm')
+    removal = snare('E2', 'P2', technique=a('hot_snare', 'hot snare', ['P2']),
+                    status_words='was removed with a hot snare',
+                    target=tg('L1', landmark, polyp_line[2:polyp_line.index(' was removed')], ['P2']))
+    lines = {'P2': polyp_line, 'P3': clip_line, **options.pop('lines', {})}
+    inv, text = colonoscopy(clip, polyp=removal, lesions=(lesion,), lines=lines, **options)
+    return inv, text, run(inv, text, [('45385', polyp_line), ('45382', clip_line)])
+
+
 class AdjunctBesideARemoval(SimpleTestCase):
     """DECISIONS D41 (the S17 refutation, finding 6): beside a current performed removal of its session, an ablation or a
     bleeding control that D30 does not bundle - no verified part_of, no lesion, at compatible or unknown places - is
     asked (act_target, the procedural_adjunct bundling identity), never READY alone. Verified places that are not
-    compatible, two distinct verified lesions, or a verified part_of naming another act set it apart."""
+    compatible, two distinct verified lesions, or a verified part_of naming another act set it apart.
+
+    DECISIONS D58 (the S17 round-2 refutation, finding 5) narrows what sets it apart: places only when they are
+    verifiably apart - both on one of the tract's chains, neither compatible nor ADJACENT (one step apart); a place on
+    no chain (a region, an anastomosis, even one D34 places) never - and a part_of only when it names an ACT, never the
+    examination (the session, ADJUDICATION C-1) or an umbrella."""
 
     def assert_asked(self, result, code):
         p = proposal(result, code)
@@ -562,3 +597,139 @@ class AdjunctBesideARemoval(SimpleTestCase):
         reading = events.Reading.of(inv)
         self.assertEqual(reading.events['E3']['part_of']['value'], 'E4')
         self.assertIsNone(coverage.bundling_doubt(reading, reading.events['E3']))
+
+    # --- DECISIONS D58 ------------------------------------------------------------------------------------------------
+
+    def assert_places(self, inv, removal: set, clip: set):
+        reading = events.Reading.of(inv)
+        self.assertEqual((reading.context.places(reading.events['E2']), reading.context.places(reading.events['E3'])),
+                         (frozenset(removal), frozenset(clip)))
+        doubt = coverage.bundling_doubt(reading, reading.events['E3']) or {}
+        self.assertEqual(doubt.get('reason'), 'procedural_adjunct')
+
+    def test_d58_a_clip_in_the_distal_sigmoid_beside_a_rectosigmoid_polypectomy_is_asked(self):
+        """Finding 5, variant 1: the clip's line says 'the polypectomy site', and its place - the sigmoid colon - is one
+        step from the rectosigmoid on the tract. Adjacent places never set the adjunct apart (it was READY)."""
+        clip = hemoclips(RS_CLIP, target=tg('', 'sigmoid_colon', 'polypectomy site in the distal sigmoid colon',
+                                            ['P3']))
+        inv, text, result = hot_snared(clip, RS_CLIP)
+        self.assert_places(inv, {'rectosigmoid'}, {'sigmoid_colon'})
+        self.assertEqual(proposal(result, '45385').status, 'ready')
+        self.assert_asked(result, '45382')
+
+    def test_d58_a_clip_in_the_proximal_transverse_beside_a_hepatic_flexure_polypectomy_is_asked(self):
+        """Finding 5, variant 2: the transverse colon is one step from the hepatic flexure (it was READY)."""
+        clip = hemoclips(HF_CLIP, target=tg('', 'transverse_colon', 'polypectomy site in the proximal transverse colon',
+                                            ['P3']))
+        inv, text, result = hot_snared(clip, HF_CLIP, HF_POLYP, 'hepatic_flexure', 'hepatic flexure')
+        self.assert_places(inv, {'hepatic_flexure'}, {'transverse_colon'})
+        self.assertEqual(proposal(result, '45385').status, 'ready')
+        self.assert_asked(result, '45382')
+
+    def test_d58_a_part_of_naming_the_examination_sets_nothing_apart(self):
+        """Finding 5, variant 3: the examination is the session, never an act (ADJUDICATION C-1), and normalize
+        verifies a part_of only as naming an event that exists - so a part_of naming the colonoscopy sets the clip apart
+        from nothing (it was READY). On the D41 control's line, and on the claim's own line with no place given."""
+        for line in (HEMOCLIPS, RS_CLIP):
+            with self.subTest(line=line):
+                inv, text, result = hot_snared(hemoclips(line, part_of='E1'), line)
+                reading = events.Reading.of(inv)
+                self.assertEqual((reading.events['E3']['part_of']['value'], reading.events['E3']['part_of']['state'],
+                                  reading.events['E1']['catalogue_kind'], reading.events['E1']['kind']['state']),
+                                 ('E1', 'verified', 'examination', 'verified'))
+                doubt = coverage.bundling_doubt(reading, reading.events['E3']) or {}
+                self.assertEqual(doubt.get('reason'), 'procedural_adjunct')
+                self.assertEqual(proposal(result, '45385').status, 'ready')
+                self.assert_asked(result, '45382')
+
+    def test_d58_a_standalone_ablation_one_step_from_the_resection_is_asked(self):
+        """D58's cost, pinned: D30's standalone-ablation control - two angioectasias in the ascending colon treated with
+        argon plasma coagulation, naming no lesion, beside a cecal EMR - was READY because the ascending colon is not
+        compatible with the cecum. It is one step from it on the tract, so the ablation is asked (act_target)."""
+        inv, text, line = standalone_ablation('ascending_colon', 'ascending colon')
+        reading = events.Reading.of(inv)
+        self.assertEqual(coverage.bundled_reason(reading, reading.events['E3']), '')
+        self.assert_places(inv, {'cecum'}, {'ascending_colon'})
+        result = run(inv, text, [('45390', ADJUNCT_LINES['P2']), ('45388', line)])
+        self.assertEqual(proposal(result, '45390').status, 'ready')
+        self.assert_asked(result, '45388')
+
+    def test_d58_an_adjunct_at_an_anastomosis_is_never_set_apart_by_its_place(self):
+        """A place on no chain never sets the adjunct apart (fail-closed): an anastomosis beside the sigmoid colon, and
+        an anastomosis that D34 places at the rectum (the encounter's one colorectal anastomosis) beside the descending
+        colon, three steps away - that place is the anatomy entry's, not the clip's own words'. Both were READY."""
+        line = 'Oozing at the colorectal anastomosis was controlled with two hemoclips for hemostasis.'
+        clip = hemoclips(line, target=tg('', 'anastomosis', 'colorectal anastomosis', ['P3']))
+        inv, text = colonoscopy(clip, lines={'P3': line})
+        self.assert_places(inv, {'sigmoid_colon'}, {'anastomosis'})
+        self.assert_asked(run(inv, text, [('45385', POLYP), ('45382', line)]), '45382')
+        polyp = 'A 12 mm sessile polyp in the descending colon was removed with a hot snare.'
+        inv, text, result = hot_snared(clip, line, polyp, 'descending_colon', 'descending colon',
+                                       lines={'G3': 'History: low anterior resection with a colorectal anastomosis.'},
+                                       anatomy=[anatomy_entry('colorectal anastomosis')])
+        self.assert_places(inv, {'descending_colon'}, {'rectum'})
+        self.assertEqual(proposal(result, '45385').status, 'ready')
+        self.assert_asked(result, '45382')
+
+    def test_d58_control_places_two_steps_apart_set_the_adjunct_apart(self):
+        """The control D58 keeps: a bleeding diverticulum in the descending colon, two steps from the rectosigmoid, is
+        its own act, READY beside the polypectomy (D41's ascending-colon control is five steps from the sigmoid)."""
+        line = 'A bleeding diverticulum in the descending colon was controlled with two hemoclips for hemostasis.'
+        inv, text, result = hot_snared(hemoclips(line, target=tg('', 'descending_colon', 'descending colon', ['P3'])),
+                                       line)
+        reading = events.Reading.of(inv)
+        self.assertIsNone(coverage.bundling_doubt(reading, reading.events['E3']))
+        self.assertEqual([proposal(result, code).status for code in ('45385', '45382')], ['ready', 'ready'])
+
+
+class PossiblyCurrent(SimpleTestCase):
+    """DECISIONS D62 (D54's review): a current time left unverified is a doubt about the event's own code, never an
+    absence for the rules that hold OTHER codes by it - a session's examinations, the removal a biopsy is bundled into.
+    A current time whose own words place the event on another occasion (a differing date, D35's marker) is evidence,
+    and keeps the event out."""
+
+    ASIDE = 'These were the findings at her index colonoscopy: a 12 mm sessile polyp in the ascending colon was removed.'
+
+    def aside_session(self, time_words):
+        lines = {'P1': COLONOSCOPE, 'P5': self.ASIDE}
+        aside_exam = exam('E3', 'P5', words='index colonoscopy', status_words='were the findings',
+                          time=a('current_encounter', time_words, ['P5']))
+        removal = snare('E2', 'P5', status_words='was removed', technique=a('not_stated'),
+                        target=tg('', 'ascending_colon', 'ascending colon', ['P5']))
+        return inventory(lines, events=[exam(), aside_exam, removal], reach=[reached()])
+
+    def test_an_aside_examination_with_unanchored_words_leaves_todays_session_unresolved(self):
+        inv, text = self.aside_session('These were the findings at her index colonoscopy')
+        reading = events.Reading.of(inv)
+        self.assertEqual(reading.events['E3']['time']['reasons'], ['current_unanchored'])
+        session = coverage.sessions(reading)['gi.colonoscopy']
+        self.assertEqual((session.event, session.unresolved, session.examinations), ('', True, ('E1', 'E3')))
+        p = proposal(run(inv, text, [('45385', self.ASIDE)]), '45385')
+        self.assertEqual(p.status, 'needs_clarification')  # never READY on the index colonoscopy's removal
+
+    def test_an_examination_its_own_date_places_elsewhere_never_takes_the_session(self):
+        inv, text = self.aside_session('at her index colonoscopy on 01/14/2024')
+        reading = events.Reading.of(inv)
+        self.assertIn('date_mismatch', reading.events['E3']['time']['reasons'])
+        session = coverage.sessions(reading)['gi.colonoscopy']
+        self.assertEqual((session.event, session.unresolved), ('E1', False))
+
+    def test_a_removal_with_an_unanchored_time_still_holds_the_biopsy_of_the_lesion_it_removed(self):
+        line = 'During this colonoscopy, a 6 mm sessile polyp in the sigmoid colon was biopsied and then removed with a ' \
+               'cold snare.'
+        lesion = les('L1', '6 mm sessile polyp', 'P2', landmark='sigmoid_colon', site_words='sigmoid colon',
+                     size_words='6 mm')
+        biopsy = act('E3', 'P2', 'biopsy', 'biopsied', status_words='was biopsied',
+                     technique=a('not_stated'),
+                     target=tg('L1', 'sigmoid_colon', '6 mm sessile polyp', ['P2']))
+        for time_words, removal_held in (('During this colonoscopy', True), ('', False)):
+            removal = snare('E2', 'P2', status_words='removed with a cold snare',
+                            target=tg('L1', 'sigmoid_colon', '6 mm sessile polyp', ['P2']),
+                            time=a('current_encounter', time_words, ['P2']) if time_words else a('current_encounter'))
+            inv, text = inventory({'P1': COLONOSCOPE, 'P2': line}, events=[exam(), removal, biopsy], lesions=[lesion],
+                                  reach=[reached()])
+            result = run(inv, text, [('45380', line), ('45385', line)])
+            with self.subTest(time_words=time_words):
+                self.assertEqual(proposal(result, '45380').support['reason'], events.BUNDLED)  # held, never READY
+                self.assertEqual(proposal(result, '45380').status, 'needs_clarification')
+                self.assertEqual(proposal(result, '45385').status == 'ready', not removal_held)

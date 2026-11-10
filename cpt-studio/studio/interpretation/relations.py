@@ -74,6 +74,15 @@ non-match (P3; review finding 4). On one verified single lesion the engine bundl
 own where neither names a lesion and they are stated apart (random biopsies told in their own sentence), and where one is
 verified to a lesion and the other names none (Gemini's own reading ties only that act to it).
 
+A REMOVAL'S PROCEDURAL ADJUNCT (DECISIONS D41, as D58 narrows what sets it apart): an ablation or a bleeding control
+beside a current positive removal of its session (snare, EMR, hot biopsy, ESD) that D30 does not bundle gets a
+``procedural_adjunct`` bundling identity - asked, never READY alone - unless something verified separates it from the
+removal: two distinct verified lesions; a verified part_of naming an ACT (names_an_act: an event with a catalogue kind
+that is neither an examination - the session, ADJUDICATION C-1 - nor an umbrella); or places that are verifiably apart
+(adjunct_apart, every pair): both on one of the tract's chains (TRACT_POSITION) and neither compatible nor ADJACENT
+(one step apart on a chain). A place on no chain - a region, an anastomosis (even one D34 places), an organ beside the
+tract - never sets it apart (fail-closed). The adjacency is this arm's alone; lexicon.compatible is unchanged.
+
 Pure and Django-free; imports nothing from studio.gi but through mapping's reference tables (FINAL 3.1).
 """
 from __future__ import annotations
@@ -81,6 +90,7 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from types import MappingProxyType
 
 from studio.interpretation import identity, lexicon, mapping, verify
 
@@ -116,6 +126,26 @@ RESECTIONS = frozenset({'emr', 'esd'})
 RESECTION_TECHNIQUES = frozenset({'snare', 'hot_biopsy'})
 # DECISIONS D30 and D41: the kinds a removal's procedural adjunct can be (coverage.ADJUNCT_KINDS is this set)
 PROCEDURAL_ADJUNCTS = frozenset({'ablation', mapping.BLEEDING_CONTROL})
+# DECISIONS D58: the catalogue kinds a part_of may name without naming an ACT - the examination, which is the session
+# (ADJUDICATION C-1), and the umbrellas (a removal or an intervention whose method is not stated).
+NOT_ACTS = mapping.EXAMINATION_KINDS | frozenset(mapping.UMBRELLAS)
+# DECISIONS D58: the tract's anatomical order, read by the procedural_adjunct arm only (lexicon.compatible is not
+# changed). Two places one step apart on a chain are ADJACENT; the appendiceal orifice and the ileocecal valve are at
+# the cecum. A landmark on no chain - a region (the colon, the right colon, the stomach, the duodenum), a surgically
+# made place (an anastomosis, a stoma, a pouch), the ampulla, an organ beside the tract - has no position, so it never
+# sets an adjunct apart (fail-closed).
+LOWER_TRACT = ('anal_canal', 'rectum', 'rectosigmoid', 'sigmoid_colon', 'descending_colon', 'splenic_flexure',
+               'transverse_colon', 'hepatic_flexure', 'ascending_colon', 'cecum', 'terminal_ileum')
+UPPER_TRACT = ('proximal_esophagus', 'mid_esophagus', 'distal_esophagus', 'gastroesophageal_junction', 'gastric_cardia',
+               'gastric_fundus', 'gastric_body', 'gastric_antrum', 'pylorus', 'duodenal_bulb',
+               'second_portion_duodenum', 'jejunum')  # on to the jejunum an enteroscopy reaches; the ileum, which
+                                                      # leads into the cecum on the other chain, is on no chain
+AT_THE_CECUM = ('appendiceal_orifice', 'ileocecal_valve')
+TRACT_POSITION = MappingProxyType({
+    **{landmark: ('lower', index) for index, landmark in enumerate(LOWER_TRACT)},
+    **{landmark: ('lower', LOWER_TRACT.index('cecum')) for landmark in AT_THE_CECUM},
+    **{landmark: ('upper', index) for index, landmark in enumerate(UPPER_TRACT)},
+})
 
 
 @dataclass(frozen=True)
@@ -153,8 +183,8 @@ class Context:
             event['family'] for event in events if event['status']['value'] in verify.POSITIVE
             and event['time']['value'] == 'current_encounter' and event['family'] in lexicon.PROCEDURAL_FAMILIES)
         exams = Counter(event['family'] for event in events if event['kind']['value'] == 'examination'
-                        and event['status']['value'] in verify.POSITIVE and event['current'] == 'yes'
-                        and event['family'])
+                        and event['status']['value'] in verify.POSITIVE and _possibly_current(event)
+                        and event['family'])  # D62: an unverified current time counts toward two examinations
         self.unresolved_sessions = frozenset(family for family, count in exams.items() if count >= 2)
         self.facts = identity.lesion_facts(draft)
         self.kinds = {eid: mapping.catalogue_kind(event) for eid, event in draft.events.items()}
@@ -554,14 +584,48 @@ def _compatible(first, second) -> bool:
     return bool(first) and bool(second) and all(lexicon.compatible(one, two) for one in first for two in second)
 
 
+def names_an_act(context: Context, eid: str) -> bool:
+    """D58: whether the event ``eid`` that a verified part_of names is an ACT - one a removal's adjunct can be part of
+    instead of the removal: an event with a catalogue kind that is neither an examination (the session, ADJUDICATION
+    C-1) nor an umbrella (NOT_ACTS). Its catalogue kind is read as every consumer reads one (FINAL 7.3 line 1): with
+    its kind usable. An event whose kind is not usable, or that has no catalogue kind (an 'other' kind, listed only),
+    is not established as one."""
+    kind, event = context.kinds.get(eid, ''), context.draft.events.get(eid)
+    return bool(kind) and kind not in NOT_ACTS and event is not None and verify.usable(event['kind'])
+
+
+def adjacent(first: str, second: str) -> bool:
+    """D58: whether two landmarks lie on one chain of the tract at most one step apart (TRACT_POSITION)."""
+    one, two = TRACT_POSITION.get(first), TRACT_POSITION.get(second)
+    return one is not None and two is not None and one[0] == two[0] and abs(one[1] - two[1]) <= 1
+
+
+def adjunct_apart(first: str, second: str) -> bool:
+    """D58: whether two places verifiably set a removal's adjunct apart from the removal: both on a chain of the tract,
+    neither compatible (lexicon.compatible: one place, or one a region containing the other) nor adjacent. A place on no
+    chain never sets it apart (fail-closed)."""
+    return (first in TRACT_POSITION and second in TRACT_POSITION and not lexicon.compatible(first, second)
+            and not adjacent(first, second))
+
+
+def _adjunct_places_apart(context: Context, whole: Mapping, part: Mapping, places, part_places) -> bool:
+    """D58: whether the removal's places and its adjunct's set the adjunct apart: every pair apart (adjunct_apart), and
+    every place stated by its own event's or its lesion's words - an anastomosis D34 places is still an anastomosis, on
+    no chain (Context.stated_places)."""
+    return (bool(places) and bool(part_places) and context.stated_places(whole, part)
+            and all(adjunct_apart(one, two) for one in places for two in part_places))
+
+
 def identity_in_doubt(context: Context, rule: str, whole: Mapping, part: Mapping) -> bool:
     """Whether the bundling of ``part`` beside ``whole`` under ``rule`` depends on an identity not established (module
     docstring). Each act's OWN verified places (Context.places) that are not compatible - disjoint, or not comparable
     (an anastomosis beside a segment) - ask nothing (contract 6.6: "at compatible landmarks"; FINAL 5.6: the E15 biopsy
-    is unaffected); an unverified link sets nothing apart (P3)."""
+    is unaffected); an unverified link sets nothing apart (P3). A removal's procedural adjunct is set apart by its
+    places only when they are verifiably apart, never adjacent (DECISIONS D58: _adjunct_places_apart)."""
     places, part_places = context.places(whole), context.places(part)
     known = bool(places) and bool(part_places)
-    if known and not _compatible(places, part_places):
+    if known and not _compatible(places, part_places) and (
+            rule != 'procedural_adjunct' or _adjunct_places_apart(context, whole, part, places, part_places)):
         return False
     lesion, other = identity.verified_lesion(whole), identity.verified_lesion(part)
     if lesion and other:
@@ -572,12 +636,14 @@ def identity_in_doubt(context: Context, rule: str, whole: Mapping, part: Mapping
     if rule == 'procedural_adjunct':
         # D41 (the S17 refutation of D30): a removal's adjunct is bundled only through a verified link (its part_of, or
         # the removal's verified lesion: coverage.bundled_reason). Beside a removal of its session, an ablation or a
-        # bleeding control that names no lesion, names one not established, or stands at compatible or unknown places is
-        # set apart by nothing verified - so it is asked, never READY alone; only a verified part_of naming another act
-        # (above: incompatible places; two distinct verified lesions) sets it apart. FINAL 5.7: a false READY is repaired.
+        # bleeding control that names no lesion, names one not established, or stands at compatible, adjacent or unknown
+        # places is set apart by nothing verified - so it is asked, never READY alone; only a verified part_of naming
+        # another ACT (above: places verifiably apart, D58; two distinct verified lesions) sets it apart. D58 (the S17
+        # round-2 refutation, finding 5): a part_of naming the examination - the session, never an act (ADJUDICATION
+        # C-1) - or an umbrella sets nothing apart. FINAL 5.7: a false READY is repaired.
         step = part.get('part_of')
-        return not (isinstance(step, Mapping) and step.get('state') == 'verified' and step.get('value')
-                    and step.get('value') != whole['id'])
+        named = (step.get('value') or '') if isinstance(step, Mapping) and step.get('state') == 'verified' else ''
+        return not (named and named != whole['id'] and names_an_act(context, named))
     identities = (whole['target']['identity'], part['target']['identity'])
     if rule == 'lift_injection':  # C-5: its lesion or its site unresolved
         return identity.UNRESOLVED in identities or not known
@@ -588,9 +654,17 @@ def identity_in_doubt(context: Context, rule: str, whole: Mapping, part: Mapping
     return bool(_own_passages(whole) & _own_passages(part))  # neither names a lesion: one statement asks (P3)
 
 
+def _possibly_current(event: Mapping) -> bool:
+    """D62 (coverage.possibly_current, on a draft record): current, or a current_encounter time not verified."""
+    return event['current'] == 'yes' or (event['current'] == 'unresolved'
+                                         and event['time'].get('value') == 'current_encounter'
+                                         and not set(event['time'].get('reasons') or ()) & {'date_mismatch',
+                                                                                            'other_occasion'})
+
+
 def _bundling(draft, context: Context) -> None:
     current = [event for event in draft.events.values()
-               if event['status']['value'] in verify.POSITIVE and event['current'] == 'yes']
+               if event['status']['value'] in verify.POSITIVE and _possibly_current(event)]  # D62
     for whole in current:
         for part in current:
             if part is whole:

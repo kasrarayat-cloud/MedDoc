@@ -76,10 +76,30 @@ CODING_VERSION = ENGINE_VERSION  # event_coding's version: its reader (overlay.p
 
 # --- bundling (7.7) -------------------------------------------------------------------------------------------------------
 
+# D62: the time reasons that place an event on another occasion rather than leave its time in doubt
+CONTRADICTED_TIME = frozenset({'date_mismatch', 'other_occasion'})
+
+
+def possibly_current(event: Mapping) -> bool:
+    """DECISIONS D62 (D54's review): whether Gemini gave ``event`` a current_encounter time, verified or not. A current
+    time left unverified - D35's other occasion, D54's unanchored words, words that do not bind - is a doubt about the
+    event's own code, never an absence for the rules that hold OTHER codes by it: a session's examinations, a removal
+    its parts are bundled into, the acts two codes compete for. Read as an absence, unverifying an aside's examination
+    resolved today's session to the other examination (45385 READY on the index colonoscopy's snare), and unverifying a
+    removal's time released the biopsy of the lesion it removed. An earlier or future time stays not current, verified
+    or not: Gemini did not say this encounter. So is a current time whose own words place the event on another
+    occasion - a date that differs from the service date (date_mismatch) or D35's marker (other_occasion): that is
+    evidence, not a doubt (the 2024 examination Gemini mislabelled current never takes today's session)."""
+    time = event.get('time')
+    return (isinstance(time, Mapping) and time.get('value') == 'current_encounter'
+            and not set(time.get('reasons') or ()) & CONTRADICTED_TIME)
+
+
 def current_performed(event: Mapping) -> bool:
-    """A whole a part can be bundled into: performed, current (usable) - never a statement, an earlier act or a doubt."""
+    """A whole a part can be bundled into: performed (usable), and current - its time current_encounter, verified or
+    not (D62: possibly_current) - never a statement or an act Gemini places on another occasion."""
     return (events.usable(event, 'status') and events.value(event, 'status') == 'performed'
-            and events.usable(event, 'time') and events.value(event, 'time') == 'current_encounter')
+            and possibly_current(event))
 
 
 def _same_session(reading, whole: Mapping, part: Mapping) -> bool:
@@ -230,11 +250,18 @@ def sessions(reading) -> dict:
         done = [event for event in members if events.done(event) and events.usable(event, 'kind')]
         exams = [event for event in done if event.get('catalogue_kind') in mapping.EXAMINATION_KINDS
                  and events.endoscopic_examination(event)]  # FINAL 5.6 E13: a manual examination is no session
+        # D62: an examination Gemini read as done at this encounter whose time is not verified may be this
+        # encounter's too: beside a done one it leaves the session unresolved, and it is never the session itself
+        possible = [event for event in members if event not in exams and events.usable(event, 'kind')
+                    and event.get('catalogue_kind') in mapping.EXAMINATION_KINDS
+                    and events.endoscopic_examination(event) and possibly_current(event)
+                    and events.value(event, 'status') in events.verify.POSITIVE]
         service = mapping.service_kind(family)
         session = Session(id=family, family=family, kind=service,
                           label=wording.kind_label(service) if service else wording.family_label(family),
-                          event=exams[0]['id'] if len(exams) == 1 else '',
-                          examinations=tuple(event['id'] for event in exams), unresolved=len(exams) >= 2,
+                          event=exams[0]['id'] if len(exams) == 1 and not possible else '',
+                          examinations=tuple(event['id'] for event in exams + possible),
+                          unresolved=len(exams) + len(possible) >= 2,
                           done=bool(done), incomplete=bool(exams) and all(
                               events.value(event, 'status') == 'attempted_not_completed' for event in exams),
                           events=tuple(event['id'] for event in members))
