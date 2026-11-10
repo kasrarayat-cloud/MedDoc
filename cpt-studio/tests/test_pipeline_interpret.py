@@ -28,6 +28,7 @@ from studio.interpretation import store as inventory_store
 from studio.providers.base import request_sha256
 from studio.types import RawExchange
 from tests.support import factories as f
+from tests.support import operator as ops
 from tests.test_pipeline_api import FakeProvider
 
 AUTH = 'docs/foundation/rulings/2026-10-23-cpt-studio-gi.md'
@@ -1345,3 +1346,50 @@ class ReviewAndProgressTests(InterpretCase):
         self.assertEqual([step['state'] for step in block['steps']][:2], ['done', 'active'])
         self.assertNotIn('gemini', json.dumps(block).lower())
         self.assertEqual(job.kind, 'interpret')
+
+
+class ReconciledRetryTests(InterpretCase):
+    """DECISIONS D52 (the S17 refutation, finding 0): an operator's recorded reconciliation of an unknown outcome - who,
+    when and the note, whose only copy is the run (the audit trail keeps no note text) - survives a retry release of the
+    same run; the release is then the retry stage queued for it ('retry:<run>'), which every door reads as the release."""
+
+    NOTE = 'Synthetic operator note: the vendor console shows one answered request (D52 pin).'
+
+    def unknown_after_outcome_write_failure(self):
+        interpreter = self.scripted(answered(envelope(text='{"passages": "not the schema"}')))
+        encounter, revision = self.through_extract()
+        real, calls = jobs._finish_run, []
+
+        def fails_once(run, exchange):
+            calls.append(exchange.outcome)
+            if len(calls) == 1:
+                raise RuntimeError('synthetic: the outcome write failed')
+            return real(run, exchange)
+        with mock.patch.object(jobs, '_finish_run', side_effect=fails_once), self.assertLogs('studio.jobs', 'ERROR'):
+            self.run_next('interpret')
+        [run] = self.interpret_runs(revision)
+        self.assertEqual(run.state, models.ProviderRun.UNKNOWN)
+        return interpreter, encounter, revision, run
+
+    def test_the_operators_reconciliation_survives_a_retry_and_the_release_is_read(self):
+        operator_user = f.user('d52-operator')
+        ops.grant(operator_user)
+        interpreter, encounter, revision, run = self.unknown_after_outcome_write_failure()
+        self.assertTrue(jobs.reconcile(encounter, run, operator_user, self.NOTE))
+        run.refresh_from_db()
+        recorded = (run.reconciled_by_id, run.reconciled_at, run.reconciliation_note)
+        self.run_next('interpret')  # after-reconcile: settled from its exchange (P-6), the reading refused
+        run.refresh_from_db()
+        self.assertEqual((run.state, recorded[0], recorded[2]), ('succeeded', operator_user.pk, self.NOTE))
+        self.assertFalse(jobs.released_for_retry(run))
+        models.Job.objects.filter(state=models.Job.QUEUED).update(state=models.Job.CANCELLED)
+        job = jobs.retry_reading(encounter, self.user)
+        run.refresh_from_db()
+        self.assertEqual((run.reconciled_by_id, run.reconciled_at, run.reconciliation_note), recorded)
+        self.assertTrue(jobs.released_for_retry(run))  # the release, read from the retry stage
+        self.assertIn(f'retry:{run.pk}', job.idempotency_key)
+        # a second retry finds it released and writes nothing over the operator's record either
+        models.Job.objects.filter(state=models.Job.QUEUED).update(state=models.Job.CANCELLED)
+        jobs.retry_reading(encounter, self.user)
+        run.refresh_from_db()
+        self.assertEqual((run.reconciled_by_id, run.reconciled_at, run.reconciliation_note), recorded)

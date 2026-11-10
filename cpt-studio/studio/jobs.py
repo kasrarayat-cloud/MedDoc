@@ -1931,10 +1931,15 @@ def interpretation_effect(run) -> str:
 def released_for_retry(run) -> bool:
     """Whether ``run``'s answer was released for one retry (FINAL 11.3: a member's or an operator's recorded act writes
     RETRY_RELEASE_NOTE on the released run's reconciled_by, reconciled_at and reconciliation_note): on the run or on any
-    run carrying the same answer."""
-    return models.ProviderRun.objects.filter(
-        _answer_runs(run), reconciled_at__isnull=False, reconciliation_note=RETRY_RELEASE_NOTE,
-        state__in=(models.ProviderRun.FAILED, models.ProviderRun.SUCCEEDED)).exists()
+    run carrying the same answer. DECISIONS D52: a run that already holds an operator's reconciliation keeps it, and its
+    release is the retry stage queued for it in the same transaction (its key, 'retry:<run>')."""
+    runs = models.ProviderRun.objects.filter(_answer_runs(run), state__in=(models.ProviderRun.FAILED,
+                                                                           models.ProviderRun.SUCCEEDED))
+    if runs.filter(reconciled_at__isnull=False, reconciliation_note=RETRY_RELEASE_NOTE).exists():
+        return True
+    return any(Job.objects.filter(kind=INTERPRET, revision_id=item.revision_id,
+                                  idempotency_key__startswith=_interpret_key(item.revision, f'retry:{item.pk}'))
+               .exists() for item in runs.select_related('revision').only('pk', 'revision_id', 'revision'))
 
 
 def _read_inventory(revision, mode=None):
@@ -4095,9 +4100,13 @@ def retry_reading(encounter, user, *, override=False):
             raise Refused(RETRY_TOO_LONG)
         if released is not None and not released_for_retry(released):
             locked = models.ProviderRun.objects.select_for_update().get(pk=released.pk)
-            locked.reconciled_by, locked.reconciled_at = user, timezone.now()
-            locked.reconciliation_note = RETRY_RELEASE_NOTE
-            locked.save(update_fields=['reconciled_by', 'reconciled_at', 'reconciliation_note'])
+            # DECISIONS D52 (the S17 refutation, finding 0): a run an operator reconciled (an unknown outcome P-6 then
+            # settled from its exchange) keeps that record - who, when and the note are its only copy, and the audit
+            # trail keeps no note text by design; the release is the retry stage queued below ('retry:<run>')
+            if locked.reconciled_at is None:
+                locked.reconciled_by, locked.reconciled_at = user, timezone.now()
+                locked.reconciliation_note = RETRY_RELEASE_NOTE
+                locked.save(update_fields=['reconciled_by', 'reconciled_at', 'reconciliation_note'])
         clear_stop(encounter)
         key = _interpret_key(revision, f'retry:{(released or newest).pk}')
         if Job.objects.filter(idempotency_key=key).exists():  # asked again for the same attempt: a stage of its own
