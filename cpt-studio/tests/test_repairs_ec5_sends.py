@@ -20,6 +20,7 @@ from studio import jobs, models, review
 from studio.gi import context as gi_context
 from studio.providers import corti
 from studio.providers.base import ProviderUnavailable
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
 from tests.test_pipeline_api import OFFICE_NOTE, drain
@@ -170,6 +171,7 @@ class Base(OperatorReads, TestCase):
 
 # --- sends-0 / migrate-1: an identical request is never sent again, in either direction -------------------------------
 
+@applied
 @override_settings(**LIVE)
 class IdenticalRequestTests(Base):
     """A report documented from its first character makes the second review's excerpt the whole text: the request
@@ -258,6 +260,7 @@ class IdenticalRequestTests(Base):
 
 # --- sends-1 / migrate-0: a member date the installed revision kept is never sent -------------------------------------
 
+@applied
 @override_settings(**LIVE)
 class PreUpgradeMemberDateTests(Base):
     """The installed revision kept a member's date that differs from the document's as plain metadata
@@ -401,6 +404,7 @@ class PreUpgradeMemberDateTests(Base):
 
 # --- sends-2 / context-2: the paid second review stays with the request it answered -----------------------------------
 
+@applied
 @override_settings(**LIVE)
 class SecondReviewAcrossReuseTests(Base):
     """A date round trip (a member conflict cleared, or a member date changed and changed back) reuses the retained
@@ -497,6 +501,7 @@ class SecondReviewAcrossReuseTests(Base):
 
 # --- migrate-2: a member setting the installed revision kept is never read as the setting -----------------------------
 
+@applied
 @override_settings(**LIVE)
 class PreUpgradeSettingTests(Base):
     def test_a_reassess_queued_at_the_swap_holds_the_visit_and_asks(self):
@@ -520,6 +525,7 @@ class PreUpgradeSettingTests(Base):
 
 # --- migrate-5: nothing is sent at the swap that no member asked for --------------------------------------------------
 
+@applied
 @override_settings(**LIVE)
 class NothingSentAtTheSwapTests(Base):
     """Work the installed revision left queued, or stranded, at the swap is finished under the current rules without
@@ -638,6 +644,7 @@ class SizedProvider(Provider):
                                           settings.PROVIDER_MAX_REQUEST_BYTES)
 
 
+@applied
 @override_settings(**LIVE)
 class UpgradeStopsOnlyWhereItWouldSendTests(Base):
     """skeptic:1 (on bc7c128b1): after an upgrade's remake at a stage that never sends, the predict was recorded as
@@ -854,6 +861,7 @@ class UpgradeStopsOnlyWhereItWouldSendTests(Base):
 
 # --- the reviewer-requested second review (8985dde42): never sent twice, never sent when it should not be -------------
 
+@applied
 @override_settings(**LIVE)
 class ReviewerSecondReviewTests(Base):
     def processed(self, text=REPORT, **extra):
@@ -941,6 +949,7 @@ class ReviewerSecondReviewTests(Base):
 
 # --- migrate-3: the reviewer's second review never reaches a worker that cannot run it --------------------------------
 
+@applied
 @override_settings(**LIVE)
 class UndoClosesTheReviewersSecondReviewTests(Base):
     def test_a_second_review_asked_on_the_new_pair_is_closed_before_the_installed_pair_returns(self):

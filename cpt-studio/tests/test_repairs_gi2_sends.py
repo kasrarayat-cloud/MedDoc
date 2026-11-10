@@ -38,6 +38,7 @@ from studio.gi import context as gi_context
 from studio.providers.base import ProviderUnavailable
 from studio.providers.corti import CortiProvider
 from studio.types import RawExchange
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
 from tests.test_pipeline_api import drain
@@ -203,6 +204,7 @@ class _JumpingClock:
 
 # --- R1: a save that settles a member date conflict makes the request the hold deferred ------------------------------
 
+@applied
 @override_settings(**LIVE)
 class SettlingAMemberDateConflictMakesTheOwedRequestTests(LensSteps):
     """R1. The first attempt conclusively never reached the provider; a member's date conflicts with the documented
@@ -454,6 +456,7 @@ class SettlingAMemberDateConflictMakesTheOwedRequestTests(LensSteps):
                 self.assert_nothing_new_persisted(encounter_id)
 
 
+@applied
 @override_settings(**LIVE)
 class TheRealAdaptersOutcomesDecideTests(LensSteps):
     """R1 through the REAL Corti adapter: only an outcome it records as not sent (the coding request provably never
@@ -528,6 +531,7 @@ class TheRealAdaptersOutcomesDecideTests(LensSteps):
         self.assertEqual(self.encounter(encounter_id).state, 'provider_failed')
 
 
+@applied
 @override_settings(**LIVE)
 class ConcurrentSettlingSavesTests(OperatorReads, TransactionTestCase):
     """R1 under concurrency: two members settle the same held conflict at once (separate database connections). The row
@@ -576,6 +580,7 @@ class ConcurrentSettlingSavesTests(OperatorReads, TransactionTestCase):
 
 # --- R2: the Activity card states each attempt's recorded outcome ----------------------------------------------------
 
+@applied
 @override_settings(**LIVE)
 class TheActivityCardStatesTheRecordedOutcomeTests(LensSteps):
     """R2. 'provider.sending' is recorded before the exchange, so it says only that the attempt started; its
@@ -650,6 +655,7 @@ class TheActivityCardStatesTheRecordedOutcomeTests(LensSteps):
 
 # --- F3: the second-review offer refuses a context read under earlier context rules ----------------------------------
 
+@applied
 @override_settings(**LIVE)
 class TheOfferRefusesAContextReadUnderEarlierRulesTests(LensSteps):
     """F3. An install that bumps CONTEXT_VERSION leaves every encounter's current context 'earlier'; stage_review2 sends
@@ -740,6 +746,7 @@ class TheOfferRefusesAContextReadUnderEarlierRulesTests(LensSteps):
 
 # --- L1: a second review that conclusively never reached the provider leaves the ask open ----------------------------
 
+@applied
 @override_settings(**LIVE)
 class ASecondReviewNeverSentLeavesTheAskOpenTests(LensSteps):
     """L1. The once-per-revision-and-date bound counts every second review that may have reached the provider; one the
@@ -1000,6 +1007,7 @@ class ASecondReviewNeverSentLeavesTheAskOpenTests(LensSteps):
             self.assert_nothing_new_persisted(encounter_id)
 
 
+@applied
 @override_settings(**LIVE)
 class AnOutcomeMarkedSentIsNeverTrustedAsNeverSentTests(LensSteps):
     """R1 and L1 trust only a 'not_sent' outcome whose run says sent=False: one an adapter marked sent is treated as a
@@ -1034,6 +1042,7 @@ class AnOutcomeMarkedSentIsNeverTrustedAsNeverSentTests(LensSteps):
         self.assertEqual(len(self.provider.log), 2)
 
 
+@applied
 @override_settings(**LIVE)
 class ConcurrentAsksAfterANotSentSecondReviewTests(OperatorReads, TransactionTestCase):
     """L1 under concurrency: two reviewers ask at once after a second review that was never sent (separate database

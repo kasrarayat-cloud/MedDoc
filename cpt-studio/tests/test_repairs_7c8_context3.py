@@ -27,6 +27,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 
 from studio import bounded, jobs, models
 from studio.gi import context
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider, drain
 from tests.test_repairs_7c8_context import DateAssertions
@@ -223,6 +224,7 @@ class MemberDateAgreesOnlyWithAStatedValueTests(DateAssertions, SimpleTestCase):
         self.assert_member_conflict(text, ELENA_DATE)
 
 
+@applied
 class MemberDateAgreesOnlyWithAStatedValueRequestTests(EndToEnd):
     """sk:1 end to end: nothing is sent for the member's 1998-01-01, and no act is excluded against it."""
 
@@ -323,6 +325,7 @@ class QualifierInAnotherFieldHoldsTests(DateAssertions, SimpleTestCase):
         self.assert_question(text, '2026-10-14')
 
 
+@applied
 class QualifierInAnotherFieldRequestTests(EndToEnd):
     """sk:2 end to end (X1 .. X3): no planned or prior date is sent, and the act done on the note's date is never
     excluded against one."""
@@ -390,6 +393,7 @@ class AnotherDisciplineTitleTests(DateAssertions, SimpleTestCase):
                 self.assert_member_conflict(text, ELENA_DATE)
 
 
+@applied
 class AnotherDisciplineTitleRequestTests(EndToEnd):
     """sk:4 end to end (E4): the pathology consultation's date is never sent and the snare polypectomy done on the
     colonoscopy's date is never excluded against it."""
@@ -471,6 +475,7 @@ class FieldAboveOrPhraseAfterTests(DateAssertions, SimpleTestCase):
                              + COLO_PLAIN, '2026-10-14')
 
 
+@applied
 class FieldAboveOrPhraseAfterRequestTests(EndToEnd):
     """sk:5 end to end (W1, W2, E5): no outside or planned date is sent, and the snare polypectomy done on the note's
     date is never excluded against one."""
@@ -519,6 +524,7 @@ class LetterDateBesideTheEncounterLineTests(DateAssertions, SimpleTestCase):
                 self.assert_question(text, '2026-10-14')
 
 
+@applied
 class LetterDateBesideTheEncounterLineRequestTests(EndToEnd):
     """sk:6 end to end (E3): the letter's date is never sent; the member's choice of the colonoscopy's date is."""
 
@@ -568,6 +574,7 @@ class DateAndTimeLabelTests(DateAssertions, SimpleTestCase):
                 self.assert_member_date(text, ELENA_DATE)
 
 
+@applied
 class DateAndTimeLabelRequestTests(EndToEnd):
     """sk:7 end to end (W3): the member's 1998-01-01 is a member conflict and nothing is sent."""
 
@@ -625,6 +632,7 @@ class ServiceLineStatesOnlyItsOwnDateTests(DateAssertions, SimpleTestCase):
         self.assert_member_conflict(text, ELENA_DATE)
 
 
+@applied
 class ServiceLineStatesOnlyItsOwnDateRequestTests(EndToEnd):
     """The variant end to end: created with the member's 1998-01-01, nothing is sent and 45385 is never excluded."""
 
@@ -676,6 +684,7 @@ class HeadingOrSentenceAboveTests(DateAssertions, SimpleTestCase):
         self.assert_never(HEAD + 'Previous procedure\nProcedure date: 05/01/2019\n' + COLO_BODY, '2019-05-01')
 
 
+@applied
 class HeadingOrSentenceAboveRequestTests(EndToEnd):
     """The paraphrases end to end: no outside or prior date is sent and 45385 is never excluded against one."""
 

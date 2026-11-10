@@ -24,13 +24,14 @@ from studio.types import NormalizedResponse, ProviderCode
 from studio.validation import engine
 from studio.validation.engine import assess
 from tests import test_harness2_pipeline as hp
+from tests.legacy_chain import applied
 from tests.support.operator import OperatorReads
 from tests.support import factories as f
 from tests.support import pipeline_factories as pf
 from tests.test_harness2_pipeline import BIOPSY, LAND, SNARE, TWO_EXTENTS
 from tests.test_harness2_r2_truth import NO_DATE, OUTSIDE, tamper_one_passage
 from tests.test_harness2_r2_wording import R2WordingCase, browser
-from tests.test_pipeline_api import drain
+from tests.test_pipeline_api import RecordedInterpretation, drain
 
 
 def _txt(encounter):
@@ -127,6 +128,7 @@ class RetrievalFailureWithoutSourceMixin:
                 self.assertNotIn(claim, said)
 
 
+@applied
 class RetrievalFailureWithoutSourceTests(RetrievalFailureWithoutSourceMixin, R2WordingCase):
     def test_no_documented_date_after_peer_review(self):
         encounter_id = self.run_tampered(NO_DATE)
@@ -148,6 +150,7 @@ class RetrievalFailureWithoutSourceTests(RetrievalFailureWithoutSourceMixin, R2W
             self.assertEqual((statuses['pfs.presence'], statuses['mue.units']), ('pass', 'pass'), proposal.code)
 
 
+@applied
 @override_settings(ASTRA_MODE='disabled', FABLE_MODE='disabled')
 class CortiOnlyRetrievalFailureWithoutSourceTests(RetrievalFailureWithoutSourceMixin, R2WordingCase):
     def test_no_documented_date(self):
@@ -202,6 +205,7 @@ LISTED_FIRST = ('Astra listed this code in its first reading, but none of its qu
                 'that reading did not propose it. It proposed it after peer review.')
 
 
+@applied
 class FirstReadingUnlocatedTests(R2WordingCase):
     """Astra's frozen first reading lists 45385 with a quote the document does not hold, and its peer review lists it
     again with the snare passage. The engine counts no first-reading entry whose quotes were not found (refutation
@@ -330,10 +334,12 @@ class CortiUnlistedMixin:
         self.assertFalse([line for line in lines if line.startswith('    Not listed: ')])
 
 
+@applied
 class CortiUnlistedTests(CortiUnlistedMixin, R2WordingCase):
     pass
 
 
+@applied
 @override_settings(ASTRA_MODE='disabled', FABLE_MODE='disabled')
 class CortiOnlyUnlistedTests(CortiUnlistedMixin, R2WordingCase):
     def test_the_chain_is_i1_s(self):
@@ -343,7 +349,7 @@ class CortiOnlyUnlistedTests(CortiUnlistedMixin, R2WordingCase):
 
 # --- truth-4: a reuse's REVIEW PARTICIPANTS never credits it with the retained run's exchanges ---------------------
 
-class ReuseExchangesTests(hp.Harness2Case):
+class ReuseExchangesTests(RecordedInterpretation, hp.Harness2Case):
     """The second encounter of the same synthetic note reuses Astra's retained answer: its run sent nothing and holds
     no exchange, while its Assessment.participants entry counts the exchanges and tool calls of the loop that answered
     for it (jobs.loop_run: the retained run's). The TXT printed "Exchanges: 2 · tool calls: 1" as this run's, beside
@@ -380,6 +386,7 @@ class ReuseExchangesTests(hp.Harness2Case):
 LISTED = 'Corti listed this code as a candidate or an alternative, not selected; see Alternatives.'
 
 
+@applied
 class CortiListedTests(R2WordingCase):
     """Corti selects 45385 and nests 45380 under it as an alternative; Astra proposes 45380 from the biopsy passage. The
     card, the rationale and corti_relation called 45380 "listed only as a candidate", while the Alternatives row it
@@ -448,6 +455,7 @@ def _statements(line):
     return len(LIMIT.findall(line))
 
 
+@applied
 class PtpOncePerCardTests(R2WordingCase):
     """Every real code card of the colon chain stated the limit in its status line, again in "Not verified: ...; NCCI
     procedure-to-procedure edits." and, where separate lesions are documented, again in its modifier considerations
@@ -484,7 +492,7 @@ class PtpOncePerCardTests(R2WordingCase):
 
 # --- falsegreen-9: no partial estimate where a failed exchange reported no usage ----------------------------------
 
-class FailedExchangeCostTests(hp.Harness2Case):
+class FailedExchangeCostTests(RecordedInterpretation, hp.Harness2Case):
     """truth-12's rule (HARNESS.md 12.9; review._unpriced): an exchange that may have been billed - any not recorded not
     sent - and reported no usage leaves the run with no estimate. Round 2 pinned it for an unknown exchange and for one
     not sent; a mutant that read only 'unknown' priced exchange 1 alone as the run's ("0.0310") for an exchange that
@@ -575,6 +583,7 @@ class SecondReviewRelationTests(OperatorReads, TestCase):
 CATEGORY_II = '3017F'
 
 
+@applied
 class SelectedApartRelationTests(R2WordingCase):
     """corti_relation 'selected_apart' through the real pipeline: Corti selects 3017F (a CPT Category II code, out of
     this release's scope) with an exact passage, and Astra proposes it too. Corti's selection is excluded for its scope

@@ -16,6 +16,7 @@ from django.test import Client, SimpleTestCase, TestCase, override_settings
 
 from studio import models, reports
 from studio.types import RawExchange
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
 from tests.test_pipeline_api import drain
@@ -163,6 +164,7 @@ class PrimaryInexact(TwoPassProvider):
                            usage={'creditsConsumed': 0.02}, usage_basis='provider_reported_credits_not_usd')
 
 
+@applied
 class SecondReviewSelectionIsNeverDroppedTests(Harness):
     """reports-0: the primary response selected 45380 without an exact passage, so 45380 was excluded early ("No exact
     source evidence", not reinstatable) and the biopsy stayed unresolved. The second review a reviewer asked for
@@ -228,6 +230,7 @@ class SecondReviewSelectionIsNeverDroppedTests(Harness):
         self.assertFalse(assessment.proposals.filter(bucket='alternative').exists())
 
 
+@applied
 class SecondReviewCheckNamesWhatItAccountsForTests(Harness):
     """reports-2: two asked items (a forceps biopsy and a balloon dilation); the second review selected only 45380. The
     stored check said 45380 "account[s] for them" - both asked items - while the same assessment still lists the
@@ -300,6 +303,7 @@ No polyps were seen.
 """
 
 
+@applied
 class DocumentedVisitWithoutAProposalTests(Harness):
     """reports-1: an office visit (documented as performed, with or without a significant, separately identifiable E/M)
     beside a same-day colonoscopy; the provider selected only 45378. The reconciliation does not list the visit as
@@ -424,6 +428,7 @@ DECIDED = "Every documented service has a proposal with a reviewer's decision, b
 CONTEXT_PENDING = 'The encounter context changed; re-assessment has not finished.'
 
 
+@applied
 class PendingReviewSaysWhatIsMissingTests(Harness):
     """reports-3: both proposals approved, then a context change (the re-assessment queued) and a Stop. Coding
     completeness said "Every documented service has a proposal; each still needs a reviewer's decision" in the draft
@@ -505,6 +510,7 @@ def mark_title(html, text):
     return found.group(1) if found else None
 
 
+@applied
 class NotCheckedPassagesAreNeverEvidenceTests(Harness):
     """reports-4: a biopsy code proposed for a colonoscopy where no biopsy is documented is held (act_missing); its stored
     support says "Not checked: the documented service or act is not established as performed" and keeps the service's
@@ -553,6 +559,7 @@ class NotCheckedPassagesAreNeverEvidenceTests(Harness):
 NONE_PROPOSED = 'No CPT codes were proposed for this document.'
 
 
+@applied
 class NothingIsSaidOfAResponseNeverReadTests(Harness):
     """reports-5: with the provider outcome unknown (a request sent, no complete response read), and still after a
     member reconciled it and stopped the one new attempt, the suggestions panel said "No CPT codes were proposed for this
@@ -632,6 +639,7 @@ def visit_beside_findings_read_in_part():
 CECUM = ('45378', 'The colonoscope was advanced to the cecum')
 
 
+@applied
 class UnresolvedCheckNamesTheUnlistedVisitTests(Harness):
     """Skeptic of the reports-1 repair (bc261aee3): completeness.not_listed held the office visit (covered [], never
     listed as unresolved beside a same-day procedure), and coding completeness and UNRESOLVED named it - yet the stored
@@ -726,6 +734,7 @@ PROBLEM_TAIL = ('the documented-service reading reported a problem, listed under
 EXCEPT_VISIT = f', except {UNLISTED_VISIT}, which no proposal accounts for and which is not listed as unresolved'
 
 
+@applied
 class UnresolvedSectionNamesTheUnlistedVisitTests(Harness):
     """Skeptic of the reports-1 repair (bc261aee3): the repair named the unlisted visit only on the closing line of a
     fully reconciled reading. Over a reading read in part (the visit, then a findings sentence of 1,315 characters),
@@ -829,6 +838,7 @@ def panel_copy(html):
     return [text.replace('&#x27;', "'").replace('&quot;', '"').replace('&amp;', '&') for text in found]
 
 
+@applied
 class SecondReviewOutcomeIsStatedTests(Harness):
     """Skeptic of the reports-5 repair (0f44cf065): the primary response was read with no code, the colonoscopy was
     offered for the second review and a reviewer asked for it (201). With that review's outcome unknown (sent, no
@@ -937,6 +947,7 @@ class FailedPrimary(TwoPassProvider):
         return RawExchange(outcome='failed', sent=True, http_status=500, error='HTTP 500 from the provider.')
 
 
+@applied
 class RefusedResponseStateTests(Harness):
     """Skeptic of the reports-5 repair: a response refused whole (65 selected codes, over the 64-code cap) - the primary's,
     or the second review's - left the encounter state 'no_codes', whose label "No CPT codes proposed" the documents list
@@ -1021,6 +1032,7 @@ class RefusedResponseStateTests(Harness):
 READ_NONE = 'No CPT code was proposed in the response that was read'
 
 
+@applied
 class SecondReviewOutcomeBlockerTests(Harness):
     """Found while refuting the two repairs above: with the primary response read with nothing selected and the second
     review's outcome unknown (sent, no response read) or failed, the readiness blocker - in the API, the draft TXT's

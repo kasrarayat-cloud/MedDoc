@@ -38,6 +38,7 @@ from studio.gi import services as gi_services
 from studio.types import ConfirmedFinding, EvidenceSpan, NormalizedResponse, ProviderCode
 from studio.validation import engine, reconcile
 from studio.validation.engine import assess
+from tests.legacy_chain import applied
 from tests.test_harness2_pipeline import (EMPTY_PEER, HEAD, TWO_EXTENTS, ColonCase, Harness2Case, answered,
                                           open_questions, peer_answer, reading)
 from tests.test_harness_engine_confirmations import CONFIGURED, REFERENCE, REVIEWER, binding, encounter_check, proposal
@@ -165,6 +166,7 @@ class EvidenceCase(Harness2Case):
 
 # --- EV2-1: the four scenarios of the verifier's probe, end to end ---------------------------------------------------
 
+@applied
 class DiagnosticExaminationTests(EvidenceCase):
     """(A) A diagnostic colonoscopy ("No polyps were seen"): Corti selects 45378 and 45385 on the cecum sentence;
     Astra reads 45378 and a colonoscopy performed, quoting it. 45385 is held - no snare removal is documented - and the
@@ -200,6 +202,7 @@ def doubts_reading():
                code_item('45380', service_ids=[], evidence=[SLICE_BX])])
 
 
+@applied
 class SpecimenLineTests(EvidenceCase):
     """(B) The suite's DOUBTS document: each act is left in doubt, and Astra's colonoscopy service quotes both specimen
     lines - which the readers read as no snare removal and no biopsy at all. Round 1's EV-1 wrong output (45385 ready on
@@ -232,6 +235,7 @@ class SpecimenLineTests(EvidenceCase):
         self.assertNotRead(encounter_id, row, '45385', 'the passage does not name the snare removal')
 
 
+@applied
 class UnsettledTests(EvidenceCase):
     """(C) Nothing documents either act as done; Astra reads the colonoscopy as performed, quoting the cecum sentence.
     Neither 45380 nor 45385 becomes ready on it."""
@@ -268,6 +272,7 @@ def answers_with_slice(name, number=2):
     return answer
 
 
+@applied
 class HedgeSliceTests(EvidenceCase):
     """(D) Astra's peer review answers 45380's question 'performed', quoting a slice of the hedge sentence. The readers
     read the whole sentence, which leaves the biopsy in doubt; the page shows the slice with that whole sentence."""
@@ -300,6 +305,7 @@ class HedgeSliceTests(EvidenceCase):
         self.assertNotRead(encounter_id, row, '45380', 'the passage leaves the forceps biopsy in doubt')
 
 
+@applied
 class ActStatedTests(EvidenceCase):
     """The control: a passage that truly states the act answers its question. 45380 cites the hedge while another
     sentence states the biopsy done, so the readers disagree and hold it on its status; the done sentence is verified,
@@ -448,6 +454,7 @@ def answers_extent_with(quote, value='cecum', number=2):
     return answer
 
 
+@applied
 class ExtentEvidenceTests(EvidenceCase):
     corti_codes = (('45385', SNARE_QUOTE), ('45380', BIOPSY_QUOTE))
 
@@ -495,6 +502,7 @@ NO_BASIS = (HEAD + 'Office visit note (fictional)\nDate of service: 2026-10-20\n
             + '\nHistory: ' + PRIOR + '\nAssessment: reflux, stable on current therapy.\nPlan: continue omeprazole.\n')
 
 
+@applied
 class BasisEvidenceTests(EvidenceCase):
     """EV2-2 (c): no time and no MDM are documented for today; Astra's office visit quotes an earlier visit's time."""
     corti_codes = (('99214', VISIT),)
@@ -524,6 +532,7 @@ def undated(line):
             'Place of service: Ambulatory surgery center\nProcedure: Colonoscopy\n' + CECUM + '\n' + POLYP + '\n')
 
 
+@applied
 class DateEvidenceTests(EvidenceCase):
     corti_codes = (('45385', SNARE_QUOTE),)
 
@@ -591,6 +600,7 @@ def page(detail):
 
 # The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
 # run that path with its setting on and keep their assertions.
+@applied
 @override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class ContextChangedTests(ColonCase):
     """truth-10 (s5): the colon chain to phase 2, then a member's context change, then Stop. The live assessment is the
@@ -744,6 +754,7 @@ class ConfirmationAcrossChangesCase(ColonCase):
                 assessment.proposals.filter(code='45385').order_by('position')]
 
 
+@applied
 class IdentityContextTests(ConfirmationAcrossChangesCase):
     def test_a_confirmation_made_under_one_member_date_is_not_read_under_another(self):
         """FG2-1 (a): the identity includes the service date (12.7), so the confirmation made under 2026-10-14 is not
@@ -778,6 +789,7 @@ CONTRADICTING = ('Addendum (synthetic): correction - the cecum was not reached; 
                  'transverse colon because of poor preparation.')
 
 
+@applied
 class NewRevisionTests(ConfirmationAcrossChangesCase):
     def to_revision_two(self, addendum):
         encounter_id = self.create(TWO_EXTENTS)
@@ -830,6 +842,7 @@ class NewRevisionTests(ConfirmationAcrossChangesCase):
 
 # --- FG2-4: an agent's confirmation is served and reported as an agent's ----------------------------------------------
 
+@applied
 class AgentConfirmationTests(ConfirmationAcrossChangesCase):
     def test_an_agent_reviewer_s_confirmation_is_labelled_an_agent_s_everywhere(self):
         import csv

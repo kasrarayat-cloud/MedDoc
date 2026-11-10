@@ -5,6 +5,9 @@ Pre-install review, 2026-10-26: the installer gave the web no path, so get_provi
 billing change re-predicted, and the worker re-sent a failed or not-sent request (ARCHITECTURE 5.4 says it never
 does). The pipeline suites patch get_provider for the web and the worker alike, so none of them could see it. Here
 only the worker's send is stubbed; the web calls the real get_provider(). Synthetic data only; no network.
+
+The Gemini migration (design/FINAL.md 14.6; slice S15): a send-discipline test, so it runs the production chain, Gemini
+reading OFFICE_NOTE from its recorded synthetic interpretation (tests.test_pipeline_api.RecordedInterpretation).
 """
 import json
 from unittest import mock
@@ -15,7 +18,7 @@ from studio import models
 from studio.providers.corti import CortiProvider
 from studio.types import RawExchange
 from tests.support import factories as f
-from tests.test_pipeline_api import OFFICE_NOTE, drain
+from tests.test_pipeline_api import OFFICE_NOTE, RecordedInterpretation, drain
 from tests.test_repairs_pipeline import LIVE
 
 # ops/install.py CREDENTIALS_IN_CONTAINER: the worker's mount point. Nothing exists there in a test.
@@ -35,8 +38,9 @@ class FailingCorti(CortiProvider):
 
 
 @override_settings(**LIVE, CORTI_CREDENTIALS_FILE=WORKER_CREDENTIALS_PATH)
-class WebWithTheWorkersCredentialsPathTests(TestCase):
+class WebWithTheWorkersCredentialsPathTests(RecordedInterpretation, TestCase):
     def setUp(self):
+        super().setUp()
         self.ws = f.workspace()
         self.reviewer = f.member(self.ws, f.user('reviewer'))
         self.client = Client(enforce_csrf_checks=False)

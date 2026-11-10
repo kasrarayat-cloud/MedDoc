@@ -15,10 +15,11 @@ from django.test import Client, override_settings
 
 from studio import jobs, models, reports, review, serializers
 from studio.types import RawExchange
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.test_harness2_pipeline import (ASTRA_READING, TWO_EXTENTS, ColonCase, Harness2Case, answered, asks,
                                           facts_call, unknown)
-from tests.test_pipeline_api import drain
+from tests.test_pipeline_api import RecordedInterpretation, drain
 
 
 def _proposal(detail, code):
@@ -30,6 +31,7 @@ def _proposal(detail, code):
 PEER_ONLY = 'Fable did not propose this code in its first reading. It proposed it after peer review.'
 
 
+@applied
 class PeerProposedPositionTests(ColonCase):
     """The default colon chain: Fable's peer review adds 45378 (support proposed_by ['fable'], phases {'fable':
     'peer_review'}). participant_positions reads the frozen first readings, so its position there is 'not_proposed' -
@@ -128,6 +130,7 @@ class ReferenceValidationTruthMixin:
                              proposal.code)
 
 
+@applied
 class ReferenceValidationTruthTests(ReferenceValidationTruthMixin, ColonCase):
     def test_a_member_date_conflict_leaves_every_code_unchecked_and_the_row_says_so(self):
         encounter_id = self.create(TWO_EXTENTS)
@@ -157,6 +160,7 @@ class ReferenceValidationTruthTests(ReferenceValidationTruthMixin, ColonCase):
                          {('selected', 'needs_clarification', 'participant')})
 
 
+@applied
 @override_settings(ASTRA_MODE='disabled', FABLE_MODE='disabled')
 class CortiOnlyReferenceValidationTruthTests(ReferenceValidationTruthMixin, ColonCase):
     def test_no_documented_date(self):
@@ -242,6 +246,7 @@ class RetrievalFailureWordingMixin:
         return encounter_id
 
 
+@applied
 class RetrievalFailureWordingTests(RetrievalFailureWordingMixin, ColonCase):
     def test_with_both_participants_after_peer_review(self):
         encounter_id = self.run_tampered()
@@ -249,6 +254,7 @@ class RetrievalFailureWordingTests(RetrievalFailureWordingMixin, ColonCase):
         self.assertSaysWhatFailed(encounter_id)
 
 
+@applied
 @override_settings(ASTRA_MODE='disabled', FABLE_MODE='disabled')
 class CortiOnlyRetrievalFailureWordingTests(RetrievalFailureWordingMixin, ColonCase):
     def test_corti_only(self):
@@ -261,6 +267,7 @@ class CortiOnlyRetrievalFailureWordingTests(RetrievalFailureWordingMixin, ColonC
 
 # The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
 # run that path with its setting on and keep their assertions.
+@applied
 @override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class ConfirmationEffectTests(ColonCase):
     """review.confirmation_effect states what the current assessment made of each reviewer-confirmed finding - read,
@@ -333,7 +340,7 @@ UNPRICED = ("not estimated: exchange 2 (outcome unknown) reported no usage and m
             "this run cannot be estimated from published rates")
 
 
-class CostCoverageTests(Harness2Case):
+class CostCoverageTests(RecordedInterpretation, Harness2Case):
     """A tool loop is priced exchange by exchange (pricing.estimate_loop), which counts an exchange that reported no
     usage and prices the rest. An exchange that may have reached the vendor - any not recorded not sent - and reported
     no usage leaves the run's cost unknown, so it has no estimate (the trace, the participant row, the reports), and
@@ -391,7 +398,7 @@ class CostCoverageTests(Harness2Case):
 
 # --- sends-r2-3: a tool result the participant was never sent is never shown as one it retrieved ---------------------
 
-class UndeliveredReferenceTests(Harness2Case):
+class UndeliveredReferenceTests(RecordedInterpretation, Harness2Case):
     """A tool call's refs are references its participant retrieved only when the exchange that carried its result to
     the participant was sent (the next exchange, recorded and not 'not_sent'). The loop records the tool calls it
     answered on exchange N even when it then ends without sending exchange N+1 - not sent, a Stop, a follow-up it could
@@ -473,7 +480,7 @@ class UndeliveredReferenceTests(Harness2Case):
 
 # --- truth-13: a reuse's references are said to be the retained run's, retrieved by its tool calls --------------------
 
-class ReusedRunReferenceTests(Harness2Case):
+class ReusedRunReferenceTests(RecordedInterpretation, Harness2Case):
     """A run that reuses a retained answer made no tool call: its references are the retained run's (HARNESS.md 12.7, a
     reuse shows the calls of the run it reuses), and the API names that run (references.reused_from, and each of the
     trace's references used), so the page, the trace and the reports say they were retrieved by the retained run's tool

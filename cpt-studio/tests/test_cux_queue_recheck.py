@@ -15,6 +15,7 @@ from unittest import mock
 from django.test import Client, TestCase, override_settings
 
 from studio import customer_api, models, serializers
+from tests.legacy_chain import applied
 from tests.test_cux_flow import LIVE as FLOW_LIVE, MARA, pasted, run_stages
 from tests.support import factories as f
 from tests.test_pipeline_api import FakeProvider, drain
@@ -23,6 +24,7 @@ from tests.test_repairs_gi2_present import BIOPSY, LETTER, SNARE, UNDATED, VISIT
 from tests.test_services_second_review import TwoPassProvider
 
 
+@applied
 class RecheckTests(Harness):
     def customer(self, encounter_id, client=None):
         reply = (client or self.client).get(f'/api/encounters/{encounter_id}')
@@ -67,6 +69,7 @@ class RecheckTests(Harness):
         self.assertEqual(self.customer(complete)['recheck'], {'available': False, 'can_request': False})
 
 
+@applied
 class QueueTests(Harness):
     def customer_rows(self):
         reply = self.client.get('/api/encounters')
@@ -99,6 +102,7 @@ class QueueTests(Harness):
                              or bool(operator_rows[key]['queue_reasons']), key)
 
 
+@applied
 @override_settings(**FLOW_LIVE)
 class DateHoldQueueTests(TestCase):
     """The directive's "Action needed" at once: right after the read and the analyze stage, a member's date held against

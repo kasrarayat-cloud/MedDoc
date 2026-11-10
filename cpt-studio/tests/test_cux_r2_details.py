@@ -30,6 +30,7 @@ from django.test import Client, TestCase, override_settings
 
 from studio import answers, customer_api, jobs, models, review
 from studio.gi import context as gi_context
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support import pipeline_factories as pf
 from tests.test_cux_flow import COLON, DetailsCase, asks, ready
@@ -121,6 +122,7 @@ class PipelineCase(TestCase):
                                                      data__fact='service_date').order_by('created_at', 'pk'))
 
 
+@applied
 class DateSettledAtUploadTests(PipelineCase):
     """L7-02: the document states two dates of service and the member typed one of them in the upload form, before the
     document's dates could be seen. The reading takes it (a member's value settles a conflict inside the document by
@@ -214,6 +216,7 @@ class DateSettledAtUploadTests(PipelineCase):
                          (None, answers.DATE_PROMPTS['confirm'], '2026-10-20'))
 
 
+@applied
 class NoUsableDateTests(PipelineCase):
     """L7-03: the document's only date text is not a date of service this service reads, so every member date is held
     (interpretation 35). The date row says what the document states, and always offers a way that settles: removing
@@ -276,6 +279,7 @@ class NoUsableDateTests(PipelineCase):
         self.assertFalse(self.date_row(doc)['addendum_allowed'])
 
 
+@applied
 class DateCorrectionTests(PipelineCase):
     """L7-05: a member's date of service in effect where the document gives no single date of its own is the member's
     saved answer, attributed, and the same row corrects or removes it - each change one context change, audited."""

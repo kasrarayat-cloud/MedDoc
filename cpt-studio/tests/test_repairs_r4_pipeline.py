@@ -9,9 +9,10 @@ from django.utils import timezone
 
 from studio import jobs, models, review
 from studio.providers.base import ProviderUnavailable
-from tests.test_pipeline_api import OFFICE_NOTE, drain
+from tests.legacy_chain import applied
+from tests.test_pipeline_api import OFFICE_NOTE, RecordedInterpretation, drain
 from tests.support.operator import OperatorReads
-from tests.test_repairs_pipeline import FIRST_DATE, LIVE, NO_DATE_NOTE, ApiHarness
+from tests.test_repairs_pipeline import FIRST_DATE, INTERPRETATIONS, LIVE, NO_DATE_NOTE, ApiHarness
 
 # A note that documents no place of service: a member's setting supplies it, and a later one changes it. A member's
 # setting beside a documented one is a conflict instead (session interpretation 11).
@@ -22,6 +23,7 @@ class _WorkerDied(BaseException):
     """Stands in for a SIGKILL: run_job records an Exception, never a BaseException."""
 
 
+@applied
 @override_settings(**LIVE)
 class SweptReservedRunIsNoOutcomeTests(OperatorReads, ApiHarness, TestCase):
     """Round 4, pipeline:2 — a predict whose worker died with its run only reserved is settled by the stale sweep as
@@ -179,9 +181,12 @@ class SweptReservedRunIsNoOutcomeTests(OperatorReads, ApiHarness, TestCase):
 
 
 @override_settings(**LIVE)
-class RunInUseTests(OperatorReads, ApiHarness, TestCase):
+class RunInUseTests(RecordedInterpretation, OperatorReads, ApiHarness, TestCase):
     """Round 4, pipeline:2 — exactly the runs the sweep settled from reserved stop standing; every other finished
-    run stands as before (cc78bc4c4), whatever it is newer than."""
+    run stands as before (cc78bc4c4), whatever it is newer than.
+
+    On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads OFFICE_NOTE from its recorded synthetic
+    interpretation, and the run these tests start from is Corti's primary run, beside the interpretation's own."""
 
     def setUp(self):
         super().setUp()
@@ -190,7 +195,7 @@ class RunInUseTests(OperatorReads, ApiHarness, TestCase):
         drain()
         self.encounter = models.Encounter.objects.get(pk=encounter_id)
         self.revision = self.encounter.current_revision
-        self.failed = models.ProviderRun.objects.get(encounter=self.encounter)
+        self.failed = models.ProviderRun.objects.get(encounter=self.encounter, purpose=models.ProviderRun.PRIMARY)
         self.assertEqual(self.failed.state, models.ProviderRun.FAILED)
 
     def make_run(self, **fields):
@@ -224,11 +229,14 @@ class RunInUseTests(OperatorReads, ApiHarness, TestCase):
 
 
 @override_settings(**LIVE)
-class ContextValuesAreStringsTests(OperatorReads, ApiHarness, TestCase):
+class ContextValuesAreStringsTests(RecordedInterpretation, OperatorReads, ApiHarness, TestCase):
     """Round 4, pipeline:6 — POST /context takes, per field, a listed string, or null or '' to clear it (API.md). Any
     other JSON type answers 400 and changes nothing, never a silent clear (the round-3 orchestrator:5 class, on
     another endpoint). A service date is a string in YYYY-MM-DD form only: never a JSON number, a basic or week date
     that date.fromisoformat also accepts; on the upload too."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads OFFICE_NOTE or NO_DATE_NOTE from its
+    # recorded synthetic interpretation.
+    interpretations = INTERPRETATIONS
 
     NON_STRINGS = (False, 0, [], {}, 0.0, True, 1, ['office'], {'a': 1}, 1.5)
 

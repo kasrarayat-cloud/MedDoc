@@ -14,6 +14,7 @@ from django.test import TestCase, override_settings
 
 from studio import jobs, models, review
 from studio.gi import context as gi_context
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
 from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider, drain
@@ -50,6 +51,7 @@ def member_conflict(context):
     return gi_context.is_member_conflict((context.facts or {}).get('service_date'))
 
 
+@applied
 @override_settings(**LIVE)
 class MemberDateConflictIsHeldWhereDecidedTests(OperatorReads, TestCase):
     """migrate-4: whichever path would start the request for a context whose service date is a member conflict records
@@ -665,6 +667,7 @@ def run_app_script(body, params):
     return json.loads(answers[0][len(install.APP_SCRIPT_ANSWER):])
 
 
+@applied
 @override_settings(**LIVE)
 class TheUndoScriptsOnTheDatabaseTests(OperatorReads, TestCase):
     """The installer's in-image scripts, run against real rows: what the undone pair left open is closed as failed

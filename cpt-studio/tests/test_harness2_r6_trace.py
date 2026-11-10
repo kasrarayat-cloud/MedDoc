@@ -27,6 +27,7 @@ from django.test import SimpleTestCase
 from studio import reports
 from tests import test_harness2_pipeline as hp
 from tests import test_harness_engine as he
+from tests.legacy_chain import applied
 from tests.test_harness2_pipeline import BIOPSY, LAND, SNARE, TWO_EXTENTS
 from tests.test_harness2_r2_wording import R2WordingCase, browser
 from tests.test_harness2_r4_truth import UNLOCATED, _block, _section
@@ -151,6 +152,7 @@ class PositionCountEngineTests(SimpleTestCase):
                                           'proposer.'))
 
 
+@applied
 class PositionCountPipelineTests(Surfaces, R2WordingCase):
     """account-3 through the pipeline and the API (the proposal's support): the account lens's case C - Astra's first
     reading lists 45385 with a quote no document holds and locates 45380; its peer review locates 45385 and lists 45380
@@ -200,6 +202,7 @@ class PositionCountPipelineTests(Surfaces, R2WordingCase):
 
 # --- account-4: each additional-code entry is worded by its own quotes ------------------------------------------------
 
+@applied
 class EntryWordingTests(Surfaces, R2WordingCase):
     """account-4: Fable's peer review gives 45378 twice, one entry quoting the landmarks line and one with a quote no
     document holds, in either order. Per code, as before, Fable first proposed 45378 in its peer review (codes_added,
@@ -304,6 +307,7 @@ class EntryWordingTests(Surfaces, R2WordingCase):
 
 # --- account-5: a peer review the current assessment did not read is marked so, never "listed" ------------------------
 
+@applied
 class UnreadReviewTests(Surfaces, R2WordingCase):
     """account-5: after a member's context change the new chain reuses the identical peer request, so the current
     assessment reads the reuse run, not the run that holds the bytes. The trace served '' for every additional code of
@@ -341,6 +345,7 @@ class UnreadReviewTests(Surfaces, R2WordingCase):
 
 # --- account-1: the trace's headings are neutral; each item carries its own words -----------------------------------
 
+@applied
 class TraceHeadingTests(Surfaces, R2WordingCase):
     """account-1, on the account lens's inputs: Astra's first reading lists 45385 with a quote no document holds (and
     locates 45380), and Fable's peer review lists 45378 with a quote no document holds. The trace headed them "Codes

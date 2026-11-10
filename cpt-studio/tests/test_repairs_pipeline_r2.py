@@ -10,11 +10,13 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from studio import jobs, models
-from tests.test_pipeline_api import drain
+from tests.legacy_chain import applied
+from tests.test_pipeline_api import RecordedInterpretation, drain
 from tests.support.operator import OperatorReads
-from tests.test_repairs_pipeline import FIRST_DATE, LIVE, NO_DATE_NOTE, ApiHarness
+from tests.test_repairs_pipeline import FIRST_DATE, INTERPRETATIONS, LIVE, NO_DATE_NOTE, ApiHarness
 
 
+@applied
 @override_settings(**LIVE)
 class ResumeOnlyTheLatestCancelledStageTests(OperatorReads, ApiHarness, TestCase):
     """pipeline:0 — a stale Resume never re-runs an older stage."""
@@ -57,13 +59,16 @@ class ResumeOnlyTheLatestCancelledStageTests(OperatorReads, ApiHarness, TestCase
 
 
 @override_settings(**LIVE)
-class MetadataChangesNeverResendTests(OperatorReads, ApiHarness, TestCase):
+class MetadataChangesNeverResendTests(RecordedInterpretation, OperatorReads, ApiHarness, TestCase):
     """Round 3, pipeline3:0 — ARCHITECTURE 5.4: a setting or billing change leaves the request unchanged, so it
     re-checks with the run in use and sends nothing, whatever that run's outcome.
 
     fb65bf79f implemented pipeline:1, which its second, final verifier had REFUTED, and re-sent the identical
     request after a failed or not-sent run on every metadata save. These pin the contract instead.
     """
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads OFFICE_NOTE or NO_DATE_NOTE from its
+    # recorded synthetic interpretation.
+    interpretations = INTERPRETATIONS
 
     def change(self, encounter_id, *bodies):
         for body in bodies:
@@ -119,6 +124,7 @@ class MetadataChangesNeverResendTests(OperatorReads, ApiHarness, TestCase):
         self.assertEqual(len(self.provider.requests), 2)
 
 
+@applied
 @override_settings(**LIVE)
 class LegacyRunServiceDateTests(OperatorReads, ApiHarness, TestCase):
     """pipeline:2 — a run recorded before ProviderRun.service_date existed keeps the date its request carried."""
@@ -155,6 +161,7 @@ class LegacyRunServiceDateTests(OperatorReads, ApiHarness, TestCase):
         self.assertEqual(len(self.provider.sent), 1)
 
 
+@applied
 @override_settings(**LIVE)
 class SettledStagesStayResumableTests(OperatorReads, ApiHarness, TestCase):
     """pipeline:3 — a stage the sweep settles, or that expires in the queue, can be resumed; it never strands
@@ -194,6 +201,7 @@ class SettledStagesStayResumableTests(OperatorReads, ApiHarness, TestCase):
         self.assertEqual(models.Encounter.objects.get(pk=encounter_id).state, 'ready_for_review')
 
 
+@applied
 @override_settings(**LIVE)
 class RoutingSummaryTests(OperatorReads, ApiHarness, TestCase):
     """pipeline:4 — the detail's routing is the routing the current assessment used."""

@@ -34,7 +34,8 @@ from tests.support import pipeline_factories as pf
 from tests.test_cux_review import retrieval_for
 from tests.test_h2_refutation_r1 import COLON, EGD, both
 from tests.test_harness_engine import REFERENCE, code, corti, read, run, span
-from tests.test_repairs_pipeline import FIRST_DATE, NO_DATE_NOTE, RECONCILE_NOTE
+from tests.test_pipeline_api import RecordedInterpretation
+from tests.test_repairs_pipeline import FIRST_DATE, INTERPRETATIONS, NO_DATE_NOTE, RECONCILE_NOTE
 
 SYN = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n'
 # the lenses' own headers, verbatim (L1: EGD_PLAIN; L2: EGD2, NOPOLYP, DOC, DOC_REF; L3: CR)
@@ -1626,7 +1627,11 @@ class StopResumeBase(h2p.Harness2Case):
                 if (r.scope or {}).get('continues') == str(stopped.pk)]
 
 
-class StopRecoveryTests(StopResumeBase):
+class StopRecoveryTests(RecordedInterpretation, StopResumeBase):
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads OFFICE_NOTE or NO_DATE_NOTE from its
+    # recorded synthetic interpretation.
+    interpretations = INTERPRETATIONS
+
     def test_l6_1_a_hold_recorded_after_a_mid_loop_stop_never_hides_the_stopped_run(self):
         encounter_id = self.create(text=NO_DATE_NOTE)
         stopped = self.stop_mid_loop(encounter_id, 'astra', 'call_astra_1', h2p.ASTRA_READING)
@@ -1664,9 +1669,12 @@ class StopRecoveryTests(StopResumeBase):
         self.assertEqual(self.records(self.encounter(encounter_id).current_assessment)['fable']['state'], 'read')
 
 
-class SingleProposerStopRecoveryTests(StopResumeBase):
+class SingleProposerStopRecoveryTests(RecordedInterpretation, StopResumeBase):
     """L6-1 where Astra is the only proposer (Corti selects nothing): its explicit first-reading code reaches review
     after the hold and the reconciliation, as after a plain Resume."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads OFFICE_NOTE or NO_DATE_NOTE from its
+    # recorded synthetic interpretation.
+    interpretations = INTERPRETATIONS
     corti_codes = ()
 
     def test_the_only_proposers_code_reaches_review(self):
@@ -1686,7 +1694,7 @@ class SingleProposerStopRecoveryTests(StopResumeBase):
         self.assertEqual(found, [('selected', ['astra'])])
 
 
-class ContinuationLineageTests(StopResumeBase):
+class ContinuationLineageTests(RecordedInterpretation, StopResumeBase):
     def resumed(self):
         encounter_id = self.create()
         stopped = self.stop_mid_loop(encounter_id, 'astra', 'call_astra_1', h2p.ASTRA_READING)

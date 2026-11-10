@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from studio import jobs, models, review
 from studio.validation import questions
+from tests.legacy_chain import applied
 from tests.test_cux_r2_details import PipelineCase
 from tests.test_pipeline_api import drain
 from tests.test_reference import ArchiveMixin
@@ -80,6 +81,7 @@ class _Case(ArchiveMixin, PipelineCase):
                 if models.DecisionInvalidation.objects.filter(decision=d).exists()]
 
 
+@applied
 class EarlierFormAnswerApprovalTests(_Case):
     """Answers C3-1: an answer recorded before the binding never reopens an approval through a re-assessment."""
 
@@ -114,6 +116,7 @@ class EarlierFormAnswerApprovalTests(_Case):
         self.assertEqual(self.invalidated(encounter_id), [])
 
 
+@applied
 class ServiceAnswerUndoTests(_Case):
     """Answers C3-2: an assessment whose documented service's question an answer closed is this revision's write."""
 
@@ -150,6 +153,7 @@ class ServiceAnswerUndoTests(_Case):
         self.assertTrue(hold)
 
 
+@applied
 class SupersedingServiceAnswerTests(_Case):
     """Answers C3-3: a superseding answer to a closed documented service's question is shown on its row."""
 
@@ -173,6 +177,7 @@ class SupersedingServiceAnswerTests(_Case):
         self.assertIn(('em_basis', 'cannot_confirm', str(new.pk)), rows)
 
 
+@applied
 class ClosedRowFingerprintTests(_Case):
     """Answers C3-4: a new answer to a row an earlier-form answer closed is bound to that question's fingerprint."""
 

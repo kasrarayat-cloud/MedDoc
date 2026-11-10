@@ -26,13 +26,14 @@ from studio.providers.base import canonical_body
 from studio.reference import passages as reference_passages
 from studio.reference import tools
 from studio.types import PeerReview, RawExchange, sha256_json, to_jsonable
+from tests.legacy_chain import applied
 from tests.support import docgen
 from tests.support.operator import OperatorReads
 from tests.support import factories as f
 from tests.test_harness_pipeline import BOTH, TIME_QUOTE, ScriptedCorti, _WorkerDied
 from tests.test_participants_support import (OfflineMixin, astra_tool_call, astra_with, code, empty_reading,
                                              fable_tool_use, fable_with, service)
-from tests.test_pipeline_api import OFFICE_NOTE, drain
+from tests.test_pipeline_api import OFFICE_NOTE, RecordedInterpretation, drain
 from tests.test_repairs_pipeline import LIVE, RECONCILE_NOTE
 
 DAY = '2026-10-20'
@@ -300,6 +301,7 @@ class Harness2Case(OperatorReads, OfflineMixin, TestCase):
 
 # --- the chain --------------------------------------------------------------------------------------------------------
 
+@applied
 class ChainTests(Harness2Case):
     def test_both_phases_run_in_order_with_their_keys(self):
         encounter_id = self.create()
@@ -341,6 +343,7 @@ class ChainTests(Harness2Case):
 
 # --- phase 1 on the tool loop (HARNESS.md 11.2, 12.1) -----------------------------------------------------------------
 
+@applied
 class PhaseOneLoopTests(Harness2Case):
     def setUp(self):
         super().setUp()
@@ -528,7 +531,7 @@ class PhaseOneLoopTests(Harness2Case):
         self.assertEqual(self.encounter(second).state, 'ready_for_review')
 
 
-class RefusalWordingTests(Harness2Case):
+class RefusalWordingTests(RecordedInterpretation, Harness2Case):
     """Refutation round 1, IND-2 (I9: no CPT descriptor text displayed): a model writes its own refusal, and it can
     write descriptor-like wording there. The refusal is named by its length; its words reach no record, page, report or
     trace."""
@@ -564,7 +567,7 @@ class RefusalWordingTests(Harness2Case):
         self.assertIn('the model refused (its message, 156 characters, is not repeated)', shown[0])
 
 
-class StopInLoopTests(Harness2Case):
+class StopInLoopTests(RecordedInterpretation, Harness2Case):
     """Refutation round 1, sends-3 (HARNESS.md 2: a Stop observed before sending): a member's Stop recorded while a tool
     loop runs ends it before its next exchange. The run records what was sent and has no final answer; the stage ends
     stopped. Harness repair 3, F-STOP: such a run is resumable, and a member's Resume continues it - a run of its own,
@@ -656,7 +659,7 @@ class StopInLoopTests(Harness2Case):
         self.assertEqual(jobs._failed_before(self.encounter(encounter_id), adapter, request), astra)
 
 
-class SingleExchangeRunTests(Harness2Case):
+class SingleExchangeRunTests(RecordedInterpretation, Harness2Case):
     """Refutation round 1, sends-2: before part B, harness@2's adapter version sent its body through the single-exchange
     send(), so a stored run of that version can hold an answer that still asks for tool calls, with no exchange
     recorded. Such a run is not a tool loop's answer: the identical request is never answered by reusing it."""
@@ -687,7 +690,7 @@ class SingleExchangeRunTests(Harness2Case):
 
 # --- what assess #1 and assess #2 record (HARNESS.md 12.3) ------------------------------------------------------------
 
-class RecordsTests(Harness2Case):
+class RecordsTests(RecordedInterpretation, Harness2Case):
     def test_assess_one_records_every_frozen_phase_one_output_and_assess_two_the_peer_reviews(self):
         encounter_id = self.create()
         drain()
@@ -740,6 +743,7 @@ class RecordsTests(Harness2Case):
 
 # --- the peer stages' gating (HARNESS.md 12.1) ------------------------------------------------------------------------
 
+@applied
 class PeerGatingTests(Harness2Case):
     def test_a_participant_whose_first_reading_was_not_read_gets_no_peer_stage(self):
         self.adapters['astra'].first = [failed()]
@@ -874,6 +878,7 @@ class ColonCase(Harness2Case):
 
 # The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
 # run that path with its setting on and keep their assertions.
+@applied
 @override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class PeerRequestTests(ColonCase):
     def test_the_peer_request_shows_exactly_the_frozen_inputs(self):
@@ -1020,6 +1025,7 @@ class PeerRequestTests(ColonCase):
         self.assertEqual(self.proposal(final, 'sel:1').status, 'needs_clarification')  # another question: untouched
 
 
+@applied
 class StableQuestionTests(ColonCase):
     """Pipeline Q2 (cost; refutation round 1's plan): a peer request names each open question by an id that is stable
     for the revision - the first clarification of the revision that asks the same thing, through the one identity
@@ -1064,6 +1070,7 @@ class StableQuestionTests(ColonCase):
 
 # The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
 # run that path with its setting on and keep their assertions.
+@applied
 @override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class ReassessTests(ColonCase):
     def test_it_reads_what_the_final_assessment_read_plus_the_confirmations_and_sends_nothing(self):
@@ -1143,6 +1150,7 @@ class ReassessTests(ColonCase):
 
 # --- the send doors in phase 2: unknown outcomes, failures, reuse, I10 ------------------------------------------------
 
+@applied
 class PeerSendDoorTests(Harness2Case):
     def test_an_unknown_peer_outcome_blocks_every_later_send_and_reconcile_runs_phase_two_again(self):
         self.adapters['astra'].peer_loops = [[unknown()]]
@@ -1272,6 +1280,7 @@ class PeerSendDoorTests(Harness2Case):
 
 # --- the stale sweep, Stop, Resume, reconcile and the upgrade across phase 2 (HARNESS.md 12.1) -----------------------
 
+@applied
 class SweepStopResumeTests(Harness2Case):
     def age(self, job):
         models.Job.objects.filter(pk=job.pk).update(started_at=timezone.now() - timedelta(minutes=11))
@@ -1443,6 +1452,7 @@ class SweepStopResumeTests(Harness2Case):
         self.assertEqual(jobs.assessment_phase(self.encounter(encounter_id).current_assessment), 2)
 
 
+@applied
 class SecondReviewTests(Harness2Case):
     def test_a_second_review_s_assess_runs_phase_two_and_its_assess_two_reads_the_second_review(self):
         from tests.test_services_second_review import REPORT, TwoPassProvider, ask
@@ -1474,7 +1484,7 @@ class SecondReviewTests(Harness2Case):
             self.assertEqual(self.records(final)[name]['peer_run'], str(peers[-1].pk))
 
 
-class PeerRunLookupTests(Harness2Case):
+class PeerRunLookupTests(RecordedInterpretation, Harness2Case):
     def test_assess_two_reads_only_the_peer_runs_made_for_its_assess_one(self):
         encounter_id = self.create()
         drain()
@@ -1496,6 +1506,7 @@ class PeerRunLookupTests(Harness2Case):
 # The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
 # run that path with its setting on and keep their assertions (the first makes its new peer request by a
 # confirmation the next assess #1 reads).
+@applied
 @override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class UpgradeChainTests(ColonCase):
     def upgrade(self, encounter_id):
@@ -1558,6 +1569,7 @@ def engine_refusing_harness(**kwargs):
     return REAL_ENGINE(**kwargs)
 
 
+@applied
 class CortiOnlyTests(Harness2Case):
     """I1: with Astra and Fable disabled, nothing of harness@2 runs - no peer stage, no second assess, no exchange, no
     new record key - and the engine is never given the revision's confirmations."""

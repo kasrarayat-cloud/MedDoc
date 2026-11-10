@@ -22,6 +22,7 @@ from django.conf import settings
 from django.test import Client, SimpleTestCase, TestCase
 
 from studio import answers, customer_api, jobs, models, progress, reports, review
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support import operator as ops
 from tests.support import pipeline_factories as pf
@@ -178,6 +179,7 @@ class DateHoldRowsTests(DetailsCase):
         self.assertEqual([(row['fact'], row['affects']) for row in rows], [('extent', ['45385'])])
 
 
+@applied
 class ApprovedExportMarkerTests(WireCase):
     """An approved export answers 409 exactly when the decisions it was made from changed (critic C8)."""
 

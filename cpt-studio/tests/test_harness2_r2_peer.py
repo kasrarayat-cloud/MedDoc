@@ -47,6 +47,7 @@ from studio.types import (EvidenceSpan, ExtractionIssue, LocatedQuote, Participa
                           ParticipantNotCoded, ParticipantQuestion, ParticipantReading, ParticipantService,
                           ReferenceUse, sha256_json)
 from studio.validation import checks as validation_checks
+from tests.legacy_chain import applied
 from tests.test_harness2_pipeline import (ASTRA_READING, BIOPSY, CPT_STUDIO, EMPTY_PEER, FABLE_READING, HEAD, LAND,
                                           SNARE, TWO_EXTENTS, ColonCase, Harness2Case, answered, asks,
                                           document_sections, facts_call, peer_document, reading)
@@ -67,6 +68,7 @@ TWO_SNARES = (HEAD + 'Colonoscopy report (fictional)\nDate of service: 2026-10-1
               + SECOND_SNARE + '.\n' + LAND + '\n' + SURVEILLANCE + '\n')
 
 
+@applied
 class PeerMaterialTests(ColonCase):
     """HARNESS.md 11.1, 12.4 and 12.7: Corti's selected codes 'with units as the number of its entries', and CPT
     Studio's held and excluded codes with their reasons. The earlier pins saw only one-entry Corti codes and an empty
@@ -106,6 +108,7 @@ def without_key(data, key):
     return json.dumps(envelope).encode()
 
 
+@applied
 class NullArgumentsTests(Harness2Case):
     """HARNESS.md 11.2 and 12.1: every exchange is a recorded ProviderExchange and every tool call a ToolCall row; the
     loop answers arguments that are not a usable object with CPT Studio's own sentence and goes on (loop.NOT_AN_OBJECT).
@@ -346,6 +349,7 @@ class NeverConnectedTests(SimpleTestCase):
 
 # --- sends-r2-4: every exchange is recorded as it ends ----------------------------------------------------------------
 
+@applied
 class RecordedAsItEndsTests(Harness2Case):
     """HARNESS.md 11.2 and 12.1: each exchange of the loop is a recorded ProviderExchange with its response bytes, usage
     and tool calls, and the run records whether it was sent. They were all written only once the whole loop had ended
@@ -611,6 +615,7 @@ PERFORMED = (HEAD + 'Colonoscopy report (fictional)\nDate of service: 2026-10-14
 
 # The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
 # run that path with its setting on and keep their assertions.
+@applied
 @override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class ReviewerIdentityTests(PeerMaterialCase):
     """HARNESS.md 3 and 11.1 list what a peer request holds, and no workspace member's identity is among it; 11.3: a
@@ -716,6 +721,7 @@ NO_DATE = (HEAD + 'Colonoscopy report (fictional)\nPlace of service: Ambulatory 
 MEMBER_DATE = '2019-03-04'  # before every installed release, so the reference checks would print it
 
 
+@applied
 class MemberValueTests(PeerMaterialCase):
     """HARNESS.md 3: "No title, filename, member-entered date, setting or billing context" is sent, and 2: a context
     change reuses the participants' requests. A held proposal's facts.required detail lists what a member entered
@@ -832,6 +838,7 @@ def worded_reading():
         references_used=[{'ref': CITED_REF, 'use': WORDS['use']}])
 
 
+@applied
 class OtherModelTests(PeerMaterialCase):
     """I9: no CPT descriptor text sent or displayed; 11.1 and 12.7: never Corti's display text. The engine refuses to
     list a code over 10 characters, the trace names one by its length and the page withholds descriptor-like text, yet a

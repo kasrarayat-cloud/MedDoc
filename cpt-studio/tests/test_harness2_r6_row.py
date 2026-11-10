@@ -35,6 +35,7 @@ from django.test import Client, TestCase, override_settings
 
 from studio import jobs, models, review
 from tests import test_harness2_pipeline as hp
+from tests.legacy_chain import applied
 from tests.support.operator import OperatorReads
 from tests.support import factories as f
 from tests.test_harness2_pipeline import LAND, SNARE, TWO_EXTENTS, ColonCase
@@ -113,6 +114,7 @@ class StaleMixin(RowMixin):
         return served
 
 
+@applied
 class StaleRowTests(StaleMixin, ColonCase):
     """(A) Participants on, at the release default (no confirmation offered): R4-CONF's CodeQuestionTests input -
     TWO_EXTENTS drained to its final assessment, Corti's 45385 and 45380, two questions each about a code (their
@@ -177,6 +179,7 @@ class StaleRowTests(StaleMixin, ColonCase):
         self.assertEqual(counted, ['assess', 'astra_peer', 'fable_peer', 'assess'])
 
 
+@applied
 @override_settings(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
 class CortiOnlyStaleRowTests(OperatorReads, StaleMixin, TestCase):
     """(B) Corti alone at the release default (Astra and Fable disabled, no confirmation offered): R5-ROW's
@@ -237,6 +240,7 @@ class CortiOnlyStaleRowTests(OperatorReads, StaleMixin, TestCase):
         self.assertEqual(clarification_row(page(stopped)), NOT_ASKED)
 
 
+@applied
 class PeerProposedAlternativeTitleTests(R2WordingCase):
     """falsegreen-2: ColonCase, except Fable's peer review adds G0121 quoting the landmarks line. G0121 is an HCPCS code
     outside the GI profiles, so the engine keeps it as an alternative, proposed by Fable in peer review with a located

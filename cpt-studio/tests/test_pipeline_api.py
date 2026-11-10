@@ -1,14 +1,29 @@
-"""End-to-end pipeline + API tests with a fake provider (no network)."""
+"""End-to-end pipeline + API tests with a fake provider (no network).
+
+The Gemini migration (design/FINAL.md 14.6; slice S15) put an interpret stage between extract and analyze. The tests
+here that assert the pipeline's MECHANICS - the upload API, the send discipline (one send, the retained answer reused,
+nothing sent when the request cannot be built), Stop, the unknown outcome and its reconciliation, the provider lock,
+addenda and report bytes - run the production chain: extract, interpret, analyze (derive only), predict, assess. Gemini
+is the replay interpreter over ONE RECORDED SYNTHETIC INTERPRETATION PER FIXTURE DOCUMENT (RecordedInterpretation;
+OFFICE_NOTE's is OFFICE_INTERPRETATION), and Corti is the in-process FakeProvider. The one test that asserts what the
+LEGACY reader read in the document - the full flow's selected proposals - is a reading-outcome test, kept as a legacy
+regression test under the test-only legacy chain (LegacyReadingTests; tests/legacy_chain.py)."""
 import hashlib
 import json
+import shutil
+import tempfile
+from pathlib import Path
 from unittest import mock
 
 from django.test import Client, TestCase, override_settings
 
-from studio import jobs, models, review
+from studio import interpretation, jobs, models, review
+from studio.interpretation import adapter as interpretation_adapter
+from studio.interpretation.replay import ReplayInterpreter
 from studio.providers.base import ProviderUnavailable
 from studio.providers.corti import ADAPTER_VERSION
 from studio.types import ProviderRequest, RawExchange, sha256_json
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
 
@@ -79,8 +94,149 @@ def drain():
         jobs.run_job(job)
 
 
+# --- one recorded synthetic interpretation per fixture document (design/FINAL.md 14.6) --------------------------------
+
+def _stated(value, words='', passages=()):
+    """An attribute as Gemini gives it (contract 3.2): its value, the words stating it and their passages."""
+    return {'value': value, 'words': words, 'passages': list(passages)}
+
+
+def synthetic_event(eid, procedure, kind, status, *, time=None):
+    """An event of a synthetic interpretation: ``procedure``, ``kind`` and ``status`` are (value, words, passage); the
+    time is this encounter's and the performer the documenting team's (the frame defaults) unless ``time`` is given."""
+    return {'id': eid, 'procedure': _stated(procedure[0], procedure[1], [procedure[2]]),
+            'kind': _stated(kind[0], kind[1], [kind[2]]), 'technique': _stated('not_stated'),
+            'target': {'lesion': '', 'landmark': 'not_stated', 'words': '', 'passages': []},
+            'time': time or _stated('current_encounter'), 'performer': _stated('documenting_team'),
+            'status': _stated(status[0], status[1], [status[2]]),
+            'scope': {'value': 'not_applicable', 'targets': [], 'words': '', 'passages': []},
+            'purpose': _stated('not_stated'), 'part_of': '', 'sequence': 0, 'contradicts': []}
+
+
+# Gemini's synthetic answer to OFFICE_NOTE (schema gemini-events@1): every passage a line of the note, every claimed
+# attribute verified by normalization - the office visit of 2026-10-20 (its basis the stated total time) and the
+# colonoscopy scheduled for a later date.
+OFFICE_INTERPRETATION = {
+    'passages': [{'id': 'P1', 'text': 'Date of service: 2026-10-20'},
+                 {'id': 'P2', 'text': 'Place of service: Office, in-person outpatient visit'},
+                 {'id': 'P3', 'text': 'Total time on the date of the encounter was 24 minutes.'},
+                 {'id': 'P4', 'text': 'A colonoscopy is scheduled for 2026-12-01.'}],
+    'encounter': {'date_of_service': {'value': '2026-10-20', 'state': 'stated', 'words': '2026-10-20',
+                                      'passages': ['P1'], 'other_dates': []},
+                  'documenting_endoscopist': {'words': '', 'passages': []}, 'team': [], 'anatomy': [], 'reach': [],
+                  'visit_facts': [{'event': 'E1', 'basis': _stated('total_time', '24 minutes', ['P3']),
+                                   'separately_identifiable': _stated('not_stated')}]},
+    'lesions': [],
+    'events': [synthetic_event('E1', ('office_em', 'Office', 'P2'), ('em_visit', 'in-person outpatient visit', 'P2'),
+                               ('performed', 'in-person outpatient visit', 'P2')),
+               synthetic_event('E2', ('colonoscopy', 'colonoscopy', 'P4'), ('examination', 'colonoscopy', 'P4'),
+                               ('planned', 'is scheduled', 'P4'),
+                               time=_stated('future', 'scheduled for 2026-12-01', ['P4']))],
+    'open_questions': []}
+
+
+def gemini_answer(answer) -> bytes:
+    """The raw body of Gemini's 200 answer carrying ``answer`` (a recording's bytes, contract 2.3)."""
+    return json.dumps({'candidates': [{'content': {'parts': [{'text': json.dumps(answer)}], 'role': 'model'},
+                                       'finishReason': 'STOP', 'index': 0}],
+                       'modelVersion': interpretation.MODEL, 'responseId': 'synthetic-s15',
+                       'usageMetadata': {'promptTokenCount': 1000, 'candidatesTokenCount': 200,
+                                         'totalTokenCount': 1200}}).encode()
+
+
+class RecordedReplayInterpreter(ReplayInterpreter):
+    """The production replay interpreter (studio/interpretation/replay.py) whose recordings are a test's synthetic
+    interpretations. Before a request is replayed, its recording is written from the interpretation registered for the
+    document the request carries (its contexts[0], the revision text): the one registered for exactly that text, else
+    for the longest registered text it begins with - an addendum revision keeps its parent's text at its start, so its
+    parent's passages are still its own. The recording is keyed as a live answer's is, by the request's canonical
+    sha256, and the stage reads, normalizes and stores it through the production path. A document with no registered
+    interpretation gets no recording: the replay answers 'No recorded response', as it would in production."""
+
+    def __init__(self, replay_dir, interpretations, **limits):
+        super().__init__(replay_dir, **limits)
+        self.interpretations = tuple(interpretations)
+        self.replayed = []  # the canonical sha256 of every request it was asked to send, in order
+        self.unrecorded = []  # the documents (revision texts) it met with no registered interpretation
+
+    def answer_for(self, text):
+        exact = [answer for document, answer in self.interpretations if document == text]
+        if exact:
+            return exact[0]
+        prefixes = sorted(((len(document), answer) for document, answer in self.interpretations
+                           if text.startswith(document)), key=lambda item: item[0])
+        return prefixes[-1][1] if prefixes else None
+
+    def _record(self, request):
+        self.replayed.append(request.canonical_sha256)
+        document = request.contexts[0] if request.contexts else ''
+        answer = self.answer_for(document)
+        if answer is None:
+            self.unrecorded.append(document)
+            return
+        folder = self.replay_dir / interpretation_adapter.NAME
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / f'{request.canonical_sha256}.json').write_bytes(gemini_answer(answer))
+
+    def send(self, request, **kwargs):
+        self._record(request)
+        return super().send(request, **kwargs)
+
+    def send_loop(self, request, **kwargs):
+        self._record(request)
+        return super().send_loop(request, **kwargs)
+
+
+class RecordedInterpretation:
+    """A TestCase mixin, first among the bases (FINAL 14.6, the mechanics side): the interpreter is the replay
+    interpreter (GEMINI_MODE 'replay', a replay directory of the test's own) over ``interpretations`` - (document text,
+    Gemini's synthetic answer) pairs, one per fixture document the class uploads - so every upload takes the production
+    chain. ``interpreters`` lists every interpreter the stages were given, in order. A test that asked the interpreter
+    to read a document with no registered interpretation fails once it ends (unless it sets ``unrecorded_allowed``): a
+    test switched to the production chain never passes on a reading that silently did not happen."""
+    interpretations = ((OFFICE_NOTE, OFFICE_INTERPRETATION),)
+    unrecorded_allowed = False
+
+    def setUp(self):
+        self.addCleanup(self._every_document_was_recorded)
+        replay_dir = tempfile.mkdtemp(prefix='s15-replay-')
+        self.addCleanup(shutil.rmtree, replay_dir, True)
+        replay = override_settings(GEMINI_MODE='replay', GEMINI_REPLAY_DIR=replay_dir)
+        replay.enable()
+        self.addCleanup(replay.disable)
+        self.interpreters = []
+        original = interpretation_adapter.get_interpreter
+
+        def get_interpreter(mode=None):
+            if mode not in (None, 'replay'):
+                return original(mode)
+            interpreter = RecordedReplayInterpreter(Path(replay_dir), self.interpretations)
+            self.interpreters.append(interpreter)
+            return interpreter
+        patcher = mock.patch.object(interpretation_adapter, 'get_interpreter', side_effect=get_interpreter)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        super().setUp()
+
+    def _every_document_was_recorded(self):
+        unrecorded = [document for interpreter in self.interpreters for document in interpreter.unrecorded]
+        if unrecorded and not self.unrecorded_allowed:
+            self.fail(f'{len(unrecorded)} interpretation request(s) for a document with no recorded synthetic '
+                      f'interpretation; the first begins {unrecorded[0][:80]!r}')
+
+    def interpretation_runs(self, encounter_id):
+        return list(models.ProviderRun.objects.filter(encounter_id=encounter_id, purpose=interpretation.PURPOSE)
+                    .order_by('created_at', 'pk'))
+
+    def replayed(self):
+        """Every interpretation request the stages asked the interpreter to send, in order (their sha256)."""
+        return [sha for interpreter in self.interpreters for sha in interpreter.replayed]
+
+
 @override_settings(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
-class PipelineApiTests(OperatorReads, TestCase):
+class PipelineApiCase(OperatorReads, TestCase):
+    """The upload client, Corti's fake and the helpers both chains' tests use."""
+
     def setUp(self):
         self.ws = f.workspace()
         self.reviewer = f.member(self.ws, f.user('reviewer'))
@@ -106,23 +262,43 @@ class PipelineApiTests(OperatorReads, TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             return self.client.post(path, data=json.dumps(data), content_type='application/json')
 
+    @staticmethod
+    def primary_runs(data):
+        """The encounter payload's runs of Corti's primary request (purpose 'primary'), oldest first: the runs these
+        tests assert about. On the production chain the interpretation's own run is served beside them (FINAL 6.3)."""
+        return [run for run in data['provider_runs'] if run['purpose'] == models.ProviderRun.PRIMARY]
+
+
+class PipelineApiTests(RecordedInterpretation, PipelineApiCase):
+    """The upload API and the pipeline's mechanics on the production chain (FINAL 14.6): Gemini reads each upload from
+    its recorded synthetic interpretation, and the assertions are the ones these tests always made - where one names
+    "the" run of an encounter, it is Corti's primary run, which the interpretation's own run now stands beside."""
+
+    def test_an_upload_here_takes_the_production_chain(self):
+        """The positive control of the switch: the stages, the recorded interpretation read once, the gemini context
+        derived from its inventory, the predict on that context and the events engine's assessment."""
+        encounter_id = self.create()
+        drain()
+        jobs_run = list(models.Job.objects.filter(encounter_id=encounter_id).order_by('created_at', 'pk'))
+        self.assertEqual([(job.kind, job.state) for job in jobs_run],
+                         [('extract', 'succeeded'), ('interpret', 'succeeded'), ('analyze', 'succeeded'),
+                          ('predict', 'succeeded'), ('assess', 'succeeded')])
+        [run] = self.interpretation_runs(encounter_id)
+        self.assertEqual((run.provider, run.state, run.scope.get('mode')),
+                         (interpretation.PROVIDER, 'succeeded', 'replay'))
+        self.assertEqual(self.replayed(), [run.request_sha256])
+        inventory = models.EventInventory.objects.get(provider_run=run)
+        self.assertEqual(inventory.state, models.EventInventory.READ)
+        encounter = models.Encounter.objects.get(pk=encounter_id)
+        self.assertTrue(interpretation.is_new_context(encounter.current_context))
+        self.assertEqual(encounter.current_context.event_inventory_id, inventory.pk)
+        self.assertEqual(encounter.current_context.facts['service_date']['value'], '2026-10-20')
+        self.assertTrue(interpretation.is_new_assessment(encounter.current_assessment))
+        self.assertEqual(len(self.provider.sent), 1)
+
     def test_upload_requires_attestation_and_one_source(self):
         self.assertEqual(self.client.post('/api/encounters', {'text': 'x'}).status_code, 400)
         self.assertEqual(self.client.post('/api/encounters', {'synthetic_attestation': 'yes'}).status_code, 400)
-
-    def test_full_flow_reviews_and_reports(self):
-        encounter_id = self.create()
-        drain()
-        data = self.detail(encounter_id)
-        self.assertEqual(data['revision']['extraction']['status'], 'ok')
-        self.assertEqual(len(self.provider.sent), 1)
-        selected = [p for p in data['assessment']['proposals'] if p['bucket'] == 'selected']
-        self.assertTrue(selected, data['assessment'])
-        text = data['revision']['text']
-        for proposal in selected:
-            for span in proposal['evidence']:
-                self.assertEqual(text[span['start']:span['end']], span['text'])
-        self.assertNotIn('UNVERIFIED PROVIDER WORDING', json.dumps(data))
 
     def test_cross_workspace_access_is_404(self):
         encounter_id = self.create()
@@ -155,11 +331,11 @@ class PipelineApiTests(OperatorReads, TestCase):
         second = self.create()
         drain()
         self.assertEqual(len(self.provider.sent), 1)
-        run = models.ProviderRun.objects.filter(encounter_id=second).get()
+        run = models.ProviderRun.objects.filter(encounter_id=second, purpose=models.ProviderRun.PRIMARY).get()
         self.assertIsNotNone(run.reused_from_id)
         self.assertEqual(run.usage, {})
         self.assertEqual(run.usage_basis, 'reused_retained_result_no_new_usage')
-        self.assertEqual(self.detail(first)['provider_runs'][0]['reused_from'], None)
+        self.assertEqual(self.primary_runs(self.detail(first))[0]['reused_from'], None)
 
     def test_stop_before_send_sends_nothing(self):
         encounter_id = self.create()
@@ -176,7 +352,7 @@ class PipelineApiTests(OperatorReads, TestCase):
         data = self.detail(encounter_id)
         self.assertEqual(data['state'], 'provider_unknown')
         self.assertEqual(len(self.provider.sent), 1)
-        run_id = data['provider_runs'][0]['id']
+        run_id = self.primary_runs(data)[0]['id']
         # Adding context does not resend while the outcome is unknown.
         self.assertEqual(self.post(f'/api/encounters/{encounter_id}/context', {'setting': 'office'}).status_code, 201)
         drain()
@@ -231,7 +407,7 @@ class PipelineApiTests(OperatorReads, TestCase):
         self.provider.build_request = mock.Mock(side_effect=ProviderUnavailable('Request too large.'))
         encounter_id = self.create()
         drain()
-        runs = self.detail(encounter_id)['provider_runs']
+        runs = self.primary_runs(self.detail(encounter_id))
         self.assertEqual(runs[0]['state'], 'not_sent')
         self.assertEqual(self.provider.sent, [])
 
@@ -257,6 +433,26 @@ class PipelineApiTests(OperatorReads, TestCase):
         fake_pdf = SimpleUploadedFile('note.pdf', b'not a pdf at all', content_type='application/pdf')
         response = self.client.post('/api/encounters', {'file': fake_pdf, 'synthetic_attestation': 'yes'})
         self.assertEqual(response.status_code, 400)
+
+
+@applied
+class LegacyReadingTests(PipelineApiCase):
+    """A reading-outcome test (FINAL 14.6): what the LEGACY reader read in OFFICE_NOTE - the proposals it selected and
+    their exact evidence - kept as a legacy regression test under the test-only legacy chain (tests/legacy_chain.py)."""
+
+    def test_full_flow_reviews_and_reports(self):
+        encounter_id = self.create()
+        drain()
+        data = self.detail(encounter_id)
+        self.assertEqual(data['revision']['extraction']['status'], 'ok')
+        self.assertEqual(len(self.provider.sent), 1)
+        selected = [p for p in data['assessment']['proposals'] if p['bucket'] == 'selected']
+        self.assertTrue(selected, data['assessment'])
+        text = data['revision']['text']
+        for proposal in selected:
+            for span in proposal['evidence']:
+                self.assertEqual(text[span['start']:span['end']], span['text'])
+        self.assertNotIn('UNVERIFIED PROVIDER WORDING', json.dumps(data))
 
 
 class SnapshotHashTests(OperatorReads, TestCase):
@@ -285,10 +481,16 @@ class _OtherSession:
             return cursor.fetchone()[0]
 
 
+@applied
 @override_settings(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
 class ProviderLockTests(OperatorReads, TestCase):
     """Refutation round 1, FG-4 (I8; HARNESS.md 2: every provider send takes the one installation-wide advisory lock):
-    no test held the lock from another session, so removing it from jobs._send stayed green."""
+    no test held the lock from another session, so removing it from jobs._send stayed green.
+
+    Under the test-only legacy chain (design/FINAL.md 14.6): the first test asserts the legacy chain's stage order (no
+    interpretation before the predict) and the legacy reader's outcome for the note ('ready_for_review'), so both run as
+    legacy regression tests; ProductionChainProviderLockTests proves the lock on the production chain, whose
+    interpretation is a send of its own."""
 
     def setUp(self):
         self.ws = f.workspace()
@@ -340,4 +542,73 @@ class ProviderLockTests(OperatorReads, TestCase):
         drain()
         self.assertEqual(held, [True])
         self.assertTrue(self.other.try_lock())  # released once the send's outcome was recorded
+        self.assertTrue(self.other.unlock())
+
+
+class ProductionChainProviderLockTests(RecordedInterpretation, PipelineApiCase):
+    """FG-4 on the production chain (FINAL 6.3: the interpretation is sent through jobs._send's looped branch): each
+    send - the interpretation's, then Corti's - waits while another session holds the installation-wide provider lock,
+    reserving and sending nothing, holds the lock while it is in flight, and releases it once its outcome is
+    recorded."""
+
+    def setUp(self):
+        super().setUp()
+        patcher = mock.patch('studio.jobs.time.sleep')  # a requeued stage waits a second: not here
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.other = _OtherSession(self)
+
+    def test_the_interpretation_and_the_predict_each_wait_while_another_session_holds_the_provider_lock(self):
+        encounter_id = self.create()
+        requeued = {'requeued': 'another provider request is in flight'}
+        self.assertTrue(self.other.try_lock())
+        try:
+            for _ in range(2):
+                job = jobs.run_job(jobs.claim_next())  # extract, then the interpretation, which waits
+            job.refresh_from_db()
+            self.assertEqual((job.kind, job.state, job.result, job.started_at), ('interpret', 'queued', requeued, None))
+            self.assertEqual((self.replayed(), models.ProviderRun.objects.filter(encounter_id=encounter_id).count()),
+                             ([], 0))  # nothing reserved, nothing sent
+        finally:
+            self.assertTrue(self.other.unlock())
+        for kind in ('interpret', 'analyze'):
+            job = jobs.run_job(jobs.claim_next())
+            self.assertEqual((job.kind, job.state), (kind, 'succeeded'), job.error)
+        self.assertTrue(self.other.try_lock())
+        try:
+            job = jobs.run_job(jobs.claim_next())  # the predict, which waits
+            job.refresh_from_db()
+            self.assertEqual((job.kind, job.state, job.result, job.started_at), ('predict', 'queued', requeued, None))
+            self.assertEqual((self.provider.sent, models.ProviderRun.objects.filter(
+                encounter_id=encounter_id, purpose=models.ProviderRun.PRIMARY).count()), ([], 0))
+        finally:
+            self.assertTrue(self.other.unlock())
+        drain()
+        self.assertEqual((len(self.replayed()), len(self.provider.sent)), (1, 1))
+        encounter = models.Encounter.objects.get(pk=encounter_id)
+        self.assertTrue(interpretation.is_new_assessment(encounter.current_assessment))
+
+    def test_the_lock_is_held_while_each_provider_sends_and_released_after(self):
+        held = []
+        send, send_loop = self.provider.send, RecordedReplayInterpreter.send_loop
+
+        def in_flight():
+            acquired = self.other.try_lock()  # from the other session, while the worker's send is in flight
+            if acquired:
+                self.other.unlock()
+            return not acquired
+
+        def checked(request, *, deadline_s):
+            held.append(('corti', in_flight()))
+            return send(request, deadline_s=deadline_s)
+
+        def checked_loop(interpreter, request, **kwargs):
+            held.append(('interpretation', in_flight()))
+            return send_loop(interpreter, request, **kwargs)
+        self.provider.send = checked
+        with mock.patch.object(RecordedReplayInterpreter, 'send_loop', checked_loop):
+            self.create()
+            drain()
+        self.assertEqual(held, [('interpretation', True), ('corti', True)])
+        self.assertTrue(self.other.try_lock())  # released once the sends' outcomes were recorded
         self.assertTrue(self.other.unlock())

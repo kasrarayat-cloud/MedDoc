@@ -41,6 +41,7 @@ from studio.gi import context
 from studio.gi.sections import layout
 from studio.ingest import extract as ingest
 from studio.types import to_jsonable
+from tests.legacy_chain import applied
 from tests.support import docgen
 from tests.test_repairs_7c8_context import DateAssertions, merged_date
 from tests.test_repairs_7c8_context3 import COLO_PLAIN, ELENA_DATE, HEAD, EndToEnd, date_fact
@@ -347,6 +348,7 @@ class DoubtedDateIsAnsweredOnlyAsBeforeTests(DateAssertions, SimpleTestCase):
                 self.assertEqual(to_jsonable(bounded), to_jsonable(unbounded))  # as stored
 
 
+@applied
 class TheRequestCarriesWhatInstalledSendsTests(EndToEnd):
     """End to end with the suite's FakeProvider: the request bodies of the findings' inputs."""
 

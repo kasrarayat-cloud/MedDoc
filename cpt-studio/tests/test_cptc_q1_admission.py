@@ -27,6 +27,7 @@ from studio.types import ProviderCode
 from studio.validation import engine
 from tests import test_harness2_pipeline as hp
 from tests import test_harness2_r6_meaning as r6m
+from tests.legacy_chain import applied
 from tests.test_harness_engine import code, corti, decision, peer, proposal, read, reviewed, run, span, without_record
 from tests.test_h3_repairs import EGD_BIOPSY, LABELLED, NET, PLAIN, SNARE
 
@@ -555,6 +556,7 @@ class CompetitionTests(SimpleTestCase):
 SNARED = 'The polyp was removed with a hot snare.'
 
 
+@applied
 class AdmittedCodePipelineTests(r6m.MeaningCase):
     """Corti's 45378 and Astra's first-reading 45385 on the snare sentence, against Corti selecting both on the same
     document (another request, a trailing blank line: an identical Corti request reuses the workspace's retained

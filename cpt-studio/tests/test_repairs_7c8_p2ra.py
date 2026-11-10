@@ -28,6 +28,7 @@ from studio.gi.profiles import PROFILES
 from studio.providers import ProviderUnavailable
 from studio.types import NormalizedResponse
 from studio.validation import checks
+from tests.legacy_chain import applied
 from tests.test_pipeline_api import FakeProvider, drain
 from tests.test_repairs_7c8_p1reports import Harness
 from tests.test_repairs_7c8_p2install import BANNER, SNARE, VISIT, WEB, WORKER
@@ -108,6 +109,7 @@ class AnEnteroscopyBesideAnEgdInsideAnEusIsNamedTests(SimpleTestCase):
                          f'{PROFILES["gi.eus"].label} are documented as performed with no selected proposal.')
 
 
+@applied
 class TheReportsNameTheEnteroscopyTests(Harness):
     """EUS lens 0 through the API, as its verifier ran it: the stored check, the draft TXT, the Checks tab and - once the
     reviewer approves the EGD-with-EUS code - the reviewed TXT name the enteroscopy; none says that every performed
@@ -157,6 +159,7 @@ NOT_INCLUDED_TXT = 'read as part of S2, but no selected code of that service inc
 NOT_INCLUDED_PAGE = 'Read as part of S2, but no selected code of that service includes this examination.'
 
 
+@applied
 class TheInclusionLineFollowsTheInclusionRuleTests(Harness):
     """EUS lens 1 (verified must-fix, class 3; not pre-existing at 057a7d398, which has no documented-services section):
     an EGD with its own code beside an EUS whose selected code includes no upper endoscopy - 43235 with 45342 or 43232,
@@ -315,6 +318,7 @@ class ASecondReviewCodeThatIncludesTheExaminationAccountsForItTests(SimpleTestCa
                 self.assertEqual([(u[0], u[2]) for u in unresolved_items(result)], [('S1', 'no_proposal')])
 
 
+@applied
 class TheSecondReviewsIncludingCodeThroughTheApiTests(Harness):
     """EUS lens 2 through the API, as its verifier ran it: the reviewer asks for the second review the encounter offers
     for the listed EGD (201), the job is drained, and the code it selects that includes the EGD is a proposal marked as
@@ -362,6 +366,7 @@ class ExcerptNotBuilt(P2Provider):
         return super().build_request(text, service_date)
 
 
+@applied
 class AnUnreadSecondReviewIsNamedNeverHandedOverTests(P2Base):
     """ROLLBACK lens 0 (verified must-fix, class 3 reached through a class 5 path; not pre-existing at 057a7d398, which
     has no second review): the bounded second review a reviewer asked for over a primary answer that proposes nothing

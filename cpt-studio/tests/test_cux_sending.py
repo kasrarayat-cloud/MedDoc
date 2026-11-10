@@ -1,7 +1,12 @@
 """Core repair (2026-11-03), decision (k): a provider run left 'sending' after its stage failed blocks every further send
 like an unknown outcome (R6 4.6, recorded and not verified there; reproduced here on the base rule first). The source
 is closed - an answer whose outcome cannot be recorded is recorded unknown, never left 'sending' - and the backstop is
-one rule every send door and the derived state read (review._unreconciled_unknown), which the stale sweep settles."""
+one rule every send door and the derived state read (review._unreconciled_unknown), which the stale sweep settles.
+
+The Gemini migration (design/FINAL.md 14.6; slice S15): these are send-discipline mechanics, so they run the production
+chain, Gemini reading OFFICE_NOTE from its recorded synthetic interpretation (tests.test_pipeline_api.
+RecordedInterpretation); the run they assert about is Corti's primary run, which the interpretation's own run now stands
+beside."""
 from __future__ import annotations
 
 import json
@@ -14,14 +19,15 @@ from django.utils import timezone
 from studio import jobs, models, review
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
-from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider, drain
+from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider, RecordedInterpretation, drain
 
 NOTE = 'Checked the vendor console (synthetic): the answer was received and billed once.'
 
 
 @override_settings(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
-class SendingEdgeTests(OperatorReads, TestCase):
+class SendingEdgeTests(RecordedInterpretation, OperatorReads, TestCase):
     def setUp(self):
+        super().setUp()
         self.ws = f.workspace()
         self.reviewer = f.member(self.ws, f.user('reviewer'))
         self.client = Client(enforce_csrf_checks=False)
@@ -45,14 +51,17 @@ class SendingEdgeTests(OperatorReads, TestCase):
         return models.Encounter.objects.get(pk=pk)
 
     def unrecorded_first_answer(self):
-        """The first answer arrives and its outcome cannot be written (the first _finish_run raises once)."""
+        """The first answer arrives and its outcome cannot be written (the first _finish_run of Corti's primary request
+        raises once; the interpretation's run, which the production chain finishes first through the same function, is
+        recorded as usual)."""
         real = jobs._finish_run
         calls = []
 
         def finish(run, exchange):
-            calls.append(run.pk)
-            if len(calls) == 1:
-                raise RuntimeError('synthetic: the outcome write failed')
+            if run.purpose == models.ProviderRun.PRIMARY:
+                calls.append(run.pk)
+                if len(calls) == 1:
+                    raise RuntimeError('synthetic: the outcome write failed')
             return real(run, exchange)
         return mock.patch('studio.jobs._finish_run', side_effect=finish)
 
@@ -60,7 +69,7 @@ class SendingEdgeTests(OperatorReads, TestCase):
         with self.unrecorded_first_answer():
             encounter_id = self.create()
             drain()
-        run = models.ProviderRun.objects.get(encounter_id=encounter_id)
+        run = models.ProviderRun.objects.get(encounter_id=encounter_id, purpose=models.ProviderRun.PRIMARY)
         self.assertEqual((run.state, run.sent, run.error), (models.ProviderRun.UNKNOWN, True,
                                                            jobs.UNRECORDED_OUTCOME_MESSAGE))
         self.assertEqual(len(self.provider.sent), 1)
@@ -82,7 +91,7 @@ class SendingEdgeTests(OperatorReads, TestCase):
         with self.unrecorded_first_answer(), mock.patch('studio.jobs._settle_unrecorded'):
             encounter_id = self.create()
             drain()
-        run = models.ProviderRun.objects.get(encounter_id=encounter_id)
+        run = models.ProviderRun.objects.get(encounter_id=encounter_id, purpose=models.ProviderRun.PRIMARY)
         self.assertEqual(run.state, models.ProviderRun.SENDING)
         encounter = self.encounter(encounter_id)
         self.assertTrue(review._orphaned_sending(encounter))

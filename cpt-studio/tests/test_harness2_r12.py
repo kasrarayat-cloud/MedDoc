@@ -26,6 +26,7 @@ from tests import test_harness2_pipeline as hp
 from tests import test_harness2_r6_meaning as r6m
 from tests import test_harness2_r7 as r7
 from tests import test_harness2_r11 as r11
+from tests.legacy_chain import applied
 
 he = r11.he
 ACK = r11.ACK
@@ -117,6 +118,7 @@ class InArmRulesTests(SimpleTestCase):
         self.assertEqual((item['start'], item['end']), (last, last + len(ALSO)))
 
 
+@applied
 class MentionOwnStatusPipelineTests(r6m.MeaningCase):
     def test_wording_1_on_the_reviewed_report(self):
         """svc-34, on the reviewed report a reviewer signs, beside the approved 43260."""

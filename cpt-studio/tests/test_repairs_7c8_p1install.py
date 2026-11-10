@@ -36,9 +36,10 @@ from django.utils import timezone
 
 from studio import jobs, models, review
 from studio.types import RawExchange
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
-from tests.test_pipeline_api import OFFICE_NOTE, drain
+from tests.test_pipeline_api import OFFICE_NOTE, RecordedInterpretation, drain
 from tests.test_repairs_r1_m import NEW_REVISION, OLD_REVISION, DockerWorld, install, run_app_script
 from tests.test_services_second_review import LIVE, REPORT, TwoPassProvider, response
 
@@ -179,6 +180,7 @@ class Base(OperatorReads, TestCase):
 
 # --- security-0: a stage of a kind the next worker cannot run is closed whichever pair created it --------------------
 
+@applied
 class SecondReviewStoppedUnderAnEarlierPairTests(Base):
     """Refutation p1, security-0. The finding's smallest input: a reviewer asks for the second review, a member stops
     it before it runs (cancelled, resumable), a later pair of the same revision is created (an `app` re-run), and its
@@ -233,6 +235,7 @@ class SecondReviewStoppedUnderAnEarlierPairTests(Base):
 
 # --- migrate-0 / migrate-1: what an older revision would act on wrongly is named, never left for it ------------------
 
+@applied
 class UndoHazardsTests(Base):
     """Refutation p1, migrate-0 and migrate-1. The installer reads, with this revision's image, every encounter whose
     records the installed revision 057a7d39 would act on under its own rules: an unreconciled unknown outcome (its
@@ -351,7 +354,7 @@ class UndoHazardsTests(Base):
         self.assertEqual(self.hazards(), {encounter_id: ['conflict']})
 
 
-class OutcomeIsARequestTheOlderRevisionWouldMakeAgainTests(Base):
+class OutcomeIsARequestTheOlderRevisionWouldMakeAgainTests(RecordedInterpretation, Base):
     """Round-7c8 skeptic of the first repair, sk:0 and sk:1 (migrate-1's class: after a rollback a request that FAILED
     is re-sent byte-identical behind a metadata save, and neither revision alone would send it). 'outcome' names every
     request of the current revision that failed or was not sent through the send, with no retained answer the installed
@@ -439,6 +442,7 @@ class OutcomeIsARequestTheOlderRevisionWouldMakeAgainTests(Base):
         self.assertTrue(review.can_resume(self.encounter(encounter_id)))
 
 
+@applied
 class SecondReviewCodeTests(Base):
     """Round-7c8 skeptic of the first repair, sk:3 (must-fix class 4). The installed revision's re-assessment reads the
     primary answer alone (057a7d398 jobs.stage_assess: job.provider_run, no second review), so after a rollback a code
@@ -477,6 +481,7 @@ class SecondReviewCodeTests(Base):
 
 # --- migrate-2 / sk:2: the stored list states are recomputed once the new pair replaced the old one -------------------
 
+@applied
 class RecomputedStatesTests(Base):
     """Refutation p1, migrate-2, and the round-7c8 skeptic of its first repair (sk:2). The first repair refused the app
     phase while any outcome was unknown, so a same-revision re-run (`app --provider-mode disabled`, as during a provider

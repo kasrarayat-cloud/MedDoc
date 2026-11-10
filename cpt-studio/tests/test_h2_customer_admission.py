@@ -5,6 +5,7 @@ suggests is never listed again under "other codes" as not suggested."""
 import json
 from unittest import mock
 
+from tests.legacy_chain import applied
 from tests.test_customer_surface import SurfaceCase
 from tests.test_harness_pipeline import REAL_ENGINE
 from tests.test_pipeline_api import drain
@@ -19,6 +20,7 @@ BIOPSY = 'Cold forceps biopsies of the cecum were obtained for histology.'
 SNARE = 'A separate 7 mm sessile polyp in the sigmoid colon was removed with a cold snare and retrieved.'
 
 
+@applied
 class AdmittedParticipantCodeTests(SurfaceCase):
     astra_codes = (('45385', SNARE),)
     fable_codes = (('45385', SNARE), ('45380', BIOPSY))

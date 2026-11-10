@@ -19,6 +19,7 @@ from django.test import TestCase, override_settings
 
 from studio import jobs, models, reports, review, serializers
 from studio.participants.http import USAGE_BASIS  # what the adapters record: 'provider_reported_tokens'
+from tests.legacy_chain import applied
 from tests.support import pipeline_factories as pf
 from tests.support.operator import OperatorReads
 from tests.test_harness_api import record
@@ -325,6 +326,7 @@ class FailedRetrievalReportTests(OperatorReads, TestCase):
                           f'  - {failure["notes"][0]}', NOT_CONNECTED_LINE])
 
 
+@applied
 @override_settings(**LIVE)
 class FailedRetrievalDownloadsTests(OperatorReads, HarnessCase):
     """The server's own TXT and CSV, draft and reviewed, of an encounter whose retrieval raised: the download verifier
@@ -369,6 +371,7 @@ class FailedRetrievalDownloadsTests(OperatorReads, HarnessCase):
         self.assertIn('PEER REVIEW', text.splitlines())
 
 
+@applied
 @override_settings(**LIVE, **BOTH)
 class RealDownloadsTests(OperatorReads, HarnessCase):
     """The server's own TXT and CSV of a harness encounter, read by ops/verify_downloads.py as a download is."""

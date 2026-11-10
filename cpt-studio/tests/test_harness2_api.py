@@ -23,6 +23,7 @@ from studio.gi import context as gi_context
 from studio.providers.base import canonical_body
 from studio.providers.replay import ReplayProvider
 from studio.types import ExtractionResult, PageSpan, to_jsonable
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
 from tests.support import pipeline_factories as pf
@@ -516,6 +517,7 @@ class ConfirmationRefusalTests(Harness2Case):
 
 # The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
 # run that path with its setting on and keep their assertions.
+@applied
 @override_settings(**BOTH)
 @override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class ConfirmationTests(Harness2Case):
@@ -946,6 +948,7 @@ class _Decisions:
 
 # The dormant confirmation path (HARNESS.md 12.10): this release offers no reviewer confirmation; these tests
 # run that path with its setting on and keep their assertions.
+@applied
 @override_settings(STUDIO_OFFER_CONFIRMATIONS=True)
 class DecisionCarryTests(_Decisions, PipelineColonCase):
     def confirm_extent(self, encounter_id):
@@ -978,6 +981,7 @@ class DecisionCarryTests(_Decisions, PipelineColonCase):
         self.assertEqual(self.proposal_of(encounter_id, '45385')['decision_state'], 'approved')
 
 
+@applied
 class DecisionInvalidationTests(_Decisions, PipelineCase):
     def test_an_approval_whose_final_fingerprint_changed_is_invalidated_by_the_final_assessment_with_its_reason(self):
         encounter_id = self.create()

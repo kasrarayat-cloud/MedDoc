@@ -41,6 +41,7 @@ from studio.types import QuestionAnswer
 from studio.validation import engine
 from tests import test_harness2_pipeline as hp
 from tests import test_harness_engine as he
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.test_harness2_pipeline import BIOPSY, LAND, SNARE, TWO_EXTENTS
 from tests.test_harness2_r2_wording import R2WordingCase, browser
@@ -179,6 +180,7 @@ class ErcpCase(Surfaces, hp.Harness2Case):
         return [row for row in csv_rows(text) if row['item_list'] == 'peer_answer']
 
 
+@applied
 class PeerAnswerReportTests(ErcpCase):
     """d8-2: Astra answers the open cannulation question 'Cannulation of the bile duct was not successful.', quoting
     'Biliary cannulation was unsuccessful.'. Both reports printed 'Answer to "...": successful' and a CSV peer_answer
@@ -253,6 +255,7 @@ ANSWERED_TWICE = 'It gave 2 answers to 1 open question; an answer is recorded an
 ANSWERED_ONCE = 'It answered 1 open question; an answer is recorded and decides nothing by itself.'
 
 
+@applied
 class AnsweredQuestionCountTests(ErcpCase):
     """d8-3: one open question, answered twice in one peer review (the reader keeps both and notes the repeat): the
     summary said "It answered 2 open questions"."""
@@ -295,6 +298,7 @@ class AnsweredQuestionEngineTests(SimpleTestCase):
 
 # --- D12 (truth-1, truth-2, truth-3): "proposed" only of an entry with a located quote ---------------------------------
 
+@applied
 class AlternativeAccountTests(Surfaces, R2WordingCase):
     """A participant-origin alternative named every participant that gave the code as its proposer - "Proposed by Astra
     (independent participant), but not added as a proposal: none of its quotes was found verbatim ..." - beside the
@@ -495,6 +499,7 @@ class AlternativeAccountTests(Surfaces, R2WordingCase):
         self.assertIn('    Additional code 45378 · units 1 — proposed after peer review, never independent', txt)
 
 
+@applied
 @override_settings(ASTRA_MODE='disabled', FABLE_MODE='disabled')
 class CortiOnlyListedByTests(Surfaces, R2WordingCase):
     """Corti only (I1): no participant's alternative exists, so listed_by is [] on every proposal and every trace
@@ -555,6 +560,7 @@ def position(value, stance, quote):
     return {'code': value, 'position': stance, 'reason': 'Synthetic.', 'evidence': [quote]}
 
 
+@applied
 class HcpcsPeerCodeTests(Surfaces, R2WordingCase):
     """shapes-1, truth-7: the peer review's additional codes and positions were read in the CPT shape alone, so an HCPCS
     code the engine reads (participant_listable) was "a code CPT Studio does not read" in both reports, '' in the CSV,
@@ -642,6 +648,7 @@ class HcpcsPeerCodeTests(Surfaces, R2WordingCase):
 
 # --- D13 (truth-6, shapes-2): one count of a participant's codes that cannot be listed ---------------------------------
 
+@applied
 class UnlistedCountTests(Surfaces, R2WordingCase):
     """The engine counts every entry of a reading in no code's shape; the row counted the assessment's record of the
     reading, which keeps one entry per code value, so '45385-59' given twice was 2 in the summary and 1 on the row
@@ -759,6 +766,7 @@ class HcpcsShapeTests(SimpleTestCase):
                               he.encounter_check(result, 'participants.summary').detail)
 
 
+@applied
 class HcpcsLedPipelineTests(Surfaces, R2WordingCase):
     """falsegreen-1 through the pipeline: the value is counted, never listed or shown, and the longest - which a
     Proposal cannot hold - never fails the assess stage."""
@@ -791,6 +799,7 @@ class HcpcsLedPipelineTests(Surfaces, R2WordingCase):
 
 # --- falsegreen-2: Corti's own rule beside D9's -------------------------------------------------------------------------
 
+@applied
 class CortiShortUnshapedTests(Surfaces, R2WordingCase):
     """falsegreen-2: Corti's unlisted count is the engine's own rule for the proposal provider (engine._listable: 1 to 10
     characters, I1), never D9's participant rule. Every round-4 pin used values both rules agree on, so a count by
@@ -843,6 +852,7 @@ class UnreadPositionSentenceTests(SimpleTestCase):
 
 # --- falsegreen-5: the engine's position of a first reading's unlocated code that peer review proposed ---------------
 
+@applied
 class FirstReadingThenPeerReviewTests(Surfaces, R2WordingCase):
     """falsegreen-5: round 4's variant A - Astra's frozen first reading lists 45385 with a quote no document holds, and
     its peer review proposes 45385 on the snare passage. HARNESS.md 12.12 recorded the engine's support position as

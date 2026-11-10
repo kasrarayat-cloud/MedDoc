@@ -18,12 +18,14 @@ from pathlib import Path
 from django.test import SimpleTestCase
 
 from studio import answers, customer_api, models, progress, review
+from tests.legacy_chain import applied
 from tests.test_cux_flow import ELSEWHERE
 from tests.test_cux_r2_details import NO_DATE, TWO_DATES, PipelineCase
 
 APP = Path(__file__).resolve().parents[1] / 'studio' / 'static' / 'studio' / 'app.js'
 
 
+@applied
 class DateConfirmationHoldsTheApprovedExportTests(PipelineCase):
     def test_the_approved_export_waits_for_the_confirmation_and_not_after(self):
         encounter_id = self.upload(TWO_DATES, '2026-10-21')
@@ -46,6 +48,7 @@ class DateConfirmationHoldsTheApprovedExportTests(PipelineCase):
                 self.assertNotIn(review.DATE_CONFIRMATION_BLOCKER, review.readiness(encounter)['blockers'])
 
 
+@applied
 class ActionNeededWordingTests(PipelineCase):
     def test_a_conflict_is_named_only_where_the_document_states_its_own_date(self):
         conflicted = self.encounter(self.upload(TWO_DATES.replace('Date of service: 2026-10-21\n', ''), '1998-01-01'))

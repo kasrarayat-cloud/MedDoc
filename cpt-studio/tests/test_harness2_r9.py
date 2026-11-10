@@ -32,6 +32,7 @@ from tests import test_harness2_r6_meaning as r6m
 from tests import test_harness2_r7 as r7
 from tests import test_harness2_r8 as r8
 from tests import test_harness_engine as he
+from tests.legacy_chain import applied
 from tests.test_harness2_r2_wording import browser
 
 ACK = review.ACKNOWLEDGEMENTS['human']
@@ -50,6 +51,7 @@ def endoscopy_family(item):
 
 # --- retrieval-1, retrieval-2, page-1: a code no reviewer can decide is never traced -------------------------------
 
+@applied
 class UndecidableExclusionRetrievalTests(r6m.MeaningCase):
     def assert_nothing_checked(self, encounter_id, detail):
         """retrieval-1, page-1: the only code is Corti's, excluded with no reinstatement - no action reaches it and its
@@ -254,6 +256,7 @@ class MissingServiceReadingTests(SimpleTestCase):
         self.assertIn(r7.NOT_READ, item['reason'])
 
 
+@applied
 class MissingServiceReadingPipelineTests(r6m.MeaningCase):
     def test_wording_1_an_attempt_that_failed_is_never_printed_beside_as_performed(self):
         """wording-1 (a), on the reviewed report a reviewer signs."""
@@ -283,6 +286,7 @@ class MissingServiceReadingPipelineTests(r6m.MeaningCase):
 
 # --- wording-4: participants.summary's closing sentence beside a response refused whole ----------------------------
 
+@applied
 class SummarySentenceTests(r6m.MeaningCase):
     def test_beside_a_provider_response_refused_whole(self):
         """wording-4: Corti's stored response selects 45385, in scope and on an exact passage, and is refused whole. The
@@ -306,6 +310,7 @@ LINE = f'{r6m.SEEN} {r7.SNARED} {BIOPSIES}'
 HOLDING = r8.OVERLAPPING
 
 
+@applied
 class TwoCodeHighlightTitleTests(r6m.MeaningCase):
     def titles(self, detail):
         return {text: title for _, title, text in r6m.marks(detail)}

@@ -21,6 +21,7 @@ from django.utils import timezone
 
 from studio import customer_api, jobs, models, reports, review, serializers
 from studio.validation import engine, questions
+from tests.legacy_chain import applied
 from tests.test_cux_r2_details import PipelineCase
 from tests.test_cux_r2_overlay import ApiCase, persist_input
 from tests.test_cux_review import decide
@@ -148,6 +149,7 @@ class EarlierFormKeyBindingTests(SimpleTestCase):
 
 # --- W1, W6 and their controls: the withdrawal window reads the stored assessment everywhere ------------------------
 
+@applied
 class WithdrawalWindowTests(ArchiveMixin, PipelineCase):
     def setUp(self):
         super().setUp()
@@ -332,6 +334,7 @@ class WithdrawalWindowTests(ArchiveMixin, PipelineCase):
 
 # --- W5: a documented service's engine-applied answer, withdrawn: the same window, read alike --------------------------
 
+@applied
 class ServiceAnswerWindowTests(ArchiveMixin, PipelineCase):
     def setUp(self):
         super().setUp()
@@ -373,6 +376,7 @@ class ServiceAnswerWindowTests(ArchiveMixin, PipelineCase):
 
 # --- W2: an earlier-form answer through a re-assessment by this release ----------------------------------------------
 
+@applied
 class EarlierFormThroughReassessmentTests(ArchiveMixin, PipelineCase):
     def setUp(self):
         super().setUp()
@@ -521,6 +525,7 @@ def undo_reading(since):
     return answer['hazards'], answer['written'], install.web_written_by_time(closed), hold, notes
 
 
+@applied
 class MarkerHazardTimingTests(ArchiveMixin, PipelineCase):
     def setUp(self):
         super().setUp()

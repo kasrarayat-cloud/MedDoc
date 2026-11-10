@@ -37,6 +37,7 @@ from studio import models
 from studio.types import EvidenceSpan, NormalizedResponse, ProviderCode, RawExchange
 from studio.validation import checks
 from studio.validation.engine import MAX_LISTED_CODE, NO_EVIDENCE
+from tests.legacy_chain import applied
 from tests.test_pipeline_api import drain
 from tests.test_repairs_7c8_p1reports import (BIOPSY, COLONOSCOPY, COLONOSCOPY_THREE, DILATION, SNARE, Harness, page,
                                               section)
@@ -325,6 +326,7 @@ def unescape(html):
     return html.replace('&#x27;', "'").replace('&quot;', '"').replace('&amp;', '&')
 
 
+@applied
 class TheSecondReviewThroughThePipelineTests(Harness):
     """The live shape end to end: the primary answer proposes nothing for the EUS, a reviewer asks for the one second
     review, and it adds nothing. The stored check, the draft TXT and the Checks tab carry the reworded sentence."""
@@ -369,6 +371,7 @@ class MalformedSecondReview(ListingProvider):
                            usage={'creditsConsumed': 0.02}, usage_basis='provider_reported_credits_not_usd')
 
 
+@applied
 class TheSecondReviewsProblemsThroughThePipelineTests(Harness):
     """F2 as stored: the second review's response is normalised by the adapter and its passages moved to the revision
     (jobs._second_inputs) before the merge; its problems and the code it returned that cannot be listed reach the stored
@@ -399,6 +402,7 @@ class TheSecondReviewsProblemsThroughThePipelineTests(Harness):
         self.assertIn(check['detail'], unescape(page(self.detail(encounter_id))['checks']))
 
 
+@applied
 class TheOriginOfASecondReviewCodeIsSaidTests(Harness):
     """F4 and F5. The primary selects the snare polypectomy and lists 45378; a reviewer asks for the second review, which
     selects the biopsy (added, marked as from it) and lists 45381. On the Suggestions screen the alternative it listed

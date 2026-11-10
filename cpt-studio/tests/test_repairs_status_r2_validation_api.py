@@ -15,6 +15,7 @@ from studio import review
 from studio.gi.detect import route
 from studio.types import RawExchange
 from studio.validation import checks
+from tests.legacy_chain import applied
 from tests.support import pipeline_factories as pf
 from tests.support.operator import OperatorReads
 from tests.test_pipeline_api import drain
@@ -174,6 +175,7 @@ class ApiCase(ApiHarness):
         return b''.join(download.streaming_content if download.streaming else [download.content]).decode('utf-8')
 
 
+@applied
 @override_settings(**LIVE)
 class Review0ReinstatedProcedureApiTests(OperatorReads, ApiCase, TestCase):
     """review:0 — a reinstated same-day procedure gates the selected E/M, whichever is decided first."""
@@ -239,6 +241,7 @@ class Review0ReinstatedProcedureApiTests(OperatorReads, ApiCase, TestCase):
         self.assertEqual(self.decide(encounter_id, '99213', 'approve').status_code, 409)
 
 
+@applied
 @override_settings(**LIVE)
 class Review1PlanDiscussionApiTests(OperatorReads, ApiCase, TestCase):
     """review:1 — an office visit whose plan only discusses a procedure can be approved and reported."""
@@ -262,6 +265,7 @@ class MultiEvidenceApiCase(ApiCase):
         self.addCleanup(patcher.stop)
 
 
+@applied
 @override_settings(**LIVE)
 class Status4ApiTests(OperatorReads, MultiEvidenceApiCase, TestCase):
     """status:4 — EUS named only as requested: the EGD passage does not make 43259 approvable."""
@@ -277,6 +281,7 @@ class Status4ApiTests(OperatorReads, MultiEvidenceApiCase, TestCase):
         self.assertEqual(self.decide(encounter_id, '43259', 'approve').status_code, 409)
 
 
+@applied
 @override_settings(**LIVE)
 class Status13ApiTests(OperatorReads, MultiEvidenceApiCase, TestCase):
     """status:13 — one Corti code with a performed and a hedged evidence passage is not approvable."""
@@ -294,6 +299,7 @@ class Status13ApiTests(OperatorReads, MultiEvidenceApiCase, TestCase):
         self.assertEqual(self.decide(encounter_id, '45380', 'approve').status_code, 409)
 
 
+@applied
 @override_settings(**LIVE)
 class Status19ApiTests(OperatorReads, ApiCase, TestCase):
     """status:19 (b) — the report never certifies coverage routing does not have."""

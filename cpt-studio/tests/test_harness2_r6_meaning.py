@@ -29,6 +29,7 @@ from studio import models, review
 from studio.types import ProviderCode
 from studio.validation import engine
 from tests import test_harness2_pipeline as hp
+from tests.legacy_chain import applied
 from tests.test_harness2_r2_wording import browser
 from tests.test_harness2_r5_account import Surfaces, csv_rows
 from tests.test_harness_engine import code, corti, peer, read, reviewed, run, service, span, without_record
@@ -195,6 +196,7 @@ class MeaningCase(Surfaces, hp.Harness2Case):
 PROPOSED_DETAIL = '{label} proposed this code, quoting the document verbatim.'
 
 
+@applied
 class PositionWordingTests(MeaningCase):
     """review.participant_positions' 'proposed' detail is the engine's own words ("quoting the document verbatim"):
     "with evidence located in the document" called a denial, or another procedure's sentence, evidence for the code."""
@@ -581,6 +583,7 @@ class D14EngineTests(SimpleTestCase):
 
 # --- D14 through the pipeline: every surface, and Corti's proposals as with no participant configured -----------------
 
+@applied
 class D14PipelineTests(MeaningCase):
     def assert_d14(self, text, only, corti=(), **participants):
         """The findings' input through the pipeline. Moved by the completion repair (owner directive 2026-11-06, item
@@ -800,6 +803,7 @@ class MissingServiceWordingTests(SimpleTestCase):
 NO_PERFORMED_SERVICE = 'where the documented-service reading reads no performed service of that kind'
 
 
+@applied
 class MissingServicePipelineTests(MeaningCase):
     def test_n11_the_statement_the_reports_and_the_check(self):
         text = doc(COLON, NO_EGD)
@@ -839,6 +843,7 @@ SERVICE_LABEL = 'Source passages of the documented service'
 NOT_THE_ACT = '— cited by the provider; does not show the coded act'
 
 
+@applied
 class EvidenceChipLabelTests(MeaningCase):
     """The page as it is drawn with no participant configured (the release default): a code whose act the engine read
     from its own cited passage ('own_passage': support.acts []) has the documented service's passages as its source
@@ -889,6 +894,7 @@ PARTICIPANTS_ONLY = ('No code is selected for approval: each code listed was giv
                      'as an alternative')
 
 
+@applied
 class D14BlockerTests(MeaningCase):
     """D14 makes reachable an assessment whose every code is a participant's alternative: time-1 p1, where Corti selects
     nothing. review.readiness still said "No code is selected for approval: the provider proposed only codes that were
@@ -974,6 +980,7 @@ def marks(detail):
     return [(keys.split(' '), unescape(title), unescape(text)) for keys, title, text in found]
 
 
+@applied
 class SourceHighlightTitleTests(MeaningCase):
     """ownership-5's chip label has a second reader: the source panel titles every highlighted passage, and gave the
     documented service's passages of an own-passage support "Evidence for <code>" - the claim the chip no longer makes.
@@ -1052,6 +1059,7 @@ NEVER_DECIDE = ("A participant never decides a status and agreement never promot
 SAME_RULES = "by the same rules as the proposal provider's"
 
 
+@applied
 class SummarySentenceTests(MeaningCase):
     """participants.summary closed with "each code it proposes is judged by CPT Studio's own readers, with exact
     evidence, by the same rules as the proposal provider's" - false since D14 of a code only a participant gave, which

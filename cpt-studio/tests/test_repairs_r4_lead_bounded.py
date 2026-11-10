@@ -18,6 +18,7 @@ from studio import bounded, models
 from studio.gi import context as gi_context
 from studio.gi import detect
 from studio.types import to_jsonable
+from tests.legacy_chain import applied
 from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider, drain
 from tests.support import factories as f
 
@@ -105,6 +106,7 @@ class RunBoundedTests(SimpleTestCase):
                 self.assertLess(time.monotonic() - start, 8)
 
 
+@applied
 @override_settings(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
 class BoundedStageTests(TestCase):
     def setUp(self):

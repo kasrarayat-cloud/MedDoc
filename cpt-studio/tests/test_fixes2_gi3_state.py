@@ -23,6 +23,7 @@ from django.utils import timezone
 
 from studio import jobs, models, review
 from studio.types import Fact, from_jsonable
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.test_pipeline_api import FakeProvider
 
@@ -36,6 +37,7 @@ LIVE_SETTINGS = dict(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/ru
 INSTALLED_LABELS = {'CONTEXT_VERSION': 'gi-context@2', 'EARLIER_CONTEXT_VERSIONS': ('gi-context@1',)}
 
 
+@applied
 @override_settings(**LIVE_SETTINGS)
 class SendingDisabledAfterTheInstallTests(TestCase):
     def setUp(self):

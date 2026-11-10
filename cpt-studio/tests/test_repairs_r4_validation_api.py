@@ -8,6 +8,7 @@ from datetime import date, datetime, timezone
 from django.test import TestCase, override_settings
 
 from studio.models import ReferenceCodeFact, ReferenceSource
+from tests.legacy_chain import applied
 from tests.test_repairs_pipeline import LIVE
 from tests.support.operator import OperatorReads
 from tests.test_repairs_status_r2_validation_api import MultiEvidenceApiCase
@@ -22,6 +23,7 @@ def row(global_days):
     return {'status': 'A', 'global_days': global_days, 'mult_proc': '0', 'endo_base': None, 'pctc': '0'}
 
 
+@applied
 @override_settings(**LIVE)
 class RoundFourValidationApiTests(OperatorReads, MultiEvidenceApiCase, TestCase):
     def setUp(self):

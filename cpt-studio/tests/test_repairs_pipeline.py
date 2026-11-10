@@ -3,6 +3,7 @@
 Each test reproduces a confirmed finding's input and asserts the corrected
 behaviour. Synthetic data only; the provider is an in-process fake.
 """
+import copy
 import json
 import threading
 import time
@@ -15,10 +16,11 @@ from django.utils import timezone
 
 from studio import jobs, models
 from studio.types import ExtractionResult, PageSpan, RawExchange
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
 from tests.test_frontend import PLAIN_STATIC
-from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider, drain
+from tests.test_pipeline_api import OFFICE_INTERPRETATION, OFFICE_NOTE, FakeProvider, RecordedInterpretation, drain
 
 LIVE = dict(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
 NO_DATE_NOTE = OFFICE_NOTE.replace('Date of service: 2026-10-20\n', '')
@@ -26,6 +28,22 @@ NO_DATE_NOTE = OFFICE_NOTE.replace('Date of service: 2026-10-20\n', '')
 # is never changed by a member's value, which is a conflict instead (session interpretation 11).
 FIRST_DATE = '2026-10-20'
 RECONCILE_NOTE = 'Checked the provider console: no response was recorded.'
+
+
+def _no_date_interpretation():
+    """Gemini's synthetic answer to NO_DATE_NOTE (design/FINAL.md 14.6): OFFICE_NOTE's, the date line and its date
+    gone - the date of service not stated."""
+    answer = copy.deepcopy(OFFICE_INTERPRETATION)
+    answer['passages'] = [item for item in answer['passages'] if item['text'] != 'Date of service: 2026-10-20']
+    answer['encounter']['date_of_service'] = {'value': '', 'state': 'not_stated', 'words': '', 'passages': [],
+                                              'other_dates': []}
+    return answer
+
+
+NO_DATE_INTERPRETATION = _no_date_interpretation()
+# The recorded synthetic interpretations of both notes, for a class on the production chain that uploads either
+# (tests.test_pipeline_api.RecordedInterpretation.interpretations).
+INTERPRETATIONS = ((OFFICE_NOTE, OFFICE_INTERPRETATION), (NO_DATE_NOTE, NO_DATE_INTERPRETATION))
 
 
 class ScriptedProvider(FakeProvider):
@@ -77,6 +95,7 @@ class ApiHarness:
         return str(models.ProviderRun.objects.get(encounter_id=encounter_id, state='unknown').pk)
 
 
+@applied
 @override_settings(**LIVE)
 class ReconcileReleasesOneAttemptTests(OperatorReads, ApiHarness, TestCase):
     """provider:0 and provider:1 — one reconciliation, at most one new provider attempt."""
@@ -148,6 +167,7 @@ class ReconcileReleasesOneAttemptTests(OperatorReads, ApiHarness, TestCase):
         self.assertEqual(len(self.provider.sent), 1)
 
 
+@applied
 @override_settings(**LIVE)
 class ContextChangeRepredictTests(OperatorReads, ApiHarness, TestCase):
     """provider:2 and fidelity:1 — the run in use is compared on its own request, not the previous context."""
@@ -254,7 +274,7 @@ class StopRecordTests(OperatorReads, ApiHarness, TestCase):
 
 
 @override_settings(**LIVE)
-class InputBoundaryTests(OperatorReads, ApiHarness, TestCase):
+class InputBoundaryTests(RecordedInterpretation, OperatorReads, ApiHarness, TestCase):
     """security:2 and ingest:13 — text the database cannot store answers a JSON 400, never a 500."""
 
     def test_nul_in_pasted_text_is_refused_with_json(self):
@@ -331,6 +351,7 @@ class AddendumExtractionTests(OperatorReads, ApiHarness, TestCase):
         self.assertEqual(models.SourceRevision.objects.filter(encounter_id=encounter_id).count(), 1)
 
 
+@applied
 @override_settings(**LIVE)
 class ConcurrentContextTests(OperatorReads, TransactionTestCase):
     """fidelity:3 — a second concurrent context change waits for the first and is refused, never half-applied."""
@@ -391,6 +412,7 @@ HISTORY_NOTE = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nProcedure: Colonos
 HISTORY_QUOTE = 'Colonoscopy 03/14/2021: hot snare polypectomy of a 12 mm sigmoid polyp'
 
 
+@applied
 @override_settings(**LIVE)
 class MemberServiceDateRoutingTests(OperatorReads, ApiHarness, TestCase):
     """status:6 — a member-supplied service date reaches routing and span status, not only assessment."""

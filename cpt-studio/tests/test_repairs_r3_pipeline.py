@@ -13,7 +13,8 @@ from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
 from studio import audit, jobs, models, review
-from tests.test_pipeline_api import drain
+from tests.legacy_chain import applied
+from tests.test_pipeline_api import RecordedInterpretation, drain
 from tests.support.operator import OperatorReads
 from tests.test_repairs_pipeline import FIRST_DATE, LIVE, NO_DATE_NOTE, ApiHarness
 
@@ -26,6 +27,7 @@ def nested(depth, leaf='"x"'):
     return '[' * depth + leaf + ']' * depth
 
 
+@applied
 @override_settings(**LIVE)
 class SweptPredictSettlesByItsOutcomeTests(OperatorReads, ApiHarness, TestCase):
     """pipeline3:1 — a predict whose provider outcome was recorded before its worker died is settled by that
@@ -113,6 +115,7 @@ class SweptPredictSettlesByItsOutcomeTests(OperatorReads, ApiHarness, TestCase):
         self.assertEqual(len(self.provider.requests), 1)
 
 
+@applied
 @override_settings(**LIVE)
 class NonStringIdentifiersTests(OperatorReads, ApiHarness, TestCase):
     """pipeline3:2 — a nested list in an identifier field answers the endpoint's JSON 404, never an HTML 500
@@ -196,7 +199,7 @@ class NonStringIdentifiersTests(OperatorReads, ApiHarness, TestCase):
 
 
 @override_settings(**LIVE)
-class NonTextFieldsTests(OperatorReads, ApiHarness, TestCase):
+class NonTextFieldsTests(RecordedInterpretation, OperatorReads, ApiHarness, TestCase):
     """pipeline3:4 — a note, acknowledgement or addendum sent as anything but a JSON string answers 400 and is
     never stored (or sent to the provider) as its Python repr."""
 
@@ -247,7 +250,7 @@ class NonTextFieldsTests(OperatorReads, ApiHarness, TestCase):
 
 
 @override_settings(**LIVE)
-class MigrationBackfillRoundTripTests(OperatorReads, ApiHarness, TransactionTestCase):
+class MigrationBackfillRoundTripTests(RecordedInterpretation, OperatorReads, ApiHarness, TransactionTestCase):
     """Round 3, evidence:3 — migration 0003 itself backfills ProviderRun.service_date on a database at 0002 (the
     round-2 test called the helper directly, so dropping the RunPython step from 0003 left it green)."""
 
@@ -295,6 +298,7 @@ class SystemCancelledStagesAreNotMemberStopsTests(OperatorReads, ApiHarness, Tes
         self.assertIs(detail['pipeline']['stopped_by_member'], True)
 
 
+@applied
 @override_settings(**LIVE)
 class ContextChangeAfterACancelledAssessTests(OperatorReads, ApiHarness, TestCase):
     """Round 3, orchestrator:0 — the run in use is the revision's newest finished request even when the assess that

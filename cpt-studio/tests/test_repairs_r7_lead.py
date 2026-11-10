@@ -29,9 +29,10 @@ from studio.providers import CortiProvider
 from studio.providers import corti as corti_module
 from studio.types import Fact
 from studio.validation import checks
+from tests.legacy_chain import applied
 from tests.support import pipeline_factories as pf
 from tests.support.operator import OperatorReads
-from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider, drain
+from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider, RecordedInterpretation, drain
 from tests.test_repairs_r4d_lead import DEADLINES, LIVE, NEW_DATE, LiveEncounter, NOTE, SNARE
 
 _ROUTE = detect.route
@@ -110,6 +111,7 @@ class InvalidationReasonTests(OperatorReads, TestCase):
         self.assertNotIn('the evidence or checks for 43239 changed', text)
 
 
+@applied
 @override_settings(**LIVE)
 class RealEngineDateChangeReasonTests(OperatorReads, LiveEncounter, TestCase):
     def test_an_approved_em_invalidated_by_a_new_date_is_never_blamed_on_its_evidence_or_checks(self):
@@ -171,7 +173,7 @@ class RefusedResponseCheckTests(SimpleTestCase):
 
 
 @override_settings(**LIVE)
-class RefusedResponseReadinessTests(OperatorReads, LiveEncounter, TestCase):
+class RefusedResponseReadinessTests(RecordedInterpretation, OperatorReads, LiveEncounter, TestCase):
     def encounter_with(self, selections):
         self.provider.selections = selections
         with self.captureOnCommitCallbacks(execute=True):
@@ -214,7 +216,7 @@ class RefusedResponseReadinessTests(OperatorReads, LiveEncounter, TestCase):
 # --- bypass:3: an unknown action is invalid input ----------------------------------------------------------------
 
 @override_settings(**LIVE)
-class UnknownActionTests(OperatorReads, LiveEncounter, TestCase):
+class UnknownActionTests(RecordedInterpretation, OperatorReads, LiveEncounter, TestCase):
     def test_an_unknown_missing_or_non_string_action_answers_400_and_records_nothing(self):
         encounter_id = self.finished_encounter()
         detail = self.client.get(f'/ops/api/encounters/{encounter_id}').json()
@@ -279,6 +281,7 @@ class DraftListTitleTests(OperatorReads, TestCase):
 
 # --- pipeline:1: an undated note that a member dates is routed for that date before anything is sent -------------
 
+@applied
 @override_settings(**LIVE)
 class UndatedNoteDatedLaterTests(OperatorReads, LiveEncounter, TestCase):
     def undated_encounter(self):

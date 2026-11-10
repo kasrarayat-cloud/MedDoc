@@ -25,6 +25,7 @@ from django.test import SimpleTestCase, TestCase
 from studio import answers, customer_api, jobs, models, reports, review, serializers
 from studio.types import EvidenceSpan, sha256_json
 from studio.validation import engine, questions, review_view
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support import pipeline_factories as pf
 from tests.test_cux_flow import COLON, DetailsCase, asks
@@ -370,6 +371,7 @@ def replace_reason(p):
 
 # --- the chain through the website: an answer recomputes, every surface agrees ----------------------------------------
 
+@applied
 class AnswerRecomputeChainTests(ArchiveMixin, PipelineCase):
     """The target of builder Q2: save an answer and follow the chain - the recompute job, the new assessment (the code
     excluded by the member's answer, the other code's endoscopic-family check recomputed, the question closed), the

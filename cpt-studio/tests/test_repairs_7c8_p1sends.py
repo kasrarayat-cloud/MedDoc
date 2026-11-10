@@ -17,6 +17,7 @@ from studio.ingest import extract_paste
 from studio.providers import corti
 from studio.providers.base import canonical_body
 from studio.types import RawExchange
+from tests.legacy_chain import applied
 from tests.test_pipeline_api import drain
 from tests.test_repairs_ec5_sends import BANNER, Base
 from tests.test_services_second_review import LIVE, REPORT, TwoPassProvider, response
@@ -160,6 +161,7 @@ class Steps(Base):
 
 # --- sends-0: a run that carries no request is no request's outcome --------------------------------------------------
 
+@applied
 @override_settings(**LIVE)
 class RunWithoutARequestIsNoOutcomeTests(Steps):
     """sends-0: a request failed; a date whose request could not be built recorded a not-sent run with no request (and
@@ -228,6 +230,7 @@ class RunWithoutARequestIsNoOutcomeTests(Steps):
 
 # --- sends-1: a FAILED second review is never sent again, on any revision --------------------------------------------
 
+@applied
 @override_settings(**LIVE)
 class FailedSecondReviewTests(Steps):
     """sends-1: a reviewer's second review FAILED; an addendum that left the excerpt as it was made a new revision, the
@@ -336,6 +339,7 @@ class FailedSecondReviewTests(Steps):
 
 # --- sends-2: a FAILED primary request is never sent again, whatever came between -------------------------------------
 
+@applied
 @override_settings(**LIVE)
 class FailedPrimaryRequestTests(Steps):
     """sends-2: an undated report's request failed; a member's date was sent; going back (clearing the date, or the date
@@ -458,6 +462,7 @@ class FailedPrimaryRequestTests(Steps):
 
 # --- the one rule: whatever the failed request was made for, on whichever revision -----------------------------------
 
+@applied
 @override_settings(**LIVE)
 class WhateverItWasMadeForTests(Steps):
     """The send door reads every run of the encounter that sent the request, whatever it was made for and on whichever
@@ -523,6 +528,7 @@ class WhateverItWasMadeForTests(Steps):
 
 # --- round 7c8, the P1SENDS skeptic: a reuse is not a send, and the run in use is the outcome that stands ------------
 
+@applied
 @override_settings(**LIVE)
 class RetainedSecondReviewIsReusedTests(Steps):
     """Skeptic sk:1 (capability loss; 5.4 Reuse): the second-review blocker refused, as a request this document had
@@ -595,6 +601,7 @@ class RetainedSecondReviewIsReusedTests(Steps):
         self.assertEqual(self.runs(first, purpose=models.ProviderRun.SECOND_REVIEW), [failed])
 
 
+@applied
 @override_settings(**LIVE)
 class TheRunInUseIsTheOutcomeThatStandsTests(Steps):
     """Skeptic sk:2 (rollback safety; class 1 through a rollback) and sk:3: where the send door met a request that had

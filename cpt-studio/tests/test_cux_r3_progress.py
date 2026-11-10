@@ -30,6 +30,7 @@ from django.test import Client, SimpleTestCase, TestCase, override_settings
 from studio import jobs, models, progress
 from studio.gi.context import _USER_CONFLICT_PREFIX
 from studio.providers.base import ProviderUnavailable
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support import pipeline_factories as pf
 from tests.support.operator import OperatorReads
@@ -102,6 +103,7 @@ class DrawnSteps:
 
 # --- C-R3-5: a document review that did not give an answer never reads its step done ----------------------------------
 
+@applied
 @override_settings(**LIVE)
 class DocumentReviewStepTests(DrawnSteps, CustomerReads, TestCase):
     """The lens's input and its siblings, through the real pipeline and the shipped page: Corti answers HTTP 503 after
@@ -164,6 +166,7 @@ class DocumentReviewStepTests(DrawnSteps, CustomerReads, TestCase):
         self.assertEqual(doc['checks'][0]['state'], 'done')
 
 
+@applied
 @override_settings(**BOTH)
 class CheckedStepTests(DrawnSteps, CustomerReads, OperatorReads, HarnessCase):
     """With both checks configured (the committed failed fixture's shape): the checks that run after a document review
@@ -345,6 +348,7 @@ class QueuedReading:
         return page
 
 
+@applied
 @override_settings(**LIVE)
 class QueuedTitleFlowTests(QueuedReading, CustomerReads, OperatorReads, TestCase):
     """The lens's inputs and the member's other re-runs of a revision, through the real endpoints: the first step each
@@ -425,6 +429,7 @@ class QueuedTitleFlowTests(QueuedReading, CustomerReads, OperatorReads, TestCase
         self.assertEqual(len(self.provider.sent), 2)  # the one attempt it released, sent once
 
 
+@applied
 class QueuedRecheckTests(QueuedReading, CustomerReads, Harness):
     def test_a_re_check_of_what_is_still_open_waits_for_the_next_step(self):
         self.use(TwoPassProvider(first=[SNARE], later=[BIOPSY]))

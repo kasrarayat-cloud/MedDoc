@@ -39,6 +39,7 @@ from django.test import Client, SimpleTestCase, TestCase, override_settings
 
 from studio import models, review
 from studio.types import RawExchange
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
 from tests.test_pipeline_api import OFFICE_NOTE, drain
@@ -245,6 +246,7 @@ class Base(OperatorReads, TestCase):
         return caught.exception, world
 
 
+@applied
 class RefusedResponseHandedBackTests(Base):
     """install2:1. Before an undo hands the rows to an older revision - rollback-app, and the failure path of `app` - a
     stored state this revision labels from more than the state (a response refused whole: provider_failed, 'Provider
@@ -409,6 +411,7 @@ class RefusedResponseHandedBackTests(Base):
 
 # --- install2:1, the skeptic of its repair: a second review's response refused whole is named, never put back --------
 
+@applied
 class SecondReviewRefusedTests(Base):
     """install2:1, the skeptic of the put-back (must-fix class 3). The response refused whole was the bounded SECOND
     REVIEW's, asked for by a reviewer over a primary answer that was used and proposes nothing the report supports: this
@@ -659,6 +662,7 @@ class AppPhaseRecomputesBeforeRemovingTheParkedPairTests(SimpleTestCase):
         self.assertIsNone(record['details']['states_recomputed'])
 
 
+@applied
 class InterruptedAppRecoveryTests(Base):
     """install2:2 on real rows: the states the replaced revision derived, through this revision's web, before and after
     an `app` stopped once its new pair ran, and after the recovery ops/INSTALL.md documents."""

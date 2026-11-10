@@ -22,6 +22,7 @@ from studio.types import NormalizedResponse, to_jsonable
 from studio.validation import engine
 from studio.validation.engine import assess
 from tests.test_harness_engine import REFERENCE, code, corti, read, run, span
+from tests.test_pipeline_api import RecordedInterpretation
 
 CASES = json.loads((Path(__file__).parent / 'fixtures' / 'gi4' / 'refutation' / 'h3-c2-cases.json')
                    .read_text(encoding='utf-8'))['cases']
@@ -150,7 +151,7 @@ class CompetitionByActIdentityTests(SimpleTestCase):
                                   '43245': ('selected', 'needs_clarification', True)})
 
 
-class ChainCostAndModeTests(h2p.Harness2Case):
+class ChainCostAndModeTests(RecordedInterpretation, h2p.Harness2Case):
     """C2-5 (lens C2-5's database findings): a stopped and resumed participant's chain is one record on every surface,
     and a chain never mixes a live run and a replay one."""
 

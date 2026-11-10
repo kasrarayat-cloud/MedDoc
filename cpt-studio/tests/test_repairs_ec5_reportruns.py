@@ -30,6 +30,7 @@ from django.test import Client, TestCase, override_settings
 from studio import jobs, models, reports, review
 from studio.providers.base import ProviderUnavailable
 from studio.types import RawExchange
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
 from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider, drain
@@ -179,6 +180,7 @@ class Pipeline(OperatorReads, TestCase):
 
 # --- sends-3, context-4: a held run is never "The provider request failed" ------------------------------------------
 
+@applied
 class HeldRunReadsAsHeldTests(Pipeline):
     """Re-checked at the head: repaired by WIP 8j (e9b7c5e23) in readiness and the report; pinned here end to end,
     including the page's "Still needed" and the reviewed report's refusal, for both shapes the finding named."""
@@ -234,6 +236,7 @@ class HeldRunReadsAsHeldTests(Pipeline):
 
 # --- report-7: "requested" only of a request that was made, "used" only of a response that was read ----------------
 
+@applied
 class ProviderUsageWordingTests(Pipeline):
     """ARCHITECTURE 5.12: each provider run is "used by this assessment" only when its own provider check did not fail.
     At the head a failed request and an unknown outcome still read "used by this assessment" (the "not used" wording
@@ -311,6 +314,7 @@ process.stdin.on('end', () => process.stdout.write(app.listDescription('queue', 
 """
 
 
+@applied
 class UnknownSecondReviewStateTests(Pipeline):
     """A second review a reviewer asked for whose outcome is unknown blocks every further send until a member reconciles
     it (ARCHITECTURE 5.11), and the page shows the reconciliation card. At the head the encounter's state followed the
@@ -401,6 +405,7 @@ def provider_rows(timeline):
     return timeline[start:timeline.index('| Activity |', start)]
 
 
+@applied
 class SecondReviewDescribedTests(Pipeline):
     """The page renders what the report renders: a second-review run is named as one, with what it asked about
     (report-10: the Activity tab showed two identical "Corti · live · Succeeded" rows). A second review a reviewer asked
@@ -524,6 +529,7 @@ class SecondReviewDescribedTests(Pipeline):
         self.assertEqual(len(usage_lines(self.draft(encounter_id))), 1)
 
 
+@applied
 class LatestStageExplainsTests(Pipeline):
     """The "No proposals were requested" card explains itself with the stage that did not run: the LATEST predict. A
     date change re-requests proposals; when that predict fails (here the reviewer who changed the date lost the role
@@ -550,6 +556,7 @@ class LatestStageExplainsTests(Pipeline):
         self.assertNotIn('did not run for this revision', shown)
 
 
+@applied
 class FailedCardNamesTheRunInUseTests(Pipeline):
     """The "provider request failed" card explains itself with the run the current assessment read. It took the
     encounter's last FAILED run instead, so after a date change whose request was refused before sending it showed the
@@ -584,6 +591,7 @@ class SucceedsThenFails(FakeProvider):
                            error='HTTP 500 from the provider (synthetic).')
 
 
+@applied
 class FailedCardNamesTheRunTheStateReadsTests(Pipeline):
     """The card explains provider_failed with the run that state reads, which the API names (state_run). Re-check of
     the repair above (skeptic, new:provider-failed-card-older-run): it took the latest primary row whatever its state,

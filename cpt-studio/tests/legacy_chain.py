@@ -1,4 +1,4 @@
-"""The legacy chain, for TESTS ONLY (design/FINAL.md 14.6 and 16.14; slices S09 and S15).
+"""The legacy chain, for TESTS ONLY (design/FINAL.md 14.6 and 16.14; slices S09, S10 and S15).
 
 The Gemini migration makes Gemini the only interpreter: extract queues the interpret stage, analyze derives a
 gemini-context@1 context from the event inventory, and a stage given a context that is not a gemini context ends
@@ -14,9 +14,20 @@ The seams (studio/jobs.py), each replaced by its pre-migration behaviour:
   (_analyze_child: the mention gate, gi.context.extract_context, gi.detect.route), _record_context and _record_routing;
 - ``_earlier_reading``: the legacy ``_remade_context`` (a context an earlier gi-context version recorded is remade),
   where the new image ends such a stage StageCancelled;
-- ``_new_path_owed``: never - a Resume or a reconciliation works as before rather than interpreting the revision first.
+- ``_new_path_owed``: never - a Resume or a reconciliation works as before rather than interpreting the revision first;
+- ``_legacy_reading_allowed`` (S10): always - the assess, the participants' first readings and peer reviews and the
+  second review run their legacy branches on a legacy context (the legacy child, the legacy engine), a context save on a
+  revision with no gemini context remakes its context in the web as before, an answer recomputes a legacy final, a
+  re-assessment from retained answers takes a legacy final, and the second review is offered on a legacy context.
 
-Later slices that add a seam for the legacy chain (S10's assess dispatch, its context save) extend this module (S15).
+Nothing else is replaced: the stages, the doors, the send discipline and the read-time consumers are the product's own.
+The stage and context branches that dispatch on a gemini context are not seams, so a gemini context met under the chain
+still takes them (only nothing under the chain interprets a revision first, or makes a gemini context of its own).
+
+Which suites run here (FINAL 14.6, slice S15): the reading-outcome tests - and the mechanics tests whose assertions name
+the legacy chain's own stage order or the legacy reader's readings - each class marked where it is defined. The
+mechanics tests whose assertions hold on the production chain run there instead, with a recorded synthetic
+interpretation per fixture document (tests.test_pipeline_api.RecordedInterpretation).
 
 Usage::
 
@@ -27,7 +38,14 @@ Usage::
 
     @applied
     class SomeLegacyReadingTests(TestCase):
-        ...  # every test of the class runs with the legacy chain (entered before its own setUp)
+        ...  # every test of the class runs with the legacy chain, from before its setUpClass (so its setUpTestData)
+             # until after its class cleanups; its setUp, its test and its cleanups run inside it
+
+    class OtherLegacyReadingTests(LegacyChain, TestCase):  # the mixin form of the same
+        ...
+
+The chain is marked per class, where the class is defined, so a test added later to any of these modules runs the
+production chain unless it is marked too.
 """
 import contextlib
 import functools
@@ -81,26 +99,56 @@ def legacy_new_path_owed(revision, context=None):
     return False
 
 
+def legacy_reading_allowed():
+    """Before the migration every context was read by the legacy chain (jobs._legacy_reading_allowed's seam, S10)."""
+    return True
+
+
 @contextlib.contextmanager
 def legacy_chain():
     """While the block runs, studio.jobs runs the legacy chain (module docstring). Yields nothing."""
     with mock.patch.object(jobs, '_after_extract', legacy_after_extract), \
             mock.patch.object(jobs, '_earlier_reading', legacy_earlier_reading), \
             mock.patch.object(jobs, '_new_path_owed', legacy_new_path_owed), \
+            mock.patch.object(jobs, '_legacy_reading_allowed', legacy_reading_allowed), \
             mock.patch.dict(jobs.STAGES, {Job.ANALYZE: legacy_stage_analyze}):
         yield
 
 
+def _enter_for_class(klass):
+    """Enter legacy_chain() for ``klass``'s whole run: left by a class cleanup, which unittest runs after the class's
+    tearDownClass - and also when its setUpClass raised."""
+    chain = legacy_chain()
+    chain.__enter__()
+    klass.addClassCleanup(chain.__exit__, None, None, None)
+
+
+def _enter_for_test(test):
+    """Enter legacy_chain() for one test: left by its cleanups, after its tearDown."""
+    chain = legacy_chain()
+    chain.__enter__()
+    test.addCleanup(chain.__exit__, None, None, None)
+
+
 def applied(cls):
-    """A TestCase class decorator: every test of ``cls`` runs inside legacy_chain(), entered before the class's own
-    setUp runs and left after its cleanups - whether or not that setUp calls super()."""
+    """A TestCase class decorator: every test of ``cls`` runs inside legacy_chain(). It is entered before the class's
+    setUpClass (so Django's setUpTestData reads and writes under it too) and left after its class cleanups, and entered
+    again before each test's own setUp - whether or not those call super() - and left after that test's cleanups."""
+    own_class_setup = cls.__dict__.get('setUpClass')
+
+    def setUpClass(klass):
+        _enter_for_class(klass)
+        if own_class_setup is not None:
+            own_class_setup.__func__(klass)
+        else:
+            super(cls, klass).setUpClass()
+
+    cls.setUpClass = classmethod(setUpClass)
     original = cls.setUp
 
     @functools.wraps(original)
     def setUp(self, *args, **kwargs):
-        chain = legacy_chain()
-        chain.__enter__()
-        self.addCleanup(chain.__exit__, None, None, None)
+        _enter_for_test(self)
         return original(self, *args, **kwargs)
 
     cls.setUp = setUp
@@ -108,10 +156,15 @@ def applied(cls):
 
 
 class LegacyChain:
-    """A mixin form of ``applied`` for a class that calls super().setUp(): ``class X(LegacyChain, TestCase)``."""
+    """The mixin form of ``applied``, first among the bases: ``class X(LegacyChain, TestCase)``. The chain is entered
+    before the class's setUpClass and before each test's setUp, as ``applied`` enters it; a subclass that defines its
+    own setUpClass or setUp calls super(), as Django's TestCase already requires."""
+
+    @classmethod
+    def setUpClass(cls):
+        _enter_for_class(cls)
+        super().setUpClass()
 
     def setUp(self):
-        chain = legacy_chain()
-        chain.__enter__()
-        self.addCleanup(chain.__exit__, None, None, None)
+        _enter_for_test(self)
         super().setUp()

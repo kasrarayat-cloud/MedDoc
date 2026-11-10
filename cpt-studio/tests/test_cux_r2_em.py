@@ -29,6 +29,7 @@ from studio.gi import context as gi_context
 from studio.gi import cues, detect, services
 from studio.reference.store import InMemoryReferenceLookup
 from studio.types import PageSpan
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.test_cux_bind import EM_QUESTIONS, READY, day_of, em_questions, inventory, outcomes, run, service
 from tests.test_pipeline_api import FakeProvider, drain
@@ -398,6 +399,7 @@ class MemberStatusClosesTheVisitQuestionTests(SimpleTestCase):
         self.assertIn('in conflict', reasons[0])
 
 
+@applied
 @override_settings(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
 class MemberStatusEndToEndTests(TestCase):
     """L7-06, end to end through the customer API (the verifier's flow): the member answers the status row once; after

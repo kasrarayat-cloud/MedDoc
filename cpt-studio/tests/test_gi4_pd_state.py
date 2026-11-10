@@ -32,6 +32,7 @@ from studio.gi import context as gi_context
 from studio.gi.context import is_member_conflict
 from studio.providers.corti import ADAPTER_VERSION, build_coding_request
 from studio.types import Fact, RawExchange
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
 from tests.test_gi4_state import DOCS, LIVE, RetainedProvider, seed_reference
@@ -50,6 +51,7 @@ def request_sha(text, day):
                                 10 ** 7).canonical_sha256
 
 
+@applied
 @override_settings(**LIVE)
 class WideDateStateTests(OperatorReads, TestCase):
     def setUp(self):
@@ -164,6 +166,7 @@ def installed_reading(text, service_date):
     return facts
 
 
+@applied
 @override_settings(**LIVE)
 class RecordedInstallConsequenceTests(OperatorReads, TestCase):
     """CTS-6: what an encounter recorded before the install meets at its first context save after it (recorded for the

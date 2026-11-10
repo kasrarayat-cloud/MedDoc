@@ -38,10 +38,11 @@ from django.utils import timezone
 from studio import jobs, models, participants, review
 from studio.reference import importers, passages
 from studio.types import RawExchange
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
 from tests.test_harness_pipeline import BOTH, HarnessCase, installed_reader_labels, served_reader_labels
-from tests.test_pipeline_api import FakeProvider, drain
+from tests.test_pipeline_api import FakeProvider, RecordedInterpretation, drain
 from tests.test_reference import ArchiveMixin
 from tests.test_repairs_pipeline import LIVE
 
@@ -184,6 +185,7 @@ class CortiOnlyCase(OperatorReads, AssessedTwiceMixin, ArchiveMixin, TestCase):
         self.assertEqual(self.holdings(encounter_id), before)
 
 
+@applied
 class CortiOnlyRepersistTests(CortiOnlyCase):
     """A reviewer decides 45378; then the passages are imported; then an assess reads exactly the first assessment's
     inputs again: the round-4 head's answer, one assessment with everything where it was."""
@@ -258,6 +260,7 @@ class SameAssessmentMixin:
         self.assertFalse(review._same_assessment(None, *common[1:], record, []))
 
 
+@applied
 @override_settings(**LIVE)
 class CortiOnlySameAssessmentTests(SameAssessmentMixin, CortiOnlyCase):
     """review._same_assessment with no model participant configured: exactly the round-4 head's comparison (I1)."""
@@ -301,7 +304,7 @@ def jobs_records():
 # --- parity-r2-2 with participants configured (HARNESS.md 12.3) -------------------------------------------------------
 
 @override_settings(**LIVE, **BOTH)
-class ConfiguredRepersistTests(OperatorReads, AssessedTwiceMixin, ArchiveMixin, HarnessCase):
+class ConfiguredRepersistTests(RecordedInterpretation, OperatorReads, AssessedTwiceMixin, ArchiveMixin, HarnessCase):
     """Astra and Fable configured (the pipeline tests' fakes) and both of their first requests failed, so assess #1 owes
     no peer stage and is the final assessment (I10). The same assess, resumed after the stale sweep with the passages
     imported in between, reads the same participant runs: it is the same assessment."""
@@ -342,6 +345,7 @@ class ConfiguredRepersistTests(OperatorReads, AssessedTwiceMixin, ArchiveMixin, 
         self.assertEqual(self.holdings(encounter_id), before)
 
 
+@applied
 @override_settings(**LIVE, **BOTH)
 class ConfiguredSameAssessmentTests(OperatorReads, SameAssessmentMixin, HarnessCase):
     """review._same_assessment while a model participant is configured, on a final assess #2 (both participants read,
@@ -448,6 +452,7 @@ ASSESSMENT_FIELDS = ('profiles_version', 'engine_version', 'encounter_checks', '
                      'completeness', 'participants')
 
 
+@applied
 @override_settings(**LIVE)
 class ImportedReferenceParityTests(OperatorReads, ArchiveMixin, TestCase):
     """I1's one declared exception, pinned through the importers: Corti alone on COLON, the CMS PFS and practitioner

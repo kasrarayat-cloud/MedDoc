@@ -3,6 +3,7 @@ Synthetic data only; the provider is an in-process fake."""
 from django.test import TestCase, override_settings
 
 from studio import models
+from tests.legacy_chain import applied
 from tests.test_pipeline_api import FakeProvider, drain
 from tests.support.operator import OperatorReads
 from tests.test_repairs_ec5_reportfacts import browser
@@ -11,6 +12,7 @@ from tests.test_repairs_gi2_present import Harness as PresentHarness
 from tests.test_repairs_pipeline import LIVE, ApiHarness
 
 
+@applied
 @override_settings(**LIVE)
 class RepeatedResumeTests(OperatorReads, ApiHarness, TestCase):
     """sends known limit 'third Resume': every Resume appended 44 characters to the previous key, so the third or fourth
@@ -61,6 +63,7 @@ class OneSubActReadPerSentenceTests(OperatorReads, TestCase):
         self.assertEqual(routed, detect.route(text, date(2026, 10, 19)))
 
 
+@applied
 @override_settings(**LIVE)
 class ListedDateQuotesTheKeptEvidenceTests(PresentHarness):
     """gi2 integration (present's open must-fix concern, occurrence RC5): the documents/queue list's SERVICE DATE cell

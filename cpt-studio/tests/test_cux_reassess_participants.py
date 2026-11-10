@@ -12,10 +12,12 @@ from django.core.management.base import CommandError
 from django.test import override_settings
 
 from studio import models
+from tests.legacy_chain import applied
 from tests.test_cux_flow import TWO_EXTENTS, ColonCase
 from tests.test_pipeline_api import drain
 
 
+@applied
 class ParticipantsTheWorkerRunsTests(ColonCase):
     """tests/test_cux_flow.ReassessRetainedTests' chain (Corti the harness suite's fake, Astra and Fable the replay
     adapters), with its helpers and none of its tests."""

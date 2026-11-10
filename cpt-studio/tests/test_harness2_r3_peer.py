@@ -30,6 +30,7 @@ from studio.participants.reading import CODE
 from studio.types import (EvidenceSpan, LocatedQuote, ParticipantCode, ParticipantNotCoded, ParticipantQuestion,
                           ParticipantReading, ParticipantService, ReferenceUse)
 from studio.validation import checks, engine
+from tests.legacy_chain import applied
 from tests.test_harness2_pipeline import (BIOPSY, CPT_STUDIO, EMPTY_PEER, SNARE, TWO_EXTENTS, answered,
                                           document_sections, peer_document, reading)
 from tests.test_harness2_r2_peer import (CITED_REF, CORTI_LONG, LONG_BASIS, LONG_CODE, NOT_CODED_LONG,
@@ -227,6 +228,7 @@ def lens_reading():
                          'service_ids': [ASTRA_SID, 'c1', LESION_SID], 'evidence': []}])
 
 
+@applied
 class PeerRequestTests(PeerMaterialCase):
     """The lens's input (refutation round 3, peer-1) through the real pipeline: what Astra's and Fable's peer requests
     carry, as stored and as handed to the adapters' send."""

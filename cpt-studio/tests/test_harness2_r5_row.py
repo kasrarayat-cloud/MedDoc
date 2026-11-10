@@ -33,6 +33,7 @@ from django.conf import settings
 from django.test import Client, TestCase, override_settings
 
 from studio import customer_api, jobs, review
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
 from tests.test_harness2_pipeline import EMPTY_PEER, HEAD, SNARE, TWO_EXTENTS, ColonCase, answered, reading
@@ -75,6 +76,7 @@ class RowMixin:
         self.assertEqual((drawn, notes), (lines, [NOTE]))
 
 
+@applied
 class AfterRejectionTests(RowMixin, ColonCase):
     """d8-1 (a), truth-4: R4-CONF's CodeQuestionTests input - TWO_EXTENTS, Corti's 45385 and 45380 and the 45378 Fable's
     peer review adds, four questions each about a code - and then reject_selected. Moved by refutation round 6
@@ -113,6 +115,7 @@ class AfterRejectionTests(RowMixin, ColonCase):
         self.assert_counts(before, ['2 open questions are each about a code.'])
 
 
+@applied
 class StoppedTests(RowMixin, ColonCase):
     """d8-1 (b): the same case stopped after assess #1. That assessment owes its peer reviews, so it is not final: no
     action is offered and a decision is refused."""
@@ -150,6 +153,7 @@ COLON = (HEAD + 'Colonoscopy report (fictional)\nDate of service: 2026-10-21\n'
          'A 9 mm pedunculated polyp in the sigmoid colon was removed with a hot snare.\n')
 
 
+@applied
 @override_settings(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
 class CortiOnlyTests(OperatorReads, RowMixin, TestCase):
     """parity-1: Corti alone at the release default (Astra and Fable disabled, no confirmation offered). Corti selects
@@ -212,6 +216,7 @@ CONFLICT = (HEAD + 'Colonoscopy report (fictional)\nDate of service: 2026-10-14\
             'Cold forceps biopsies were taken from the sigmoid colon.\nNo biopsies were taken.\n')
 
 
+@applied
 class CarriedServiceTests(RowMixin, PipelineCase):
     """truth-5: a documented colonoscopy that both states and denies a forceps biopsy. 45385, which Corti and both
     participants propose on the snare line, carries that colonoscopy; the readers ask the conflict as a question about

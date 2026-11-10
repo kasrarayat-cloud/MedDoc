@@ -26,6 +26,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 
 from studio import bounded, jobs, models
 from studio.gi import context
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider, drain
 
@@ -542,6 +543,7 @@ class Provider(FakeProvider):
             self.selections = every
 
 
+@applied
 @override_settings(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
 class RequestDateTests(TestCase):
     """End to end with the suite's FakeProvider: the date each provider request carries, and the dated checks."""

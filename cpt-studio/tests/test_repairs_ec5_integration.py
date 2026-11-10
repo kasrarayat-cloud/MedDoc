@@ -11,6 +11,7 @@ from studio import models
 from studio.gi import context as gi_context
 from studio.types import RawExchange
 from studio.validation import checks
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.test_pipeline_api import OFFICE_NOTE, drain
 from tests.test_services_second_review import LIVE, TwoPassProvider
@@ -76,6 +77,7 @@ class FailingProvider(TwoPassProvider):
         return super().send(request, deadline_s=deadline_s)
 
 
+@applied
 @override_settings(**LIVE)
 class HeldRunIsNoRequestOutcomeTests(TestCase):
     """REPORTRUNS' skeptic, routed to sends (must-fix class 1, ARCHITECTURE 5.4: a failed or not-sent request is never

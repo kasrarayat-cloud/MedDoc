@@ -26,6 +26,7 @@ from django.test import Client, override_settings
 
 from studio import customer_api, models, progress, reports, review
 from studio.gi.catalogue import COMMON_BUNDLED
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support import operator as ops
 from tests.support import pipeline_factories as pf
@@ -465,6 +466,7 @@ class SurfaceCase(HarnessCase):
         raise AssertionError('the decisions did not settle')
 
 
+@applied
 class ScenarioTests(SurfaceCase):
     def test_harness2_both_participants_after_peer_review(self):
         encounter_id = self.create()
@@ -665,6 +667,7 @@ class ScenarioTests(SurfaceCase):
         self.assertEqual(customer_api.customer_blocker('anything else'), 'The review is not complete yet.')
 
 
+@applied
 class ReportTests(SurfaceCase):
     """Customer reports (cpt-studio-customer-report@1), legacy artifacts and the stale approved export."""
 

@@ -29,6 +29,7 @@ from django.utils import timezone
 from studio import answers, audit, customer_api, jobs, models, progress, review
 from studio.types import RawExchange
 from studio.validation import checks
+from tests.legacy_chain import applied
 from tests.support import pipeline_factories as pf
 from tests.test_cux_r2_details import HEAD, NO_DATE, TWO_DATES, PipelineCase
 from tests.test_cux_r2_overlay import (EM, NO_COLONOSCOPY, OFFICE_READY_DENIED, VISIT, ApiCase, answer, persist_input,
@@ -55,6 +56,7 @@ def state_pair(encounter):
 
 # --- B-01 / C-R3-1: the stored state follows every details save ------------------------------------------------------
 
+@applied
 class DetailsSaveRefreshesTheStoredStateTests(PipelineCase):
     def decide(self, encounter_id, code, action='approve'):
         encounter = self.encounter(encounter_id)
@@ -305,6 +307,7 @@ class SameDayHeldVisitApiTests(ApiCase):
                          review.readiness(s.encounter)['blockers'])
 
 
+@applied
 class SameDayHeldVisitPipelineTests(PipelineCase):
     def test_the_findings_document_through_the_whole_pipeline(self):
         """B-05's input character for character, through the pasted-document intake and every stage, the provider an
@@ -370,6 +373,7 @@ class RecheckActivityRowsTests(TestCase):
                          {(customer_api.RECHECK_NOT_COMPLETED[1], 'CPT Studio')})
 
 
+@applied
 class RecheckActivityPathTests(Harness):
     """End to end: the re-check asked from the customer page (session decision (n)) and each way it can end."""
 

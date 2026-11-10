@@ -44,6 +44,7 @@ from django.test import SimpleTestCase, override_settings
 from studio import jobs, models, reports, review
 from studio.types import sha256_json
 from tests import test_harness2_api as h2
+from tests.legacy_chain import applied
 from tests.test_frontend import HARNESS2_SCENARIOS, _fixture
 from tests.test_harness2_pipeline import EMPTY_PEER, HEAD, TWO_EXTENTS, ColonCase, answered, reading
 from tests.test_harness2_pipeline import Harness2Case as PipelineCase
@@ -149,6 +150,7 @@ EM_NOT_USED = 'Total time of 45 minutes is not used to select the level; the lev
 OFFICE_TAIL = 'Assessment: reflux, stable on current therapy.\nPlan: continue omeprazole.\n'
 
 
+@applied
 class BasisTests(PipelineCase):
     """d7-1 and truth-1 (a), through the real pipeline at the release default: Corti selects 99214 on the visit line,
     and Astra's first reading has one office visit service quoting a single sentence (the reading schema has no basis
@@ -225,6 +227,7 @@ class EncounterQuestionTests(h2.Harness2Case):
         self.assertEqual(review._review_state(self.encounter, self.final), 'needs_clarification')
 
 
+@applied
 class CodeQuestionTests(ColonCase):
     """Two colonoscopy codes Corti selects on a note with no extent reached, and 45378 Fable's peer review adds: four
     questions, each about a code; none about the encounter. Moved by refutation round 6 (R6-MEANING, the session's D14):
@@ -262,6 +265,7 @@ EGD_AND_COLON = (HEAD + 'Procedure report (fictional)\nDate of service: 2026-10-
                  'A 9 mm pedunculated polyp in the sigmoid colon was removed with a hot snare.\n')
 
 
+@applied
 class ServiceQuestionTests(PipelineCase):
     """A documented upper endoscopy with no extent, which no code carries, beside a colonoscopy code: the readers ask
     its extent as a question about the service, which holds neither a code nor the reviewed report."""
@@ -329,6 +333,7 @@ class ConfirmationWordingTests(h2.Harness2Case):
 
 # --- falsegreen-7, falsegreen-4: the case's and the fixtures' rows are the assess stage's -----------------------------
 
+@applied
 @override_settings(**h2.BOTH)
 class CaseRowsTests(h2.Harness2Case):
     def test_the_participants_entries_and_the_retrieval_are_the_stage_s(self):

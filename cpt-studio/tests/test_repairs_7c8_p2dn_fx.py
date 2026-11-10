@@ -28,6 +28,7 @@ Synthetic text only; no network.
 from django.test import SimpleTestCase
 
 from studio.gi import context
+from tests.legacy_chain import applied
 from tests.test_repairs_7c8_context import DateAssertions, merged_date
 from tests.test_repairs_7c8_context3 import (COLO_BODY, COLO_PLAIN, EGD_BODY, ELENA_DATE, HEAD, OFFICE_BODY, EndToEnd,
                                              date_fact, evidence_text)
@@ -110,6 +111,7 @@ class AnotherFieldSDateIsNeverTheLineSTests(DateAssertions, SimpleTestCase):
                 self.assert_member_conflict(text, '2026-10-27')
 
 
+@applied
 class AnotherFieldSDateRequestTests(EndToEnd):
     """Issue 1 end to end: the member's other-field date is held (nothing sent), and the note's own labelled 10/14 is
     sent with no member."""
@@ -188,6 +190,7 @@ class BirthLabelIsALabelTests(DateAssertions, SimpleTestCase):
                 self.assertFalse(any(BIRTH in quoted for quoted in evidence_text(text)), evidence_text(text))
 
 
+@applied
 class BirthLabelIsALabelRequestTests(EndToEnd):
     def test_e3_e4_e8_the_member_s_1998_is_held_and_its_10_14_sent(self):
         for text in (INITIALS[0], INITIALS[1], DOB_LAST_COLUMN):
@@ -284,6 +287,7 @@ class BirthDateInAnyRowTests(DateAssertions, SimpleTestCase):
         self.assert_member_date(HEAD + 'Date of service:\n10/14/2026\n' + COLO_BODY, '2026-10-14')
 
 
+@applied
 class BirthDateInAnyRowRequestTests(EndToEnd):
     def test_j1_no_date_is_sent(self):
         encounter_id = self.finished(JOINED_ONE_VALUE[0])
@@ -384,6 +388,7 @@ class NextFieldSLabelIsALabelTests(DateAssertions, SimpleTestCase):
                 self.assert_question(HEAD + 'Colonoscopy report\n' + line + '\n' + COLO_BODY, '2026-10-14')
 
 
+@applied
 class NextFieldSLabelIsALabelRequestTests(EndToEnd):
     def test_z1_z5_send_no_date(self):
         for text, code in IN_THE_FIELD:
@@ -452,6 +457,7 @@ class QualifierWithItsOwnDateOnTheLineTests(DateAssertions, SimpleTestCase):
                 self.assert_question(text, '2026-10-14')
 
 
+@applied
 class QualifierWithItsOwnDateOnTheLineRequestTests(EndToEnd):
     def test_w1_and_e9_send_no_date(self):
         w1 = self.finished(RESCHEDULED)
@@ -511,6 +517,7 @@ class EmptyDateFieldIsEvidenceTests(DateAssertions, SimpleTestCase):
         self.assert_member_date(text, '2026-10-14')
 
 
+@applied
 class EmptyDateFieldIsEvidenceRequestTests(EndToEnd):
     def test_v1_v2_the_member_s_1998_is_held(self):
         for text in EMPTY_BESIDE_BIRTH[:2]:
@@ -638,6 +645,7 @@ class InstalledFormTests(DateAssertions, SimpleTestCase):
                              '2026-10-14', '2026-09-03')
 
 
+@applied
 class InstalledFormRequestTests(EndToEnd):
     def test_e1_sends_no_date_and_the_member_s_answer_is_sent(self):
         encounter_id = self.finished(OUTSIDE_DMY)

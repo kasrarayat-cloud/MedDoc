@@ -36,6 +36,7 @@ from studio.gi import services as gi_services
 from studio.providers.corti import ADAPTER_VERSION, build_coding_request
 from studio.types import Fact, RawExchange, Span
 from studio.validation import engine, reconcile
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
 
@@ -153,6 +154,7 @@ def seed_reference(codes):
                 replay.PFS_ROW if source['kind'] == 'cms-pfs' else replay.MUE_ROW))
 
 
+@applied
 @override_settings(**LIVE)
 class StateBatteryTests(OperatorReads, TestCase):
     def setUp(self):

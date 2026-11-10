@@ -27,6 +27,7 @@ from tests import test_harness2_pipeline as hp
 from tests import test_harness2_r6_meaning as r6m
 from tests import test_harness2_r7 as r7
 from tests import test_harness2_r9 as r9
+from tests.legacy_chain import applied
 
 ACK = review.ACKNOWLEDGEMENTS['human']
 SNARE_LINE = 'A 6 mm polyp in the rectum was removed with a cold snare.'
@@ -129,6 +130,7 @@ class NoActIsNamedTests(SimpleTestCase):
                                        corti_code=[('43244', BANDS[0])]))
 
 
+@applied
 class NoActIsNamedPipelineTests(r6m.MeaningCase):
     def test_wording_2_on_the_reviewed_report(self):
         """wording-2, on the reviewed report a reviewer signs, beside the approved 45385 whose evidence is that very
@@ -163,6 +165,7 @@ HOLDING = r9.HOLDING
 NOT_THE_ACT = 'Passage the provider cited for {code}, which does not show the coded act'
 
 
+@applied
 class PieceTitleTests(r6m.MeaningCase):
     both = r9.TwoCodeHighlightTitleTests.both
 

@@ -36,6 +36,7 @@ from studio.participants.openai_astra import AstraParticipant
 from studio.types import ReferenceUse
 from studio.validation import engine
 from tests import test_harness_engine as he
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.test_harness2_pipeline import BIOPSY, EMPTY_PEER, PFS_KEY, SNARE, TWO_EXTENTS, answered, asks, reading
 from tests.test_harness2_r2_peer import PeerMaterialCase
@@ -173,6 +174,7 @@ class ShapesCase(PeerMaterialCase):
         return {row['name']: row for row in detail['harness']['participants']}
 
 
+@applied
 class ParticipantCodeShapeTests(ShapesCase):
     """shapes-1: a participant's code outside a code's shape is counted, never listed (the engine's _Harness)."""
 
@@ -229,6 +231,7 @@ class ParticipantCodeShapeTests(ShapesCase):
         self.assertIn(f'  - {LES} · ', txt)  # Corti's excluded proposal, as harness@1 prints it
 
 
+@applied
 class TraceIdsTests(ShapesCase):
     """shapes-2, truth-3: one name per withheld id for a participant across its reading and its peer review."""
 
@@ -250,6 +253,7 @@ class TraceIdsTests(ShapesCase):
         self.assertEqual(len({name: None for name in names}), 3)  # three ids, three names, never one for two
 
 
+@applied
 class ReferenceShapeTests(ShapesCase):
     """shapes-3: a reference the participant's own tool results never returned is shown only as a short id of letters
     and digits, otherwise by its length - in the API, the trace and both reports; a retrieved one as given."""
@@ -291,6 +295,7 @@ class ReferenceShapeTests(ShapesCase):
                 self.assertNotIn(value, text, f'{value} in {where}')
 
 
+@applied
 class ToolArgumentShapeTests(ShapesCase):
     """shapes-4: a tool call's arguments in the trace - codes in a code's shape, a date in its digits, a topic of the
     enumeration, a tool CPT Studio has - and anything else the participant wrote only by its length."""
@@ -314,6 +319,7 @@ class ToolArgumentShapeTests(ShapesCase):
             self.assertNotIn(value, text, value)
 
 
+@applied
 class TraceReviewShapeTests(ShapesCase):
     """falsegreen-2: the trace's peer review - its positions and its additional codes' codes and modifiers - in the
     strict shapes (serializers._code_entry), pinned on tokens of 20 characters or fewer with no whitespace, which round

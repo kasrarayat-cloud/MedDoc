@@ -24,6 +24,7 @@ from django.test import Client, override_settings
 from django.utils import timezone
 
 from studio import jobs, models
+from tests.legacy_chain import applied
 from tests.test_pipeline_api import drain
 from tests.test_repairs_7c8_p1sends import Steps
 from tests.test_repairs_ec5_reportfacts import browser
@@ -38,6 +39,7 @@ def row_meta(html):
     return re.findall(r'<small>([^<]*)</small>', html)
 
 
+@applied
 @override_settings(**LIVE)
 class TheQueueOffersOnlyAnAskTheServerAcceptsTests(Steps):
     """Each test ends by making the ask itself: the queue's claim is judged against what POST second-review answers."""
@@ -209,6 +211,7 @@ class TheQueueOffersOnlyAnAskTheServerAcceptsTests(Steps):
         self.assert_resume_runs_it_once(encounter_id)
 
 
+@applied
 @override_settings(**LIVE)
 class OnePredicateTests(Steps):
     """The status the encounter view and the queue read is the predicate the ask is refused by: _second_review_blocker

@@ -15,12 +15,13 @@ from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
 from studio import jobs, models, operator, review, serializers
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
 from tests.support import operator as operator_access
 from tests.support import pipeline_factories as pf
 from tests.test_harness_pipeline import BOTH, TIME_QUOTE, HarnessCase, fake_passages
-from tests.test_pipeline_api import drain
+from tests.test_pipeline_api import RecordedInterpretation, drain
 from tests.test_repairs_pipeline import LIVE
 
 PTP = 'NCCI procedure-to-procedure edits are not connected'
@@ -339,6 +340,7 @@ class EstimatedCostTests(FieldCase):
             self.assertIsNone(review.estimated_cost(self.make_run(usage={'input_tokens': 1200, 'output_tokens': 300})))
 
 
+@applied
 @override_settings(**LIVE, **BOTH)
 class HarnessBlockTests(OperatorReads, HarnessCase):
     def detail(self, encounter_id):
@@ -500,6 +502,7 @@ class HarnessBlockTests(OperatorReads, HarnessCase):
                          {'corti': 'done', 'astra': 'not_configured', 'fable': 'not_configured'})
 
 
+@applied
 @override_settings(**LIVE, **BOTH)
 class FrontendContractTests(OperatorReads, HarnessCase):
     """The operator console's contract constants (tests.test_frontend) are the operator serializer's own keys as /ops/
@@ -544,6 +547,7 @@ class FrontendContractTests(OperatorReads, HarnessCase):
         self.assertEqual((astra['requested_model'], astra['returned_model']), ('gpt-6-astra', 'gpt-6-astra'))
 
 
+@applied
 class FailedRetrievalTests(OperatorReads, HarnessCase):
     """A retrieval that raises (refutation round 1, parity-1) through the real pipeline: the assessment stands as made,
     and the harness block says reference validation failed with the note the assessment recorded - never 'not_run' or
@@ -589,7 +593,7 @@ class FailedRetrievalTests(OperatorReads, HarnessCase):
 
 
 @override_settings(**LIVE, **BOTH)
-class ActivityTests(OperatorReads, HarnessCase):
+class ActivityTests(RecordedInterpretation, OperatorReads, HarnessCase):
     def test_participant_attempts_are_named_and_corti_s_read_as_before(self):
         self.adapters['astra'].outcome = 'failed'
         encounter_id = self.create()
@@ -602,6 +606,7 @@ class ActivityTests(OperatorReads, HarnessCase):
         self.assertIn('Provider response recorded', summaries)
 
 
+@applied
 @override_settings(**LIVE, **BOTH)
 class TraceTests(OperatorReads, HarnessCase):
     def setUp(self):

@@ -14,6 +14,7 @@ from django.test import Client, TestCase, override_settings
 from studio import jobs, models, reports
 from studio.providers.corti import ADAPTER_VERSION
 from studio.types import ProviderRequest, RawExchange
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
 from tests.test_pipeline_api import drain
@@ -85,6 +86,7 @@ class TwoPassProvider:
                            usage={'creditsConsumed': 0.02}, usage_basis='provider_reported_credits_not_usd')
 
 
+@applied
 @override_settings(**LIVE)
 class SecondReviewTests(OperatorReads, TestCase):
     def setUp(self):
@@ -352,6 +354,7 @@ VISIT_LINE = 'Established patient office visit for rectal bleeding.'
 CECUM_LINE = 'The colonoscope was advanced to the cecum.'
 
 
+@applied
 class NoSecondReviewForWhatWasNotDoneTests(OperatorReads, TestCase):
     """A paid second review is sent only for a documented service or act the document states done (triage round 2
     skeptic, proven end to end: checked boxes under consent, equipment, education and "discussed" lists, a "Yes" field
@@ -417,6 +420,7 @@ class NoSecondReviewForWhatWasNotDoneTests(OperatorReads, TestCase):
         self.assertEqual(self.sends(text, '45378', CECUM_LINE), (2, ['primary', 'second_review']))
 
 
+@applied
 @override_settings(**LIVE)
 class PreUpgradeContextTests(OperatorReads, TestCase):
     """Refutation r1 (migrate lens): a context the installed revision recorded (gi-context@1) keeps a member's date as

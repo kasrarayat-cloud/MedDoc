@@ -36,6 +36,7 @@ from studio import models
 from studio.gi import context
 from studio.types import to_jsonable
 from studio.validation import checks
+from tests.legacy_chain import applied
 from tests.test_repairs_7c8_context import DateAssertions, merged_date
 from tests.test_repairs_7c8_context3 import COLO_BODY, ELENA_DATE, HEAD, EndToEnd, date_fact
 
@@ -325,6 +326,7 @@ class MemberDateOfAnotherOccurrenceNoteTests(SimpleTestCase):
         self.assertIn(self.PHRASE, check.detail)
 
 
+@applied
 class ElapsedTimeRequestTests(EndToEnd):
     """End to end with the suite's FakeProvider: the request of an ho-04-shaped note carries its labelled date (the walk
     sent it without one), and an undated note with a time field sends the member's date (2b82889f held it)."""

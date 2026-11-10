@@ -16,10 +16,12 @@ from django.test import override_settings
 from django.utils import timezone
 
 from studio import models, review
+from tests.legacy_chain import applied
 from tests.test_pipeline_api import drain
 from tests.test_repairs_ec5_sends import Base, LIVE
 
 
+@applied
 @override_settings(**LIVE)
 class FailedSecondReviewStateTests(Base):
     def assert_states_the_assessment(self, encounter_id, own):

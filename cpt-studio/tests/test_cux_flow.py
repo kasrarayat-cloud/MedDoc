@@ -24,6 +24,7 @@ from django.utils import timezone
 from studio import answers, intake, jobs, models, progress, review
 from studio.gi import context as gi_context
 from studio.types import ExtractionResult, PageSpan, sha256_json
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support import pipeline_factories as pf
 from tests.test_harness2_pipeline import TWO_EXTENTS, ColonCase
@@ -55,6 +56,7 @@ def pasted(text, *, service_date='', title='Synthetic note'):
     return intake.create_encounter(membership=membership, user=user, title=title, service_date=service_date, text=text)
 
 
+@applied
 class DocumentDateTests(TestCase):
     """EncounterContext.document_date: the document's own service date fact before a member's value is merged (R2 4.4,
     Q-6), from the facts the bounded child returned; never a date the document does not state as its own."""
@@ -302,6 +304,7 @@ class DetailRowsTests(DetailsCase):
                          (None, False, '1998-01-01'))  # never read back from the note's prose
 
 
+@applied
 class DetailSaveTests(DetailsCase):
     def setUp(self):
         super().setUp()
@@ -440,6 +443,7 @@ class DetailSaveTests(DetailsCase):
         self.assertEqual(self.counts(), before)
 
 
+@applied
 @override_settings(**LIVE)
 class DateHoldDetailTests(TestCase):
     """The member date hold (Mara's first run): the date row is there at once, and "Use document date" is the existing
@@ -743,6 +747,7 @@ class ProgressFoldTests(ProgressCase):
         self.assertEqual((out['slow'], out['message']), (False, progress.TAKING_TURN))
 
 
+@applied
 @override_settings(**LIVE)
 class DateHoldProgressTests(TestCase):
     def setUp(self):
@@ -876,6 +881,7 @@ class UploadKeyTests(TestCase):
 
 # --- the re-assessment from retained answers (manage.py reassess_retained; jobs.reassess_retained) ---------------------
 
+@applied
 class ReassessRetainedTests(ColonCase):
     """R6 6.4: ONE assess in the re-assessment mode, which re-reads the final assessment's retained answers by id - the
     Corti run, every phase-1 run and peer run its entries name - creates no ProviderRun and sends nothing. Corti is the

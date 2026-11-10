@@ -31,6 +31,7 @@ from studio.types import (EvidenceSpan, LocatedQuote, PageSpan, ParticipantCode,
                           ParticipantReading, PeerReview, ProviderRequest, RawExchange, RoutingResult, from_jsonable,
                           sha256_json)
 from studio.validation import engine
+from tests.legacy_chain import applied
 from tests.support import docgen
 from tests.support.operator import OperatorReads
 from tests.support import factories as f
@@ -338,6 +339,7 @@ class HarnessCase(TestCase):
 
 # --- I1: no participant configured -----------------------------------------------------------------------------------
 
+@applied
 @override_settings(**LIVE)
 class CortiOnlyParityTests(OperatorReads, HarnessCase):
     """I1: with Astra and Fable disabled, the stages, their keys, the rows and the assessment's sha256 are as before;
@@ -481,6 +483,7 @@ class CortiOnlyParityTests(OperatorReads, HarnessCase):
 
 # --- the chain --------------------------------------------------------------------------------------------------------
 
+@applied
 @override_settings(**LIVE, **BOTH)
 class ChainTests(OperatorReads, HarnessCase):
     def test_predict_then_astra_then_fable_then_assess(self):
@@ -717,6 +720,7 @@ class ChainTests(OperatorReads, HarnessCase):
 
 # --- unknown outcomes, reuse, failures --------------------------------------------------------------------------------
 
+@applied
 @override_settings(**LIVE, **BOTH)
 class UnknownOutcomeTests(OperatorReads, HarnessCase):
     def test_an_unknown_outcome_blocks_every_later_send_and_reconcile_resends_only_that_participant(self):
@@ -887,6 +891,7 @@ class UnknownOutcomeTests(OperatorReads, HarnessCase):
         self.assertEqual(jobs.assessment_phase(self.encounter(encounter_id).current_assessment), 2)
 
 
+@applied
 @override_settings(**LIVE, **BOTH)
 class ProviderLockTests(OperatorReads, HarnessCase):
     """Refutation round 1, FG-4 (I8): a participant's send takes the same installation-wide advisory lock as Corti's; a
@@ -913,6 +918,7 @@ class ProviderLockTests(OperatorReads, HarnessCase):
         self.assertEqual((len(self.adapters['astra'].sent), len(self.adapters['fable'].sent)), (1, 1))
 
 
+@applied
 @override_settings(**LIVE, **BOTH)
 class NotSentAttemptTests(OperatorReads, HarnessCase):
     """Refutation round 1, sends-1 (I8; ARCHITECTURE 5.4): an attempt that went through the send doors and was recorded
@@ -1016,6 +1022,7 @@ class NotSentAttemptTests(OperatorReads, HarnessCase):
         self.assertEqual(self.records(encounter_id)['fable']['peer_state'], 'read')
 
 
+@applied
 @override_settings(**LIVE, **BOTH)
 class MemberDateHoldTests(OperatorReads, HarnessCase):
     """Session interpretation 19: nothing is built, reused or sent while a member date conflict stands - the
@@ -1074,6 +1081,7 @@ class MemberDateHoldTests(OperatorReads, HarnessCase):
 
 # --- the stale sweep, Stop and Resume ---------------------------------------------------------------------------------
 
+@applied
 @override_settings(**LIVE, **BOTH)
 class SweepAndResumeTests(OperatorReads, HarnessCase):
     def run_until(self, kind):
@@ -1280,6 +1288,7 @@ class SweepAndResumeTests(OperatorReads, HarnessCase):
 
 # --- what the assess reads, and retrieval -----------------------------------------------------------------------------
 
+@applied
 @override_settings(**LIVE, **BOTH)
 class AssessReadsTests(OperatorReads, HarnessCase):
     def test_retrieval_reads_the_same_lookup_for_every_proposal_code(self):
@@ -1505,6 +1514,7 @@ def install_endoscopy_pfs():
             'status': 'A', 'global_days': '000', 'mult_proc': '3', 'endo_base': '45378', 'pctc': '0'})
 
 
+@applied
 @override_settings(**LIVE)
 class RetrievalFailureTests(OperatorReads, HarnessCase):
     """With Astra and Fable disabled (I1): nothing retrieval meets stops the assessment Corti's answer makes."""
@@ -1608,6 +1618,7 @@ class RetrievalFailureTests(OperatorReads, HarnessCase):
         self.assertIn(f'\n  - {note}\n', reports.render_txt(snap).decode('utf-8'))
 
 
+@applied
 @override_settings(**LIVE, **BOTH)
 class RetrievalFailureChainTests(OperatorReads, HarnessCase):
     def test_both_assessments_of_the_chain_are_recorded_and_say_reference_validation_failed(self):
@@ -1631,6 +1642,7 @@ class RetrievalFailureChainTests(OperatorReads, HarnessCase):
 
 # --- what a participant is given --------------------------------------------------------------------------------------
 
+@applied
 @override_settings(**LIVE, **BOTH)
 class DocumentKindTests(OperatorReads, HarnessCase):
     def setUp(self):

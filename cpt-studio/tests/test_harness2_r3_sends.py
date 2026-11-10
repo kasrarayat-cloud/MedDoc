@@ -56,7 +56,7 @@ from tests.test_harness2_pipeline import (ASTRA_READING, EMPTY_PEER, FABLE_READI
                                           answered, asks, facts_call, install_reference_store)
 from tests.test_harness_pipeline import BOTH, ScriptedCorti, _WorkerDied
 from tests.test_participants_support import OfflineMixin
-from tests.test_pipeline_api import _OtherSession, drain
+from tests.test_pipeline_api import _OtherSession, RecordedInterpretation, drain
 from tests.test_repairs_pipeline import LIVE, RECONCILE_NOTE
 from tests.test_repairs_r1_m import install, run_app_script
 
@@ -116,7 +116,7 @@ def end_session_by_server():
 
 
 @override_settings(**LIVE, **BOTH)
-class LockedSessionTests(OperatorReads, OfflineMixin, TransactionTestCase):
+class LockedSessionTests(RecordedInterpretation, OperatorReads, OfflineMixin, TransactionTestCase):
     """HARNESS.md 2 and I8: every provider send takes the one installation-wide advisory lock, a lock of the database
     session that took it (jobs._send). No test transaction wraps the pipeline here, as none wraps the worker, so a write
     that meets an ended session lets Django open another one exactly as it does in the worker. Round 4's sends-3 tests
@@ -353,7 +353,7 @@ class LockedSessionTests(OperatorReads, OfflineMixin, TransactionTestCase):
 
 # --- sends-3 and sends-4: the installer's undo settles a run as the sweep does; a replay reached nothing --------------
 
-class SettledAsSentTests(Harness2Case):
+class SettledAsSentTests(RecordedInterpretation, Harness2Case):
     """HARNESS.md 12.7: a run left sending is settled unknown, and sent when an exchange of it that may have reached the
     vendor is recorded - by the stale sweep (jobs.mark_stale) and by the installer's undo (CLOSE_STAGES) alike, through
     one rule (jobs.may_have_reached_vendor). The undo had settled sent as before D5 (sends-3), and the rule counted a
@@ -455,7 +455,7 @@ class SettledAsSentTests(Harness2Case):
 
 # --- sends-2: recorded as a known limit (HARNESS.md 12.7) -------------------------------------------------------------
 
-class FinalAnswerSweptTests(Harness2Case):
+class FinalAnswerSweptTests(RecordedInterpretation, Harness2Case):
     """sends-2, a known limit recorded in HARNESS.md 12.7 with its cost: a worker that dies after the loop's final
     answer was recorded as it ended and before the run's outcome was recorded (_finish_loop) leaves a run the stale
     sweep settles as unknown, in flight, beside that answer; the encounter waits for a member's reconciliation, which

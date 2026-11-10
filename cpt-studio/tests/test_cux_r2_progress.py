@@ -31,14 +31,15 @@ from django.utils import timezone
 
 from studio import jobs, models, progress, review
 from studio.types import ExtractionResult, RawExchange
+from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support import pipeline_factories as pf
 from tests.support.operator import OperatorReads
 from tests.test_cux_flow import ProgressCase, run_stages
 from tests.test_harness_pipeline import BOTH, HarnessCase
-from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider, drain
+from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider, RecordedInterpretation, drain
 from tests.test_repairs_gi2_present import BIOPSY, SNARE, Harness
-from tests.test_repairs_pipeline import NO_DATE_NOTE
+from tests.test_repairs_pipeline import INTERPRETATIONS, NO_DATE_NOTE
 from tests.test_services_second_review import TwoPassProvider
 
 LIVE = dict(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
@@ -161,6 +162,7 @@ class StatePrecedenceTests(TestCase):
         self.assertTrue(review.can_resume(models.Encounter.objects.get(pk=self.enc.pk)))
 
 
+@applied
 @override_settings(**BOTH)
 class ParticipantUnknownTests(CustomerReads, OperatorReads, HarnessCase):
     """L5-1's inputs (a) and (b), through the real pipeline: a participant left 'sending' after both its outcome writes
@@ -222,6 +224,7 @@ class ParticipantUnknownTests(CustomerReads, OperatorReads, HarnessCase):
         self.assertEqual(error, {'text': progress.ERRORS['processing_failed'][0], 'action': 'new_document'})
 
 
+@applied
 @override_settings(**LIVE)
 class CortiUnknownTests(CustomerReads, OperatorReads, TestCase):
     """L5-1's input (c): Corti's read times out after sending, then the assess overruns its bound."""
@@ -331,6 +334,7 @@ class HeartbeatLifetimeTests(TransactionTestCase):
 
 # --- L5-3: a reservation its stage left behind is never being confirmed -----------------------------------------------
 
+@applied
 @override_settings(**LIVE)
 class ReservationTests(CustomerReads, OperatorReads, TestCase):
     def setUp(self):
@@ -447,9 +451,12 @@ class StaleReservationTests(TestCase):
 # --- L5-4: a blocked or skipped stage is never done -------------------------------------------------------------------
 
 @override_settings(**LIVE)
-class BlockedStageTests(CustomerReads, TestCase):
+class BlockedStageTests(RecordedInterpretation, CustomerReads, TestCase):
     """L5-4's input: a document whose first request's outcome is unknown, then a member's date - a new request, which
     the unknown outcome blocks (nothing is sent, nothing assessed)."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads OFFICE_NOTE or NO_DATE_NOTE from its
+    # recorded synthetic interpretation.
+    interpretations = INTERPRETATIONS
 
     def test_a_document_review_an_unknown_outcome_blocked_is_never_done(self):
         ws = f.workspace()
@@ -562,6 +569,7 @@ class FailingRecheck(TwoPassProvider):
         return super().send(request, deadline_s=deadline_s)
 
 
+@applied
 class RecheckOutcomeTests(CustomerReads, Harness):
     def ask(self, provider):
         self.use(provider)

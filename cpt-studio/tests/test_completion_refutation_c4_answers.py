@@ -12,6 +12,7 @@ import json
 from unittest import mock
 
 from studio import jobs, models, review
+from tests.legacy_chain import applied
 from tests.test_cux_r2_details import PipelineCase
 from tests.test_pipeline_api import drain
 from tests.test_reference import ArchiveMixin
@@ -78,6 +79,7 @@ class _Case(ArchiveMixin, PipelineCase):
         return {row['code']: (row['status'], row.get('allowed_actions')) for row in self.doc(encounter_id)['codes']}
 
 
+@applied
 class NoAnswerMovesAnotherCodesDecisionTests(_Case):
     """answers 1: the approval or rejection of another code survives every answer that changes nothing it shows."""
     selections = [('43239', HEDGED_BX), ('45378', ADVANCED), ('45385', SNARE)]
@@ -105,6 +107,7 @@ class NoAnswerMovesAnotherCodesDecisionTests(_Case):
         self.assertEqual(self.invalidations(encounter_id), [])
 
 
+@applied
 class CorrectedValueTests(_Case):
 
     def test_correcting_an_earlier_form_answers_value_keeps_the_approval(self):
@@ -117,6 +120,7 @@ class CorrectedValueTests(_Case):
         self.assertEqual(self.doc(encounter_id)['state'], 'reviewed')
 
 
+@applied
 class CorrectedValueRejectionTests(_Case):
     selections = [('45378', ADVANCED), ('45385', HEDGED_SNARE)]
 
@@ -130,6 +134,7 @@ class CorrectedValueRejectionTests(_Case):
         self.assertEqual(self.doc(encounter_id)['state'], 'reviewed')
 
 
+@applied
 class RejectionClosesTheBaseQuestionTests(_Case):
     """answers 2: a rejection that closes the base code's base_included question releases it - the answer to that
     question no longer applies, as the installed overlay read it."""
@@ -151,6 +156,7 @@ class RejectionClosesTheBaseQuestionTests(_Case):
         self.assertEqual(self.codes(encounter_id)['45378'], ('ready', ['approve', 'reject']))
 
 
+@applied
 class StaleCheckTests(_Case):
     """answers 3: where the overlay cannot recompute another code's endoscopic check, it is marked stale."""
 
@@ -168,6 +174,7 @@ class StaleCheckTests(_Case):
         self.assertEqual(list(views[snare.key].stale), ['pfs.endoscopic_base'])
 
 
+@applied
 class KeyBoundBaseAnswerTests(_Case):
     """The differential round over cycle 4 (answers 1): a base_included or separate_em answer binds by its key, as the
     installed release bound every answer. A review decision that rewords the base code's hidden reason (rejecting the
