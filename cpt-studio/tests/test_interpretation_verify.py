@@ -73,6 +73,26 @@ class DateOfService(SimpleTestCase):
             with self.subTest(text):
                 self.assertEqual(reasons(verify.date_words('2026-03-14', text)), ('date_mismatch',))
 
+    def test_pass_a_month_or_a_year_at_its_own_precision(self):
+        # an other date read.date_error admits as YYYY-MM or YYYY (the FRESH recording, S16)
+        for value, text, literal in (('2024-01', 'January 2024', {'value': '2024-01', 'precision': 'month'}),
+                                     ('2024-01', '1/2024', {'value': '2024-01', 'precision': 'month'}),
+                                     ('2024', 'in 2024', {'value': '2024', 'precision': 'year'}),
+                                     ('2017', '2017 laparoscopic ileocecal resection',
+                                      {'value': '2017', 'precision': 'year'})):
+            with self.subTest(value=value, text=text):
+                verdict = verify.date_words(value, text)
+                self.assertEqual(reasons(verdict), ())
+                self.assertEqual(verdict.checks, ('date_literal',))
+                self.assertEqual(verdict.literals, {'dates': [literal]})
+
+    def test_fail_a_month_or_a_year_against_another_precision_another_value_or_several(self):
+        for value, text in (('2024-01', 'January 15, 2024'), ('2024-01', 'February 2024'), ('2024', 'January 2024'),
+                            ('2024', '2023 and 2024'), ('2024', 'in 2023'), ('2024-01', 'January 2024 and March 2024'),
+                            ('2024', ''), ('2024-01', 'last January')):
+            with self.subTest(value=value, text=text):
+                self.assertEqual(reasons(verify.date_words(value, text)), ('date_mismatch',))
+
 
 class Time(SimpleTestCase):
     def test_pass_each_value_against_the_service_date_at_the_literals_precision(self):

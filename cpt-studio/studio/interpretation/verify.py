@@ -96,9 +96,17 @@ def _verdict(checks, found: dict, reasons=()) -> Verdict:
 # --- the checks, one per attribute (contract 5.3, C1; EB1-EB3): each reads the attribute's own words, ``text`` --------
 
 def date_words(value: str, text: str) -> Verdict:
-    """date_of_service and other_dates: the words hold exactly one full date, and it is ``value`` (date_mismatch)."""
-    found = literals.full_dates(text)
-    ok = len(found) == 1 and found[0].value.isoformat() == value
+    """date_of_service and other_dates: the words hold exactly one date, and it is ``value`` (date_mismatch). A full value
+    (YYYY-MM-DD, and "", which none equals) is read against the full dates in the words, exactly one; a month or a year
+    (YYYY-MM, YYYY: an other date read.date_error admits at its own precision) against every date literal in the words,
+    exactly one, of that precision and equal to it - so a month value whose words state a day is a mismatch."""
+    if len(value) in (4, 7):
+        found = literals.dates(text)
+        precision = literals.MONTH if len(value) == 7 else literals.YEAR
+        ok = len(found) == 1 and found[0].precision == precision and found[0].iso == value
+    else:
+        found = literals.full_dates(text)
+        ok = len(found) == 1 and found[0].value.isoformat() == value
     return _verdict(('date_literal',), {'dates': [_date_record(item) for item in found]},
                     () if ok else ('date_mismatch',))
 

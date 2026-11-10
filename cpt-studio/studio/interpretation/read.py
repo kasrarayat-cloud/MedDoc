@@ -14,8 +14,12 @@ answer, and nothing of it is read:
 3. The bounds (schema.BOUNDS), each named by count and never truncated (stage ``bounds``).
 4. The ids: every passage, lesion and event id is 1 to 24 letters, digits, '_', '.', ':' or '-', beginning with a letter
    or a digit, and unique in its list, since an ambiguous reference cannot be bound (stage ``ids``).
-5. The ISO shapes: the date of service and every other date is "" or a real YYYY-MM-DD date (stage ``schema``: the
-   format is part of the answer's shape; the validator's keyword subset cannot state it).
+5. The ISO shapes: the date of service and every other date of this encounter (role this_encounter: a date-of-service
+   candidate) is "" or a real YYYY-MM-DD date; an other date of any other role is "", a real YYYY-MM-DD date, or a real
+   month or year, YYYY-MM or YYYY, where the document gives one with no day ('January 2024', 'in 2017') (stage ``schema``:
+   the format is part of the answer's shape; the validator's keyword subset cannot state it). The partial shapes were
+   admitted after the FRESH recording (S16): Gemini writes a history date at its own precision, and a refusal of the
+   whole answer for it refused 27 of 69 answers.
 
 Everything later is item-level and never refuses the answer: an id cited but not defined, an attribute not permitted on
 its event, an inconsistent combination, an unlocated quote. Normalization records each as a problem and a state.
@@ -38,6 +42,7 @@ REFUSED = 'The interpretation was not used: '  # every refusal sentence starts s
 STAGES = ('envelope', 'json', 'schema', 'bounds', 'ids')
 ID = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.:-]{0,23}')
 _DATE = re.compile(r'[0-9]{4}-[0-9]{2}-[0-9]{2}')
+_PARTIAL_DATE = re.compile(r'[0-9]{4}(?:-[0-9]{2})?')
 # The top-level lists and the encounter's lists, with what one entry is called.
 _TOP_LISTS = (('passages', 'passages'), ('lesions', 'lesions'), ('events', 'events'),
               ('open_questions', 'open questions'))
@@ -206,15 +211,32 @@ def id_error(answer: dict) -> str:
 # --- 5: the ISO shapes -------------------------------------------------------------------------------------------------
 
 def date_error(answer: dict) -> str:
-    """The first date of service or other date that is neither "" nor a real YYYY-MM-DD date, or ''."""
+    """The first date whose value has no shape rule 5 admits, or '': the date of service, or an other date of this
+    encounter, that is neither "" nor a real YYYY-MM-DD date; an other date of another role that is neither "", a real
+    YYYY-MM-DD date nor a real YYYY-MM or YYYY."""
     when = answer['encounter']['date_of_service']
-    places = [('encounter.date_of_service.value', when['value'])]
-    places += [(f'encounter.date_of_service.other_dates[{index}].value', item['value'])
+    places = [('encounter.date_of_service.value', when['value'], False)]
+    places += [(f'encounter.date_of_service.other_dates[{index}].value', item['value'], item['role'] != 'this_encounter')
                for index, item in enumerate(when['other_dates'])]
-    for path, value in places:
-        if value and not iso_date(value):
+    for path, value, partial in places:
+        if not value or iso_date(value):
+            continue
+        if not partial:
             return f'a date is not YYYY-MM-DD ({path})'
+        if not partial_date(value):
+            return f'a date is not YYYY-MM-DD, YYYY-MM or YYYY ({path})'
     return ''
+
+
+def partial_date(value: str) -> bool:
+    """Whether ``value`` is a real month or year written YYYY-MM or YYYY in ASCII digits (year 1 or later)."""
+    if not _PARTIAL_DATE.fullmatch(value):
+        return False
+    try:
+        date(int(value[:4]), int(value[5:7]) if len(value) == 7 else 1, 1)
+    except ValueError:
+        return False
+    return True
 
 
 def iso_date(value: str) -> bool:

@@ -477,6 +477,38 @@ class DateRowTests(ReadTestCase):
                 value['encounter']['date_of_service']['other_dates'] = [
                     {'value': '2026-01-02', 'role': 'other_document', 'words': '', 'passages': []},
                     {'value': bad, 'role': 'report_time', 'words': '', 'passages': []}]
+                self.refused(value, 'schema', 'a date is not YYYY-MM-DD, YYYY-MM or YYYY '
+                                              '(encounter.date_of_service.other_dates[1].value)')
+
+    def test_an_other_date_of_another_role_may_be_a_month_or_a_year(self):
+        # the FRESH recording (S16): Gemini writes a history date the document gives with no day at its own precision
+        # ("January 2024" -> "2024-01", "in 2017" -> "2017"); refusing the whole answer for it refused 27 of 69 answers
+        for role in ('birth', 'other_occurrence', 'other_document', 'report_time', 'unclear'):
+            for good in ('2024', '2024-01', '1999-12', '2026-11-08'):
+                with self.subTest(role=role, date=good):
+                    value = answer()
+                    value['encounter']['date_of_service']['other_dates'] = [
+                        {'value': good, 'role': role, 'words': '', 'passages': []}]
+                    self.accepted(value)
+            for bad in ('2024-13', '2024-00', '0000', '0000-01', '24', '2024-1', '202401', '2024-01-', 'Jan 2024',
+                        '２０２４', ' 2024', '2024 '):
+                with self.subTest(role=role, date=bad):
+                    value = answer()
+                    value['encounter']['date_of_service']['other_dates'] = [
+                        {'value': bad, 'role': role, 'words': '', 'passages': []}]
+                    self.refused(value, 'schema', 'a date is not YYYY-MM-DD, YYYY-MM or YYYY '
+                                                  '(encounter.date_of_service.other_dates[0].value)')
+
+    def test_the_date_of_service_and_this_encounters_other_dates_stay_full_dates(self):
+        for partial in ('2026', '2026-11'):
+            with self.subTest(date=partial):
+                value = answer()
+                value['encounter']['date_of_service']['value'] = partial
+                self.refused(value, 'schema', 'a date is not YYYY-MM-DD (encounter.date_of_service.value)')
+                value = answer()
+                value['encounter']['date_of_service']['other_dates'] = [
+                    {'value': '2024', 'role': 'other_occurrence', 'words': '', 'passages': []},
+                    {'value': partial, 'role': 'this_encounter', 'words': '', 'passages': []}]
                 self.refused(value, 'schema', 'a date is not YYYY-MM-DD '
                                               '(encounter.date_of_service.other_dates[1].value)')
 
