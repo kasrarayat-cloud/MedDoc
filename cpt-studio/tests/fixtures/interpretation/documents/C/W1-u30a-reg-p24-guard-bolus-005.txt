@@ -1,0 +1,8 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+URGENT UPPER ENDOSCOPY NOTE
+Date of Service: Nov 5, 2026
+Endoscopist: Synthetic Endoscopist, MD (fictional)
+Procedure: Esophagogastroduodenoscopy (EGD)
+Procedure details
+The gastroscope was passed through the mouth under direct vision. At 33 cm a large piece of meat filled the lumen. The meat bolus was removed with a Roth net and was not pushed into the stomach. The stomach and duodenum were normal. The bolus was discarded and was not sent to pathology.
+Estimated blood loss: Minimal

@@ -1,0 +1,17 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+UPPER ENDOSCOPIC ULTRASOUND (EUS) REPORT
+Facility: Kingsmere University Hospital (fictional)
+Patient: Rosalind Achterhof (fictional)
+Date of service: November 5, 2026
+Endoscopist: Victor Ilunga, MD (fictional)
+Indication: Pancreatic head mass on CT; tissue diagnosis requested.
+Procedure: As part of this EUS, an EGD was first performed with a standard gastroscope.
+The esophagus, stomach and duodenum to the second portion were normal on the EGD portion.
+The linear echoendoscope was then advanced to the second portion of the duodenum.
+EUS imaging was performed from the esophagus, stomach and duodenum.
+EUS findings: a 24 mm hypoechoic mass in the pancreatic head; common bile duct 9 mm.
+No lymphadenopathy or liver lesion was seen.
+EUS-guided fine-needle aspiration of the pancreatic head mass: 22-gauge needle, 3 passes.
+The needle passes were made through the duodenal wall.
+Impression: 24 mm pancreatic head mass, sampled by EUS-guided fine-needle aspiration.
+Plan: Await cytology; multidisciplinary pancreas review.

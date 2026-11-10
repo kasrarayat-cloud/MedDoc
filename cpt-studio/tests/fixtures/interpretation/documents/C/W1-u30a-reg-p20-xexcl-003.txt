@@ -1,0 +1,9 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Colonoscopy Report
+Date of Service: 11/04/2026
+Endoscopist: Synthetic Endoscopist, MD (fictional)
+Indication: Screening.
+Description of procedure: The colonoscope was inserted into the rectum and advanced to the cecum. The patient tolerated the procedure well.
+Findings:
+1. Ascending colon: 8 mm sessile polyp. It was removed with a cold snare, without argon plasma coagulation.
+Impression: Ascending colon polyp, removed with cold snare.

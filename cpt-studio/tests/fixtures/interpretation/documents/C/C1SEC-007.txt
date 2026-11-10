@@ -1,0 +1,19 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+COLONOSCOPY AND THERAPEUTIC ENDOSCOPY REPORT
+Date of service: November 8, 2026
+Endoscopist: A. Synthetic, MD (fictional)
+Procedure: Colonoscopy with balloon dilation and polypectomy
+Clinical indication and interval history
+The patient has ileocolonic Crohn disease and underwent an ileocecal resection in 2017. She reports postprandial cramping.
+Pertinent records reviewed before the examination
+A colonoscopy from January 2024 described a narrowed anastomosis and a 4 mm rectal polyp that was removed at that earlier encounter. No dilation was carried out in 2024.
+Procedure technique and chronological findings
+The patient was positioned in the left lateral decubitus position. The colonoscope was introduced through the anus and advanced to the ileocolonic anastomosis.
+Ileocolonic anastomosis and balloon dilation
+A short anastomotic stricture was present. A through-the-scope balloon was advanced across the stricture and inflated to 15 mm. The colonoscope then traversed the treated narrowing into the neo-terminal ileum.
+Descending colon: cold-snare polypectomy
+A 9 mm sessile polyp in the descending colon was removed with a cold snare and retrieved.
+Postprocedure impression
+1. Crohn disease of the anastomosis.
+Recovery instructions and management plan
+Advance the diet as tolerated. Surveillance colonoscopy in 3 years.

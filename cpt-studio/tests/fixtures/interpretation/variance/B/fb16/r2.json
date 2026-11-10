@@ -1,0 +1,37 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "{\n  \"passages\": [\n    {\n      \"id\": \"P1\",\n      \"text\": \"COLONOSCOPY REPORT\"\n    },\n    {\n      \"id\": \"P2\",\n      \"text\": \"Date of service: November 9, 2026\"\n    },\n    {\n      \"id\": \"P3\",\n      \"text\": \"Endoscopist: Marcus Delacroix-Ye, MD (fictional)\"\n    },\n    {\n      \"id\": \"P4\",\n      \"text\": \"Procedure: I advanced the colonoscope to the cecum and identified the appendiceal orifice.\"\n    },\n    {\n      \"id\": \"P5\",\n      \"text\": \"- Ascending colon: a 7 mm sessile polyp.\"\n    },\n    {\n      \"id\": \"P6\",\n      \"text\": \"- Under MAC by Dr. Yusuf Brightwater (fictional), a cold snare polypectomy was performed.\"\n    },\n    {\n      \"id\": \"P7\",\n      \"text\": \"- The polyp was retrieved for histology. There was no bleeding.\"\n    },\n    {\n      \"id\": \"P8\",\n      \"text\": \"Impression: 7 mm ascending colon polyp, removed by cold snare.\"\n    }\n  ],\n  \"encounter\": {\n    \"date_of_service\": {\n      \"value\": \"2026-11-09\",\n      \"state\": \"stated\",\n      \"words\": \"November 9, 2026\",\n      \"passages\": [\"P2\"],\n      \"other_dates\": []\n    },\n    \"documenting_endoscopist\": {\n      \"words\": \"Marcus Delacroix-Ye, MD\",\n      \"passages\": [\"P3\"]\n    },\n    \"team\": [],\n    \"anatomy\": [],\n    \"reach\": [\n      {\n        \"event\": \"E1\",\n        \"landmark\": \"cecum\",\n        \"words\": \"to the cecum\",\n        \"passages\": [\"P4\"],\n        \"completion\": {\n          \"value\": \"not_stated\",\n          \"words\": \"\",\n          \"passages\": []\n        }\n      }\n    ],\n    \"visit_facts\": []\n  },\n  \"lesions\": [\n    {\n      \"id\": \"L1\",\n      \"words\": \"a 7 mm sessile polyp\",\n      \"landmark\": \"ascending_colon\",\n      \"site_words\": \"Ascending colon\",\n      \"size_words\": \"7 mm\",\n      \"multiplicity\": \"single\",\n      \"passages\": [\"P5\", \"P7\", \"P8\"]\n    }\n  ],\n  \"events\": [\n    {\n      \"id\": \"E1\",\n      \"procedure\": {\n        \"value\": \"colonoscopy\",\n        \"words\": \"COLONOSCOPY\",\n        \"passages\": [\"P1\"]\n      },\n      \"kind\": {\n        \"value\": \"examination\",\n        \"words\": \"advanced the colonoscope to the cecum and identified the appendiceal orifice\",\n        \"passages\": [\"P1\", \"P4\"]\n      },\n      \"technique\": {\n        \"value\": \"endoscope\",\n        \"words\": \"colonoscope\",\n        \"passages\": [\"P4\"]\n      },\n      \"target\": {\n        \"lesion\": \"\",\n        \"landmark\": \"cecum\",\n        \"words\": \"cecum\",\n        \"passages\": [\"P4\"]\n      },\n      \"time\": {\n        \"value\": \"current_encounter\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"performer\": {\n        \"value\": \"documenting_team\",\n        \"words\": \"I\",\n        \"passages\": [\"P4\"]\n      },\n      \"status\": {\n        \"value\": \"performed\",\n        \"words\": \"advanced the colonoscope to the cecum and identified the appendiceal orifice\",\n        \"passages\": [\"P4\"]\n      },\n      \"scope\": {\n        \"value\": \"not_applicable\",\n        \"targets\": [],\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"purpose\": {\n        \"value\": \"not_stated\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"part_of\": \"\",\n      \"sequence\": 0,\n      \"contradicts\": []\n    },\n    {\n      \"id\": \"E2\",\n      \"procedure\": {\n        \"value\": \"colonoscopy\",\n        \"words\": \"COLONOSCOPY\",\n        \"passages\": [\"P1\"]\n      },\n      \"kind\": {\n        \"value\": \"snare\",\n        \"words\": \"cold snare polypectomy\",\n        \"passages\": [\"P6\", \"P8\"]\n      },\n      \"technique\": {\n        \"value\": \"cold_snare\",\n        \"words\": \"cold snare\",\n        \"passages\": [\"P6\", \"P8\"]\n      },\n      \"target\": {\n        \"lesion\": \"L1\",\n        \"landmark\": \"ascending_colon\",\n        \"words\": \"7 mm ascending colon polyp\",\n        \"passages\": [\"P5\", \"P7\", \"P8\"]\n      },\n      \"time\": {\n        \"value\": \"current_encounter\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"performer\": {\n        \"value\": \"documenting_team\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"status\": {\n        \"value\": \"performed\",\n        \"words\": \"was performed\",\n        \"passages\": [\"P6\", \"P8\"]\n      },\n      \"scope\": {\n        \"value\": \"not_applicable\",\n        \"targets\": [],\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"purpose\": {\n        \"value\": \"removal\",\n        \"words\": \"removed\",\n        \"passages\": [\"P8\"]\n      },\n      \"part_of\": \"\",\n      \"sequence\": 0,\n      \"contradicts\": []\n    }\n  ],\n  \"open_questions\": []\n}",
+            "thoughtSignature": "EtIKCs8KAWkUfRMuxA8LRivS1A5uI4Qvye+R+vjlZ+Z7lVKgHU3yyXPyFh4pqWeXR/QLUObjrI99VbgZub/AF358lG5mslIcbXHd/KeS+dkt2Xh1ghm/435E6h1lANLG7ohLuAkWRkDWDsV1CT+oOGEh8nBN3zKG8ViKCpioMkucL/uZ6/PTALn4geiNmelqXNTF4HDmQeY3GTPND9id6ofjCFYOSCReQxkomm7ybwHJL5jqE2MgL4PPzu2a4me7XlBBAZPU9Ncsrw+KaKfP1hhvRk8dWTqr8Jekg27listoaRCffIRlSUMLURLI0oZG7hJ8hZ7874wDP3tU+HE7f2hyiIgVaEmlkeMj1PycNFFmqNrIs72uM73KoKqEG8EmV5mLEa9cHeP5izI+DU/PnH9OUSfT6LqC6k9fNLl3c1jkhLF/mIvGsw7O6AMZUwmpDQoYA43TWEHAQ4l3HR/kjfkN+pkX5LL7u0arf8gT1mzNDoX57vFgVM83DmaAt5acbCNqof3Zg490WKGW7M0v07qsUw70TIlRqGEGnH+Af0qB4sW37pocwoZK9Y1fuxOSL966/IGMYirLAHEsfbCBUJMe7fl+sRx8b//hENGXYbN/N72DsMnjhob2+JgmgKwFRW3I5nUhEkduKEyJCsadw3nG5B9ZTm/NLFAiZAOeXtEgLFEAqU9udWlZcwmkPQcyLrPz1yzuGuOxaL92bNMUAVu/vlOPbZt60CKgS1fJajJ4mIIeKBFXErE1n7GBweflB9XwGa2N+xB1aFFBNwOplujBzzEh5TgVWnVSxSSmzBUy1yrNI7Rhnr1nwZm4oXbR44Je4ezijBwB12s0+TEkG0pJzTyVnffM7WcHgKd0wGdyDSCK3Nb18BeCMXhF+8uhcZMml5cGJFPHdXYE/C4CyPzCSe6Tuw9jzVb91S05sUpwn+dcq+NVJBHy87rU4Lo8MJD1uBaZuNC8J+uyeEj4DtEBbzg98dDbmP5JgS9kAXglknXrGDAcL2OQw29641mPbmjSHkCHOG9k/Vlax+01HlhLjH93MB4eKnIIvIq0YWSjMbQDEvA3DVLWCmer0QmuI7+hzxX+DAtswgSG54KoqWZXDdTPYhzXsHv8qeFRvogfTZseUmXbMGEDAQBYf3AsE8RmvjpaNCNtTm1wlVmYVCtfV3UHwYuK5HBOnqkQCZUDHD4URv4JwjlA8rQitbQr8U2rLzHkn1StvCdOCJRtIczPlakBK9OLEy1Hemprube5GGh0z1oOrTuZpFCP7Bmu+ZnfZ14WNVPBTfLPBL3jvIV6LPtd08BOSu/gNQQMlpEBLucwcvTb3B0NixoRrCG7EYWJRY9qU1CjNhppqeXV+u9qKji+7+1hCgGx/RJXDxsluWT+Rk+3GxGBFY0laZc6O/ofdwoMeVIL2NL8lFfNaZuE65xnR+pWbu8sLEw1/nfCMfLYA3kPTy+w/LlBtN7StO3tHO/70ec2g3OBIh9RZnuu1/fEBy7TGUknMTSwwzSoyE2yLUA5s3Ci09P8pbA5tVMheQUXC2NTLPCkZVt2Q7uj7dYiJKcqFDMUkWDKnjTC1hony2z/ICxzDwvm3n/4wOt6jWtRcxVxG62D7zaqlUHNtHYbK8R6IdkRPfa9MXsXHKCix4XRWCikFHMq5ZOb/jeqkg+Q1Czze4dqTSNe9yn+BDrN3oidP1aRl7kAeXKLsW+qR7+YKbcThYPTBzw3rkRfBqcDfcBKxEHvkyvxqlsN9rCAeXITMZl70N0cguI9oSQQAi0KI5/b1kLFr49F/50UAos8HiWupeC37UcTyiFKgUNR"
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 7879,
+    "candidatesTokenCount": 1447,
+    "totalTokenCount": 9689,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 7879
+      }
+    ],
+    "candidatesTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 1447
+      }
+    ],
+    "thoughtsTokenCount": 363
+  },
+  "modelVersion": "gemini-4-argon",
+  "responseId": "n__yaonJCNSFz7IP1vrmuAU"
+}

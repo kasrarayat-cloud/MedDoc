@@ -1,0 +1,36 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "{\n  \"passages\": [\n    {\n      \"id\": \"P1\",\n      \"text\": \"Flexible Sigmoidoscopy - urgent\"\n    },\n    {\n      \"id\": \"P2\",\n      \"text\": \"Date of service: 2026-10-14\"\n    },\n    {\n      \"id\": \"P3\",\n      \"text\": \"Endoscopist: Jane Synthetic, MD (fictional)\"\n    },\n    {\n      \"id\": \"P4\",\n      \"text\": \"Procedure: The adult colonoscope was advanced to 40 cm in the sigmoid colon.\"\n    },\n    {\n      \"id\": \"P5\",\n      \"text\": \"Cold forceps biopsies were obtained from the rectum.\"\n    },\n    {\n      \"id\": \"P6\",\n      \"text\": \"Flexible sigmoidoscopy was completed to 40 cm without complication.\"\n    },\n    {\n      \"id\": \"P7\",\n      \"text\": \"Plan: Colonoscopy in 6 weeks.\"\n    }\n  ],\n  \"encounter\": {\n    \"date_of_service\": {\n      \"value\": \"2026-10-14\",\n      \"state\": \"stated\",\n      \"words\": \"2026-10-14\",\n      \"passages\": [\n        \"P2\"\n      ],\n      \"other_dates\": []\n    },\n    \"documenting_endoscopist\": {\n      \"words\": \"Jane Synthetic, MD\",\n      \"passages\": [\n        \"P3\"\n      ]\n    },\n    \"team\": [],\n    \"anatomy\": [],\n    \"reach\": [\n      {\n        \"event\": \"E1\",\n        \"landmark\": \"sigmoid_colon\",\n        \"words\": \"40 cm in the sigmoid colon\",\n        \"passages\": [\n          \"P4\",\n          \"P6\"\n        ],\n        \"completion\": {\n          \"value\": \"complete\",\n          \"words\": \"completed to 40 cm\",\n          \"passages\": [\n            \"P6\"\n          ]\n        }\n      }\n    ],\n    \"visit_facts\": []\n  },\n  \"lesions\": [],\n  \"events\": [\n    {\n      \"id\": \"E1\",\n      \"procedure\": {\n        \"value\": \"flex_sig\",\n        \"words\": \"Flexible Sigmoidoscopy\",\n        \"passages\": [\n          \"P1\",\n          \"P6\"\n        ]\n      },\n      \"kind\": {\n        \"value\": \"examination\",\n        \"words\": \"Flexible sigmoidoscopy\",\n        \"passages\": [\n          \"P1\",\n          \"P4\",\n          \"P6\"\n        ]\n      },\n      \"technique\": {\n        \"value\": \"endoscope\",\n        \"words\": \"adult colonoscope\",\n        \"passages\": [\n          \"P4\"\n        ]\n      },\n      \"target\": {\n        \"lesion\": \"\",\n        \"landmark\": \"sigmoid_colon\",\n        \"words\": \"sigmoid colon\",\n        \"passages\": [\n          \"P4\"\n        ]\n      },\n      \"time\": {\n        \"value\": \"current_encounter\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"performer\": {\n        \"value\": \"documenting_team\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"status\": {\n        \"value\": \"performed\",\n        \"words\": \"was advanced to 40 cm in the sigmoid colon\",\n        \"passages\": [\n          \"P4\",\n          \"P6\"\n        ]\n      },\n      \"scope\": {\n        \"value\": \"not_applicable\",\n        \"targets\": [],\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"purpose\": {\n        \"value\": \"not_stated\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"part_of\": \"\",\n      \"sequence\": 0,\n      \"contradicts\": []\n    },\n    {\n      \"id\": \"E2\",\n      \"procedure\": {\n        \"value\": \"flex_sig\",\n        \"words\": \"Flexible Sigmoidoscopy\",\n        \"passages\": [\n          \"P1\"\n        ]\n      },\n      \"kind\": {\n        \"value\": \"biopsy\",\n        \"words\": \"biopsies\",\n        \"passages\": [\n          \"P5\"\n        ]\n      },\n      \"technique\": {\n        \"value\": \"cold_forceps\",\n        \"words\": \"Cold forceps\",\n        \"passages\": [\n          \"P5\"\n        ]\n      },\n      \"target\": {\n        \"lesion\": \"\",\n        \"landmark\": \"rectum\",\n        \"words\": \"rectum\",\n        \"passages\": [\n          \"P5\"\n        ]\n      },\n      \"time\": {\n        \"value\": \"current_encounter\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"performer\": {\n        \"value\": \"documenting_team\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"status\": {\n        \"value\": \"performed\",\n        \"words\": \"were obtained\",\n        \"passages\": [\n          \"P5\"\n        ]\n      },\n      \"scope\": {\n        \"value\": \"not_applicable\",\n        \"targets\": [],\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"purpose\": {\n        \"value\": \"not_stated\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"part_of\": \"\",\n      \"sequence\": 0,\n      \"contradicts\": []\n    },\n    {\n      \"id\": \"E3\",\n      \"procedure\": {\n        \"value\": \"colonoscopy\",\n        \"words\": \"Colonoscopy\",\n        \"passages\": [\n          \"P7\"\n        ]\n      },\n      \"kind\": {\n        \"value\": \"examination\",\n        \"words\": \"Colonoscopy\",\n        \"passages\": [\n          \"P7\"\n        ]\n      },\n      \"technique\": {\n        \"value\": \"not_stated\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"target\": {\n        \"lesion\": \"\",\n        \"landmark\": \"not_stated\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"time\": {\n        \"value\": \"future\",\n        \"words\": \"in 6 weeks\",\n        \"passages\": [\n          \"P7\"\n        ]\n      },\n      \"performer\": {\n        \"value\": \"unknown\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"status\": {\n        \"value\": \"planned\",\n        \"words\": \"Plan: Colonoscopy in 6 weeks.\",\n        \"passages\": [\n          \"P7\"\n        ]\n      },\n      \"scope\": {\n        \"value\": \"not_applicable\",\n        \"targets\": [],\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"purpose\": {\n        \"value\": \"not_stated\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"part_of\": \"\",\n      \"sequence\": 0,\n      \"contradicts\": []\n    }\n  ],\n  \"open_questions\": []\n}",
+            "thoughtSignature": "EmQKYgFpFH0TcKf//Go5sc64l6edpctCJekGfTmSrX/Edg8HtSdaa8N8H2FTP5/pxsGGii9UcmEtMXC2bSzJpd7en64QEmMxfG4zpmywmKFMUD51gLotWfW+ZxnN374+SiBQSuLo"
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 7783,
+    "candidatesTokenCount": 1774,
+    "totalTokenCount": 9557,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 7783
+      }
+    ],
+    "candidatesTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 1774
+      }
+    ]
+  },
+  "modelVersion": "gemini-4-argon",
+  "responseId": "1gbzatbAD4S9qtsPtteM2QQ"
+}

@@ -1,0 +1,15 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+COLONOSCOPY REPORT
+Patient: Synthetic Patient (fictional), 58-year-old man
+Date of service: November 9, 2026
+Endoscopist: A. Current, MD (fictional)
+Sedation: Monitored anesthesia care by the anesthesia team
+
+Indication: Surveillance colonoscopy.
+
+FINDINGS
+The colonoscope was advanced to the cecum; the appendiceal orifice and ileocecal valve were identified. A 12 mm sessile polyp in the transverse colon could not be captured with a cold snare on the first attempt; after repositioning, it was captured and removed en bloc with the cold snare and retrieved.
+
+IMPRESSION
+12 mm transverse colon polyp removed with a cold snare.

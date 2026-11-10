@@ -1,0 +1,11 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+COLONOSCOPY REPORT
+Date of service: November 9, 2026
+Endoscopist: Priya Nandakumar, MD (fictional)
+Indication: Surveillance colonoscopy.
+Procedure: The colonoscope was advanced to the cecum, identified by the appendiceal orifice and ileocecal valve. Preparation was good.
+Findings: In the sigmoid colon at 25 cm there was a 6 mm sessile polyp. This polyp was removed en bloc with a cold snare and retrieved.
+A second polyp, 3 mm and flat, was seen in the sigmoid colon at 30 cm. Cold forceps biopsies were taken from it, and it was left in place.
+The second polyp was not snared because of its size.
+The remainder of the colon was normal.
+Impression: Two sigmoid polyps: the 6 mm polyp removed with a cold snare; the 3 mm polyp biopsied and left in place.

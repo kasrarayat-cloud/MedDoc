@@ -1,0 +1,11 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+COLONOSCOPY REPORT
+Patient: Synthetic Patient (fictional), 58-year-old man
+Date of service: November 9, 2026
+Endoscopist: A. Current, MD (fictional)
+Sedation: Monitored anesthesia care by the anesthesia team
+Indication: Chronic diarrhea; prior EMR of an ascending colon lesion.
+FINDINGS
+The colonoscope reached the cecum. No biopsy was taken from the ascending colon EMR scar, which was clean. Random biopsies of the right and left colon were taken for microscopic colitis.
+IMPRESSION
+Random colon biopsies taken; clean EMR scar.

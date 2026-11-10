@@ -1,0 +1,8 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+COLONOSCOPY REPORT
+Date of service: November 9, 2026
+Endoscopist: Tomas Rivera-Lind, MD (fictional)
+Procedure: The colonoscope was advanced to the cecum. The terminal ileum was not intubated.
+Findings: A 9 mm sessile polyp was found in the descending colon at 40 cm. The polyp was removed in one piece with a cold snare and retrieved.
+No hot snare and no electrocautery were used on this polyp, and no submucosal injection was given.
+Impression: 9 mm descending colon polyp removed by cold snare polypectomy.

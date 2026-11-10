@@ -1,0 +1,20 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+COLONOSCOPY REPORT
+Facility: Larkspur Valley Endoscopy Center (fictional)
+Patient: Marian Quell (fictional)
+Date of service: November 3, 2026
+Endoscopist: Helena Marsh, MD (fictional)
+Indication: Surveillance of a polypectomy scar in the ascending colon.
+History: Piecemeal endoscopic mucosal resection of a 25 mm ascending colon polyp in May 2026.
+Procedure: The colonoscope was advanced to the cecum, identified by the appendiceal orifice.
+Bowel preparation was good.
+Findings:
+- Ascending colon: a pale, stellate, well-healed scar at the prior resection site.
+- The scar was inspected with narrow-band imaging; no residual adenomatous tissue was seen.
+- Cold forceps biopsies of the scar were obtained to confirm the absence of residual adenoma.
+- The remainder of the colon was normal.
+No polyp was removed today.
+Impression:
+1. Healed ascending colon polypectomy scar without visible residual polyp; scar biopsied.
+2. Otherwise normal colonoscopy.
+Plan: Await pathology; the next surveillance interval depends on the biopsy result.

@@ -1,0 +1,19 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+COLONOSCOPY REPORT
+Facility: Northgate Ambulatory Endoscopy (fictional)
+Patient: Delia Farrow (fictional)
+Date of service: November 5, 2026
+Endoscopist: Samuel Achterberg, MD (fictional)
+Indication: Iron deficiency anemia and intermittent rectal bleeding.
+Procedure: The colonoscope was advanced to the cecum; the appendiceal orifice was identified.
+Findings:
+- Sigmoid colon at 30 cm: two separate lesions lie side by side, about 1 cm apart.
+- Lesion A: an 8 mm sessile polyp, removed completely with a cold snare and retrieved.
+- Lesion B: a 20 mm firm, ulcerated mass with irregular margins, suspicious for malignancy.
+- Lesion B was biopsied with cold forceps (six samples) and was left in place, not removed.
+- Scattered sigmoid diverticula. The rest of the colon was normal.
+Impression:
+1. Lesion A: 8 mm sigmoid polyp, removed by cold snare.
+2. Lesion B: 20 mm sigmoid mass suspicious for malignancy, biopsied and left in place.
+3. Sigmoid diverticulosis.
+Plan: Await pathology; refer to colorectal surgery.

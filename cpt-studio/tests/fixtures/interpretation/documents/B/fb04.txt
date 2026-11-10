@@ -1,0 +1,19 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+COLONOSCOPY REPORT
+Facility: Bramblewood Endoscopy Suite (fictional)
+Patient: Oren Castellane (fictional)
+Date of service: November 6, 2026
+Endoscopist: Lucia Fenwright, MD (fictional)
+Indication: Change in bowel habit.
+Procedure: The colonoscope was advanced to the cecum and the terminal ileum was intubated.
+Bowel preparation was excellent.
+Findings:
+- Transverse colon: a 12 mm sessile polyp with a regular surface pattern.
+- The polyp was removed en bloc with a cold snare and retrieved for histology.
+- Hot snare was not used. No submucosal injection was given before or after the resection.
+- The defect was clean, with no residual tissue at the margins and no bleeding.
+- Terminal ileum and remainder of the colon: normal.
+Impression:
+1. 12 mm transverse colon polyp, removed en bloc by cold snare.
+2. Otherwise normal colonoscopy to the terminal ileum.
+Plan: Await pathology to set the surveillance interval.

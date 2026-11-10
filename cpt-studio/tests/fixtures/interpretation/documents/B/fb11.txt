@@ -1,0 +1,18 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+EGD AND COLONOSCOPY REPORT
+Facility: Silverbrook Endoscopy Center (fictional)
+Patient: Nathaniel Ruskin (fictional)
+Date of service: November 2, 2026
+Endoscopist: Adaeze Montclair, MD (fictional)
+Indication: Iron deficiency anemia.
+EGD: The gastroscope was advanced to the second portion of the duodenum.
+EGD findings: normal esophagus; mild antral erythema; mildly scalloped duodenal folds.
+EGD biopsies: cold forceps biopsies of the second portion of the duodenum for celiac disease.
+Cold forceps biopsies of the gastric antrum were also taken for Helicobacter pylori.
+Colonoscopy: The colonoscope was then advanced to the cecum; the appendiceal orifice was seen.
+Colonoscopy findings: a 2 cm patch of erythema in the sigmoid colon; otherwise normal.
+Colonoscopy biopsy: cold forceps biopsies were taken from the sigmoid erythema.
+Impression:
+1. Scalloped duodenal folds and antral erythema, biopsied.
+2. Patchy sigmoid erythema, biopsied.
+Plan: Await pathology; continue oral iron.

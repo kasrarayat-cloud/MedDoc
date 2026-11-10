@@ -1,0 +1,16 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+ERCP REPORT
+Facility: Oakhurst Regional Medical Center (fictional)
+Patient: Ambrose Whitcombe (fictional)
+Date of service: November 4, 2026
+Endoscopist: Farida Kessler-Moore, MD (fictional)
+Indication: Choledocholithiasis on MRCP with abnormal liver tests.
+Procedure: The duodenoscope was advanced to the major papilla, which appeared normal.
+Deep biliary cannulation was achieved with a sphincterotome and a guidewire.
+Cholangiogram: the bile duct was dilated to 12 mm with three filling defects (stones).
+A biliary sphincterotomy was performed with blended current, without bleeding.
+Three stones, the largest 9 mm, were extracted from the bile duct with an extraction balloon.
+An occlusion cholangiogram showed no residual filling defects.
+Fluoroscopy images were interpreted separately by the radiology service.
+Impression: Choledocholithiasis; biliary sphincterotomy and complete balloon stone extraction.
+Plan: Observe overnight for post-ERCP pancreatitis.

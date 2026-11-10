@@ -1,0 +1,22 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+OFFICE VISIT AND FLEXIBLE SIGMOIDOSCOPY NOTE
+Practice: Elmstead Gastroenterology Associates (fictional)
+Patient: Vivian Okonkwo-Hale (fictional), established patient
+Date of service: November 6, 2026
+Endoscopist: Gregory Talmadge, MD (fictional)
+Seen today in the office for two problems: worsening heartburn and new rectal bleeding.
+GERD: heartburn has worsened over two months despite omeprazole 20 mg daily.
+Omeprazole was increased to 40 mg twice daily, and reflux precautions were reviewed.
+The GERD evaluation and management is a significant, separately identifiable E/M service.
+GERD E/M: moderate medical decision making; 32 minutes spent on GERD care alone.
+That time excludes the rectal bleeding assessment and the sigmoidoscopy.
+Rectal bleeding: the history and exam led to a decision to perform flexible sigmoidoscopy today.
+The rectal bleeding assessment is part of the procedure and is not a separate E/M service.
+Procedure: After two enemas, the flexible sigmoidoscope was advanced to 50 cm.
+The examination reached the descending colon.
+Findings: moderate internal hemorrhoids with stigmata of recent bleeding. No masses or polyps.
+No biopsies were taken.
+Impression:
+1. Internal hemorrhoids, the likely source of the rectal bleeding.
+2. GERD with worsening symptoms; proton pump inhibitor dose increased.
+Plan: Fiber and sitz baths.

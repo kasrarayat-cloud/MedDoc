@@ -1,0 +1,23 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+GASTROENTEROLOGY ASSOCIATES (FICTIONAL)  |  PROCEDURE REPORT
+Page 1 of 1
+
+COLONOSCOPY WITH ENDOSCOPIC MUCOSAL RESECTION
+Patient: Synthetic Patient (fictional), 58-year-old man
+Date of service: November 9, 2026
+Endoscopist: A. Current, MD (fictional)
+Sedation: Monitored anesthesia care by the anesthesia team
+
+Indication: Referred for resection of an 18 mm sigmoid lesion.
+
+Procedure
+The colonoscope reached the cecum. Dr. B. Prior (fictional) placed a tattoo 3
+cm distal to the sigmoid lesion at the referring hospital in October 2026. At
+this examination I resected the 18 mm sigmoid lesion by endoscopic mucosal
+resection after a saline lift; the earlier tattoo was seen distal to the
+resection site.
+
+Impression
+18 mm sigmoid lesion removed by EMR; prior tattoo identified.
+
+Electronically signed by A. Current, MD (fictional)

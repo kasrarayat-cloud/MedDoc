@@ -1,0 +1,13 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Anesthesia Assessment
+Colonoscopy - outpatient
+Date of service: 2026-10-14
+Provider: Jane Synthetic, MD (fictional)
+
+Anesthesia type: Monitored anesthesia care
+ASA class: II
+Airway: Mallampati 2
+
+Procedure: The colonoscope was advanced to the cecum. A 6 mm polyp in the ascending colon was removed with a cold snare.
+
+Anesthesia events: none. Propofol 200 mg total.

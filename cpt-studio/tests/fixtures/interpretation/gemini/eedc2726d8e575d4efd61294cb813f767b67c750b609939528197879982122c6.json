@@ -1,0 +1,36 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "{\n  \"passages\": [\n    {\n      \"id\": \"P1\",\n      \"text\": \"Date of service: 2026-10-14\"\n    },\n    {\n      \"id\": \"P2\",\n      \"text\": \"Procedure: Colonoscopy\"\n    },\n    {\n      \"id\": \"P3\",\n      \"text\": \"Findings: The colonoscope was advanced to the cecum and the examination was completed.\"\n    },\n    {\n      \"id\": \"P4\",\n      \"text\": \"The ascending colon scar was clean.\"\n    },\n    {\n      \"id\": \"P5\",\n      \"text\": \"Impression: Clean scar; no recurrence.\"\n    },\n    {\n      \"id\": \"P6\",\n      \"text\": \"Copy of the prior report\"\n    },\n    {\n      \"id\": \"P7\",\n      \"text\": \"A 22 mm polyp in the ascending colon was removed piecemeal with a cold snare in four pieces.\"\n    }\n  ],\n  \"encounter\": {\n    \"date_of_service\": {\n      \"value\": \"2026-10-14\",\n      \"state\": \"stated\",\n      \"words\": \"2026-10-14\",\n      \"passages\": [\"P1\"],\n      \"other_dates\": []\n    },\n    \"documenting_endoscopist\": {\n      \"words\": \"\",\n      \"passages\": []\n    },\n    \"team\": [],\n    \"anatomy\": [],\n    \"reach\": [\n      {\n        \"event\": \"E1\",\n        \"landmark\": \"cecum\",\n        \"words\": \"cecum\",\n        \"passages\": [\"P3\"],\n        \"completion\": {\n          \"value\": \"complete\",\n          \"words\": \"the examination was completed\",\n          \"passages\": [\"P3\"]\n        }\n      }\n    ],\n    \"visit_facts\": []\n  },\n  \"lesions\": [\n    {\n      \"id\": \"L1\",\n      \"words\": \"The ascending colon scar\",\n      \"landmark\": \"ascending_colon\",\n      \"site_words\": \"ascending colon\",\n      \"size_words\": \"\",\n      \"multiplicity\": \"single\",\n      \"passages\": [\"P4\", \"P5\"]\n    },\n    {\n      \"id\": \"L2\",\n      \"words\": \"A 22 mm polyp in the ascending colon\",\n      \"landmark\": \"ascending_colon\",\n      \"site_words\": \"in the ascending colon\",\n      \"size_words\": \"22 mm\",\n      \"multiplicity\": \"single\",\n      \"passages\": [\"P7\"]\n    }\n  ],\n  \"events\": [\n    {\n      \"id\": \"E1\",\n      \"procedure\": {\n        \"value\": \"colonoscopy\",\n        \"words\": \"Colonoscopy\",\n        \"passages\": [\"P2\"]\n      },\n      \"kind\": {\n        \"value\": \"examination\",\n        \"words\": \"Colonoscopy\",\n        \"passages\": [\"P2\", \"P3\"]\n      },\n      \"technique\": {\n        \"value\": \"endoscope\",\n        \"words\": \"colonoscope\",\n        \"passages\": [\"P3\"]\n      },\n      \"target\": {\n        \"lesion\": \"\",\n        \"landmark\": \"cecum\",\n        \"words\": \"cecum\",\n        \"passages\": [\"P3\"]\n      },\n      \"time\": {\n        \"value\": \"current_encounter\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"performer\": {\n        \"value\": \"documenting_team\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"status\": {\n        \"value\": \"performed\",\n        \"words\": \"The colonoscope was advanced to the cecum and the examination was completed.\",\n        \"passages\": [\"P3\"]\n      },\n      \"scope\": {\n        \"value\": \"not_applicable\",\n        \"targets\": [],\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"purpose\": {\n        \"value\": \"not_stated\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"part_of\": \"\",\n      \"sequence\": 0,\n      \"contradicts\": []\n    },\n    {\n      \"id\": \"E2\",\n      \"procedure\": {\n        \"value\": \"unknown\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"kind\": {\n        \"value\": \"snare\",\n        \"words\": \"removed piecemeal with a cold snare in four pieces\",\n        \"passages\": [\"P7\"]\n      },\n      \"technique\": {\n        \"value\": \"cold_snare\",\n        \"words\": \"cold snare\",\n        \"passages\": [\"P7\"]\n      },\n      \"target\": {\n        \"lesion\": \"L2\",\n        \"landmark\": \"ascending_colon\",\n        \"words\": \"A 22 mm polyp in the ascending colon\",\n        \"passages\": [\"P7\"]\n      },\n      \"time\": {\n        \"value\": \"earlier_encounter\",\n        \"words\": \"Copy of the prior report\",\n        \"passages\": [\"P6\"]\n      },\n      \"performer\": {\n        \"value\": \"unknown\",\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"status\": {\n        \"value\": \"performed\",\n        \"words\": \"was removed piecemeal with a cold snare in four pieces\",\n        \"passages\": [\"P7\"]\n      },\n      \"scope\": {\n        \"value\": \"not_applicable\",\n        \"targets\": [],\n        \"words\": \"\",\n        \"passages\": []\n      },\n      \"purpose\": {\n        \"value\": \"removal\",\n        \"words\": \"removed\",\n        \"passages\": [\"P7\"]\n      },\n      \"part_of\": \"\",\n      \"sequence\": 0,\n      \"contradicts\": []\n    }\n  ],\n  \"open_questions\": []\n}",
+            "thoughtSignature": "EmQKYgFpFH0T50H+Oq5Tudtgl7Rr0AHoZVzXvzYAl/ZEeBhIbCizCrUg4SaaKnJ340KwdyxDVdZpEpnvpXeHJRtkKRb/XUcO9+8BHJDjNeElNm8kBZpMIdSw8GR09tJFuPbJHpBf"
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 7782,
+    "candidatesTokenCount": 1445,
+    "totalTokenCount": 9227,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 7782
+      }
+    ],
+    "candidatesTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 1445
+      }
+    ]
+  },
+  "modelVersion": "gemini-4-argon",
+  "responseId": "sgHzavS_AvqcqtsP0a-muAQ"
+}

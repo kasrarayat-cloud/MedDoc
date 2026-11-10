@@ -1,0 +1,19 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+UPPER ENDOSCOPY (EGD) REPORT
+Facility: Westmere Surgical Hospital (fictional)
+Patient: Celeste Varga (fictional)
+Date of service: November 4, 2026
+Endoscopist: Isaac Brandvold, MD (fictional)
+Indication: Vomiting and solid-food intolerance after Roux-en-Y gastric bypass in 2025.
+Anatomy: small gastric pouch with a gastrojejunal anastomosis to a Roux limb.
+Procedure: The gastroscope was advanced through a normal esophagus into the gastric pouch.
+At the gastrojejunal anastomosis there was a tight stricture with a lumen of about 4 mm.
+The gastroscope could not be passed through the stricture.
+A guidewire was passed through the stricture under direct vision into the Roux limb.
+A wire-guided balloon was positioned across the stricture and inflated to 6, 7 and 8 mm.
+After dilation the gastroscope still could not traverse the anastomosis.
+The Roux limb was therefore not examined endoscopically.
+Impression:
+1. Gastrojejunal anastomotic stricture, balloon-dilated to 8 mm over a guidewire.
+2. The gastroscope reached the anastomosis only; only the guidewire entered the Roux limb.
+Plan: Repeat balloon dilation in 3 weeks.

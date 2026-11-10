@@ -1,0 +1,9 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+COLONOSCOPY REPORT
+Date of service: November 9, 2026
+Endoscopist: Mei-Lin Castellanos, MD (fictional)
+History: Right hemicolectomy in 2021; the cecum and ascending colon were removed.
+Procedure: The colonoscope was advanced to the ileocolic anastomosis, which was narrowed, and the colonoscope could not pass it.
+A guidewire was advanced through the narrowing into the neo-terminal ileum, and a through-the-scope balloon dilated the anastomosis to 13.5 mm.
+After the dilation the colonoscope still could not pass the anastomosis, and the examination ended there.
+Impression: Ileocolic anastomotic stricture dilated to 13.5 mm; the scope did not pass beyond the anastomosis.
