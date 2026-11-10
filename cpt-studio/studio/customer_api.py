@@ -139,6 +139,11 @@ def _code(value) -> str:
 
 # --- errors -------------------------------------------------------------------------------------------------------
 
+# The customer's words for jobs.SECOND_REVIEW_NOT_FINAL (KNOWN_ERRORS): the peer chain is 'the independent checks', as
+# in the confirmation's refusal below.
+SECOND_REVIEW_NOT_FINAL_WORDS = ('The independent checks for this document have not finished: resume processing to '
+                                 'finish them, then ask for a second review.')
+
 # Refusals from deeper layers (jobs.Refused, ValidationError, PermissionDenied, AttestationRefused) that are already in
 # CPT Studio's plain customer wording pass through; the rest are re-worded; anything this table does not know answers
 # GENERIC_ERROR, so no stored or exception text ever reaches a customer.
@@ -162,6 +167,13 @@ KNOWN_ERRORS = {
     # a gated write refused because a reading finished between its request's read of the encounter and its row lock
     # (readers.moved; the Gemini migration's review, finding 3): retried by the member
     readers.MOVED: None,
+    # a context save on a new-path revision whose reading ended without a result, or that was never read (S10's
+    # hand-off; jobs.change_context): already in the member's words, naming no module or provider
+    jobs.CONTEXT_UNREAD_MESSAGE: None,
+    jobs.CONTEXT_NONE_MESSAGE: None,
+    # a second review asked before its chain's final assessment (jobs._second_review_bounds): re-worded, as the
+    # confirmation's refusal below is, because 'peer reviews' names the machinery
+    jobs.SECOND_REVIEW_NOT_FINAL: SECOND_REVIEW_NOT_FINAL_WORDS,
     'Wait for processing to finish (or stop it) before asking for a second review.': None,
     'There is no current assessment to review again.': None,
     'No documented service is left without a supported proposal.': None,

@@ -21,7 +21,7 @@ from unittest import mock
 
 from django.test import TestCase, override_settings
 
-from studio import interpretation, jobs, models, participants, review
+from studio import customer_api, interpretation, jobs, models, participants, review
 from studio.gi import cues
 from studio.interpretation import adapter, report, sentinel
 from studio.interpretation.assess import SERVICES_STUB, INVENTORY_PROBLEMS
@@ -669,6 +669,10 @@ class InterruptedPeerChainTests(SecondReviewCase):
         with self.assertRaises(jobs.Refused) as refused:
             jobs.request_second_review(encounter, self.user)
         self.assertEqual(str(refused.exception), jobs.SECOND_REVIEW_NOT_FINAL)
+        # the member reads it in the customer's words, not as the generic error (customer_api.KNOWN_ERRORS; S10's
+        # hand-off)
+        self.assertEqual(customer_api.customer_error(str(refused.exception)),
+                         customer_api.SECOND_REVIEW_NOT_FINAL_WORDS)
         self.assertFalse(Job.objects.filter(encounter=encounter, kind=Job.REVIEW2).exists())
         self.assertTrue(review.can_resume(encounter))  # the member's way on is still offered
         # Resume finishes the peer chain; the second review is then taken on its final, and its follow-up is final

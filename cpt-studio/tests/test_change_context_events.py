@@ -17,7 +17,7 @@ from unittest import mock
 
 from django.db import transaction
 
-from studio import interpretation, jobs, models
+from studio import customer_api, interpretation, jobs, models
 from studio.context_facts import USER_CONFLICT_NOTE, is_member_conflict
 from studio.gi import cues
 from studio.interpretation import adapter, sentinel
@@ -295,6 +295,8 @@ class BeforeReadingTests(ContextSaveCase):
         with self.assertRaises(jobs.Refused) as refused:
             self.save(encounter, {'setting': 'asc'})
         self.assertEqual(str(refused.exception), jobs.CONTEXT_UNREAD_MESSAGE)
+        # and the member reads it as written, not as the generic error (customer_api.KNOWN_ERRORS; S10's hand-off)
+        self.assertEqual(customer_api.customer_error(str(refused.exception)), jobs.CONTEXT_UNREAD_MESSAGE)
         encounter.refresh_from_db()
         self.assertEqual(encounter.user_values, {})
         self.assertEqual(self.queued(), [])
@@ -322,6 +324,7 @@ class BeforeReadingTests(ContextSaveCase):
         with self.assertRaises(jobs.Refused) as refused:
             self.save(encounter, {'setting': 'asc'})
         self.assertEqual(str(refused.exception), jobs.CONTEXT_NONE_MESSAGE)
+        self.assertEqual(customer_api.customer_error(str(refused.exception)), jobs.CONTEXT_NONE_MESSAGE)
         encounter.refresh_from_db()
         self.assertEqual((encounter.user_values, encounter.current_context_id), ({}, None))
         self.assertEqual(self.queued(), [])
