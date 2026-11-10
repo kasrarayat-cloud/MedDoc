@@ -521,20 +521,52 @@ def write_receipt(directory: Path, phase: str, record: dict) -> Path:
     return write_private(directory, f'{phase}-{stamp()}.json', data)
 
 
-def latest_receipt(directory: Path, phase: str, revision: str):
-    """The newest successful receipt of ``phase`` for ``revision``, or None."""
+def latest_receipt_entry(directory: Path, phase: str, revision: str):
+    """(path, record) of the newest successful receipt of ``phase`` for ``revision``, or None."""
     for path in sorted(directory.glob(f'{phase}-*.json'), reverse=True):
         record = json.loads(path.read_text(encoding='utf-8'))
         if record.get('phase') == phase and record.get('ok') and record.get('revision') == revision:
-            return record
+            return path, record
     return None
 
 
-def require_receipt(ctx, phase):
-    record = latest_receipt(ctx.receipts, phase, ctx.revision)
-    if record is None:
+def latest_receipt(directory: Path, phase: str, revision: str):
+    """The newest successful receipt of ``phase`` for ``revision``, or None."""
+    entry = latest_receipt_entry(directory, phase, revision)
+    return None if entry is None else entry[1]
+
+
+def require_receipt_entry(ctx, phase):
+    """(path, record) of require_receipt's receipt: the one latest_receipt gives, else refused."""
+    entry = latest_receipt_entry(ctx.receipts, phase, ctx.revision)
+    if entry is None:
         raise InstallError(f'No successful --phase {phase} receipt for this revision in {ctx.receipts}.')
-    return record
+    return entry
+
+
+def require_receipt(ctx, phase):
+    return require_receipt_entry(ctx, phase)[1]
+
+
+def receipt_moments(record) -> list:
+    """DECISIONS D59: the times ``record`` (a receipt main wrote) records for its phase, as aware datetimes - main's
+    'started_at', taken before anything of the phase ran, and each step its swap stamped ('details' 'steps': S1-S6 of a
+    blue/green app). A value that is not such a time is left out."""
+    if not isinstance(record, dict):
+        return []
+    details = record.get('details')
+    steps = details.get('steps') if isinstance(details, dict) else None
+    values = [record.get('started_at')] + (list(steps.values()) if isinstance(steps, dict) else [])
+    return [moment for moment in (utc_moment(value) for value in values if isinstance(value, str))
+            if moment is not None]
+
+
+def written_moment(path: Path):
+    """When write_receipt wrote the receipt at ``path``: the stamp() its name carries, as an aware datetime, or None."""
+    match = re.fullmatch(r'.+-(\d{8}T\d{12}Z)\.json', path.name)
+    if match is None:
+        return None
+    return dt.datetime.strptime(match[1], '%Y%m%dT%H%M%S%fZ').replace(tzinfo=dt.timezone.utc)
 
 
 class Context:
@@ -2184,12 +2216,26 @@ def undo_hazards():
         # DECISIONS D51 (the S17 refutation, finding 13): a reviewer's reinstatement on a new-path assessment. The new
         # path's review overlay adds, at read time, the base rule a reinstated therapeutic code brings back ("45378 was
         # approved, but 45386 was reinstated ..."); no older revision reads a new-path assessment's event coding, so its
-        # overlay adds no such hold - its readiness reads both approvals as reviewed and its export bills both
-        if assessment is not None and is_new_assessment(assessment) and any(
-                decision.action == models.Decision.REINSTATE
-                for decision in review.current_decisions(assessment).values()):
+        # overlay adds no such hold - its readiness reads both approvals as reviewed and its export bills both. D59 (the
+        # S17 refutation round 2, finding 11): named while any code stands reinstated as the overlay counts one - the
+        # reinstatement, or the approval that rests on it (reinstated_codes) - so approving the reinstated code, the
+        # normal end of a reinstatement, never clears it; only a revoke (or a reject) of that code does
+        if assessment is not None and is_new_assessment(assessment) and reinstated_codes(assessment):
             found.setdefault(str(encounter.pk), set()).add('reinstatement')
     return {pk: sorted(reasons) for pk, reasons in sorted(found.items())}
+
+
+def reinstated_codes(assessment):
+    """DECISIONS D59: the excluded codes of ``assessment`` a reviewer reinstated and has not rejected or revoked - their
+    current decision is the reinstatement, or an approval that rests on it - as the review overlay counts them
+    (review.reinstated_codes, read where the image has it; otherwise the same rule over its current decisions)."""
+    from studio import models, review
+    current = review.current_decisions(assessment)
+    if hasattr(review, 'reinstated_codes'):
+        return list(review.reinstated_codes(assessment, current))
+    counted = (models.Decision.REINSTATE, models.Decision.APPROVE)
+    return [proposal.code for proposal in assessment.proposals.filter(bucket=models.Proposal.EXCLUDED)
+            if current.get(proposal.pk) is not None and current[proposal.pk].action in counted]
 
 
 def is_new_assessment(assessment):  # a new-path assessment (DECISIONS D51); an older image has no new path
@@ -2389,6 +2435,12 @@ print(ANSWER + json.dumps({'encounters': rows.count(), 'changed': changed}))
 # routing stand-in (its operator console only shows it). None of it is EVER a refusing reason (not an UNDO_HAZARDS or
 # SHOWN_HAZARDS one): switch-back and rollback-app write it as a declared note in their receipts and go on. Read in
 # this revision's own image; an image with no event inventories answers None. Nothing is written or sent.
+# DECISIONS D59 (the S17 refutation round 2, finding 13): it also names, as 'reinstatable', the new-path encounters
+# whose current assessment - the one an earlier web shows and takes decisions on - is a new-path one holding an
+# excluded code a reviewer can reinstate. An earlier image reads that assessment through its stub record, so its
+# overlay adds no base hold for a reinstatement made THERE, and the diagnostic base code beside the reinstated
+# therapeutic code stays approvable (45378 beside 45385, which this revision holds): those encounters are exposed. The
+# key is given only when there is one, so the answer is as it was otherwise; still never a refusing reason.
 INTERPRETATION_MADE = '''
 from django.db.models import Q
 from studio import models
@@ -2400,9 +2452,8 @@ made = None
 if interpretation is not None and all(any(f.name == 'event_inventory' for f in model._meta.get_fields())
                                       for model in (models.Assessment, models.EncounterContext)):
     family = interpretation.ENGINE_VERSION.partition('@')[0] + '@'
-    encounters = list(models.Assessment.objects.filter(Q(event_inventory__isnull=False)
-                                                       | Q(engine_version__startswith=family))
-                      .values_list('encounter_id', flat=True))
+    new_path = models.Assessment.objects.filter(Q(event_inventory__isnull=False) | Q(engine_version__startswith=family))
+    encounters = list(new_path.values_list('encounter_id', flat=True))
     derived = interpretation.CONTEXT_VERSION.partition('@')[0] + '@'
     holding = (models.EncounterContext.objects.filter(Q(event_inventory__isnull=False)
                                                       | Q(version__startswith=derived))
@@ -2411,6 +2462,11 @@ if interpretation is not None and all(any(f.name == 'event_inventory' for f in m
     context_only = {str(pk) for pk in holding} - assessed
     made = {'assessments': len(encounters), 'encounters': sorted(assessed | context_only),
             'context_only': sorted(context_only)}
+    exposed = {str(pk) for pk in models.Encounter.objects.filter(
+        current_assessment__in=new_path, current_assessment__proposals__bucket=models.Proposal.EXCLUDED,
+        current_assessment__proposals__reinstatable=True).order_by().values_list('pk', flat=True)}
+    if exposed:
+        made['reinstatable'] = sorted(exposed)
 print(ANSWER + json.dumps({'interpretation': made}))
 '''
 # The list state the installed revision 057a7d39 derives for each encounter of P['encounters'], written where it differs
@@ -2751,8 +2807,11 @@ def interpretation_note(image_id, env_bytes, revision) -> dict:
     ``revision`` made from event inventories, and the new-path encounters (INTERPRETATION_MADE, read with ``image_id``,
     this revision's own image): those with such an assessment, which the earlier image reads fail-closed, and those that
     hold only a context derived from an inventory ('context_only'; the review of S14, finding 1), which it reads as
-    current, keeping its holds. {'assessments', 'encounters', 'context_only', 'note'}. It never stops an undo: a read
-    that fails, or an answer that says nothing it read, is recorded as not counted (an interrupt is never
+    current, keeping its holds. {'assessments', 'encounters', 'context_only', 'note'}, and 'reinstatable' when the
+    answer names it (DECISIONS D59, the S17 refutation round 2, finding 13): the encounters among them whose current
+    new-path assessment holds an excluded code a reviewer can reinstate - exposed, since the earlier image adds no base
+    hold for a reinstatement made there; the note then says how many, and what to do first. It never stops an undo: a
+    read that fails, or an answer that says nothing it read, is recorded as not counted (an interrupt is never
     swallowed)."""
     def uncounted(why):
         return {'assessments': None, 'encounters': None, 'context_only': None,
@@ -2771,14 +2830,18 @@ def interpretation_note(image_id, env_bytes, revision) -> dict:
                 'note': 'this image keeps no event inventory, so no assessment or context was made from one'}
     named = made.get('encounters') if isinstance(made, dict) else None
     context_only = made.get('context_only') if isinstance(made, dict) else None
+    exposed = made.get('reinstatable', []) if isinstance(made, dict) else None
     # what it read, said consistently: every id once, the context-only encounters among those named, and an assessment
-    # for each other named encounter - at least one, and no more encounters than assessments
+    # for each other named encounter - at least one, and no more encounters than assessments; D59: the exposed
+    # encounters, when named, once each and among those with an assessment
     if not (isinstance(made, dict) and type(made.get('assessments')) is int and made['assessments'] >= 0
             and isinstance(named, list) and all(isinstance(pk, str) for pk in named) and len(set(named)) == len(named)
             and isinstance(context_only, list) and all(isinstance(pk, str) for pk in context_only)
             and len(set(context_only)) == len(context_only) and set(context_only) <= set(named)
             and (len(named) - len(context_only) == 0) == (made['assessments'] == 0)
-            and len(named) - len(context_only) <= made['assessments']):
+            and len(named) - len(context_only) <= made['assessments']
+            and isinstance(exposed, list) and all(isinstance(pk, str) for pk in exposed)
+            and len(set(exposed)) == len(exposed) and set(exposed) <= set(named) - set(context_only)):
         return uncounted('the count did not say what it read')
     count, held = made['assessments'], len(context_only)
     note = (f'{count} {"assessment was" if count == 1 else "assessments were"} made from event inventories; the '
@@ -2787,7 +2850,16 @@ def interpretation_note(image_id, env_bytes, revision) -> dict:
         note += (f'; {held} {"encounter holds" if held == 1 else "encounters hold"} a context derived from an event '
                  'inventory and no assessment made from one: the earlier image reads that context as current, keeping '
                  'its holds, and an explicit act reads the document again with the earlier reader')
-    return {'assessments': count, 'encounters': list(named), 'context_only': list(context_only), 'note': note}
+    if exposed:  # D59 (finding 13): the rollback limit, with how many encounters it reaches
+        note += (f'; {len(exposed)} {"encounter holds" if len(exposed) == 1 else "encounters hold"} an excluded code a '
+                 'reviewer can reinstate: the earlier image reads a new-path assessment through a stub that adds no '
+                 'base hold, so a reinstatement made there can leave the diagnostic base code approvable beside the '
+                 'therapeutic code - re-check each new-path encounter on the earlier web (a context save reads it '
+                 'again with the earlier reader) before reviewing it there')
+    found = {'assessments': count, 'encounters': list(named), 'context_only': list(context_only), 'note': note}
+    if 'reinstatable' in made:
+        found['reinstatable'] = list(exposed)
+    return found
 
 
 def target_reads(prev_image, env_bytes, kinds) -> frozenset:
@@ -4845,12 +4917,14 @@ def phase_switch_back(ctx) -> dict:
     the participant modes and ``--interpreter-mode`` are the previous pair's, as its own app phase was given them (a
     revision before the Gemini migration has no interpreter: leave it disabled). What this revision made from event
     inventories is never a refusing reason: the receipt declares it in a note and the switch goes on (ADJUDICATION
-    P-1)."""
+    P-1). DECISIONS D59: the encounters it refuses on are those this revision wrote a record for since it replaced that
+    pair - the time that same app receipt records (replaced_since), never the current containers' creation."""
     mode, reference = ctx.args.provider_mode, ctx.args.authorization_ref or ''
     modes = participant_modes(ctx.args)
     live = [name for name in PARTICIPANTS if modes[name] == 'live']
     interpreter = interpreter_mode(ctx.args)
-    app = require_receipt(ctx, 'app')
+    entry = require_receipt_entry(ctx, 'app')
+    app = entry[1]
     previous = ((app.get('details') or {}).get('replaced') or {}).get('web') or {}
     prev_image, prev_revision = previous.get('image'), previous.get('revision')
     if not (isinstance(prev_image, str) and re.fullmatch(r'sha256:[0-9a-f]{64}', prev_image)
@@ -4876,17 +4950,21 @@ def phase_switch_back(ctx) -> dict:
     check_credential_files(mode, live, interpreter)
     env = read_protected_env(APP_ENV, APP_ENV_KEYS)
     check_credential_parsing(prev_image, env, mode, live, interpreter)
-    since = pair_created_at()
+    since = replaced_since(ctx, entry)  # D59: the touched filter's since, read once for every check of this phase
     reads = target_reads(prev_image, env, stage_kinds_of(prev_image, env))
     hazards = switch_back_hazards(undo_hazards(image_id, env, ctx.revision), reads,
                                   touched_encounters(image_id, env, since))  # D51
+    if not isinstance(hazards, dict):  # D66: an answer that does not say what it read is never read as "none"
+        raise InstallError('The read of what an older revision would act on wrongly gave no answer it could be judged by; '
+                           'nothing was started or stopped.', details={'hazards': hazards})
     if hazards:
         raise InstallError(f'{hazard_summary(hazards)} hold records an older revision would act on, or show, wrongly '
                            'under its own rules; nothing was started or stopped. Clear them on this revision\'s web '
                            '(ops/INSTALL.md, Reinstalling an older revision), then rerun --phase switch-back.',
-                           details={'hazards': hazards})
+                           details={'hazards': hazards, 'touched_since': since.isoformat()})
     services = switch_back_services(ctx, image_id, env, prev_image, prev_revision, mode, reference, modes,
-                                    preflight=preflight, plan=plan, interpreter=interpreter, reads=reads)
+                                    preflight=preflight, plan=plan, interpreter=interpreter, reads=reads,
+                                    touched_since=since)
     availability = services.get('availability') or {}
     note = (services.get('interpretation') or {}).get('note')
     return {'image_id': image_id, 'previous': {'image': prev_image, 'revision': prev_revision},
@@ -4904,8 +4982,48 @@ def pair_created_at():
     return min(created_at(container) for container in current if container is not None)
 
 
+def replaced_since(ctx, entry) -> dt.datetime:
+    """DECISIONS D59 (the S17 refutation round 2, finding 12): the 'since' of a switch-back's touched filter
+    (touched_encounters; D51) - when this revision replaced the pair the switch-back returns to. ``entry`` is the
+    successful app receipt the switch-back reads that pair from (require_receipt_entry: the receipt latest_receipt
+    gives), and the since is the earliest time it records for its phase (receipt_moments: main's started_at, taken
+    before anything of that phase ran). Never the current containers' creation: a later app phase of this same revision
+    that installed a pair and then failed (its receipt not ok - a recompute that failed, or an access check: the pair
+    stays installed) created them, and what this revision wrote under its earlier pair is not the target's status quo.
+    A receipt that records no time falls back to the earliest creation time of this revision's containers
+    (pair_created_at) and of every app receipt of this revision written after it (the earliest time each records, else
+    when it was written) - fail-closed: an earlier since names more encounters. The closes of B4 and B7 keep their own
+    since (they close this pair's stages)."""
+    path, record = entry
+    # D65 (D59's review): the EARLIEST successful app receipt of this revision that replaced the same target revision
+    # counts too - an app phase run again (the recovery after a switch-back refused at B7) writes a newer receipt
+    # naming the same target, and what this revision wrote under its earlier pair is no more the target's than before
+    target = (((record.get('details') or {}).get('replaced') or {}).get('web') or {}).get('revision')
+    earlier = []
+    for other_path in sorted(ctx.receipts.glob('app-*.json')):
+        if other_path.name >= path.name:
+            continue
+        other = json.loads(other_path.read_text(encoding='utf-8'))
+        named = (((other.get('details') or {}).get('replaced') or {}).get('web') or {}).get('revision') \
+            if isinstance(other, dict) else None
+        if (isinstance(other, dict) and other.get('phase') == 'app' and other.get('ok')
+                and other.get('revision') == ctx.revision and target and named == target):
+            earlier += receipt_moments(other) or [moment for moment in (written_moment(other_path),) if moment]
+    own = receipt_moments(record)
+    if own:
+        return min(own + earlier)
+    moments = [pair_created_at()] + earlier
+    for later in sorted(ctx.receipts.glob('app-*.json')):
+        if later.name <= path.name:
+            continue
+        other = json.loads(later.read_text(encoding='utf-8'))
+        if isinstance(other, dict) and other.get('phase') == 'app' and other.get('revision') == ctx.revision:
+            moments += receipt_moments(other) or [moment for moment in (written_moment(later),) if moment is not None]
+    return min(moments)
+
+
 def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, provider_mode, authorization_ref,
-                         participants, *, preflight, plan, interpreter=None, reads=None) -> dict:
+                         participants, *, preflight, plan, interpreter=None, reads=None, touched_since=None) -> dict:
     """The switch in reverse, never stopping the serving web first:
 
       B2  start the previous revision's web, INCOMING_WEB, on the idle port; health_ok for ITS revision; smoke_web
@@ -4921,26 +5039,32 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
       B6  drain this revision's web, stop it and park it; the previous web takes the canonical name
       B7  close again what this revision's web started between B4 and the end of its drain (requests it accepted
           before the switch); this also closes what a member started on the previous web during that window
-          (ops/INSTALL.md, Known limits); put back again; hold the previous worker while the close names a record
+          (ops/INSTALL.md, Known limits); count again what this revision made from event inventories - before any
+          refusal, so a receipt that stops here carries it too (D59); put back again; hold the previous worker while
+          the close names a record
       B8  start the previous worker
       B9  remove this revision's parked pair (its image is kept)
     The baseline is read before anything starts too. Before B5 every failure resumes this revision's pair; from B5 on
-    the previous web serves and the receipt says what is left."""
+    the previous web serves and the receipt says what is left. ``touched_since``: the since of every touched filter
+    (replaced_since, D59; read from the app receipt when not given) - the closes keep their own, this pair's creation
+    and B4's close."""
     live, idle = plan['live'], plan['idle']
     current = {role: inspect('container', SERVICES[role]) for role in SERVICES}
     since = min(created_at(container) for container in current.values() if container is not None)
+    if touched_since is None:
+        touched_since = replaced_since(ctx, require_receipt_entry(ctx, 'app'))
     kinds = stage_kinds_of(prev_image, env_bytes)
     reads = target_reads(prev_image, env_bytes, kinds) if reads is None else reads  # D51
 
     def hazards_now(hazards):  # D51: what this switch-back refuses on, read again whenever hazards are read
-        return switch_back_hazards(hazards, reads, touched_encounters(image_id, env_bytes, since))
+        return switch_back_hazards(hazards, reads, touched_encounters(image_id, env_bytes, touched_since))  # D59
     reason = f'revision {ctx.revision[:12]} was switched back to {prev_revision[:12]} (switch-back)'
     drifted = ingress_checks(ctx, preflight)
     if drifted:
         raise InstallError(baseline_problem(drifted, 'nothing was started or stopped'), details={'baseline': drifted})
     steps, parked, started, progress, closes, put_back = {}, {}, {}, {}, {}, []
     record = {'mode': 'switch-back', 'ports': {'from': live, 'to': idle}, 'steps': steps, 'closes': closes,
-              'states_put_back': put_back, 'since': since.isoformat()}
+              'states_put_back': put_back, 'since': since.isoformat(), 'touched_since': touched_since.isoformat()}
     reached = [None]
 
     def step(name):
@@ -4981,6 +5105,9 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
                                details={'baseline': drifted})
         checked = dt.datetime.now(dt.timezone.utc)
         hazards = hazards_now(undo_hazards(image_id, env_bytes, ctx.revision))  # D51
+        if not isinstance(hazards, dict):  # D66: never read as "none"
+            raise InstallError('before anything was closed, the read of what an older revision would act on wrongly gave '
+                               'no answer it could be judged by', details={'hazards': hazards})
         if hazards:
             raise InstallError(f'before anything was closed, {hazard_summary(hazards)} hold records an older revision '
                                'would act on, or show, wrongly under its own rules', details={'hazards': hazards})
@@ -5001,13 +5128,15 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
         parked['web'] = retire_live_web(plan['web']['id'])
         step('B7')
         closes['second'] = close_undone_stages(image_id, env_bytes, first, ctx.revision, reason, kinds)
-        refuse_on_hazards(closes['second'], 'after the switch', checked)
-        put_back.append(put_back_states(closes['second'], prev_image, image_id, env_bytes))
         # D51 (the S17 refutation, finding 14): this revision's web served until B6's drain, so a context save there
         # could make a new-path context after B4's count; the note is read again once that web is stopped - the final
-        # count of what the previous image is handed (B4's stays in the record)
+        # count of what the previous image is handed (B4's stays in the record). D59 (round 2, finding 14): read
+        # before the close's refusal, which leaves the previous web serving these rows with its worker held, so the
+        # receipt that stops here carries B7's count too
         record['interpretation_at_b4'] = record.get('interpretation')
         record['interpretation'] = interpretation_note(image_id, env_bytes, ctx.revision)
+        refuse_on_hazards(closes['second'], 'after the switch', checked)
+        put_back.append(put_back_states(closes['second'], prev_image, image_id, env_bytes))
         step('B8')
         docker('run', '-d', *service_args('worker', prev_image, prev_revision, provider_mode, authorization_ref,
                                           participants, interpreter=interpreter), input=env_bytes, quiet=True)

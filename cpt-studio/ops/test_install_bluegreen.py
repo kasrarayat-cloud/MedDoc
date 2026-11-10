@@ -105,6 +105,11 @@ class BlueGreenWorld:
         # tests name, so the time filter drops nothing unless a test says so)
         self.target_model_reads = []
         self.touched_answer = {'e1', 'e2', 'e3', 'e4'}
+        # DECISIONS D59: when set ({encounter id: [when each of its records was created]}), TOUCHED_SINCE_READ answers
+        # as touched_since does - the encounters with a record created at or after P['since'] - instead of
+        # touched_answer; every P['since'] it was asked with is kept, in order
+        self.record_times = None
+        self.touched_since_seen = []
         self.next_id = 0
         revision, image = serving
         self.add(WEB, 'web', image, revision, port=live)
@@ -350,6 +355,11 @@ class BlueGreenWorld:
             return self.done({'reads': list(self.target_model_reads)})
         if body == install.TOUCHED_SINCE_READ:
             self.act('touched', image_id)
+            self.touched_since_seen.append(params['since'])
+            if self.record_times is not None:
+                since = dt.datetime.fromisoformat(params['since'])
+                return self.done({'touched': sorted(pk for pk, times in self.record_times.items()
+                                                    if any(moment >= since for moment in times))})
             return self.done({'touched': sorted(self.touched_answer)})
         if body == install.INTERPRETATION_MADE:
             self.act('interpretation', image_id)
@@ -1462,6 +1472,17 @@ class SwitchBackTests(TemporaryDirectoryTest):
         self.assertIsNone(error)
         self.assertEqual(world.acts('touched')[0], ('touched', IMAGE))
 
+    def test_d66_a_hazard_answer_that_is_not_a_dict_refuses_before_anything_starts(self):
+        # D66 (the D15 re-run's verifier): None, a list or a string from the hazard read is never read as "nothing named"
+        for answer in (None, [], 'none', 0):
+            world = self.world()
+            world.undo_hazards = lambda *args, answer=answer: (world.act('hazards', args[0]), world.done(answer))[1]
+            with self.subTest(answer=answer):
+                details, error = self.switch_back(world)
+                self.assertIsInstance(error, install.InstallError)
+                self.assertIn('gave no answer it could be judged by', str(error))
+                self.assertEqual(world.acts('run', 'stop', 'rename', 'vhost', 'reload', 'close'), [])
+
     def test_d51_a_reason_the_previous_revision_does_not_read_still_refuses_before_anything_starts(self):
         for label, hazards, kinds in (('no participant stage', {'e1': ['participant']}, list(install.COMMON_STAGE_KINDS)),
                                       ('a new-path reinstatement', {'e1': ['reinstatement']}, KINDS_OLD)):
@@ -1963,6 +1984,19 @@ class InstallDocTests(unittest.TestCase):
                        'An installer killed outright inside S3', 'the TLS renewal deploy hook'):
             self.says(phrase, recovery)
 
+    def test_d59_switching_back_states_its_since_the_approved_reinstatement_and_the_rollback_limit(self):
+        switch = self.between('## Switching back', '## Reinstalling an older revision')
+        for phrase in ('the one the same `app` receipt records for its phase (its `started_at`; DECISIONS D59), never '
+                       "the current containers' creation", "the receipt's `touched_since`",
+                       'stays named once the reinstated code is approved',
+                       'counted again (the receipt\'s `interpretation`, B4\'s count kept as '
+                       '`interpretation_at_b4`; read before the hold below',
+                       '**The rollback limit for new-path assessments (DECISIONS D59).**',
+                       'adds no base hold', 'can leave its diagnostic base code approvable beside the therapeutic code',
+                       'a context save reads it again with the previous reader',
+                       'excluded code a reviewer can reinstate - the ones exposed - and names them (`reinstatable`)'):
+            self.says(phrase, switch)
+
     def test_the_known_limits_state_every_residual_of_the_design(self):
         limits = self.said.split('## Known limits', 1)[1]
         for number, phrase in ((1, 'a large upload'), (2, 'hashed names'), (3, 'keeps running the old `app.js`'),
@@ -2188,3 +2222,290 @@ class SwitchBackTargetTests(unittest.TestCase):
         with mock.patch.object(install, 'app_script', return_value={'reads': []}):
             self.assertEqual(install.target_reads('img', b'', install.COMMON_STAGE_KINDS), frozenset())
 
+
+# --- DECISIONS D59 (the S17 refutation round 2, findings 12, 13 and 14): the switch-back's touched since, the count it
+# keeps at B7, and the rollback limit its note states ---------------------------------------------------------------
+
+DAY = dt.datetime(2026, 11, 3, tzinfo=dt.timezone.utc)  # BlueGreenWorld creates its Nth container at 10:0N:00 that day
+
+
+def at(clock):
+    """'HH:MM:SS' on the world's day, as an aware datetime."""
+    hours, minutes, seconds = (int(part) for part in clock.split(':'))
+    return DAY.replace(hour=hours, minute=minutes, second=seconds)
+
+
+EXPOSED_1 = ('1 encounter holds an excluded code a reviewer can reinstate: the earlier image reads a new-path '
+             'assessment through a stub that adds no base hold, so a reinstatement made there can leave the diagnostic '
+             'base code approvable beside the therapeutic code - re-check each new-path encounter on the earlier web '
+             '(a context save reads it again with the earlier reader) before reviewing it there')
+
+
+def replaced_old(tmp, **record):
+    """A successful app receipt of this revision that replaced the OLD pair (switch-back's precondition)."""
+    return install.write_receipt(tmp, 'app', {'phase': 'app', 'ok': True, 'revision': REVISION, **record, 'details': {
+        'replaced': {'web': {'id': 'web-old', 'image': OLD_IMAGE, 'revision': OLD},
+                     'worker': {'id': 'worker-old', 'image': OLD_IMAGE, 'revision': OLD}}}})
+
+
+class SwitchBackSinceTests(TemporaryDirectoryTest):
+    """DECISIONS D59 (finding 12): the since of the switch-back's touched filter (D51) is when this revision replaced
+    the pair it returns to - the time the app receipt it reads that pair from records (main's started_at) - never the
+    current containers' creation, which a later app phase of this same revision that installed a pair and then failed
+    made. Through the REAL install.main - receipts written as an install writes them, its clock fixed on the world's
+    day - phase_app and phase_switch_back, in BlueGreenWorld, whose TOUCHED_SINCE_READ answers by when each encounter's
+    records were created (touched_since's rule)."""
+
+    def setUp(self):
+        super().setUp()
+        self.receipts = self.tmp / 'receipts'
+        self.receipts.mkdir(mode=0o700)
+        os.chmod(self.receipts, 0o700)
+
+    def main(self, world, phase, clock):
+        """``phase`` through install.main, started at ``clock``: (exit code, the receipt it wrote). main() leaves its
+        lock on <receipts>/.lock open, as a process does until it exits; it is closed here after each run (the
+        pattern of test_install_r3's run_phase)."""
+        output, lock_fds, real_open = io.StringIO(), [], os.open
+
+        def tracking_open(path, flags, mode=0o777, *, dir_fd=None):
+            fd = real_open(path, flags, mode, dir_fd=dir_fd)
+            if str(path).endswith('/.lock'):
+                lock_fds.append(fd)
+            return fd
+        patches = world.patches() + [
+            mock.patch.object(install, 'check_door', return_value={'declaration_commit': OTHER_COMMIT}),
+            mock.patch.object(install, 'check_tree', return_value={'mode': 'exact'}),
+            mock.patch.object(install, 'utc_now', return_value=clock), mock.patch('sys.stdout', output),
+            mock.patch.object(install.os, 'open', tracking_open)]
+        for patcher in patches:
+            patcher.start()
+        try:
+            code = install.main(['--phase', phase, '--revision', REVISION, '--receipts', str(self.receipts),
+                                 '--provider-mode', 'disabled'])
+        finally:
+            for patcher in reversed(patches):
+                patcher.stop()
+            for fd in lock_fds:
+                os.close(fd)
+        printed = json.loads(output.getvalue().strip().splitlines()[-1])
+        self.assertIn('receipt', printed, printed)
+        return code, json.loads(Path(printed['receipt']).read_text())
+
+    def installed(self):
+        """This revision's app R1 (started 10:02:30) replaced OLD, which served from 10:01: its pair at 10:03, 10:04."""
+        world = BlueGreenWorld(self.receipts)
+        code, first = self.main(world, 'app', '2026-11-03T10:02:30Z')
+        self.assertEqual((code, first['ok'], first['details']['replaced']['web']['revision']), (0, True, OLD), first)
+        self.assertEqual((world.containers[WEB]['created'], world.containers[WORKER]['created']),
+                         ('2026-11-03T10:03:00.000000Z', '2026-11-03T10:04:00.000000Z'))
+        return world
+
+    def test_d59_a_failed_app_of_this_revision_after_a_reinstatement_never_hides_it_from_the_switch_back(self):
+        world = self.installed()
+        # a reviewer's reinstatement on a new-path assessment, on this revision's web under R1's pair
+        world.hazards_answer, world.record_times = {'e1': ['reinstatement']}, {'e1': [at('10:04:30')]}
+        # R2, this same revision again (a provider-mode switch): its pair is installed at 10:05 and 10:06, then its
+        # recompute fails, so its receipt is not ok - and the newest successful one is still R1's
+        world.fail[('recompute', IMAGE, 'all')] = install.InstallError('the recompute failed')
+        code, second = self.main(world, 'app', '2026-11-03T10:04:45Z')
+        self.assertEqual((code, second['ok']), (1, False))
+        self.assertIn('still parked (*-previous): remove it by hand', second['error'])
+        for name in (WEB + '-previous', WORKER + '-previous'):  # removed by hand, as R2's receipt says
+            world.containers.pop(name)
+        self.assertEqual(world.containers[WEB]['created'], '2026-11-03T10:05:00.000000Z')
+        mark = len(world.events)
+        code, back = self.main(world, 'switch-back', '2026-11-03T10:07:00Z')
+        self.assertEqual((code, back['ok']), (1, False), back.get('details'))
+        self.assertIn('1 encounter(s): reinstatement 1 hold records an older revision would act on', back['error'])
+        self.assertIn('nothing was started or stopped', back['error'])
+        self.assertEqual(back['details'], {'hazards': {'e1': ['reinstatement']},
+                                           'touched_since': '2026-11-03T10:02:30+00:00'})
+        self.assertEqual([event for event in world.events[mark:]
+                          if event[0] in ('run', 'stop', 'rename', 'vhost', 'reload', 'close')], [])
+        self.assertEqual(world.touched_since_seen, ['2026-11-03T10:02:30+00:00'])  # R1's start, not R2's pair (10:05)
+        self.assertEqual(world.names(), {WEB: (IMAGE, 9150, True), WORKER: (IMAGE, None, True)})
+
+    def test_d59_the_touched_since_is_the_receipts_own_time_and_the_closes_keep_this_pairs(self):
+        world = self.installed()
+        # what the pair before R1 left there - written before R1 began - is its own status quo (D51, as before)
+        world.hazards_answer, world.record_times = {'e2': ['unknown']}, {'e2': [at('10:02:10')]}
+        code, back = self.main(world, 'switch-back', '2026-11-03T10:07:00Z')
+        self.assertEqual((code, back['ok']), (0, True), back.get('error'))
+        self.assertEqual(world.names(), {WEB: (OLD_IMAGE, 9150, True), WORKER: (OLD_IMAGE, None, True)})
+        # every touched read - the check, B4's and both closes' - from R1's start
+        self.assertEqual(world.touched_since_seen, ['2026-11-03T10:02:30+00:00'] * 4)
+        details = back['details']
+        self.assertEqual((details['touched_since'], details['since']),
+                         ('2026-11-03T10:02:30+00:00', '2026-11-03T10:03:00+00:00'))
+        first, second = world.closes  # the closes keep their own since: this pair's creation, then B4's close
+        self.assertEqual(first['since'], at('10:03:00'))
+        self.assertGreater(second['since'], first['since'])
+        # control: one record of e2 since R1 began - while the previous pair still served, before R1's pair existed -
+        # and the same switch-back refuses (an earlier since names more encounters: fail-closed)
+        for path in self.receipts.glob('switch-back-*.json'):
+            path.unlink()
+        world = self.installed()
+        world.hazards_answer, world.record_times = {'e2': ['unknown']}, {'e2': [at('10:02:40')]}
+        code, back = self.main(world, 'switch-back', '2026-11-03T10:07:00Z')
+        self.assertEqual((code, back['details']['hazards']), (1, {'e2': ['unknown']}))
+
+    def test_d65_the_earliest_app_of_this_revision_that_replaced_the_same_target_gives_the_since(self):
+        # D65 (D59's review): app R1 replaced OLD at 10:02:30; a switch-back refused at B7; the recovery app R3 at 10:06:30
+        # replaced OLD again. What this revision wrote between R1 and R3 is still its own: the since is R1's start.
+        ctx = install.Context(switch_back_args(self.tmp), self.tmp)
+
+        def put(name, started, target, ok=True, revision=REVISION):
+            path = self.tmp / name
+            path.write_text(json.dumps({'phase': 'app', 'ok': ok, 'revision': revision, 'started_at': started,
+                                        'details': {'replaced': {'web': {'image': OLD_IMAGE, 'revision': target}}}}))
+            return path
+        put('app-20261103T100230000000Z.json', '2026-11-03T10:02:30Z', OLD)
+        put('app-20261103T100630000000Z.json', '2026-11-03T10:06:30Z', OLD)
+        entry = install.require_receipt_entry(ctx, 'app')
+        self.assertEqual(entry[1]['started_at'], '2026-11-03T10:06:30Z')  # the receipt the target is read from: R3
+        self.assertEqual(install.replaced_since(ctx, entry), at('10:02:30'))
+        # an earlier receipt that replaced ANOTHER target, failed, or is another revision's does not move the since
+        for name, started, target, ok, revision in (
+                ('app-20261103T100100000000Z.json', '2026-11-03T10:01:00Z', 'c' * 40, True, REVISION),
+                ('app-20261103T100110000000Z.json', '2026-11-03T10:01:10Z', OLD, False, REVISION),
+                ('app-20261103T100120000000Z.json', '2026-11-03T10:01:20Z', OLD, True, 'e' * 40)):
+            put(name, started, target, ok, revision)
+        self.assertEqual(install.replaced_since(ctx, install.require_receipt_entry(ctx, 'app')), at('10:02:30'))
+
+    def test_d59_a_receipt_that_records_no_time_falls_back_to_the_pair_and_the_later_app_receipts(self):
+        world = BlueGreenWorld(self.tmp, live=9151, serving=(REVISION, IMAGE))  # this revision's pair: 10:01, 10:02
+        ctx = install.Context(switch_back_args(self.tmp), self.tmp)
+
+        def put(name, **record):
+            path = self.tmp / name
+            path.write_text(json.dumps({'phase': 'app', 'revision': REVISION, **record}))
+            return path
+        target = put('app-20261103T100000000000Z.json', ok=True, details={'replaced': {}})
+        entry = install.require_receipt_entry(ctx, 'app')
+        self.assertEqual(entry, (target, json.loads(target.read_text())))  # the receipt latest_receipt gives
+        since = lambda: install.replaced_since(ctx, install.require_receipt_entry(ctx, 'app'))  # noqa: E731
+        patches = world.patches()
+        for patcher in patches:
+            patcher.start()
+        try:
+            self.assertEqual(since(), at('10:01:00'))  # no later receipt: the pair's creation
+            # later app receipts of this revision, not ok: each counts from the earliest time it records, else from
+            # when it was written; another revision's, an earlier one, or another phase's never
+            put('app-20261103T095900000000Z.json', ok=False, started_at='2026-11-03T09:00:00Z')
+            put('app-20261103T100500000000Z.json', ok=False, revision=OLD, started_at='2026-11-03T09:10:00Z')
+            put('rollback-app-20261103T100600000000Z.json', phase='rollback-app', ok=False,
+                started_at='2026-11-03T09:20:00Z')
+            self.assertEqual(since(), at('10:01:00'))
+            put('app-20261103T100700000000Z.json', ok=False, details={'steps': {'S1': '2026-11-03T10:00:40.250Z'}})
+            self.assertEqual(since(), at('10:00:40').replace(microsecond=250000))
+            put('app-20261103T100800000000Z.json', ok=False, started_at='2026-11-03T10:00:30Z',
+                details={'steps': {'S1': '2026-11-03T10:00:31.000Z'}})
+            self.assertEqual(since(), at('10:00:30'))
+            put('app-20261103T100010000000Z.json', ok=False)  # records nothing: when it was written
+            self.assertEqual(since(), at('10:00:10'))
+            # a receipt that records its time: that time, whatever the containers or the later receipts say
+            put('app-20261103T100900000000Z.json', ok=True, started_at='2026-11-03T10:30:00Z', details={'replaced': {}})
+            self.assertEqual(since(), at('10:30:00'))
+        finally:
+            for patcher in reversed(patches):
+                patcher.stop()
+        self.assertEqual(install.receipt_moments({'started_at': 'never', 'details': {'steps': {'S1': 7}}}), [])
+        self.assertEqual(install.written_moment(Path('app-20261103T100010000000Z.json')), at('10:00:10'))
+        self.assertIsNone(install.written_moment(Path('app-latest.json')))
+
+
+class DrainCountWorld(BlueGreenWorld):
+    """INTERPRETATION_MADE answers ``before`` until this revision's web has been drained, then ``after``: a context save
+    on that web while it drained made a new-path context after B4's count (the S17 refutation, finding 14)."""
+    before = after = None
+
+    def app_script(self, image_id, env_bytes, body, params, **kwargs):
+        if body == install.INTERPRETATION_MADE:
+            drained = any(event[0] == 'drain' for event in self.events)
+            self.interpretation_answer = self.after if drained else self.before
+        return super().app_script(image_id, env_bytes, body, params, **kwargs)
+
+
+class SwitchBackCountTests(TemporaryDirectoryTest):
+    """DECISIONS D59 (findings 14 and 13): B7 counts again what this revision made from event inventories before its
+    close may refuse - so a receipt that stops there, with the previous web serving those rows and its worker held,
+    carries B7's count beside B4's - and the note states the rollback limit with how many encounters it reaches
+    (INTERPRETATION_MADE's 'reinstatable'), never refusing."""
+
+    def world(self, cls=BlueGreenWorld):
+        world = cls(self.tmp, live=9151, serving=(REVISION, IMAGE))
+        world.stage_kinds[IMAGE] = KINDS_OLD + ['interpret']
+        replaced_old(self.tmp)
+        return world
+
+    def counted(self, b7_hazards):
+        world = self.world(DrainCountWorld)
+        world.before = {'interpretation': {'assessments': 0, 'encounters': [], 'context_only': []}}
+        world.after = {'interpretation': {'assessments': 0, 'encounters': ['e9'], 'context_only': ['e9']}}
+        answers = iter([{'closed': 0, 'kinds': [], 'hazards': {}, 'relabel': []},
+                        {'closed': 1, 'kinds': [], 'hazards': b7_hazards, 'relabel': []}])
+        world.close = lambda *args: (world.act('close', args[0], tuple(args[5])), world.closes.append(args),
+                                     world.done(next(answers)))[2]
+        details, error = run_holding_the_key(world, install.phase_switch_back, switch_back_args(self.tmp))
+        return world, details, error
+
+    def test_d59_a_b7_refusal_carries_b7s_count_with_b4s_beside_it(self):
+        world, details, error = self.counted({'e1': ['unknown']})
+        self.assertIsInstance(error, install.InstallError)
+        self.assertIn("the previous revision's worker was not started", str(error))
+        record = error.details
+        self.assertEqual(record['failed_at'], 'B7')
+        self.assertEqual((record['interpretation']['context_only'], record['interpretation_at_b4']['context_only']),
+                         (['e9'], []))
+        self.assertIn('1 encounter holds a context derived from an event inventory', record['interpretation']['note'])
+        reads = [index for index, event in enumerate(world.events) if event == ('interpretation', IMAGE)]
+        self.assertEqual(len(reads), 2)
+        self.assertLess(world.events.index(('drain', 9151)), reads[1])  # once this revision's web was drained
+        self.assertEqual(world.names()[WEB], (OLD_IMAGE, 9150, True))  # the previous web serves, its worker held
+        self.assertFalse([name for name, c in world.containers.items() if c['role'] == 'worker' and c['running']])
+        # control: with nothing named at B7 the switch-back finishes, and its record says the same
+        world, details, error = self.counted({})
+        self.assertIsNone(error, error and str(error))
+        self.assertEqual((details['interpretation']['context_only'], details['interpretation_at_b4']['context_only']),
+                         (['e9'], []))
+
+    def test_d59_the_note_states_the_rollback_limit_with_the_encounters_it_reaches_and_never_refuses(self):
+        world = self.world()
+        world.interpretation_answer = {'interpretation': {'assessments': 1, 'encounters': ['e1'], 'context_only': [],
+                                                          'reinstatable': ['e1']}}
+        details, error = run_holding_the_key(world, install.phase_switch_back, switch_back_args(self.tmp))
+        self.assertIsNone(error, error and str(error))
+        self.assertEqual(world.names(), {WEB: (OLD_IMAGE, 9150, True), WORKER: (OLD_IMAGE, None, True)})
+        self.assertEqual(details['interpretation']['reinstatable'], ['e1'])
+        self.assertTrue(details['summary'].endswith(
+            '; 1 assessment was made from event inventories; the earlier image reads them fail-closed; ' + EXPOSED_1),
+            details['summary'])
+
+
+class ExposedNoteTests(unittest.TestCase):
+    """DECISIONS D59 (finding 13): interpretation_note reads INTERPRETATION_MADE's 'reinstatable' as strictly as the
+    rest of its answer, and says how many encounters an earlier image's missing base hold reaches; an answer naming
+    none is the note as it was."""
+
+    def note(self, made):
+        with mock.patch.object(install, 'app_script', return_value={'interpretation': made}):
+            return install.interpretation_note(IMAGE, b'', REVISION)
+
+    def test_d59_the_count_of_the_exposed_encounters_and_what_to_do_first(self):
+        made = {'assessments': 3, 'encounters': ['e1', 'e2', 'e3'], 'context_only': ['e3']}
+        self.assertEqual(self.note({**made, 'reinstatable': ['e2']}),
+                         {**made, 'reinstatable': ['e2'], 'note': f'{NOTE_3_1}; {EXPOSED_1}'})
+        two = self.note({'assessments': 2, 'encounters': ['e1', 'e2'], 'context_only': [],
+                         'reinstatable': ['e2', 'e1']})
+        self.assertIn('; 2 encounters hold an excluded code a reviewer can reinstate: the earlier image', two['note'])
+        self.assertEqual(self.note(made), {**made, 'note': NOTE_3_1})  # control: none named, the note as it was
+        self.assertNotIn('not counted', self.note({**made, 'reinstatable': ['e1']})['note'])  # D15's note check
+
+    def test_d59_a_list_that_does_not_say_what_it_read_is_not_counted(self):
+        made = {'assessments': 3, 'encounters': ['e1', 'e2', 'e3'], 'context_only': ['e3']}
+        for exposed in ('e1', None, {'e1': 1}, [1], ['e1', 'e1'], ['e3'], ['e9']):  # e3 is context-only, e9 unnamed
+            with self.subTest(exposed=exposed):
+                found = self.note({**made, 'reinstatable': exposed})
+                self.assertEqual((found['assessments'], found['encounters'], found['context_only']), (None, None, None))
+                self.assertIn('were not counted (the count did not say what it read)', found['note'])

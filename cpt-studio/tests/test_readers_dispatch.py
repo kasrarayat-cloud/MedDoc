@@ -952,7 +952,9 @@ class SwitchBackHazardTests(NewPathCase):
     """DECISIONS D51 (the S17 refutation, finding 13; the S17 rollback test D15): the installer's in-image reads behind
     a switch-back - a reinstatement on a new-path assessment is named ('reinstatement': no older overlay adds the hold
     it brings back), and the encounters this revision wrote a record for since its pair was created are listed
-    (touched_since), so a switch-back refuses only on what this revision wrote that the previous one would mishandle."""
+    (touched_since), so a switch-back refuses only on what this revision wrote that the previous one would mishandle.
+    DECISIONS D59 (the S17 refutation round 2, findings 11 and 13): the reinstatement stays named once it is approved,
+    and the switch-back's note counts the new-path encounters exposed to a reinstatement made on the earlier web."""
 
     def hazards(self):
         from tests.test_repairs_r1_m import install, run_app_script
@@ -978,3 +980,87 @@ class SwitchBackHazardTests(NewPathCase):
         mark = timezone.now()
         self.decide(encounter, '43239', 'approve')
         self.assertIn(str(encounter.pk), self.touched(mark))  # a decision recorded since
+
+    # DECISIONS D59 (the S17 refutation round 2, finding 11): 'reinstatement' is named while a code stands reinstated
+    # as the review overlay counts one - its current decision the reinstatement, or the approval that rests on it
+    # (review.reinstated_codes) - so approving the reinstated code, the normal end of a reinstatement, never clears it.
+    # An older overlay adds no base hold for either: on those rows c2e53f8e readied and exported 45378 beside 45385.
+
+    def assert_named(self, encounter, named):
+        reasons = self.hazards().get(str(encounter.pk), [])
+        (self.assertIn if named else self.assertNotIn)('reinstatement', reasons)
+
+    def test_d59_a_reinstated_code_approved_afterwards_stays_named_until_its_decision_is_revoked(self):
+        # finding 11 (a): approve the base, reinstate the therapeutic code, approve it
+        encounter = self.new_path_encounter(denied_removal)
+        self.decide(encounter, '45378', 'approve')
+        self.assert_named(encounter, False)  # control: an approved base alone is no reinstatement
+        self.decide(encounter, '45385', 'reinstate')
+        self.assert_named(encounter, True)
+        self.decide(encounter, '45385', 'approve')
+        self.assert_named(encounter, True)  # the read before D59 cleared here, and the switch-back went on
+        self.decide(encounter, '45378', 'revoke')
+        self.assert_named(encounter, True)  # the base's decision is not what holds it
+        self.decide(encounter, '45385', 'revoke')
+        self.assert_named(encounter, False)  # both revoked: nothing stands reinstated
+
+    def test_d59_a_reinstated_code_approved_with_its_base_undecided_stays_named_and_a_rejection_clears_it(self):
+        # finding 11 (b): reinstate and approve the therapeutic code, the base left undecided - c2e53f8e then offered
+        # the base's approve, and one click billed both
+        encounter = self.new_path_encounter(denied_removal)
+        self.decide(encounter, '45385', 'reinstate')
+        self.decide(encounter, '45385', 'approve')
+        self.assert_named(encounter, True)
+        self.decide(encounter, '45385', 'revoke')
+        self.assert_named(encounter, False)
+        # the overlay counts no rejected reinstatement (it holds no base), so neither does the reason
+        self.decide(encounter, '45385', 'reinstate')
+        self.assert_named(encounter, True)
+        self.decide(encounter, '45385', 'reject')
+        self.assert_named(encounter, False)
+
+    def test_d59_an_image_without_review_reinstated_codes_reads_the_same_rule(self):
+        # read where the image has it (hasattr); otherwise the same rule over the current decisions, never the
+        # reinstatement alone
+        encounter = self.new_path_encounter(denied_removal)
+        self.decide(encounter, '45385', 'reinstate')
+        self.decide(encounter, '45385', 'approve')
+        saved = review.reinstated_codes
+        try:
+            del review.reinstated_codes  # as an image without it has review
+            self.assertFalse(hasattr(review, 'reinstated_codes'))
+            self.assert_named(encounter, True)
+        finally:
+            review.reinstated_codes = saved
+        self.decide(encounter, '45385', 'revoke')
+        try:
+            del review.reinstated_codes
+            self.assert_named(encounter, False)
+        finally:
+            review.reinstated_codes = saved
+        self.assertIs(review.reinstated_codes, saved)
+
+    def test_d59_the_note_counts_the_new_path_encounters_holding_an_excluded_code_a_reviewer_can_reinstate(self):
+        # DECISIONS D59 (finding 13): INTERPRETATION_MADE names them as 'reinstatable' - those whose current new-path
+        # assessment holds an excluded, reinstatable code (an older overlay adds no base hold for a reinstatement made
+        # there) - and the switch-back's note says how many, and what to do first; never a refusal
+        from tests.test_repairs_r1_m import install, run_app_script
+        exposed = self.new_path_encounter(denied_removal)  # 45385 excluded, reinstatable
+        other = self.new_path_encounter()  # two_procedures: nothing excluded (control)
+        made = run_app_script(install.INTERPRETATION_MADE, {})['interpretation']
+        self.assertEqual(sorted(made['encounters']), sorted([str(exposed.pk), str(other.pk)]))
+        self.assertEqual(made['reinstatable'], [str(exposed.pk)])
+        self.decide(exposed, '45385', 'reinstate')  # a decision does not change what the encounter holds
+        self.assertEqual(run_app_script(install.INTERPRETATION_MADE, {})['interpretation']['reinstatable'],
+                         [str(exposed.pk)])
+        with mock.patch.object(install, 'app_script',
+                               lambda image, env, body, params, **kwargs: run_app_script(body, params)):
+            note = install.interpretation_note('sha256:' + 'c' * 64, b'', 'a' * 40)
+        self.assertEqual((note['assessments'], note['reinstatable']), (made['assessments'], [str(exposed.pk)]))
+        self.assertEqual(note['note'], f'{made["assessments"]} assessments were made from event inventories; the '
+                                       'earlier image reads them fail-closed; 1 encounter holds an excluded code a '
+                                       'reviewer can reinstate: the earlier image reads a new-path assessment through '
+                                       'a stub that adds no base hold, so a reinstatement made there can leave the '
+                                       'diagnostic base code approvable beside the therapeutic code - re-check each '
+                                       'new-path encounter on the earlier web (a context save reads it again with the '
+                                       'earlier reader) before reviewing it there')

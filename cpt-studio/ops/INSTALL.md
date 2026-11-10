@@ -645,11 +645,17 @@ revision**). For a switch-back that check is read against the revision it
 returns to (DECISIONS D51): a reason that revision reads is no hazard to it -
 participants and second reviews when its worker runs their stages, a member's
 answer and a chosen modifier when its own models read them - and an encounter
-with no record created since this revision's pair was created holds only what
-the pair before it left there. A reviewer's reinstatement on a new-path
-assessment is always named (`reinstatement`: no older overlay adds the hold
-it brings back): revoke it on this revision's web first. Then, without ever
-stopping the serving web first: **B2** the
+with no record created since this revision replaced that pair holds only what
+that pair left there. That time is the one the same `app` receipt records for
+its phase (its `started_at`; DECISIONS D59), never the current containers'
+creation: a later `app` of this same revision that installed a pair and then
+failed made those, and what this revision wrote under its earlier pair is not
+the previous revision's own (the receipt's `touched_since` says which time was
+read). A reviewer's reinstatement on a new-path assessment is always named
+(`reinstatement`: no older overlay adds the hold it brings back), and stays
+named once the reinstated code is approved - the normal end of a
+reinstatement: revoke that code's decision on this revision's web first. Then,
+without ever stopping the serving web first: **B2** the
 previous image's web starts as `cpt-studio-web-next` on the idle port and must
 answer `/health/` with ITS revision and serve its pages; **B3** this revision's
 worker is parked; **B4** every stage this revision's pair queued, ran or left
@@ -667,7 +673,10 @@ removed, and both webs are left running otherwise); **B6** this revision's web
 is drained, stopped and parked;
 **B7** the close runs again for what this revision's web started between B4 and
 the end of its drain - which also closes what a member started on the previous
-web during that window (**Known limits**) - and the previous worker is held
+web during that window (**Known limits**) - what this revision made from event
+inventories is counted again (the receipt's `interpretation`, B4's count kept
+as `interpretation_at_b4`; read before the hold below, so a receipt that stops
+here carries it too), and the previous worker is held
 while it names a record (a member's answer or a chosen modifier named there
 was written since B4's own check found none standing - by this revision's web
 before it stopped taking traffic, or by the previous web after the switch when
@@ -683,6 +692,19 @@ what is left. A B4 close that was started and gave no answer (a Ctrl-C, or the
 closed this revision's open stages: the receipt says so, never that nothing
 was closed. The availability record runs from B2 to the end. To come back to
 this revision, run `app` again.
+
+**The rollback limit for new-path assessments (DECISIONS D59).** After a
+switch-back the previous revision reads a new-path assessment through the stub
+record this revision stores beside its event coding, which adds no base hold.
+So a reinstatement made THERE, on the previous web, on a new-path assessment
+can leave its diagnostic base code approvable beside the therapeutic code (a
+reinstated 45385 beside 45378, which this revision holds), and its approved
+export would bill both. Before reviewing a new-path encounter on the previous
+web, re-check it there: a context save reads it again with the previous
+reader. The receipt's interpretation note (`interpretation`, also in the
+summary) counts the new-path encounters whose current assessment holds an
+excluded code a reviewer can reinstate - the ones exposed - and names them
+(`reinstatable`).
 
 ## Reinstalling an older revision
 
