@@ -542,6 +542,54 @@ class EB(SimpleTestCase):
                 self.assertNotIn(removed, dumped)
 
 
+class PlaceFree(SimpleTestCase):
+    """S16 repair round 2 (held for the owner): the procedure and the technique (normalize.PLACE_FREE) cited from a
+    passage too short for the Locator to place - a heading "EGD" - bind their words where that passage's text stands,
+    the location kept ambiguous by its occurrences; a place-bound attribute never does, nor words the passage does not
+    hold, nor a passage the document does not hold."""
+    LINES = {'P1': 'ENDOSCOPY NOTE - EGD AND COLONOSCOPY', 'P2': 'EGD', 'P3': 'Biopsies were taken from the antrum.',
+             'P4': 'COLONOSCOPY', 'P5': 'The colonoscope was advanced to the cecum.', 'P7': 'Antrum'}
+    TEXT = doc(*LINES.values())
+
+    def inventory(self, **changes):
+        colonoscopy = examination('E0', procedure=attr('colonoscopy', 'COLONOSCOPY', ['P4']))
+        upper = event('E2', procedure=attr('egd', 'EGD', ['P1']), kind=attr('examination', 'ENDOSCOPY NOTE', ['P1']),
+                      technique=attr('not_stated'), target=target(), status=attr('performed', 'ENDOSCOPY NOTE', ['P1']),
+                      purpose=attr('not_stated'))
+        biopsy = event('E1', **{'procedure': attr('egd', 'EGD', ['P2']), 'kind': attr('biopsy', 'Biopsies', ['P3']),
+                                'technique': attr('not_stated'), 'target': target('', 'gastric_antrum', 'antrum', ['P3']),
+                                'status': attr('performed', 'were taken', ['P3']), 'purpose': attr('not_stated'),
+                                **changes})
+        lines = dict(self.LINES, P6='Upper')  # P6 is in the passage table and NOT in the document
+        value = answer(lines, lesions=[], events=[colonoscopy, upper, biopsy], encounter=encounter(
+            date_of_service={'value': '', 'state': 'not_stated', 'words': '', 'passages': [], 'other_dates': []},
+            documenting_endoscopist={'words': '', 'passages': []}, team=[], reach=[]))
+        return run(value, self.TEXT)
+
+    def test_a_procedure_named_by_a_heading_too_short_to_place(self):
+        inventory = self.inventory()
+        self.assertEqual((passage(inventory, 'P2')['state'], passage(inventory, 'P2')['reason']),
+                         ('unlocated', 'too short'))  # the passage itself stays unlocated
+        procedure = ev(inventory, 'E1')['procedure']
+        self.assertEqual(state(procedure), ('verified', 'stated', []))
+        self.assertEqual(procedure['checks'][:2], ['passage_places', 'words_in_own_passage'])
+        self.assertIn('procedure_name', procedure['checks'])  # the name check ran on the words
+        words = procedure['words']
+        self.assertEqual((words['text'], words['occurrences']), ('EGD', 2))  # title and heading: ambiguous
+        self.assertEqual(words['start'], self.TEXT.index('EGD'))  # the first place
+
+    def test_a_place_bound_attribute_never_binds_there(self):
+        status = ev(self.inventory(status=attr('performed', 'EGD', ['P2'])), 'E1')['status']
+        self.assertEqual(state(status), ('unverified', 'absent', ['passage_unlocated']))
+
+    def test_nor_words_the_passage_does_not_hold_nor_a_passage_the_document_does_not_hold(self):
+        for procedure in (attr('egd', 'EGD', ['P7']), attr('egd', 'Upper', ['P6'])):
+            with self.subTest(procedure['passages']):
+                record = ev(self.inventory(procedure=procedure), 'E1')['procedure']
+                self.assertEqual(record['state'], 'unverified')
+                self.assertIn('passage_unlocated', record['reasons'])
+
+
 class Procedure(SimpleTestCase):
     TWO = doc('EGD: the esophagus was normal.', 'Colonoscopy: a polyp was removed with a cold snare.')
 

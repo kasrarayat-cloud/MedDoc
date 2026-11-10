@@ -59,7 +59,7 @@ from typing import Callable, Optional
 
 from studio.interpretation import LABEL, lexicon, literals, schema, verify
 from studio.interpretation.read import Refusal
-from studio.participants.reading import Locator
+from studio.participants.reading import TOO_SHORT, Locator
 from studio.types import sha256_json
 
 # The steps of contract 4.1 that the modules of slice S03 own, in the order normalize runs them on the Draft: each is
@@ -83,6 +83,13 @@ _CLOSERS = frozenset(OPENERS.values())
 # The open questions' ``about`` values that open an attribute of the same name on each listed event.
 EVENT_ABOUT = frozenset({'procedure', 'kind', 'technique', 'target', 'time', 'performer', 'status', 'scope', 'extent',
                          'completion', 'visit_basis'})
+# The attributes whose meaning does not depend on where their words stand (S16 repair round 2): the procedure (its check
+# reads a procedure's NAME) and the technique (a device's surface form) name the same thing wherever the words are, and
+# no consumer reads their place - coverage reads the kind, status, time and target words (C-10), identity the kind,
+# status and target, the relations values and states. Their words may bind where a passage too short for the Locator to
+# place stands (Draft._place_free). Time, status, scope, performer, kind, target and purpose are bound to places: where
+# their words stand decides which statement, act and code they cover, so an unplaced passage never binds them.
+PLACE_FREE = ('procedure', 'technique')
 # What the verification report counts, by attribute (contract 4.3).
 COUNTED = ('procedure', 'kind', 'technique', 'target', 'time', 'performer', 'status', 'scope', 'purpose', 'part_of',
            'reach', 'completion', 'visit_basis', 'separately_identifiable', 'lesion', 'lesion_site', 'lesion_size',
@@ -262,7 +269,7 @@ class Draft:
 
     def _bind(self, where: str, raw: Mapping, value, *, absent: bool = False, default: Optional[_Default] = None,
               check: Optional[Callable[[str], verify.Verdict]] = None, opened: bool = False,
-              span_check: Optional[Callable[[Mapping], verify.Verdict]] = None) -> dict:
+              span_check: Optional[Callable[[Mapping], verify.Verdict]] = None, place_free: bool = False) -> dict:
         """The attribute record (contract 4.2) of ``raw`` ({words, passages}) for ``value``. ``span_check``, when given,
         is the check of located words that also needs where they are (the performer's: _team_for); ``check`` reads
         their text alone."""
@@ -279,16 +286,19 @@ class Draft:
             failure = list(default.reasons) if default is not None and default.reasons else ['words_missing']
             return self._failed(record, failure, default.checks if default is not None else ())
         usable = [self.passages[pid] for pid in known if self.passages[pid]['state'] != UNLOCATED]
-        if not usable:
+        span = self._locate_words(words, usable) if usable else None
+        located = 'passages_located'
+        if span is None and place_free:
+            span, located = self._place_free(words, known), 'passage_places'
+        if span is None:
+            if usable:
+                return self._fall_back(record, where, ['words_unlocated'], default, words)
             failure = (['passage_unknown'] if len(known) < len(ids) else []) + (
                 ['passage_unlocated'] if len(usable) < len(known) else [])
             failure = failure or ['words_unlocated']
             return self._fall_back(record, where, failure, default, words)
-        span = self._locate_words(words, usable)
-        if span is None:
-            return self._fall_back(record, where, ['words_unlocated'], default, words)
         record.update(basis='stated', words=span)
-        record['checks'] = ['passages_located', 'words_in_own_passage']
+        record['checks'] = [located, 'words_in_own_passage']
         if check is not None or span_check is not None:
             verdict = span_check(span) if span_check is not None else check(span['text'])
             record['checks'] += list(verdict.checks)
@@ -341,6 +351,40 @@ class Draft:
                     return {'start': start, 'end': end, 'text': self.revision_text[start:end], 'match': tier,
                             'occurrences': len(positions)}
         return None
+
+    def _place_free(self, words: str, pids: Sequence) -> Optional[dict]:
+        """The words of a PLACE_FREE attribute cited from a passage too short for the Locator to place (fewer than its 8
+        characters: a heading such as "EGD"): the passage's own text at EVERY place it stands in the revision text -
+        whitespace collapsed, word-bounded, the exact tier then the normalized - and the words inside it there. The first
+        occurrence is kept with ``occurrences``, how many there are over every place: more than one keeps the location
+        ambiguous, as FINAL C2 records it. The passage itself stays unlocated (its text is never stored), so no rule that
+        reads places sees it. None when the passage's text, or the words inside it, are not there."""
+        given = {item['id']: item['text'] for item in self.answer['passages']}
+        for pid in pids:
+            record = self.passages.get(pid)
+            if record is None or record['state'] != UNLOCATED or record['reason'] != TOO_SHORT:
+                continue
+            for tier, fold in (('exact', None), ('normalized', lexicon.fold_char)):
+                needle = ' '.join(given[pid].split()) if fold is None else lexicon.fold(given[pid])
+                inner = ' '.join(words.split()) if fold is None else lexicon.fold(words)
+                if not needle or not inner:
+                    continue
+                hay, starts, ends = self._document(tier, fold)
+                found = [at + offset for at in _bounded_positions(hay, needle)
+                         for offset in _bounded_positions(needle, inner)]
+                if found:
+                    first = found[0]
+                    start, end = starts[first], ends[first + len(inner) - 1]
+                    return {'start': start, 'end': end, 'text': self.revision_text[start:end], 'match': tier,
+                            'occurrences': len(found)}
+        return None
+
+    def _document(self, tier: str, fold) -> tuple:
+        """The whole revision text, collapsed (and folded on the normalized tier), with each character's offsets."""
+        key = ('', tier)
+        if key not in self._hay:
+            self._hay[key] = _mapped(self.revision_text, fold)
+        return self._hay[key]
 
     def _haystack(self, passage: dict, tier: str) -> tuple:
         key = (passage['id'], tier)
@@ -529,10 +573,12 @@ class Draft:
             'family': lexicon.family_of(procedure),
             'procedure': bind('procedure', procedure, absent=procedure == 'unknown',
                               default=_Default(settled, ('single_family',), () if settled else ('procedure_unsettled',)),
-                              check=lambda text: verify.procedure_words(procedure, text, len(families) >= 2)),
+                              check=lambda text: verify.procedure_words(procedure, text, len(families) >= 2),
+                              place_free='procedure' in PLACE_FREE),
             'kind': bind('kind', kind),
             'technique': bind('technique', technique, absent=technique == 'not_stated',
-                              check=lambda text: verify.device_words(technique, text)),
+                              check=lambda text: verify.device_words(technique, text),
+                              place_free='technique' in PLACE_FREE),
             'target': self._target(where, raw['target'], opened('target')),
             'time': bind('time', time, absent=time == 'unknown',
                          default=_Default(True, deny=time_check) if time == 'current_encounter' else None,

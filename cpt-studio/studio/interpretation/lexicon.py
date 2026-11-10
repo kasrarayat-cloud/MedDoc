@@ -314,6 +314,9 @@ COLD, HOT = ('cold',), ('hot',)
 # using the snare tip", "low-power snare-tip soft coagulation", "snare-tip soft coagulation", "coagulation using the
 # snare tip", "blended current"). Coagulation alone is not enough: a heater probe coagulates too (thermal_probe).
 SNARE_TIP = ('snare tip', 'tip of the snare')
+# A snare named by its current is a hot snare (S16 census: "15 mm electrocautery snare", "electrosurgical snare", "EMR
+# electrosurgical snare") - never in words that also say "cold" ("a cold snare, without electrocautery").
+HOT_CURRENT = ('hot', 'electrocautery', 'electrosurgical')
 COAGULATION = ('coagulation', 'coagulated', 'coagulate', 'coagulating')
 CURRENT_MODES = ('soft coagulation', 'blended current', 'blend current')
 EXTRACTION = ('extraction', 'sweep', 'sweeps', 'swept', 'occlusion', 'retrieval')
@@ -328,8 +331,10 @@ def device_named(device: str, text: str) -> bool:
     if device == 'electrocautery' and (holds(text, CURRENT_MODES)
                                        or (holds(text, SNARE_TIP) and holds(text, COAGULATION))):
         return True
-    if device in ('cold_snare', 'hot_snare'):
-        return holds(text, COLD if device == 'cold_snare' else HOT) and holds(text, SNARE)
+    if device == 'cold_snare':
+        return holds(text, COLD) and holds(text, SNARE)
+    if device == 'hot_snare':
+        return holds(text, HOT_CURRENT) and holds(text, SNARE) and not holds(text, COLD)
     if device in ('cold_forceps', 'hot_forceps'):
         temperature = COLD if device == 'cold_forceps' else HOT
         return holds(text, temperature) and holds(text, FORCEPS + ('biopsy',))

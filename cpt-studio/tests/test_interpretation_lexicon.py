@@ -113,7 +113,7 @@ class Devices(SimpleTestCase):
     NAMED = {
         'endoscope': ('the colonoscope', 'pediatric colonoscope', 'the scope', 'EGD'),
         'cold_snare': ('cold snare', 'snared cold'),
-        'hot_snare': ('hot snare',),
+        'hot_snare': ('hot snare', '15 mm electrocautery snare', 'electrosurgical snare', 'EMR electrosurgical snare'),
         'snare': ('snare', 'snared'),
         'cold_forceps': ('cold forceps', 'cold biopsy'),
         'hot_forceps': ('hot forceps', 'hot biopsy'),
@@ -147,7 +147,7 @@ class Devices(SimpleTestCase):
     }
     NOT_NAMED = {
         'cold_snare': ('hot snare', 'snare', 'cold forceps'),
-        'hot_snare': ('cold snare',),
+        'hot_snare': ('cold snare', 'cold snare without electrocautery', 'electrocautery', 'the snare tip'),
         'snare': ('forceps', 'polypectomy'),
         'cold_forceps': ('forceps', 'hot forceps'),
         'balloon': ('Savary dilators', 'bougie'),

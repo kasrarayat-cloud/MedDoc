@@ -57,7 +57,7 @@ IDENTITY_REASONS = ('identity_not_in_statement', 'identity_no_tie', 'identity_li
 REMOVED_REASONS = ('foreign_date_in_passage', 'foreign_name_in_passage')
 # The checks a record lists as having run on it.
 CHECKS = (
-    'passages_located', 'words_in_own_passage', 'default', 'default_after_unlocated_words', 'single_family',
+    'passages_located', 'passage_places', 'words_in_own_passage', 'default', 'default_after_unlocated_words', 'single_family',
     'date_literal', 'name_tokens', 'size_literal', 'landmark_words', 'reach_device', 'device_words', 'procedure_name',
     'negation_marker', 'quantifier', 'duration_literal', 'label_words', 'planning_marker', 'failure_marker',
     'time_marker', 'facility_marker', 'scope_permitted', 'scope_target', 'umbrella', 'status_time', 'part_of_reference',
