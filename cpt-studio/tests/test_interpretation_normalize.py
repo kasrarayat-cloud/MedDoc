@@ -499,6 +499,42 @@ class EB(SimpleTestCase):
         self.assertEqual(state(self.performed_by('Dr. Robin Okafor', endoscopist='Okafor, Grace, MD')),
                          ('unverified', 'stated', ['name_mismatch']))
 
+    HALE = 'Both biopsies were done by Dr. Hale.'
+
+    def hale(self, performer: str = 'documenting_team', team=(('Dr. Hale', 'P1'),),
+             endoscopist=('Grace Okafor, MD', 'P2')):
+        """S16 FRESH-C PAR-008 r1: a biopsy whose own sentence (P1) names Dr. Hale as its performer, the documenting
+        endoscopist Grace Okafor (P2) and a fellow line (P3); each of ``team`` a team entry (words, passage)."""
+        lines = {'P1': self.HALE, 'P2': 'Endoscopist: Grace Okafor, MD.', 'P3': 'Fellow: Dr. Hale.'}
+        value, _ = one_line(lines['P1'], kind=attr('biopsy', 'biopsies', ['P1']),
+                            status=attr('performed', 'were done', ['P1']), performer=attr(performer, 'Dr. Hale', ['P1']))
+        value['passages'] = [{'id': pid, 'text': line} for pid, line in lines.items()]
+        value['encounter']['documenting_endoscopist'] = {'words': endoscopist[0], 'passages': [endoscopist[1]]}
+        value['encounter']['team'] = [{'words': words, 'passages': [pid]} for words, pid in team]
+        return ev(run(value, doc(*lines.values())), 'E1')['performer']
+
+    def test_eb2_a_team_entry_that_is_the_acts_own_performer_words_confirms_nothing(self):
+        # Gemini listed Dr. Hale as the team FROM the very words that name him as the act's performer: that entry is
+        # the act's statement again, not a document's listing of him (EB2's "listed team member"), so it confirms
+        # nothing about that act and the name is not the team's.
+        self.assertEqual(state(self.hale()), ('unverified', 'stated', ['name_mismatch']))
+        self.assertEqual(state(self.hale(team=())), ('unverified', 'stated', ['name_mismatch']))  # (the same, unlisted)
+
+    def test_but_a_team_entry_listed_elsewhere_still_confirms_the_name(self):
+        verified = ('verified', 'stated', [])
+        self.assertEqual(state(self.hale(team=(('Dr. Hale', 'P3'),))), verified)  # the fellow line lists him
+        self.assertEqual(state(self.hale(team=(('Dr. Hale', 'P1'), ('Dr. Hale', 'P3')))), verified)  # either entry
+        # the documenting endoscopist is never left out, even when her own words are the act's performer words
+        okafor = ('Grace Okafor', 'P1')
+        lines = {'P1': 'Grace Okafor removed the polyp with a cold snare.'}
+        value, _ = one_line(lines['P1'], performer=attr('documenting_team', 'Grace Okafor', ['P1']))
+        value['encounter']['documenting_endoscopist'] = {'words': okafor[0], 'passages': [okafor[1]]}
+        self.assertEqual(state(ev(run(value, doc(lines['P1'])), 'E1')['performer']), verified)
+
+    def test_and_another_clinicians_check_keeps_every_member(self):
+        # EB3: name_not_other is never weakened - the entry naming Dr. Hale still makes "another clinician" unverified
+        self.assertEqual(state(self.hale('other_clinician')), ('unverified', 'stated', ['name_not_other']))
+
     def test_no_inventory_ever_carries_a_removed_reason(self):
         for value, text in (self.tattoo(), self.dated(self.ANASTOMOSIS), self.patel(True), self.patel(False)):
             dumped = json.dumps(run(value, text).__dict__)

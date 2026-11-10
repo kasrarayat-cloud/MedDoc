@@ -12,7 +12,9 @@ The steps, in the order their inputs require (contract 4.1 lists them by subject
 2. The open questions are read first (step 7 of the contract), so every attribute an open question names is built
    ``open`` and every later rule sees it (an open attribute is treated as an unverified one, contract 5.5).
 3. The documenting endoscopist and the team: their words bound like an attribute's, their names read (literals.names);
-   each entry is one member of the team the performer check reads (verify.performer_words).
+   each entry is one member of the team the performer check reads (verify.performer_words) - except, for a
+   documenting_team performer, a team entry whose own words ARE that performer's words: the act's own performer
+   statement listed again as the team confirms nothing about it (Draft._team_for).
 4. The date of service and every other date, each verified by its own date literal (contract 8.1).
 5. Lesions: the description, the site (landmark words) and the size (size literal), each in the lesion's own passages.
 6. Events: every attribute bound to its OWN passages by its OWN words (5.2, below), its literal check run on those
@@ -170,6 +172,7 @@ class Draft:
         self._opened: set = set()
         self._date_open = False
         self._team: tuple = ()
+        self._members: tuple = ()  # (names, own words span, is a team entry) per member, in self._team's order
         self._tallied: list = []
         self._hay: dict = {}
 
@@ -258,8 +261,11 @@ class Draft:
         return known
 
     def _bind(self, where: str, raw: Mapping, value, *, absent: bool = False, default: Optional[_Default] = None,
-              check: Optional[Callable[[str], verify.Verdict]] = None, opened: bool = False) -> dict:
-        """The attribute record (contract 4.2) of ``raw`` ({words, passages}) for ``value``."""
+              check: Optional[Callable[[str], verify.Verdict]] = None, opened: bool = False,
+              span_check: Optional[Callable[[Mapping], verify.Verdict]] = None) -> dict:
+        """The attribute record (contract 4.2) of ``raw`` ({words, passages}) for ``value``. ``span_check``, when given,
+        is the check of located words that also needs where they are (the performer's: _team_for); ``check`` reads
+        their text alone."""
         ids = list(raw.get('passages', ()))
         known = self._known(ids, where)
         record = {'value': value, 'basis': 'absent', 'state': 'absent', 'open': bool(opened), 'words': None,
@@ -283,8 +289,8 @@ class Draft:
             return self._fall_back(record, where, ['words_unlocated'], default, words)
         record.update(basis='stated', words=span)
         record['checks'] = ['passages_located', 'words_in_own_passage']
-        if check is not None:
-            verdict = check(span['text'])
+        if check is not None or span_check is not None:
+            verdict = span_check(span) if span_check is not None else check(span['text'])
             record['checks'] += list(verdict.checks)
             record['literals'] = dict(verdict.literals)
             record['reasons'] = verify.ordered(verdict.reasons)
@@ -348,21 +354,35 @@ class Draft:
         encounter = self.answer['encounter']
         entries = [('encounter.documenting_endoscopist', encounter['documenting_endoscopist'])]
         entries += [(f'encounter.team[{index}]', raw) for index, raw in enumerate(encounter['team'])]
-        records, team = [], []
-        for where, raw in entries:
+        records, team, members = [], [], []
+        for index, (where, raw) in enumerate(entries):
             bound = self._bind(where, raw, None, absent=not has_words(raw['words']))
             names = literals.names(bound['words']['text']) if bound['state'] == 'verified' else ()
             if names:  # one member per entry, whatever number of names the parser reads in it (verify.performer_words)
                 team.append(names)
+                members.append((names, bound['words'], index > 0))
             records.append({'state': bound['state'], 'words': bound['words'], 'passages': bound['passages'],
                             'checks': bound['checks'], 'reasons': bound['reasons'],
                             'names': [name.as_record() for name in names]})
         self._team = tuple(team)
+        self._members = tuple(members)
         self.encounter['documenting_endoscopist'] = records[0]
         self.encounter['team'] = records[1:]
         self._tally('documenting_endoscopist', records[0])
         for record in records[1:]:
             self._tally('team', record)
+
+    def _team_for(self, value: str, span: Mapping) -> tuple:
+        """The members a performer's located words ``span`` are checked against (verify.performer_words; EB2). For
+        documenting_team, a TEAM entry whose own words are those very words is left out: such an entry is the act's own
+        performer statement listed again as the team ("Both done by Dr. Hale." read as Dr. Hale's membership), so it
+        confirms nothing about it - EB2's "listed team member" is one the document lists, and an entry that IS the
+        statement being checked would make any name its own confirmation. The documenting endoscopist is never left
+        out, and the other values keep every member: their check (name_not_other) must not be weakened (EB3)."""
+        if value != 'documenting_team':
+            return self._team
+        return tuple(names for names, words, team in self._members
+                     if not (team and words and words['start'] < span['end'] and span['start'] < words['end']))
 
     # --- 4. the date of service and the other dates (contract 8.1) -----------------------------------------------------
 
@@ -501,6 +521,9 @@ class Draft:
         def performer_check(text: str) -> verify.Verdict:
             return verify.performer_words(performer, text, self._team)
 
+        def performer_span_check(span: Mapping) -> verify.Verdict:
+            return verify.performer_words(performer, span['text'], self._team_for(performer, span))
+
         record = {
             'id': eid,
             'family': lexicon.family_of(procedure),
@@ -516,7 +539,7 @@ class Draft:
                          check=time_check),
             'performer': bind('performer', performer, absent=performer == 'unknown',
                               default=_Default(True, deny=performer_check) if performer == 'documenting_team' else None,
-                              check=performer_check),
+                              check=performer_check, span_check=performer_span_check),
             'status': bind('status', status, check=lambda text: verify.status_words(status, text)),
             'scope': bind('scope', scope, absent=scope in ('not_applicable', 'unknown'),
                           check=lambda text: verify.scope_words(scope, text)),
