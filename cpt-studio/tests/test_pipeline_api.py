@@ -192,10 +192,9 @@ class RecordedInterpretation:
     interpreter (GEMINI_MODE 'replay', a replay directory of the test's own) over ``interpretations`` - (document text,
     Gemini's synthetic answer) pairs, one per fixture document the class uploads - so every upload takes the production
     chain. ``interpreters`` lists every interpreter the stages were given, in order. A test that asked the interpreter
-    to read a document with no registered interpretation fails once it ends (unless it sets ``unrecorded_allowed``): a
-    test switched to the production chain never passes on a reading that silently did not happen."""
+    to read a document with no registered interpretation fails once it ends: a test switched to the production chain
+    never passes on a reading that silently did not happen."""
     interpretations = ((OFFICE_NOTE, OFFICE_INTERPRETATION),)
-    unrecorded_allowed = False
 
     def setUp(self):
         self.addCleanup(self._every_document_was_recorded)
@@ -220,7 +219,7 @@ class RecordedInterpretation:
 
     def _every_document_was_recorded(self):
         unrecorded = [document for interpreter in self.interpreters for document in interpreter.unrecorded]
-        if unrecorded and not self.unrecorded_allowed:
+        if unrecorded:
             self.fail(f'{len(unrecorded)} interpretation request(s) for a document with no recorded synthetic '
                       f'interpretation; the first begins {unrecorded[0][:80]!r}')
 
