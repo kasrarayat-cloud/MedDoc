@@ -513,6 +513,65 @@ class LesionVerified(SimpleTestCase):
         self.assertIn('lesion_unverified', reasons)
 
 
+class TargetThroughLesion(SimpleTestCase):
+    """S16 repair round 2: a target whose words name no landmark ("It": landmark_missing and nothing else) is verified
+    through its lesion when the act is verified to be done on it and that lesion's own site is verified - the target's
+    landmark that site, or one holding it. The lesion's own verified attribute is read, never a passage."""
+    LINES = {'P1': 'A 6 mm sessile polyp was seen in the sigmoid colon.', 'P2': 'It was removed with a cold snare.'}
+    SIGMOID = les('L1', '6 mm sessile polyp', 'P1', landmark='sigmoid_colon', site_words='sigmoid colon',
+                  size_words='6 mm')
+
+    def target(self, landmark: str = 'sigmoid_colon', lesions=None, lines=None, **options) -> tuple:
+        draft = linked(lines or self.LINES, [snare(passage='P2', target=tg('L1', landmark, 'It', ['P2']))],
+                       lesions or [self.SIGMOID], **options)
+        record = ev(draft, 'E1')['target']
+        return record['identity'], record['state'], record['reasons'], 'lesion_site' in record['checks']
+
+    def test_a_reference_to_the_verified_lesion_takes_its_verified_site(self):
+        through = ('verified', 'verified', [], True)
+        self.assertEqual(self.target(), through)
+        self.assertEqual(self.target('colon'), through)  # the colon holds the sigmoid colon
+        self.assertEqual(self.target('left_colon'), through)  # and so does the left colon (C-15)
+
+    def test_a_landmark_the_site_does_not_establish_stays_unverified(self):
+        missing = ('verified', 'unverified', ['landmark_missing'], False)
+        self.assertEqual(self.target('descending_colon'), missing)  # another place
+        colon = les('L1', '6 mm sessile polyp', 'P1', landmark='colon', site_words='colon', size_words='6 mm')
+        lines = {'P1': 'A 6 mm sessile polyp was seen in the colon.', 'P2': 'It was removed with a cold snare.'}
+        self.assertEqual(self.target('sigmoid_colon', [colon], lines), missing)  # more specific than the site
+
+    def test_an_unverified_site_or_an_unresolved_identity_establishes_nothing(self):
+        unstated = les('L1', '6 mm sessile polyp', 'P1', landmark='sigmoid_colon', size_words='6 mm')  # no site words
+        self.assertEqual(self.target(lesions=[unstated]), ('verified', 'unverified', ['landmark_missing'], False))
+        lines = {'P1': 'A 6 mm sessile polyp and a 4 mm flat polyp were seen in the sigmoid colon.',
+                 'P2': 'It was removed with a cold snare.'}
+        two = [les('L1', '6 mm sessile polyp', 'P1', landmark='sigmoid_colon', site_words='sigmoid colon',
+                   size_words='6 mm'),
+               les('L2', '4 mm flat polyp', 'P1', landmark='sigmoid_colon', site_words='sigmoid colon',
+                   size_words='4 mm')]
+        self.assertEqual(self.target(lesions=two, lines=lines), ('unresolved', 'unverified', ['landmark_missing'],
+                                                                 False))
+
+    def test_an_open_target_stays_open(self):
+        question = {'about': 'target', 'events': ['E1'], 'lesions': [], 'passages': ['P2']}
+        self.assertEqual(self.target(open_questions=[question]),
+                         ('verified', 'unverified', ['landmark_missing'], False))
+
+    def test_only_words_that_name_no_landmark_are_completed_by_the_site(self):
+        site = {'value': 'sigmoid_colon', 'state': 'verified', 'open': False}
+        for reasons in (['landmark_conflict'], ['landmark_missing', 'landmark_conflict'], ['words_unlocated']):
+            with self.subTest(reasons=reasons):
+                target = {'value': 'sigmoid_colon', 'state': 'unverified', 'open': False, 'reasons': list(reasons),
+                          'checks': ['landmark_words']}
+                identity.through_lesion(target, {'site': site})
+                self.assertEqual((target['state'], target['reasons']), ('unverified', reasons))
+        target = {'value': 'sigmoid_colon', 'state': 'unverified', 'open': False, 'reasons': ['landmark_missing'],
+                  'checks': ['landmark_words']}
+        identity.through_lesion(target, {'site': site})  # the control: the same target with landmark_missing alone
+        self.assertEqual((target['state'], target['reasons'], target['checks']),
+                         ('verified', [], ['landmark_words', 'lesion_site']))
+
+
 class OpenAndUntouched(SimpleTestCase):
     def test_an_open_identity_question_leaves_it_unresolved(self):
         draft = linked(ONE, [snare(target=tg('L1', 'cecum', '6 mm sessile polyp in the cecum', ['P1']))], [L_ONE],

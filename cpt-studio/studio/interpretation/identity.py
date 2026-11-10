@@ -43,6 +43,14 @@ reasons of verify.IDENTITY_REASONS in ``identity_by``:
 5. L is verified (lesion_unverified).
 An open question about the event's identity leaves it ``unresolved`` whatever the rules found (``open`` in identity_by).
 
+The target's landmark through its lesion (S16 repair round 2). A target whose own words name no landmark - a reference
+("It", "this polyp", "the defect") failing the landmark check with landmark_missing and nothing else - is verified
+THROUGH its lesion when its identity is VERIFIED and that lesion's own site is verified (usable) and placed: the
+target's landmark is that site or holds it (lexicon.contains), as the landmark check asks of words that name one. Only
+the lesion's own verified attribute is read, never a passage (EB1); the check is recorded as ``lesion_site``. A target
+more specific than the site, one whose words fail otherwise (a conflict, words that did not bind), an open target, an
+unresolved identity and an unverified or unplaced site leave it unverified.
+
 Pure and Django-free; imports nothing from studio.gi (FINAL 3.1).
 """
 from __future__ import annotations
@@ -410,6 +418,20 @@ def link(draft) -> None:
         opened = eid in draft.identity_open
         target['identity'] = VERIFIED if not reasons and not opened else UNRESOLVED
         target['identity_by'] = {'reasons': verify.ordered(reasons), 'by': by, **({'open': True} if opened else {})}
+        if target['identity'] == VERIFIED:
+            through_lesion(target, draft.lesions[lid])
+
+
+def through_lesion(target: dict, lesion: Mapping) -> None:
+    """The target's landmark verified through its verified lesion's verified site (module docstring), in place; a
+    target that does not qualify is left exactly as it is."""
+    if target['state'] != 'unverified' or list(target['reasons']) != ['landmark_missing'] or target.get('open'):
+        return
+    site = lesion['site']
+    if not verify.usable(site) or site['value'] in lexicon.UNPLACED_LANDMARKS:
+        return
+    if target['value'] == site['value'] or lexicon.contains(target['value'], site['value']):
+        target.update(state='verified', reasons=[], checks=list(target['checks']) + ['lesion_site'])
 
 
 # --- reading identity (for relations.py and the engine) ----------------------------------------------------------------
