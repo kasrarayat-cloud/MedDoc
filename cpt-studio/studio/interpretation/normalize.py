@@ -83,13 +83,18 @@ _CLOSERS = frozenset(OPENERS.values())
 # The open questions' ``about`` values that open an attribute of the same name on each listed event.
 EVENT_ABOUT = frozenset({'procedure', 'kind', 'technique', 'target', 'time', 'performer', 'status', 'scope', 'extent',
                          'completion', 'visit_basis'})
-# The attributes whose meaning does not depend on where their words stand (S16 repair round 2): the procedure (its check
-# reads a procedure's NAME) and the technique (a device's surface form) name the same thing wherever the words are, and
-# no consumer reads their place - coverage reads the kind, status, time and target words (C-10), identity the kind,
-# status and target, the relations values and states. Their words may bind where a passage too short for the Locator to
-# place stands (Draft._place_free). Time, status, scope, performer, kind, target and purpose are bound to places: where
-# their words stand decides which statement, act and code they cover, so an unplaced passage never binds them.
-PLACE_FREE = ('procedure', 'technique')
+# The attributes whose meaning does not depend on where their words stand (S16 repair round 2): the technique (a
+# device's surface form) names the same device wherever its words are, and no consumer reads its place - coverage reads
+# the kind, status, time and target words (C-10), identity the kind, status and target, the relations values and
+# states. Its words may bind where a passage too short for the Locator to place stands (Draft._place_free).
+# The procedure is NOT place-free: DECISIONS D37 withdrew it. Bound at the places of a heading too short to place ("EGD",
+# found in a title and a heading alike), it verified the procedure of acts Gemini read in a reproduced outside report as
+# today's, and turned W1S-075, -076, -171 (and, on FRESH-1, -193) 43239 from held to READY against the registry's
+# expected NOT_READY - a regression by the owner's rule of 2026-11-09. A procedure cited only from such a heading stays
+# unverified.
+# Time, status, scope, performer, kind, target and purpose are bound to places too: where their words stand decides
+# which statement, act and code they cover, so an unplaced passage never binds them.
+PLACE_FREE = ('technique',)
 # What the verification report counts, by attribute (contract 4.3).
 COUNTED = ('procedure', 'kind', 'technique', 'target', 'time', 'performer', 'status', 'scope', 'purpose', 'part_of',
            'reach', 'completion', 'visit_basis', 'separately_identifiable', 'lesion', 'lesion_site', 'lesion_size',
@@ -354,7 +359,7 @@ class Draft:
 
     def _place_free(self, words: str, pids: Sequence) -> Optional[dict]:
         """The words of a PLACE_FREE attribute cited from a passage too short for the Locator to place (fewer than its 8
-        characters: a heading such as "EGD"): the passage's own text at EVERY place it stands in the revision text -
+        characters: a heading such as "Snare"): the passage's own text at EVERY place it stands in the revision text -
         whitespace collapsed, word-bounded, the exact tier then the normalized - and the words inside it there. The first
         occurrence is kept with ``occurrences``, how many there are over every place: more than one keeps the location
         ambiguous, as FINAL C2 records it. The passage itself stays unlocated (its text is never stored), so no rule that
@@ -573,8 +578,7 @@ class Draft:
             'family': lexicon.family_of(procedure),
             'procedure': bind('procedure', procedure, absent=procedure == 'unknown',
                               default=_Default(settled, ('single_family',), () if settled else ('procedure_unsettled',)),
-                              check=lambda text: verify.procedure_words(procedure, text, len(families) >= 2),
-                              place_free='procedure' in PLACE_FREE),
+                              check=lambda text: verify.procedure_words(procedure, text, len(families) >= 2)),
             'kind': bind('kind', kind),
             'technique': bind('technique', technique, absent=technique == 'not_stated',
                               check=lambda text: verify.device_words(technique, text),
