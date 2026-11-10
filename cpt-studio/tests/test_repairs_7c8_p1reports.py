@@ -14,12 +14,12 @@ from unittest import mock
 from django.conf import settings
 from django.test import Client, SimpleTestCase, TestCase, override_settings
 
-from studio import models, reports
+from studio import interpretation, models, reports
 from studio.types import RawExchange
 from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
-from tests.test_pipeline_api import RecordedInterpretation, drain
+from tests.test_pipeline_api import OFFICE_INTERPRETATION, OFFICE_NOTE, RecordedInterpretation, drain
 from tests.test_services_second_review import REPORT_INTERPRETATION, TwoPassProvider, ask
 
 LIVE = dict(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
@@ -564,14 +564,17 @@ class NotCheckedPassagesAreNeverEvidenceTests(Harness):
 NONE_PROPOSED = 'No CPT codes were proposed for this document.'
 
 
-@applied
-class NothingIsSaidOfAResponseNeverReadTests(Harness):
+class NothingIsSaidOfAResponseNeverReadTests(RecordedInterpretation, Harness):
     """reports-5: with the provider outcome unknown (a request sent, no complete response read), and still after a
     member reconciled it and stopped the one new attempt, the suggestions panel said "No CPT codes were proposed for this
     document" beside the stored provider check "...its outcome is unknown, so there are no CPT proposals... This is not a
     finding that no codes apply" (the export said "nothing from it was used"). The panel says nothing was proposed only
     of a response the assessment read; otherwise it shows the provider check's own wording - for an unknown outcome,
-    a failure and a provider that was not run alike."""
+    a failure and a provider that was not run alike.
+
+    On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads OFFICE_NOTE from its recorded synthetic
+    interpretation, and the run these tests assert about is Corti's primary run, which the interpretation's own run
+    now stands beside (FINAL 6.3)."""
 
     def codes_tab(self, encounter_id):
         return page(self.detail(encounter_id))['codes'].replace('&#x27;', "'")
@@ -582,7 +585,8 @@ class NothingIsSaidOfAResponseNeverReadTests(Harness):
                               outcome='unknown'))
         encounter_id = self.create(OFFICE_NOTE)
         drain()
-        (run,) = models.ProviderRun.objects.filter(encounter_id=encounter_id)
+        # the encounter's one run but the interpretation's own, which the production chain makes before the predict
+        (run,) = models.ProviderRun.objects.filter(encounter_id=encounter_id).exclude(purpose=interpretation.PURPOSE)
         self.assertEqual((run.state, run.sent), ('unknown', True))
         check = self.encounter_check(encounter_id, 'provider.status')
         self.assertEqual(check['status'], 'warn')
@@ -609,7 +613,9 @@ class NothingIsSaidOfAResponseNeverReadTests(Harness):
         self.addCleanup(patcher.stop)
         encounter_id = self.create(OFFICE_NOTE)
         drain()
-        self.assertFalse(models.ProviderRun.objects.filter(encounter_id=encounter_id).exists())
+        # no provider run but the interpretation's own, which the production chain makes before the predict
+        self.assertFalse(models.ProviderRun.objects.filter(encounter_id=encounter_id)
+                         .exclude(purpose=interpretation.PURPOSE).exists())
         check = self.encounter_check(encounter_id, 'provider.status')
         self.assertEqual(check['status'], 'not_verified')
         html = self.codes_tab(encounter_id)
@@ -954,22 +960,27 @@ class FailedPrimary(TwoPassProvider):
         return RawExchange(outcome='failed', sent=True, http_status=500, error='HTTP 500 from the provider.')
 
 
-@applied
-class RefusedResponseStateTests(Harness):
+class RefusedResponseStateTests(RecordedInterpretation, Harness):
     """Skeptic of the reports-5 repair: a response refused whole (65 selected codes, over the 64-code cap) - the primary's,
     or the second review's - left the encounter state 'no_codes', whose label "No CPT codes proposed" the documents list
     badge and the "Most recent" line show, beside the stored check "...was not used, so there are no CPT proposals. This
     is not a finding that no codes apply." (ARCHITECTURE, round 7 bypass:1: a response refused whole is never reported
     as one that proposed nothing). For the second review the readiness blocker said "No CPT code was proposed" too.
     The state is the provider's failure to give a usable result (provider_failed), state_run names the refused run, and
-    the label, the card and the blocker say that the response was not used."""
+    the label, the card and the blocker say that the response was not used.
+
+    On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads OFFICE_NOTE and COLONOSCOPY from their
+    recorded synthetic interpretations, and the run these tests assert about is Corti's primary run, which the
+    interpretation's own run now stands beside (FINAL 6.3)."""
+    interpretations = ((OFFICE_NOTE, OFFICE_INTERPRETATION),) + COLONOSCOPY_INTERPRETATIONS
 
     def test_a_primary_response_refused_whole_is_never_labelled_no_codes_proposed(self):
         from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider
         self.use(FakeProvider(selections=[OFFICE_TIME] * 65))
         encounter_id = self.create(OFFICE_NOTE)
         drain()
-        (run,) = models.ProviderRun.objects.filter(encounter_id=encounter_id)
+        # the encounter's one run but the interpretation's own, which the production chain makes before the predict
+        (run,) = models.ProviderRun.objects.filter(encounter_id=encounter_id).exclude(purpose=interpretation.PURPOSE)
         self.assertEqual(run.state, 'succeeded')
         self.assertEqual(self.encounter_check(encounter_id, 'provider.status')['status'], 'fail')
         detail = self.detail(encounter_id)
@@ -1025,7 +1036,7 @@ class RefusedResponseStateTests(Harness):
         self.use(FailedPrimary([], []))
         failed = self.create(OFFICE_NOTE)
         drain()
-        (run,) = models.ProviderRun.objects.filter(encounter_id=failed)
+        (run,) = models.ProviderRun.objects.filter(encounter_id=failed).exclude(purpose=interpretation.PURPOSE)
         detail = self.detail(failed)
         self.assertEqual((run.state, detail['state'], detail['state_label'], detail['state_run']),
                          ('failed', 'provider_failed', 'Provider request failed', str(run.pk)))

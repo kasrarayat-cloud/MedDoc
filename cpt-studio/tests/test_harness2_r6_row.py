@@ -38,7 +38,7 @@ from tests import test_harness2_pipeline as hp
 from tests.legacy_chain import applied
 from tests.support.operator import OperatorReads
 from tests.support import factories as f
-from tests.test_harness2_pipeline import LAND, SNARE, TWO_EXTENTS, ColonCase
+from tests.test_harness2_pipeline import LAND, SNARE, TWO_EXTENTS, TWO_EXTENTS_INTERPRETATIONS, ColonCase
 from tests.test_harness2_r2_evidence import page
 from tests.test_harness2_r2_wording import R2WordingCase
 from tests.test_harness2_r4_conf import NOTE
@@ -69,6 +69,10 @@ def clarification_row(html):
 
 
 class StaleMixin(RowMixin):
+    # The encounter facts the addendum's words state that its document did not, for the addendum revision's recorded
+    # synthetic interpretation on the production chain (tests.test_pipeline_api.recorded_addendum): none by default.
+    addendum_states = {}
+
     def addendum(self, encounter_id, clarification_id=None):
         data = {'text': ADDENDUM, 'synthetic_attestation': 'yes'}
         if clarification_id:
@@ -77,7 +81,8 @@ class StaleMixin(RowMixin):
             response = self.client.post(f'/api/encounters/{encounter_id}/addenda', data=json.dumps(data),
                                         content_type='application/json')
         self.assertEqual(response.status_code, 201, response.content)
-        recorded_addendum(self, encounter_id, ADDENDUM)  # read from its own answer on the production chain
+        # read from its own answer on the production chain
+        recorded_addendum(self, encounter_id, ADDENDUM, **self.addendum_states)
 
     def stop(self, encounter_id):
         self.assertEqual(self.client.post(f'/api/encounters/{encounter_id}/stop').status_code, 200)
@@ -116,8 +121,7 @@ class StaleMixin(RowMixin):
         return served
 
 
-@applied
-class StaleRowTests(StaleMixin, ColonCase):
+class StaleRowTests(RecordedInterpretation, StaleMixin, ColonCase):
     """(A) Participants on, at the release default (no confirmation offered): R4-CONF's CodeQuestionTests input -
     TWO_EXTENTS drained to its final assessment, Corti's 45385 and 45380, two questions each about a code (their
     extents) - then an addendum answering 45385's extent question, as the page's own "Answer with an addendum" sends it.
@@ -127,6 +131,15 @@ class StaleRowTests(StaleMixin, ColonCase):
     constants were four open questions before the addendum (45378's base_included and extent among them), three of the
     earlier revision's in the window, and one open once revision 2 was assessed; measured on the merged tree, they are
     two, one (45380's extent) and none. The window's pins - no count, never the earlier revision's - are unchanged."""
+    # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads TWO_EXTENTS and the addendum revision from
+    # their recorded synthetic interpretations, and the interpret stage follows the extract. TWO_EXTENTS states no reach
+    # (tests.test_harness2_pipeline.two_extents_interpretation); the addendum's line does - the colonoscopy (E1) reached
+    # the cecum, in words that name the colonoscope (contract 5.4) - so the addendum revision's answer states it, in its
+    # own passage A1 (verified by normalization, as every recorded interpretation is).
+    interpretations = TWO_EXTENTS_INTERPRETATIONS
+    addendum_states = {'reach': [{'event': 'E1', 'landmark': 'cecum', 'words': 'colonoscope was advanced to the cecum',
+                                  'passages': ['A1'],
+                                  'completion': {'value': 'not_stated', 'words': '', 'passages': []}}]}
 
     ASKED = [('proposal', 'extent', '45380')]
 
@@ -177,7 +190,8 @@ class StaleRowTests(StaleMixin, ColonCase):
             else:
                 self.assert_counted(detail)
                 counted.append(job.kind)
-        self.assertEqual(unassessed, ['extract', 'analyze', 'predict', 'astra', 'fable'])
+        # the interpret stage, the production chain's own, is one more stage before the first assessment
+        self.assertEqual(unassessed, ['extract', 'interpret', 'analyze', 'predict', 'astra', 'fable'])
         self.assertEqual(counted, ['assess', 'astra_peer', 'fable_peer', 'assess'])
 
 

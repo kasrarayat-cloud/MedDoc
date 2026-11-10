@@ -27,7 +27,7 @@ from unittest import mock
 from django.conf import settings
 from django.test import Client, TestCase, override_settings
 
-from studio import jobs, models, reports, review
+from studio import interpretation, jobs, models, reports, review
 from studio.providers.base import ProviderUnavailable
 from studio.types import RawExchange
 from tests.legacy_chain import applied
@@ -84,9 +84,12 @@ def page(detail):
 
 
 def usage_lines(txt):
-    """The run lines of a TXT report's PROVIDER USAGE section."""
+    """The run lines of a TXT report's PROVIDER USAGE section for Corti's requests, the runs these tests assert about.
+    On the production chain (design/FINAL.md 6.3, 14.6) the interpretation's own run is listed beside them, by its
+    provider's name; its line is not one of these (a class on the legacy chain has none, so these are all of them)."""
     block = txt[txt.index('\nPROVIDER USAGE\n'):txt.index('\nREFERENCE SOURCES\n')]
-    return [line for line in block.split('\n') if line.startswith('  - ')]
+    return [line for line in block.split('\n') if line.startswith('  - ')
+            and not line.startswith(f'  - {interpretation.PROVIDER} · ')]
 
 
 def review_status(txt):
@@ -166,7 +169,11 @@ class Pipeline(OperatorReads, TestCase):
         return reports.render_txt(reports.snapshot(encounter, 'draft')).decode('utf-8')
 
     def runs(self, encounter_id):
-        return list(models.ProviderRun.objects.filter(encounter_id=encounter_id).order_by('created_at', 'pk'))
+        """The encounter's runs of Corti's requests (the primary and the second review), oldest first: the runs these
+        tests assert about. On the production chain the interpretation's own run stands beside them (design/FINAL.md
+        6.3); a class on the legacy chain has none, so its runs are all of them, as before."""
+        return list(models.ProviderRun.objects.filter(encounter_id=encounter_id).exclude(purpose=interpretation.PURPOSE)
+                    .order_by('created_at', 'pk'))
 
     def approve(self, encounter_id, code):
         proposal = next(p for p in self.detail(encounter_id)['assessment']['proposals'] if p['code'] == code)
@@ -181,10 +188,13 @@ class Pipeline(OperatorReads, TestCase):
 
 # --- sends-3, context-4: a held run is never "The provider request failed" ------------------------------------------
 
-@applied
-class HeldRunReadsAsHeldTests(Pipeline):
+class HeldRunReadsAsHeldTests(RecordedInterpretation, Pipeline):
     """Re-checked at the head: repaired by WIP 8j (e9b7c5e23) in readiness and the report; pinned here end to end,
-    including the page's "Still needed" and the reviewed report's refusal, for both shapes the finding named."""
+    including the page's "Still needed" and the reviewed report's refusal, for both shapes the finding named.
+
+    On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads OFFICE_NOTE from its recorded synthetic
+    interpretation, and the runs these tests assert about are Corti's (Pipeline.runs, usage_lines), which the
+    interpretation's own run now stands beside."""
 
     def assert_held(self, encounter_id):
         (held,) = [run for run in self.runs(encounter_id) if run.scope.get('held')]
@@ -237,11 +247,14 @@ class HeldRunReadsAsHeldTests(Pipeline):
 
 # --- report-7: "requested" only of a request that was made, "used" only of a response that was read ----------------
 
-@applied
-class ProviderUsageWordingTests(Pipeline):
+class ProviderUsageWordingTests(RecordedInterpretation, Pipeline):
     """ARCHITECTURE 5.12: each provider run is "used by this assessment" only when its own provider check did not fail.
     At the head a failed request and an unknown outcome still read "used by this assessment" (the "not used" wording
-    was gated on a succeeded run), and a run stopped before sending read "requested <time>"."""
+    was gated on a succeeded run), and a run stopped before sending read "requested <time>".
+
+    On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads OFFICE_NOTE from its recorded synthetic
+    interpretation, and the runs these tests assert about are Corti's (Pipeline.runs, usage_lines), which the
+    interpretation's own run now stands beside."""
 
     def only_line(self, encounter_id):
         (line,) = usage_lines(self.draft(encounter_id))
@@ -594,14 +607,18 @@ class SucceedsThenFails(FakeProvider):
                            error='HTTP 500 from the provider (synthetic).')
 
 
-@applied
-class FailedCardNamesTheRunTheStateReadsTests(Pipeline):
+class FailedCardNamesTheRunTheStateReadsTests(RecordedInterpretation, Pipeline):
     """The card explains provider_failed with the run that state reads, which the API names (state_run). Re-check of
     the repair above (skeptic, new:provider-failed-card-older-run): it took the latest primary row whatever its state,
     but the run in use is the newest FINISHED request (jobs._run_in_use); a request a Stop cancelled before sending, or
     one the stale-stage sweep settled unsent after its worker died, is newer and is never the run in use. A member who
     went back to the failed request's date re-assessed with it (nothing was resent) and the card gave the newer run's
-    "nothing was sent" instead of the HTTP 500 the state reports."""
+    "nothing was sent" instead of the HTTP 500 the state reports.
+
+    On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads the undated note (NO_DATE_NOTE) from its
+    recorded synthetic interpretation, and the runs these tests assert about are Corti's (Pipeline.runs), which the
+    interpretation's own run now stands beside."""
+    interpretations = INTERPRETATIONS
 
     UNDATED = OFFICE_NOTE.replace('Date of service: 2026-10-20\n', '')
     CARD = 'The provider request | failed. | Error: HTTP 500 from the provider (synthetic).'

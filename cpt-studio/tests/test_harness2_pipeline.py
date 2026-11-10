@@ -777,19 +777,24 @@ class RecordsTests(RecordedInterpretation, Harness2Case):
 
 # --- the peer stages' gating (HARNESS.md 12.1) ------------------------------------------------------------------------
 
-@applied
-class PeerGatingTests(Harness2Case):
+class PeerGatingTests(RecordedInterpretation, Harness2Case):
+    """The peer stages' gating (HARNESS.md 12.1). On the production chain (design/FINAL.md 14.6; slice S15): Gemini
+    reads OFFICE_NOTE from its recorded synthetic interpretation, so the interpret stage follows the extract and the
+    participants' stages start one later, and the state a finished chain leaves the note in is OFFICE_NOTE_STATE (its
+    visit facts are member values there, DECISIONS D3) - never provider_failed (I10), as before."""
+
     def test_a_participant_whose_first_reading_was_not_read_gets_no_peer_stage(self):
         self.adapters['astra'].first = [failed()]
         encounter_id = self.create()
         drain()
-        self.assertEqual(self.kinds(encounter_id)[3:], ['astra', 'fable', 'assess', 'fable_peer', 'assess'])
+        # after extract, interpret, analyze and predict (the interpret stage is the production chain's own)
+        self.assertEqual(self.kinds(encounter_id)[4:], ['astra', 'fable', 'assess', 'fable_peer', 'assess'])
         self.assertEqual((self.sent('astra', 'peer'), self.sent('fable', 'peer')), (0, 1))
         record = self.records(self.encounter(encounter_id).current_assessment)['astra']
         self.assertEqual((record['state'], record['peer_state'], record['peer_run'], record['peer_reason']),
                          ('failed', 'not_run', None, jobs.PEER_FIRST_NOT_READ))
         self.assertEqual(self.runs_of(encounter_id, 'astra', 'peer_review'), [])
-        self.assertEqual(self.encounter(encounter_id).state, 'ready_for_review')  # I10: never provider_failed
+        self.assertEqual(self.encounter(encounter_id).state, OFFICE_NOTE_STATE)  # I10: never provider_failed
 
     def test_no_first_reading_read_means_no_peer_review_and_assess_one_is_final(self):
         self.adapters['astra'].first = self.adapters['fable'].first = [failed()]
