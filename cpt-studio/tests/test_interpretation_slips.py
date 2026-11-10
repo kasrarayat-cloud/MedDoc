@@ -133,8 +133,11 @@ class S1HistoricalExtent(SimpleTestCase):
     def test_labelled_current_with_its_own_time_words(self):
         inventory = inventory_of('s1-e5-mislabelled-current-with-its-time-words')
         time = ev(inventory, 'E1')['time']
+        # its words, 'in January 2024', are a month that is not the service date (date_mismatch) and that, being no
+        # date at day precision, anchors nothing either (DECISIONS D54: current_unanchored, kept whatever date a
+        # member enters)
         self.assertEqual((time['value'], time['state'], time['reasons']), ('current_encounter', 'unverified',
-                                                                           ['date_mismatch']))
+                                                                           ['date_mismatch', 'current_unanchored']))
         self.assertEqual(ev(inventory, 'E1')['current'], 'unresolved')
         self.assert_history_reach_discarded(inventory)
         self.assert_current_reach_verified(inventory, 1)

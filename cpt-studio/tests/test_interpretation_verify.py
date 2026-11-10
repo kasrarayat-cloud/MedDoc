@@ -11,7 +11,7 @@ from datetime import date
 
 from django.test import SimpleTestCase
 
-from studio.interpretation import literals, verify
+from studio.interpretation import lexicon, literals, verify
 
 SERVICE = date(2026, 11, 9)
 # One entry per member - the documenting endoscopist, then a team member - each the names read in its own words.
@@ -97,16 +97,20 @@ class DateOfService(SimpleTestCase):
 
 class Time(SimpleTestCase):
     def test_pass_each_value_against_the_service_date_at_the_literals_precision(self):
-        cases = (('current_encounter', 'on 11/09/2026'), ('current_encounter', 'November 2026'),
-                 ('current_encounter', 'today'), ('earlier_encounter', 'in 2024'),
-                 ('earlier_encounter', 'October 2026'), ('earlier_encounter', 'on 11/08/2026'),
+        # A current time's month or year compares too, but no longer verifies it alone (DECISIONS D54: it anchors
+        # nothing; test_d54_a_year_or_a_month_compares_and_anchors_nothing).
+        cases = (('current_encounter', 'on 11/09/2026'), ('current_encounter', 'today'),
+                 ('earlier_encounter', 'in 2024'), ('earlier_encounter', 'October 2026'),
+                 ('earlier_encounter', 'on 11/08/2026'),
                  ('future', 'in 2027'), ('future', 'on 12/01/2026'))
         for value, text in cases:
             with self.subTest(value=value, text=text):
                 self.assertEqual(reasons(verify.time_words(value, text, SERVICE)), ())
 
     def test_fail_date_mismatch(self):
-        cases = (('current_encounter', 'on 12/01/2026'), ('current_encounter', 'in 2024'),
+        # (a current time's differing year, 'in 2024', is unanchored beside it: DECISIONS D54; so are other words beside
+        # a differing day: 'at the index colonoscopy on 12/01/2026', D64)
+        cases = (('current_encounter', 'on 12/01/2026'),
                  ('earlier_encounter', 'in 2026'), ('earlier_encounter', 'September 21, 2027'),
                  ('future', 'in 2026'), ('future', 'on 11/09/2026'),
                  ('earlier_encounter', 'in 2019 and again on 12/01/2026'))
@@ -137,9 +141,10 @@ class Time(SimpleTestCase):
                 self.assertEqual(reasons(verify.time_words(value, text, SERVICE)), ('time_marker_missing',))
 
     def test_eb3_a_missing_marker_never_touches_the_ready_path(self):
-        # A current_encounter time is never asked FOR a C1 marker: words anchored to this encounter (D42) or carrying a
-        # date literal leave it Gemini's reading.
-        for text in ('today', 'On withdrawal', 'At this procedure', 'this morning', 'on 11/09/2026', 'November 2026',
+        # A current_encounter time is never asked FOR a C1 marker: words made of whole present-encounter frames, or
+        # carrying the service date at day precision, leave it Gemini's reading (DECISIONS D54). 'November 2026' stood
+        # here under D42; a month alone now anchors nothing (test_d54_a_year_or_a_month_compares_and_anchors_nothing).
+        for text in ('today', 'On withdrawal', 'At this procedure', 'this morning', 'on 11/09/2026',
                      'during the present encounter', 'same session', 'this time as well.',
                      'during the single date of service stated at the top of this report'):
             with self.subTest(text):
@@ -167,32 +172,115 @@ class Time(SimpleTestCase):
         self.assertEqual(reasons(verify.time_words('current_encounter', 'previously, on 12/01/2026', SERVICE)),
                          ('date_mismatch', 'other_occasion'))
 
-    def test_d42_worded_current_time_with_no_anchor_of_this_encounter_is_unverified(self):
-        # DECISIONS D42 (the S17 refutation of D35, finding 7): the words name an occasion, or a sequence, without saying
-        # it is this encounter - fail-closed, a time question, never an exclusion
-        for text in ('At the index procedure', 'At that procedure', 'At the first procedure', 'At the initial procedure',
-                     'At her first colonoscopy', 'During that examination', 'On that occasion', 'Back then',
-                     'Initially', 'then', 'over the summer', 'those were the findings at her index colonoscopy.',
-                     'during the procedure', 'findings', 'at the outside hospital', 'at the referring facility'):
+    # DECISIONS D54 (the round-2 refutation of D42, findings 0, 7 and 8): the words D42 already left unanchored, and the
+    # words D42 verified because an anchor WORD stood somewhere in them - each the time words of an act of another
+    # occasion that Gemini called current, every one READY under D42 where the installed release holds it
+    D42_UNANCHORED = ('At the index procedure', 'At that procedure', 'At the first procedure',
+                      'At the initial procedure', 'At her first colonoscopy', 'During that examination',
+                      'On that occasion', 'Back then', 'Initially', 'then', 'over the summer',
+                      'those were the findings at her index colonoscopy.', 'during the procedure', 'findings',
+                      'at the outside hospital', 'at the referring facility')
+    D54_UNANCHORED = (
+        # finding 0 (and its words as the whole framing sentence, as D33 asks)
+        'These were the findings at her index colonoscopy', 'At her index colonoscopy, this',
+        'At her first colonoscopy the same', 'At the index procedure, on withdrawal',
+        'She is currently under surveillance because at her index colonoscopy',
+        'These were the findings at her index colonoscopy: a 6 mm sessile polyp in the sigmoid colon was removed '
+        'with a cold snare.',
+        # finding 7
+        'At her index colonoscopy this spring', 'At the index procedure this year',
+        'At her first colonoscopy this summer', 'On insertion at the index procedure',
+        'At the index procedure, the same polyp',
+        # an anchor word, a phase, a period or a sequence alone; a frame beside other words
+        'this', 'these', 'same', 'present', 'currently', 'now', 'withdrawal', 'on insertion', 'retroflexion',
+        'this spring', 'this year', 'today the polyp from her index colonoscopy', 'today at her index colonoscopy',
+        'during the present encounter and at her index colonoscopy', 'today. On withdrawal',
+        'today or this examination', ',')
+
+    def assert_unanchored(self, text: str, expected=('current_unanchored',)):
+        verdict = verify.time_words('current_encounter', text, SERVICE)
+        self.assertEqual(reasons(verdict), expected)
+        self.assertIn('current_anchor', verdict.checks)
+        record = {'value': 'current_encounter', 'state': 'unverified', 'basis': 'stated',
+                  'literals': dict(verdict.literals), 'reasons': list(verdict.reasons)}
+        self.assertEqual(verify.exclusion_basis('time', record), '')  # a time question, never an exclusion
+        return record
+
+    def test_d54_words_that_are_not_whole_frames_leave_a_current_time_unverified(self):
+        for text in self.D42_UNANCHORED + self.D54_UNANCHORED:
+            with self.subTest(text):
+                record = self.assert_unanchored(text)
+                self.assertEqual(verify.time_state(record, date(2026, 11, 9))['reasons'], ['current_unanchored'])
+
+    def test_d54_a_year_or_a_month_compares_and_anchors_nothing(self):
+        # finding 8: a year or a month that holds the service date names no occasion as this one. 'November 2026' alone
+        # verified under D42 (its EB3 pin); it is unanchored now.
+        for text in ('At her index colonoscopy in 2026', 'At her index colonoscopy in November 2026', 'November 2026',
+                     'in 2026', 'in 11/2026', 'At the index EMR in 2026'):
+            with self.subTest(text):
+                record = self.assert_unanchored(text)
+                self.assertIn(record['literals']['dates'][0]['precision'], ('month', 'year'))
+        # one that differs still gives date_mismatch, beside it - and a member's date never re-anchors it: time_state
+        # recomputes only the date reasons
+        for text in ('in 2024', 'in March 2026', 'At her index colonoscopy in 2025'):
+            with self.subTest(text):
+                record = self.assert_unanchored(text, ('date_mismatch', 'current_unanchored'))
+                year = int(record['literals']['dates'][0]['value'][:4])
+                month = int(record['literals']['dates'][0]['value'][5:7] or 6)
+                rejudged = verify.time_state(record, date(year, month, 1))
+                self.assertEqual((rejudged['state'], rejudged['reasons']), ('unverified', ['current_unanchored']))
+        # nor does it depend on a service date at all: with none established (D42 verified this outright), it is
+        # unanchored, and stays so whatever date a member then supplies
+        verdict = verify.time_words('current_encounter', 'At her index colonoscopy in 2025', None)
+        self.assertEqual(reasons(verdict), ('current_unanchored',))
+        record = {'value': 'current_encounter', 'state': 'unverified', 'basis': 'stated',
+                  'literals': dict(verdict.literals), 'reasons': list(verdict.reasons)}
+        self.assertEqual(verify.time_state(record, date(2025, 6, 1))['reasons'], ['current_unanchored'])
+
+    def test_d54_whole_frames_and_a_date_at_day_precision_verify(self):
+        # every frame, the census's wordings exactly as recorded (Gemini's words and their located slices), and frames
+        # joined by commas, semicolons and "and"
+        census = ('during the present encounter', 'today', 'Today', 'SAME SESSION', 'On withdrawal',
+                  'At\nthis examination', 'at this examination', 'this examination', 'This time as well.',
+                  'This time as well', 'This time', 'on this occasion',
+                  'during the single date of service stated at the top of this report',
+                  'occurred during the single date of service stated at the top of this report',
+                  'occurred\nduring the single date of service stated at the top of this report')
+        joined = ('Today, on withdrawal', 'today; this examination', 'this examination and on withdrawal',
+                  'today, and during this procedure', '(today)', 'same-session')
+        for text in lexicon.CURRENT_FRAMES + census + joined:
             with self.subTest(text):
                 verdict = verify.time_words('current_encounter', text, SERVICE)
-                self.assertEqual(reasons(verdict), ('current_unanchored',))
+                self.assertEqual(reasons(verdict), ())
                 self.assertIn('current_anchor', verdict.checks)
-                record = {'value': 'current_encounter', 'state': 'unverified', 'basis': 'stated',
-                          'literals': dict(verdict.literals), 'reasons': list(verdict.reasons)}
-                self.assertEqual(verify.exclusion_basis('time', record), '')
-                self.assertEqual(verify.time_state(record, date(2026, 11, 9))['reasons'], ['current_unanchored'])
-        # D35's marker stands alone where it is found; a safe word beside it does not make the time current
-        self.assertEqual(reasons(verify.time_words('current_encounter', 'At the original procedure', SERVICE)),
-                         ('other_occasion',))
-        self.assertEqual(reasons(verify.time_words('current_encounter', 'this, at her prior colonoscopy', SERVICE)),
-                         ('other_occasion',))
-        # no words: Gemini's reading (EB2); a date literal is read by its own check
-        self.assertEqual(reasons(verify.time_words('current_encounter', '', SERVICE)), ())
-        self.assertEqual(reasons(verify.time_words('current_encounter', 'at the index colonoscopy on 11/09/2026',
-                                                   SERVICE)), ())
+        # a date at day precision is read by its own check; it anchors the time only where the words beside it name
+        # nothing but that date or this encounter's own frames (D64: a same-day date dates the words it stands in, not
+        # an act they place on another occasion - "faxed to us on 11/09/2026")
+        for text, service in (('on 11/09/2026', SERVICE), ('November 9, 2026', SERVICE),
+                              ('on November 8, 2026', date(2026, 11, 8)),  # the census's dated wordings
+                              ('today, 11/09/2026', SERVICE), ('on 11/09/2026, during this procedure', SERVICE),
+                              ('dated 11/09/2026', SERVICE)):
+            with self.subTest(text):
+                self.assertEqual(reasons(verify.time_words('current_encounter', text, service)), ())
+        for text, service in (('at the index colonoscopy on 11/09/2026', SERVICE),
+                              ('faxed to us on 11/09/2026', SERVICE),
+                              ('Summary of the upper endoscopy of 2026-09-30 for the referring physician.',
+                               date(2026, 9, 30))):
+            with self.subTest(text, d64='asked'):
+                self.assertEqual(reasons(verify.time_words('current_encounter', text, service)), ('current_unanchored',))
         self.assertEqual(reasons(verify.time_words('current_encounter', 'at the index colonoscopy on 12/01/2026',
-                                                   SERVICE)), ('date_mismatch',))
+                                                   SERVICE)), ('date_mismatch', 'current_unanchored'))
+        # no words: Gemini's reading (EB2)
+        self.assertEqual(reasons(verify.time_words('current_encounter', '', SERVICE)), ())
+
+    def test_d54_d35_marker_stands_alone_where_found(self):
+        # a frame beside a marker of another occasion does not make the time current, and D35's reason stands alone
+        for text in ('At the original procedure', 'this, at her prior colonoscopy', 'today, at the original procedure',
+                     'On withdrawal at the original procedure'):
+            with self.subTest(text):
+                self.assertEqual(reasons(verify.time_words('current_encounter', text, SERVICE)), ('other_occasion',))
+        self.assertEqual(reasons(verify.time_words('current_encounter', 'previously, in 2024', SERVICE)),
+                         ('date_mismatch', 'other_occasion'))
 
     def test_d35_leaves_the_earlier_and_future_values_as_eb3_reads_them(self):
         # "original" is no earlier marker: the exclusion path is unchanged (EB3).

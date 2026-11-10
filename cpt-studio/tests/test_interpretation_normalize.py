@@ -308,9 +308,12 @@ class Bases(SimpleTestCase):
                 self.assertIsNone(record['words'], 'words given for a not-stated value are not bound')
 
     def test_a_default_value_whose_words_do_not_bind_falls_back_with_the_problem_recorded(self):
-        value = answer(events=[examination(), event(time=attr('current_encounter', f'today {MODEL_TEXT}', ['P2']),
+        # The time's unlocated words are a whole present-encounter frame, which denies nothing (DECISIONS D54); they
+        # were f'today {MODEL_TEXT}' before D54, which now denies the default (the next test).
+        value = answer(events=[examination(), event(time=attr('current_encounter', 'during this procedure', ['P2']),
                                                     performer=attr('documenting_team', 'Dr. Okafor', ['P9'])),
                                denial()])
+        self.assertNotIn('during this procedure', TEXT.lower())
         inventory = run(value)
         snare = ev(inventory, 'E1')
         self.assertEqual(state(snare['time']), ('verified', 'default', []))
@@ -318,6 +321,20 @@ class Bases(SimpleTestCase):
         self.assertEqual(state(snare['performer']), ('verified', 'default', []))
         self.assertIn('events[1].time: its words were not found in its own passages, so the frame default was accepted.',
                       inventory.verification['problems'])
+
+    def test_d54_unbound_current_time_words_that_are_not_whole_frames_deny_the_default(self):
+        # DECISIONS D54 reads the time's given words whether or not they locate, as EB2 reads a date and D35 a marker:
+        # words that are not made only of whole present-encounter frames leave the time unverified, nothing of them
+        # stored. A frame beside other words, an anchor word inside them, a year: each was the default under D42.
+        for words in (f'today {MODEL_TEXT}', 'These were the findings at her index colonoscopy',
+                      'At the index procedure, on withdrawal', 'At her index colonoscopy in 2026'):
+            value = answer(events=[examination(), event(time=attr('current_encounter', words, ['P2'])), denial()])
+            snare = ev(run(value), 'E1')
+            with self.subTest(words):
+                self.assertEqual(state(snare['time']), ('unverified', 'absent',
+                                                        ['words_unlocated', 'current_unanchored']))
+                self.assertEqual((snare['time']['words'], snare['time']['literals']), (None, {}))
+                self.assertEqual(snare['current'], 'unresolved')
 
     def test_eb2_unbound_default_words_that_deny_the_default_leave_it_unverified(self):
         # EB2 governs over 5.2's fallback: given time words holding another date, or performer words naming someone
@@ -470,6 +487,34 @@ class EB(SimpleTestCase):
         snare = ev(run(value, text), 'E1')
         self.assertEqual(state(snare['time']), ('unverified', 'absent', ['words_unlocated', 'other_occasion']))
         self.assertEqual((snare['time']['words'], snare['time']['literals']), (None, {}))
+
+    INDEX = ('These were the findings at her index colonoscopy: a 6 mm sessile polyp in the sigmoid colon was removed '
+             'with a cold snare.')
+    INDEX_IN_2026 = 'At her index colonoscopy in November 2026, a 12 mm polyp was removed with a hot snare.'
+    WITHDRAWAL = 'At the index procedure, on withdrawal, a 12 mm polyp was removed with a hot snare.'
+    TODAY = 'Today, on withdrawal, a 6 mm polyp was removed with a cold snare.'
+
+    def test_d54_located_current_time_words_that_are_not_whole_frames_leave_it_unverified(self):
+        # DECISIONS D54 (the round-2 refutation, findings 0, 7 and 8): an anchor word inside the words ("These", "on
+        # withdrawal"), or a month that holds the service date, verified these acts of the index colonoscopy as current
+        # under D42. Located in the act's own passage, they now leave the time unverified: a time question, never an
+        # exclusion. The whole framing sentence, as D33 asks for it, too.
+        for sentence, words in ((self.INDEX, 'These were the findings at her index colonoscopy'),
+                                (self.INDEX, self.INDEX),
+                                (self.INDEX_IN_2026, 'At her index colonoscopy in November 2026'),
+                                (self.WITHDRAWAL, 'At the index procedure, on withdrawal')):
+            value, text = self.dated(sentence, time=attr('current_encounter', words, ['P1']))
+            snare = ev(run(value, text), 'E1')
+            with self.subTest(words):
+                self.assertEqual(state(snare['time']), ('unverified', 'stated', ['current_unanchored']))
+                self.assertIn('current_anchor', snare['time']['checks'])
+                self.assertEqual(snare['current'], 'unresolved')
+                self.assertEqual(verify.exclusion_basis('time', snare['time']), '')
+        # words made only of whole present-encounter frames still verify a current time
+        value, text = self.dated(self.TODAY, time=attr('current_encounter', 'Today, on withdrawal', ['P1']))
+        snare = ev(run(value, text), 'E1')
+        self.assertEqual(state(snare['time']), ('verified', 'stated', []))
+        self.assertEqual(snare['current'], 'yes')
 
     def test_d35_reads_only_the_times_own_words_and_leaves_an_earlier_time_as_before(self):
         # EB1: a marker elsewhere in the passage is never read; words naming no occasion still verify a current time.
@@ -1527,7 +1572,7 @@ def every_reason_scenario() -> list:
     add('failure_missing', e(status=attr('attempted_not_completed', 'was removed', ['P2'])))
     add('time_marker_missing', e(time=attr('earlier_encounter', 'removed', ['P2'])))
     add('other_occasion', e(time=attr('current_encounter', 'at the original procedure', ['P2'])))  # D35, unlocated
-    add('current_unanchored', e(time=attr('current_encounter', 'sessile polyp', ['P2'])))  # D42: no anchor, no marker
+    add('current_unanchored', e(time=attr('current_encounter', 'sessile polyp', ['P2'])))  # D54: not a whole frame
     add('facility_marker_missing', e(performer=attr('other_facility', 'sessile polyp', ['P2'])))
     add('scope_target_mismatch', answer(events=[examination(), event(), denial(
         scope=scope('single_target', 'No other', ['P3']))]))

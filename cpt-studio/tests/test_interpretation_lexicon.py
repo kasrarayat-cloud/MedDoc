@@ -11,7 +11,7 @@ from pathlib import Path
 
 from django.test import SimpleTestCase
 
-from studio.interpretation import lexicon, schema
+from studio.interpretation import lexicon, literals, schema
 
 PACKAGE = Path(__file__).resolve().parents[1] / 'studio' / 'interpretation'
 SLICE_MODULES = ('literals', 'lexicon', 'normalize', 'verify')
@@ -321,20 +321,53 @@ class Markers(SimpleTestCase):
         with self.assertRaises(KeyError):
             lexicon.markers('negation', 'no')
 
-    def test_d42_the_anchors_of_this_encounter(self):
-        self.assertEqual(lexicon.CURRENT_ANCHORS, ('today', 'this', 'these', 'present', 'current', 'currently', 'now',
-                                                   'same', 'date of service', 'day of service', 'this date',
-                                                   'the date of the encounter'))
-        self.assertEqual(lexicon.PROCEDURE_PHASES, ('on withdrawal', 'withdrawal', 'on insertion', 'insertion',
-                                                    'on retroflexion', 'retroflexion'))
-        self.assertEqual(lexicon.current_anchors('Today, on withdrawal'), ('today', 'on withdrawal'))
-        # word-bounded: no anchor inside another word
-        for text in ('known', 'presentation', 'samesite', 'thistle', 'nowhere', 'currents', 'index', 'that'):
+    def test_d54_the_whole_frames_of_this_encounter(self):
+        # DECISIONS D54: the census of every current time FRESH-1 and FRESH-2 recorded, each present-encounter wording
+        # exactly, then the obvious exact frames of the present encounter. D42's anchor words are gone.
+        self.assertEqual(lexicon.CURRENT_FRAMES, (
+            'today', 'during the present encounter',
+            'during the single date of service stated at the top of this report',
+            'occurred during the single date of service stated at the top of this report', 'this examination',
+            'at this examination', 'this time', 'this time as well', 'on this occasion', 'same session',
+            'on withdrawal', 'this procedure', 'at this procedure', 'during this procedure', 'during this examination',
+            'at the present encounter', 'on the date of service', 'this morning', 'this afternoon'))
+        for name in ('CURRENT_ANCHORS', 'PROCEDURE_PHASES', 'current_anchors'):
+            self.assertFalse(hasattr(lexicon, name), name)
+        self.assertEqual(len(set(lexicon.CURRENT_FRAMES)), len(lexicon.CURRENT_FRAMES))
+        for frame in lexicon.CURRENT_FRAMES:
+            with self.subTest(frame):
+                self.assertEqual(lexicon.fold(frame), frame)  # already folded
+                self.assertTrue(lexicon.current_frame(frame))
+                # no frame names another occasion (D35), holds a date, or is a period or a bare sequence word
+                self.assertEqual(lexicon.other_occasion(frame), ())
+                self.assertEqual(literals.dates(frame), ())
+        for word in ('this spring', 'this year', 'this summer', 'initially', 'then', 'this', 'same', 'withdrawal',
+                     'on insertion', 'currently', 'now', 'present', 'findings'):
+            self.assertNotIn(word, lexicon.CURRENT_FRAMES)
+
+    def test_d54_current_frame_reads_the_words_whole(self):
+        # folded, the edges' punctuation and whitespace stripped, split at commas, semicolons and a standalone "and":
+        # every part a frame
+        for text in ('Today', 'TODAY', '  today. ', '(today)', '"Today"', 'This time as well.', 'At\nthis examination',
+                     'SAME SESSION', 'same-session', 'Today, on withdrawal', 'today; this examination',
+                     'this examination and on withdrawal', 'today, and on withdrawal', 'today ,on withdrawal',
+                     'occurred\nduring the single date of service stated at the top of this report'):
             with self.subTest(text):
-                self.assertEqual(lexicon.current_anchors(text), ())
-        # no anchor is an earlier or future marker, and none is "original"
-        self.assertFalse(set(lexicon.CURRENT_ANCHORS + lexicon.PROCEDURE_PHASES)
-                         & set(lexicon.EARLIER_MARKERS + lexicon.FUTURE_MARKERS + lexicon.OTHER_OCCASION))
+                self.assertTrue(lexicon.current_frame(text))
+        # findings 0, 7 and 8 (an anchor word inside other words, a period, a year or a month), an anchor word or a
+        # phase alone, a frame beside other words, an unsplit join, and nothing at all
+        for text in ('These were the findings at her index colonoscopy', 'At her index colonoscopy, this',
+                     'At her first colonoscopy the same', 'At the index procedure, on withdrawal',
+                     'She is currently under surveillance because at her index colonoscopy',
+                     'At her index colonoscopy this spring', 'At the index procedure this year',
+                     'At her index colonoscopy in 2026', 'At her index colonoscopy in November 2026',
+                     'Those were the findings at her index colonoscopy.', 'FINDINGS', 'Over the summer', 'initially',
+                     'then', 'this', 'these', 'same', 'withdrawal', 'on insertion', 'this spring', 'November 2026',
+                     'today at her index colonoscopy', 'today. On withdrawal', 'today or this examination',
+                     'today and', 'and today', 'todays', 'not today', 'today: on withdrawal', ',', ';', ' and ', '',
+                     '  ', 'today,, this year'):
+            with self.subTest(text):
+                self.assertFalse(lexicon.current_frame(text))
 
     def test_d35_a_marker_of_another_occasion(self):
         # DECISIONS D35: every C1 earlier and future marker, the future period, and "original"; each once, in order.

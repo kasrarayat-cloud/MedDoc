@@ -14,9 +14,10 @@ a visit label, (EB3) a C1 marker on a value that could decide an exclusion, and 
 occasion in the words of a time stated current, which leaves that time unverified. No list reads a passage, a heading or
 the document, no list produces a value, and a word missing from a list leaves its attribute unverified: a focused
 question, never an exclusion and never READY - except D35's, the one list a word must be ABSENT from: a marker of
-another occasion it lacks leaves the current time Gemini's reading (EB2), as before D35, and one it holds leaves that
-time unverified. A list is widened only under a new INVENTORY_VERSION, by re-normalizing the stored answers with no new
-request (contract 1).
+another occasion it holds leaves the current time unverified, whatever else the words say. Words given for a current
+time must also be made only of whole present-encounter frames (DECISIONS D54, CURRENT_FRAMES) or carry a date at day
+precision; a frame missing there leaves the time unverified. A list is widened only under a new INVENTORY_VERSION, by
+re-normalizing the stored answers with no new request (contract 1).
 
 Pure: imports nothing from studio.gi (FINAL 3.1). PROCEDURAL_FAMILIES and FAMILY_OF are this module's own copies of
 the families gi.profiles marks procedural and of the family slugs, pinned equal to gi.profiles by a test.
@@ -525,25 +526,61 @@ def other_occasion(text: str) -> tuple[str, ...]:
     return tuple(found_)
 
 
-# DECISIONS D42 (the S17 refutation of D35, finding 7): D35's list is one a word must be ABSENT from, so every wording of
-# another occasion it lacks ("At the index procedure", "At that procedure", "At her first colonoscopy", "Back then",
-# "over the summer") left a current time verified - a false READY by omission. D42 inverts the default for a current
-# time's own words: they are SAFE only where they anchor the time to THIS encounter - a deictic of the present
-# (CURRENT_ANCHORS) or a phase of the procedure being reported (PROCEDURE_PHASES); a date literal is read by its own
-# check (verify.time_words). Words with none of these leave the time unverified (current_unanchored): a time question,
-# never an exclusion and never READY. A word missing here asks; it never releases (an inclusion list that decides safety
-# names what is safe). Measured on every current time FRESH-1 and FRESH-2 recorded: 1,079 + 991 events, 860 + 872 with
-# no words; the worded ones use 19 + 17 distinct texts, and the only ones left unanchored are the index colonoscopy,
-# "over the summer", "initially", "then" and a bare "findings" heading. D35's markers stay: a safe word beside one of
-# them does not make the time current.
-CURRENT_ANCHORS = ('today', 'this', 'these', 'present', 'current', 'currently', 'now', 'same', 'date of service',
-                   'day of service', 'this date', 'the date of the encounter')
-PROCEDURE_PHASES = ('on withdrawal', 'withdrawal', 'on insertion', 'insertion', 'on retroflexion', 'retroflexion')
+# DECISIONS D42 (the S17 refutation of D35, finding 7) inverted D35's default for a current time's own words: SAFE only
+# where they anchor the time to THIS encounter. DECISIONS D54 (the round-2 refutation of D42, findings 0, 7 and 8): D42
+# read an anchor WORD anywhere in the words, so "These were the findings at her index colonoscopy", "At her index
+# colonoscopy this spring", "At her first colonoscopy the same" and "At the index procedure, on withdrawal" verified an
+# act of another occasion as current - "these", "this", "same" or a procedure's phase names no occasion by itself. D54
+# reads the words WHOLE: they anchor the time only when they are made of whole present-encounter frames and nothing
+# else (current_frame); a date literal at day precision is read by its own check (verify.time_words). Anything else - an
+# anchor word inside other words, a period ("this spring", "this year"), a bare sequence word ("initially", "then"), a
+# heading ("findings") - leaves the time unverified (current_unanchored): a time question, never an exclusion and never
+# READY. A frame missing here asks; it never releases (an inclusion list that decides safety names what is safe).
+# CURRENT_FRAMES is the census of every current time FRESH-1 and FRESH-2 recorded - the frozen answers, 1,099 + 1,079
+# current times, 136 + 219 with words; their normalized inventories, 991 + 1,079 and 119 + 219 (FRESH-1's four refused
+# answers have none); 18 + 20 distinct worded texts, 24 in all - each present-encounter wording exactly, then the
+# obvious exact frames of the present encounter; never a wording that names another occasion, a period or a bare
+# sequence word. The census's other wordings stay unanchored as under D42 ("Those were the findings at her index
+# colonoscopy.", "Over the summer", "initially", "then", "FINDINGS"), carry a date at day precision, or are D35's. D35's
+# markers stay, and stand alone where found.
+CURRENT_FRAMES = (
+    # the census (FRESH-1 and FRESH-2), folded
+    'today', 'during the present encounter', 'during the single date of service stated at the top of this report',
+    'occurred during the single date of service stated at the top of this report', 'this examination',
+    'at this examination', 'this time', 'this time as well', 'on this occasion', 'same session', 'on withdrawal',
+    # the obvious exact frames of the present encounter
+    'this procedure', 'at this procedure', 'during this procedure', 'during this examination',
+    'at the present encounter', 'on the date of service', 'this morning', 'this afternoon',
+)
+_CURRENT_FRAMES = frozenset(fold(frame) for frame in CURRENT_FRAMES)
+_FRAME_EDGES = re.compile(r'^[\W_]+|[\W_]+$')  # leading and trailing punctuation and whitespace
+_FRAME_JOINS = re.compile(r'[,;]| and ')  # a comma, a semicolon, a standalone "and" (folded text: single spaces)
 
 
-def current_anchors(text: str) -> tuple[str, ...]:
-    """D42: the anchors of the present encounter ``text`` holds (CURRENT_ANCHORS, PROCEDURE_PHASES), in order."""
-    return found(text, CURRENT_ANCHORS + PROCEDURE_PHASES)
+def current_frame(text: str) -> bool:
+    """D54: whether ``text`` is made only of whole present-encounter frames. Folded, its leading and trailing
+    punctuation and whitespace stripped, split at commas, semicolons and a standalone " and ", each part stripped: True
+    only when there is a part and EVERY non-empty part equals a CURRENT_FRAMES entry. "Today", "This time as well." and
+    "Today, on withdrawal" are; "At the index procedure, on withdrawal", "these were the findings at her index
+    colonoscopy", "this spring", "this" and "," are not."""
+    parts = [part.strip() for part in _FRAME_JOINS.split(_FRAME_EDGES.sub('', fold(text)))]
+    parts = [part for part in parts if part]
+    return bool(parts) and all(part in _CURRENT_FRAMES for part in parts)
+
+
+# DECISIONS D64 (D54's review): the words that may introduce a same-day date in a current time's words ("on November 8,
+# 2026"), and nothing else - read by dated_frame only.
+DATE_CONNECTORS = ('on', 'dated', 'of', 'as of', 'date', 'date of service', 'the date of service', 'service date')
+
+
+def dated_frame(rest: str) -> bool:
+    """D64: whether what is left of a current time's words once its day-precision date literals are cut out - ``rest``
+    - names nothing but that date: split as current_frame splits, every part empty, a DATE_CONNECTORS entry or a whole
+    CURRENT_FRAMES entry. "on November 8, 2026" and "today, 11/09/2026" are; "At her index colonoscopy on 11/09/2026"
+    and "faxed to us on 11/09/2026" are not - a same-day date beside other words dates the act only where those words
+    are this encounter's own."""
+    parts = [part.strip() for part in _FRAME_JOINS.split(_FRAME_EDGES.sub('', fold(rest)))]
+    return all(not part or part in DATE_CONNECTORS or part in _CURRENT_FRAMES for part in parts)
 
 
 # --- the words a person name is not (contract 5.3: names tokenized without titles, credentials and role words) --------

@@ -19,9 +19,11 @@ reading of the document:
   occasion - a C1 earlier or future marker, or "original" (lexicon.other_occasion) - is unverified (other_occasion),
   because Gemini's own words contradict Gemini's own value. A time question, never an exclusion: no exclusion reads a
   current time, and the earlier and future values' markers are read exactly as EB3 reads them.
-- DECISIONS D42 completes D35 fail-closed: a current_encounter time whose OWN words (no date literal in them) hold no
-  anchor of this encounter (lexicon.current_anchors) is unverified (current_unanchored) - the words name an occasion
-  without saying it is this one. Words with no anchor and no marker no longer release the READY path.
+- DECISIONS D42 completed D35 fail-closed, and D54 reads the words WHOLE: a current_encounter time whose OWN words
+  carry no date literal at day precision and no D35 marker is verified only when those words are made of whole
+  present-encounter frames (lexicon.current_frame); otherwise it is unverified (current_unanchored) - the words name an
+  occasion, a period or a sequence without saying it is this one. An anchor word inside other words ("these were the
+  findings at her index colonoscopy") and a year or a month ("in November 2026") anchor nothing.
 
 What a failure does (contract 5.5): the attribute is unverified with its reasons, closed lists here. It never sets,
 changes or removes a value, never excludes a code, never creates a status, a contradiction or a hold. Consumers read an
@@ -135,10 +137,13 @@ def time_words(value: str, text: str, service_date: Optional[date]) -> Verdict:
     C1 earlier or future marker, or "original") is unverified (other_occasion), date literal or not - "At the original
     procedure" given as the words of a time Gemini calls current. The words are read for that marker only where they
     contradict the value; an earlier or future time is read exactly as before, so no exclusion changes (EB3).
-    DECISIONS D42: a current_encounter time given words with no date literal is verified only when those words anchor it
-    to this encounter (lexicon.current_anchors: "today", "this examination", "during the present encounter", "on
-    withdrawal"); otherwise it is unverified (current_unanchored). A current time given NO words stays Gemini's reading
-    (EB2)."""
+    DECISIONS D54 (amends D42): a current_encounter time given words is verified only when those words carry a date
+    literal at day precision (read by the date check above: equal to the service date, or date_mismatch) or are made
+    only of whole present-encounter frames (lexicon.current_frame: "today", "this examination", "during the present
+    encounter", "Today, on withdrawal"); otherwise it is unverified (current_unanchored) - "These were the findings at
+    her index colonoscopy", "At the index procedure, on withdrawal", "At her index colonoscopy in November 2026". A year
+    or a month no longer anchors: one that differs from the service date still gives date_mismatch, beside it. D35's
+    marker stands alone where found. A current time given NO words stays Gemini's reading (EB2)."""
     found = literals.dates(text)
     records = [_date_record(item) for item in found]
     if found:
@@ -153,10 +158,15 @@ def time_words(value: str, text: str, service_date: Optional[date]) -> Verdict:
     if value != 'current_encounter':
         return verdict
     marks = lexicon.other_occasion(text)
-    # D42: worded, with no date literal and no marker of another occasion (D35's reason then stands alone), a current
-    # time needs an anchor of this encounter in its own words
-    unanchored = (bool(lexicon.fold(text).strip()) and not found and not marks
-                  and not lexicon.current_anchors(text))
+    # D54: worded, with no date literal at day precision and no marker of another occasion (D35's reason then stands
+    # alone), a current time's words must be made only of whole present-encounter frames
+    day = sorted((item for item in found if item.precision == literals.DAY), key=lambda item: item.start, reverse=True)
+    rest = text
+    for item in day:  # D64: a same-day date anchors only words that name nothing else
+        rest = rest[:item.start] + ' ' + rest[item.end:]
+    dated = bool(day) and lexicon.dated_frame(rest)
+    unanchored = (bool(lexicon.fold(text).strip()) and not dated and not marks
+                  and not lexicon.current_frame(text))
     return _verdict(verdict.checks + ('occasion_marker', 'current_anchor'), {**verdict.literals, 'markers': list(marks)},
                     verdict.reasons + (('other_occasion',) if marks else ()) + (('current_unanchored',) if unanchored
                                                                                 else ()))
