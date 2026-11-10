@@ -31,6 +31,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+from django.core.exceptions import ValidationError
+from django.db import connection
 from django.test import Client, SimpleTestCase, TestCase
 
 from studio import (answers, api, code_shapes, customer_api, interpretation, jobs, models, operator, progress, reports,
@@ -802,6 +804,33 @@ class UnreadableRecordTests(NewPathCase):
         self.assertEqual((customer['approved'], customer['blockers']),
                          (False, [customer_api.BLOCKER_EXACT[review.UNREADABLE_EVENTS_BLOCKER]]))
         self.assertFalse(models.ReportArtifact.objects.filter(encounter=encounter).exists())
+
+    def test_d50_no_decision_but_a_revoke_is_taken_on_a_record_this_release_cannot_read(self):
+        """D50 (the S17 refutation, finding 15): the blocker's promise is enforced on the decision path. With the event
+        coding unreadable (a version this release does not read, written as a later release would), a READY code offers
+        no approve and no reject, a decision is refused, and an approval taken before stays revocable."""
+        encounter = self.new_path_encounter()
+        self.decide(encounter, '43239', 'approve')
+        assessment = review.live_assessment(encounter)
+        completeness = dict(assessment.completeness)
+        completeness['event_coding'] = dict(completeness['event_coding'], version='cpt-studio-event-coding@999')
+        with connection.cursor() as cursor:  # as a later release would have written it: the rows are immutable here
+            cursor.execute('UPDATE studio_assessment SET completeness = %s WHERE id = %s',
+                           [json.dumps(completeness), assessment.pk])
+        encounter.refresh_from_db()
+        assessment = review.live_assessment(encounter)
+        self.assertIsNone(overlay.coding_of(assessment.completeness))
+        self.assertIn(review.UNREADABLE_EVENTS_BLOCKER, review.readiness(encounter)['blockers'])
+        decided, open_ = self.proposal_of(encounter, '43239'), self.proposal_of(encounter, '45385')
+        self.assertEqual(review.allowed_actions(decided, assessment, self.membership), [review.REVOKE])
+        self.assertEqual(review.allowed_actions(open_, assessment, self.membership), [])
+        for action in ('approve', 'reject'):
+            with self.subTest(action=action), self.assertRaises(ValidationError):
+                self.decide(encounter, '45385', action)
+        self.assertFalse(models.Decision.objects.filter(encounter=encounter, proposal__code='45385').exists())
+        self.decide(encounter, '43239', 'revoke')  # a decision taken before stays revocable
+        self.assertEqual(review.allowed_actions(self.proposal_of(encounter, '43239'), review.live_assessment(encounter),
+                                                self.membership), [])
 
     def test_a_reinstated_codes_coverage_that_cannot_be_re_run_blocks_what_it_says_it_blocks(self):
         # review finding 2: the frozen event inventory a reinstated code's coverage is re-run over cannot be read (an

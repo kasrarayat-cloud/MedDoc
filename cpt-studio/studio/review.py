@@ -648,6 +648,17 @@ def _same_day_blocker(visit, procedures):
     return f'{visit.code} needs a separately identifiable E/M: {listed} {done}'
 
 
+def _events_unreadable(assessment) -> bool:
+    """DECISIONS D50 (the S17 refutation, finding 15; FINAL 8.1): whether ``assessment`` is a new-path one whose record of
+    the documented events this release cannot read - readiness then blocks it with UNREADABLE_EVENTS_BLOCKER, the same
+    reader's own answer (readers.EventReader.unreadable)."""
+    from .interpretation import readers  # local import: the one dispatch of read time (FINAL 8.2)
+    reader = readers.for_assessment(assessment)
+    if reader.kind != readers.EVENTS:
+        return False
+    return reader.unreadable(assessment, reinstated_codes(assessment, current_decisions(assessment)))
+
+
 def _allowed(proposal, assessment, membership, encounter, views=None):
     if not _is_reviewer(membership, encounter) or proposal.assessment_id != assessment.pk:
         return []
@@ -655,8 +666,15 @@ def _allowed(proposal, assessment, membership, encounter, views=None):
             or assessment.revision_id != encounter.current_revision_id or not is_final(assessment)):
         return []
     view = (effective_view(assessment) if views is None else views).get(proposal.key)
-    return _actions(proposal, _current_decision(proposal), assessment.revision.text,
-                    view.same_day_held if view is not None else _same_day_held(proposal, assessment), view)
+    actions = _actions(proposal, _current_decision(proposal), assessment.revision.text,
+                       view.same_day_held if view is not None else _same_day_held(proposal, assessment), view)
+    if actions and actions != [REVOKE] and _events_unreadable(assessment):
+        # D50: the blocker says the record "cannot be approved or exported until it is assessed again", and the decision
+        # path enforces it - no approve, reject, confirm or reinstate on a record this release cannot read (each would be
+        # judged against checks the overlay could not re-read); a revoke of a decision taken stays, so a reviewer can
+        # always take one back
+        return [action for action in actions if action == REVOKE]
+    return actions
 
 
 def allowed_actions(proposal, assessment, membership, views=None):
