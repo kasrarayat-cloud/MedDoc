@@ -2181,7 +2181,48 @@ def undo_hazards():
         if assessment is not None and any(f.name == 'modifiers' for f in models.Decision._meta.get_fields()) and any(
                 decision.modifiers for decision in review.current_decisions(assessment).values()):
             found.setdefault(str(encounter.pk), set()).add('modifier')
+        # DECISIONS D51 (the S17 refutation, finding 13): a reviewer's reinstatement on a new-path assessment. The new
+        # path's review overlay adds, at read time, the base rule a reinstated therapeutic code brings back ("45378 was
+        # approved, but 45386 was reinstated ..."); no older revision reads a new-path assessment's event coding, so its
+        # overlay adds no such hold - its readiness reads both approvals as reviewed and its export bills both
+        if assessment is not None and is_new_assessment(assessment) and any(
+                decision.action == models.Decision.REINSTATE
+                for decision in review.current_decisions(assessment).values()):
+            found.setdefault(str(encounter.pk), set()).add('reinstatement')
     return {pk: sorted(reasons) for pk, reasons in sorted(found.items())}
+
+
+def is_new_assessment(assessment):  # a new-path assessment (DECISIONS D51); an older image has no new path
+    try:
+        from studio import interpretation
+    except ImportError:
+        return False
+    check = getattr(interpretation, 'is_new_assessment', None)
+    return bool(check(assessment)) if check is not None else False
+
+
+def touched_since(since):
+    """DECISIONS D51: the encounters (ids, as strings) with a record CREATED at or after ``since`` - an encounter, a
+    revision, a context, a provider run (or its reconciliation), an event inventory, an assessment, a clarification, a
+    finding confirmation, a decision or its invalidation, a member's answer or its revocation, a stage, a report. Only
+    creations and members' and operators' acts count: an installer's own close and put-back write finish times and list
+    states, never these. An encounter with none holds only what the pair before this one left there."""
+    from studio import models
+    out = set()
+    rows = [(models.Encounter, 'created_at', 'pk'), (models.ProviderRun, 'created_at', 'encounter_id'),
+            (models.ProviderRun, 'reconciled_at', 'encounter_id'), (models.Assessment, 'created_at', 'encounter_id'),
+            (models.Clarification, 'created_at', 'encounter_id'), (models.Decision, 'created_at', 'encounter_id'),
+            (models.Job, 'created_at', 'encounter_id')]
+    optional = [('SourceRevision', 'created_at', 'encounter_id'), ('EncounterContext', 'created_at', 'encounter_id'),
+                ('EventInventory', 'created_at', 'encounter_id'), ('FindingConfirmation', 'created_at', 'encounter_id'),
+                ('MemberAnswer', 'answered_at', 'encounter_id'), ('ReportArtifact', 'generated_at', 'encounter_id'),
+                ('MemberAnswerRevocation', 'revoked_at', 'answer__encounter_id'),
+                ('DecisionInvalidation', 'created_at', 'decision__encounter_id')]
+    rows += [(getattr(models, name), field, key) for name, field, key in optional if hasattr(models, name)]
+    for model, field, key in rows:
+        out.update(str(pk) for pk in model.objects.filter(**{f'{field}__gte': since}).values_list(key, flat=True)
+                   if pk is not None)
+    return out
 
 
 def written_since(since, pks):
@@ -2213,6 +2254,23 @@ def written_since(since, pks):
     return found
 '''
 UNDO_HAZARDS_READ = UNDO_HAZARDS + "print(ANSWER + json.dumps({'hazards': undo_hazards()}))\n"
+# DECISIONS D51: the encounters with a record created since this revision's pair (P['since']), in this revision's image.
+TOUCHED_SINCE_READ = (UNDO_HAZARDS + "import datetime as _dt\n"
+                      "print(ANSWER + json.dumps({'touched': sorted(touched_since(_dt.datetime.fromisoformat("
+                      "P['since'])))}))\n")
+# DECISIONS D51: what the PREVIOUS revision reads of the records the hazard reasons name - run in the previous image. A
+# member's answer as the completion repair reads it (its re-made assessment, support 'answered'; jobs.recompute_after_
+# answers), and a chosen modifier (Decision.modifiers). Its participants and second reviews are read from the stage
+# kinds its worker runs (stage_kinds_of: astra and fable, review2).
+TARGET_MODEL_READS = '''
+from studio import jobs, models
+reads = []
+if hasattr(models, 'MemberAnswer') and hasattr(jobs, 'recompute_after_answers'):
+    reads.append('member_answer')
+if any(f.name == 'modifiers' for f in models.Decision._meta.get_fields()):
+    reads.append('modifier')
+print(ANSWER + json.dumps({'reads': reads}))
+'''
 # Close what a pair being undone left open since it started (refutation r1, migrate-3/-4): every stage it queued, ran
 # or left resumable (cancelled) becomes FAILED with P['note'] - failed, not cancelled, so no revision's web offers a
 # Resume for it - and every provider run it left unsettled is settled as the stale-stage sweep settles one (sending:
@@ -2732,6 +2790,47 @@ def interpretation_note(image_id, env_bytes, revision) -> dict:
     return {'assessments': count, 'encounters': list(named), 'context_only': list(context_only), 'note': note}
 
 
+def target_reads(prev_image, env_bytes, kinds) -> frozenset:
+    """DECISIONS D51: the hazard reasons the revision a switch-back returns to reads as this revision wrote them, so
+    they are no hazard to it: 'participant' when its worker runs a participant stage (astra or fable), the three second
+    review reasons when it runs review2 (``kinds``: stage_kinds_of its image), and 'member_answer' and 'modifier' as its
+    own models say (TARGET_MODEL_READS, in its image). Never 'unknown', 'outcome', 'conflict' or 'reinstatement'."""
+    reads = set()
+    if {'astra', 'fable'} & set(kinds):
+        reads.add('participant')
+    if 'review2' in kinds:
+        reads.update(('second_review', 'second_review_refused', 'second_review_unread'))
+    answer = app_script(prev_image, env_bytes, TARGET_MODEL_READS, {},
+                        what='Reading which review records the previous revision reads')
+    reads.update(reason for reason in answer.get('reads') or () if reason in ('member_answer', 'modifier'))
+    return frozenset(reads)
+
+
+def touched_encounters(image_id, env_bytes, since) -> set:
+    """DECISIONS D51: the encounters with a record created since ``since`` (TOUCHED_SINCE_READ, in this image)."""
+    answer = app_script(image_id, env_bytes, TOUCHED_SINCE_READ, {'since': since.isoformat()},
+                        what='Reading what this revision wrote since its pair was created')
+    return set(answer['touched'])
+
+
+def switch_back_hazards(hazards, reads, touched) -> dict:
+    """DECISIONS D51 (the S17 rollback test, D15 assertion 5): of ``hazards`` (undo_hazards' {encounter id: reasons},
+    read as the oldest revision reads the rows), those a switch-back must refuse on. A switch-back returns to the pair
+    this revision replaced: a reason that revision reads (``reads``: target_reads) is no hazard to it, and an encounter
+    with no record created since this revision's pair (``touched``) holds only what that pair itself left there - its
+    status quo before the switch, as it served it. On live data the unfiltered read named 23 such legacy encounters
+    (participant, member_answer, modifier), so the switch-back refused whatever this revision had done. A hazards value
+    that is not a dict is returned as it is (the caller refuses on it)."""
+    if not isinstance(hazards, dict):
+        return hazards
+    out = {}
+    for pk, reasons in hazards.items():
+        left = [reason for reason in (reasons or ()) if reason not in reads]
+        if left and pk in touched:
+            out[pk] = left
+    return out
+
+
 def hazard_summary(hazards) -> str:
     counts = {}
     for reasons in hazards.values():
@@ -2747,7 +2846,8 @@ def hazard_summary(hazards) -> str:
 # The harness: a code only a participant proposed is one too (the older web shows it as the provider's proposal).
 # The core repair (2026-11-03): a member's answer that stands, and a chosen modifier, are two more (the older web reads
 # neither: it asks the answered question again, and shows the approval without its modifier).
-SHOWN_HAZARDS = ('second_review_refused', 'second_review_unread', 'participant', 'member_answer', 'modifier')
+SHOWN_HAZARDS = ('second_review_refused', 'second_review_unread', 'participant', 'member_answer', 'modifier',
+                 'reinstatement')  # D51: an older overlay adds no hold for a new-path reinstatement
 # The Gemini migration (ADJUDICATION P-1, which governs design/FINAL.md 13): an assessment made from an event inventory
 # is NOT a hazard of either kind - not here and not in UNDO_HAZARDS. An earlier image reads it fail-closed (it keeps
 # every stored hold and releases none), so naming it would only make switch-back and rollback-app refuse. They write it
@@ -4776,14 +4876,17 @@ def phase_switch_back(ctx) -> dict:
     check_credential_files(mode, live, interpreter)
     env = read_protected_env(APP_ENV, APP_ENV_KEYS)
     check_credential_parsing(prev_image, env, mode, live, interpreter)
-    hazards = undo_hazards(image_id, env, ctx.revision)
+    since = pair_created_at()
+    reads = target_reads(prev_image, env, stage_kinds_of(prev_image, env))
+    hazards = switch_back_hazards(undo_hazards(image_id, env, ctx.revision), reads,
+                                  touched_encounters(image_id, env, since))  # D51
     if hazards:
         raise InstallError(f'{hazard_summary(hazards)} hold records an older revision would act on, or show, wrongly '
                            'under its own rules; nothing was started or stopped. Clear them on this revision\'s web '
                            '(ops/INSTALL.md, Reinstalling an older revision), then rerun --phase switch-back.',
                            details={'hazards': hazards})
     services = switch_back_services(ctx, image_id, env, prev_image, prev_revision, mode, reference, modes,
-                                    preflight=preflight, plan=plan, interpreter=interpreter)
+                                    preflight=preflight, plan=plan, interpreter=interpreter, reads=reads)
     availability = services.get('availability') or {}
     note = (services.get('interpretation') or {}).get('note')
     return {'image_id': image_id, 'previous': {'image': prev_image, 'revision': prev_revision},
@@ -4794,8 +4897,15 @@ def phase_switch_back(ctx) -> dict:
                        f'{availability.get("non_200_count", 0)} not 200' + (f'; {note}' if note else '')}
 
 
+def pair_created_at():
+    """When this revision's pair was created: the earliest creation time of its web and worker containers (the 'since'
+    every close of an undo reads)."""
+    current = [inspect('container', SERVICES[role]) for role in SERVICES]
+    return min(created_at(container) for container in current if container is not None)
+
+
 def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, provider_mode, authorization_ref,
-                         participants, *, preflight, plan, interpreter=None) -> dict:
+                         participants, *, preflight, plan, interpreter=None, reads=None) -> dict:
     """The switch in reverse, never stopping the serving web first:
 
       B2  start the previous revision's web, INCOMING_WEB, on the idle port; health_ok for ITS revision; smoke_web
@@ -4820,6 +4930,10 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
     current = {role: inspect('container', SERVICES[role]) for role in SERVICES}
     since = min(created_at(container) for container in current.values() if container is not None)
     kinds = stage_kinds_of(prev_image, env_bytes)
+    reads = target_reads(prev_image, env_bytes, kinds) if reads is None else reads  # D51
+
+    def hazards_now(hazards):  # D51: what this switch-back refuses on, read again whenever hazards are read
+        return switch_back_hazards(hazards, reads, touched_encounters(image_id, env_bytes, since))
     reason = f'revision {ctx.revision[:12]} was switched back to {prev_revision[:12]} (switch-back)'
     drifted = ingress_checks(ctx, preflight)
     if drifted:
@@ -4835,6 +4949,8 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
 
     def refuse_on_hazards(closed, when, checked):
         hazards = closed.get('hazards') if isinstance(closed, dict) else None
+        if isinstance(hazards, dict):
+            hazards = hazards_now(hazards)  # D51
         if not isinstance(hazards, dict) or hazards:
             named = hazard_summary(hazards) if isinstance(hazards, dict) else 'the close did not say which encounters'
             written = ({pk: [r for r in reasons if r in WEB_WRITTEN_HAZARDS] for pk, reasons in hazards.items()}
@@ -4864,7 +4980,7 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
             raise InstallError(baseline_problem(drifted, 'nothing was closed or switched'),
                                details={'baseline': drifted})
         checked = dt.datetime.now(dt.timezone.utc)
-        hazards = undo_hazards(image_id, env_bytes, ctx.revision)
+        hazards = hazards_now(undo_hazards(image_id, env_bytes, ctx.revision))  # D51
         if hazards:
             raise InstallError(f'before anything was closed, {hazard_summary(hazards)} hold records an older revision '
                                'would act on, or show, wrongly under its own rules', details={'hazards': hazards})
@@ -4887,6 +5003,11 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
         closes['second'] = close_undone_stages(image_id, env_bytes, first, ctx.revision, reason, kinds)
         refuse_on_hazards(closes['second'], 'after the switch', checked)
         put_back.append(put_back_states(closes['second'], prev_image, image_id, env_bytes))
+        # D51 (the S17 refutation, finding 14): this revision's web served until B6's drain, so a context save there
+        # could make a new-path context after B4's count; the note is read again once that web is stopped - the final
+        # count of what the previous image is handed (B4's stays in the record)
+        record['interpretation_at_b4'] = record.get('interpretation')
+        record['interpretation'] = interpretation_note(image_id, env_bytes, ctx.revision)
         step('B8')
         docker('run', '-d', *service_args('worker', prev_image, prev_revision, provider_mode, authorization_ref,
                                           participants, interpreter=interpreter), input=env_bytes, quiet=True)

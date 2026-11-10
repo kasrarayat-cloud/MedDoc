@@ -641,7 +641,15 @@ credentials files are checked with the previous image's own loaders). It
 refuses, starting nothing, unless this revision's web serves the site through
 its HTTPS stage, and while this revision recorded what an older revision would
 act on, or show, wrongly (`rollback-app`'s check: **Reinstalling an older
-revision**). Then, without ever stopping the serving web first: **B2** the
+revision**). For a switch-back that check is read against the revision it
+returns to (DECISIONS D51): a reason that revision reads is no hazard to it -
+participants and second reviews when its worker runs their stages, a member's
+answer and a chosen modifier when its own models read them - and an encounter
+with no record created since this revision's pair was created holds only what
+the pair before it left there. A reviewer's reinstatement on a new-path
+assessment is always named (`reinstatement`: no older overlay adds the hold
+it brings back): revoke it on this revision's web first. Then, without ever
+stopping the serving web first: **B2** the
 previous image's web starts as `cpt-studio-web-next` on the idle port and must
 answer `/health/` with ITS revision and serve its pages; **B3** this revision's
 worker is parked; **B4** every stage this revision's pair queued, ran or left

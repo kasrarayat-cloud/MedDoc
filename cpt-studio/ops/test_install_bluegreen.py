@@ -100,6 +100,11 @@ class BlueGreenWorld:
         self.oneshots = []          # (image, command, keyword arguments) of every one-shot, in order
         # ADJUDICATION P-1: what INTERPRETATION_MADE answers in this revision's image (an exception: it raises that)
         self.interpretation_answer = {'interpretation': {'assessments': 0, 'encounters': [], 'context_only': []}}
+        # DECISIONS D51: what the previous image's models read (TARGET_MODEL_READS: an old revision reads neither), and
+        # the encounters this revision wrote a record for since its pair was created (TOUCHED_SINCE_READ: every one the
+        # tests name, so the time filter drops nothing unless a test says so)
+        self.target_model_reads = []
+        self.touched_answer = {'e1', 'e2', 'e3', 'e4'}
         self.next_id = 0
         revision, image = serving
         self.add(WEB, 'web', image, revision, port=live)
@@ -340,6 +345,12 @@ class BlueGreenWorld:
         if body == install.UNRUNNABLE_STAGES:
             self.act('unrunnable', image_id)
             return self.done({'known': self.stage_kinds.get(image_id, KINDS_OLD), 'stuck': 0, 'kinds': []})
+        if body == install.TARGET_MODEL_READS:
+            self.act('target_reads', image_id)
+            return self.done({'reads': list(self.target_model_reads)})
+        if body == install.TOUCHED_SINCE_READ:
+            self.act('touched', image_id)
+            return self.done({'touched': sorted(self.touched_answer)})
         if body == install.INTERPRETATION_MADE:
             self.act('interpretation', image_id)
             if isinstance(self.interpretation_answer, BaseException):
@@ -1385,8 +1396,8 @@ class SwitchBackTests(TemporaryDirectoryTest):
                     'replaced': {'web': {'image': OLD_IMAGE, 'revision': OLD}}}})
             else:
                 world = self.world(**change)
-            if label == 'a hazard':
-                world.hazards_answer = {'e1': ['participant']}
+            if label == 'a hazard':  # one no previous revision reads (D51: 'participant' is read by a harness worker)
+                world.hazards_answer = {'e1': ['unknown']}
             with self.subTest(label):
                 details, error = self.switch_back(world)
                 self.assertIsInstance(error, install.InstallError)
@@ -1431,6 +1442,38 @@ class SwitchBackTests(TemporaryDirectoryTest):
         self.assertIn("the previous revision's worker did not become ready", str(error))
         self.assertEqual(world.names()[WEB], (OLD_IMAGE, 9150, True))
         self.assertFalse(world.containers[WORKER]['running'])
+
+    def test_d51_hazards_the_previous_revision_reads_never_refuse(self):
+        # D51 (the S17 rollback test, D15 assertion 5): the live data's legacy encounters named participant,
+        # member_answer and modifier, which the revision switched back to reads - so nothing refuses
+        world = self.world()
+        world.hazards_answer = {'e1': ['participant'], 'e2': ['member_answer', 'modifier']}
+        world.target_model_reads = ['member_answer', 'modifier']
+        details, error = self.switch_back(world)
+        self.assertIsNone(error)
+        self.assertIn('switched back to bbbbbbbbbbbb', details['summary'])
+        self.assertEqual(world.acts('target_reads'), [('target_reads', OLD_IMAGE)])
+
+    def test_d51_an_encounter_nothing_was_written_for_since_never_refuses(self):
+        world = self.world()
+        world.hazards_answer = {'e1': ['unknown']}
+        world.touched_answer = set()  # the pair before this one left it so: its own status quo
+        details, error = self.switch_back(world)
+        self.assertIsNone(error)
+        self.assertEqual(world.acts('touched')[0], ('touched', IMAGE))
+
+    def test_d51_a_reason_the_previous_revision_does_not_read_still_refuses_before_anything_starts(self):
+        for label, hazards, kinds in (('no participant stage', {'e1': ['participant']}, list(install.COMMON_STAGE_KINDS)),
+                                      ('a new-path reinstatement', {'e1': ['reinstatement']}, KINDS_OLD)):
+            world = self.world()
+            world.hazards_answer = hazards
+            world.stage_kinds[OLD_IMAGE] = kinds
+            with self.subTest(label):
+                details, error = self.switch_back(world)
+                self.assertIsInstance(error, install.InstallError)
+                self.assertIn('hold records an older revision would act on', str(error))
+                self.assertEqual(world.acts('run', 'stop', 'rename', 'vhost', 'reload', 'close'), [])
+
 
 
 # --- the new phases' arguments -------------------------------------------------------------------------------------------
@@ -2121,3 +2164,27 @@ class InterpreterBlueGreenTests(TemporaryDirectoryTest):
         self.assertLess(world.events.index(('oneshot', ('manage', 'shell'))),
                         world.events.index(('run', 'web', NEXT, 9150, OLD_IMAGE)))
         self.assertIn('interpreter live) on 9150', details['summary'])
+
+
+class SwitchBackTargetTests(unittest.TestCase):
+    """DECISIONS D51 (the S17 rollback test, D15 assertion 5): a switch-back refuses only on what this revision wrote
+    that the revision it returns to would act on, or show, wrongly. A reason that revision reads - participants and
+    second reviews by the stage kinds its worker runs, a member's answer and a modifier by its own models - and an
+    encounter with no record created since this revision's pair was created are never refusals."""
+
+    def test_the_filter(self):
+        hazards = {'a': ['participant', 'unknown'], 'b': ['member_answer'], 'c': ['reinstatement'], 'd': ['unknown']}
+        reads = frozenset({'participant', 'member_answer'})
+        self.assertEqual(install.switch_back_hazards(hazards, reads, {'a', 'b', 'c'}),
+                         {'a': ['unknown'], 'c': ['reinstatement']})
+        self.assertEqual(install.switch_back_hazards(hazards, frozenset(), set()), {})
+        self.assertIsNone(install.switch_back_hazards(None, reads, {'a'}))  # an unread answer stays unread
+
+    def test_what_the_previous_revision_reads(self):
+        with mock.patch.object(install, 'app_script', return_value={'reads': ['member_answer', 'modifier', 'bogus']}):
+            self.assertEqual(install.target_reads('img', b'', KINDS_OLD),
+                             {'participant', 'second_review', 'second_review_refused', 'second_review_unread',
+                              'member_answer', 'modifier'})
+        with mock.patch.object(install, 'app_script', return_value={'reads': []}):
+            self.assertEqual(install.target_reads('img', b'', install.COMMON_STAGE_KINDS), frozenset())
+

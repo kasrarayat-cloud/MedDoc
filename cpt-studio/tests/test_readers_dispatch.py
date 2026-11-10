@@ -27,12 +27,14 @@ in-process fake (tests.test_pipeline_assess_events.EventsCase).
 import ast
 import hashlib
 import json
+from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
 from django.core.exceptions import ValidationError
 from django.db import connection
+from django.utils import timezone
 from django.test import Client, SimpleTestCase, TestCase
 
 from studio import (answers, api, code_shapes, customer_api, interpretation, jobs, models, operator, progress, reports,
@@ -944,3 +946,35 @@ class OperatorSectionTests(NewPathCase):
         snap = reports.snapshot(s.encounter, reports.DRAFT)
         self.assertNotIn('interpretation', snap)
         self.assertNotIn(b'\nINTERPRETATION\n', reports.render_txt(snap))
+
+
+class SwitchBackHazardTests(NewPathCase):
+    """DECISIONS D51 (the S17 refutation, finding 13; the S17 rollback test D15): the installer's in-image reads behind
+    a switch-back - a reinstatement on a new-path assessment is named ('reinstatement': no older overlay adds the hold
+    it brings back), and the encounters this revision wrote a record for since its pair was created are listed
+    (touched_since), so a switch-back refuses only on what this revision wrote that the previous one would mishandle."""
+
+    def hazards(self):
+        from tests.test_repairs_r1_m import install, run_app_script
+        return run_app_script(install.UNDO_HAZARDS_READ, {})['hazards']
+
+    def touched(self, since):
+        from tests.test_repairs_r1_m import install, run_app_script
+        return set(run_app_script(install.TOUCHED_SINCE_READ, {'since': since.isoformat()})['touched'])
+
+    def test_a_reinstatement_on_a_new_path_assessment_is_named_until_it_is_revoked(self):
+        encounter = self.new_path_encounter(denied_removal)
+        self.assertNotIn('reinstatement', self.hazards().get(str(encounter.pk), []))  # control: nothing reinstated
+        self.decide(encounter, '45385', 'reinstate')
+        self.assertIn('reinstatement', self.hazards()[str(encounter.pk)])
+        self.decide(encounter, '45385', 'revoke')
+        self.assertNotIn('reinstatement', self.hazards().get(str(encounter.pk), []))
+
+    def test_touched_lists_an_encounter_only_for_a_record_created_since(self):
+        encounter = self.new_path_encounter()
+        later = timezone.now() + timedelta(seconds=1)
+        self.assertNotIn(str(encounter.pk), self.touched(later))  # nothing created since
+        self.assertIn(str(encounter.pk), self.touched(timezone.now() - timedelta(hours=1)))
+        mark = timezone.now()
+        self.decide(encounter, '43239', 'approve')
+        self.assertIn(str(encounter.pk), self.touched(mark))  # a decision recorded since

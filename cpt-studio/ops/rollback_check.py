@@ -767,8 +767,15 @@ class Check:
         record = self.record.setdefault('switch_back', {})
         record['census_before'] = self.census()
         with mock.patch.object(installer, 'app_script', inst.transport(installer, images)):
-            # phase_switch_back's first check: any hazard refuses before anything is started or stopped
-            record['precheck_hazards'] = installer.undo_hazards(cand['id'], inst.env_bytes, cand['revision'])
+            # phase_switch_back's first check: a hazard refuses before anything is started or stopped - read raw, then
+            # as DECISIONS D51 filters it (what the previous revision reads; encounters this revision wrote since)
+            record['precheck_hazards_raw'] = installer.undo_hazards(cand['id'], inst.env_bytes, cand['revision'])
+            kinds_for_reads = installer.stage_kinds_of(prev['id'], inst.env_bytes)
+            reads = installer.target_reads(prev['id'], inst.env_bytes, kinds_for_reads)
+            record['previous_reads'] = sorted(reads)
+            touched = installer.touched_encounters(cand['id'], inst.env_bytes, self.since)
+            record['touched_since'] = sorted(touched)
+            record['precheck_hazards'] = installer.switch_back_hazards(record['precheck_hazards_raw'], reads, touched)
             record['note_before_close'] = installer.interpretation_note(cand['id'], inst.env_bytes, cand['revision'])
             calls = len(inst.calls)
             kinds = installer.stage_kinds_of(prev['id'], inst.env_bytes)
@@ -779,6 +786,8 @@ class Check:
             record['close_started_at'] = utc_now()
             close = installer.close_undone_stages(cand['id'], inst.env_bytes, self.since, cand['revision'], reason, kinds)
             record['close'] = close
+            record['close_hazards_filtered'] = installer.switch_back_hazards(
+                (close or {}).get('hazards'), reads, installer.touched_encounters(cand['id'], inst.env_bytes, self.since))
             record['closed_stages'] = inst.sql(
                 "select id, kind, encounter_id, left(error, 60) from studio_job where error like 'Closed by the installer:%' "
                 f"and finished_at >= '{record['close_started_at']}' order by kind, id")
@@ -793,7 +802,7 @@ class Check:
         hazards = record['precheck_hazards'] or {}
         record['refusals'] = {
             'precheck (install.py phase_switch_back: any hazard refuses)': bool(hazards),
-            'after the close (switch_back_services refuse_on_hazards)': bool((close or {}).get('hazards')),
+            'after the close (switch_back_services refuse_on_hazards)': bool(record['close_hazards_filtered']),
             'interpretation named as a refusing reason': any(
                 'interpretation' in reasons for reasons in list(hazards.values())
                 + list(((close or {}).get('hazards') or {}).values()))}
