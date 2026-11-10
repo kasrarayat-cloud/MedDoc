@@ -974,6 +974,80 @@ class Reach(SimpleTestCase):
         self.assertIn('encounter.reach[0] names an event the answer does not define.', problems)
         self.assertIn('encounter.reach[2] gives a second reach for one examination; the first is kept.', problems)
 
+    # DECISIONS D36: a reach is verified only from a passage of its own examination, or one no act of its session cites.
+    BIOPSY = 'Biopsies of the ascending colon were taken.'
+
+    def sourced(self, reach, *events, lines=()):
+        """The base answer, its text plus ``lines`` ({id: text}, appended in order), the base events plus ``events``
+        and ``reach`` as the only reach: (the inventory, E0, the reach entry)."""
+        added = dict(lines)
+        value = answer(dict(LINES, **added), events=[examination(), event(), denial(), *events])
+        value['encounter']['reach'] = [dict({'event': 'E0', 'completion': attr('not_stated')}, **reach)]
+        inventory = run(value, TEXT + ''.join(f'{text}\n' for text in added.values()))
+        return inventory, ev(inventory, 'E0'), inventory.encounter_facts['reach'][0]
+
+    def biopsy(self, id='E3', passage='P7', landmark='ascending_colon', words='ascending colon', **changes):
+        """A performed biopsy of this encounter's colonoscopy, stated in ``passage``."""
+        return event(id, **{'kind': attr('biopsy', 'Biopsies', [passage]), 'technique': attr('not_stated'),
+                            'target': target('', landmark, words, [passage]),
+                            'status': attr('performed', 'were taken', [passage]), 'purpose': attr('not_stated'),
+                            **changes})
+
+    def test_d36_the_examinations_own_statement_or_a_line_no_act_cites_verifies_a_reach(self):
+        _, exam, entry = self.sourced({'landmark': 'cecum', 'words': 'advanced to the cecum', 'passages': ['P5']})
+        self.assertEqual(state(exam['extent']), ('verified', 'stated', []))
+        self.assertIn('reach_source', exam['extent']['checks'])
+        # "Cecum reached." on a line of its own, which no event cites
+        _, exam, entry = self.sourced({'landmark': 'cecum', 'words': 'Cecum reached', 'passages': ['P7']},
+                                      lines={'P7': 'Cecum reached.'})
+        self.assertEqual(state(exam['extent']), ('verified', 'stated', []))
+        self.assertEqual((entry['state'], entry['attached']), ('verified', True))
+        # a sentence the examination and an act both cite is the examination's own
+        both = 'The colonoscope was advanced to the cecum, where biopsies were taken.'
+        examination_ = examination(kind=attr('examination', 'colonoscope', ['P7']),
+                                   status=attr('performed', 'advanced to the cecum', ['P7']))
+        value = answer(dict(LINES, P7=both), events=[examination_, event(), denial(),
+                                                     self.biopsy(landmark='cecum', words='cecum')])
+        value['encounter']['reach'] = [{'event': 'E0', 'landmark': 'cecum', 'words': 'advanced to the cecum',
+                                        'passages': ['P7'], 'completion': attr('not_stated')}]
+        self.assertEqual(state(ev(run(value, TEXT + both + '\n'), 'E0')['extent']), ('verified', 'stated', []))
+
+    def test_d36_a_reach_read_only_from_another_acts_sentence_is_inferred(self):
+        inventory, exam, entry = self.sourced(
+            {'landmark': 'ascending_colon', 'words': 'ascending colon', 'passages': ['P7']}, self.biopsy(),
+            lines={'P7': self.BIOPSY})
+        self.assertEqual(state(exam['extent']), ('unverified', 'stated', ['reach_inferred']))
+        self.assertEqual(exam['extent']['checks'][-2:], ['reach_source', 'reach_permitted'])
+        self.assertEqual((entry['state'], entry['reasons'], entry['attached']),
+                         ('unverified', ['reach_inferred'], True))  # still the examination's: R6 reads it unverified
+        self.assertEqual(inventory.verification['reasons'], {'reach_inferred': 1})
+        self.assertEqual(inventory.verification['counts']['reach']['unverified'], 1)
+        # citing the examination's own passage beside it changes nothing when the words stand only in the act's
+        _, exam, _ = self.sourced({'landmark': 'ascending_colon', 'words': 'ascending colon', 'passages': ['P5', 'P7']},
+                                  self.biopsy(), lines={'P7': self.BIOPSY})
+        self.assertEqual(state(exam['extent']), ('unverified', 'stated', ['reach_inferred']))
+
+    def test_d36_another_examination_of_the_session_is_another_event(self):
+        # The reach of a prior colonoscopy, read for today's: its passage belongs to another event of the session.
+        prior = 'A prior colonoscopy in 2024 reached the cecum.'
+        earlier = examination('E3', kind=attr('examination', 'colonoscopy', ['P7']),
+                              technique=attr('not_stated'), time=attr('earlier_encounter', 'in 2024', ['P7']),
+                              status=attr('performed', 'reached the cecum', ['P7']))
+        _, exam, _ = self.sourced({'landmark': 'cecum', 'words': 'reached the cecum', 'passages': ['P7']}, earlier,
+                                  lines={'P7': prior})
+        self.assertEqual(state(exam['extent']), ('unverified', 'stated', ['reach_inferred']))
+
+    def test_d36_an_act_of_another_session_does_not_make_a_passage_the_sessions(self):
+        # D36's scope is the examination's session (its family): an EGD act citing the line leaves it no act's of the
+        # colonoscopy, so the colonoscopy's reach read there stays verified.
+        line = 'Biopsies of the duodenum and the terminal ileum were taken.'
+        egd = self.biopsy(procedure=attr('egd', 'Biopsies of the duodenum', ['P7']), landmark='duodenum',
+                          words='duodenum')
+        inventory, exam, _ = self.sourced({'landmark': 'terminal_ileum', 'words': 'terminal ileum',
+                                           'passages': ['P7']}, egd, lines={'P7': line})
+        self.assertEqual(ev(inventory, 'E3')['family'], 'gi.egd')
+        self.assertEqual(state(exam['extent']), ('verified', 'stated', []))
+
     def test_a_reach_with_no_landmark_is_absent_and_never_attached(self):
         value = answer()
         value['encounter']['reach'][0]['landmark'] = 'not_stated'
@@ -1462,6 +1536,13 @@ def every_reason_scenario() -> list:
     add('claim_unknown_event', e(contradicts=[{'event': 'E77', 'passages': []}]))
     add('lesion_unknown', e(target=target('L7', 'transverse_colon', 'transverse colon', ['P2'])))
     add('reach_not_permitted', answer(events=[examination(time=attr('future', 'advanced', ['P5'])), event(), denial()]))
+    biopsy = 'Biopsies of the ascending colon were taken.'
+    add('reach_inferred', answer(dict(LINES, P7=biopsy), encounter=encounter(reach=[{
+        'event': 'E0', 'landmark': 'ascending_colon', 'words': 'ascending colon', 'passages': ['P7'],
+        'completion': attr('not_stated')}]), events=[examination(), event(), denial(), event(
+            'E3', kind=attr('biopsy', 'Biopsies', ['P7']), technique=attr('not_stated'),
+            target=target('', 'ascending_colon', 'ascending colon', ['P7']),
+            status=attr('performed', 'were taken', ['P7']), purpose=attr('not_stated'))]), TEXT + biopsy + '\n')
     add('visit_not_permitted', visit_answer(attr('total_time', 'Total time spent: 45 minutes', ['P1']),
                                             attr('not_stated'), kind='examination'), visit_text)
     add('scope_not_permitted', e(scope=scope('single_target', 'sessile polyp', ['P2'])))

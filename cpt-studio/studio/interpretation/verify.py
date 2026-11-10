@@ -52,7 +52,8 @@ REASONS = (
     'planning_missing', 'failure_missing', 'time_marker_missing', 'facility_marker_missing', 'other_occasion',
     # structural (contract 5.4)
     'scope_target_mismatch', 'umbrella_on_positive', 'inconsistent_status_time', 'part_of_invalid',
-    'claim_unknown_event', 'lesion_unknown', 'reach_not_permitted', 'visit_not_permitted', 'scope_not_permitted',
+    'claim_unknown_event', 'lesion_unknown', 'reach_not_permitted', 'reach_inferred', 'visit_not_permitted',
+    'scope_not_permitted',
 )
 # The identity rules' reasons (contract 6.2): identity.py gives them, in a target's identity_by.
 IDENTITY_REASONS = ('identity_not_in_statement', 'identity_no_tie', 'identity_literal_conflict', 'identity_ambiguous',
@@ -61,11 +62,12 @@ IDENTITY_REASONS = ('identity_not_in_statement', 'identity_no_tie', 'identity_li
 REMOVED_REASONS = ('foreign_date_in_passage', 'foreign_name_in_passage')
 # The checks a record lists as having run on it.
 CHECKS = (
-    'passages_located', 'passage_places', 'words_in_own_passage', 'default', 'default_after_unlocated_words', 'single_family',
-    'date_literal', 'name_tokens', 'size_literal', 'landmark_words', 'reach_device', 'device_words', 'procedure_name',
-    'negation_marker', 'quantifier', 'duration_literal', 'label_words', 'planning_marker', 'failure_marker',
-    'time_marker', 'occasion_marker', 'facility_marker', 'scope_permitted', 'scope_target', 'umbrella', 'status_time', 'part_of_reference',
-    'lesion_reference', 'reach_permitted', 'visit_permitted', 'lesion_site',
+    'passages_located', 'passage_places', 'words_in_own_passage', 'default', 'default_after_unlocated_words',
+    'single_family', 'date_literal', 'name_tokens', 'size_literal', 'landmark_words', 'reach_device', 'device_words',
+    'procedure_name', 'negation_marker', 'quantifier', 'duration_literal', 'label_words', 'planning_marker',
+    'failure_marker', 'time_marker', 'occasion_marker', 'facility_marker', 'scope_permitted', 'scope_target',
+    'umbrella', 'status_time', 'part_of_reference', 'lesion_reference', 'reach_permitted', 'reach_source',
+    'visit_permitted', 'lesion_site',
 )
 _ORDER = {reason: index for index, reason in enumerate(REASONS + IDENTITY_REASONS)}
 
@@ -349,6 +351,25 @@ def reach_permitted(event: Mapping, reach_text: str) -> bool:
     if technique['value'] == 'endoscope':
         return usable(technique)
     return technique['value'] == 'not_stated' and lexicon.scope_named(reach_text)
+
+
+# DECISIONS D36: the attributes whose passages are an event's own - the passages it cites for its statement.
+CITING = ('procedure', 'kind', 'technique', 'target', 'time', 'performer', 'status', 'scope', 'purpose')
+
+
+def cites(event: Mapping, pid: str) -> bool:
+    """D36: whether one of ``event``'s statement attributes (CITING) cites passage ``pid``."""
+    return any(isinstance(event.get(name), Mapping) and pid in (event[name].get('passages') or ()) for name in CITING)
+
+
+def reach_stated(passages: Sequence[str], examination: Mapping, session: Sequence[Mapping]) -> bool:
+    """DECISIONS D36: whether a reach is its examination's own statement and not inferred from where the session's acts
+    were done. ``passages`` are the reach's cited passages that hold its words, ``examination`` its event and
+    ``session`` the other events of that event's family. True when one of those passages belongs to the examination
+    (it cites it) or to no other event of the session ("Cecum reached." on its own line); False when each belongs only
+    to other events of the session - a biopsy's sentence, "Biopsies of the ascending colon were taken", or an act's
+    finding (reach_inferred). Structural, over Gemini's own citations: no word is read."""
+    return any(cites(examination, pid) or not any(cites(event, pid) for event in session) for pid in passages)
 
 
 # --- reading an attribute ----------------------------------------------------------------------------------------------

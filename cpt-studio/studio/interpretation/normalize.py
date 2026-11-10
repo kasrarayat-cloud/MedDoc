@@ -20,7 +20,8 @@ The steps, in the order their inputs require (contract 4.1 lists them by subject
 6. Events: every attribute bound to its OWN passages by its OWN words (5.2, below), its literal check run on those
    words alone (EB1); then the structural rules (5.4); then the model's contradicts[] claims (an unknown or own event is
    a dismissed claim; the rest are handed to the relations step).
-7. Reach (attached to its examination only when permitted, 5.4), visit facts (to an em_visit event), anatomy.
+7. Reach (attached to its examination only when permitted, 5.4; DECISIONS D36: unverified, reach_inferred, when its
+   words stand only in passages of the session's other events), visit facts (to an em_visit event), anatomy.
 8. The steps of slice S03, LINKED_STEPS: lesion distinctness and act-to-lesion identity (6.2-6.3), pairing, model
    claims, steps and bundling identity (6.4-6.6), and the mapping fields (9.1). Each is resolved by name when normalize
    runs and is called with the Draft; a missing one RAISES - normalization never proceeds without it.
@@ -709,6 +710,8 @@ class Draft:
             landmark, completion_value = raw['landmark'], raw['completion']['value']
             extent = self._bind(where, raw, landmark, absent=landmark == 'not_stated', opened=(eid, 'extent') in
                                 self._opened, check=lambda text: verify.reach_words(landmark, text))
+            if event is not None and extent['words'] is not None:
+                self._reach_source(extent, raw['words'], event)
             completion = self._bind(f'{where}.completion', raw['completion'], completion_value,
                                     absent=completion_value == 'not_stated', opened=(eid, 'completion') in self._opened)
             reach_text = extent['words']['text'] if extent['words'] else ''
@@ -733,6 +736,19 @@ class Draft:
             self.encounter['reach'].append(entry)
             self._tally('reach', extent)
             self._tally('completion', completion)
+
+    def _reach_source(self, extent: dict, words: str, examination: Mapping) -> None:
+        """DECISIONS D36 (verify.reach_stated): a reach whose words stand only in passages of the session's other events -
+        its cited passages that hold the words, each cited by another event of the examination's family and not by the
+        examination - is inferred from where those acts were done: unverified (reach_inferred), so R6 asks the extent.
+        A cited passage that does not hold the words is not where the reach was read, and counts for nothing."""
+        extent['checks'].append('reach_source')
+        holding = [pid for pid in extent['passages'] if self.passages[pid]['state'] != UNLOCATED
+                   and self._locate_words(words, [self.passages[pid]]) is not None]
+        session = [event for event in self.events.values()
+                   if event['id'] != examination['id'] and event['family'] == examination['family']]
+        if not verify.reach_stated(holding, examination, session):
+            _fail(extent, 'reach_inferred')
 
     def _attach_visits(self) -> None:
         self.encounter['visits'] = []

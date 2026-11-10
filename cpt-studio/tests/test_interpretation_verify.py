@@ -461,6 +461,29 @@ class Structural(SimpleTestCase):
         self.assertFalse(verify.reach_permitted(event(technique={'value': 'not_stated', 'state': 'absent'}),
                                                 'through-the-scope balloon to the duodenum'))
 
+    def test_d36_reach_stated(self):
+        # DECISIONS D36: the reach's passages that hold its words; the examination; the session's other events.
+        def event(eid, **cited):
+            return {'id': eid, **{name: {'value': 'x', 'passages': list(ids)} for name, ids in cited.items()}}
+
+        exam = event('E1', kind=['P1'], status=['P1'], performer=['P9'])
+        biopsy = event('E2', kind=['P2'], target=['P2'], status=['P2'])
+        finding = event('E3', target=['P3'], purpose=['P4'])
+        self.assertTrue(verify.reach_stated(['P1'], exam, [biopsy, finding]))  # the examination's own statement
+        self.assertTrue(verify.reach_stated(['P5'], exam, [biopsy, finding]))  # a line no act cites
+        self.assertTrue(verify.reach_stated(['P2', 'P5'], exam, [biopsy]))  # one of them suffices
+        for name in verify.CITING:  # any statement attribute of the examination makes a passage its own
+            with self.subTest(name):
+                self.assertTrue(verify.reach_stated(['P2'], event('E1', **{name: ['P2']}), [biopsy]))
+        self.assertFalse(verify.reach_stated(['P2'], exam, [biopsy, finding]))  # a biopsy's sentence: inferred
+        self.assertFalse(verify.reach_stated(['P3'], exam, [biopsy, finding]))  # an act's finding (its target)
+        self.assertFalse(verify.reach_stated(['P2', 'P4'], exam, [biopsy, finding]))
+        self.assertFalse(verify.reach_stated([], exam, [biopsy]))  # no passage holds its words: nothing states it
+        # no event outside the session is given, so another family's act never makes a passage the session's
+        self.assertTrue(verify.reach_stated(['P2'], exam, [finding]))
+        self.assertEqual(verify.CITING, ('procedure', 'kind', 'technique', 'target', 'time', 'performer', 'status',
+                                         'scope', 'purpose'))
+
 
 class Reading(SimpleTestCase):
     @staticmethod

@@ -262,6 +262,35 @@ EUS_LINES = {'P1': 'A linear echoendoscope was advanced to the duodenum.',
              'P4': 'No fine-needle aspiration was performed.'}
 
 
+class ReachSource(SimpleTestCase):
+    """DECISIONS D36 (FRESH-2 W1S-399 r1): a colonoscopy's reach read only from another act's sentence - "Biopsies of the
+    ascending colon were taken" - is inferred from where that act was done, so R6 asks the extent; the examination's
+    own statement, or a line no act cites, still gives it."""
+    BIOPSY = 'Biopsies of the ascending colon were taken.'
+
+    def assessed(self, first_line: str, reach: dict):
+        biopsy = act('E3', 'P3', 'biopsy', 'Biopsies', status_words='were taken',
+                     target=tg('', 'ascending_colon', 'ascending colon', ['P3']))
+        inv, text = inventory({'P1': first_line, 'P2': POLYP, 'P3': self.BIOPSY},
+                              events=[exam(status_words='advanced'), removed(), biopsy], lesions=[L1], reach=[reach])
+        return run(inv, text, [('45380', self.BIOPSY), ('45385', POLYP)])
+
+    def test_a_reach_read_from_a_biopsys_sentence_asks_the_extent(self):
+        result = self.assessed('The colonoscope was inserted and advanced under direct vision.',
+                               reached(landmark='ascending_colon', words='ascending colon', passage='P3'))
+        for code in ('45380', '45385'):
+            with self.subTest(code):
+                p = proposal(result, code)
+                self.assertEqual((p.status, p.bucket), ('needs_clarification', 'selected'))
+                self.assertEqual(asked(p), ['extent'])
+
+    def test_the_examinations_own_statement_still_gives_the_extent(self):
+        result = self.assessed(COLONOSCOPE, reached())
+        for code in ('45380', '45385'):
+            with self.subTest(code):
+                self.assertEqual(proposal(result, code).status, 'ready')
+
+
 def eus(*more, act_lines=('P1', 'P2'), reach=()):
     """An upper EUS (E1: the echoendoscope advanced to the duodenum, P1; the pancreatic head examined, P2) plus ``more``
     events; ``reach`` the encounter's reach entries (none by default: the EUS examination's reach is then not stated, and
