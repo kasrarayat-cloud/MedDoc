@@ -33,9 +33,9 @@ from studio.types import (AssessmentResult, CodePosition, EvidenceSpan, LocatedQ
                           ParticipantCode, ParticipantInput, ParticipantNotCoded, ParticipantReading, PeerReview,
                           ProviderCode, ReferenceSourceInfo, Span, from_jsonable, to_jsonable)
 from studio.validation import checks, engine, questions, rationale, reconcile, review_view
-from tests.test_interpretation_events import (COLONOSCOPE, DUODENAL_REACH, EUS_LINES, FNA, LOOKUP, NO_FNA, POLYP, asked,
-                                              check, colonoscopy, eus, exam, inventory, proposal, reached, removed,
-                                              response, run)
+from tests.test_interpretation_events import (COLONOSCOPE, DUODENAL_REACH, EUS_LINES, FNA, L1, LOOKUP, NO_FNA, POLYP,
+                                              asked, check, colonoscopy, eus, exam, inventory, proposal, reached,
+                                              removed, response, run)
 from tests.test_interpretation_identity import a, act, les, sc, tg
 from tests.test_interpretation_no_gi import scan, violations
 
@@ -536,6 +536,55 @@ class ExaminationClass(SimpleTestCase):
         _, question = wording.examination_class_hold('43238', 'limited', 'duodenum', 'duodenum')
         self.assertEqual(p.support['reinstatement_waits'], [{'fact': 'extent', 'question': question}])
         self.assertEqual(check(p, 'review.reinstatement').status, 'warn')
+
+
+def colonoscopy_reaching(landmark: str, words: str, incomplete: bool = False):
+    """A colonoscopy (E1) whose colonoscope was advanced to ``words`` (its verified reach, ``landmark``), with the cold
+    snare removal of L1 (E2); ``incomplete``: the reach's completion stated as incomplete in its own line (P3)."""
+    lines = {'P1': f'The colonoscope was advanced to the {words}.', 'P2': POLYP}
+    reach = reached('E1', landmark, words, 'P1')
+    if incomplete:
+        lines['P3'] = 'The examination was incomplete because of poor preparation.'
+        reach['completion'] = {'value': 'incomplete', 'words': 'incomplete', 'passages': ['P3']}
+    return inventory(lines, events=[exam(), removed()], lesions=[L1], reach=[reach])
+
+
+class ColonoscopyReach(SimpleTestCase):
+    """DECISIONS D38 (FRESH-2 W1S-112 r1): a colonoscopy's verified reach short of the cecum (or the terminal ileum, or the
+    small intestine beyond an anastomosis) does not establish its extent unless the examination is stated to be
+    incomplete; R6 then asks the extent. A full reach, a stated incomplete examination and other families are
+    unaffected."""
+
+    def test_a_reach_short_of_the_cecum_with_nothing_said_of_completion_asks_the_extent(self):
+        for landmark, words in (('descending_colon', 'descending colon'), ('transverse_colon', 'transverse colon'),
+                                ('ascending_colon', 'ascending colon'), ('sigmoid_colon', 'sigmoid colon')):
+            inv, text = colonoscopy_reaching(landmark, words)
+            self.assertEqual(inv.encounter_facts['reach'][0]['state'], 'verified')
+            p = proposal(run(inv, text, [('45385', POLYP)]), '45385')
+            with self.subTest(reach=landmark):
+                self.assertEqual((p.bucket, p.status, asked(p)), ('selected', 'needs_clarification', ['extent']))
+                self.assertEqual(check(p, 'facts.required').status, 'warn')
+
+    def test_a_full_reach_is_unaffected(self):
+        for landmark, words in (('cecum', 'cecum'), ('terminal_ileum', 'terminal ileum'),
+                                ('neo_terminal_ileum', 'neo-terminal ileum'), ('appendiceal_orifice',
+                                                                               'appendiceal orifice')):
+            inv, text = colonoscopy_reaching(landmark, words)
+            p = proposal(run(inv, text, [('45385', POLYP)]), '45385')
+            with self.subTest(reach=landmark):
+                self.assertNotIn('extent', asked(p))
+                self.assertEqual(check(p, 'facts.required').status, 'pass')
+
+    def test_a_stated_incomplete_examination_keeps_its_reach(self):
+        inv, text = colonoscopy_reaching('transverse_colon', 'transverse colon', incomplete=True)
+        self.assertEqual(inv.events['events'][0]['completion']['state'], 'verified')
+        p = proposal(run(inv, text, [('45385', POLYP)]), '45385')
+        self.assertNotIn('extent', asked(p))
+        self.assertIn('extent reached = transverse colon', check(p, 'facts.required').detail)
+
+    def test_another_family_is_unaffected(self):
+        inv, text = eus_reaching('gastric_antrum', 'gastric antrum', FNA)
+        self.assertEqual(proposal(run(inv, text, [('43238', EUS_LINES['P3'])]), '43238').status, 'ready')
 
 
 # --- the copied legacy words, pinned ------------------------------------------------------------------------------------

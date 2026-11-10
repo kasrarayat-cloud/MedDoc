@@ -222,14 +222,33 @@ def _span_of(record: Optional[Mapping]):
     return (Span(record['start'], record['end'], record['text']),) if isinstance(record, Mapping) else ()
 
 
+# DECISIONS D38: a colonoscopy examines the entire colon, from the rectum to the cecum, and may include the terminal ileum
+# or the small intestine proximal to an anastomosis (the CPT colonoscopy definition). A verified reach short of those
+# places, with no verified statement that the examination was incomplete, does not establish the colonoscopy's extent:
+# R6 asks it (FRESH-2 W1S-112 r1: a reach Gemini took from "Moderate diverticulosis in the sigmoid and descending colon."
+# made 45385 READY; the registry, and the installed release, hold it). A stated incomplete examination keeps its reach.
+COLONOSCOPY_FULL_REACH = frozenset({'cecum', 'appendiceal_orifice', 'ileocecal_valve', 'terminal_ileum', 'ileum',
+                                    'neo_terminal_ileum', 'small_bowel', 'anastomosis'})
+
+
+def _stated_incomplete(examination: Mapping) -> bool:
+    """Whether ``examination``'s completion is verified as incomplete (the reach's completion, contract 5.4)."""
+    completion = examination.get('completion')
+    return events.verify.usable(completion) and completion.get('value') == 'incomplete'
+
+
 def _reach(family: str, reading: events.Reading, sessions_: Mapping) -> tuple:
     """The verified reach of ``family``'s session examination (contract 9.2's extent): (its landmark, its extent record);
     ('', the record or None) when the session has no single current examination or its reach is not verified or names
-    no place."""
+    no place - or, for a colonoscopy, when it is short of the full colonoscopy reach and the examination is not stated
+    to be incomplete (D38)."""
     session = sessions_.get(family)
     exam = reading.events.get(session.event) if session is not None and session.event else None
     extent = exam.get('extent') if exam is not None else None
     if exam is not None and events.verify.usable(extent) and wording.landmark_label(extent.get('value', '')):
+        if (family == 'gi.colonoscopy' and extent['value'] not in COLONOSCOPY_FULL_REACH
+                and not _stated_incomplete(exam)):
+            return '', extent
         return extent['value'], extent
     return '', extent
 
