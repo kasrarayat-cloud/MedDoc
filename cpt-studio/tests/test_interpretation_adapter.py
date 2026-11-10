@@ -1223,7 +1223,7 @@ class ConfiguredTests(SimpleTestCase):
         # FINAL 6.3: the send and its recording fit the stage, and the stage ends before the stale-stage sweep
         self.assertLess(settings.INTERPRETER_SEND_DEADLINE_SECONDS + jobs.LOOP_RECORDING_SECONDS, interpret)
         self.assertLess(interpret, settings.STALE_RUNNING_SECONDS)
-        self.assertEqual((settings.INTERPRET_MAX_CHARS, settings.INTERPRET_MAX_PAGES), (30_000, 40))
+        self.assertEqual((settings.INTERPRET_MAX_CHARS, settings.INTERPRET_MAX_PAGES), (20_000, 40))  # DECISIONS D25
         self.assertEqual(len(interpretation.JOB_KIND), 9)
         source = (APP / 'cptstudio' / 'settings.py').read_text(encoding='utf-8')
         # the form the installer's tests pin a credentials setting by (ops/test_install_harness.py)
@@ -1237,7 +1237,7 @@ class ConfiguredTests(SimpleTestCase):
                     pass
         self.assertEqual((literals['INTERPRETER_SEND_DEADLINE_SECONDS'], literals['INTERPRET_MAX_CHARS'],
                           literals['INTERPRET_MAX_PAGES'], literals['JOB_DEADLINE_SECONDS']['interpret']),
-                         (330, 30_000, 40, 380))
+                         (330, 20_000, 40, 380))
 
     def run_settings(self, **environment):
         script = 'import cptstudio.settings as s\nprint(s.GEMINI_MODE)\n'

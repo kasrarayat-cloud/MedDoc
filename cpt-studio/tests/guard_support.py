@@ -1204,7 +1204,7 @@ def participants():
 # --- a TransactionTestCase with EventsCase's fixtures (the byte-identity test reads committed rows) -------------------
 
 PIPELINE_SETTINGS = dict(GEMINI_MODE='replay', PROVIDER_MODE='live', AUTHORIZATION_REF=AUTH, ASTRA_MODE='disabled',
-                         FABLE_MODE='disabled', INTERPRET_MAX_CHARS=30_000, INTERPRET_MAX_PAGES=40,
+                         FABLE_MODE='disabled', INTERPRET_MAX_CHARS=20_000, INTERPRET_MAX_PAGES=40,
                          STORAGES=PLAIN_STATIC)
 
 

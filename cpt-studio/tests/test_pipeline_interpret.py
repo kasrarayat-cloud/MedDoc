@@ -89,7 +89,7 @@ class ScriptedInterpreter(adapter.Interpreter):
 
 
 @override_settings(GEMINI_MODE='replay', PROVIDER_MODE='disabled', AUTHORIZATION_REF=AUTH, ASTRA_MODE='disabled',
-                   FABLE_MODE='disabled', INTERPRET_MAX_CHARS=30_000, INTERPRET_MAX_PAGES=40)
+                   FABLE_MODE='disabled', INTERPRET_MAX_CHARS=20_000, INTERPRET_MAX_PAGES=40)
 class InterpretCase(TestCase):
     @classmethod
     def setUpClass(cls):

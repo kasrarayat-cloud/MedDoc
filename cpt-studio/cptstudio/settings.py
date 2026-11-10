@@ -202,10 +202,14 @@ PARTICIPANT_MAX_TOOL_RESULT_BYTES = 256 * 1024  # one tool result, as returned t
 # recording its outcome (jobs.LOOP_RECORDING_SECONDS) and the stage's own work, and ends well before
 # STALE_RUNNING_SECONDS.
 INTERPRETER_SEND_DEADLINE_SECONDS = 330
-# The size bound (D4, FINAL C9): a revision longer than this, or with more pages, is not sent to the interpreter, and its
-# stage says so plainly. The characters are PROVISIONAL until measured from the recorded output tokens (slice S16); the
-# pages equal MAX_PDF_PAGES' default.
-INTERPRET_MAX_CHARS = 30_000
+# The size bound (D4, FINAL C9 as DECISIONS D25 sets it from the S16 measurement): a revision longer than this, or with
+# more pages, is not sent to the interpreter, and its stage says so plainly. Measured on the 179 FRESH answers of
+# 2026-11-10: output tokens = 2,173 + 1.081 x input characters (residual p99 3,593); the 14 runs at 19,398-19,460
+# characters gave 21,201-25,036 tokens, at most 76% of maxOutputTokens (32,768). 20,000 characters is the edge of the
+# measured range, where the fit plus the p99 residual predicts 27,378 tokens (84%); it refuses none of the 86 live texts
+# (the longest 19,398). An answer cut off at the limit anyway is refused as too long (C5). The pages equal
+# MAX_PDF_PAGES' default.
+INTERPRET_MAX_CHARS = 20_000
 INTERPRET_MAX_PAGES = 40
 # The assess stage routes the document again (validation's span readings read that routing's analysis) and then
 # validates, so it has the analyze stage's time and memory and as much again for the validation: a document the analyze

@@ -168,7 +168,7 @@ LEGACY_ENTRY_POINTS = ('run_assessment', '_assess_child', '_analyze_child', '_ro
 
 
 @override_settings(GEMINI_MODE='replay', PROVIDER_MODE='live', AUTHORIZATION_REF=AUTH, ASTRA_MODE='disabled',
-                   FABLE_MODE='disabled', INTERPRET_MAX_CHARS=30_000, INTERPRET_MAX_PAGES=40)
+                   FABLE_MODE='disabled', INTERPRET_MAX_CHARS=20_000, INTERPRET_MAX_PAGES=40)
 class EventsCase(TestCase):
     """Corti answers ``corti_groups``; Astra and Fable, where a class configures them, answer ``participant_codes``."""
     corti_groups = (TWO_CODES,)
