@@ -285,7 +285,11 @@ DEVICE_WORDS = MappingProxyType({
     'snare': SNARE,
     'forceps': FORCEPS + ('biopsy forceps', 'jumbo forceps'),
     'needle': ('needle', 'needles', 'gauge', 'fna', 'fnb', 'fine needle'),
-    'injection': ('inject', 'injected', 'injecting', 'injection', 'injections', 'epinephrine', 'adrenaline'),
+    # an injected agent names the injection, as epinephrine does: a marking tattoo (India ink, carbon particles) and a
+    # saline lift are placed only by submucosal injection (S16 census: "tattoo", "carbon-particle tattoo", "tattooed
+    # with India ink", "tattooed", "lifted with saline", "saline lift")
+    'injection': ('inject', 'injected', 'injecting', 'injection', 'injections', 'epinephrine', 'adrenaline', 'tattoo',
+                  'tattooed', 'tattooing', 'india ink', 'carbon particle', 'saline lift', 'lifted with saline'),
     'balloon': BALLOON,
     'clip': ('clip', 'clips', 'clipped', 'clipping', 'hemoclip', 'hemoclips', 'endoclip', 'endoclips'),
     'band': ('band', 'bands', 'banded', 'banding'),
@@ -306,6 +310,12 @@ DEVICE_WORDS = MappingProxyType({
     'manual': ('digital', 'manual', 'manually', 'finger'),
 })
 COLD, HOT = ('cold',), ('hot',)
+# Electrocautery delivered through the snare's tip, or named by its generator's mode (S16 census: "contact coagulation
+# using the snare tip", "low-power snare-tip soft coagulation", "snare-tip soft coagulation", "coagulation using the
+# snare tip", "blended current"). Coagulation alone is not enough: a heater probe coagulates too (thermal_probe).
+SNARE_TIP = ('snare tip', 'tip of the snare')
+COAGULATION = ('coagulation', 'coagulated', 'coagulate', 'coagulating')
+CURRENT_MODES = ('soft coagulation', 'blended current', 'blend current')
 EXTRACTION = ('extraction', 'sweep', 'sweeps', 'swept', 'occlusion', 'retrieval')
 UNCHECKED_DEVICES = frozenset({'not_stated', 'other'})  # no surface form: not stated, or a device outside the list
 
@@ -315,6 +325,9 @@ def device_named(device: str, text: str) -> bool:
     any balloon word; wire_bougie by a wire-guided dilator's name, or a bougie or dilator with a guide wire; bougie by
     an unguided bougie's name, or a dilator with no balloon and no wire named; cold_snare by "cold" and a snare;
     extraction_balloon by a balloon and an extraction word. False for a device with no surface form."""
+    if device == 'electrocautery' and (holds(text, CURRENT_MODES)
+                                       or (holds(text, SNARE_TIP) and holds(text, COAGULATION))):
+        return True
     if device in ('cold_snare', 'hot_snare'):
         return holds(text, COLD if device == 'cold_snare' else HOT) and holds(text, SNARE)
     if device in ('cold_forceps', 'hot_forceps'):
@@ -428,13 +441,15 @@ FAILURE_MARKERS = ('unable', 'could not', "couldn't", 'cannot', 'can not', 'fail
 EARLIER_MARKERS = ('previous', 'previously', 'prior', 'earlier', 'ago', 'last', 'history', 'historical', 'past',
                    'formerly', 'before this', 'at that time', 'status post', 's/p', 'in the past', 'already')
 FUTURE_MARKERS = ('will', 'to be', 'planned', 'plan', 'scheduled', 'next', 'upcoming', 'later', 'repeat', 'return',
-                  'follow up', 'follow-up')
+                  'follow up', 'follow-up', 'future')  # 'future': S16 census ("A future intervention ... is planned")
 FACILITY_MARKERS = ('hospital', 'facility', 'center', 'centre', 'clinic', 'institution', 'practice', 'outside',
                     'elsewhere', 'another', 'referring')
 NUMBER_WORDS = ('one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve',
                 'fifteen', 'eighteen', 'twenty', 'twenty four', 'thirty', 'sixty', 'ninety')
-# The future marker "in N day(s), week(s), month(s), year(s)", N a numeral or a number word.
-_IN_PERIOD = re.compile(r'(?<!\w)in (?:\d+|' + _alternation(NUMBER_WORDS) + r') (?:day|week|month|year)s?(?!\w)')
+# The future marker "in N day(s), week(s), month(s), year(s)", N a numeral or a number word - or a range of two, "in 4 to
+# 6 weeks", "in two or three months" (S16 census: "in 4 to 6 weeks").
+_NUMBER = r'(?:\d+|' + _alternation(NUMBER_WORDS) + r')'
+_IN_PERIOD = re.compile(r'(?<!\w)in ' + _NUMBER + r'(?: (?:to|or) ' + _NUMBER + r')? (?:day|week|month|year)s?(?!\w)')
 
 
 def markers(kind: str, text: str) -> tuple[str, ...]:

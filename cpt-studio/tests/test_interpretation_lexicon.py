@@ -119,7 +119,8 @@ class Devices(SimpleTestCase):
         'hot_forceps': ('hot forceps', 'hot biopsy'),
         'forceps': ('forceps', 'jumbo forceps'),
         'needle': ('22-gauge needle', 'FNB', 'fine needle'),
-        'injection': ('injected', 'epinephrine'),
+        'injection': ('injected', 'epinephrine', 'tattoo', 'carbon-particle tattoo', 'tattooed with India ink',
+                      'lifted with saline', 'saline lift'),  # injected agents (S16 census)
         'balloon': ('balloon', 'CRE', 'TTS', 'through-the-scope', 'pneumatic', 'hydrostatic',
                     'controlled radial expansion'),
         'wire_bougie': ('Savary', 'Savary-Gilliard dilators', 'American dilators', 'wire-guided', 'over-the-wire',
@@ -131,7 +132,9 @@ class Devices(SimpleTestCase):
         'radiofrequency': ('radiofrequency', 'RFA'),
         'cryotherapy': ('cryotherapy', 'cryospray'),
         'thermal_probe': ('heater probe', 'bipolar', 'BICAP'),
-        'electrocautery': ('electrocautery', 'cauterized'),
+        'electrocautery': ('electrocautery', 'cauterized', 'contact coagulation using the snare tip',
+                           'low-power snare-tip soft coagulation', 'snare-tip soft coagulation', 'blended current',
+                           'coagulation using the tip of the snare'),  # S16 census
         'stent': ('stent',),
         'basket': ('basket',),
         'extraction_balloon': ('balloon sweep', 'extraction balloon'),
@@ -153,6 +156,11 @@ class Devices(SimpleTestCase):
         'extraction_balloon': ('balloon', 'basket'),
         'endoscope': ('the polyp', 'forceps'),
         'clip': ('band',),
+        # coagulation alone is no electrocautery (a heater probe coagulates; argon plasma coagulation is its own
+        # class), nor is a snare's tip that does not coagulate
+        'electrocautery': ('coagulation', 'contact coagulation with a heater probe', 'argon plasma coagulation',
+                           'the snare tip was opened'),
+        'injection': ('saline', 'washed with saline', 'a good lift'),  # saline or a lift alone is no injection
     }
 
     def test_every_device_has_a_rule_or_is_unchecked(self):
@@ -247,10 +255,11 @@ class Markers(SimpleTestCase):
                     self.assertTrue(lexicon.markers(kind, f'the act {entry} today'))
 
     def test_the_future_period(self):
-        for text in ('in 3 years', 'in two weeks', 'in 6 months', 'in one year', 'in twenty four months'):
+        for text in ('in 3 years', 'in two weeks', 'in 6 months', 'in one year', 'in twenty four months',
+                     'in 4 to 6 weeks', 'in two or three months'):  # a range of two (S16 census: "in 4 to 6 weeks")
             with self.subTest(text):
                 self.assertIn(text, lexicon.markers('future', text))
-        for text in ('in years', 'in the 3 weeks before', '3 years ago'):
+        for text in ('in years', 'in the 3 weeks before', '3 years ago', '4 to 6 weeks ago', 'in 4 to weeks'):
             with self.subTest(text):
                 self.assertFalse(any(marker.startswith('in ') for marker in lexicon.markers('future', text)))
 
@@ -261,6 +270,8 @@ class Markers(SimpleTestCase):
         self.assertEqual(lexicon.markers('facility', 'performed today'), ())
         self.assertEqual(lexicon.markers('planning', 'removed with a cold snare'), ())
         self.assertEqual(lexicon.markers('failure', 'completed without difficulty'), ())
+        self.assertEqual(lexicon.markers('future', 'A future intervention is planned'), ('future', 'planned'))
+        self.assertEqual(lexicon.markers('future', 'the futures'), ())
 
     def test_an_unknown_marker_kind_is_an_error(self):
         with self.assertRaises(KeyError):

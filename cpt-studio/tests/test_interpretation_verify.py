@@ -122,14 +122,16 @@ class Time(SimpleTestCase):
     def test_c1_time_marker_with_no_date_literal(self):
         for value, text in (('earlier_encounter', 'previously'), ('earlier_encounter', '2 years ago'),
                             ('earlier_encounter', 'at that time'), ('future', 'in 3 months'),
-                            ('future', 'repeat colonoscopy'), ('future', 'will be')):
+                            ('future', 'repeat colonoscopy'), ('future', 'will be'),
+                            ('future', 'future'), ('future', 'in 4 to 6 weeks')):  # S16 census
             with self.subTest(value=value, text=text):
                 verdict = verify.time_words(value, text, SERVICE)
                 self.assertEqual(reasons(verdict), ())
                 self.assertIn('time_marker', verdict.checks)
                 self.assertTrue(verdict.literals['markers'])
         for value, text in (('earlier_encounter', 'during the procedure'), ('future', 'afterwards'),
-                            ('earlier_encounter', 'next year'), ('future', 'previously')):
+                            ('earlier_encounter', 'next year'), ('future', 'previously'),
+                            ('earlier_encounter', 'future'), ('future', 'at a separate session')):
             with self.subTest(value=value, text=text):
                 self.assertEqual(reasons(verify.time_words(value, text, SERVICE)), ('time_marker_missing',))
 
