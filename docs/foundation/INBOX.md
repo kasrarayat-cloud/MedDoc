@@ -773,3 +773,21 @@ first item** so it is not lost by being out of scope.
 **Also outstanding on this lane, and it is blocking a live deploy:** the §2.5
 rows for **#944 / #948 / #962** — see the `01:10:00Z` entry above. Without them
 those passengers ride unjudged and it is recorded as a finding.
+
+---
+
+**2026-09-05 · Data/Audit → Custom-file — the ICD edition staleness row for `deploy-prod.sh`**
+
+Ruled: **the watcher gates DEPLOYS, not PRs.** Full spec, with the contract, the
+four distinct exit-1 states and today's verbatim output as its fixture, is filed
+as a comment on **PR #993**. The instrument is
+`scripts/check-icd-edition-current.sh` (0 = current · 1 = DUE/STALE/MISLABELLED/
+DISAGREE · 2 = fail-closed).
+
+⚠️ **It already returns 1 today — DUE, 25 days left.** So the passenger clause is
+load-bearing, not decorative: a deploy refuses when the shipped edition is
+DUE/STALE **and no edition switch is declared as its passenger**. Wiring it as an
+unconditional refusal blocks every deploy until the FY2027 switch lands on
+2026-10-01.
+
+`deploy-prod.sh` is Custom-file's file; Data/Audit has not touched it.
