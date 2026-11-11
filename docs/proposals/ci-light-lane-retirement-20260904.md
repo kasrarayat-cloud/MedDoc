@@ -1,5 +1,25 @@
 # Proposal — retire the self-hosted CI box? (light lane)
 
+> ## ⚖️ DECIDED 2026-09-04 — ACCEPTED, WITH ONE TRIGGER ADDED
+>
+> The owner **accepted** the recommendation below: **keep the box for the light
+> lane, re-decide on the invoice.** One trigger was added, and it corrects a
+> column this proposal left out:
+>
+> > **If the box balloons or wedges again, it is retired REGARDLESS OF COST.
+> > Maintenance burden is a cost too.**
+>
+> ⚠️ **That is a fair correction to this document.** §4 priced dollars carefully
+> and §6 mentioned babysitting only as prose. The balloon, the sshd and the
+> "wedge" false alarms each cost a session's attention mid-flight, and none of
+> that appears in the $51–185/month figure. A machine that needs watching is not
+> free because its invoice is zero.
+>
+> The trigger's measured form and what happens when it fires are recorded in
+> `DEPLOYMENT_RUNBOOK.md` §12 — retirement becomes maintenance, needing no
+> further decision, precisely so nobody is re-litigating it while the box is
+> misbehaving.
+
 **Written 2026-09-04, for the owner's decision.** Requested as: *"move the light
 lane too and RETIRE the self-hosted CI box entirely … Propose with the measured
 monthly minutes."*
