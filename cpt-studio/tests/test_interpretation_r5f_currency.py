@@ -132,8 +132,10 @@ class D162AFrameAnywherePlacesAnOffActOnTheDate(SimpleTestCase):
         own pin input (tests/test_interpretation_r4_em_same_day.py, the finding-14 office lines); and the whole
         sentence as the time words (FRESH-2 attests whole-line time words). Every new-path head: OFF, 99213 READY, the
         visit listed. c2e53f8e: held with separate_em ("Upper GI endoscopy ... is documented as performed on the same
-        date"), the visit set apart. Now as c2e53f8e. With 43235 proposed beside it, 43235 is excluded on every
-        new-path head, before and after (it reads its own time, not day_of)."""
+        date"), the visit set apart. Now as c2e53f8e. With 43235 proposed beside it, 43235 was excluded on every
+        new-path head, before and after D162 (it read its own time, not day_of); DECISIONS D169 (1) (round 5g):
+        events.deciding reads the exclusion's time basis with day_of, so the act ON the date is never excluded for its
+        time and 43235 is held (not documented as done at this encounter), as c2e53f8e holds it."""
         for label, (inv, text) in (
                 ('the review', office(EGD5, egd(a('earlier_encounter', W5, ['P2']), by_i()))),
                 ("D109's office lines", inventory({**OFFICE_14, 'P1': EGD5}, events=[visit(), egd(
@@ -145,7 +147,8 @@ class D162AFrameAnywherePlacesAnOffActOnTheDate(SimpleTestCase):
         stated_on_the_date(self, inv, text, EGD_LABEL, done=True)
         inv, text = office(EGD5, egd(a('earlier_encounter', W5, ['P2']), by_i()))
         result = run(inv, text, [('99213', VISIT), ('43235', 'upper endoscopy')], user_values=MEMBER)
-        self.assertEqual((proposal(result, '43235').bucket, proposal(result, '43235').status), ('excluded', 'excluded'))
+        self.assertEqual((proposal(result, '43235').bucket, proposal(result, '43235').status),
+                         ('selected', 'needs_clarification'))  # D169 (1): was ('excluded', 'excluded')
         held_for_separate_em(self, proposal(result, '99213'), EGD_LABEL)
 
     def test_d162_the_class_other_frames_and_positions(self):

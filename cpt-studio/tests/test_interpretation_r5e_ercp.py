@@ -266,19 +266,23 @@ class D155DenialClause(SimpleTestCase):
         """The reader (ercp.nothing_retrieved, the inventory alone), only the stent filed after the sweep's sentence.
         Controls, no denial in the dropped sentence's free clauses: "A plastic biliary stent was placed.", "A plastic
         biliary stent was placed, and sludge was retrieved." and the exceptive "No further stones were seen, and a
-        plastic biliary stent was placed." state nothing (as at e5628be56 and 4f82e5056). Clause-level ownership only:
-        "No stones were retrieved and a plastic biliary stent was placed." (no clause break) and "A plastic biliary
-        stent was placed because no stones were retrieved." are one clause that holds the stent's own words, so they are
-        the stent's and state nothing of the sweep's - a RECORDED RESIDUAL: 43264 stays READY on E4 there, as at
-        e5628be56 and 4f82e5056, where c2e53f8e HOLDS (readings_disagree). The denial is read with the act's own
-        sentence: the sweep's "extraction balloon" is the retrieval word a presence denial needs ("No stones were seen,
-        and ...")."""
+        plastic biliary stent was placed." state nothing (as at e5628be56 and 4f82e5056). D155 built clause-level
+        ownership only, so "No stones were retrieved and a plastic biliary stent was placed." (no clause break) and "A
+        plastic biliary stent was placed because no stones were retrieved." (one clause that holds the stent's own
+        words) stated nothing of the sweep's: its RECORDED RESIDUAL, 43264 READY on E4 where c2e53f8e HOLDS
+        (readings_disagree). DECISIONS D168 (1) (round 5g; D159's rule (1), rebuilt) closes it - where D155's reading
+        states nothing, a clause of the dropped sentence that holds another event's own words is read too - so this
+        pin's expectation for those two shapes CHANGED: each is now the sweep's statement, the clause quoted whole
+        (pinned in tests.test_interpretation_r5g_ercp). The denial is read with the act's own sentence: the sweep's
+        "extraction balloon" is the retrieval word a presence denial needs ("No stones were seen, and ...")."""
         for second in ('A plastic biliary stent was placed.',
                        'A plastic biliary stent was placed, and sludge was retrieved.',
-                       'No further stones were seen, and a plastic biliary stent was placed.',
-                       'No stones were retrieved and a plastic biliary stent was placed.',
-                       'A plastic biliary stent was placed because no stones were retrieved.'):
+                       'No further stones were seen, and a plastic biliary stent was placed.'):
             with self.subTest(second=second):
                 self.assertIsNone(statement(f'{SWEPT_ONCE} {second}', **SW, more=[stent()]))
+        for second in ('No stones were retrieved and a plastic biliary stent was placed.',
+                       'A plastic biliary stent was placed because no stones were retrieved.'):
+            with self.subTest(second=second):  # DECISIONS D168 (1): changed from None
+                self.assertEqual(statement(f'{SWEPT_ONCE} {second}', **SW, more=[stent()]), [SWEPT_ONCE, second[:-1]])
         self.assertEqual(statement(f'{SWEPT_ONCE} No stones were seen, and a plastic biliary stent was placed.', **SW,
                                    more=[stent()]), [SWEPT_ONCE, 'No stones were seen'])

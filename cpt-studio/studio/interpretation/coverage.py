@@ -210,6 +210,32 @@ def bundled_reason(reading, event: Mapping) -> str:
     return ''
 
 
+def drainage_step(reading, event: Mapping) -> Optional[Mapping]:
+    """DECISIONS D171 (1) (refute6 families finding 4): the transmural drainage of which ``event`` - an EUS fine-needle
+    aspiration or biopsy (an aspiration of a collection included) - is a STEP, or None. It is a step of a drainage of its
+    session, current as adjunct_whole reads a whole (performed or begun and not completed, possibly current: D62, D79),
+    when its verified part_of names that drainage (Gemini's step: 'Under EUS guidance, the pseudocyst was punctured from
+    the gastric body with a 19-gauge needle and 20 mL of clear fluid was aspirated and sent for amylase and CEA.' part_of
+    'EUS-guided transmural drainage of the pseudocyst was then performed with a 15 mm lumen-apposing metal stent.'), or
+    when its verified lesion is the drainage's own verified lesion (the same aspiration with no part_of: the needle access
+    and aspiration of the collection the drainage drains). The drainage's code includes that access, so the code that
+    stands on the aspiration is held (assess._examination_class) - never READY beside 43240 on the same lesion. An FNA of
+    ANOTHER lesion ('EUS-guided fine-needle aspiration of the pancreatic tail mass ...' beside the pseudocyst's drainage)
+    is no step. Read for that hold only: bundled_reason does not read it, so coverage still lists the aspiration where no
+    counted code reads it (D171's recorded stop: bundling it would drop that listing). Structure only: no words."""
+    if event.get('family') != 'gi.eus' or event.get('catalogue_kind') != 'fna':
+        return None
+    whole_of = _part_of(event)
+    lesion = identity.verified_lesion(event)
+    for whole in reading.events.values():
+        if (whole is event or whole.get('family') != 'gi.eus' or whole.get('catalogue_kind') != 'drainage'
+                or not adjunct_whole(whole) or not _same_session(reading, whole, event)):
+            continue
+        if whole_of == whole['id'] or (lesion and lesion == identity.verified_lesion(whole)):
+            return whole
+    return None
+
+
 def bundling_doubt(reading, event: Mapping) -> Optional[dict]:
     """The bundling_identity relation that makes ``event``'s bundling depend on an identity not established, whose
     whole is a current performed act (FINAL 7.7: asked, never READY) - or, for a removal's procedural adjunct, a removal
@@ -1028,8 +1054,9 @@ def in_doubt_questions(reading, coverage: Coverage, asked=(), holding=()) -> lis
     order; its claim corrected by D154). ``holding``: the event ids the proposed codes hold on.
 
     DECISIONS D157 (3) (round 5f; D154's class (ii), and the round-5e review of D154, problem 1): ``holding`` is LIVE -
-    assess passes the events every proposal's own question names (events.Question.events, support['question_events'];
-    assess.py's one call). An act in doubt that a proposed code's own question already names is asked through that
+    assess passes the events that the question of every proposal held NOT DOCUMENTED names (events.Question.events,
+    support['question_events']; assess.py's one call, narrowed at the round 5f integration: a bundling identity's
+    act_target names a whole act, never an act in doubt). An act in doubt that a proposed code's own question already names is asked through that
     code: it yields its (family, fact) service slot to the next act in doubt no code's question names, and keeps the
     slot only when no such act is left - so which facts are asked never depends on the order (no question is dropped),
     only which act each one names. Act identity only (event ids), never a fact or a wording: a different act's question

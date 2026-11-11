@@ -420,33 +420,228 @@ def _examination_class(selection: _Selection, reading: events.Reading, sessions_
     it (mapping.SHORT_OF_DUODENUM); a lower-tract EUS code the reach of its endoscopy (mapping.SIGMOIDOSCOPIC_REACH,
     COLONOSCOPIC_REACH, and for a stoma code STOMA_REACH with the encounter's verified stoma); a reach in no class of the
     code fits none. None when it fits, when the code has no class, or when the reach is not verified (the extent fact
-    the class adds to the code's required facts is then missing, and asked). Never an exclusion."""
+    the class adds to the code's required facts is then missing, and asked). Never an exclusion.
+
+    DECISIONS D171 (round 5g, narrowing only; refute6 families findings 4 and 5, judges findings 11-13): the EUS code
+    checks. (3) The class question of an EGD's limited EUS code (43237, 43238) states its class as CPT does - an
+    examination limited to the esophagus, the stomach or the duodenum (and adjacent structures) - never D28's 'short of
+    the duodenum', which on an examination limited to the duodenum steered a truthful answer to the full code. Where the
+    class fits, or the code has none, a code the per-code rule SUPPORTS (E* not empty: the code that would otherwise go
+    READY) is held - never excluded, never released - by the first of _eus_code_hold's checks that applies (the tract,
+    the stated stations, a denied station, a drainage's step, an injection of the wall); a code the rule holds or
+    excludes keeps its outcome."""
     exam_class = mapping.examination_class(selection.code)
-    if not exam_class:
-        return None
     landmark, extent = _reach(selection.family, reading, sessions_)
-    if not landmark:
+    if exam_class and landmark:
+        exam = _session_examination(selection.family, reading, sessions_)
+        # D43: a full examination stated incomplete ("The examination was limited to the ampulla ...") does not fit the
+        # full class, whatever its reach; a colonoscopy through a stoma needs the encounter's verified stoma. D56 (the
+        # round-2 refutation, finding 3): an 'incomplete' completion in ANY state - verified, unverified or opened - does
+        # not fit the full class (fail-closed), so Gemini's own doubt about the completion, or completion words that do
+        # not bind, never releases the hold a confident 'incomplete' sets. D72 (the round-3 refutation, finding 6): nor
+        # does an examination whose STATUS is attempted_not_completed, in any state - Gemini may state the
+        # incompleteness through the status ("The examination was incomplete: the esophagus and the stomach were not
+        # examined." read as begun and not completed; "The examination was aborted ...") rather than the completion;
+        # D56's question either way
+        attempted = exam is not None and events.value(exam, 'status') == 'attempted_not_completed'
+        incomplete = exam_class == mapping.FULL and exam is not None and (_said_incomplete(exam) or attempted)
+        no_stoma = exam_class == mapping.STOMA and not mapping.has_stoma(reading.encounter)
+        if not (landmark in mapping.CLASS_REACH[exam_class] and not incomplete and not no_stoma):
+            words = extent['words']['text'] if isinstance(extent.get('words'), Mapping) else ''
+            reason, question = wording.examination_class_hold(selection.code, exam_class,
+                                                              wording.landmark_label(landmark), words,
+                                                              incomplete=incomplete)
+            if selection.code in mapping.EGD_LIMITED_EUS_CODES:  # D171 (3): the limited class as CPT states it
+                reason, question = [item.replace(wording.EXAMINATION_CLASS_WORDS[mapping.LIMITED], EGD_LIMITED_WORDS)
+                                    for item in (reason, question)]
+            return _eus_class_spec(selection, key, reason, question)
+    return _eus_code_hold(selection, reading, sessions_, key, exam_class, landmark)
+
+
+# DECISIONS D171: the classes the EUS code checks name, as CPT states them (the limited one replaces D28's words for
+# 43237 and 43238 only; an esophagoscopy's limited code keeps them)
+EGD_LIMITED_WORDS = ('an endoscopic ultrasound examination limited to the esophagus, the stomach or the duodenum (and '
+                     'adjacent structures)')
+FULL_STATIONS_WORDS = 'an endoscopic ultrasound examination including the esophagus, the stomach and the duodenum'
+UPPER_TRACT_WORDS = 'an endoscopic ultrasound through an upper endoscopy (the esophagus, the stomach or the duodenum)'
+EUS_ACT_CHECK = ('facts.eus_act', 'Endoscopic ultrasound act of the code')
+HELD = 'Held for the reviewer, not excluded.'
+
+
+def _eus_class_spec(selection: _Selection, key: str, reason: str, question: str, fact: str = 'extent',
+                    check: tuple = wording.EXAMINATION_CLASS_CHECK) -> tuple:
+    """The (warn check, proposal clarification) pair of an EUS code check: D28's form, fact 'extent' unless given."""
+    return (Check(*check, 'warn', reason, wording.SOURCE),
+            ClarificationSpec(scope='proposal', fact=fact, question=question, reason=reason, family=selection.family,
+                              proposal_key=key))
+
+
+def _own_place(reading: events.Reading, event: Mapping) -> str:
+    """The first own place (kind, status or target passage, in document order) of ``event``, else its own words."""
+    places = events.anchors(reading, event)
+    return places[0]['text'] if places else events.statement_text(reading, event)
+
+
+def _lower_place(reading: events.Reading, supporting: Sequence) -> Optional[tuple]:
+    """DECISIONS D171 (2): (event, landmark, words) of the lower-tract place (coverage.LOWER_REGIONS) that makes the EUS a
+    lower-tract one for an upper endoscopy's code, else None. Places are read as C-4 reads them (coverage.eus_places: a
+    verified target, a usable reach, an unplaced act's own target words): first an act the code itself stands on (its
+    supporting events: 'Three gold fiducial markers were then placed into the rectal mass under EUS guidance ...', read
+    as 'tattoo', which is no lower evidence for C-4 - D96 - but is this code's own act), placed lower whatever else the
+    document places; else the EUS session's own places (coverage.lower_evidence: its done examinations and done EUS
+    acts - 'The radial echoendoscope was advanced to the sigmoid colon ...'), lower where none of them, nor of the
+    code's acts, lies in the upper tract (mapping.UPPER_TRACT_REGIONS): a rectal act Gemini files under an upper EUS that
+    reached the duodenum and sampled the pancreas (D96's settled control) makes no lower-tract EUS of it."""
+    def lower(event):
+        return next((place for place in coverage.eus_places(event)
+                     if place and mapping.region(place) in coverage.LOWER_REGIONS), '')
+
+    def found(event, place):
+        extent = event.get('extent')
+        record = extent if (events.verify.usable(extent) and extent.get('value') == place) else event.get('target')
+        words = record.get('words') if isinstance(record, Mapping) else None
+        text = words.get('text') if isinstance(words, Mapping) else ''
+        return event, place, text or _own_place(reading, event)
+
+    for event in supporting:
+        if lower(event):
+            return found(event, lower(event))
+    session = coverage.lower_evidence(reading)
+    if any(mapping.region(place) in mapping.UPPER_TRACT_REGIONS for event in session + list(supporting)
+           for place in coverage.eus_places(event) if place):
         return None
-    exam = _session_examination(selection.family, reading, sessions_)
-    # D43: a full examination stated incomplete ("The examination was limited to the ampulla ...") does not fit the full
-    # class, whatever its reach; a colonoscopy through a stoma needs the encounter's verified stoma. D56 (the round-2
-    # refutation, finding 3): an 'incomplete' completion in ANY state - verified, unverified or opened - does not fit
-    # the full class (fail-closed), so Gemini's own doubt about the completion, or completion words that do not bind,
-    # never releases the hold a confident 'incomplete' sets. D72 (the round-3 refutation, finding 6): nor does an
-    # examination whose STATUS is attempted_not_completed, in any state - Gemini may state the incompleteness through the
-    # status ("The examination was incomplete: the esophagus and the stomach were not examined." read as begun and not
-    # completed; "The examination was aborted ...") rather than the completion; D56's question either way
-    attempted = exam is not None and events.value(exam, 'status') == 'attempted_not_completed'
-    incomplete = exam_class == mapping.FULL and exam is not None and (_said_incomplete(exam) or attempted)
-    no_stoma = exam_class == mapping.STOMA and not mapping.has_stoma(reading.encounter)
-    if landmark in mapping.CLASS_REACH[exam_class] and not incomplete and not no_stoma:
+    return next((found(event, lower(event)) for event in session if lower(event)), None)
+
+
+def _stated_stations(reading: events.Reading, exam: Mapping) -> dict:
+    """DECISIONS D171 (3): {upper-tract region: the passage that names it} over the examination's own statement - the
+    passages that hold its own kind or status words ('EUS imaging' ... 'was performed') - outside its reach's passages:
+    the station line ('EUS imaging was performed from the duodenum only.'), which Gemini cites as the examination's kind
+    and status and never as its reach. Read by lexicon.landmarks_named (the landmark vocabulary every reader shares),
+    never by a word of this rule's own; a heading or an impression that only names the procedure is not read."""
+    extent = exam.get('extent')
+    reach = set(extent.get('passages') or ()) if isinstance(extent, Mapping) else set()
+    pids = []
+    for name in ('kind', 'status'):
+        words = (exam.get(name) or {}).get('words')
+        if isinstance(words, Mapping) and isinstance(words.get('start'), int):
+            pids += [pid for pid in reading.passages_of(words) if pid not in reach and pid not in pids]
+    found: dict = {}
+    for place in reading.places(pids):
+        for landmark in lexicon.landmarks_named(place['text']):
+            region = mapping.region(landmark)
+            if region in mapping.UPPER_STATIONS and region not in found:
+                found[region] = place['text']
+    return found
+
+
+def _denied_station(reading: events.Reading, family: str) -> Optional[tuple]:
+    """DECISIONS D171 (3): (event, region) of an examination of ``family`` stated not performed - its status value
+    not_performed in ANY state, verified or not, cited by the code or not - at an upper-tract station (its target's
+    value, in any state: 'The esophagus and the stomach were not examined.' as two denial events), unless it is verified
+    at another time (another occasion's examination); None when there is none."""
+    for event in reading.events.values():
+        if event.get('family') != family or not (event.get('catalogue_kind') in mapping.EXAMINATION_KINDS
+                                                 or events.value(event, 'kind') == mapping.EXAMINATION):
+            continue
+        if events.value(event, 'status') != 'not_performed' or events.verified_other_time(event):
+            continue
+        region = mapping.region(events.value(event, 'target') or '')
+        if region in mapping.UPPER_STATIONS:
+            return event, region
+    return None
+
+
+def _whole(text: str) -> str:
+    """The document's words in curly quotes, uncut (wording.quote with a limit past their end): the passages are bound
+    to 600 characters each, and a question about an act shows its whole sentence (D103's rule for a statement)."""
+    return wording.quote(text, len(text) + 1)
+
+
+def _eus_code_hold(selection: _Selection, reading: events.Reading, sessions_: Mapping, key: str, exam_class: str,
+                   landmark: str) -> Optional[tuple]:
+    """DECISIONS D171: the EUS code checks after the class (_examination_class), for a code the per-code rule supports
+    (its E* not empty); the first that applies holds it - a warn check and one proposal question - never an exclusion,
+    never READY. In order:
+    - (2) the tract (refute6 families finding 5): an upper endoscopy's EUS code (mapping.eus_tract) on a lower-tract EUS
+      (_lower_place: an act the code stands on placed lower - 'Three gold fiducial markers were then placed into the
+      rectal mass under EUS guidance ...' that 43253 stands on - or the session's own places lower and none upper - 'The
+      radial echoendoscope was advanced to the sigmoid colon ...'). A code with a class is read here only where its
+      reach is verified (with none, the extent is asked already);
+    - (3) the full class's stations (judges findings 11 and 13), for 43242 and 43259 where the reach fits: the station
+      line names one upper-tract station only (_stated_stations: 'EUS imaging was performed from the duodenum only.'),
+      or an examination of the session's family is stated not performed at a station (_denied_station);
+    - (1) a drainage's step (families finding 4): an FNA the code stands on is a step of a transmural drainage
+      (coverage.drainage_step: its part_of names the drainage, or it is of the drainage's own verified lesion) - fact
+      'target', as c2e53f8e holds 43242 there; an FNA of another lesion is no step;
+    - (4) an injection of the wall (judges finding 12): 43253, the transmural injection, on an act mapping.submucosal_act
+      reads as submucosal (its own words name the submucosa, a lift injection, or an ink tattoo) - fact 'target', as
+      c2e53f8e holds it.
+    (1) and (4) are not asked where R6 asks the code's 'target' already (the structure examined is not documented): the
+    code is held by it, and a second 'target' question would share its member key. None when none applies, or when the
+    rule does not support the code (held or excluded: its outcome is kept)."""
+    evaluation = selection.evaluation
+    if selection.family != 'gi.eus' or evaluation is None or not evaluation.supporting:
         return None
-    words = extent['words']['text'] if isinstance(extent.get('words'), Mapping) else ''
-    reason, question = wording.examination_class_hold(selection.code, exam_class, wording.landmark_label(landmark),
-                                                      words, incomplete=incomplete)
-    return (Check(*wording.EXAMINATION_CLASS_CHECK, 'warn', reason, wording.SOURCE),
-            ClarificationSpec(scope='proposal', fact='extent', question=question, reason=reason,
-                              family=selection.family, proposal_key=key))
+    supporting = [reading.events[eid] for eid in evaluation.supporting if eid in reading.events]
+    code, family = selection.code, selection.family
+    if mapping.eus_tract(code) == mapping.UPPER_TRACT and (landmark or not exam_class):  # D171 (2)
+        lower = _lower_place(reading, supporting)
+        if lower is not None:
+            _, place, words = lower
+            where = f'the {wording.landmark_label(place)}: {_whole(words)}'
+            reason = (f'{code} accounts for {UPPER_TRACT_WORDS}; the document places this endoscopic ultrasound in the '
+                      f'lower tract ({where}), which no upper endoscopic ultrasound code describes. {HELD}')
+            question = (f'The documented endoscopic ultrasound is placed in the lower tract ({where}). Was '
+                        f'{UPPER_TRACT_WORDS} performed on the date of service?')
+            return _eus_class_spec(selection, key, reason, question)
+    if exam_class == mapping.FULL and landmark:  # D171 (3): the esophagus, the stomach and the duodenum
+        exam = _session_examination(family, reading, sessions_)
+        stations = _stated_stations(reading, exam) if exam is not None else {}
+        if len(stations) == 1:
+            (region, line), = stations.items()
+            reason = (f'The documented endoscopic ultrasound examination names one station only, the {region} '
+                      f'({wording.quote(line)}); {code} accounts for {FULL_STATIONS_WORDS}, which CPT Studio could '
+                      f'not find in the document. {HELD}')
+            question = (f'The documented endoscopic ultrasound examination ({_whole(line)}) names one '
+                        f'station only, the {region}. Was {FULL_STATIONS_WORDS} performed on the date of service?')
+            return _eus_class_spec(selection, key, reason, question)
+        denied = _denied_station(reading, family)
+        if denied is not None:
+            event, region = denied
+            line = _own_place(reading, event)
+            reason = (f'The document states that the {region} was not examined ({wording.quote(line)}); {code} '
+                      f'accounts for {FULL_STATIONS_WORDS}, which CPT Studio could not find in the document. {HELD}')
+            question = (f'The document states that the {region} was not examined ({_whole(line)}). Was '
+                        f'{FULL_STATIONS_WORDS} performed on the date of service?')
+            return _eus_class_spec(selection, key, reason, question)
+    if 'target' in PROFILES[family].required_facts and not _documented(
+            _inventory_fact('target', family, selection, reading, sessions_)):
+        return None  # R6 asks the code's 'target' already: (1) and (4) would ask it twice, and it is held either way
+    for event in supporting:  # D171 (1): an FNA that is a step of a transmural drainage
+        whole = coverage.drainage_step(reading, event)
+        if whole is not None:
+            step, drainage = _own_place(reading, event), _own_place(reading, whole)
+            reason = (f'The document gives this fine-needle aspiration ({wording.quote(step)}) as a step of the '
+                      f'transmural drainage of the same structure ({wording.quote(drainage)}): the needle access and '
+                      'aspiration of a collection that is drained are part of that drainage, which its code '
+                      f'accounts for, not a separate service (internal profile rule). {HELD}')
+            question = (f'Was the fine-needle aspiration ({_whole(step)}) a separate sampling, or a step '
+                        f'of the transmural drainage ({_whole(drainage)})?')
+            return _eus_class_spec(selection, key, reason, question, fact='target', check=EUS_ACT_CHECK)
+    if code in mapping.TRANSMURAL_INJECTION_CODES:  # D171 (4): an injection of the wall is no transmural injection
+        for event in supporting:
+            if mapping.submucosal_act(event):
+                act = events.event_label(reading, event)
+                line = _own_place(reading, event)
+                reason = (f'{code} describes an EUS-guided transmural injection (of a diagnostic or therapeutic '
+                          f'substance, or of fiducial markers); the document describes this {act} as an injection of '
+                          f'the wall ({wording.quote(line)}), a submucosal injection rather than a transmural one. '
+                          f'{HELD}')
+                question = (f'Was the {act} ({_whole(line)}) an EUS-guided transmural injection or '
+                            'fiducial placement, or a submucosal injection of the wall?')
+                return _eus_class_spec(selection, key, reason, question, fact='target', check=EUS_ACT_CHECK)
+    return None
 
 
 def _procedural(selection: _Selection, ref) -> bool:
@@ -762,26 +957,48 @@ def _claims(selection: _Selection, reading: events.Reading) -> tuple:
     competing_codes ("a misread role never releases anything": its held match keeps its acts). A code HELD by any hold
     (state 'uncertain', no supporting event) now keeps as claims the acts its evaluation names or read - its question's
     events and the acts the hold was decided on (Evaluation.read) - that it could account for, as it would claim them as
-    supporting were its doubt resolved: acts of its family and of a kind of its requirement groups (events.is_candidate),
-    stated positive or uncertain, possibly current (D62) and not verified as another performer's; for a code that names
-    a technique, of its device class or not verified as a class, and not verified outside its site class (D29), as
-    _technique_doubts reads them (R4: a dilation of another technique is no act the code accounts for). They are ADDED
+    supporting were its doubt resolved: acts events.is_candidate admits to one of its requirement groups - on the
+    catalogue route an act of its family whose kind covers one of the group's (mapping.covers: the kind itself, a
+    tattoo and an injection as one act, or an umbrella over it), on the unreconciled route an act of a kind of the
+    group whose verified target lies in the code's regions, of ANY family; stated positive or uncertain, possibly
+    current (D62) and not verified as another performer's (``doubt``); for a code that names a technique, of its
+    device class or not verified as a class, as _technique_doubts reads it (R4: a dilation of another technique is no
+    act the code accounts for); and for EVERY site-specific dilation code (mapping.DILATION_SITES; 43213 and 43245
+    among them name no technique), on either route, not verified outside its site class (D29), where events.evaluate
+    applies D29 on the catalogue route only (D167 corrected this sentence: review:claims6 problem 2). They are ADDED
     to what D55, D74 and D118 claim above, which read the code's supporting events only and are unchanged, so a hold only
     ever adds a competition - never READY, never an exclusion, never a question dropped. Only the competition reads
     them: E* (support.acts) is unchanged. As integrated (variant G4): a TECHNIQUE code (link.technique, a dilation code)
     held for its SITE (events.SITE: the place unsettled for its class) adds no claim - D118's rule, 'an act is never
     paired with itself', so FRESH-2 fb07's shape keeps 43245 READY beside 43249 held for its site (the general form
     held 43245 competing_codes there, a cost on an attested document); a technique code held for any other reason
-    (another_role: a dilation documented only in a nurse's entry) keeps its acts, so its rival keeps competing."""
+    (another_role: a dilation documented only in a nurse's entry) keeps its acts, so its rival keeps competing.
+
+    DECISIONS D167 (round 5g, narrowing only; review:claims6 problem 1): D74's extras read only the current performed
+    acts (coverage.current_performed: a usable status 'performed'). On finding 5's stone clearance with the extraction's
+    status words unlocated (E4 'were removed', which its passage P4 does not hold: the attribute state FRESH-2
+    C/C2MEM-023 r1 attests), D163 gave the held 43264 its act (E4) while 43265 claimed its lithotripsy (E3) alone, so
+    combination.competition found no pair and 43265 was READY with no competing_codes beside the held 43264 of one stone
+    clearance, where c2e53f8e with its participants holds both with competing_codes. The extras now also read the acts
+    of the code's other kinds that D163's own() keeps (``doubt``): stated positive or uncertain in ANY verification
+    state, possibly current (D62) and not verified as another performer's - an act only doubted is a doubt about the
+    code that accounts for it, never an absence of it (D74, D87). The current performed acts are claimed as before (one
+    verified as another performer's included), so this only ever adds a competition pair: never READY, never an
+    exclusion, never a question dropped, and E* (support.acts) is unchanged. Only the three codes with such extras claim
+    more (43265's extraction, 44365's ablation, 49440's tube placement). D167 records its costs, among them an
+    extraction stated uncertain beside a performed lithotripsy: 43265 is now held with competing_codes where c2e53f8e
+    READYs it in both settings."""
     evaluation = selection.evaluation
     supporting = tuple(evaluation.supporting)
     link = evaluation.link
     site = mapping.DILATION_SITES.get(link.code, '')
 
+    def doubt(event: Mapping) -> bool:  # D163, D167: positive or uncertain, possibly current, not another's
+        return (events.value(event, 'status') in events.verify.POSITIVE + ('uncertain',)
+                and coverage.possibly_current(event) and not events.verified_other_performer(event))
+
     def own(event: Mapping) -> bool:  # D163: an act the held code could account for
-        return (any(events.is_candidate(link, group, event) for group in events.requirements(link))
-                and events.value(event, 'status') in events.verify.POSITIVE + ('uncertain',)
-                and coverage.possibly_current(event) and not events.verified_other_performer(event)
+        return (any(events.is_candidate(link, group, event) for group in events.requirements(link)) and doubt(event)
                 and (not link.technique or mapping.code_technique(event) in ('', link.technique))
                 and not (site and events.site_fit(reading, event, site) == events.OUTSIDE))
 
@@ -806,7 +1023,8 @@ def _claims(selection: _Selection, reading: events.Reading) -> tuple:
         return claimed(supporting)
     kinds = set(link.acts) - set(link.defining)
     extra = tuple(event['id'] for event in family if (event.get('catalogue_kind') or '') in kinds
-                  and coverage.current_performed(event) and event['id'] not in supporting)
+                  and (coverage.current_performed(event) or doubt(event))  # D167: an act only doubted too
+                  and event['id'] not in supporting)
     return claimed(supporting + extra)
 
 

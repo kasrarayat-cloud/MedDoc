@@ -407,8 +407,8 @@ class Evaluation:
     code's support state, FINAL 7.11); ``reason``: this module's reason constants; ``supporting``: E*(C), the event ids
     the code accounts for (empty when held or excluded); ``read``: every event the decision read (its fingerprint's
     events); ``unverified``: the (event, attribute) pairs a decision read and found unusable; ``second``: a held code's
-    second question, which assess asks as its own clarification after ``question`` (DECISIONS D161: only
-    _target_hold sets one)."""
+    second question, which assess asks as its own clarification after ``question`` (DECISIONS D161: _target_hold's target
+    question; DECISIONS D168 (3): ercp.role_second's exchange or retrieval question beside the another_role hold)."""
     code: str
     family: str
     link: mapping.CodeLink
@@ -424,7 +424,7 @@ class Evaluation:
     attempted: bool = False  # C-9: a non-examination code's act begun and not completed (the 52/53 consideration)
     unverified: tuple = ()
     bundled: tuple = field(default=())  # (event id, why) of supporting acts part of another documented act
-    second: Optional[Question] = None  # DECISIONS D161: _target_hold's target question beside 7.4's
+    second: Optional[Question] = None  # D161: _target_hold's target question beside 7.4's; D168 (3): ercp.role_second's
 
     @property
     def held(self) -> bool:
@@ -527,8 +527,8 @@ def evaluate(code: str, kept: Sequence, reading: Reading, link: Optional[mapping
                                             _spans(anchors(reading, event))),
                           bundled=tuple((item['id'], reason) for item, reason in bundled))
     held = another_role_hold(code, link, own_acts, reading, read, name, bundled)  # DECISIONS D124
-    if held is not None:
-        return held
+    if held is not None:  # DECISIONS D168 (3): the ERCP rules' question about its own acts is the hold's second
+        return ercp.role_second(held, own_acts, kept, reading)
     performed = [event for event in own_acts if value(event, 'status') == 'performed']
     labels = [event_label(reading, event) for event in own_acts[:4]]
     if not performed:  # an examination begun and not completed (7.3 line 2): its failure-marker words (R-4)
@@ -771,6 +771,16 @@ def another_role_hold(code: str, link: mapping.CodeLink, own_acts: Sequence, rea
         return (2 <= len(body) <= 61 and body[0].isascii() and (body[0].isupper() or body[0].isdigit())
                 and all((char.isascii() and char.isalnum()) or char in _ROLE_HEADING_MARKS for char in body))
 
+    def sentence_end(source: str, start: int, end: int) -> int:
+        """DECISIONS D165 (1): the index of the last sentence end in ``source[start:end]`` by the engine's own boundary -
+        '.', '!' or '?' (ercp.SENTENCE_ENDS) followed by whitespace or by the end of ``source``, as ercp._sentences ends a
+        sentence; never a word list - else -1."""
+        while True:
+            stop = max(source.rfind(mark, start, end) for mark in ercp.SENTENCE_ENDS)
+            if stop < 0 or stop + 1 == len(source) or source[stop + 1].isspace():
+                return stop
+            end = stop
+
     def signed(source: str, at: int, begin: int) -> str:
         """The role whose signature (_ROLE_SIGNATURE: services.ROLE_SIGNATURE, c2e53f8e) stands in the label closed by
         a colon before ``at`` (the act's own words) - the text of ``source`` from the start of the line on which the
@@ -790,7 +800,25 @@ def another_role_hold(code: str, link: mapping.CodeLink, own_acts: Sequence, rea
         a label on a line above it: 'CRNA charted the sedation:' / 'Documented by Jo Rowe, RN: <the act>', cited as
         one passage, names the nursing entry, as the act's line and the installed release name it (its sentence begins
         after the line a colon ends), not anesthesia (both roles' signatures in one label). It decides no hold: a label
-        that names a role on the act's line names one on the passage's lines too."""
+        that names a role on the act's line names one on the passage's lines too.
+
+        DECISIONS D165 (round 5g; review:colon5 problems 2-4):
+        (1) the label is read for the act's SENTENCE, not only from the line its passage begins on. A passage that begins
+        mid-sentence - the text from the previous sentence end to the passage's start holds more than whitespace, by the
+        engine's own sentence boundaries (ercp.SENTENCE_ENDS followed by whitespace, as ercp._sentences ends one; never a
+        word list) - is read from the start of the line its sentence begins on, by the same rules (D152, D158). So a
+        hard-wrapped sentence Gemini cites as one passage per line is read as the installed release reads it whole:
+        'Documented by Jo Rowe, RN: Sigmoid colon, 30 cm: 10 mm sessile polyp, removed en bloc with a cold' / 'snare and
+        retrieved (jar 3).', cited as two passages, names the nursing entry for the second as for the first. It only
+        reads a longer label, so it never loses a role the passage's own lines name.
+        (2) NOT INTEGRATED (round 5g integration; review:colon6 problem 0, critical): the physician's own label on the act's
+        line was to be read as the act's role, a judged restoration of colon5's recorded cost. Its early return released
+        holds both 05a881a75 and c2e53f8e keep: an act stated only on the signed line above, whose kind and status words
+        stand on a physician-labelled field line. The cost stays recorded (a hold where c2e53f8e is READY).
+        (3) the lines above the act's own are read one by one, the nearest first, and the first whose label names a role
+        names it; only where none does is the whole label read (a signature whose \\s+ spans a line break). So 'CRNA
+        charted the sedation:' / 'Documented by Jo Rowe, RN: A 6 mm ...' / 'was removed with a cold snare.' names the
+        nursing entry, as the installed release does. It changes the entry named, never whether one is."""
         records, nurses, entries, anesthetists, charted = _ROLE_SIGNATURE
 
         def word(part: str, index: int) -> bool:  # an ASCII letter, digit or '_' at ``index`` (\w under re.A)
@@ -844,9 +872,32 @@ def another_role_hold(code: str, link: mapping.CodeLink, own_acts: Sequence, rea
                     return 'anesthesia'
             return role
 
+        def sentence_start(index: int) -> int:  # where the sentence ``index`` lies in begins (D165 (1))
+            start = sentence_end(source, 0, index) + 1  # after the previous sentence end
+            while start < index and source[start].isspace():
+                start += 1
+            return start  # ``index`` itself when only whitespace lies between: the passage begins its sentence
+
         own_line = source.rfind('\n', 0, at) + 1  # the act's own line, read first: its role is kept (D158)
+        role = read(source[own_line:at])
+        if role:
+            return role
         first = source.rfind('\n', 0, min(begin, at)) + 1  # the line the passage begins on (D152)
-        return read(source[own_line:at]) or (read(source[first:at]) if first < own_line else '')
+        first = min(first, source.rfind('\n', 0, sentence_start(min(begin, at))) + 1)  # its sentence's (D165 (1))
+        # every signature holds one of these words, so a line or a span above the act's line holding none of them names
+        # no role: skipping it changes nothing (str.lower folds every ASCII letter read folds), only the work done
+        anchors = records + anesthetists + ('nursing',)
+        if not any(term in source[first:own_line].lower() for term in anchors):
+            return ''
+        stop = own_line - 1  # the line break that ends the line above the act's own
+        while stop >= first:  # the nearest labelled line first (D165 (3))
+            start = source.rfind('\n', 0, stop) + 1
+            if any(term in source[start:stop].lower() for term in anchors):
+                role = read(source[start:stop])
+                if role:
+                    return role
+            stop = start - 1
+        return read(source[first:at])  # a label spanning lines (\s+ after 'by': D152)
 
     def words_at(place: Mapping, event: Mapping) -> Optional[int]:
         """Where the act's own words begin in ``place``: the earliest of its kind's and status's words that begin in
@@ -861,6 +912,25 @@ def another_role_hold(code: str, link: mapping.CodeLink, own_acts: Sequence, rea
                 starts.append(words['start'] + inner + 1 if inner >= 0 else words['start'])
         return min(starts) if starts else None
 
+    def words_later(place: Mapping, event: Mapping) -> Optional[int]:
+        """DECISIONS D165 (1): where the act's own words begin after ``place`` (which holds none of them) in the
+        sentence the place ends in - the earliest of its kind's and status's words that begin after the place, each read
+        after the last colon inside them as words_at reads them, with no sentence end (sentence_end) from the place's
+        last character to them - else None. So a wrapped sentence's label line, cited as a passage of its own, is read
+        with the label of the sentence the act's words close ('Documented by Jo Rowe, RN: A 6 mm sessile polyp in the
+        sigmoid colon' / 'was removed with a cold snare.', its kind's and status's words on the second line); read on the
+        revision text only."""
+        starts = []
+        for record in (event.get('kind'), event.get('status')):
+            words = record.get('words') if isinstance(record, Mapping) else None
+            if isinstance(words, Mapping) and words['start'] >= place['end']:
+                inner = str(words.get('text') or '').rfind(':')
+                starts.append(words['start'] + inner + 1 if inner >= 0 else words['start'])
+        if text is None or not starts:
+            return None
+        last = max(0, place['start'] + len(place['text'].rstrip()) - 1)  # the place's last character
+        return min(starts) if sentence_end(text, last, min(starts)) < 0 else None
+
     def role_of(place: Mapping, event: Mapping) -> str:
         own = words_at(place, event)  # its kind's and status's words (the place's start where neither stands in it)
         role = label_of(place['text'])
@@ -868,11 +938,17 @@ def another_role_hold(code: str, link: mapping.CodeLink, own_acts: Sequence, rea
         if role or text is None or text[place['start']:place['end']] != place['text']:
             return role or (signed(place['text'], own - place['start'], lead) if own is not None else '')
         at = place['start'] + lead
+
+        def by_sentence() -> str:  # the label closed before the act's words (D146), else its sentence's (D165 (1))
+            role = signed(text, at if own is None else own, at)
+            later = words_later(place, event) if not role and own is None else None
+            return signed(text, later, at) if later is not None else role
+
         start = text.rfind('\n', 0, at) + 1
         stop = text.find('\n', at)
         line = text[start:len(text) if stop < 0 else stop].strip(_ROLE_SPACE)  # ASCII whitespace only (D146)
         if physician(line):  # the physician's line - unless a signature label closes before the act's words (D146)
-            return signed(text, at if own is None else own, at)
+            return by_sentence()
         role = label_of(line) or heading_of(line)
         while not role and start > 0:  # the lines above, up to the nearest heading
             above_end = start - 1
@@ -883,7 +959,7 @@ def another_role_hold(code: str, link: mapping.CodeLink, own_acts: Sequence, rea
             role = heading_of(above)
             if not role and heading_end(above):
                 break
-        return role or signed(text, at if own is None else own, at)  # no entry places it: its signature (D146)
+        return role or by_sentence()  # no entry places it: its signature (D146)
 
     roles: set = set()
     shown: list = []
@@ -1636,15 +1712,38 @@ def concerns(link: mapping.CodeLink, group: Sequence[str], event: Mapping) -> bo
 def deciding(event: Mapping) -> tuple:
     """7.5 (2): (attribute, value, basis) of the statement's deciding attribute, the first of status, time and performer
     with a deterministic basis (verify.exclusion_basis); ('', '', '') when none. An act begun and not completed never
-    decides an exclusion (C-9)."""
+    decides an exclusion (C-9). DECISIONS D169 (1) (round 5g, narrowing only; refute6 families finding[0]): the TIME
+    basis is read with the one currency rule, facts.day_of (_off_the_date) - an act whose time it does not place OFF the
+    date of service is never excluded for its time, so one rule has one answer. "Earlier today, I performed a flexible
+    sigmoidoscopy to 40 cm, ..." (earlier_encounter worded "Earlier today", verified by its marker) was ON for the E/M of
+    the same assessment (separate_em: "Flexible sigmoidoscopy is documented as performed on the same date") while 45330
+    was EXCLUDED "at an earlier encounter, not on the date of service"; now the time decides nothing and the code is held
+    (7.6, not documented) - never excluded, as c2e53f8e never excludes it (READY there for "Earlier today", held for
+    "Earlier in the day" and "Earlier this morning"). Status and performer bases are read as before: another clinician's
+    titled name still excludes."""
     for name in ('status', 'time', 'performer'):
         basis = verify.exclusion_basis(name, event.get(name))
         if not basis:
             continue
         if name == 'status' and value(event, 'status') == 'attempted_not_completed':
             continue
+        if name == 'time' and not _off_the_date(event):  # D169 (1): never excluded for a time placed ON the date
+            continue
         return name, value(event, name), basis
     return '', '', ''
+
+
+def _off_the_date(event: Mapping) -> bool:
+    """DECISIONS D169 (1): whether facts.day_of places ``event`` OFF the date of service - the time basis deciding reads.
+    Read with no effective date: a time that has an exclusion basis is a usable earlier_encounter or future time, which
+    day_of places ON only by its own words (a same-day word, a frame, D162's frame anywhere, D169 (2)'s clock time and
+    this date's words) - never by a date literal, since a usable earlier or future time's literals all compare unequal to
+    the date it was judged against (verify.time_words: otherwise date_mismatch, so unusable) and day_of reads no frame
+    beside a literal - so the answer is the effective date's (assess judges every time against it, verify.rejudged), and
+    the E/M's day (combination.procedure_day) gives the same. Imported here because facts imports nothing of events."""
+    from studio.interpretation import facts
+
+    return facts.day_of(event, None) == facts.OFF
 
 
 def broad(reading: Reading, event: Mapping) -> bool:

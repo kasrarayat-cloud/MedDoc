@@ -498,6 +498,42 @@ def defining_target(code: str, event: Mapping, lesion: Mapping | None = None) ->
     return any(text and lexicon.holds(text, names) for text in texts)
 
 
+# --- a transmural code's act read apart: an injection of the wall (DECISIONS D171 (4); refute6 judges finding 12) ---------
+
+# 43253 is the EGD's EUS-guided TRANSMURAL injection - of a diagnostic or therapeutic substance, or of fiducial markers
+# (its CPT descriptor; D27 narrows it to its injection, and mapping.ONE_ACT makes a tattoo that injection). An injection
+# or a tattoo made through the echoendoscope INTO THE WALL is a submucosal injection - the EGD's 43236, 'directed
+# submucosal injection(s), any substance' - and never 43253's act: its own route or depth words name the submucosa
+# ('The gastric wall 2 cm proximal to the lesion was tattooed with a submucosal injection of 2 mL of India ink ...',
+# 'A submucosal tattoo was placed ...', 'A submucosal injection of 5 mL of saline was made beside the lesion ...'), or
+# its purpose is a lift for resection, or it is a tattoo whose own words name an ink ('India ink', 'Spot ink': an
+# endoscopic tattoo marks the wall). Read only for HOLDING the code (assess._examination_class, D171 (4)): the words are
+# no inclusion list for support, nothing they match ever releases a code, and a fiducial placement read as 'tattoo'
+# (D145), a celiac plexus block or any injection whose own words say neither keeps D27's reading. EB1: the act's own
+# attribute words, in any state, never a passage.
+TRANSMURAL_INJECTION_CODES = frozenset({'43253'})
+SUBMUCOSAL_WORDS = ('submucosal', 'submucosa', 'sub mucosal', 'sub mucosa')
+INK_WORDS = ('ink', 'inks')
+INJECTION_OWN_WORDS = ('kind', 'technique', 'target', 'purpose')
+
+
+def submucosal_act(event: Mapping) -> bool:
+    """DECISIONS D171 (4): whether ``event`` - an injection or a tattoo - is an injection of the WALL, which a transmural
+    code (TRANSMURAL_INJECTION_CODES) never stands on: the own words of its kind, technique, target or purpose name the
+    submucosa (SUBMUCOSAL_WORDS); or its purpose is a lift for resection (a lift injection is submucosal by definition:
+    FINAL 7.7's lift_injection); or it is a tattoo (its catalogue kind, or the kind Gemini gave) whose own words name an
+    ink (INK_WORDS). Any state of the words and the purpose is read (fail-closed: it only ever holds)."""
+    texts = [_words_text(event.get(name) or {}) for name in INJECTION_OWN_WORDS]
+    if any(text and lexicon.holds(text, SUBMUCOSAL_WORDS) for text in texts):
+        return True
+    purpose = event.get('purpose') if isinstance(event.get('purpose'), Mapping) else {}
+    if purpose.get('value') == 'lift_for_resection':
+        return True
+    kind = event.get('kind') if isinstance(event.get('kind'), Mapping) else {}
+    tattoo = event.get('catalogue_kind') == 'tattoo' or kind.get('value') == 'tattoo'
+    return tattoo and any(text and lexicon.holds(text, INK_WORDS) for text in texts)
+
+
 # --- the EUS examination class (DECISIONS D28; FINAL 7.2 R6) -------------------------------------------------------------
 
 FULL, LIMITED = 'full', 'limited'
@@ -537,6 +573,34 @@ def examination_class(code: str) -> str:
     if profile is not None and profile.exam in EXAMINATION_CLASSES:
         return profile.exam
     return LOWER_EUS_CLASS.get(code, '')
+
+
+# DECISIONS D171 (2) (refute6 families finding 5): the tract of an EUS code. The EUS codes of an UPPER endoscopy - an
+# esophagoscopy's (43231, 43232) and an EGD's (43237, 43238, 43240, 43242, 43253, 43259), whose CPT descriptors are
+# transoral - need an upper-tract EUS session: on a lower-tract EUS (an echoendoscope advanced to the sigmoid colon, a
+# fiducial placed into a rectal mass) none describes what was done, and the catalogue gives 43240 and 43253 no class,
+# so no reach was read for them (43253 READY on a rectal EUS's fiducials). The lower-tract codes are D43's
+# (LOWER_EUS_CLASS). The set is pinned equal to the catalogue's gi.eus codes less LOWER_EUS_CLASS
+# (tests/test_interpretation_r5g_eus_class.py).
+UPPER_TRACT, LOWER_TRACT = 'upper', 'lower'
+UPPER_EUS_CODES = frozenset({'43231', '43232', '43237', '43238', '43240', '43242', '43253', '43259'})
+# DECISIONS D171 (3): the EGD's limited EUS codes, whose class CPT states as an examination 'limited to the esophagus,
+# stomach or duodenum, and adjacent structures' (an examination limited to the duodenum included) - D28's 'short of the
+# duodenum' misstates it - and the full-examination codes, which need the esophagus, the stomach and the duodenum.
+EGD_LIMITED_EUS_CODES = frozenset({'43237', '43238'})
+# the regions (REGION_OF) of the upper tract's EUS stations, in the order an upper EUS passes them; and every region an
+# upper endoscopy's EUS examines or samples from them (the stations, and the pancreas, the biliary tree and the liver
+# beside them) - a place there makes no EUS a lower-tract one (assess._lower_place)
+UPPER_STATIONS = ('esophagus', 'stomach', 'duodenum')
+UPPER_TRACT_REGIONS = frozenset(UPPER_STATIONS) | frozenset({'pancreas', 'biliary', 'liver'})
+
+
+def eus_tract(code: str) -> str:
+    """DECISIONS D171 (2): UPPER_TRACT for an upper endoscopy's EUS code (UPPER_EUS_CODES), LOWER_TRACT for D43's
+    lower-tract EUS codes, '' for any other code."""
+    if code in UPPER_EUS_CODES:
+        return UPPER_TRACT
+    return LOWER_TRACT if code in LOWER_EUS_CLASS else ''
 
 
 def has_stoma(encounter: Mapping) -> bool:

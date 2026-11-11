@@ -286,13 +286,17 @@ class ASignatureLabelMakesTheActItsRoles(Held):
             inv, text, codes = on_its_line(line)
             self.ready(run(inv, text, codes), '45385', line=line[:40])
 
-    def test_d146_controls_a_signature_line_above_the_act_names_no_role(self):
-        """'Findings' / 'Documented by Jo Rowe, RN:' (or 'Per nursing note:', or 'Documented by Jo Rowe, RN: see
-        below') / the snare line: the signature is on a line of its own, not in the label the act's line opens with.
-        READY on this build, on e5628be56 and on c2e53f8e."""
+    def test_d146_a_signature_line_above_the_act_stands_in_its_sentence(self):
+        """Formerly test_d146_controls_a_signature_line_above_the_act_names_no_role (READY on 05a881a75, e5628be56 and
+        c2e53f8e). DECISIONS D165 (1) changes the expectation: 'Findings' / 'Documented by Jo Rowe, RN:' (or 'Per
+        nursing note:', or 'Documented by Jo Rowe, RN: see below') / the snare line, the snare line cited alone. The
+        line above ends with no sentence end ('.', '!' or '?' followed by whitespace, the engine's own boundary), so it
+        stands in the act's sentence and its signature label is read for the act: held [performed_status] another_role,
+        as D158 holds the same lines cited as one passage (colon4's K1). A RECORDED COST: c2e53f8e is READY in both
+        configurations (its _sentences cuts after a line a colon ends and before a line that opens a sentence)."""
         for line in ('Documented by Jo Rowe, RN:', 'Per nursing note:', 'Documented by Jo Rowe, RN: see below'):
             inv, text, codes = after_the_entry([line], SNARE_LINE, heading='Findings')
-            self.ready(run(inv, text, codes), '45385', line=line)
+            self.held(run(inv, text, codes), '45385', nursing_question('snare removal', SNARE_LINE), line=line)
 
     def test_d146_a_reading_without_the_text_reads_the_passages_own_signature_and_label(self):
         """events.evaluate over a Reading with no text (the review overlay's counted codes, a unit test's): the

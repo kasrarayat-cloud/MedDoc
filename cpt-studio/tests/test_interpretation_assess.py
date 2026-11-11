@@ -461,7 +461,10 @@ class CustomerWords(SimpleTestCase):
                                                                           'facts.required', 'events.match')]
                 texts += [p.support.get('summary', '')] + [item['label'] for item in p.support.get('acts', ())]
         self.assertLessEqual({events.NOT_DOCUMENTED, events.SITE, events.ANOTHER_SITE, events.BUNDLED}, reasons)
-        self.assertTrue(any('limited endoscopic ultrasound examination' in t for t in texts))
+        # DECISIONS D171 (3): the EGD's limited EUS class as CPT states it (was 'a limited endoscopic ultrasound
+        # examination (short of the duodenum)')
+        self.assertTrue(any('endoscopic ultrasound examination limited to the esophagus, the stomach or the duodenum' in t
+                            for t in texts))
         for text_ in texts:
             if text_:
                 self.assertIsNone(customer_api.FORBIDDEN.search(text_), text_)
@@ -528,12 +531,16 @@ class ExaminationClass(SimpleTestCase):
                          ('selected', 'needs_clarification', ['extent'], events.SUPPORTED))
         reason, question = wording.examination_class_hold('43238', 'limited', 'second portion duodenum',
                                                           'second portion of the duodenum')
+        # DECISIONS D171 (3): the EGD's limited EUS codes state CPT's class in D28's form, never 'short of the duodenum'
+        reason, question = [item.replace(wording.EXAMINATION_CLASS_WORDS['limited'], assess.EGD_LIMITED_WORDS)
+                            for item in (reason, question)]
         self.assertEqual((check(limited, 'facts.examination_class').status, check(limited, 'facts.examination_class')
                           .detail, limited.clarifications[0].question, limited.clarifications[0].reason),
                          ('warn', reason, question, reason))
         self.assertEqual(question, 'The documented endoscopic ultrasound examination (“second portion of the duodenum”) '
-                                   'reached the second portion duodenum. Was a limited endoscopic ultrasound examination '
-                                   '(short of the duodenum) performed on the date of service?')
+                                   'reached the second portion duodenum. Was an endoscopic ultrasound examination limited '
+                                   'to the esophagus, the stomach or the duodenum (and adjacent structures) performed on '
+                                   'the date of service?')
 
     def test_both_class_siblings_for_one_fna_compete(self):
         """D40: proposed together for one FNA, the two class siblings compete as the installed release holds them
@@ -679,6 +686,7 @@ class ExaminationClass(SimpleTestCase):
         p = proposal(run(inv, text, [('43238', 'No fine-needle aspiration was performed')]), '43238')
         self.assertEqual((p.bucket, p.reinstatable), ('excluded', True))
         _, question = wording.examination_class_hold('43238', 'limited', 'duodenum', 'duodenum')
+        question = question.replace(wording.EXAMINATION_CLASS_WORDS['limited'], assess.EGD_LIMITED_WORDS)  # D171 (3)
         self.assertEqual(p.support['reinstatement_waits'], [{'fact': 'extent', 'question': question}])
         self.assertEqual(check(p, 'review.reinstatement').status, 'warn')
 

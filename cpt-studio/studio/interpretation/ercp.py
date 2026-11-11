@@ -88,10 +88,37 @@ two-act sentence). D147's third release, the following sentence of a performed a
     "The bile duct was swept with an extraction balloon. No stones were retrieved, and a plastic biliary stent was
     placed." (the stent filed) holds 43264. It only adds a hold.
 
+- DECISIONS D168, round 5g (narrowing only; round 5f's ercp6, D159, not integrated, rebuilt without review:ercp6
+  problem 1; that review's problems 3 and 4; review:colon5 problem 0). D155's reading is unchanged and runs first; only
+  where it states nothing do D159's two WIDENED reads give the act's statement (D168 (1)):
+  - D159's rule (1): a clause of the sentence D155 drops as another act's is the act's statement WHATEVER other events'
+    words it holds - "No stones were retrieved and a plastic biliary stent was placed." holds 43264 as "No stones were
+    retrieved; a plastic biliary stent was placed." does;
+  - D159's rule (3): a LATER sentence of the act's own passage, past the one right after the act's own, is read for a
+    denial clause that holds no other event's own words - "... A plastic biliary stent was placed. No stones were
+    retrieved." holds 43264;
+  - one structural condition decides WHOSE such a denial is. Where the sentence it sits in - or, for rule (3), a
+    sentence between the act's own and it - holds the own words of ANOTHER performed stone extraction that supports
+    the same code (a second sweep or extraction), the denial is that act's, never this act's, when this act's own
+    sentence states its own yield (_clause_yield): "The bile duct was swept with an extraction balloon and two stones
+    were removed. The pancreatic duct was then swept with a balloon and no stones were seen." stays READY on both
+    sweeps, never on the pancreatic one alone. When it states none, the denial stays this act's statement. That
+    own-yield reading is read nowhere else, so it never stops a denial D155 reads;
+  - D168 (2): after an own sentence that states the act's yield, a later sentence's RETRIEVAL denial is still read, as
+    D127 reads one in the act's own sentence - "... and two stones were removed. A plastic biliary stent was placed. No
+    stones were retrieved." holds 43264; a presence denial there is still a clearance;
+  - a widened statement only ever HOLDS the code. Where another act still supports it, every act stays in E* as D155
+    leaves it (retrieval_hold), so no READY code's acts change;
+  - D168 (3): the another_role hold (events.another_role_hold, D124 and D158) of a code these rules would hold as a
+    possible exchange (D105) or as nothing retrieved (D106) keeps its question, and the ERCP question is its SECOND
+    clarification (role_second; events.Evaluation.second, D161's mechanism), so neither question is dropped.
+
 Where they run: D105 and D106 sit inside the per-code rule itself - ``ruled`` is events.evaluate's one call site, its
 first statement - so every reader of the per-code rule (the assessment, its participants and second review, and the
 review overlay's counted codes, overlay.counted_codes: "the evaluation the engine made, made again") reads one
 evaluation, and events.evaluate stays the function its module defines. D107 is read by assess._incomplete_session.
+DECISIONS D168 (3): events.evaluate hands its another_role hold to ``role_second`` (the one other place this module is
+called from there), so the ERCP question about the acts that hold names is that same one evaluation's second.
 
 Pure apart from one context variable (``_RULING``, set only while ``ruled`` has the per-code rule evaluate one code):
 it reads the stored attributes' values and states, the literal words of the inventory's located passages and of the
@@ -516,6 +543,17 @@ def _yields(clauses: Sequence[Mapping], others: Sequence[Mapping] = (),
     return False
 
 
+def _clause_yield(clauses: Sequence[Mapping], others: Sequence[Mapping]) -> bool:
+    """DECISIONS D168 (1) (review:ercp6 problem 1): whether the act's OWN sentence (its ``clauses``) states a stone
+    yield in a clause that holds no other event's own words (``others``) - a stone word the subject of a past yield
+    verb, with D140's guards: no purpose, condition or doubt, or other-time word (_states_yield) - in ANY of its
+    clauses: "The bile duct was swept with an extraction balloon and two stones were removed." states the sweep's yield
+    here, where D147's simple-clause reading (_yields) does not. Read ONLY where a widened read meets a denial in
+    another performed stone extraction's words (nothing_retrieved, _later_statement): it decides that such a denial is
+    the other act's, and is read nowhere else, so it never stops a denial D155 reads."""
+    return any(not _holds(clause, others) and _states_yield(clause['tokens']) for clause in clauses)
+
+
 def states_nothing_retrieved(text: str) -> bool:
     """D106 over one sentence read alone as the act's own (every clause the act's), as D127 completes it: a negator
     over stones, calculi, debris or sludge (at most NEGATOR_REACH words between, no clause break and no exceptive or
@@ -550,7 +588,47 @@ def _kept(kept: Sequence) -> list:
             if getattr(span, 'exact', True) and span.text]
 
 
-def nothing_retrieved(reading, event: Mapping, kept: Sequence = ()) -> Optional[list]:
+def _later_statement(places: Sequence[Mapping], anchors: Mapping, others: Sequence[Mapping],
+                     rivals: Sequence[Mapping]) -> Optional[list]:
+    """DECISIONS D168 (1), D159's rule (3) rebuilt (review:ercp5 problem 5): the act's statement in a LATER sentence of
+    its own passage (each of ``places``, its own located passages), else None. Within a place, a sentence after an own
+    sentence (``anchors``: (the sentence, its clauses, whether it states the act's yield) by its (start, end)) and past
+    the one immediately after it (D127, D140 and D155 read that one) is read with the nearest own sentence before it,
+    for a denial only, as D127 reads the following sentence: its first clause (_clauses, cut at CLAUSE_BREAKS) that
+    holds no other event's own words and, read with that own sentence (_denial), denies the retrieval or the stones'
+    presence is the act's statement, and that own sentence and the clause are returned ("The bile duct was swept with an
+    extraction balloon. A plastic biliary stent was placed. No stones were retrieved." with the stent filed). Never
+    another passage (EB1: the act's own words, not a scan of the document) and never a sentence before the act's own.
+    - Whose denial (review:ercp6 problem 1): once a sentence after the own sentence - the later sentence itself
+      included - holds the own words of another performed stone extraction that supports the same code (``rivals``), a
+      later denial is that act's, never this act's, when the own sentence states this act's yield (its D147 reading,
+      or _clause_yield's): "... and two stones were removed. The pancreatic duct was then swept with a basket. No stones
+      remained." is the pancreatic sweep's. Where it states none, the denial stays this act's statement.
+    - DECISIONS D168 (2) (review:ercp6 problem 3): after an own sentence that states the act's yield (D147's reading)
+      only a RETRIEVAL denial is read, as D127 reads one in the own sentence - "... and two stones were removed. A
+      plastic biliary stent was placed. No stones were retrieved." holds 43264, while "... No stones remained." there is
+      a clearance, as before (D159 read nothing after such a sentence).
+    It only turns a None into a statement, and retrieval_hold lets such a statement only hold the code."""
+    for place in places:
+        anchor, at, past = None, -1, False
+        for index, item in enumerate(_sentences(place)):
+            if (item['start'], item['end']) in anchors:
+                anchor, at, past = anchors[(item['start'], item['end'])], index, False
+                continue
+            if anchor is None:
+                continue
+            past = past or _holds(item, rivals)  # another supporting stone extraction's words stand after the own one
+            if index == at + 1 or (past and (anchor[2] or _clause_yield(anchor[1], others))):
+                continue
+            for clause in _clauses(item):
+                found = '' if _holds(clause, others) else _denial(anchor[1] + [clause])[0]
+                if found == 'retrieval' or (found and not anchor[2]):  # D168 (2): after a yield, a retrieval only
+                    return [_trimmed(anchor[0]), _trimmed(clause)]
+    return None
+
+
+def nothing_retrieved(reading, event: Mapping, kept: Sequence = (), beside: Sequence[str] = (), *,
+                      widened: bool = True) -> Optional[list]:
     """D106: the act's statement that nothing was retrieved (its places, [{start, end, text}], in document order), else
     None. The act's own sentences are those of its own located passages (events.own_passages: kind, status, target) that
     hold one of its own words (kind, status or target words); a passage of the act none of whose sentences holds them is
@@ -593,7 +671,26 @@ def nothing_retrieved(reading, event: Mapping, kept: Sequence = ()) -> Optional[
       event's own words and, read with the act's own sentence, denies the retrieval or the stones' presence (_denial) is
       the act's statement, whatever the sentence's other clauses hold - the act's own sentence and that clause are
       returned: "The bile duct was swept with an extraction balloon. No stones were retrieved, and a plastic biliary
-      stent was placed." with the stent filed. It only adds a hold."""
+      stent was placed." with the stent filed. It only adds a hold.
+    DECISIONS D168 (round 5g, narrowing only; D159's rules (1) and (3) rebuilt without review:ercp6 problem 1). D155's
+    reading above runs first and is unchanged (``widened`` False: it alone). Only where it states nothing are two
+    WIDENED reads made, and each only turns a None into a statement:
+    - D159's rule (1): a clause of the sentence dropped as another act's that holds another event's own words and, read
+      with the act's own sentence, denies the retrieval or the stones' presence is the act's statement, the own sentence
+      and the clause returned: "No stones were retrieved and a plastic biliary stent was placed.", "A plastic biliary
+      stent was placed because no stones were retrieved." and "The pancreatic duct was then swept with a balloon and no
+      stones were retrieved." (the pancreatic sweep filed) hold as the ';' forms do;
+    - D159's rule (3): a later sentence of the act's own passage, read for a denial (_later_statement: "... A plastic
+      biliary stent was placed. No stones were retrieved."), with D168 (2)'s retrieval denial after an own yield;
+    - WHOSE denial (review:ercp6 problem 1): ``beside`` is the code's other supporting acts (retrieval_hold's). A
+      dropped sentence that holds the own words of one of them that is a performed stone extraction (a second sweep or
+      extraction) is read for this act only when the act's own sentence states no yield of its own (_clause_yield,
+      read here and in _later_statement only); where it states one, the denial is the other act's: "The bile duct was
+      swept with an extraction balloon and two stones were removed. The pancreatic duct was then swept with a balloon
+      and no stones were seen." states nothing of the bile-duct sweep's, as at f9013e12e and 05a881a75. Without
+      ``beside`` (a direct read of one act) no other act supports the code, and the dropped sentence is read as D159
+      read it.
+    retrieval_hold lets a widened statement only hold the code, never take an act out of E* (D168)."""
     from studio.interpretation import events
 
     words = _own_words(event)
@@ -622,12 +719,14 @@ def nothing_retrieved(reading, event: Mapping, kept: Sequence = ()) -> Optional[
                 seen.add((sentence['start'], sentence['end']))
                 own.append(sentence)
     candidates = [sentence for place in located + _kept(kept) for sentence in _sentences(place)]
+    anchors, pending = {}, []  # DECISIONS D168 (1): the own sentences and the dropped sentences the widened reads read
     for sentence in sorted(own, key=lambda item: (item['start'], item['end'])):
         clauses = _clauses(sentence)
         yields, (denial, where) = stated or _yields(clauses, others, words), _denial(clauses)
         shared = any(_holds(clause, others) for clause in where)  # a presence denial in a clause of another act's
         if denial == 'retrieval' or (denial == 'presence' and (not yields or shared)):
             return [_trimmed(sentence)]
+        anchors[(sentence['start'], sentence['end'])] = (sentence, clauses, yields)
         if yields:  # the act's own sentence states what it retrieved: a sentence after it never denies that
             continue
         after = [item for item in candidates
@@ -649,7 +748,24 @@ def nothing_retrieved(reading, event: Mapping, kept: Sequence = ()) -> Optional[
             for clause in _clauses(item):
                 if not _holds(clause, others) and _denial(clauses + [clause])[0]:
                     return [_trimmed(sentence), _trimmed(clause)]
-    return None
+        pending.append((sentence, clauses, dropped))
+    if not widened:  # D155's reading alone (retrieval_hold's E*)
+        return None
+    # DECISIONS D168 (1), D159's rule (1): a clause of a dropped sentence that holds another event's own words - but
+    # not, where the act's own sentence states its yield, one of a sentence that holds another supporting stone
+    # extraction's
+    rivals = [span for eid in dict.fromkeys(beside) if eid != event.get('id') and eid in reading.events
+              and events.value(reading.events[eid], 'status') == PERFORMED
+              and (reading.events[eid].get('catalogue_kind') or '') == STONE_EXTRACTION
+              for span in _own_words(reading.events[eid])]
+    for sentence, clauses, dropped in pending:
+        for item in dropped:
+            if _holds(item, rivals) and _clause_yield(clauses, others):
+                continue  # the denial is the other act's, never this act's (review:ercp6 problem 1)
+            for clause in _clauses(item):
+                if _holds(clause, others) and _denial(clauses + [clause])[0]:
+                    return [_trimmed(sentence), _trimmed(clause)]
+    return _later_statement(places, anchors, others, rivals)  # D159's rule (3), rebuilt
 
 
 def retrieval_hold(evaluation, reading, kept: Sequence = ()):
@@ -657,7 +773,15 @@ def retrieval_hold(evaluation, reading, kept: Sequence = ()):
     stone_extraction: 43264) whose supporting acts each state that nothing was retrieved is held with the
     performed_status question naming that statement; when another act supports it, the code keeps READY on that act and
     the act that retrieved nothing leaves E* (the decision still read it). Any other evaluation is returned unchanged.
-    D127: ``kept`` is the code's own exact evidence, which nothing_retrieved also reads."""
+    D127: ``kept`` is the code's own exact evidence, which nothing_retrieved also reads.
+
+    DECISIONS D168 (round 5g, narrowing only): each act is read beside the code's other supporting acts (``beside``:
+    whose denial a sentence of another stone extraction's words is), and a statement only the WIDENED reads give
+    (nothing_retrieved's D159 rules) only ever HOLDS the code - when every supporting act states nothing retrieved.
+    Where an act would still support it, the acts leave E* only by D155's reading (widened=False), as before: "The bile
+    duct was swept with an extraction balloon. Two stones were extracted with a basket and no stones were seen on the
+    final cholangiogram." (the basket filed) stays READY on both acts, never on the basket alone - a READY whose acts
+    changed would be a move this round's rule forbids (review:ercp6 problem 1's class)."""
     from studio.interpretation import events
 
     link = evaluation.link
@@ -668,14 +792,19 @@ def retrieval_hold(evaluation, reading, kept: Sequence = ()):
         return evaluation
     stated = []
     for eid in evaluation.supporting:
-        statement = nothing_retrieved(reading, reading.events[eid], kept)
+        statement = nothing_retrieved(reading, reading.events[eid], kept, evaluation.supporting)
         if statement is not None:
             stated.append((eid, statement))
     if not stated:
         return evaluation
     apart = {eid for eid, _ in stated}
     left = tuple(eid for eid in evaluation.supporting if eid not in apart)
-    if left:
+    if left:  # DECISIONS D168: an act still supports the code, so only D155's reading takes acts out of E*
+        apart = {eid for eid in apart
+                 if nothing_retrieved(reading, reading.events[eid], kept, widened=False) is not None}
+        if not apart:
+            return evaluation
+        left = tuple(eid for eid in evaluation.supporting if eid not in apart)
         labels = [events.event_label(reading, reading.events[eid]) for eid in left[:4]]
         return replace(evaluation, supporting=left, detail=f'The {events.service_label(link.family)} is documented as '
                                                            f'performed with {"; ".join(labels)}.')
@@ -727,6 +856,35 @@ def ruled(code: str, kept: Sequence, reading, link: Optional[mapping.CodeLink] =
     finally:
         _RULING.reset(token)
     return retrieval_hold(exchange_hold(evaluation, reading), reading, kept)  # D127: the code's own exact evidence
+
+
+def role_second(held, acts: Sequence[Mapping], kept: Sequence, reading):
+    """DECISIONS D168 (3) (round 5g; review:colon5 problem 0): the another_role hold of a code these rules read - handed
+    over by events.evaluate, where events.another_role_hold (D124, D158) holds a code whose every act is told only in
+    another role's entry - keeps its question, and the question ``ruled`` would hold the code with were it READY on
+    ``acts`` (its own acts: the per-code rule's E*, which the hold names) is the hold's SECOND clarification
+    (events.Evaluation.second, D161's mechanism: assess asks it after the hold's own): D105's possible exchange
+    (exchange_hold) or D106's nothing retrieved (retrieval_hold). So "Documented by Jo Rowe, RN: A new 10 Fr x 9 cm
+    plastic" / "biliary stent was placed into the common bile duct." beside finding 22's snare removal asks the nursing
+    entry's question AND the exchange question (43276), and finding 25's sweep signed by the nurse asks whether any
+    stone was removed, where ``ruled`` applied both rules to a READY evaluation only, so the ERCP question was asked
+    nowhere.
+    Any other evaluation, a code neither rule reads, a hold with a second question already, acts none of which is
+    performed (the per-code rule's evaluation would not be READY) and a READY evaluation the rules leave READY return
+    ``held`` as it is. It never changes the hold: its reason, question, read events and E* (empty) stay the hold's,
+    so the competition (assess._claims, D163) and coverage read what they read before."""
+    from studio.interpretation import events
+
+    if held.second is not None or held.reason != events.ANOTHER_ROLE or not _read_by_a_rule(held.link):
+        return held
+    if not any(events.value(event, 'status') == PERFORMED for event in acts):
+        return held
+    ready = replace(held, state='performed', reason=events.SUPPORTED, supporting=tuple(event['id'] for event in acts),
+                    question=None)
+    ruling = retrieval_hold(exchange_hold(ready, reading), reading, kept)
+    if ruling.held and ruling.reason in (POSSIBLE_EXCHANGE, NOTHING_RETRIEVED) and ruling.question is not None:
+        return replace(held, second=ruling.question)
+    return held
 
 
 # --- D107: an ERCP whose access act was begun and not completed ------------------------------------------------------
