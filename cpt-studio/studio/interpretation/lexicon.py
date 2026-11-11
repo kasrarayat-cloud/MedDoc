@@ -583,6 +583,28 @@ def dated_frame(rest: str) -> bool:
     return all(not part or part in DATE_CONNECTORS or part in _CURRENT_FRAMES for part in parts)
 
 
+# DECISIONS D109 (the round-4 refutation, finding 14): the frames that place an act on the date of service itself - read
+# by facts.day_of only, in a time's OWN words (EB1), and only as WHOLE frames, as D54 reads CURRENT_FRAMES: the words,
+# folded, their edges stripped and split at commas, semicolons and a standalone "and", must be made of these and nothing
+# else. "Earlier in the day", "Earlier that day" and "Earlier in the morning" are ON the date even where Gemini gives
+# the time earlier_encounter (an act of its own encounter earlier on the same date, ADJUDICATION C-3); "earlier in the
+# day, before her visit" is not made of frames and is read as before. facts.SAME_DAY_WORDS ("today", "this morning",
+# ...) stays as it was, read anywhere in the words; these frames only ADD the same-date phrasings that carry none of
+# those words. Never a bare "that day", "that morning" or "in the morning": they name no day by themselves.
+SAME_DAY_FRAMES = (
+    'today', 'earlier today', 'later today', 'tonight', 'this morning', 'this afternoon', 'this evening',
+    'earlier this morning', 'earlier this afternoon', 'earlier this evening', 'later this morning',
+    'later this afternoon', 'later this evening',
+    'earlier in the day', 'later in the day', 'earlier that day', 'later that day', 'earlier that same day',
+    'later that same day', 'earlier the same day', 'later the same day', 'earlier on the same day',
+    'later on the same day', 'earlier in the morning', 'later in the morning', 'earlier in the afternoon',
+    'later in the afternoon', 'earlier in the evening', 'later in the evening', 'earlier that morning',
+    'earlier that afternoon', 'later that morning', 'later that afternoon', 'later that evening',
+    'same day', 'the same day', 'on the same day', 'that same day', 'same date', 'the same date', 'on the same date',
+    'on the date of service', 'on the same date of service',
+)
+
+
 # --- the words a person name is not (contract 5.3: names tokenized without titles, credentials and role words) --------
 
 TITLES = ('dr', 'doctor', 'prof', 'professor', 'mr', 'mrs', 'ms', 'miss', 'mx')

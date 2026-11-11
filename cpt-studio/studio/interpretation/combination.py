@@ -180,6 +180,27 @@ OTHER_GI = 'gi.other'  # engine.OTHER_GI
 # gi.profiles.
 SAME_DAY_FAMILIES = lexicon.PROCEDURAL_FAMILIES | frozenset({OTHER_GI, 'gi.unsupported'})  # D94: a non-GI procedure too
 UNIDENTIFIED_PROCEDURE = 'A procedure CPT Studio could not identify'  # D94: the label of an act of family ''
+# DECISIONS D109 (the round-4 refutation, findings 15 and 16; D94 narrowed): an act of gi.unsupported, or of no family
+# (Gemini's procedure 'unknown'), counts only when its time is current_encounter - in any state - and its performer is
+# not verified to another clinician or facility. A CT "interpreted separately by the radiology service" (fb13's attested
+# shape) and an imaging study named in the indication with an earlier or undatable time (fb14's) made a procedure day,
+# or asked the E/M's event_time, where c2e53f8e is READY; the office excision (D94) and an unidentified act today still
+# count.
+CURRENT_ONLY_FAMILIES = frozenset({'gi.unsupported', ''})
+# DECISIONS D109 (findings 13 and 23): the same-day rule reads an act by its KIND, not only its family. An in-office
+# band ligation Gemini files under the visit (procedure office_em: the note's only heading is the visit's) has family
+# gi.office_em, outside SAME_DAY_FAMILIES, and made no procedure day: 99213 was READY where c2e53f8e holds it with
+# separate_em. SAME_DAY_KINDS: every kind a procedural family's catalogue entry lists (its acts, bundled and unsupported
+# acts), the examination kinds (an endoscopic examination such as an anoscopy; never one whose device is verified
+# manual - a digital rectal examination, E13) and the umbrellas: every act kind but the visit's, prolonged time,
+# moderate sedation and 'other'. Such an act of a family outside SAME_DAY_FAMILIES (gi.office_em, gi.em_other,
+# gi.sedation) is another GI service (OTHER_GI's label, as the installed routing reads it) when C-3 counts it: its time
+# is current_encounter, in any state, or its own words place it on the date (facts.day_of ON).
+SAME_DAY_KINDS = frozenset(
+    kind for family in sorted(lexicon.PROCEDURAL_FAMILIES) if family in catalogue.CATALOGUE
+    for kind in (catalogue.CATALOGUE[family].acts + tuple(item for item, _ in catalogue.CATALOGUE[family].bundled)
+                 + tuple(item for item, _ in catalogue.CATALOGUE[family].unsupported_acts))
+    if kind in mapping.CATALOGUE_KINDS) | mapping.EXAMINATION_KINDS | frozenset(mapping.UMBRELLAS)
 
 
 @dataclass(frozen=True)
@@ -202,24 +223,42 @@ def procedure_day(reading, effective, codes: Sequence[tuple] = ()) -> ProcedureD
     derived.procedure_day reads it, contract 8.3, gi.other added by D81), is ON the date (facts.day_of:
     a usable current time, or a time whose own words or literals place it on the effective date), OFF it, or UNDATABLE.
     ON with status, time, performer and procedure usable and positive: done; ON otherwise: possible; UNDATABLE: listed
-    for the E/M's time question. ``codes``: (code, family, state, procedural, label) of the counted codes - a counted
-    procedural code adds its label to the done (performed) or possible (held) list, as engine._encounter adds the
-    selected procedural codes."""
+    for the E/M's time question. DECISIONS D109: an act of gi.unsupported or of no family counts only when its time is
+    current_encounter (any state) and its performer is not verified to another clinician or facility
+    (CURRENT_ONLY_FAMILIES); an act of a procedural KIND (SAME_DAY_KINDS) filed under a family outside SAME_DAY_FAMILIES
+    (gi.office_em, gi.em_other, gi.sedation) counts as another GI service when its time is current_encounter (any state)
+    or its own words place it on the date - done only with its kind usable too. ``codes``: (code, family, state,
+    procedural, label) of the counted codes - a counted procedural code adds its label to the done (performed) or
+    possible (held) list, as engine._encounter adds the selected procedural codes."""
     labels, possible, undatable = [], [], []
     for event in reading.events.values():
         family = event.get('family') or ''
-        if (family not in SAME_DAY_FAMILIES and family != '') or events.value(event, 'kind') in lexicon.EM_KINDS:
-            continue  # D81: gi.other too; D94: gi.unsupported, and an act whose procedure Gemini left 'unknown' (family
-            # '') - never done, its procedure unusable, so only a possible same-day procedure (fail-closed)
+        kind = events.value(event, 'kind')
+        if kind in lexicon.EM_KINDS:
+            continue
+        current = events.value(event, 'time') == 'current_encounter'
+        day = facts.day_of(event, effective)
+        by_kind = False
+        if family in CURRENT_ONLY_FAMILIES:
+            if not current or events.verified_other_performer(event):
+                continue  # D109 (D94 narrowed): D94's gi.unsupported, and an act whose procedure Gemini left 'unknown'
+                # (family '' - never done, its procedure unusable, so only a possible same-day procedure, fail-closed),
+                # count only as acts of this encounter: never an earlier, future or undated study, never another's read
+        elif family not in SAME_DAY_FAMILIES:
+            manual = (kind == mapping.EXAMINATION and events.usable(event, 'technique')
+                      and events.value(event, 'technique') == events.DIGITAL)
+            if kind not in SAME_DAY_KINDS or manual or not (current or day == facts.ON):
+                continue  # D81: gi.other too; D109: an act of a procedural kind, whatever procedure it is filed under
+            by_kind = True
         status = events.value(event, 'status')
         if status not in verify.POSITIVE + ('uncertain',):
             continue
-        label = (profiles.PROFILES[family].label if family in profiles.PROFILES
-                 else family or UNIDENTIFIED_PROCEDURE)  # D94
-        day = facts.day_of(event, effective)
+        label = (profiles.PROFILES[OTHER_GI].label if by_kind
+                 else profiles.PROFILES[family].label if family in profiles.PROFILES
+                 else family or UNIDENTIFIED_PROCEDURE)  # D94; D109: an act read by its kind is another GI service
         if day == facts.ON:
-            if status in verify.POSITIVE and all(events.usable(event, name)
-                                                 for name in ('status', 'performer', 'procedure', 'time')):
+            needed = ('status', 'performer', 'procedure', 'time') + (('kind',) if by_kind else ())
+            if status in verify.POSITIVE and all(events.usable(event, name) for name in needed):
                 labels.append(label)
             else:
                 possible.append(label)

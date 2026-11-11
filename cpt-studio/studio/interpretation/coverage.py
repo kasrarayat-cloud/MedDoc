@@ -79,19 +79,23 @@ CODING_VERSION = ENGINE_VERSION  # event_coding's version: its reader (overlay.p
 # --- bundling (7.7) -------------------------------------------------------------------------------------------------------
 
 def possibly_current(event: Mapping) -> bool:
-    """DECISIONS D62 (D54's review), as D68 completes it: whether Gemini gave ``event`` a current_encounter time,
-    verified or not, WHATEVER its reasons. A current time left unverified - D35's other occasion, D54's unanchored
-    words, a date that differs from the service date or that no date checks (D67), words that do not bind - is a doubt
-    about the event's own code, never an absence for the rules that hold OTHER codes by it: a session's examinations, a
-    removal its parts are bundled into, the acts two codes compete for. Read as an absence, unverifying an aside's
-    examination resolved today's session to the other examination (45385 READY on the index colonoscopy's snare), and
-    unverifying a removal's time released the biopsy of the lesion it removed. D68: neither D35's marker nor a
-    date_mismatch proves another occasion - "Next", "Later in the procedure" and "At that time" are sequence words
-    within one procedure, and a clock time ("At 2030") reads as a year - so they are doubts too: the part stays held,
-    and a mislabelled examination beside today's leaves the session unresolved (asked, never the other examination's).
-    Only an earlier or future time is not current, verified or not: Gemini did not say this encounter."""
+    """DECISIONS D62 (D54's review), as D68 and D98 complete it: whether ``event`` may be of this encounter - Gemini
+    gave it a current_encounter time, verified or not, WHATEVER its reasons, or (D98) a time it gave as 'unknown'. A
+    current time left unverified - D35's other occasion, D54's unanchored words, a date that differs from the service
+    date or that no date checks (D67), words that do not bind - is a doubt about the event's own code, never an absence
+    for the rules that hold OTHER codes by it: a session's examinations, a removal its parts are bundled into, the acts
+    two codes compete for. Read as an absence, unverifying an aside's examination resolved today's session to the other
+    examination (45385 READY on the index colonoscopy's snare), and unverifying a removal's time released the biopsy of
+    the lesion it removed. D68: neither D35's marker nor a date_mismatch proves another occasion - "Next", "Later in the
+    procedure" and "At that time" are sequence words within one procedure, and a clock time ("At 2030") reads as a year
+    - so they are doubts too: the part stays held, and a mislabelled examination beside today's leaves the session
+    unresolved (asked, never the other examination's). D98 (the round-4 refutation, finding 7): an explicit unknown is
+    absent (FINAL C6) - it never supports a code and gives UNRESOLVED in pairing, and it never makes a non-match either:
+    read as not current, a snare whose time Gemini left 'unknown' ("Once, a 22 mm polyp ... was removed piecemeal")
+    released the biopsy of the polyp it removed, 45380 READY while 45385 was asked its time. Only an earlier_encounter
+    or future time is not current, verified or not: Gemini placed the event on another occasion."""
     time = event.get('time')
-    return isinstance(time, Mapping) and time.get('value') == 'current_encounter'
+    return isinstance(time, Mapping) and time.get('value') not in ('earlier_encounter', 'future')
 
 
 def current_performed(event: Mapping) -> bool:
@@ -256,18 +260,77 @@ def done_examinations(reading, family: str) -> list:
             and events.endoscopic_examination(event)]
 
 
-def _lower_eus(examinations) -> bool:
-    """Whether one of the EUS ``examinations`` is placed in the lower tract (LOWER_REGIONS) by its verified target or its
-    usable reach. DECISIONS D69 (the round-3 refutation, finding 2): C-4 reads only examinations it is given - today's
-    done ones (done_examinations) - never every EUS event of the reading: a planned ("Plan: rectal EUS ... in 2 weeks"),
+# DECISIONS D96: the kinds of an EUS ACT that are the EUS's own - the catalogue's gi.eus acts besides the examination: the
+# fine-needle aspiration or biopsy, an injection under EUS guidance (a celiac block or neurolysis, a fiducial marker) and
+# a drainage - read from the catalogue (pinned equal to it). Any other kind filed under the EUS (a rectal medication read
+# as 'other', a forceps biopsy, a clip) is no EUS act for C-4.
+EUS_ACTS = tuple(kind for kind in catalogue.entry('gi.eus').acts if kind not in mapping.EXAMINATION_KINDS)
+
+
+def eus_act(event: Mapping) -> bool:
+    """DECISIONS D96 (the round-4 refutation, findings 0 and 2): a DONE EUS act C-4 may read the lower tract from - an
+    event of the EUS family done at this encounter (events.done), its kind usable and one of EUS_ACTS, and its own
+    PROCEDURE usable as 'eus'. An act whose family is in doubt (its procedure unsettled: a colonoscopy's 'Random biopsies
+    were taken from the rectum.' filed under 'eus' with no words, D75) is a doubt, never a fact (D87): read as one, it
+    made the EUS session lower and 43235 READY beside 43242."""
+    return (event.get('family') == 'gi.eus' and event.get('catalogue_kind') in EUS_ACTS and events.done(event)
+            and events.usable(event, 'kind') and events.usable(event, 'procedure')
+            and events.value(event, 'procedure') == 'eus')
+
+
+def lower_evidence(reading) -> list:
+    """DECISIONS D96 (amends D88): what C-4 reads the lower tract from, in the reading's order - today's DONE endoscopic
+    EUS examinations (done_examinations: never a digital or manual examination, FINAL 5.6 E13) and today's DONE EUS acts
+    (eus_act). D88 read every done EUS event with a usable kind, so a digital rectal examination filed under the EUS
+    heading ("Pre-procedure examination: digital rectal examination showed brown stool and no palpable mass.", the
+    attested C2MEM-029 r1 E9 form) or a rectal medication read as an EUS event of kind 'other' made the EUS session lower:
+    C-4 switched off and 43235 went READY beside 43242, where the installed release holds it base_included."""
+    return done_examinations(reading, 'gi.eus') + [event for event in reading.events.values() if eus_act(event)]
+
+
+def unsettled_eus_examinations(reading) -> list:
+    """DECISIONS D97 (the round-4 refutation, finding 10): the EUS examinations whose KIND is not usable - an event of the
+    EUS family that is an examination by its catalogue kind or by its unusable kind's value (kind words that do not
+    locate: 'EUS' or 'endoscopic ultrasound' cited from an act line, or joined across two sentences) - stated performed or
+    begun, possibly current (D62: its time current_encounter, verified or not) and no digital examination (FINAL 5.6 E13).
+    Neither done_examinations nor D62's possible ones hold them (both need a usable kind), so C-4 skipped them: the EUS
+    session had no examination, the EGD was part of nothing, and 43235 was READY beside 43242. They are possible upper EUS
+    examinations instead (D70's doubt): a doubt, never a fact, so never the session and never lower evidence."""
+    return [event for event in reading.events.values() if event.get('family') == 'gi.eus'
+            and not events.usable(event, 'kind')
+            and (event.get('catalogue_kind') in mapping.EXAMINATION_KINDS
+                 or events.value(event, 'kind') == mapping.EXAMINATION)
+            and events.endoscopic_examination(event) and possibly_current(event)
+            and events.value(event, 'status') in verify.POSITIVE]
+
+
+def eus_places(event: Mapping) -> list:
+    """The places C-4 reads an EUS event at: its verified target landmark, its usable reach, and - for an ACT (DECISIONS
+    D96, the round-4 refutation, finding 12) - every landmark its own verified target's words name (verify.landmark_words
+    over those words, EB1's landmark literal): 'a perirectal lymph node in the rectum' at the verified landmark
+    'lymph_node' names the rectum too. Read at its landmark alone, such an FNA placed the radial EUS nowhere lower, the
+    EGD became its endoscopic portion, and the EGD's own no_proposal item and second-review mark were dropped."""
+    places = [mapping.target_landmark(event)]
+    extent = event.get('extent')
+    if verify.usable(extent):
+        places.append(extent.get('value', ''))
+    target = event.get('target')
+    if event.get('catalogue_kind') not in mapping.EXAMINATION_KINDS and verify.usable(target):
+        words = target.get('words')
+        text = (words.get('text') or '') if isinstance(words, Mapping) else ''
+        if text:
+            places.extend(verify.landmark_words(target.get('value') or '', text).literals.get('landmarks', ()))
+    return places
+
+
+def _lower_eus(found) -> bool:
+    """Whether one of the EUS events ``found`` is placed in the lower tract (LOWER_REGIONS) at one of its places
+    (eus_places). DECISIONS D69 (the round-3 refutation, finding 2): C-4 reads only the events it is given - today's
+    done ones (lower_evidence, D96) - never every EUS event of the reading: a planned ("Plan: rectal EUS ... in 2 weeks"),
     historical ("a radial EUS of the rectum in 2024") or denied ("No rectal EUS was performed.") rectal EUS line made the
     EUS session lower and freed 43235 beside 43242, where the installed release holds it."""
-    for event in examinations:
-        places = [mapping.target_landmark(event)]
-        extent = event.get('extent')
-        if verify.usable(extent):
-            places.append(extent.get('value', ''))
-        if any(mapping.region(place) in LOWER_REGIONS for place in places if place):
+    for event in found:
+        if any(mapping.region(place) in LOWER_REGIONS for place in eus_places(event) if place):
             return True
     return False
 
@@ -313,15 +376,18 @@ def sessions(reading) -> dict:
     done_eus = done_examinations(reading, 'gi.eus') if eus is not None else []
     done_ids = {event['id'] for event in done_eus}
     possible_eus = [reading.events[eid] for eid in (eus.possible if eus is not None else ()) if eid not in done_ids]
-    # D88 (integration of D69/D70): the lower tract is read from every DONE EUS event - its acts' verified places as
-    # well as its examinations' (a radial EUS naming no place whose done FNA samples a perirectal node is lower) - and
-    # never from a POSSIBLE examination: a possible rectal aside cancelled D70's doubt and made 43235 READY beside 43242.
-    # D70's doubt stands while some possible EUS examination is not itself placed lower and no done EUS event is
-    done_events = [event for event in reading.events.values() if event.get('family') == 'gi.eus'
-                   and events.done(event) and events.usable(event, 'kind')] if eus is not None else []
-    lower = _lower_eus(done_events)
+    # D88 (integration of D69/D70), as D96 narrows it: the lower tract is read from today's DONE endoscopic EUS
+    # examinations and DONE EUS acts of the EUS's own kinds whose procedure is usable (lower_evidence) - an act's verified
+    # target words as well as its landmark (a radial EUS naming no place whose done FNA samples 'a perirectal lymph node
+    # in the rectum' is lower) - never from a digital examination, an act of another kind, an act whose family is in
+    # doubt, or a POSSIBLE examination: a possible rectal aside cancelled D70's doubt and made 43235 READY beside 43242.
+    # D70's doubt stands while some possible EUS examination - D62's, or (D97) one whose kind is not usable - is not
+    # itself placed lower and no done EUS event is
+    evidence = lower_evidence(reading) if eus is not None else []
+    doubts = possible_eus + (unsettled_eus_examinations(reading) if eus is not None else [])  # D62's, and D97's
+    lower = _lower_eus(evidence)
     upper_eus = bool(done_eus) and not lower
-    possibly_upper = not upper_eus and not lower and any(not _lower_eus([event]) for event in possible_eus)
+    possibly_upper = not upper_eus and not lower and any(not _lower_eus([event]) for event in doubts)
     for family, session in list(found.items()):
         # D87: a session left unresolved only by POSSIBLE examinations keeps the structure of its one done examination
         # (C3, C-4) - read without it, an aside EGD ("Previously, ...") beside today's EGD within an upper EUS asked

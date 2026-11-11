@@ -60,6 +60,7 @@ from studio.gi import catalogue
 from studio.gi.profiles import PROFILES, PROFILES_VERSION, family_for_code
 from studio.interpretation import (ENGINE_VERSION, combination, coverage, events, facts, identity, lexicon, mapping,
                                    wording)
+from studio.interpretation import classes  # DECISIONS D108: the enteroscopy class
 from studio.participants import LABELS as PARTICIPANT_LABELS, PARTICIPANTS as PARTICIPANT_ORDER
 from studio.reference.store import PFS, applied_sources
 from studio.types import (CONTEXT_FACTS, PARTICIPANT_STATES, AssessmentResult, Check, ClarificationSpec, EvidenceSpan,
@@ -306,7 +307,13 @@ def _incomplete_session(family: str, reading: events.Reading, sessions_: Mapping
     were the findings at her index colonoscopy") leaves the session unresolved, and that removed both signals from every
     code although its done examination is stated incomplete. A done examination whose status is a usable
     attempted_not_completed (verified by its failure marker, as the base code's own state reads it) gives them too, in
-    its failure-marker words; a verified 'incomplete' completion's words come first."""
+    its failure-marker words; a verified 'incomplete' completion's words come first. DECISIONS D107 (the round-4
+    refutation, finding 26): an ERCP whose access act - its cannulation, done at this encounter - was begun and not
+    completed ("Multiple attempts at biliary cannulation were unsuccessful.") gives them too, in that act's
+    failure-marker words (ercp.access_not_completed), after the examination's own: the installed release reads a failed
+    cannulation as an incomplete ERCP, and a READY 43260 had carried neither."""
+    from studio.interpretation import ercp
+
     if family not in sessions_:
         return None
     examinations = coverage.done_examinations(reading, family)
@@ -317,7 +324,7 @@ def _incomplete_session(family: str, reading: events.Reading, sessions_: Mapping
         if events.value(exam, 'status') == 'attempted_not_completed':
             words = events.words_of(exam, 'status')
             return words['text'] if words else ''
-    return None
+    return ercp.access_not_completed(reading, family)  # D107
 
 
 def _reach(family: str, reading: events.Reading, sessions_: Mapping) -> tuple:
@@ -592,6 +599,8 @@ def _proposal(selection: _Selection, key: str, enc: _Encounter, reading: events.
             considerations.append(consideration)
     states = _fact_states(selection, enc.context, reading, enc.sessions)
     exam_class = _examination_class(selection, reading, enc.sessions, key)  # D28 (R6)
+    exam_class = exam_class or classes.enteroscopy_hold(selection.code, selection.family, key, reading, enc.sessions,
+                                                        _reach(selection.family, reading, enc.sessions))  # D108 (R6)
     if not excluded:
         if evaluation.question is not None:
             clarifications.append(_spec(evaluation.question, selection.family, key))
@@ -711,7 +720,11 @@ def _claims(selection: _Selection, reading: events.Reading) -> tuple:
     status words not binding) is a doubt about the code, never an absence of it, so 43264 is never READY beside a held
     43265 for one stone clearance. Only 43265 (the stone extraction), 44365 (the ablation) and 49440 (the tube placement)
     gain claims; a narrowed code with no such defining event (not documented) claims nothing, so 43265 held not
-    documented leaves 43264 ready."""
+    documented leaves 43264 ready. DECISIONS D104 (the round-4 refutation, finding 11): a defining act stated
+    'uncertain' (the document leaves it in doubt: "It is unclear from the record whether the 15 mm stone ... was
+    fragmented with mechanical lithotripsy.") may have been done, so it is such a doubt too - 43264 and 43265 for one
+    stone clearance compete whenever the lithotripsy is stated positive OR uncertain and possibly current; a denied or
+    planned one still claims nothing."""
     evaluation = selection.evaluation
     supporting = tuple(evaluation.supporting)
     link = evaluation.link
@@ -719,7 +732,8 @@ def _claims(selection: _Selection, reading: events.Reading) -> tuple:
         return supporting
     family = [event for event in reading.events.values() if event.get('family') == link.family]
     stated = any((event.get('catalogue_kind') or '') in link.defining
-                 and events.value(event, 'status') in events.verify.POSITIVE and coverage.possibly_current(event)
+                 and events.value(event, 'status') in events.verify.POSITIVE + ('uncertain',)  # D104
+                 and coverage.possibly_current(event)
                  for event in family)
     if not supporting and not stated:
         return supporting

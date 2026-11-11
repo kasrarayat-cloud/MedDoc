@@ -659,19 +659,28 @@ participants and second reviews when its worker runs their stages, a member's
 answer and a chosen modifier when its own models read them - and an encounter
 with no record created since this revision replaced that pair holds only what
 that pair left there. That time is the earliest `started_at` of the `app`
-receipt the pair is read from and of every successful `app` receipt of this
-revision that replaced the same pair - counting only those written after this
-revision's last successful `switch-back` to that pair (DECISIONS D59, D65 and
-D82). It never reaches across that `switch-back`: what the pair wrote while it
-served again after it, until an `app` replaced it once more, is its own. When
-the receipt the pair is read from is itself older than that `switch-back` (no
-successful `app` has replaced that pair since: a later one failed, or replaced
-another revision), the time is that `switch-back`'s own `started_at`. Never the
-current containers' creation: a later `app` of this same revision that
-installed a pair and then failed made those, and what this revision wrote under
-its earlier pair is not the previous revision's own (the receipt's
-`touched_since` says which time was read). A reviewer's reinstatement on a
-new-path assessment is always named
+receipt the pair is read from and of every `app` receipt of this revision
+written after this revision's last successful `switch-back` to that pair,
+whatever it replaced and however it ended (DECISIONS D59, D65, D82, D95 and
+D110): a successful one, over that pair or another; one that failed once its
+switch had finished; one undone after it parked a role; a swap undone after its
+web had served, whose receipt records nothing it replaced; one interrupted, or
+refused before anything changed. Any of them may have put this revision's pair
+in front of traffic, and its receipt cannot always say so, so none is left out:
+an earlier time names more encounters, which only refuses more. A receipt
+whose order cannot be told from its name is counted too. It never reaches
+across that `switch-back`: what the pair wrote while it served again after it,
+until this revision's next `app` began, is its own. A `switch-back` that did
+not complete, one to another revision and another revision's are no such
+bound. When the receipt the pair is read from is itself older than that
+`switch-back` (no successful `app` has replaced that pair since: a later one
+failed, or replaced another revision), the time is that `switch-back`'s own
+`started_at` (the earliest of it and of what the `app` receipts written after
+it record). Never the current containers' creation: a later `app` of this same
+revision that installed a pair and then failed made those, and what this
+revision wrote under its earlier pair is not the previous revision's own (the
+receipt's `touched_since` says which time was read). A reviewer's
+reinstatement on a new-path assessment is always named
 (`reinstatement`: no older overlay adds the hold it brings back), and stays
 named once the reinstated code is approved - the normal end of a
 reinstatement: revoke that code's decision on this revision's web first. Then,

@@ -175,13 +175,41 @@ def _same_day_word(text: str) -> bool:
     return any(f' {word} ' in folded for word in SAME_DAY_WORDS)
 
 
+# DECISIONS D109 (the round-4 refutation, finding 14): the same-date frames (lexicon.SAME_DAY_FRAMES), read WHOLE as D54
+# reads a current time's words (lexicon.current_frame): folded, the punctuation and whitespace at the edges stripped
+# (lexicon._FRAME_EDGES: every character that is not alphanumeric), split at commas, semicolons and a standalone " and "
+# (lexicon._FRAME_JOINS), each part stripped - the same split, written here without a pattern and pinned equal to
+# lexicon's by tests/test_interpretation_r4_em_same_day.py.
+_SAME_DAY_FRAMES = frozenset(lexicon.fold(frame) for frame in lexicon.SAME_DAY_FRAMES)
+
+
+def _frame_parts(text: str) -> list:
+    folded = lexicon.fold(text)
+    start, end = 0, len(folded)
+    while start < end and not folded[start].isalnum():
+        start += 1
+    while end > start and not folded[end - 1].isalnum():
+        end -= 1
+    pieces = [piece for part in folded[start:end].replace(';', ',').split(',') for piece in part.split(' and ')]
+    return [piece.strip() for piece in pieces]
+
+
+def _same_day_frame(text: str) -> bool:
+    """D109: whether a time's own words are made only of whole same-date frames: "Earlier in the day", "earlier that
+    day", "Earlier in the morning", "later in the day, earlier today"; never "earlier in the day, before her visit"."""
+    parts = [part for part in _frame_parts(text or '') if part]
+    return bool(parts) and all(part in _SAME_DAY_FRAMES for part in parts)
+
+
 def day_of(event: Mapping, effective) -> str:
     """Whether an event is ON the date of service, OFF it, or UNDATABLE (ADJUDICATION C-3: procedure_day is by date of
     service). ON: a usable current_encounter time; or time words whose date literals are all at day precision and equal
-    to the effective date; or time words that say so (SAME_DAY_WORDS: "earlier today"). OFF: a usable earlier or future
-    time whose words place it on no such day. UNDATABLE: a time that is not usable (unknown, unverified, open,
-    discarded) and whose words place it on no such day - "any event whose date is unresolved" (C-3). ``effective``: the
-    effective date (a date, an ISO string or None); with none, a date literal places nothing."""
+    to the effective date; or time words that say so (SAME_DAY_WORDS: "earlier today"; DECISIONS D109: or words made
+    only of whole same-date frames, lexicon.SAME_DAY_FRAMES - "earlier in the day", "Earlier that day" - whatever time
+    Gemini gives, earlier_encounter included). OFF: a usable earlier or future time whose words place it on no such day.
+    UNDATABLE: a time that is not usable (unknown, unverified, open, discarded) and whose words place it on no such day
+    - "any event whose date is unresolved" (C-3). ``effective``: the effective date (a date, an ISO string or None);
+    with none, a date literal places nothing."""
     time = event.get('time') or {}
     text = _words_of(time)
     if verify.usable(time) and time.get('value') == 'current_encounter':
@@ -191,7 +219,7 @@ def day_of(event: Mapping, effective) -> str:
     if service is not None and found and all(precision == literals.DAY and literals.iso_date(value) == service
                                              for value, precision in found):
         return ON
-    if _same_day_word(text) and not found:
+    if (_same_day_word(text) or _same_day_frame(text)) and not found:
         return ON
     if verify.usable(time) and time.get('value') in ('earlier_encounter', 'future'):
         return OFF

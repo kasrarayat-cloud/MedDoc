@@ -396,16 +396,20 @@ def examination_class_hold(code: str, exam_class: str, reached: str, words: str,
             'on the date of service?')
 
 
-def scope_question(statement: str, act: str, words: str = '') -> str:
-    """FINAL 7.4 h3 (scope) and ADJUDICATION C-10: whether a statement applies to an act."""
+def scope_question(statement: str, act: str, words: str = '', whole: bool = False) -> str:
+    """FINAL 7.4 h3 (scope) and ADJUDICATION C-10: whether a statement applies to an act. ``whole`` (DECISIONS D103,
+    h3's question): the statement is quoted uncut - it is one passage, which the read bounds to 600 characters - so the
+    words that make it a denial are never cut off the end of a long sentence."""
+    said = quote(statement, len(statement) + 1) if whole else quote(statement, 120)
     if words:
-        return f'Does {quote(statement, 120)} apply to the {act} ({quote(words, 120)})?'
-    return f'Does {quote(statement, 120)} apply to the {act} this code accounts for?'
+        return f'Does {said} apply to the {act} ({quote(words, 120)})?'
+    return f'Does {said} apply to the {act} this code accounts for?'
 
 
-def scope_reason(statement: str, act: str) -> str:
-    return (f'The document states {quote(statement, 140)}; CPT Studio could not confirm from the document whether that '
-            f'statement applies to the {act}.')
+def scope_reason(statement: str, act: str, whole: bool = False) -> str:
+    said = quote(statement, len(statement) + 1) if whole else quote(statement, 140)
+    return (f'The document states {said}; CPT Studio could not confirm from the document whether that statement '
+            f'applies to the {act}.')
 
 
 def method_question(lesion: str) -> str:

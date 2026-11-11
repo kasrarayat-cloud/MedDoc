@@ -102,9 +102,10 @@ class D89MergedItemKeepsEveryQuestion(SimpleTestCase):
 PRIOR = 'No polypectomy was performed in the prior segment.'
 RECTAL = 'Rectal biopsies were taken with cold forceps.'
 NOT_TAKEN = 'Biopsies were not taken.'
-SNARE_SCOPE = ('Does “No polypectomy was performed” apply to the snare removal (cold snare) of the 6 mm sessile polyp in '
-               'the sigmoid colon (“was removed with a cold snare”)?')
-BIOPSY_SCOPE = 'Does “were not taken” apply to the forceps biopsy (cold forceps) at the rectum (“biopsies”)?'
+# DECISIONS D103: a statement_scope question quotes the statement whole (the passage its status words are stated in)
+SNARE_SCOPE = ('Does “No polypectomy was performed in the prior segment.” apply to the snare removal (cold snare) of '
+               'the 6 mm sessile polyp in the sigmoid colon (“was removed with a cold snare”)?')
+BIOPSY_SCOPE = 'Does “Biopsies were not taken.” apply to the forceps biopsy (cold forceps) at the rectum (“biopsies”)?'
 
 
 def prior_segment_and_rectal_biopsies() -> tuple:

@@ -199,13 +199,19 @@ class Context:
         self.families = frozenset(
             event['family'] for event in events if event['status']['value'] in verify.POSITIVE
             and event['time']['value'] == 'current_encounter' and event['family'] in lexicon.PROCEDURAL_FAMILIES)
+        from studio.interpretation.events import endoscopic_examination  # FINAL 5.6 E13 (events reads this module)
         exams = Counter(event['family'] for event in events if event['kind']['value'] == 'examination'
                         and event['status']['value'] in verify.POSITIVE and event['current'] == 'yes'
-                        and event['family'])
+                        and event['family'] and endoscopic_examination(event))
         # D87 (integration of round 3): a session the pairing table reads as unresolved holds two VERIFIED current
         # examinations. A possibly current one (D62) leaves the session unresolved in coverage.sessions, which holds
         # every code of it; read here too, it turned a pairing into session_unresolved and the contradiction ("No stent
-        # was placed." beside the stent placement) was never asked - a doubt never takes another doubt's question
+        # was placed." beside the stent placement) was never asked - a doubt never takes another doubt's question.
+        # D100 (the round-4 refutation, finding 1): and two ENDOSCOPIC examinations - events.endoscopic_examination's
+        # rule, as coverage.sessions, done_examinations and events.supports read it: a digital rectal examination
+        # Gemini lists as the family's examination (its device verified as manual) is no session (FINAL 5.6 E13).
+        # Counted here, it made "No biopsies were taken." beside the biopsy ask in which procedure the biopsy was done
+        # (session_unresolved), never the contradiction, while coverage read the colonoscopy as the one session
         self.unresolved_sessions = frozenset(family for family, count in exams.items() if count >= 2)
         self.facts = identity.lesion_facts(draft)
         self.kinds = {eid: mapping.catalogue_kind(event) for eid, event in draft.events.items()}
@@ -298,8 +304,21 @@ def procedure_row(context: Context, statement: Mapping, act: Mapping) -> Row:
 
 
 def time_row(statement: Mapping, act: Mapping) -> Row:
+    """The time row (module docstring). DECISIONS D99 (the round-4 refutation, finding 8): a current_encounter time
+    whose ONLY failure is date_unchecked - D67(a): a day literal no service date could check yet, unopened - pairs as
+    current. It is a pending date check, not a doubt about the encounter. Read as UNKNOWN, the snare "On 11/09/2026, ...
+    was removed" of an undated note beside "Impression: No polypectomy was performed." was UNRESOLVED(time) instead of
+    a CONTRADICTION, so the contradiction was asked nowhere (45385 asked only event_time, and the conflicts check said
+    there was none) where the installed release asks conflict:snare. Only the pairing reads it so: the act's own code is
+    still held by its unverified time until a date decides it (supports and h4 read verify.usable), and a time no date
+    has checked is never a literal for a hard difference (verify.exclusion_basis reads only a usable time)."""
+    def pairs(time) -> bool:
+        return verify.usable(time) or (
+            isinstance(time, Mapping) and time.get('value') == 'current_encounter' and time.get('state') == 'unverified'
+            and not time.get('open') and list(time.get('reasons') or ()) == ['date_unchecked'])
+
     first, second = statement['time'], act['time']
-    if not (verify.usable(first) and verify.usable(second)):
+    if not (pairs(first) and pairs(second)):
         return Row('time', UNKNOWN, 'time_unresolved')
     if first['value'] == second['value']:
         return Row('time', SAME)
@@ -710,10 +729,12 @@ def identity_in_doubt(context: Context, rule: str, whole: Mapping, part: Mapping
 
 
 def _possibly_current(event: Mapping) -> bool:
-    """D62 as D68 completes it (coverage.possibly_current, on a draft record): current, or a current_encounter time not
-    verified, whatever its reasons - D35's marker and a date_mismatch are doubts, never proof of another occasion."""
+    """D62 as D68 and D98 complete it (coverage.possibly_current, on a draft record): current, or a time not verified
+    that is no earlier or future one - a current_encounter time whatever its reasons (D35's marker and a date_mismatch
+    are doubts, never proof of another occasion) or a time Gemini gave as 'unknown' (D98: an explicit unknown is absent,
+    never a non-match). Only an earlier_encounter or future time is not current, verified or not."""
     return event['current'] == 'yes' or (event['current'] == 'unresolved'
-                                         and event['time'].get('value') == 'current_encounter')
+                                         and event['time'].get('value') not in ('earlier_encounter', 'future'))
 
 
 def _bundling(draft, context: Context) -> None:

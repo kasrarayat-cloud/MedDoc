@@ -793,8 +793,10 @@ class Focused(SimpleTestCase):
                      scope=sc('all_of_kind', 'No', ['P3']), time=a('unknown'))
         inv, text = colonoscopy(denial, lines={'P3': 'No polyp was removed.'})
         p = proposal(run(inv, text, [('45385', POLYP)]), '45385')
-        self.assert_question(p, 'event_time')
-        self.assertIn('done at this encounter?', p.clarifications[0].question)
+        # DECISIONS D102: the unknown time is the DENIAL's (the snare's is verified), so the code asks whether the
+        # denial applies, quoted whole (D103) - never the snare's own verified time
+        self.assert_question(p, 'statement_scope')
+        self.assertIn('Does “No polyp was removed.” apply to the snare removal', p.clarifications[0].question)
         self.assertEqual(p.support['reason'], events.UNRESOLVED)
 
     def test_h3_unresolved_scope_asks_whether_the_statement_applies(self):
@@ -802,7 +804,7 @@ class Focused(SimpleTestCase):
         inv, text = colonoscopy(denial, lines={'P3': 'No polyp was removed.'})
         p = proposal(run(inv, text, [('45385', POLYP)]), '45385')
         self.assert_question(p, 'statement_scope')
-        self.assertIn('Does “No polyp was removed” apply to the snare removal', p.clarifications[0].question)
+        self.assertIn('Does “No polyp was removed.” apply to the snare removal', p.clarifications[0].question)  # D103
 
     ORIGINAL = 'At the original procedure, a 6 mm sessile polyp in the sigmoid colon was removed with a cold snare.'
 

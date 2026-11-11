@@ -4972,10 +4972,11 @@ def phase_switch_back(ctx) -> dict:
     the participant modes and ``--interpreter-mode`` are the previous pair's, as its own app phase was given them (a
     revision before the Gemini migration has no interpreter: leave it disabled). What this revision made from event
     inventories is never a refusing reason: the receipt declares it in a note and the switch goes on (ADJUDICATION
-    P-1). DECISIONS D59, D65 and D82: the encounters it refuses on are those this revision wrote a record for since it
-    replaced that pair after it last returned to it - the earliest time the app receipts that replaced it since the
-    last successful switch-back to it record (replaced_since), never across that switch-back and never the current
-    containers' creation."""
+    P-1). DECISIONS D59, D65, D82, D95 and D110: it refuses only on encounters with a record created since
+    replaced_since's time - the earliest time recorded by the app receipt the pair is read from and by every app
+    receipt of this revision written after its last successful switch-back to that pair, whatever each replaced and
+    however it ended (that switch-back's own start when the receipt the pair is read from is older than it) - never
+    across that switch-back and never the current containers' creation."""
     mode, reference = ctx.args.provider_mode, ctx.args.authorization_ref or ''
     modes = participant_modes(ctx.args)
     live = [name for name in PARTICIPANTS if modes[name] == 'live']
@@ -5062,14 +5063,6 @@ def switch_back_target(ctx, entry) -> tuple:
                        'switch back to.')
 
 
-def _parked_anything(record) -> bool:
-    """D95: whether an app receipt records that its phase parked any role of the previous pair ('details' 'replaced'
-    non-empty): this revision's pair then served, if only until an undo."""
-    details = record.get('details') if isinstance(record, dict) else None
-    replaced = details.get('replaced') if isinstance(details, dict) else None
-    return isinstance(replaced, dict) and bool(replaced)
-
-
 def pair_created_at():
     """When this revision's pair was created: the earliest creation time of its web and worker containers (the 'since'
     every close of an undo reads)."""
@@ -5078,26 +5071,36 @@ def pair_created_at():
 
 
 def replaced_since(ctx, entry) -> dt.datetime:
-    """DECISIONS D59 (the S17 refutation round 2, finding 12), D65 and D82: the 'since' of a switch-back's touched filter
-    (touched_encounters; D51) - when this revision replaced the pair the switch-back returns to, since it last returned
-    to that pair. ``entry`` is the app receipt the switch-back reads that pair from (switch_back_target, D83: the
-    newest successful one, or after a same-revision re-run the one it reads instead). The since is the earliest time
-    recorded for its phase (receipt_moments: main's started_at, taken before anything of that phase ran) by that receipt
-    and by every successful app receipt of this revision that replaced the same target revision (D65: the app run again
-    after a switch-back refused at B7 writes a newer receipt naming the same target, and what this revision wrote under
-    its earlier pair is no more the target's than before) - of those, only the ones written after this revision's
-    newest successful switch-back to that target (D82, refutation round 3, finding 13): that switch-back completed, so
-    what the target wrote while it served again, until an app replaced it once more, is its own status quo, and the
-    since never reaches across it. When ``entry`` itself is older than that switch-back (no successful app has replaced
-    the target since: a later app failed, or replaced another revision), the since is that switch-back's own start -
-    never across it, and fail-closed after it. Receipts are ordered by the stamps their names carry (written_after); one
-    whose order cannot be told is counted (fail-closed). Never the current containers' creation: a later app phase of
-    this same revision that installed a pair and then failed (its receipt not ok - a recompute that failed, or an
-    access check: the pair stays installed) created them, and what this revision wrote under its earlier pair is not
-    the target's status quo. A receipt that records no time falls back to the earliest creation time of this revision's
-    containers (pair_created_at) and of every app receipt of this revision written after it (the earliest time each
-    records, else when it was written) - fail-closed: an earlier since names more encounters. The closes of B4 and B7
-    keep their own since (they close this pair's stages)."""
+    """DECISIONS D59 (the S17 refutation round 2, finding 12), D65, D82, D95 and D110: the 'since' of a switch-back's
+    touched filter (touched_encounters; D51) - when this revision's first app phase began since it last returned to the
+    pair the switch-back returns to, whatever that app replaced and however it ended. ``entry`` is the app receipt the
+    switch-back reads that pair from (switch_back_target, D83: the newest successful one, or after a same-revision
+    re-run the one it reads instead). The bound is this revision's newest successful switch-back to that target
+    (last_switch_back; D82, refutation round 3, finding 13): that switch-back completed, so what the target wrote while
+    it served again, until this revision's next app began, is its own status quo, and the since never reaches across it.
+    A switch-back that did not complete (refused at B7: D65's recovery), one to another target and another revision's
+    set no bound; nor is there one when ``entry`` names no target revision. Counted: ``entry`` and every app receipt of
+    this revision written after the bound, whatever it replaced and however it ended (D95, the round-3 review of
+    D82/D83; D110, refutation round 4, finding 21) - a successful one, over the target or another revision (D65: the app
+    run again after a switch-back refused at B7 names the same target, and what this revision wrote under its earlier
+    pair is no more the target's than before); one that failed once its switch had finished (D83 may read it as the
+    target); one undone after it parked a role (replaced={'worker'}); a swap undone after its web had served, whose
+    receipt records no 'replaced' (finding 21: hazards, stages_closed and states_put_back); one interrupted, or refused
+    before anything changed. Any of them may have put this revision's pair in front of traffic, and its receipt cannot
+    always say so, so none is asked whether it served: an earlier since names more encounters, which only refuses more
+    (fail-closed). Receipts are ordered by the stamps their names carry (written_after); one whose order cannot be told
+    is counted (fail-closed). The since is the earliest time those receipts record for their phases (receipt_moments:
+    main's started_at, taken before anything of that phase ran, and the steps a blue/green switch stamped); a counted
+    receipt that records none counts from when it was written (written_moment). When ``entry`` itself is older than the
+    bound (no successful app has replaced the target since: a later app failed, or replaced another revision), the since
+    is the earliest of that switch-back's own start and the receipts counted after it - never across it, and fail-closed
+    after it. Never the current containers' creation: a later app phase of this same revision that installed a pair and
+    then failed (its receipt not ok - a recompute that failed, or an access check: the pair stays installed) created
+    them, and what this revision wrote under its earlier pair is not the target's status quo. When ``entry`` records no
+    time (and is not older than the bound), the since is the earliest creation time of this revision's containers
+    (pair_created_at), of the receipts counted, and of every app receipt of this revision written after ``entry`` (the
+    earliest time each records, else when it was written). The closes of B4 and B7 keep their own since (they close this
+    pair's stages)."""
     path, record = entry
     target = replaced_web_entry(record).get('revision')
     bound = last_switch_back(ctx, target) if target else None  # D82
@@ -5106,14 +5109,13 @@ def replaced_since(ctx, entry) -> dt.datetime:
         if other_path.name == path.name or written_after(other_path, bound) is False:
             continue  # D82: a receipt written before the switch-back that last returned to this target is never read
         other = json.loads(other_path.read_text(encoding='utf-8'))
-        # D95 (integration of D82/D83, the round-3 review): every app receipt of this revision written after that bound
-        # whose phase served - a successful one, or one that parked anything (its 'replaced' names a role) - counts,
-        # whatever it replaced and however it ended. Counting only successful ones replacing the same target dropped
-        # the window of a failed first app (path P: D83 reads such a receipt as the target) and of an app undone after
-        # its switch (it records replaced={'worker'}): a reinstatement written through this revision's web in either
-        # window was handed to the target. An earlier since names more encounters (fail-closed)
-        if (isinstance(other, dict) and other.get('phase') == 'app' and other.get('revision') == ctx.revision
-                and (other.get('ok') or _parked_anything(other))):
+        # D95, D110 (refutation round 4, finding 21): every app receipt of this revision written after that bound
+        # counts, whatever it replaced and however it ended. D95 counted a successful one, or one that parked a role
+        # ('replaced' non-empty); a swap undone after its web had served records no 'replaced', so its window was
+        # dropped and a record written in it was handed to the target. A receipt cannot always say whether its phase
+        # put this revision's pair in front of traffic, so none is asked: an earlier since names more encounters
+        # (fail-closed)
+        if isinstance(other, dict) and other.get('phase') == 'app' and other.get('revision') == ctx.revision:
             earlier += receipt_moments(other) or [moment for moment in (written_moment(other_path),) if moment]
     if written_after(path, bound) is False:  # D82: ``entry`` is older than the switch-back that returned to its target
         # (that receipt's stamp is told, so written_moment gives a time when it records none)

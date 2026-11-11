@@ -70,6 +70,7 @@ from types import MappingProxyType
 from typing import Optional
 
 from studio.interpretation import identity, lexicon, mapping, relations, verify, wording
+from studio.interpretation import ercp  # DECISIONS D105, D106: the ERCP rules over the per-code rule (evaluate's)
 
 ATTRIBUTES = ('procedure', 'kind', 'technique', 'target', 'time', 'performer', 'status', 'scope', 'purpose')
 BLOCKING = (relations.CONTRADICTION, relations.DOUBT, relations.UNRESOLVED)
@@ -433,6 +434,9 @@ def _kept_places(kept) -> tuple:
 def evaluate(code: str, kept: Sequence, reading: Reading, link: Optional[mapping.CodeLink] = None) -> Evaluation:
     """The per-code rule (module docstring) for ``code`` in scope with its kept exact evidence ``kept``
     (types.EvidenceSpan, already verified against the revision text by checks.exact_evidence)."""
+    ruled = ercp.ruled(code, kept, reading, link)  # DECISIONS D105, D106: the ERCP rules over this rule's evaluation
+    if ruled is not None:
+        return ruled
     from studio.interpretation import coverage  # bundling is coverage's (7.7); coverage reads this module
 
     link = link if link is not None else mapping.code_link(code)
@@ -743,39 +747,105 @@ RELATION_FACTS = {'time': 'event_time', 'performer': 'event_performer', 'target'
                   'procedure': 'procedure', 'kind': 'performed_status', 'part_of': 'performed_status'}
 
 
+# DECISIONS D102: the attributes on which an UNRESOLVED relation from a denial asks the contradiction only while the
+# ACT's own value of that attribute is usable - the unknown side is then the statement's own (its family or session, its
+# time, its performer, its device)
+_H3_STATEMENT_SIDE = ('procedure', 'time', 'performer', 'technique')
+
+
+def _h3_denial(statement: Mapping) -> bool:
+    """DECISIONS D86: a statement whose status is not_performed, in any state, or whose own status words hold a negator
+    (verify's negation_marker literal)."""
+    status = statement.get('status')
+    negating = isinstance(status, Mapping) and bool((status.get('literals') or {}).get('negators'))
+    return value(statement, 'status') == 'not_performed' or negating
+
+
+def _h3_asks_contradiction(reading: Reading, relation: Mapping, event: Mapping) -> bool:
+    """Whether an UNRESOLVED relation of the positive ``event`` is, for a code, a same-event contradiction - asked as
+    whether its statement applies to the act (statement_scope): its statement is a denial (D86), and it rests on the
+    target (D86 as D91 narrows it, whichever side is unknown), on the scope (whether the statement concerns the act at
+    all, which FINAL 7.4 h3 already asks as statement_scope), or (DECISIONS D102) on the procedure, the time, the
+    performer or the technique while the act's OWN value of that attribute is usable - the unknown side is then the
+    statement's, and the act's own attribute question would ask what is verified, with a reason that is not true. A
+    relation whose act side is the unusable one keeps that attribute's question (D91), and a status, kind or part_of
+    relation keeps performed_status (D91)."""
+    if not _h3_denial(reading.events.get(relation['statement']) or {}):
+        return False
+    attribute = relation['attribute']
+    return attribute in ('target', 'scope') or (attribute in _H3_STATEMENT_SIDE and usable(event, attribute))
+
+
+def _h3_whole_statement(reading: Reading, statement: Mapping) -> str:
+    """DECISIONS D103: what a statement_scope question quotes - the statement whole, never its status words alone: the
+    text of the place, among its own passages (its status's first), that holds its status words - the sentence, clause
+    or line Gemini cited, as the document words it. Without located status words: the first located place of its
+    status's passages, else statement_text."""
+    status = statement.get('status') if isinstance(statement.get('status'), Mapping) else {}
+    own = reading.places(status.get('passages') or ())
+    words = status.get('words')
+    if isinstance(words, Mapping):
+        for place in own + reading.places(all_passages(statement)):
+            if place['start'] <= words['start'] and words['end'] <= place['end']:
+                return place['text']
+    if own:
+        return own[0]['text']
+    return statement_text(reading, statement)
+
+
 def _h3_unresolved(code, link, event, reading):
     """FINAL 7.4 h3: the candidate is the positive side of an UNRESOLVED relation, which asks the fact of the attribute
-    it rests on (RELATION_FACTS) - unless, for a code, its statement is a DENIAL (DECISIONS D86): a statement whose
-    status is not_performed, in any state, or whose own status words hold a negator (verify's negation_marker literal).
-    The document then states the act done and states a denial that may be of it, and the code's one question is that
-    contradiction: whether the statement applies to the act (statement_scope, naming both), whatever attribute the
-    relation rests on. "No polypectomy was performed in the prior segment." beside a verified sigmoid snare had asked
-    which lesion the snare was done on (C1CL3-001), and "without submucosal injection" beside "Lift: submucosal
-    injection x2." which site the injection was done on. A doubt, a planned act a claim names and a positive event (a
-    claim that two acts are one) keep their attribute's question. So does focus_question's service-scope question about
-    an event no code depends on (FINAL 7.8; ``code`` ''): coverage.in_doubt_questions asks one question per family and
-    fact, so moving that question to statement_scope dropped it where the family's codes ask statement_scope (FRESH-2
-    C2MEM-031 r1: the balloon dilation's "done at this encounter?"). Only the question changes: the code is held as
-    before, never READY and never excluded."""
-    for relation in reading.relations_of(event['id'], (relations.UNRESOLVED,)):
-        found = _relation_question(reading, relation, event)
-        statement = found['statement']
-        status = statement.get('status')
-        negating = isinstance(status, Mapping) and bool((status.get('literals') or {}).get('negators'))
-        if (code and relation['attribute'] == 'target'
-                and (value(statement, 'status') == 'not_performed' or negating)):  # D86, narrowed at integration (D91)
+    it rests on (RELATION_FACTS) - unless, for a code, the relation is a same-event contradiction
+    (_h3_asks_contradiction): its statement is a DENIAL (DECISIONS D86: a statement whose status is not_performed, in
+    any state, or whose own status words hold a negator) that may be of the act - on its target (D86, as D91 narrows
+    it), on its scope, or on an attribute whose unknown side is the statement's own (D102: the act's own procedure,
+    time, performer or technique is usable). The document then states the act done and states a denial that may be of
+    it, and the code's one question is that contradiction: whether the statement applies to the act (statement_scope,
+    naming both). "No polypectomy was performed in the prior segment." beside a verified sigmoid snare had asked which
+    lesion the snare was done on (C1CL3-001), and "without submucosal injection" beside "Lift: submucosal injection x2."
+    which site the injection was done on; "During withdrawal, no polypectomy was performed in the sigmoid colon." (its
+    own time unanchored) asked when the snare, verified as today's, was done (D102).
+
+    DECISIONS D101: EVERY UNRESOLVED relation of the act is read, not only the first stored: when any of them is a
+    same-event contradiction, that is the code's question, whatever order the relations were stored in - the first
+    contradiction resting on the target (D86's own arm: where the pairing table rests on the target, every row before
+    it - procedure, time, performer, technique - read the same), else the first contradiction stored. A framed earlier
+    denial or a denial of another device listed before C1CL3-001's prior-segment denial had asked the snare's own time
+    or technique, and the prior-segment sentence was shown nowhere. With no contradiction, the first relation stored
+    asks its attribute's fact, as before.
+
+    DECISIONS D103: a statement_scope question and its reason quote the statement WHOLE (_h3_whole_statement: the
+    passage its status words are stated in), never only its status words, so a statement about other findings reads as
+    what it says ("... small internal hemorrhoids were incidental findings and required no therapy.", never "required no
+    therapy").
+
+    A doubt, a planned act a claim names and a positive event (a claim that two acts are one) keep their attribute's
+    question. So does focus_question's service-scope question about an event no code depends on (FINAL 7.8; ``code``
+    ''), which reads the first relation stored: coverage.in_doubt_questions asks one question per family and fact, so
+    moving that question to statement_scope dropped it where the family's codes ask statement_scope (FRESH-2 C2MEM-031
+    r1: the balloon dilation's "done at this encounter?"). Only the question changes: the code is held as before, never
+    READY and never excluded."""
+    unresolved = reading.relations_of(event['id'], (relations.UNRESOLVED,))
+    if not unresolved:
+        return None
+    relation, fact = unresolved[0], ''
+    if code:  # D101: every relation of the act is read; a same-event contradiction (D86/D91/D102) is the question
+        contradictions = [item for item in unresolved if _h3_asks_contradiction(reading, item, event)]
+        if contradictions:
+            relation = next((item for item in contradictions if item['attribute'] == 'target'), contradictions[0])
             fact = 'statement_scope'
-        else:
-            fact = RELATION_FACTS.get(relation['attribute'], 'performed_status')
-        act = event_label(reading, event)
-        words = statement_text(reading, event)
+    fact = fact or RELATION_FACTS.get(relation['attribute'], 'performed_status')
+    found = _relation_question(reading, relation, event)
+    act = event_label(reading, event)
+    words = statement_text(reading, event)
+    if fact == 'statement_scope':  # D103: the statement quoted whole
+        said = _h3_whole_statement(reading, found['statement'])
+        question = wording.scope_question(said, act, words, whole=True)
+        reason = wording.scope_reason(said, act, whole=True)
+    else:
         question, reason = _attribute_question(fact, act, words)
-        if fact == 'statement_scope':
-            said = statement_text(reading, statement)
-            question, reason = wording.scope_question(said, act, words), wording.scope_reason(said, act)
-        return {'reason': UNRESOLVED, 'relation': relation,
-                'question': Question(fact, question, reason, found['events'], found['passages'])}
-    return None
+    return {'reason': UNRESOLVED, 'relation': relation,
+            'question': Question(fact, question, reason, found['events'], found['passages'])}
 
 
 def _attribute_question(fact: str, act: str, words: str) -> tuple:

@@ -82,6 +82,12 @@ def sources(p) -> list:
     return [span['text'] for span in p.support['source']]
 
 
+# DECISIONS D103: the sentence the lift rows' denial ("without submucosal injection") is stated in, which their
+# statement_scope question quotes whole
+LIFT_SENTENCE = ('A 22 mm polyp in the ascending colon was removed piecemeal with a cold snare in four pieces, '
+                 'without submucosal injection.')
+
+
 class RecordedRows(SimpleTestCase):
     """The three rows of the head-to-head, and the recorded rows D86 also reaches, on their FRESH-2 answers."""
 
@@ -103,7 +109,9 @@ class RecordedRows(SimpleTestCase):
         # the rule that asked act_target: an UNRESOLVED(target) relation whose statement is the denial
         self.assertEqual(unresolved(inventory), [('E4', 'E2', 'target', 'site_unresolved', 'not_performed')])
         p = proposal(result, '45385')
-        self.assert_scope_question(p, 'No polypectomy was performed', 'snare removal', 'was removed')
+        # D103: the denial is quoted whole, never only its status words
+        self.assert_scope_question(p, 'No polypectomy was performed in the prior segment.', 'snare removal',
+                                   'was removed')
         self.assertIn('No polypectomy was performed in the prior segment.', sources(p))  # both sides are shown
         self.assertIn('On withdrawal, a 6 mm polyp in the sigmoid colon was removed with a cold snare.', sources(p))
         self.assertEqual(p.support['question_events'], ['E2', 'E4'])
@@ -114,15 +122,14 @@ class RecordedRows(SimpleTestCase):
                                      [('45381', 'Lift: submucosal injection x2.', 349)])
         self.assertEqual(unresolved(inventory), [('E3', 'E4', 'target', 'identity_unresolved', 'not_performed')])
         p = proposal(result, '45381')
-        self.assert_scope_question(p, 'without submucosal injection', 'submucosal injection',
-                                   'Lift: submucosal injection x2')
+        self.assert_scope_question(p, LIFT_SENTENCE, 'submucosal injection', 'Lift: submucosal injection x2')  # D103
         self.assertEqual(p.support['question_events'], ['E4', 'E3'])
 
     def test_d86_ownpassage_005_asks_whether_without_injection_applies_to_the_yes_row(self):
         inventory, result = recorded('W1-u30a-rel-f1-ownpassage-005', [('45381', 'Submucosal injection: Yes', 226)])
         self.assertEqual(unresolved(inventory), [('E4', 'E2', 'target', 'identity_unresolved', 'not_performed')])
         p = proposal(result, '45381')
-        self.assert_scope_question(p, 'without submucosal injection', 'submucosal injection', 'Yes')
+        self.assert_scope_question(p, LIFT_SENTENCE, 'submucosal injection', 'Yes')  # D103
         self.assertEqual(p.support['question_events'], ['E2', 'E4'])
 
     def test_d86_c1cl2_002_a_claimed_contradiction_whose_statuses_gemini_opened_asks_the_denial(self):
@@ -158,7 +165,8 @@ class RecordedRows(SimpleTestCase):
                                                   ('45385', 'was removed with a cold snare', 275)])
         self.assertEqual(unresolved(inventory), [('E5', 'E2', 'scope', 'scope_unresolved', 'not_performed')])
         p = proposal(result, '45385')
-        self.assert_scope_question(p, 'was not repeated', 'snare removal', 'was removed')
+        self.assert_scope_question(p, 'The intervention was not repeated at this examination.', 'snare removal',
+                                   'was removed')  # D103: the statement whole
         self.assertEqual(proposal(result, '45380').status, 'ready')
 
 
@@ -191,7 +199,7 @@ class SyntheticPairs(SimpleTestCase):
         p = proposal(run(inv, text, [('45385', POLYP)]), '45385')
         self.held_by(p, 'target', inv, 'E3')
         question = p.clarifications[0].question
-        self.assertTrue(question.startswith('Does “No polypectomy was performed” apply to the snare removal'), question)
+        self.assertTrue(question.startswith(f'Does “{PRIOR}” apply to the snare removal'), question)  # D103
         self.assertTrue(question.endswith('(“was removed with a cold snare”)?'), question)
         self.assertIn(PRIOR, sources(p))
         self.assertIn(POLYP, sources(p))
@@ -213,7 +221,7 @@ class SyntheticPairs(SimpleTestCase):
         p = proposal(run(inv, text, [('45381', 'Lift: submucosal injection x2.')]), '45381')
         self.held_by(p, 'target', inv, 'E3', 'E4')
         question = p.clarifications[0].question
-        self.assertTrue(question.startswith('Does “without submucosal injection” apply to the submucosal injection'),
+        self.assertTrue(question.startswith(f'Does “{LIFT_SENTENCE}” apply to the submucosal injection'),  # D103
                         question)
         self.assertTrue(question.endswith('(“Lift: submucosal injection x2”)?'), question)
 
@@ -244,10 +252,13 @@ class SyntheticPairs(SimpleTestCase):
         base = dict(status='not_performed', status_words='No polyp was removed', scope=sc('all_of_kind', 'No', ['P3']))
         contradiction = {'about': 'contradiction', 'events': ['E2', 'E3'], 'lesions': [], 'passages': ['P2', 'P3']}
         claim = [{'event': 'E2', 'passages': ['P2', 'P3']}]
-        cases = {  # attribute: (the denial, its line, Gemini's open questions, the question asked at a4dcbea72)
-            'time': (act('E3', 'P3', 'removal', 'removed', time=a('unknown'), **base), denied, (), 'event_time'),
+        cases = {  # attribute: (the denial, its line, Gemini's open questions, the question asked: a4dcbea72's, but
+            # D102's time and performer)
+            # DECISIONS D102: the unknown time or performer is the DENIAL's, beside the snare's verified one, so the
+            # code asks the contradiction - at 437b708bb these asked the act's own verified time or performer
+            'time': (act('E3', 'P3', 'removal', 'removed', time=a('unknown'), **base), denied, (), 'statement_scope'),
             'performer': (act('E3', 'P3', 'removal', 'removed', performer=a('unknown'), **base), denied, (),
-                          'event_performer'),
+                          'statement_scope'),
             'technique': (act('E3', 'P3', 'snare', 'cold snare', status='not_performed',
                               status_words='No cold snare was used', technique=a('cold_snare', 'cold snare', ['P3']),
                               scope=sc('single_target', 'the 6 mm sessile polyp', ['P3'], targets=['L1']),
@@ -293,7 +304,7 @@ class Boundaries(SimpleTestCase):
                 ('time', dict(scope=sc('all_of_kind', 'clip', ['P3']), time=a('unknown')), 'event_time')):
             for status, words, asked_now in (('uncertain', 'It is unclear whether a clip was placed', fact),
                                              ('not_performed', 'No clip was placed',
-                                              'statement_scope' if attribute == 'target' else fact)):  # D91
+                                              'statement_scope')):  # D91 (target); D102 (time: the denial's own)
                 with self.subTest(attribute=attribute, status=status):
                     statement = act('E3', 'P3', 'clip', 'clip', status=status, status_words=words, **changes)
                     inv, p = self.clip_beside(statement, f'{words} in the prior segment.')

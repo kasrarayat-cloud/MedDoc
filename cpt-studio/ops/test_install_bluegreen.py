@@ -1986,8 +1986,8 @@ class InstallDocTests(unittest.TestCase):
 
     def test_d59_switching_back_states_its_since_the_approved_reinstatement_and_the_rollback_limit(self):
         switch = self.between('## Switching back', '## Reinstalling an older revision')
-        for phrase in ("`switch-back` to that pair (DECISIONS D59, D65 and D82)", "Never the current containers' "
-                       'creation', "the receipt's `touched_since`",
+        for phrase in ('`switch-back` to that pair, whatever it replaced and however it ended (DECISIONS D59, D65, '
+                       'D82, D95 and D110)', "Never the current containers' creation", "the receipt's `touched_since`",
                        'stays named once the reinstated code is approved',
                        'counted again (the receipt\'s `interpretation`, B4\'s count kept as '
                        '`interpretation_at_b4`; read before the hold below',
@@ -2365,12 +2365,15 @@ class SwitchBackSinceTests(TemporaryDirectoryTest):
         entry = install.require_receipt_entry(ctx, 'app')
         self.assertEqual(entry[1]['started_at'], '2026-11-03T10:06:30Z')  # the receipt the target is read from: R3
         self.assertEqual(install.replaced_since(ctx, entry), at('10:02:30'))
-        # another revision's receipt, and one of this revision that parked nothing and failed, never move the since
+        # another revision's receipt never moves the since
         put('app-20261103T100120000000Z.json', '2026-11-03T10:01:20Z', OLD, True, 'e' * 40)
+        self.assertEqual(install.replaced_since(ctx, install.require_receipt_entry(ctx, 'app')), at('10:02:30'))
+        # D110: one of this revision that parked nothing and failed moves it - every app receipt of this revision
+        # counts, whatever it replaced and however it ended (it was 10:02:30 under D95)
         (self.tmp / 'app-20261103T100115000000Z.json').write_text(json.dumps(
             {'phase': 'app', 'ok': False, 'revision': REVISION, 'started_at': '2026-11-03T10:01:15Z',
              'details': {'replaced': {}}}))
-        self.assertEqual(install.replaced_since(ctx, install.require_receipt_entry(ctx, 'app')), at('10:02:30'))
+        self.assertEqual(install.replaced_since(ctx, install.require_receipt_entry(ctx, 'app')), at('10:01:15'))
         # D95: one of this revision that served - failed once it had parked the old web, or successful over ANOTHER
         # target - moves it: what this revision wrote from then on was never the target's
         put('app-20261103T100110000000Z.json', '2026-11-03T10:01:10Z', OLD, False, REVISION)
@@ -2396,11 +2399,17 @@ class SwitchBackSinceTests(TemporaryDirectoryTest):
         try:
             self.assertEqual(since(), at('10:01:00'))  # no later receipt: the pair's creation
             # later app receipts of this revision, not ok: each counts from the earliest time it records, else from
-            # when it was written; another revision's, an earlier one, or another phase's never
-            put('app-20261103T095900000000Z.json', ok=False, started_at='2026-11-03T09:00:00Z')
+            # when it was written; another revision's, or another phase's never
             put('app-20261103T100500000000Z.json', ok=False, revision=OLD, started_at='2026-11-03T09:10:00Z')
             put('rollback-app-20261103T100600000000Z.json', phase='rollback-app', ok=False,
                 started_at='2026-11-03T09:20:00Z')
+            self.assertEqual(since(), at('10:01:00'))
+            # D110: an EARLIER one of this revision, not ok, counts too - no switch-back bounds it, and every app
+            # receipt of this revision counts, however it ended (D95 left it out: 10:01:00). Removed again, so what
+            # follows reads the fallback as before
+            earlier = put('app-20261103T095900000000Z.json', ok=False, started_at='2026-11-03T09:00:00Z')
+            self.assertEqual(since(), at('09:00:00'))
+            earlier.unlink()
             self.assertEqual(since(), at('10:01:00'))
             put('app-20261103T100700000000Z.json', ok=False, details={'steps': {'S1': '2026-11-03T10:00:40.250Z'}})
             self.assertEqual(since(), at('10:00:40').replace(microsecond=250000))
@@ -2410,8 +2419,8 @@ class SwitchBackSinceTests(TemporaryDirectoryTest):
             put('app-20261103T100010000000Z.json', ok=False)  # records nothing: when it was written
             self.assertEqual(since(), at('10:00:10'))
             # a receipt that records its time: that time, whatever the containers or the later receipts say - and,
-            # D95, no later than an earlier SUCCESSFUL receipt of this revision (it served): here the first one, which
-            # records no time, counts from when it was written
+            # D95 and D110, no later than any earlier app receipt of this revision: here the first one, which records
+            # no time, counts from when it was written
             put('app-20261103T100900000000Z.json', ok=True, started_at='2026-11-03T10:30:00Z', details={'replaced': {}})
             self.assertEqual(since(), at('10:00:00'))
         finally:
@@ -2738,11 +2747,18 @@ class SwitchBackRound3Tests(TemporaryDirectoryTest):
         said = ' '.join((APP_ROOT / 'ops' / 'INSTALL.md').read_text(encoding='utf-8').split())
         switch = said.split('## Switching back', 1)[1].split('## Reinstalling an older revision', 1)[0]
         for phrase in (
-                'That time is the earliest `started_at` of the `app` receipt the pair is read from and of every '
-                'successful `app` receipt of this revision that replaced the same pair - counting only those written '
-                "after this revision's last successful `switch-back` to that pair (DECISIONS D59, D65 and D82)",
+                # D95 and D110 (refutation round 4, finding 20): the since as replaced_since reads it
+                'That time is the earliest `started_at` of the `app` receipt the pair is read from and of every `app` '
+                "receipt of this revision written after this revision's last successful `switch-back` to that pair, "
+                'whatever it replaced and however it ended (DECISIONS D59, D65, D82, D95 and D110)',
+                'one undone after it parked a role; a swap undone after its web had served, whose receipt records '
+                'nothing it replaced; one interrupted, or refused before anything changed',
+                'an earlier time names more encounters, which only refuses more',
+                'A receipt whose order cannot be told from its name is counted too',
                 'It never reaches across that `switch-back`: what the pair wrote while it served again after it, '
-                'until an `app` replaced it once more, is its own',
+                "until this revision's next `app` began, is its own",
+                "A `switch-back` that did not complete, one to another revision and another revision's are no such "
+                'bound',
                 'the time is that `switch-back`\'s own `started_at`',
                 'When that `app` replaced this same revision - a same-revision re-run',
                 'the pair is read instead from the newest `app` receipt of this revision written since its last '
@@ -2751,6 +2767,9 @@ class SwitchBackRound3Tests(TemporaryDirectoryTest):
                 'With none, there is nothing to switch back to'):
             self.assertIn(phrase, switch)
         self.assertNotIn('the one the same `app` receipt records for its phase', switch)  # D59's wording, before D82
+        for stale in ('every successful `app` receipt of this revision that replaced the same pair',
+                      'until an `app` replaced it once more'):  # D82's wording, before D95 and D110
+            self.assertNotIn(stale, switch)
 
 
 class D95SinceAcrossServedAppsTests(TemporaryDirectoryTest):
@@ -2813,3 +2832,160 @@ class D95SinceAcrossServedAppsTests(TemporaryDirectoryTest):
         code, sb2 = self.main(world, 'switch-back', '2026-11-03T10:50:00Z')
         self.assertFalse(sb2['ok'])
         self.assertEqual((sb2.get('details') or {}).get('hazards'), {'e1': ['reinstatement']})
+
+
+class D110SinceCountsEveryAppReceiptTests(TemporaryDirectoryTest):
+    """DECISIONS D110 (refutation round 4, findings 21 and 20): every app receipt of this revision written after the
+    bound - this revision's last completed switch-back to the target (D82) - counts toward the since, whatever it
+    replaced and however it ended. D95 counted a successful one, or one that parked a role ('replaced' non-empty); a
+    swap undone after its web had served records no 'replaced', so its window was dropped and the switch-back handed a
+    record written in it to the previous revision's worker. Through the REAL install.main in BlueGreenWorld
+    (SwitchBackSinceTests.main), and on receipts written by hand. INSTALL.md (the D84 pin) and the docstrings state the
+    since as replaced_since reads it (finding 20)."""
+
+    def setUp(self):
+        super().setUp()
+        self.fresh('receipts')
+
+    def fresh(self, label):
+        """A receipts directory of its own, which main() then writes to."""
+        self.receipts = self.tmp / label
+        self.receipts.mkdir(mode=0o700)
+        os.chmod(self.receipts, 0o700)
+        return self.receipts
+
+    def main(self, world, phase, clock):
+        return SwitchBackSinceTests.main(self, world, phase, clock)
+
+    def test_d110_finding_21_a_swap_undone_after_its_web_served_counts_while_its_record_stands(self):
+        # finding 21: an outage state - the HTTPS stage proxies to 9150 and OLD's pair is stopped, so no web answers it
+        # and A1 is a swap (replacement_plan's 'fresh', on 9150). A1 parks OLD's pair, starts this revision's web on
+        # 9150 - in front of traffic - and its worker never becomes ready; the undo's close names e1 for a reason OLD's
+        # worker acts on, so OLD's web is restored with its worker held, and the receipt asks for this revision again.
+        # A2 replaces OLD blue/green; the switch-back comes while e1's record, written in A1's window, still stands.
+        for reason in ('conflict', 'unknown', 'outcome'):
+            with self.subTest(reason=reason):
+                self.fresh(f'receipts-{reason}')
+                world = BlueGreenWorld(self.receipts)
+                world.checking = False  # nothing is served through the vhost: no blue/green invariant until A2
+                for name in (WEB, WORKER):
+                    world.containers[name]['running'] = False
+                world.unhealthy.add(WORKER)
+                names_e1 = {'closed': 1, 'kinds': [], 'hazards': {'e1': [reason]}, 'relabel': []}
+                world.close_answer = json.loads(json.dumps(names_e1))
+                world.record_times = {'e1': [at('10:03:30')]}  # e1's only record, written in A1's window
+                code, first = self.main(world, 'app', '2026-11-03T10:02:30Z')
+                self.assertEqual((code, first['ok']), (1, False))
+                self.assertIn('Install this revision again', first['error'])
+                for event in (('rename', WORKER, WORKER + '-previous'), ('rename', WEB, WEB + '-previous'),
+                              ('run', 'web', WEB, 9150, IMAGE)):  # this revision's web on the HTTPS stage's port
+                    self.assertIn(event, world.events)
+                # what the receipt records: the undo's close, and no 'replaced' (D95 counted only one that has one)
+                self.assertEqual(sorted(first['details']), ['hazards', 'stages_closed', 'states_put_back'])
+                self.assertEqual(world.names(), {WEB: (OLD_IMAGE, 9150, True), WORKER: (OLD_IMAGE, None, False)})
+                world.unhealthy.discard(WORKER)
+                world.checking = True
+                world.close_answer = {'closed': 0, 'kinds': [], 'hazards': {}, 'relabel': []}
+                code, second = self.main(world, 'app', '2026-11-03T10:30:00Z')
+                self.assertEqual((code, second['details']['replaced']['web']['revision']), (0, OLD),
+                                 second.get('error'))
+                world.hazards_answer = {'e1': [reason]}
+                world.close_answer = json.loads(json.dumps(names_e1))  # every close would name it too
+                world.touched_since_seen.clear()
+                mark = len(world.events)
+                code, back = self.main(world, 'switch-back', '2026-11-03T10:40:00Z')
+                self.assertEqual((code, back['ok']), (1, False))
+                self.assertEqual(back['details'], {'hazards': {'e1': [reason]},
+                                                   'touched_since': '2026-11-03T10:02:30+00:00'})  # A1's start
+                self.assertIn('nothing was started or stopped', back['error'])
+                self.assertEqual(world.touched_since_seen, ['2026-11-03T10:02:30+00:00'])
+                self.assertEqual([event for event in world.events[mark:]
+                                  if event[0] in ('run', 'stop', 'rename', 'vhost', 'reload', 'close', 'start')], [])
+                self.assertEqual(world.names(), {WEB: (IMAGE, 9151, True), WORKER: (IMAGE, None, True)})
+                # cleared on this revision's web, the switch-back goes through: the since holds it only while it stands
+                world.hazards_answer = {}
+                world.close_answer = {'closed': 0, 'kinds': [], 'hazards': {}, 'relabel': []}
+                code, back = self.main(world, 'switch-back', '2026-11-03T10:50:00Z')
+                self.assertEqual((code, back['ok']), (0, True), back.get('error'))
+                self.assertEqual(back['details']['touched_since'], '2026-11-03T10:02:30+00:00')
+                self.assertEqual(world.names(), {WEB: (OLD_IMAGE, 9150, True), WORKER: (OLD_IMAGE, None, True)})
+
+    def test_d110_every_app_receipt_of_this_revision_after_the_bound_counts_whatever_it_records(self):
+        ctx = install.Context(switch_back_args(self.receipts), self.receipts)
+
+        def put(stamp, started, *, phase='app', revision=REVISION, **record):
+            path = self.receipts / f'{phase}-{stamp}.json'
+            path.write_text(json.dumps({'phase': phase, 'revision': revision, **record,
+                                        **({'started_at': started} if started else {})}))
+            return path
+        since = lambda: install.replaced_since(ctx, install.require_receipt_entry(ctx, 'app'))  # noqa: E731
+        # the bound: a completed switch-back to OLD at 10:03; the target is read from a successful app over OLD at 10:30
+        put('20261103T100300000000Z', '2026-11-03T10:03:00Z', phase='switch-back', ok=True,
+            details={'previous': {'image': OLD_IMAGE, 'revision': OLD}})
+        put('20261103T103000000000Z', '2026-11-03T10:30:00Z', ok=True,
+            details={'replaced': {'web': {'image': OLD_IMAGE, 'revision': OLD}}})
+        self.assertEqual(since(), at('10:30:00'))
+        # never: one of this revision written before that switch-back (D82), another revision's, another phase's
+        put('20261103T100200000000Z', '2026-11-03T10:02:00Z', ok=False, details={'replaced': {}})
+        put('20261103T102500000000Z', '2026-11-03T10:25:00Z', revision='e' * 40, ok=False)
+        put('20261103T102600000000Z', '2026-11-03T10:26:00Z', phase='rollback-app', ok=False)
+        self.assertEqual(since(), at('10:30:00'))
+        # D110: each of this revision written after it counts, whatever it records - D95 counted none of these
+        for stamp, started, record, expected in (
+                # a swap undone after its web had served (finding 21): its close, no 'replaced'
+                ('20261103T102000000000Z', '2026-11-03T10:20:00Z',
+                 {'details': {'hazards': {'e1': ['conflict']}, 'stages_closed': {'closed': 1}, 'states_put_back': {}}},
+                 '10:20:00'),
+                # interrupted: main's finally wrote it with no details (a KeyboardInterrupt passes its except arms)
+                ('20261103T101500000000Z', '2026-11-03T10:15:00Z', {}, '10:15:00'),
+                # refused before anything changed: its details name no 'replaced'
+                ('20261103T101000000000Z', '2026-11-03T10:10:00Z', {'details': {'plan': {'mode': 'blue-green'}}},
+                 '10:10:00'),
+                # a blue/green app that failed at S1: it parked nothing
+                ('20261103T100500000000Z', '2026-11-03T10:05:00Z', {'details': {'failed_at': 'S1', 'replaced': {}}},
+                 '10:05:00'),
+                # an InstallError raised with no details, recording no time: from when it was written
+                ('20261103T100430000000Z', None, {'details': None}, '10:04:30')):
+            with self.subTest(stamp=stamp):
+                put(stamp, started, ok=False, **record)
+                self.assertEqual(since(), at(expected))
+
+    def test_d110_cost_an_app_that_failed_at_s1_counts_so_a_record_the_target_wrote_meanwhile_refuses(self):
+        # the recorded cost (finding 18's control): A1 (10:02:30) fails at S1 - its incoming web never became ready,
+        # nothing was parked and OLD served alone throughout; OLD writes e2's record at 10:20 ('unknown': a reason it
+        # writes itself and does not read); A2 (10:30) replaces OLD. A1's receipt cannot say that its pair never served,
+        # so its start is the since and e2 refuses: fail-closed, nothing is handed over (D95 read 10:30 and completed)
+        world = BlueGreenWorld(self.receipts)
+        world.unhealthy.add(NEXT)
+        code, first = self.main(world, 'app', '2026-11-03T10:02:30Z')
+        self.assertEqual((code, first['details']['failed_at'], first['details']['replaced']), (1, 'S1', {}))
+        self.assertEqual(world.names(), {WEB: (OLD_IMAGE, 9150, True), WORKER: (OLD_IMAGE, None, True)})
+        world.unhealthy.discard(NEXT)
+        world.hazards_answer, world.record_times = {'e2': ['unknown']}, {'e2': [at('10:20:00')]}
+        code, second = self.main(world, 'app', '2026-11-03T10:30:00Z')
+        self.assertEqual((code, second['details']['replaced']['web']['revision']), (0, OLD), second.get('error'))
+        mark = len(world.events)
+        code, back = self.main(world, 'switch-back', '2026-11-03T10:40:00Z')
+        self.assertEqual((code, back['details']), (1, {'hazards': {'e2': ['unknown']},
+                                                       'touched_since': '2026-11-03T10:02:30+00:00'}))
+        self.assertEqual([event for event in world.events[mark:]
+                          if event[0] in ('run', 'stop', 'rename', 'vhost', 'reload', 'close', 'start')], [])
+        self.assertEqual(world.names(), {WEB: (IMAGE, 9151, True), WORKER: (IMAGE, None, True)})
+
+    def test_d110_finding_20_the_docstrings_state_the_since_as_it_is_read(self):
+        since = ' '.join(install.replaced_since.__doc__.split())
+        for phrase in ('D82, D95 and D110',
+                       'Counted: ``entry`` and every app receipt of this revision written after the bound, whatever it '
+                       'replaced and however it ended',
+                       "a swap undone after its web had served, whose receipt records no 'replaced' (finding 21: "
+                       'hazards, stages_closed and states_put_back)', 'so none is asked whether it served',
+                       "the since is the earliest of that switch-back's own start and the receipts counted after it"):
+            self.assertIn(phrase, since)
+        phase = ' '.join(install.phase_switch_back.__doc__.split())
+        self.assertIn('DECISIONS D59, D65, D82, D95 and D110', phase)
+        self.assertIn('every app receipt of this revision written after its last successful switch-back to that pair, '
+                      "whatever each replaced and however it ended (that switch-back's own start when the receipt the "
+                      'pair is read from is older than it)', phase)
+        for said, stale in ((since, 'every successful app receipt of this revision that replaced the same target'),
+                            (phase, 'the app receipts that replaced it since the last successful switch-back to it')):
+            self.assertNotIn(stale, said)  # D82's wording, before D95
