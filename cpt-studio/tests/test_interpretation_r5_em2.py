@@ -280,16 +280,13 @@ class D130WhatTheStatementNeverCounts(SimpleTestCase):
     def test_d130_only_under_the_visit(self):
         """The statement arm reads office_em and em_other only (the spec's 'filed under the visit'): the excision filed
         as sedation is READY (RECORDED RESIDUAL: c2e53f8e holds it). D94's arm is unchanged: not_gi keeps 'Service
-        outside the GI profiles' (done), 'unknown' 'A procedure CPT Studio could not identify' (possible) - and, by
-        DECISIONS D144, unidentified too: done on the date but for its procedure, so the office-visit rule sets the
-        visit apart beside it (tests/test_interpretation_r5d_currency.py)."""
+        outside the GI profiles' (done), 'unknown' 'A procedure CPT Studio could not identify' (possible; DECISIONS
+        D151 withdrew D144's ``unidentified``, which this subtest had also asserted)."""
         inv, text = note(EXCISION, other(CYST, 'was performed', a('sedation')))
         self.assertEqual(procedure_day(inv), combination.ProcedureDay())
         ready_with_no_procedure_day(self, em(inv, text))
-        unidentified = (combination.UNIDENTIFIED_PROCEDURE,)
         for value, expected in (('not_gi', combination.ProcedureDay(labels=('Service outside the GI profiles',))),
-                                ('unknown', combination.ProcedureDay(possible=unidentified,
-                                                                     unidentified=unidentified))):  # D144
+                                ('unknown', combination.ProcedureDay(possible=(combination.UNIDENTIFIED_PROCEDURE,)))):
             with self.subTest(procedure=value):
                 inv, _ = note(EXCISION, other(CYST, 'was performed', a(value, CYST, ['P2']) if value == 'not_gi'
                                               else a(value)))

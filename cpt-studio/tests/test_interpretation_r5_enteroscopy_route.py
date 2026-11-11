@@ -9,7 +9,8 @@ note's EGD and push enteroscopy with a gastric APC (studio/interpretation/classe
 - an act Gemini files under the enteroscopy whose verified target lies in the upper tract an EGD examines, beside a done
   EGD, is the EGD session's for coding: 44369 is held on it (service.act_elsewhere), 43235 is held base_included beside
   it, and the enteroscopy's diagnostic 44360, which the act held base_included, stays held (the act's procedure
-  question). An act whose place is not verified keeps Gemini's family.
+  question). An act whose place is not verified keeps Gemini's family (DECISIONS D153: beside a done EGD it is a doubt of
+  family, the EGD session's for coding, as a moved act is).
 At 1caaf0609 each held input below was READY (44360 held base_included); the installed release c2e53f8e holds every
 route input (extent, with performed_status on the ileoscopy and pouchoscopy documents) and, on the parity input, holds
 44369 (performed_status) and 43235 (base_included) and READYs 43270 and 44360. Nothing is sent."""
@@ -483,14 +484,22 @@ class RegionOfTheAct(SimpleTestCase):
         ready(self, proposal(result, '44369'))
         ready(self, proposal(result, '43235'))
 
-    def test_d114_an_act_whose_place_is_not_verified_keeps_geminis_family(self):
-        """Target words that do not stand in their passage leave the place unverified: the act stays the enteroscopy's
-        (44369 READY, as before)."""
+    def test_d114_an_act_whose_place_is_not_verified_is_a_doubt_of_family(self):
+        """Target words that do not stand in their passage leave the place unverified. DECISIONS D153 (the round-5d
+        review of D148, problem 6) changes this pin's expectation: beside a done EGD such an act is a doubt of family
+        (D87), the EGD session's for coding, so it never makes an enteroscopy code READY by itself - 44369 is held
+        (service.act_elsewhere, performed_status) and 43235 base_included, as c2e53f8e holds both (which READYs 43270).
+        At e5628be56 and 4f82e5056 the act stayed the enteroscopy's (44369 READY). Renamed from
+        test_d114_an_act_whose_place_is_not_verified_keeps_geminis_family."""
         inv, text = egd_push(words='Two gastric fundic angioectasias')
         reading = events.Reading.of(inv)
         self.assertNotEqual(reading.events['E3']['target']['state'], 'verified')
-        self.assertEqual(coverage.coding_family(reading, reading.events['E3']), 'gi.enteroscopy')
-        ready(self, code_of(inv, text, '44369'))
+        self.assertEqual(coverage.coding_family(reading, reading.events['E3']), 'gi.egd')
+        p = code_of(inv, text, '44369')
+        self.assertEqual((p.status, asked(p), check(p, ELSEWHERE).status),
+                         ('needs_clarification', ['performed_status'], 'warn'))
+        p = proposal(run(inv, text, [('43235', line(text, 'P5'))]), '43235')
+        self.assertEqual((p.status, asked(p)), ('needs_clarification', ['base_included']))
 
     def test_d114_without_a_done_egd_the_act_keeps_its_family(self):
         """No EGD, or an EGD planned and not done: the gastric act stays the enteroscopy's (44369 READY, as before)."""

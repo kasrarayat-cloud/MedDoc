@@ -161,11 +161,6 @@ ON, OFF, UNDATABLE = 'on', 'off', 'undatable'
 # The words that place an act on the date of service itself, read in its time attribute's OWN words only (EB1): the
 # event's own statement that it was done today ("earlier today", "this morning"), never a scan of a passage.
 SAME_DAY_WORDS = ('today', 'this morning', 'this afternoon', 'this evening', 'tonight', 'same day', 'same date')
-# DECISIONS D144 (the review of D131, currency3 problem 0): the words that, standing IMMEDIATELY before a same-day word
-# in the words _same_day_word reads (D131's folding), make it name what the act came before - "prior to today's visit",
-# "before this morning's clinic" - never the act's own day. Such a same-day word places nothing: the act's own time
-# value decides, as before D131. "Earlier today, before her visit" still holds "today": "before" governs "her visit".
-ANTERIORITY_WORDS = ('prior to', 'before', 'previous to', 'preceding', 'ahead of', 'until', 'till')
 
 
 def _words_of(attribute: Mapping) -> str:
@@ -173,44 +168,23 @@ def _words_of(attribute: Mapping) -> str:
     return words['text'] if isinstance(words, Mapping) else ''
 
 
-def _same_day_word(text: str, anaphoric: bool = True) -> bool:
+def _same_day_word(text: str) -> bool:
     """Whether a time's own words hold a SAME_DAY_WORDS entry, matched at word boundaries whatever punctuation touches
     it (DECISIONS D131, the review of D111-D113, em problem 0): folded, every character that is not a letter or a digit
-    turned into a space, the spaces collapsed, then the entry's words matched whole. "Earlier today, excision ...",
-    "This morning, before clinic" and "Earlier today, at 8:30" hold "today" or "this morning" as "Earlier today before
-    her visit" does; read with its punctuation, "today," never matched, so the act was OFF by its verified "earlier".
-    DECISIONS D144 (the review of D131, currency3 problems 0 and 4): an entry whose words immediately before it are an
-    ANTERIORITY_WORDS entry is not read ("prior to today's visit", "two years prior to today's visit": what the act came
-    before, never its own day); and without ``anaphoric`` (day_of: an act whose performer is verified other) the words
-    of an anaphoric frame (lexicon.ANAPHORIC_FRAMES) are not read either - "Earlier that same day ... at that hospital"
-    holds no "same day", as D132 reads it as no frame."""
+    turned into a space, the spaces collapsed, then ' word ' matched. "Earlier today, excision ...", "This morning,
+    before clinic" and "Earlier today, at 8:30" hold "today" or "this morning" as "Earlier today before her visit"
+    does; read with its punctuation, "today," never matched, so the act was OFF by its verified "earlier".
+    DECISIONS D151 (round 5e, narrowing only; the review of D144, currency4 problems 0-2 and 5) withdrew D144's two
+    readings here, each of which released a hold e5628be56 keeps: the anteriority rule (ANTERIORITY_WORDS; "Earlier in
+    the day, prior to today's visit, rubber band ligation ..." made 99213 READY with no separate_em question, where
+    c2e53f8e holds it too) and the anaphoric argument (D112's "Earlier that same day ... at that hospital" made 99213
+    READY). Every SAME_DAY_WORDS entry is read wherever it stands, for every performer, as at D131; the costs D144 cured
+    return."""
     if not text:
         return False
-
-    def spelled(value: str) -> list:  # D131's folding: every character that is not a letter or a digit a space
-        return ''.join(char if char.isalnum() else ' ' for char in lexicon.fold(value)).split()
-
-    words = spelled(text)
-
-    def runs(entry: str) -> list:  # (start, end) of every place ``entry``'s words stand whole in ``words``
-        parts = spelled(entry)
-        return [(start, start + len(parts)) for start in range(len(words) - len(parts) + 1)
-                if words[start:start + len(parts)] == parts]
-
-    hidden = set()
-    if not anaphoric:
-        for frame in lexicon.ANAPHORIC_FRAMES:
-            for start, end in runs(frame):
-                hidden.update(range(start, end))
-    governing = [spelled(entry) for entry in ANTERIORITY_WORDS]
-    for word in SAME_DAY_WORDS:
-        for start, end in runs(word):
-            if hidden.intersection(range(start, end)):
-                continue  # D144: an anaphoric frame's words, for a verified other's act
-            if any(len(prior) <= start and words[start - len(prior):start] == prior for prior in governing):
-                continue  # D144: governed by an anteriority word
-            return True
-    return False
+    spaced = ''.join(char if char.isalnum() else ' ' for char in lexicon.fold(text))
+    folded = ' ' + ' '.join(spaced.split()) + ' '
+    return any(f' {word} ' in folded for word in SAME_DAY_WORDS)
 
 
 # DECISIONS D109 (the round-4 refutation, finding 14): the same-date frames (lexicon.SAME_DAY_FRAMES), read WHOLE as D54
@@ -255,13 +229,13 @@ def day_of(event: Mapping, effective) -> str:
     frames, lexicon.ANAPHORIC_FRAMES - "Earlier that day", "Later that morning", which name the day the sentence before
     them names - count for an act whose performer is NOT verified to another clinician or facility, the reading
     events.verified_other_performer gives, and never for one whose performer is: problem 3's outside EGD "Earlier that
-    day ... at that hospital" is read by its own value and marker; DECISIONS D144: for such an act an anaphoric frame's
-    words are no SAME_DAY_WORDS either - "Earlier that same day ... at that hospital" - and for every act a same-day
-    word an anteriority word governs places nothing - "prior to today's visit"). OFF: a usable earlier or future time
-    whose words place it on no such day. UNDATABLE: a time that is not usable (unknown, unverified, open, discarded)
-    and whose words place it on no such day - "any event whose date is unresolved" (C-3); combination.procedure_day
-    reads which of those an act's own time value makes a question (DECISIONS D111). ``effective``: the effective date
-    (a date, an ISO string or None); with none, a date literal places nothing."""
+    day ... at that hospital" is read by its own value and marker). OFF: a usable earlier or future time whose words
+    place it on no such day. UNDATABLE: a time that is not usable (unknown, unverified, open, discarded) and whose words
+    place it on no such day - "any event whose date is unresolved" (C-3); combination.procedure_day reads which of
+    those an act's own time value makes a question (DECISIONS D111). ``effective``: the effective date (a date, an ISO
+    string or None); with none, a date literal places nothing. DECISIONS D151 withdrew D144's two exceptions (a
+    same-day word right after an anteriority word; an anaphoric frame's SAME_DAY_WORDS for a verified other's act):
+    SAME_DAY_WORDS are read as D131 reads them (_same_day_word), for every performer."""
     time = event.get('time') or {}
     text = _words_of(time)
     if verify.usable(time) and time.get('value') == 'current_encounter':
@@ -273,7 +247,7 @@ def day_of(event: Mapping, effective) -> str:
         return ON
     performer = event.get('performer')  # D132: events.verified_other_performer's reading, pinned equal to it
     other = verify.usable(performer) and performer.get('value') in ('other_clinician', 'other_facility')
-    if (_same_day_word(text, anaphoric=not other) or _same_day_frame(text, anaphoric=not other)) and not found:
+    if (_same_day_word(text) or _same_day_frame(text, anaphoric=not other)) and not found:
         return ON
     if verify.usable(time) and time.get('value') in ('earlier_encounter', 'future'):
         return OFF

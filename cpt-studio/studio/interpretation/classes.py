@@ -212,6 +212,18 @@ def doubted_routes(encounter: Mapping) -> frozenset:
     return frozenset({'pouch'}) if doubt and 'pouch' not in routes(encounter) else frozenset()
 
 
+def gastric_beside(encounter: Mapping) -> bool:
+    """DECISIONS D153 (D148's disagreement 2): whether the encounter's anatomy holds the verified small-intestinal pouch
+    (routes) AND a usable altered entry whose own words name a gastric pouch or a gastric bypass (GASTRIC_POUCH_WORDS)
+    - the anatomy in which a route phrase through the gastric pouch would be read as the small-intestinal pouch's route
+    (route_phrase's ``gastric``). Typed by its own words (D148), an 'ileal J-pouch' beside 'Roux-en-Y gastric bypass' is
+    verified, and 'The enteroscope was advanced through the small gastric pouch and the Roux limb into the proximal
+    ileum.' made 44386 READY - an examination of the pouch it never entered - where e5628be56 and the installed release
+    hold it (extent)."""
+    return 'pouch' in routes(encounter) and any(lexicon.holds(_words(entry), GASTRIC_POUCH_WORDS)
+                                                for entry in _altered(encounter))
+
+
 def incomplete(examination: Optional[Mapping]) -> bool:
     """D56 and D72, as assess._examination_class reads them for the full EUS class: the examination's completion is
     'incomplete' in ANY state, or its status is attempted_not_completed (fail-closed)."""
@@ -246,11 +258,13 @@ def _tokens(text: str) -> list:
     return out
 
 
-def route_phrase(text: str, route: str) -> bool:
+def route_phrase(text: str, route: str, gastric: bool = False) -> bool:
     """D141: whether ``text`` states ``route`` (THROUGH_STOMA or THROUGH_POUCH) in a route phrase - one of ROUTE_INTO,
     then one of the route's ROUTE_NOUNS with at most PHRASE_REACH words between, none in ROUTE_BREAKS and no mark, the
     noun not after a place prefix (PLACE_PREFIXES: "into the pre-pouch ileum" names a place) - or one of its
-    ROUTE_FORMS."""
+    ROUTE_FORMS. DECISIONS D153 (D148's disagreement 2): with ``gastric`` (gastric_beside: the verified small-intestinal
+    pouch beside a gastric pouch or bypass entry), a pouch phrase whose words between name a gastric pouch (a word of
+    GASTRIC_POUCH_WORDS: 'through the small gastric pouch') is never the small-intestinal pouch's route."""
     tokens = _tokens(text)
     for index in range(len(tokens)):
         if any(tuple(tokens[index:index + len(form)]) == form for form in ROUTE_FORMS[route]):
@@ -262,15 +276,17 @@ def route_phrase(text: str, route: str) -> bool:
             if token in ROUTE_NOUNS[route] and not (between and tokens[index + len(opening) + between - 1]
                                                     in PLACE_PREFIXES):
                 return True
-            if not token or token in ROUTE_BREAKS:
-                break
+            if not token or token in ROUTE_BREAKS or (gastric and route == THROUGH_POUCH
+                                                      and token in GASTRIC_POUCH_WORDS):
+                break  # D153: a gastric pouch named in the phrase
     return False
 
 
-def named_routes(examination: Mapping, names, usable_only: bool, phrased: bool = False) -> dict:
+def named_routes(examination: Mapping, names, usable_only: bool, phrased: bool = False, gastric: bool = False) -> dict:
     """D114: {route: the first words naming it} over the located words of ``examination``'s attributes ``names`` - only
     the usable ones (verified, not opened) when ``usable_only``. ``phrased`` (D141): the stoma and the pouch are named
-    only in a route phrase (route_phrase); otherwise by any of their ROUTE_WORDS (a doubt reads every mention)."""
+    only in a route phrase (route_phrase, with D153's ``gastric``); otherwise by any of their ROUTE_WORDS (a doubt reads
+    every mention)."""
     found = {}
     for name in names:
         record = examination.get(name)
@@ -281,7 +297,7 @@ def named_routes(examination: Mapping, names, usable_only: bool, phrased: bool =
             if not text or route_name in found:
                 continue
             if phrased and route_name in ROUTE_NOUNS:
-                named = route_phrase(text, route_name)  # D141: the stoma or the pouch only in a route phrase
+                named = route_phrase(text, route_name, gastric)  # D141: the stoma or the pouch only in a route phrase
             else:
                 named = lexicon.holds(text, phrases)
             if named:
@@ -289,15 +305,15 @@ def named_routes(examination: Mapping, names, usable_only: bool, phrased: bool =
     return found
 
 
-def examination_route(examination: Optional[Mapping]) -> tuple:
+def examination_route(examination: Optional[Mapping], gastric: bool = False) -> tuple:
     """D114: (the examination's verified route, the words that state it): ('', '') unless the usable words of its own
     statement (ROUTE_STATED) name exactly one route - DECISIONS D141: the stoma or the pouch only in a route phrase
     (route_phrase), never as an anatomy mention ("Double-balloon enteroscopy in a patient with an end ileostomy", which
     made 44382 READY on an oral enteroscopy) - and none of its own located words (ROUTE_READ) names another by any of
-    its ROUTE_WORDS."""
+    its ROUTE_WORDS. ``gastric`` (D153): route_phrase's, from gastric_beside."""
     if examination is None:
         return '', ''
-    stated = named_routes(examination, ROUTE_STATED, True, phrased=True)
+    stated = named_routes(examination, ROUTE_STATED, True, phrased=True, gastric=gastric)
     if len(stated) != 1 or set(named_routes(examination, ROUTE_READ, False)) != set(stated):
         return '', ''
     return next(iter(stated.items()))
@@ -497,7 +513,8 @@ def class_misfit(code: str, exam_class: str, family: str, key: str, reading, ses
     verified_routes = routes(reading.encounter)
     read_routes = verified_routes | doubted_routes(reading.encounter)  # D141: a possible pouch keeps the route deciding
     stated = incomplete(examination)
-    taken, taken_words = examination_route(examination) if route_read(read_routes, landmark) else (None, '')
+    taken, taken_words = (examination_route(examination, gastric_beside(reading.encounter))  # D153
+                          if route_read(read_routes, landmark) else (None, ''))
     if fits(exam_class, landmark, verified_routes, stated, taken):
         return None
     if stated and fits(exam_class, landmark, verified_routes, False, taken):

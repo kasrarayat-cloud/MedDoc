@@ -273,12 +273,14 @@ class D140DenialEvent(SimpleTestCase):
 
     def test_d140_problem_1_controls(self):
         """The review's controls, unchanged: the semicolon form holds 43264 nothing_retrieved (c2e53f8e EXCLUDED); E5
-        filed as stone_extraction holds it statement_scope (c2e53f8e EXCLUDED). D127's own pin stands: the next sentence
-        another act's (the pancreatic duct's sweep, performed, E5) does not continue the act - 43264 READY on E4
-        (c2e53f8e: HELD readings_disagree, recorded by D127). DECISIONS D147 (the review of D140, problem 3) changes the
-        last expectation: the same sentence with a denial event of its own (E6) as well still holds the performed act's
-        words, so it is that act's and is dropped - READY on E4, as D127's pin (it was held; c2e53f8e: HELD
-        readings_disagree)."""
+        filed as stone_extraction holds it statement_scope (c2e53f8e EXCLUDED). D127's own pin: the next sentence
+        another act's (the pancreatic duct's sweep, performed, E5) does not continue the act - but DECISIONS D155 (2)
+        reads a sentence dropped as another act's for its denial clause, and its clause 'no stones were retrieved' holds
+        no other event's words, so it is the sweep's statement: 43264 held nothing_retrieved, the question quoting the
+        sweep's sentence and that clause (it was READY on E4 here and at e5628be56; c2e53f8e: HELD readings_disagree, as
+        D127 recorded). DECISIONS D147 (problem 3) had changed the last expectation to READY on E4 (the same sentence
+        with a denial event of its own, E6, dropped as the performed act's); D155 WITHDRAWS D147 (3), so it changes back
+        to D140's hold, the question quoting both sentences (c2e53f8e: HELD readings_disagree)."""
         semicolon = ('The bile duct was swept several times with an extraction balloon; no stones or sludge were '
                      'retrieved.')
         e5 = ercp_act('E5', 'P5', 'other', 'no stones or sludge were retrieved', 'no stones or sludge were retrieved',
@@ -296,10 +298,13 @@ class D140DenialEvent(SimpleTestCase):
         pancreatic = ercp_act('E5', 'P5', 'stone_extraction', 'swept with a balloon', 'was then swept',
                               target=tg('', 'pancreatic_duct', 'The pancreatic duct', ['P5']),
                               technique=a('balloon', 'balloon', ['P5']))
-        ready_on(self, assessed(both, SWEPT_ONCE, **SW, more=[pancreatic]))
+        # D155 (2): the dropped sentence's denial clause is the sweep's statement (was READY on E4)
+        held_nothing_retrieved(self, assessed(both, SWEPT_ONCE, **SW, more=[pancreatic]),
+                               f'{SWEPT_ONCE} no stones were retrieved')
         denial = ercp_act('E6', 'P5', 'other', 'no stones were retrieved', 'no stones were retrieved',
                           status='not_performed', scope=sc('single_target', 'no', ['P5']))
-        ready_on(self, assessed(both, SWEPT_ONCE, **SW, more=[pancreatic, denial]))  # D147: was held
+        # D155 (1): D147 (3) withdrawn - held again, as at e5628be56 (D147 had made it READY on E4)
+        held_nothing_retrieved(self, assessed(both, SWEPT_ONCE, **SW, more=[pancreatic, denial]), both)
 
     def test_d140_problem_1_an_event_not_performed_planned_begun_or_uncertain(self):
         """'An event that is not performed' read as its status value: every value but 'performed', in any verification

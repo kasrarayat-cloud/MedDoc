@@ -1,9 +1,9 @@
 """The ERCP rules of the events engine (DECISIONS D105, D106 and D107; the round-4 refutation, findings 22, 25 and 26;
 completed by D127, the review of those rules and the family parity audit): holds and signals the per-code rule and the
 session's reading give an ERCP's codes, each only ADDING a hold, a question or a warning to what the engine decided
-before - never READY, never an exclusion, never another code's question - but for the releases of D106's hold named below:
-D127's clearance, D140's structural reading (an act whose own words state its yield: the basket of D127's two-act
-sentence) and D147's following sentence of a performed act.
+before - never READY, never an exclusion, never another code's question - but for the releases of D106's hold named
+below: D127's clearance and D140's structural reading (an act whose own words state its yield: the basket of D127's
+two-act sentence). D147's third release, the following sentence of a performed act, is withdrawn (D155).
 
 - D105, a possible stent exchange. An ERCP session with a positive stent REMOVAL and a positive stent PLACEMENT whose
   ducts nothing sets apart is a possible stent exchange (43276: "removal and exchange of stent(s)"), so 43275 (the
@@ -72,10 +72,21 @@ sentence) and D147's following sentence of a performed act.
     structural reading takes the act's attribute words as its yield only where no clause of a located passage that
     holds those words carries a guard word ("It is unclear whether any stones were removed when ..." with the kind words
     "stones were removed");
-  - the sentence that follows the act's own is dropped as another act's when it holds the own words of another event
-    whose status is 'performed', and read when the only other events whose words it holds are not performed - so D140's
-    hold is released where a performed act's sentence also names a plan ("Two stones were extracted with a basket; ...
-    and a repeat ERCP is planned.").
+  - (withdrawn by D155) the sentence that follows the act's own is dropped as another act's when it holds the own words
+    of another event whose status is 'performed', and read when the only other events whose words it holds are not
+    performed - so D140's hold is released where a performed act's sentence also names a plan ("Two stones were
+    extracted with a basket; ... and a repeat ERCP is planned.").
+
+- D155, round 5e (narrowing only; the review of D147, review:ercp4 problems 0 and 6, and its builder's disagreements 2
+  and 5):
+  - D147's third rule is withdrawn: D140's following-sentence condition is restored - the sentence after the act's own
+    is read when it holds no other event's own words OR holds the words of an event that is not performed (a denial, an
+    uncertain statement, a plan, an act begun and not completed), whatever performed events' words it also holds;
+  - the sentence after the act's own that is dropped as another act's is still read for its DENIAL CLAUSE: a clause of
+    it (cut at CLAUSE_BREAKS) that holds no other event's own words and, read with the act's own sentence, denies the
+    retrieval or the stones' presence (_denial) is the act's statement, whatever the sentence's other clauses hold -
+    "The bile duct was swept with an extraction balloon. No stones were retrieved, and a plastic biliary stent was
+    placed." (the stent filed) holds 43264. It only adds a hold.
 
 Where they run: D105 and D106 sit inside the per-code rule itself - ``ruled`` is events.evaluate's one call site, its
 first statement - so every reader of the per-code rule (the assessment, its participants and second review, and the
@@ -254,7 +265,8 @@ OTHER_TIME_WORDS = ('prior', 'previous', 'previously', 'earlier', 'index', 'last
 YIELD_ATTRIBUTES = ('kind', 'status', 'target', 'technique')
 # D140 (problem 1): the one status value of an act done; the sentence after the act's own that holds the words of an
 # event with any other value (a denial, an uncertain statement, a plan, an act begun and not completed) is never dropped.
-# DECISIONS D147 (the review of D140, problem 3): ... unless it also holds the own words of an event with this value
+# DECISIONS D147 (the review of D140, problem 3) dropped it when it also held a performed event's own words; DECISIONS
+# D155 withdraws that and restores D140's condition
 PERFORMED = 'performed'
 # The words between a negator and the stone word that make the negation exceptive (C-7: "no further stones" is about
 # stones beyond those the document reports removed) or partial ("not all stones"): such a negation states nothing about
@@ -570,20 +582,28 @@ def nothing_retrieved(reading, event: Mapping, kept: Sequence = ()) -> Optional[
     DECISIONS D147, as the review of D140 asks it:
     - (problems 1 and 2) the yield stands in the act's own simple clause (_yields), and the act's attribute words are
       its yield only where no clause of a located passage that holds them carries a guard word (_own_yield);
-    - (problem 3) the following sentence is dropped as another act's when it holds the own words of another event whose
-      status value (in any verification state) is PERFORMED, and read when the only other events whose words it holds
-      are not performed: "Two stones were extracted with a basket; ... and a repeat ERCP is planned." (the basket
-      performed, the repeat ERCP planned) is the basket's, so the sweep before it keeps 43264; "No stones were
-      retrieved; a repeat ERCP is planned." (only the plan) is still the sweep's statement."""
+    - (problem 3, WITHDRAWN by D155) the following sentence was dropped as another act's when it held the own words of
+      another event whose status value was PERFORMED, whatever else it held.
+    DECISIONS D155 (round 5e, narrowing only):
+    - D140's following-sentence condition is restored: the sentence is read when it holds no other event's own words or
+      holds the words of an event that is not performed, whatever performed events' words it also holds - "Two stones
+      were extracted with a basket; ... and a repeat ERCP is planned." is read again, as at D140;
+    - a following sentence dropped as another act's (it holds a performed event's own words and no event's that is not
+      performed) is read for its denial clause: a clause of it (_clauses: cut at CLAUSE_BREAKS) that holds no other
+      event's own words and, read with the act's own sentence, denies the retrieval or the stones' presence (_denial) is
+      the act's statement, whatever the sentence's other clauses hold - the act's own sentence and that clause are
+      returned: "The bile duct was swept with an extraction balloon. No stones were retrieved, and a plastic biliary
+      stent was placed." with the stent filed. It only adds a hold."""
     from studio.interpretation import events
 
     words = _own_words(event)
     others = [span for other in reading.events.values() if other.get('id') != event.get('id')
               for span in _own_words(other)]
-    # D147 (problem 3): the words of the other events that are performed (the status value 'performed', in any
-    # verification state) - a following sentence that holds them is another act's
-    performed = [span for other in reading.events.values() if other.get('id') != event.get('id')
-                 and events.value(other, 'status') == PERFORMED for span in _own_words(other)]
+    # D140 (problem 1), restored by D155: the words of the events that are not performed - a denial or an uncertain
+    # statement, and a planned act or one begun and not completed: every status value but 'performed', in any
+    # verification state
+    unperformed = [span for other in reading.events.values() if other.get('id') != event.get('id')
+                   and events.value(other, 'status') != PERFORMED for span in _own_words(other)]
     located = [place for record in reading.passages.values() if record.get('state') != 'unlocated'
                for place in record['spans']]
     stated = _own_yield(event, others, located)  # D140: the act's own words state its yield (the structural reading)
@@ -613,13 +633,22 @@ def nothing_retrieved(reading, event: Mapping, kept: Sequence = ()) -> Optional[
         after = [item for item in candidates
                  if sentence['end'] <= item['start'] <= sentence['end'] + CONTINUES_WITHIN]
         first = min((item['start'] for item in after), default=None)
-        # D140 (problem 1), as D147 (problem 3) narrows it: another act's sentence - one that holds the own words of
-        # another event that is performed - does not continue the act; one that holds only the words of events that are
-        # not performed (a denial, an uncertain statement, a plan, an act begun and not completed) is read
+        # D140 (problem 1), restored by D155: another act's sentence does not continue the act - but one that holds the
+        # words of an event that is not performed (a denial, an uncertain statement, a plan, an act begun and not
+        # completed) is never dropped
         following = list({(item['start'], item['end']): item for item in after if item['start'] == first
-                          and not _holds(item, performed)}.values())
+                          and (not _holds(item, others) or _holds(item, unperformed))}.values())
         if following and _denial(clauses + [clause for item in following for clause in _clauses(item)])[0]:
             return [_trimmed(item) for item in (sentence, *following)]
+        # D155 (review:ercp4 problem 6): a sentence dropped as another act's is read for its denial clause - a clause of
+        # it that holds no other event's own words and, read with the act's own sentence, denies the retrieval or the
+        # stones' presence is the act's statement, whatever the sentence's other clauses hold
+        dropped = list({(item['start'], item['end']): item for item in after if item['start'] == first
+                        and _holds(item, others) and not _holds(item, unperformed)}.values())
+        for item in dropped:
+            for clause in _clauses(item):
+                if not _holds(clause, others) and _denial(clauses + [clause])[0]:
+                    return [_trimmed(sentence), _trimmed(clause)]
     return None
 
 

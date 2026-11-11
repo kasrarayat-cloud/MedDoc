@@ -197,9 +197,13 @@ class D127OwnSentence(SimpleTestCase):
 
     def test_d127_problem_2_the_next_sentence_names_another_act_and_does_not_continue(self):
         """The sentence after the act's own is another act's - the pancreatic duct's sweep, filed as E5 - so it does not
-        continue the act: 43264 READY on E4 alone (c2e53f8e HOLDS it, performed_status). The cost, recorded: the same
-        sentence with no event of Gemini's for it names no act, so it is read as the sweep's continuation and 43264 is
-        held (fail-closed, never READY, never excluded; c2e53f8e HOLDS it too)."""
+        continue the act as a whole. DECISIONS D155 (2) (round 5e) changes this pin's first expectation: such a dropped
+        sentence is still read for its denial clause, and its clause 'no stones were retrieved' holds no other event's
+        own words, so it is the sweep's statement - 43264 held nothing_retrieved, the question quoting the sweep's
+        sentence and that clause (it was READY on E4 alone here, at e5628be56 and at 4f82e5056; c2e53f8e HOLDS it,
+        performed_status, readings_disagree). The cost, recorded: the same sentence with no event of Gemini's for it
+        names no act, so it is read as the sweep's continuation and 43264 is held (fail-closed, never READY, never
+        excluded; c2e53f8e HOLDS it too)."""
         p5 = 'The bile duct was swept with an extraction balloon. The pancreatic duct was then swept with a balloon; no ' \
              'stones were retrieved.'
         first = 'The bile duct was swept with an extraction balloon.'
@@ -208,7 +212,8 @@ class D127OwnSentence(SimpleTestCase):
                       technique=a('balloon', 'balloon', ['P5']))
         options = dict(kind_words='swept with an extraction balloon', status_words='was swept')
         inv, text, doc = sweep(p5, more=[e5], **options)
-        ready_on(self, proposal(run(inv, text, [('43264', first)]), '43264'))
+        held_nothing_retrieved(self, proposal(run(inv, text, [('43264', first)]), '43264'),
+                               f'{first} no stones were retrieved')  # D155 (2): was READY on E4
         inv, text, doc = sweep(p5, **options)
         held_nothing_retrieved(self, proposal(run(inv, text, [('43264', first)]), '43264'), p5)
 

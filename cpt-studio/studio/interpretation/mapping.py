@@ -257,8 +257,9 @@ def catalogue_kind(event: Mapping) -> str:
     """The catalogue kind of an event (module docstring): its kind's value read in its family, with a clip's or an
     injection's VERIFIED hemostasis purpose - a bleeding control, or (DECISIONS D115) a bleeding control in doubt where
     its own words state no bleeding (hemostasis_in_doubt), as (D142) an event of the bleeding_control kind itself whose
-    own words name it by the adjective (D149) and state none. The kind's own state is not read here: a consumer reads it
-    (7.3 line 1)."""
+    own words state none - with no verified hemostasis purpose, only one its kind, technique or purpose words name by
+    the adjective (D149); with a verified one, whatever names it (D154: a device-named event is in doubt too). The kind's
+    own state is not read here: a consumer reads it (7.3 line 1)."""
     kind = event['kind']['value']
     if kind == EXAMINATION:
         return EUS_EXAMINATION if event.get('family') == 'gi.eus' else EXAMINATION

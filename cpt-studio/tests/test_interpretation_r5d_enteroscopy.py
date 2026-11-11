@@ -11,7 +11,10 @@ enteroscopy's line or an Impression, and the parity note's base question) - stud
   portion; an act at the second portion's landmark whose own words name a portion beyond it is read alike;
 - (problem 3) the base rule's question is asked once: base_asked reads the base rule's arm (a) too.
 The installed release c2e53f8e's outputs are named in each test (engine.assess as tests/test_harness_engine.py drives
-it, and jobs._assess_child: they agree on every probe row); e5628be56's where it differs. Nothing is sent."""
+it, and jobs._assess_child: they agree on every probe row); e5628be56's where it differs. DECISIONS D153 (the round-5d
+review of D148, problems 0-2) withdraws the act-words arm: the pins whose docstrings name D153 pinned a release it
+withdraws, and now pin the hold it restores; its own pins are tests/test_interpretation_r5e_enteroscopy.py's. Nothing
+is sent."""
 from __future__ import annotations
 
 from django.test import SimpleTestCase
@@ -325,24 +328,28 @@ class PortionBeyondTheSecond(SimpleTestCase):
             with self.subTest(case=name):
                 self.moved(inv, text)
 
-    def test_d148_the_third_portion_on_a_line_of_its_own_stays_the_enteroscopys(self):
+    def test_d148_the_third_portion_on_a_line_of_its_own_moves(self):
         """The spec's D3_LINE: 'An angioectasia in the third portion of the duodenum was treated with argon plasma
-        coagulation.' on its own line beside an EGD verified to the second portion. Its own words name a portion
-        beyond the EGD's verified reach, so only the enteroscope reached it: 44369 READY and 43235 READY beside it -
-        the codes the document supports. A release: e5628be56 and c2e53f8e hold both (c2e53f8e: 44369
-        performed_status, 43235 base_included, reading the region alone). 44360 alone is held base_included from the
-        act (c2e53f8e READY: a cost), the question asked once."""
+        coagulation.' on its own line beside an EGD verified to the second portion. DECISIONS D153 (the round-5d review
+        of D148, problems 0-2) withdraws the release D148 pinned here (44369 and 43235 READY): an act's own words never
+        place it beyond the EGD's verified reach, so it moves - 44369 held, 43235 base_included, as e5628be56 and
+        c2e53f8e hold both (c2e53f8e: 44369 performed_status, 43235 base_included). 44360 alone asks the base rule's
+        question and the act's in one clarification (fact procedure), as at e5628be56 (c2e53f8e READY: a cost). Renamed
+        from test_d148_the_third_portion_on_a_line_of_its_own_stays_the_enteroscopys."""
         inv, text = egd_push(D3_LINE, words=D3_WORDS)
-        self.stayed(inv, text)
+        self.moved(inv, text)
         p = code_of(inv, text, '44360', 'P6')
-        self.assertEqual((p.status, asked(p), check(p, ELSEWHERE), [spec.question for spec in p.clarifications]),
-                         ('needs_clarification', ['base_included'], None,
-                          ['Is 44360 reported separately from ablation for this examination?']))
+        self.assertEqual((p.status, asked(p), check(p, ELSEWHERE).status, [spec.question for spec in p.clarifications]),
+                         ('needs_clarification', ['procedure'], 'warn',
+                          ['Is 44360 reported separately from ablation for this examination? In which procedure was '
+                           f'the ablation (“{D3_WORDS}”) done?']))
 
-    def test_d148_each_form_of_a_portion_beyond_the_second_keeps_the_act(self):
-        """BEYOND_SECOND_WORDS is the spec's one constant, word-bounded in lexicon.fold's form: each form in an act's
-        own target words keeps it (44369 READY; c2e53f8e holds every one). A form not in it ('3rd portion') and a
-        plural ('the second and third portions') leave the act at its landmark: it moves (held, a cost)."""
+    def test_d148_no_form_of_a_portion_beyond_the_second_keeps_the_act(self):
+        """BEYOND_SECOND_WORDS is unchanged (D153 reads it in an EGD reach's own words only). DECISIONS D153 withdraws
+        the release D148 pinned for each form in an act's own words: every form now leaves the act at its landmark,
+        so it moves (44369 held, 43235 base_included, as e5628be56 and c2e53f8e hold every one) - 'distal duodenum'
+        (the post-bulbar duodenum a standard EGD samples) among them; so do '3rd portion' and the plural, as before.
+        Renamed from test_d148_each_form_of_a_portion_beyond_the_second_keeps_the_act."""
         self.assertEqual(coverage.BEYOND_SECOND_WORDS, ('third portion', 'fourth portion', 'third part',
                                                          'fourth part', 'd3', 'd4', 'distal duodenum'))
         for words in ('An angioectasia in the fourth portion of the duodenum', 'An angioectasia in the third part of '
@@ -350,24 +357,26 @@ class PortionBeyondTheSecond(SimpleTestCase):
                       'duodenum', 'A D4 angioectasia of the duodenum', 'An angioectasia in the distal duodenum'):
             inv, text = egd_push(f'{words} was treated with argon plasma coagulation.', words=words)
             with self.subTest(words=words):
-                self.stayed(inv, text)
+                self.moved(inv, text)
         for words, status in (('An angioectasia in the 3rd portion of the duodenum', 'was treated'),
                               ('Angioectasias in the second and third portions of the duodenum', 'were treated')):
             inv, text = egd_push(f'{words} {status} with argon plasma coagulation.', words=words, status_words=status)
             with self.subTest(words=words):
                 self.moved(inv, text)
 
-    def test_d148_the_second_portions_landmark_with_third_portion_words_stays(self):
-        """The second portion's landmark also takes third-portion words: an act there whose own words name the third
-        portion is read alike - on its own line (44369 READY; c2e53f8e holds it) and in the push enteroscopy's
-        sentence, D141's recorded cost (e5628be56 held 44369; c2e53f8e READYs 44369 and 43235 there)."""
+    def test_d148_the_second_portions_landmark_with_third_portion_words_moves(self):
+        """The second portion's landmark also takes third-portion words. DECISIONS D153 withdraws the releases D148
+        pinned here: the act at that landmark whose own words name the third portion moves - on its own line (44369
+        held, as e5628be56 and c2e53f8e hold it) and in the push enteroscopy's sentence, where D141's recorded cost
+        returns (e5628be56 held 44369; c2e53f8e READYs 44369 and 43235 there). Renamed from
+        test_d148_the_second_portions_landmark_with_third_portion_words_stays."""
         inv, text = egd_push(D3_LINE, landmark='second_portion_duodenum', words=D3_WORDS)
-        self.stayed(inv, text)
+        self.moved(inv, text)
         part = ('Push enteroscopy: The enteroscope was then advanced to the proximal jejunum, and an angioectasia in '
                 'the third portion of the duodenum was treated with argon plasma coagulation.')
         inv, text = egd_push(act_pid='P6', push_line=part, landmark='second_portion_duodenum',
                              words='an angioectasia in the third portion of the duodenum')
-        self.stayed(inv, text, 'P6')
+        self.moved(inv, text, 'P6')
 
     def test_d148_a_reach_that_may_cover_the_portion_moves_the_act(self):
         """Fail-closed: an EGD reach not verified (its words 'descending duodenum' do not stand in P5), no reach at all,
@@ -386,23 +395,28 @@ class PortionBeyondTheSecond(SimpleTestCase):
             with self.subTest(case=name):
                 self.moved(inv, text, egd_facts=facts)
 
-    def test_d148_a_reach_at_the_bulb_is_short_of_the_third_portion(self):
-        """An EGD verified to the duodenal bulb is short of the third portion: the act stays (44369 READY; c2e53f8e
-        holds it)."""
+    def test_d148_a_reach_at_the_bulb_is_not_short_of_the_generic_duodenum(self):
+        """DECISIONS D153 withdraws the release D148 pinned here (the act's words placed it beyond the bulb: 44369
+        READY): an act at the generic duodenum's landmark names no portion, so an EGD verified to the duodenal bulb may
+        cover it - it moves (44369 held, 43235 base_included), as e5628be56 and c2e53f8e hold it. Renamed from
+        test_d148_a_reach_at_the_bulb_is_short_of_the_third_portion."""
         inv, text = egd_push(D3_LINE, words=D3_WORDS,
                              egd_line='EGD: The gastroscope was advanced to the duodenal bulb.',
                              egd_reach=('duodenal_bulb', 'duodenal bulb'))
-        self.stayed(inv, text)
+        self.moved(inv, text)
 
     def test_d148_the_reach_order_beyond_the_second_portion(self):
+        """DECISIONS D153 changes this pin's expectations back: beyond_reach takes no act words (the words column is
+        the act's, kept to show they are not read), so the first three rows are False, as D141 read them; the reach's
+        own words are still read (rows 7 and 8: never short)."""
         def reach(value: str, words: str) -> dict:
             return {'extent': {'value': value, 'state': 'verified', 'open': False, 'words': {'text': words}}}
 
         for examination, landmark, words, expected in (
-                (reach('second_portion_duodenum', 'second portion of the duodenum'), 'duodenum', D3_WORDS, True),
+                (reach('second_portion_duodenum', 'second portion of the duodenum'), 'duodenum', D3_WORDS, False),
                 (reach('second_portion_duodenum', 'second portion of the duodenum'), 'second_portion_duodenum',
-                 D3_WORDS, True),
-                (reach('duodenal_bulb', 'duodenal bulb'), 'duodenum', D3_WORDS, True),
+                 D3_WORDS, False),
+                (reach('duodenal_bulb', 'duodenal bulb'), 'duodenum', D3_WORDS, False),
                 (reach('gastric_antrum', 'gastric antrum'), 'duodenum', D3_WORDS, True),
                 (reach('second_portion_duodenum', 'second portion of the duodenum'), 'duodenum',
                  'A duodenal angioectasia', False),
@@ -412,9 +426,9 @@ class PortionBeyondTheSecond(SimpleTestCase):
                 (reach('duodenum', 'duodenum'), 'second_portion_duodenum', D3_WORDS, False),
                 (reach('jejunum', 'proximal jejunum'), 'duodenum', D3_WORDS, False)):
             with self.subTest(reach=examination['extent'], landmark=landmark, words=words):
-                self.assertIs(coverage.beyond_reach(examination, landmark, words), expected)
+                self.assertIs(coverage.beyond_reach(examination, landmark), expected)
         unverified = {'extent': {'value': 'duodenal_bulb', 'state': 'unverified', 'open': False, 'words': None}}
-        self.assertFalse(coverage.beyond_reach(unverified, 'duodenum', D3_WORDS))
+        self.assertFalse(coverage.beyond_reach(unverified, 'duodenum'))
 
 
 # --- problem 3: the base question once ------------------------------------------------------------------------------
@@ -425,11 +439,14 @@ class BaseQuestionOnce(SimpleTestCase):
         examination?' (its arm (a)), and D141's act question began with the base question again. base_asked reads arm
         (a) - the base rule's own holding of the code - so the act's question is its own: on the parity input (the
         gastric APC) and on the duodenal APC of no portion on its own line. c2e53f8e asks base_included alone there.
-        On the separate-line third-portion act, which stays, the base rule's question is the one question."""
+        DECISIONS D153 changes the third-portion act's expectation back: it moves again (D148 kept it, and the base
+        rule's question was the one question), so it is asked as the other moved acts are - the base question once,
+        then the act's own."""
         for name, (inv, text), words in (
                 ('parity', egd_push(f'{GASTRIC} were treated with argon plasma coagulation.', landmark='gastric_antrum',
                                     words=GASTRIC, status_words='were treated'), GASTRIC),
-                ('duodenal APC on its own line', egd_push(DUO), 'A duodenal angioectasia')):
+                ('duodenal APC on its own line', egd_push(DUO), 'A duodenal angioectasia'),
+                ('third portion on its own line', egd_push(D3_LINE, words=D3_WORDS), D3_WORDS)):
             p = proposal(picked(inv, text, (('44360', 'P6'), ('44369', 'P7'))), '44360')
             with self.subTest(case=name):
                 self.assertEqual((p.status, asked(p), check(p, BASE).status, check(p, ELSEWHERE).status,
@@ -441,11 +458,6 @@ class BaseQuestionOnce(SimpleTestCase):
                 found = coverage.sessions(reading)
                 self.assertEqual((classes.base_asked(reading, found), classes.base_asked(reading, found, ('44369',))),
                                  (False, True))
-        inv, text = egd_push(D3_LINE, words=D3_WORDS)
-        p = proposal(picked(inv, text, (('44360', 'P6'), ('44369', 'P7'))), '44360')
-        self.assertEqual((p.status, asked(p), check(p, ELSEWHERE), [spec.question for spec in p.clarifications]),
-                         ('needs_clarification', ['base_included'], None,
-                          ['Is 44360 reported separately from 44369 for this examination?']))
 
     def test_d148_without_a_counted_act_code_the_base_question_stays_in_the_acts(self):
         """The control: with 44360 alone, or beside the EGD's 43235 (no counted code of the enteroscopy accounts for

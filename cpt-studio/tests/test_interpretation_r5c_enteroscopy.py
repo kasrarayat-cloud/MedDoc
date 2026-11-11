@@ -15,7 +15,9 @@ line of its own, and the parity note's gastric APC) - studio/interpretation/clas
 At 46e461e7f every held input below except the costs named was READY; the installed release c2e53f8e's outputs are
 named in each test (engine.assess as tests/test_harness_engine.py drives it, and jobs._assess_child: they agree on every
 probe row). DECISIONS D148 (the round-5c review of D141) changes the expectations of the pins whose docstrings name it;
-its own pins are tests/test_interpretation_r5d_enteroscopy.py's. Nothing is sent."""
+its own pins are tests/test_interpretation_r5d_enteroscopy.py's. DECISIONS D153 (the round-5d review of D148) changes
+back the region pins whose docstrings name it; its own pins are tests/test_interpretation_r5e_enteroscopy.py's.
+Nothing is sent."""
 from __future__ import annotations
 
 from django.test import SimpleTestCase
@@ -340,24 +342,32 @@ def family_of_e3(inv) -> str:
 
 
 class RegionWithinTheReach(SimpleTestCase):
-    def test_d141_the_in_sentence_d3_angioectasia_stays_the_enteroscopys(self):
+    def test_d141_the_in_sentence_d3_angioectasia_moves_a_returning_cost(self):
         """Problem 1: the angioectasia in the third portion of the duodenum told in the push enteroscopy's own sentence,
         at the generic duodenum's landmark. D114 moved it to the EGD (44369 held, 43235 held base_included, 44360 the
-        procedure question). 44369 READY, 43235 READY beside it and 44360 base_included, as c2e53f8e. DECISIONS D148
-        (the round-5c review of D141, problems 1 and 2): the act stays by its own words naming the third portion, no
-        longer by a shared passage (told_with_its_examination is gone); the outcome is unchanged."""
+        procedure question); D141 kept it by a shared passage and D148 by its own words. DECISIONS D153 (the round-5d
+        review of D148, problems 0-2) withdraws the act-words arm and keeps D148's removal of the shared-passage test,
+        so it moves again, as D114 moved it: 44369 held (performed_status), 43235 base_included alone and beside it,
+        44360 the base rule's question and the act's in one clarification. A returning cost: c2e53f8e READYs 44369 and
+        43235 and holds 44360 base_included (e5628be56: as c2e53f8e). Renamed from
+        test_d141_the_in_sentence_d3_angioectasia_stays_the_enteroscopys."""
         inv, text = egd_push(act_pid='P6', push_line=D3_PART,
                              words='an angioectasia in the third portion of the duodenum')
-        self.assertEqual(family_of_e3(inv), 'gi.enteroscopy')
-        self.assertTrue(coverage.beyond_reach(events.Reading.of(inv).events['E1'], 'duodenum',
-                                              'an angioectasia in the third portion of the duodenum'))
-        ready(self, code_of(inv, text, '44369', 'P6'))
-        result = picks(inv, text, (('44369', 'P6'), ('43235', 'P5')))
-        ready(self, proposal(result, '44369'))
-        ready(self, proposal(result, '43235'))
+        self.assertEqual(family_of_e3(inv), 'gi.egd')
+        self.assertFalse(coverage.beyond_reach(events.Reading.of(inv).events['E1'], 'duodenum'))
+        p = code_of(inv, text, '44369', 'P6')
+        self.assertEqual((p.status, asked(p), check(p, ELSEWHERE).status),
+                         ('needs_clarification', ['performed_status'], 'warn'))
+        for chosen in ((('43235', 'P5'),), (('44369', 'P6'), ('43235', 'P5'))):
+            p = proposal(picks(inv, text, chosen), '43235')
+            with self.subTest(picks=[code for code, _ in chosen]):
+                self.assertEqual((p.status, asked(p), check(p, BASE).status),
+                                 ('needs_clarification', ['base_included'], 'warn'))
         p = code_of(inv, text, '44360', 'P6')
-        self.assertEqual((p.status, asked(p), check(p, BASE).status, check(p, ELSEWHERE)),
-                         ('needs_clarification', ['base_included'], 'warn', None))
+        self.assertEqual((p.status, asked(p), check(p, ELSEWHERE).status),
+                         ('needs_clarification', ['procedure'], 'warn'))
+        self.assertTrue(p.clarifications[0].question.startswith(
+            'Is 44360 reported separately from ablation for this examination? In which procedure was the ablation'))
 
     def test_d141_on_a_line_of_its_own_the_act_moves_as_the_installed_release_reads_it(self):
         """The separate-line twin, and a duodenal angioectasia of no stated portion on its own line: the generic
@@ -366,10 +376,13 @@ class RegionWithinTheReach(SimpleTestCase):
         enteroscopy as the spec's first clause reads, the second would be READY on an act that may be the EGD's.
         DECISIONS D148 (the round-5c review of D141, problems 1 and 2) changes this pin's expectation: the separate-line
         twin's own words name the third portion, beyond the EGD's verified reach, so it stays the enteroscopy's (44369
-        READY: tests/test_interpretation_r5d_enteroscopy.py pins it); the act of no stated portion still moves."""
+        READY: tests/test_interpretation_r5d_enteroscopy.py pins it); the act of no stated portion still moves.
+        DECISIONS D153 (the round-5d review of D148, problems 0-2) changes it back: an act's own words never place it
+        beyond the EGD's verified reach, so the separate-line twin moves again (its subcase restored as D141 wrote it)."""
         for name, act_line, words in (
+                ('third portion', D3_LINE, 'An angioectasia in the third portion of the duodenum'),
                 ('no portion', 'A duodenal angioectasia was treated with argon plasma coagulation.',
-                 'A duodenal angioectasia'),):
+                 'A duodenal angioectasia')):
             inv, text = egd_push(act_line, words=words)
             with self.subTest(case=name):
                 self.assertEqual(family_of_e3(inv), 'gi.egd')
@@ -382,7 +395,8 @@ class RegionWithinTheReach(SimpleTestCase):
     def test_d141_an_act_told_in_a_sentence_of_both_examinations_moves(self):
         """Told in a passage the EGD's own statement shares, the act's sentence is not its examination's alone: it moves
         (44369 held, as c2e53f8e reads a duodenal act by its region). DECISIONS D148: the shared-passage test is gone
-        (the outcome is unchanged): the act's own words name no portion beyond the second, so it moves."""
+        (the outcome is unchanged): the act's own words name no portion beyond the second, so it moves. DECISIONS D153:
+        beyond_reach reads no act words (the call below drops them); the outcome is unchanged."""
         both = ('EGD and push enteroscopy: The gastroscope was advanced to the second portion of the duodenum and the '
                 'enteroscope was then advanced to the proximal jejunum, and a duodenal angioectasia was treated with '
                 'argon plasma coagulation.')
@@ -405,7 +419,7 @@ class RegionWithinTheReach(SimpleTestCase):
         self.assertEqual(sorted(event['catalogue_kind'] for event in coverage.done_examinations(reading, 'gi.egd')
                                 + coverage.done_examinations(reading, 'gi.enteroscopy')),
                          ['examination', 'examination'])
-        self.assertFalse(coverage.beyond_reach(reading.events['E1'], 'duodenum', 'a duodenal angioectasia'))
+        self.assertFalse(coverage.beyond_reach(reading.events['E1'], 'duodenum'))
         self.assertEqual(family_of_e3(inv), 'gi.egd')
         p = code_of(inv, text, '44369', 'P5')
         self.assertEqual((p.status, check(p, ELSEWHERE).status), ('needs_clarification', 'warn'))
@@ -436,7 +450,9 @@ class RegionWithinTheReach(SimpleTestCase):
         passage) and a reach at the generic duodenum beside an act at the second portion move: 44369 held. DECISIONS
         D148 (the round-5c review of D141, problems 1 and 2) changes this pin's expectation: the act at the second
         portion's landmark told in the push enteroscopy's sentence, whose own words name the third portion (D141's
-        recorded cost), now stays - 44369 READY, as c2e53f8e (tests/test_interpretation_r5d_enteroscopy.py pins it)."""
+        recorded cost), now stays - 44369 READY, as c2e53f8e (tests/test_interpretation_r5d_enteroscopy.py pins it).
+        DECISIONS D153 (the round-5d review of D148, problems 0-2) changes it back: that act moves again (its subcase
+        restored as D141 wrote it), and D141's recorded cost returns."""
         d2 = 'An angioectasia in the second portion of the duodenum was treated with argon plasma coagulation.'
         for name, options in (
                 ('reach not verified', dict(act_line=f'{GASTRIC} were treated with argon plasma coagulation.',
@@ -445,7 +461,10 @@ class RegionWithinTheReach(SimpleTestCase):
                 ('reach at the duodenum', dict(act_line=d2, landmark='second_portion_duodenum',
                                                words='An angioectasia in the second portion of the duodenum',
                                                egd_line='EGD: The gastroscope was advanced to the duodenum.',
-                                               egd_reach=('duodenum', 'duodenum')))):
+                                               egd_reach=('duodenum', 'duodenum'))),
+                ('second portion, in the sentence', dict(act_pid='P6', push_line=D3_PART,
+                                                        landmark='second_portion_duodenum',
+                                                        words='an angioectasia in the third portion of the duodenum'))):
             inv, text = egd_push(**options)
             with self.subTest(case=name):
                 self.assertEqual(family_of_e3(inv), 'gi.egd')

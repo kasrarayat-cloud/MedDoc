@@ -9,7 +9,9 @@ answers (rvcases.py: finding 25's ERCP with the sweep's sentence changed) - or, 
   of the act's own words, the guard words still read over the whole clause; the structural reading takes the act's
   attribute words as its yield only where no clause of a located passage that holds them carries a guard word.
 - (3) problem 3: the sentence after the act's own is dropped as another act's when it holds the own words of another
-  event that is performed, and read when the only other events whose words it holds are not performed.
+  event that is performed, and read when the only other events whose words it holds are not performed. WITHDRAWN by
+  DECISIONS D155 (round 5e, narrowing only): D140's condition is restored, and the two pins of (3) that pinned its
+  releases now expect e5628be56's holds (tests.test_interpretation_r5e_ercp pins D155 itself).
 
 The installed release c2e53f8e's outcome on each input (jobs._assess_child, as the head-to-head runs it, with no
 participant and with Astra and Fable read: the same on every input here) is quoted in each pin's docstring.
@@ -286,7 +288,7 @@ class D147SimpleClause(SimpleTestCase):
                         self.assertTrue(clause['start'] <= start < end <= clause['end'])
 
 
-# --- (3), problem 3: a performed act's sentence that also names a plan is another act's -----------------------------
+# --- (3), problem 3, WITHDRAWN by D155: a performed act's sentence that also names a plan is read again ------------
 
 BASKET = ercp_act('E5', 'P5', 'stone_extraction', 'extracted', 'were extracted',
                   technique=a('basket', 'basket', ['P5']))
@@ -299,12 +301,12 @@ class D147NextSentence(SimpleTestCase):
         """The review's problem 3 (introduced by D140), its input 1: "The bile duct was swept with an extraction
         balloon. Two stones were extracted with a basket; no stones were seen on the final cholangiogram and a repeat
         ERCP is planned." with the basket (E5, performed) and the repeat ERCP (E6, planned) filed, Corti citing the
-        sweep's sentence: held nothing_retrieved at e5628be56; READY now, as c2e53f8e (READY; 46e461e7f READY on E4, per
-        the review). So is the reviewer's "Two stones were then extracted" form (c2e53f8e READY) - and Corti citing the
-        whole passage, where c2e53f8e HOLDS (readings_disagree): a release where the installed release holds, the
-        document stating two stones extracted. 43264 rests on the sweep (E4): the basket's own sentence denies the
-        stones' presence in a clause that holds the plan's words (D127's sentence of two acts), so E5 leaves E* and the
-        decision still reads it."""
+        sweep's sentence or the whole passage, and the reviewer's "Two stones were then extracted" form. D147 (3) made
+        them READY on E4; DECISIONS D155 (round 5e, narrowing only) WITHDRAWS D147 (3), so this expectation changes back
+        to e5628be56's: the next sentence holds a planned event's words, so it is read, and 43264 is held
+        nothing_retrieved with the question quoting both sentences. A returning cost where c2e53f8e is READY (the
+        sweep's sentence cited, and the "then extracted" form); c2e53f8e HOLDS (readings_disagree) with the whole
+        passage cited."""
         p5 = ('The bile duct was swept with an extraction balloon. Two stones were extracted with a basket; no stones '
               'were seen on the final cholangiogram and a repeat ERCP is planned.')
         then = ('The bile duct was swept with an extraction balloon. Two stones were then extracted with a basket; no '
@@ -317,20 +319,21 @@ class D147NextSentence(SimpleTestCase):
                                            'then extracted': (then, SWEPT_ONCE, [then_basket, REPEAT])}.items():
             for chosen in PARTICIPANTS:
                 with self.subTest(shape=name, participants=len(chosen)):
-                    ready_on(self, assessed(text_, cited, chosen, **SW, more=more))
+                    held_nothing_retrieved(self, assessed(text_, cited, chosen, **SW, more=more), text_)
         inv, text, doc = sweep(p5, **SW, more=[BASKET, REPEAT])
         reading = events.Reading.of(inv)
-        self.assertIsNone(ercp.nothing_retrieved(reading, reading.events['E4']))
+        self.assertEqual([place['text'] for place in ercp.nothing_retrieved(reading, reading.events['E4'])],
+                         [SWEPT_ONCE, p5[len(SWEPT_ONCE) + 1:]])
         self.assertEqual(events.evaluate('43264', (), reading).read, ('E4', 'E5'))
 
     def test_d147_problem_3_a_performed_act_beside_a_denial_event_is_another_acts(self):
-        """D140's control (tests.test_interpretation_r5c_ercp, test_d140_problem_1_controls), its expectation changed by
-        this repair: "The bile duct was swept with an extraction balloon. The pancreatic duct was then swept with a
-        balloon; no stones were retrieved." with the pancreatic sweep (E5, performed) and the denial filed as its own
-        event (E6, not_performed) - the next sentence holds a performed act's words, so it is that act's and is dropped,
-        and 43264 is READY on E4 as on D127's own pin without E6. Held at e5628be56; c2e53f8e HOLDS both forms
-        (readings_disagree). A release where the installed release holds, recorded (the document states no stone
-        retrieved anywhere)."""
+        """D140's control (tests.test_interpretation_r5c_ercp, test_d140_problem_1_controls): "The bile duct was swept
+        with an extraction balloon. The pancreatic duct was then swept with a balloon; no stones were retrieved." with
+        the pancreatic sweep (E5, performed) and the denial filed as its own event (E6, not_performed). D147 (3) dropped
+        the next sentence as the performed act's and made 43264 READY on E4; DECISIONS D155 WITHDRAWS D147 (3), so this
+        expectation changes back to e5628be56's: the next sentence holds the not-performed denial's words, so it is
+        read, and 43264 is held nothing_retrieved with the question quoting both sentences (c2e53f8e HOLDS,
+        readings_disagree)."""
         both = ('The bile duct was swept with an extraction balloon. The pancreatic duct was then swept with a '
                 'balloon; no stones were retrieved.')
         pancreatic = ercp_act('E5', 'P5', 'stone_extraction', 'swept with a balloon', 'was then swept',
@@ -340,7 +343,7 @@ class D147NextSentence(SimpleTestCase):
                           status='not_performed', scope=sc('single_target', 'no', ['P5']))
         for chosen in PARTICIPANTS:
             with self.subTest(participants=len(chosen)):
-                ready_on(self, assessed(both, SWEPT_ONCE, chosen, **SW, more=[pancreatic, denial]))
+                held_nothing_retrieved(self, assessed(both, SWEPT_ONCE, chosen, **SW, more=[pancreatic, denial]), both)
 
     def test_d147_problem_3_only_events_not_performed_the_sentence_is_read(self):
         """D140's disagreement-4 inputs stay held - each next sentence holds only the words of an event that is not

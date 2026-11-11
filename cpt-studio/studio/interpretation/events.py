@@ -1016,7 +1016,19 @@ def _target_hold(code: str, link: mapping.CodeLink, supporting: Sequence, readin
     with a 15 mm lumen-apposing metal stent.' took 7.4's last resort ('Was the drainage (stent) at the gallbladder (“was
     performed”) done on the date of service?', whose reason said CPT Studio could not confirm it was done), and beside
     an EUS examination whose own target is verified 43240 asked no target at all; the installed release asks its
-    target. Asked whatever the examination's target."""
+    target. Asked whatever the examination's target.
+
+    DECISIONS D156 (2) (round 5e; the round-5d review of D145, problem 0): before the hold, 7.4's reading (_focused) over
+    the positive candidates - _without_support's: stated positive or uncertain, neither verified at another time nor by
+    another performer - that do not support the code but DO meet its defining target is kept: its question, its reason,
+    its relation, its unverified attributes and its 52/53 consideration (attempted) are the code's, and the hold's
+    target question is asked beside it - after it, in the code's one question (an Evaluation asks one). Its facts are
+    7.4's. The code reads what the hold reads (its supporting acts), so coverage lists and asks what it did. With D145's
+    hold alone, 'EUS-guided transmural drainage of the pseudocyst was attempted but failed.' beside 'EUS-guided
+    transmural drainage of the common bile duct was performed ...' (43240 cited on either) asked only which structure
+    the bile duct drainage was done on: the failed pseudocyst drainage, which e5628be56 asked about ('... was begun and
+    not completed. Confirm whether 43240 describes what was done on the date of service.') with the 52/53
+    consideration, was in no question of the assessment. Never a release: the code stays held."""
     read = tuple(event['id'] for event in supporting)
     unsettled = next((event for event in supporting if not usable(event, 'target')), None)
     event = unsettled if unsettled is not None else supporting[0]
@@ -1028,10 +1040,23 @@ def _target_hold(code: str, link: mapping.CodeLink, supporting: Sequence, readin
                                                     wording.landmark_label(places[0]) if places else '', words)
     unverified = tuple((item['id'], 'target') for item in supporting if not usable(item, 'target')
                        and value(item, 'target') != 'not_stated')
+    target = Question('target', question, reason, (event['id'],), _spans(anchors(reading, event)))
+    for group in requirements(link):  # D156 (2): 7.4 over the positive candidates that meet the defining target
+        fitting = [item for item in reading.events.values() if is_candidate(link, group, item)
+                   and value(item, 'status') in verify.POSITIVE + ('uncertain',) and not verified_other_time(item)
+                   and not verified_other_performer(item) and not supports(reading, link, group, item)
+                   and defining_fit(reading, link, item)]
+        if not fitting:
+            continue
+        kept = _focused(code, link, group, fitting, reading)
+        first = kept.question
+        asked = Question(first.fact, f'{first.question} {target.question}', f'{first.reason} {target.reason}',
+                         tuple(dict.fromkeys(first.events + target.events)), _spans(first.passages + target.passages))
+        return Evaluation(code, link.family, link, 'uncertain', kept.reason, asked.reason, read=read, question=asked,
+                          relation=kept.relation, attempted=kept.attempted,
+                          unverified=tuple(dict.fromkeys(kept.unverified + unverified)))
     return Evaluation(code, link.family, link, 'uncertain', SITE if unsettled is not None else ANOTHER_SITE, reason,
-                      read=read, question=Question('target', question, reason, (event['id'],),
-                                                   _spans(anchors(reading, event))),
-                      unverified=unverified)
+                      read=read, question=target, unverified=unverified)
 
 
 # --- 7.4-7.6: no supporting event --------------------------------------------------------------------------------------
