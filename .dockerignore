@@ -85,6 +85,38 @@ out
 # but it was being shipped into the build CONTEXT and the builder layer, which
 # is both slow and the wrong place for a volume image to live.
 .local
+
+# ── GIT WORKTREES AT THE CONTEXT ROOT ───────────────────────────────────────
+# ⚠️ MEASURED 2026-09-05: the build context was 4.04 GB for `db-migrate` and
+# 4.02 GB for the app — about 8 GB and 84 seconds shipped to the daemon on
+# EVERY deploy. 24 git worktrees live beside the repo at ~155 MB of source
+# each. Their `node_modules` were already excluded above, which is exactly
+# what left each one small enough that nobody noticed it — and there are
+# twenty-four.
+#
+# WHY IT WENT UNNOTICED. The worktree discipline is deliberate and recent: the
+# shared tree is a deploy surface, so all feature work moved into worktrees
+# BESIDE it. That rule was about GIT SAFETY, and nobody re-asked what it did
+# to the BUILD. A directory invisible to `git status` is not invisible to
+# `docker build`.
+#
+# SAFE BY CONSTRUCTION, CHECKED RATHER THAN ASSUMED: no `COPY` in any
+# Dockerfile names a dot-path at the context root — the named copies are
+# package.json files, `apps/` and `packages/` — so nothing here is reachable
+# except through `COPY . .`, which wants none of it.
+#
+# ⚠️ THIS LIST WILL GO STALE, BECAUSE WORKTREE NAMES ARE AD HOC. That is what
+# `scripts/check-dockerignore-covers-worktrees.sh` exists for: it reads
+# `git worktree list` and fails, naming any root worktree this file does not
+# cover. A static list without that check is a fix with a decay date.
+.wt-*
+.r16*
+.p17*
+.p18*
+.pass-*
+.cdev
+.f*-build
+.f8-s2-recon
 secrets
 landing-monolith
 venv
