@@ -3044,10 +3044,11 @@ def _assess_child_events(stored, context, normalized, reference, provider_status
     inventory and the gemini context's facts for meaning, and the revision ``text`` for the exactness of the proposers'
     spans and the member answers' passages and, since DECISIONS D124, for its entry lines: the role labels, signatures
     and headings around a done act, to tell whether it is documented only in another role's entry (a nursing note, a
-    pathology report). That holds the act's code and never excludes one; but a code so held supports nothing, so a
-    rival code that competed with it for the same act loses that competing_codes hold (DECISIONS D146: 43264 for a
-    stone extraction told only under a nursing heading is held, and 43265 for the same clearance is then READY, as
-    c2e53f8e READYs both) (studio/interpretation/assess.py; events.another_role_hold)."""
+    pathology report). That holds the act's code and never excludes one; and since DECISIONS D163 (round 5f) a code so
+    held keeps the acts its hold names as claims, so a rival code that competed with it for the same act keeps its
+    competing_codes hold (D146: 43264 for a stone extraction told only under a nursing heading is held, and 43265 for
+    the same clearance is held competing_codes beside it, as c2e53f8e holds both with its participants; with none
+    configured it READYs both) (studio/interpretation/assess.py; events.another_role_hold)."""
     return events_engine.assess(
         inventory=stored, context=context, normalized=normalized, provider_status=provider_status, reference=reference,
         text=text, pages=pages, extraction_status=extraction_status, extraction_messages=extraction_messages,

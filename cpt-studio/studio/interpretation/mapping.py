@@ -236,14 +236,31 @@ def hemostasis_in_doubt(event: Mapping) -> bool:
     worded 'bipolar cautery', purpose not_stated) held 43255 where c2e53f8e and 46e461e7f are READY; named by its device,
     not the adjective, it keeps the bleeding control. One whose hemostasis purpose IS verified is read as D115 reads a
     clip or an injection (RF1's 'Hemostatic', the hemostatic injection filed as bleeding_control). Its words are read
-    whatever their state: an adjective in words that do not bind still puts the act in doubt (a hold, never READY)."""
+    whatever their state: an adjective in words that do not bind still puts the act in doubt (a hold, never READY).
+
+    DECISIONS D157 (round 5f; the round-5d review of D149, egd4 problem 0, critical; D154's stopped withdrawal paired
+    with its companions): D149's adjective key is WITHDRAWN for an event of a family whose catalogue acts list the
+    bleeding control (catalogue.entry(family).acts: the upper endoscopy, the enteroscopy, the colonoscopy and the
+    flexible sigmoidoscopy) - there D142's arm stands as e5628be56 has it, whatever its purpose and whatever names
+    it. Keyed on the adjective, a device the installed release does not read as a bleeding control went READY:
+    "Cautery was applied at this site." after "A 4 mm angioectasia was seen in the cecum." (FRESH's attested
+    'cautery' filing, performed) gave 45382 READY, and "Cautery was applied to the ulcer base." beside a clean-based
+    ulcer 43255 READY, where e5628be56 and c2e53f8e hold both. In a family whose catalogue lists no bleeding control
+    (the ERCP, the EUS ...) the key stays, so a device-named control there keeps the bleeding control and stays
+    listed not covered, as on 4f82e5056 ("Cautery was applied to the sphincterotomy site." beside 43262). The cost
+    that returns is round 5c's egd3 problem 1: "Epinephrine was injected into the ulcer base, followed by bipolar
+    cautery." and "Bipolar cautery was applied to the ulcer base." beside an oozing visible vessel hold 43255 again
+    where c2e53f8e is READY. A denial of the kind cited alone no longer excludes the code beside such a doubt
+    (events._exclusion, D157 (2))."""
     kind = event['kind']['value']
     purpose = event.get('purpose') or {}
     hemostasis = verify.usable(purpose) and purpose.get('value') == 'hemostasis'
-    if kind == BLEEDING_CONTROL:  # D142; D149: with no verified hemostasis purpose, only one named by the adjective
+    if kind == BLEEDING_CONTROL:  # D142; D149's adjective key only where the family lists no bleeding control (D157)
+        entry = catalogue.entry(event.get('family', ''))
+        listed = entry is not None and BLEEDING_CONTROL in entry.acts
         named = {token for name in ('kind', 'technique', 'purpose')
                  for token in _WORD.findall(lexicon.fold(_words_text(event.get(name) or {})))}
-        if not hemostasis and not named & {'hemostatic', 'hemostasis', 'haemostatic', 'haemostasis'}:
+        if not listed and not hemostasis and not named & {'hemostatic', 'hemostasis', 'haemostatic', 'haemostasis'}:
             return False
     elif kind not in HEMOSTASIS_KINDS or not hemostasis:
         return False

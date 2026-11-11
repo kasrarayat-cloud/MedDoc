@@ -5,13 +5,19 @@ answer written to prompt.py's contract, the proposer's citations replayed) and i
   assess records for the codes), never by a profile that covers the act's kind: F1's doubted esophageal dilation, which
   43245 (READY on the pyloric dilation) neither reads nor holds on, is asked before the doubted biopsy, as 46e461e7f
   asked it. RF11's clip in doubt is held on by no record (43255 is held not_documented, naming no event), so the reading's
-  order asks the clip's question there too.
+  order asks the clip's question there too. CHANGED by DECISIONS D157 (3) (round 5f): 43255 held not_documented names
+  the clip, the bleeding control in doubt of its kind, and assess passes the proposals' question events, so the clip
+  yields the slot and RF11's biopsy question is asked, as e5628be56 asked it (the RF11 test below CHANGED).
 - (2) problem 1: D142's arm reads an event of the bleeding_control kind whose purpose is not a verified hemostasis only
   when its own kind, technique or purpose words name the control by the adjective ('hemostatic', 'hemostasis'), as
   c2e53f8e keys its rule: "Epinephrine was injected into the ulcer base, followed by bipolar cautery." and "Bipolar
   cautery was applied to the ulcer base." beside an oozing visible vessel keep the bleeding control (43255 READY, as
   c2e53f8e); RF1 and variants (a) and (b) (a verified hemostasis purpose, read as D115 reads a clip) and RF1's cautery
-  with no purpose (named by the adjective) stay in doubt.
+  with no purpose (named by the adjective) stay in doubt. WITHDRAWN by DECISIONS D157 (round 5f; the round-5d review of
+  D149, egd4 problem 0, critical) for the families whose catalogue acts list the bleeding control: the key let a device
+  the installed release does not read as a bleeding control go READY, so there D142's arm stands again, whatever the
+  purpose, and the four tests of (2) that pinned the release CHANGED back to e5628be56's holds (a recorded cost where
+  c2e53f8e is READY); D157's pins are in tests/test_interpretation_r5f_egd.py.
 - (3) problem 4: the gallbladder drainage beside 43240 is held by D136 (43240's defining target, eus3) on e5628be56.
 CASES (the round-5 module's) holds every input, so the installed release (c2e53f8e) can be run on the very same texts and
 citations. Nothing is sent."""
@@ -207,18 +213,20 @@ class D149OrderReadsTheRecords(SimpleTestCase):
         self.assertEqual([(item['act'], item['reason'], item['second_review'])
                           for item in result.completeness['unresolved_items']], [('dilation', 'not_covered', True)])
 
-    def test_d149_rf11_no_code_holds_on_the_clip_so_the_reading_order_asks_it(self):
-        """RF11 (CHANGED from D142's outcome): 43255 is held not_documented - D115's possible bleeding control matches no
-        code, so 43255 reads no event and its question names none (support['acts'] and support['question_events'] are
-        empty). No record holds on either act, and the reading's order asks the clip's question, as 46e461e7f did."""
+    def test_d149_d157_rf11_43255_names_the_clip_so_the_biopsys_question_is_asked(self):
+        """RF11 (CHANGED from D142's outcome by D149, and CHANGED again by DECISIONS D157 (3); was
+        test_d149_rf11_no_code_holds_on_the_clip_so_the_reading_order_asks_it, asserting support['question_events']
+        [] and CLIP_QUESTION): 43255 is held not_documented - D115's possible bleeding control matches no code, so 43255
+        reads no event (support['acts'] empty) - and its question names the clip, the act in doubt of its kind (D157),
+        so the clip yields the event_time slot and the biopsy's question is asked, as e5628be56 asked it."""
         for name in (RF11, RF11_ALONE):
             result = assessed(name)
             with self.subTest(case=name):
                 held(self, result, '43255', ['performed_status'])
                 p = proposal(result, '43255')
-                self.assertEqual((p.support['acts'], p.support['question_events']), ([], []))
+                self.assertEqual((p.support['acts'], p.support['question_events']), ([], ['E2']))
                 self.assertEqual([(spec.fact, spec.question) for spec in result.clarifications],
-                                 [('event_time', e5c.CLIP_QUESTION)])
+                                 [('event_time', e5c.BIOPSY_QUESTION)])
                 self.assertEqual(items(result), [(mapping.POSSIBLE_BLEEDING_CONTROL, 'in_doubt'), ('biopsy', 'in_doubt')])
 
     def test_d149_the_order_reads_the_events_held_never_a_profile(self):
@@ -263,30 +271,41 @@ class D149OrderReadsTheRecords(SimpleTestCase):
 
 
 class D149AdjectiveKeysTheBleedingControlKind(SimpleTestCase):
-    """D149 (2): c2e53f8e and 46e461e7f are READY on A6 and the bipolar cautery beside the oozing vessel (and 45382 on the
-    colonoscopy twin); e5628be56 (D142's 'whatever its purpose') held them. c2e53f8e holds RF1, variants (a) and (b) and
-    RF1's cautery with no purpose, as here."""
+    """D149 (2), WITHDRAWN by D157 where the family's catalogue lists the bleeding control: c2e53f8e and 46e461e7f are
+    READY on A6 and the bipolar cautery beside the oozing vessel (and 45382 on the colonoscopy twin); e5628be56 (D142's
+    'whatever its purpose') held them, and holds them again here - a recorded cost (round 5c's egd3 review, problem 1).
+    c2e53f8e holds RF1, variants (a) and (b) and RF1's cautery with no purpose, as here."""
 
-    def test_d149_a6_the_dual_therapy_keeps_the_bleeding_control(self):
+    def test_d149_d157_a6_the_dual_therapys_cautery_is_a_bleeding_control_in_doubt(self):
+        """CHANGED with DECISIONS D157 (was test_d149_a6_the_dual_therapy_keeps_the_bleeding_control, asserting
+        BLEEDING_CONTROL and 43255 READY): the cautery's five words state no bleeding, so it is a bleeding control in
+        doubt whatever its purpose and 43255 is held, as e5628be56 holds it; c2e53f8e is READY (a recorded cost)."""
         inv, _ = built(A6)
-        self.assertEqual(events.Reading.of(inv).events['E3']['catalogue_kind'], mapping.BLEEDING_CONTROL)
+        self.assertEqual(events.Reading.of(inv).events['E3']['catalogue_kind'], mapping.POSSIBLE_BLEEDING_CONTROL)
         result = assessed(A6)
-        ready(self, result, '43255')
-        with self.subTest(part='the injection listed not covered, as c2e53f8e lists it'):
+        held(self, result, '43255', ['performed_status'])
+        with self.subTest(part='the injection listed not covered, as c2e53f8e lists it, and the cautery in doubt'):
             self.assertEqual([(item['act'], item['reason'], item['second_review'])
-                              for item in result.completeness['unresolved_items']], [('injection', 'not_covered', True)])
+                              for item in result.completeness['unresolved_items']],
+                             [('injection', 'not_covered', True),
+                              (mapping.POSSIBLE_BLEEDING_CONTROL, 'in_doubt', False)])
 
-    def test_d149_bipolar_cautery_beside_the_oozing_vessel_keeps_the_bleeding_control(self):
+    def test_d149_d157_bipolar_cautery_beside_the_oozing_vessel_is_a_bleeding_control_in_doubt(self):
+        """CHANGED with DECISIONS D157 (was
+        test_d149_bipolar_cautery_beside_the_oozing_vessel_keeps_the_bleeding_control, asserting 43255 READY): held, as
+        e5628be56 holds it; c2e53f8e is READY (a recorded cost)."""
         for name in (A3, A3_VESSEL):
             with self.subTest(case=name):
-                ready(self, assessed(name), '43255')
+                held(self, assessed(name), '43255', ['performed_status'])
         result = assessed(A3_BASE)
-        ready(self, result, '43255')
+        held(self, result, '43255', ['performed_status'])
         held_base(self, result, '43235', '43255')
 
-    def test_d149_the_colonoscopy_twin_keeps_the_bleeding_control(self):
+    def test_d149_d157_the_colonoscopy_twins_cautery_is_a_bleeding_control_in_doubt(self):
+        """CHANGED with DECISIONS D157 (was test_d149_the_colonoscopy_twin_keeps_the_bleeding_control, asserting 45382
+        READY): held, as e5628be56 holds it; c2e53f8e is READY (a recorded cost)."""
         result = assessed(A3_COLON)
-        ready(self, result, '45382')
+        held(self, result, '45382', ['performed_status'])
         held_base(self, result, '45378', '45382')
 
     def test_d149_named_by_the_adjective_the_control_stays_in_doubt(self):
@@ -301,14 +320,21 @@ class D149AdjectiveKeysTheBleedingControlKind(SimpleTestCase):
         for code in ('43255', '43236', '43243'):
             held(self, result, code, ['performed_status'])
 
-    def test_d149_the_catalogue_kind_of_the_bleeding_control_kind(self):
+    def test_d149_d157_the_catalogue_kind_of_the_bleeding_control_kind(self):
+        """CHANGED with DECISIONS D157 (was test_d149_the_catalogue_kind_of_the_bleeding_control_kind): in the upper GI
+        family (stored()'s), whose catalogue lists the bleeding control, the four rows a device names - no purpose, a
+        purpose other than hemostasis, a hemostasis purpose whose words do not bind, and the adjective only in its
+        target words - were BLEEDING_CONTROL under D149's key and are a bleeding control in doubt again, as e5628be56
+        reads them; every other row is unchanged. The key by family is pinned in
+        tests/test_interpretation_r5f_egd.py."""
         cases = {
-            'named by its device, no purpose': (stored(), mapping.BLEEDING_CONTROL),
+            'named by its device, no purpose': (stored(), mapping.POSSIBLE_BLEEDING_CONTROL),
             'named by its device, a purpose other than hemostasis': (
-                stored(purpose='prophylaxis', purpose_words='to prevent rebleeding'), mapping.BLEEDING_CONTROL),
+                stored(purpose='prophylaxis', purpose_words='to prevent rebleeding'),
+                mapping.POSSIBLE_BLEEDING_CONTROL),
             'named by its device, a hemostasis purpose whose words do not bind': (
                 stored(purpose='hemostasis', purpose_words='to treat the ulcer', purpose_state='unverified'),
-                mapping.BLEEDING_CONTROL),
+                mapping.POSSIBLE_BLEEDING_CONTROL),
             'the adjective in its kind words': (stored(kind_words='Hemostatic cautery', technique_words='cautery'),
                                                 mapping.POSSIBLE_BLEEDING_CONTROL),
             'the adjective in its device words': (stored(kind_words='clips were placed',
@@ -332,7 +358,7 @@ class D149AdjectiveKeysTheBleedingControlKind(SimpleTestCase):
             'the noun stating the act': (stored(purpose='prophylaxis', purpose_words='for hemostasis'),
                                          mapping.BLEEDING_CONTROL),
             'the adjective only in its target words': (stored(target_words='the hemostatic clip site'),
-                                                       mapping.BLEEDING_CONTROL),
+                                                       mapping.POSSIBLE_BLEEDING_CONTROL),
             'a denial named by the adjective': (stored(kind_words='Hemostatic cautery', status='not_performed',
                                                        status_words='No hemostatic cautery'), mapping.BLEEDING_CONTROL),
             'a verified hemostasis purpose, read as D115 reads a clip, though named by its device': (

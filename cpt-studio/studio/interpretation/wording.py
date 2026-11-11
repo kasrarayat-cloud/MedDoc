@@ -260,6 +260,11 @@ def performer_reason(act: str) -> str:
 
 
 def procedure_question(act: str, words: str) -> str:
+    """The act's procedure question, quoting its words. DECISIONS D160 (3) (the round-5e review of D153, problem 5):
+    empty words are never quoted - an act whose target Gemini left absent asked 'In which procedure was the forceps
+    biopsy (“”) done?'."""
+    if not ' '.join(str(words or '').split()):
+        return f'In which procedure was the {act} done?'
     return f'In which procedure was the {act} ({quote(words, 120)}) done?'
 
 

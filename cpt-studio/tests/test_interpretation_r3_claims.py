@@ -111,7 +111,8 @@ class D74DoubtedDefiningAct(SimpleTestCase):
         possibly current - its time unanchored, its status words unbound, its status attempted - and nothing when the
         lithotripsy is denied, planned, verified at an earlier encounter or stated in another family. A time worded with
         another occasion's marker follows coverage.possibly_current, whatever D62's carve-out decides (today: evidence,
-        not a doubt, so nothing is claimed)."""
+        not a doubt, so nothing is claimed). DECISIONS D163 (round 5f): the held 43265 also claims its own doubted
+        lithotripsy (E3), as a held code keeps the acts its evaluation read; no rival claims E3, so no outcome moves."""
         claimed = {
             'time unanchored': stone_clearance(**DOUBTED['During the procedure'][0]),
             'status words unbound': stone_clearance(**DOUBTED['status words that do not bind'][0]),
@@ -122,7 +123,7 @@ class D74DoubtedDefiningAct(SimpleTestCase):
         for name, (inv, text, lines) in claimed.items():
             with self.subTest(claimed=name):
                 self.assertEqual(events.evaluate('43265', (), events.Reading.of(inv)).supporting, ())
-                self.assertEqual(claims(inv, text, '43265', lines['P3']), ('E4',))
+                self.assertEqual(claims(inv, text, '43265', lines['P3']), ('E4', 'E3'))  # D163: E3 too
         unclaimed = {
             'denied': stone_clearance('No lithotripsy was performed for the 15 mm stone in the common bile duct.',
                                       status='not_performed', status_words='No lithotripsy was performed'),
@@ -144,7 +145,7 @@ class D74DoubtedDefiningAct(SimpleTestCase):
         lithotripsy = events.Reading.of(inv).events['E3']
         self.assertEqual((lithotripsy['family'], lithotripsy['time']['state']), ('gi.ercp', 'unverified'))
         self.assertEqual(claims(inv, text, '43265', lines['P3']),
-                         ('E4',) if coverage.possibly_current(lithotripsy) else ())
+                         ('E4', 'E3') if coverage.possibly_current(lithotripsy) else ())  # D163: E3 too
 
     def test_d74_the_hot_forceps_and_gastrostomy_codes_compete_when_their_defining_act_is_doubted(self):
         """The two other codes D74 widens: 44365 (its hot forceps removal's time unanchored) beside 44369 for the

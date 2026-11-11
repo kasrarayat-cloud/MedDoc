@@ -212,16 +212,40 @@ def doubted_routes(encounter: Mapping) -> frozenset:
     return frozenset({'pouch'}) if doubt and 'pouch' not in routes(encounter) else frozenset()
 
 
-def gastric_beside(encounter: Mapping) -> bool:
+def gastric_beside(encounter: Mapping) -> str:
     """DECISIONS D153 (D148's disagreement 2): whether the encounter's anatomy holds the verified small-intestinal pouch
     (routes) AND a usable altered entry whose own words name a gastric pouch or a gastric bypass (GASTRIC_POUCH_WORDS)
     - the anatomy in which a route phrase through the gastric pouch would be read as the small-intestinal pouch's route
     (route_phrase's ``gastric``). Typed by its own words (D148), an 'ileal J-pouch' beside 'Roux-en-Y gastric bypass' is
     verified, and 'The enteroscope was advanced through the small gastric pouch and the Roux limb into the proximal
     ileum.' made 44386 READY - an examination of the pouch it never entered - where e5628be56 and the installed release
-    hold it (extent)."""
-    return 'pouch' in routes(encounter) and any(lexicon.holds(_words(entry), GASTRIC_POUCH_WORDS)
-                                                for entry in _altered(encounter))
+    hold it (extent).
+
+    DECISIONS D160 (2) (the round-5e review of D153, problem 4): which reading route_phrase takes, as a string ('' for
+    neither, so the value reads as a truth value wherever D153 read one):
+    - 'bypass': beside the verified small-intestinal pouch, the anatomy holds a gastric pouch - an altered pouch entry
+      whose own words name a gastric pouch (GASTRIC_POUCH_WORDS, as pouch_types types one: 'small gastric pouch') - or a
+      gastric bypass - an altered entry whose own words name the bypass or its Roux reconstruction ('Roux-en-Y gastric
+      bypass', 'Roux limb', 'RYGB'), in any state (D87: an entry not verified is a doubt of the anatomy, and here it
+      only holds). Two pouches may then stand in the anatomy, so ANY pouch route phrase is a doubted route, whatever
+      its words: read only where a gastric word stood between ('through the small gastric pouch'), 'The enteroscope
+      was advanced through the pouch and the Roux limb into the proximal ileum.' beside 'The patient has an ileal
+      J-pouch and a Roux-en-Y gastric bypass.' made 44386 READY, where e5628be56 and the installed release hold it
+      (extent). These words gate a hold only: an entry worded otherwise keeps the reading below, as f9013e12e reads it;
+    - 'gastric': beside it, only a usable entry whose own words hold a gastric word (GASTRIC_POUCH_WORDS; the attested
+      'A PEG tube is in place in the gastric body': no gastric pouch, no bypass) - D153's reading, unchanged: a gastric
+      word between the route word and the pouch noun ends the phrase (fail-closed), and the J-pouch's own route ('into
+      the J-pouch') still states it (D148's release beside the PEG, which this rule keeps);
+    - '': no verified small-intestinal pouch, or no such entry - the phrase reads as D141 built it."""
+    if 'pouch' not in routes(encounter):
+        return ''
+    bypass_words = ('bypass', 'roux', 'rygb')  # D160 (2): a gastric bypass's own words; they gate a hold only
+    altered = [entry for entry in (encounter.get('anatomy') or ()) if isinstance(entry, Mapping)
+               and entry.get('anatomy') == 'altered']  # D160 (2): every state - a doubt only holds
+    if any(lexicon.holds(_words(entry), bypass_words) or (entry.get('value') == 'pouch' and lexicon.holds(
+            _words(entry), GASTRIC_POUCH_WORDS)) for entry in altered):
+        return 'bypass'
+    return 'gastric' if any(lexicon.holds(_words(entry), GASTRIC_POUCH_WORDS) for entry in _altered(encounter)) else ''
 
 
 def incomplete(examination: Optional[Mapping]) -> bool:
@@ -258,13 +282,21 @@ def _tokens(text: str) -> list:
     return out
 
 
-def route_phrase(text: str, route: str, gastric: bool = False) -> bool:
+def route_phrase(text: str, route: str, gastric='') -> bool:
     """D141: whether ``text`` states ``route`` (THROUGH_STOMA or THROUGH_POUCH) in a route phrase - one of ROUTE_INTO,
     then one of the route's ROUTE_NOUNS with at most PHRASE_REACH words between, none in ROUTE_BREAKS and no mark, the
     noun not after a place prefix (PLACE_PREFIXES: "into the pre-pouch ileum" names a place) - or one of its
     ROUTE_FORMS. DECISIONS D153 (D148's disagreement 2): with ``gastric`` (gastric_beside: the verified small-intestinal
     pouch beside a gastric pouch or bypass entry), a pouch phrase whose words between name a gastric pouch (a word of
-    GASTRIC_POUCH_WORDS: 'through the small gastric pouch') is never the small-intestinal pouch's route."""
+    GASTRIC_POUCH_WORDS: 'through the small gastric pouch') is never the small-intestinal pouch's route.
+
+    DECISIONS D160 (2): with ``gastric`` 'bypass' (gastric_beside: a gastric pouch or a gastric bypass beside the
+    verified small-intestinal pouch) no pouch phrase states the pouch route, whatever its words ('through the pouch',
+    'into the J-pouch'): which pouch it names is a doubt (D87), so the route is a doubted one - the pouch is still a
+    route word among the examination's own words (named_routes' ROUTE_READ), and examination_route verifies none. Any
+    other truthy ``gastric`` reads as D153 reads it."""
+    if gastric == 'bypass' and route == THROUGH_POUCH:
+        return False  # D160 (2): two pouches stand in the anatomy, so a pouch phrase names no verified route
     tokens = _tokens(text)
     for index in range(len(tokens)):
         if any(tuple(tokens[index:index + len(form)]) == form for form in ROUTE_FORMS[route]):
@@ -282,11 +314,11 @@ def route_phrase(text: str, route: str, gastric: bool = False) -> bool:
     return False
 
 
-def named_routes(examination: Mapping, names, usable_only: bool, phrased: bool = False, gastric: bool = False) -> dict:
+def named_routes(examination: Mapping, names, usable_only: bool, phrased: bool = False, gastric='') -> dict:
     """D114: {route: the first words naming it} over the located words of ``examination``'s attributes ``names`` - only
     the usable ones (verified, not opened) when ``usable_only``. ``phrased`` (D141): the stoma and the pouch are named
-    only in a route phrase (route_phrase, with D153's ``gastric``); otherwise by any of their ROUTE_WORDS (a doubt reads
-    every mention)."""
+    only in a route phrase (route_phrase, with D153's and D160's ``gastric``); otherwise by any of their ROUTE_WORDS (a
+    doubt reads every mention)."""
     found = {}
     for name in names:
         record = examination.get(name)
@@ -305,12 +337,12 @@ def named_routes(examination: Mapping, names, usable_only: bool, phrased: bool =
     return found
 
 
-def examination_route(examination: Optional[Mapping], gastric: bool = False) -> tuple:
+def examination_route(examination: Optional[Mapping], gastric='') -> tuple:
     """D114: (the examination's verified route, the words that state it): ('', '') unless the usable words of its own
     statement (ROUTE_STATED) name exactly one route - DECISIONS D141: the stoma or the pouch only in a route phrase
     (route_phrase), never as an anatomy mention ("Double-balloon enteroscopy in a patient with an end ileostomy", which
     made 44382 READY on an oral enteroscopy) - and none of its own located words (ROUTE_READ) names another by any of
-    its ROUTE_WORDS. ``gastric`` (D153): route_phrase's, from gastric_beside."""
+    its ROUTE_WORDS. ``gastric`` (D153, D160): route_phrase's, from gastric_beside."""
     if examination is None:
         return '', ''
     stated = named_routes(examination, ROUTE_STATED, True, phrased=True, gastric=gastric)
@@ -447,14 +479,25 @@ def elsewhere_hold(code: str, family: str, key: str, reading, event: Mapping, ho
     rule no longer asks it (``asked_beside`` False: base_asked, all three of the base rule's arms (D148) - the act was
     the only act of the enteroscopy's session, the move took it, and no counted code of the family accounts for an
     act), the one question asks the base rule's question first (BASE_QUESTION, as the base rule asked it of this act at
-    1caaf0609 and as the installed release asks it), then the act's."""
-    place = wording.landmark_label(mapping.target_landmark(event))
+    1caaf0609 and as the installed release asks it), then the act's.
+
+    DECISIONS D160 (3) (the round-5e review of D153, problem 5): the place is never named empty. An act whose place is
+    not verified (mapping.target_landmark '': D153's doubt of family) is placed by its own target words, quoted, else
+    'an unverified place', and the session is said only to be one that may examine it - worded from the landmark
+    alone, problem 6's biopsies asked 'The documented forceps biopsy (“the distal duodenum”) is at the , which the upper
+    endoscopy of this encounter examines.' A verified place is worded as before."""
+    landmark = wording.landmark_label(mapping.target_landmark(event))
     words = _words(event.get('target'))
     said, shown = (f' ({wording.quote(words)})', f' ({wording.quote(words, 120)})') if words else ('', '')
+    if landmark:  # a verified place, worded as D114 words it
+        place, place_shown, examines = f'the {landmark}{said}', f'{shown} is at the {landmark}', 'examines'
+    else:  # D160 (3): the act's own target words, else 'an unverified place'; never an empty place
+        place = wording.quote(words) if words else 'an unverified place'
+        place_shown, examines = f' is at {wording.quote(words, 120) if words else place}', 'may examine'
     act, kind = events.event_label(reading, event), wording.event_kind_label(event.get('catalogue_kind') or '')
     if not what:
-        reason = (f'The {act} is filed under the small-bowel enteroscopy and documented at the {place}{said}, which '
-                  f'the {holder.label} of this encounter examines, so CPT Studio reads it as an act of the '
+        reason = (f'The {act} is filed under the small-bowel enteroscopy and documented at {place}, which '
+                  f'the {holder.label} of this encounter {examines}, so CPT Studio reads it as an act of the '
                   f'{holder.label}; if it was done in the enteroscopy, {code} is included in the code for it.')
         question = wording.procedure_question(kind, words)
         if not asked_beside:  # D141: the base rule's question stays, the act's beside it
@@ -464,10 +507,10 @@ def elsewhere_hold(code: str, family: str, key: str, reading, event: Mapping, ho
         return (Check(*ELSEWHERE_CHECK, 'warn', reason, wording.SOURCE),
                 ClarificationSpec(scope='proposal', fact='procedure', question=question, reason=reason, family=family,
                                   proposal_key=key))
-    reason = (f'The {act} is documented at the {place}{said}, which the {holder.label} of this encounter examines, so '
+    reason = (f'The {act} is documented at {place}, which the {holder.label} of this encounter {examines}, so '
               f'CPT Studio reads it as an act of the {holder.label}; {code} accounts for {what} in a small-bowel '
               'enteroscopy, which CPT Studio could not find in the document.')
-    question = (f'The documented {kind}{shown} is at the {place}, which the {holder.label} of this encounter examines. '
+    question = (f'The documented {kind}{place_shown}, which the {holder.label} of this encounter {examines}. '
                 f'Was {what} performed in the small-bowel enteroscopy on the date of service?')
     return (Check(*ELSEWHERE_CHECK, 'warn', reason, wording.SOURCE),
             ClarificationSpec(scope='proposal', fact='performed_status', question=question, reason=reason,

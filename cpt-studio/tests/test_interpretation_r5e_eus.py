@@ -193,7 +193,10 @@ class SevenFourIsAskedBesideTheTargetHold(SimpleTestCase):
         reason, question = target_question(other)
         first = p.clarifications[0]
         self.assertEqual((p.status, p.bucket, asked(p)), ('needs_clarification', 'selected', facts))
-        self.assertEqual((first.question, first.reason), (f'{first_q} {question}', f'{first_reason} {reason}'))
+        # DECISIONS D161 (1): 7.4's question and the hold's are two clarifications (D156 asked '<7.4's> <the hold's>')
+        self.assertEqual((first.question, first.reason), (first_q, first_reason))
+        self.assertEqual((p.clarifications[1].fact, p.clarifications[1].question, p.clarifications[1].reason),
+                         ('target', question, reason))
         self.assertEqual((p.support['acts'], p.support['question_events']), ([], ['E2', 'E3']))
         self.assertEqual(any(text.startswith(INCOMPLETE) for text in p.modifier_considerations), attempted)
         view = reviewed(result, '43240')
@@ -212,9 +215,9 @@ class SevenFourIsAskedBesideTheTargetHold(SimpleTestCase):
         for cited in ('P3', 'P4'):
             result = run(inv, text, [('43240', {'P3': ATTEMPTED_PFC, 'P4': DRAINAGE_LINES['bile_duct']}[cited])])
             with self.subTest(cited=cited, part='assess'):  # 4f82e5056: [target, target], E3 alone, no consideration
-                self.assert_both(result, ATTEMPTED_Q, ATTEMPTED_REASON, 'bile_duct', ['performed_status', 'target'],
-                                 True)
-                self.assertEqual(proposal(result, '43240').clarifications[1].question, R6_TARGET)
+                self.assert_both(result, ATTEMPTED_Q, ATTEMPTED_REASON, 'bile_duct',
+                                 ['performed_status', 'target', 'target'], True)  # D161 (1): the hold's, then R6's
+                self.assertEqual(proposal(result, '43240').clarifications[2].question, R6_TARGET)
                 self.assertEqual(proposal(result, '43240').support['reason'], events.ATTEMPTED)
             with self.subTest(cited=cited, part='completeness'):
                 self.assertEqual(result.completeness['state'], 'incomplete')
@@ -222,35 +225,40 @@ class SevenFourIsAskedBesideTheTargetHold(SimpleTestCase):
     def test_d156_the_gallbladder_twin_likewise(self):
         """The review's mix_attempted_pfc_beside_gb (tools/rv_refute2.py), with 43259 beside it as well."""
         inv, text = two_drainages(ATTEMPTED_PFC, ATTEMPTED, other='gallbladder')
-        for picks in ([('43240', ATTEMPTED_PFC)], [('43240', DRAINAGE_LINES['gallbladder'])],
-                      [('43240', ATTEMPTED_PFC), ('43259', 'The linear echoendoscope was advanced to the stomach.')]):
-            with self.subTest(codes=len(picks), cited=picks[0][1][:30]):
+        exam_line = 'The linear echoendoscope was advanced to the stomach.'
+        for cited, picks in (('P3 the attempted pseudocyst drainage', [('43240', ATTEMPTED_PFC)]),
+                             ('P4 the gallbladder drainage', [('43240', DRAINAGE_LINES['gallbladder'])]),
+                             ('P3, beside 43259', [('43240', ATTEMPTED_PFC), ('43259', exam_line)])):
+            with self.subTest(codes=len(picks), cited=cited):  # D161 (4): one label per citation
                 self.assert_both(run(inv, text, picks), ATTEMPTED_Q, ATTEMPTED_REASON, 'gallbladder',
-                                 ['performed_status', 'target'], True)
+                                 ['performed_status', 'target', 'target'], True)
 
     def test_d156_a_pseudocyst_drainage_told_later_asks_its_time_beside_the_target(self):
         """The review's mix_later_pfc_beside_cbd: e5628be56 asked event_time about it, 4f82e5056 only the target
-        hold's question (the drainage listed in doubt and asked at service scope); now both - and the listing and its
-        service question stay as 4f82e5056 gives them (the code reads what the hold reads)."""
+        hold's question (the drainage listed in doubt and asked at service scope); now both - and the listing stays as
+        4f82e5056 gives it (the code reads what the hold reads). D161: 43240 asks the time with e5628be56's own words,
+        so the service question, the same question, fact and words, is the code's (D89)."""
         inv, text = two_drainages(LATER_PFC, dict(time=a('current_encounter', 'Later', ['P3'])))
         result = run(inv, text, [('43240', LATER_PFC)])
         with self.subTest(part='assess'):
             self.assert_both(result, LATER_Q, 'CPT Studio could not confirm from the document when the drainage (stent) '
                              'of the A 9 cm pancreatic pseudocyst in the pancreas was done.', 'bile_duct',
-                             ['event_time', 'target'], False)
-        with self.subTest(part='listing'):  # 4f82e5056's item and its service-scope question, kept
+                             ['event_time', 'target', 'target'], False)
+        with self.subTest(part='listing'):  # 4f82e5056's item kept; D161: its service question is now 43240's own
             self.assertEqual([(item['service'], item['reason'], item['events'])
                               for item in result.completeness['unresolved_items']], [('gi.eus', 'in_doubt', ['E2'])])
-            self.assertEqual([(spec.scope, spec.fact, spec.question) for spec in result.clarifications],
-                             [('service', 'event_time', LATER_Q)])
+            # D89: a code's question suppresses a service question only when it is the same question, fact and words -
+            # 43240's first clarification is ('event_time', LATER_Q), as e5628be56 asked it
+            self.assertEqual(proposal(result, '43240').clarifications[0].question, LATER_Q)
+            self.assertEqual([(spec.scope, spec.fact, spec.question) for spec in result.clarifications], [])
 
     def test_d156_with_the_examinations_own_target_verified_both_are_still_asked(self):
-        """Constructed (the recorded residual): with the examination's own target verified, R6 asks no structure
-        examined, so the code's one question carries 7.4's fact alone - [performed_status], where 4f82e5056 asks
-        [target] - with the target hold's question asked in its words after 7.4's."""
+        """Constructed (D156's recorded residual): with the examination's own target verified, R6 asks no structure
+        examined; D156's one question carried 7.4's fact alone ([performed_status], where 4f82e5056 asks [target]).
+        D161 (1): the hold's question is its own clarification - [performed_status, target]."""
         inv, text = two_drainages(ATTEMPTED_PFC, ATTEMPTED, other='gallbladder', examined=True)
         self.assert_both(run(inv, text, [('43240', ATTEMPTED_PFC)]), ATTEMPTED_Q, ATTEMPTED_REASON, 'gallbladder',
-                         ['performed_status'], True)
+                         ['performed_status', 'target'], True)  # D161 (1): the residual closed - both facts
 
     def test_d156_controls_no_candidate_meets_the_target_or_none_supports(self):
         """Unchanged from 4f82e5056: with no candidate meeting the target the hold asks its own question alone

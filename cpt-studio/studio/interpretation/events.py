@@ -406,7 +406,9 @@ class Evaluation:
     """What the per-code rule decided for one code. ``state``: performed | incomplete | not_performed | uncertain (the
     code's support state, FINAL 7.11); ``reason``: this module's reason constants; ``supporting``: E*(C), the event ids
     the code accounts for (empty when held or excluded); ``read``: every event the decision read (its fingerprint's
-    events); ``unverified``: the (event, attribute) pairs a decision read and found unusable."""
+    events); ``unverified``: the (event, attribute) pairs a decision read and found unusable; ``second``: a held code's
+    second question, which assess asks as its own clarification after ``question`` (DECISIONS D161: only
+    _target_hold sets one)."""
     code: str
     family: str
     link: mapping.CodeLink
@@ -422,6 +424,7 @@ class Evaluation:
     attempted: bool = False  # C-9: a non-examination code's act begun and not completed (the 52/53 consideration)
     unverified: tuple = ()
     bundled: tuple = field(default=())  # (event id, why) of supporting acts part of another documented act
+    second: Optional[Question] = None  # DECISIONS D161: _target_hold's target question beside 7.4's
 
     @property
     def held(self) -> bool:
@@ -768,18 +771,26 @@ def another_role_hold(code: str, link: mapping.CodeLink, own_acts: Sequence, rea
         return (2 <= len(body) <= 61 and body[0].isascii() and (body[0].isupper() or body[0].isdigit())
                 and all((char.isascii() and char.isalnum()) or char in _ROLE_HEADING_MARKS for char in body))
 
-    def signed(source: str, at: int) -> str:
+    def signed(source: str, at: int, begin: int) -> str:
         """The role whose signature (_ROLE_SIGNATURE: services.ROLE_SIGNATURE, c2e53f8e) stands in the label closed by
-        a colon before ``at`` - the text of ``at``'s line in ``source`` up to its last colon before ``at``, as the
-        installed release reads the sentence up to its last colon before the act ("Documented by Jo Rowe, RN: A 6 mm
-        polyp ...", "Per nursing note: ..."): anesthesia when both roles' signatures stand in it (the installed
-        release's last match), else nursing, else ''. A signature anywhere else in the sentence names no role ("...,
-        placed in formalin and documented by Jo Rowe, RN": DECISIONS D146)."""
-        head = source[source.rfind('\n', 0, at) + 1:at]
-        colon = head.rfind(':')
-        if colon < 0:
-            return ''
-        label = ''.join(chr(ord(char) + 32) if 'A' <= char <= 'Z' else char for char in head[:colon])  # re.A | re.I
+        a colon before ``at`` (the act's own words) - the text of ``source`` from the start of the line on which the
+        act's passage begins (``begin``), not only of ``at``'s own line, up to its last colon before ``at``, as the
+        installed release reads the sentence up to its last colon before the act, its line wraps kept ("Documented by
+        Jo Rowe, RN: A 6 mm polyp ...", "Per nursing note: ...", and either one hard-wrapped before the act's own words:
+        DECISIONS D152): anesthesia when both roles' signatures stand in it (the installed release's last match), else
+        nursing, else ''. The reaches are ROLE_SIGNATURE's: its [^.\\n] ones - a record word within 60 characters before
+        'by', a nurse word within 60 after 'by' and its space, an anesthetist word within 40 before a record word -
+        cross no period and no line break, and the space after 'by' or 'nursing' (\\s+ under re.A) may hold a line break
+        (D152). A signature anywhere else in the sentence names no role ("..., placed in formalin and documented by Jo
+        Rowe, RN": DECISIONS D146).
+
+        DECISIONS D158 (round 5f; colon4's K6): the label on ``at``'s own line is read first, as before D152 - the text
+        of that line up to its last colon before ``at`` - and the role it names is the role; only where it names none
+        is the label read from the line the passage begins on. So a role the act's own line names is never renamed by
+        a label on a line above it: 'CRNA charted the sedation:' / 'Documented by Jo Rowe, RN: <the act>', cited as
+        one passage, names the nursing entry, as the act's line and the installed release name it (its sentence begins
+        after the line a colon ends), not anesthesia (both roles' signatures in one label). It decides no hold: a label
+        that names a role on the act's line names one on the passage's lines too."""
         records, nurses, entries, anesthetists, charted = _ROLE_SIGNATURE
 
         def word(part: str, index: int) -> bool:  # an ASCII letter, digit or '_' at ``index`` (\w under re.A)
@@ -795,51 +806,73 @@ def another_role_hold(code: str, link: mapping.CodeLink, own_acts: Sequence, rea
                     index = part.find(term, index + 1)
             return out
 
+        space = _ROLE_SPACE + '\n'  # re.A's \s, a line break too: the label may now span lines (D152)
+
         def spaced(part: str, term: str) -> list:  # (start, end of its space) of each ``term`` a word starts, \s+ after
             out = []
             index = part.find(term)
             while index >= 0:
                 end = index + len(term)
-                if not word(part, index - 1) and end < len(part) and part[end] in _ROLE_SPACE:
-                    while end < len(part) and part[end] in _ROLE_SPACE:
+                if not word(part, index - 1) and end < len(part) and part[end] in space:
+                    while end < len(part) and part[end] in space:
                         end += 1
                     out.append((index, end))
                 index = part.find(term, index + 1)
             return out
 
-        role = ''
-        for part in label.split('.'):  # no reach crosses a period; the label, on one line, holds no line break
-            ended = {end for _, end in standing(part, records)}
-            nurse_at = {start for start, _ in standing(part, nurses)}
-            if any(any(end in ended for end in range(by - 60, by + 1))  # a record word within 60 before 'by'
-                   and any(start in nurse_at for start in range(after, after + 61))  # a nurse word within 60 after
-                   for by, after in spaced(part, 'by')) \
-                    or any(part.startswith(entry, after) and not word(part, after + len(entry))
-                           for _, after in spaced(part, 'nursing') for entry in entries):
-                role = 'nursing'
-            anesthetist_end = {end for _, end in standing(part, anesthetists)}
-            if any(any(end in anesthetist_end for end in range(start - 40, start + 1))
-                   for start, _ in standing(part, charted)):
-                return 'anesthesia'
-        return role
+        def read(head: str) -> str:  # the role the signature in ``head`` up to its last colon names, else ''
+            colon = head.rfind(':')
+            if colon < 0:
+                return ''
+            label = ''.join(chr(ord(char) + 32) if 'A' <= char <= 'Z' else char for char in head[:colon])  # re.A | re.I
+            role = ''
+            for part in label.split('.'):  # no reach crosses a period, nor ([^.\n]) a line break (D152)
+                ended = {end for _, end in standing(part, records)}
+                nurse_at = {start for start, _ in standing(part, nurses)}
+                if any(any(end in ended and '\n' not in part[end:by]  # a record word within 60 before 'by'
+                           for end in range(by - 60, by + 1))
+                       and any(start in nurse_at and '\n' not in part[after:start]  # a nurse word within 60 after
+                               for start in range(after, after + 61))
+                       for by, after in spaced(part, 'by')) \
+                        or any(part.startswith(entry, after) and not word(part, after + len(entry))
+                               for _, after in spaced(part, 'nursing') for entry in entries):
+                    role = 'nursing'
+                anesthetist_end = {end for _, end in standing(part, anesthetists)}
+                if any(any(end in anesthetist_end and '\n' not in part[end:start]
+                           for end in range(start - 40, start + 1))
+                       for start, _ in standing(part, charted)):
+                    return 'anesthesia'
+            return role
 
-    def words_at(place: Mapping, event: Mapping) -> Optional[int]:  # where the act's own words begin in ``place``
-        starts = [record['words']['start'] for record in (event.get('kind'), event.get('status'))
-                  if isinstance(record, Mapping) and isinstance(record.get('words'), Mapping)
-                  and place['start'] <= record['words']['start'] < place['end']]
+        own_line = source.rfind('\n', 0, at) + 1  # the act's own line, read first: its role is kept (D158)
+        first = source.rfind('\n', 0, min(begin, at)) + 1  # the line the passage begins on (D152)
+        return read(source[own_line:at]) or (read(source[first:at]) if first < own_line else '')
+
+    def words_at(place: Mapping, event: Mapping) -> Optional[int]:
+        """Where the act's own words begin in ``place``: the earliest of its kind's and status's words that begin in
+        it, each read after the last colon inside them - words that open at a label ("Documented by Jo Rowe, RN: A 6 mm
+        sessile polyp in the sigmoid colon was removed" as the status words) leave the label before that colon to
+        signed, as the installed release reads the label before its own act mention (DECISIONS D152) - else None."""
+        starts = []
+        for record in (event.get('kind'), event.get('status')):
+            words = record.get('words') if isinstance(record, Mapping) else None
+            if isinstance(words, Mapping) and place['start'] <= words['start'] < place['end']:
+                inner = str(words.get('text') or '').rfind(':')
+                starts.append(words['start'] + inner + 1 if inner >= 0 else words['start'])
         return min(starts) if starts else None
 
     def role_of(place: Mapping, event: Mapping) -> str:
         own = words_at(place, event)  # its kind's and status's words (the place's start where neither stands in it)
         role = label_of(place['text'])
+        lead = len(place['text']) - len(place['text'].lstrip())  # where the passage's own text begins (D152)
         if role or text is None or text[place['start']:place['end']] != place['text']:
-            return role or (signed(place['text'], own - place['start']) if own is not None else '')
-        at = place['start'] + len(place['text']) - len(place['text'].lstrip())
+            return role or (signed(place['text'], own - place['start'], lead) if own is not None else '')
+        at = place['start'] + lead
         start = text.rfind('\n', 0, at) + 1
         stop = text.find('\n', at)
         line = text[start:len(text) if stop < 0 else stop].strip(_ROLE_SPACE)  # ASCII whitespace only (D146)
         if physician(line):  # the physician's line - unless a signature label closes before the act's words (D146)
-            return signed(text, at if own is None else own)
+            return signed(text, at if own is None else own, at)
         role = label_of(line) or heading_of(line)
         while not role and start > 0:  # the lines above, up to the nearest heading
             above_end = start - 1
@@ -850,7 +883,7 @@ def another_role_hold(code: str, link: mapping.CodeLink, own_acts: Sequence, rea
             role = heading_of(above)
             if not role and heading_end(above):
                 break
-        return role or signed(text, at if own is None else own)  # no entry places it: its signature (D146)
+        return role or signed(text, at if own is None else own, at)  # no entry places it: its signature (D146)
 
     roles: set = set()
     shown: list = []
@@ -1028,7 +1061,25 @@ def _target_hold(code: str, link: mapping.CodeLink, supporting: Sequence, readin
     transmural drainage of the common bile duct was performed ...' (43240 cited on either) asked only which structure
     the bile duct drainage was done on: the failed pseudocyst drainage, which e5628be56 asked about ('... was begun and
     not completed. Confirm whether 43240 describes what was done on the date of service.') with the 52/53
-    consideration, was in no question of the assessment. Never a release: the code stays held."""
+    consideration, was in no question of the assessment. Never a release: the code stays held.
+
+    DECISIONS D161 (round 5f; the round-5e review of D156, problems 0-2): the two are TWO questions. 7.4's is the code's
+    question - its own fact, words and reason, its passages as 7.4 gave them (D143's STATEMENT and LEAD marks kept,
+    never re-spanned), then the hold's events and passages after its own, so the code names and shows what D156's one
+    question did - and the hold's target question is the evaluation's ``second``, which assess asks as its own
+    clarification (fact 'target'). D156 asked both in one question of 7.4's fact: where R6 asks no structure examined
+    (the EUS examination's own target given as the landmark it was advanced to, 'stomach'), 4f82e5056's target question
+    was only words inside a performed_status question, and a member's (code, family, fact) row for it was gone; and the
+    re-spanned passages lost D143's marks, so the statement_scope row about two denials showed one of them. 7.4 reads
+    the candidates that meet the defining target, and - with none in any group - those whose target is not usable
+    (unverified, unlocated or absent): 'EUS-guided transmural drainage of the pseudocyst was attempted but failed.'
+    whose target words 'the pseudocyst' Gemini tied to no lesion (unverified, landmark_missing) met neither, so beside
+    the bile duct's drainage it was in no question and had no 52/53 consideration, where e5628be56 and the installed
+    release ask about it. Never beside a candidate that meets the target: one question (7.4's first rule that applies)
+    would then name the other act - 'Later, EUS-guided transmural drainage of the pseudocyst was performed ...' (its
+    target tied to no lesion) read beside the failed drainage of the verified pseudocyst asks the first one's time and
+    drops the failed one's performed_status and its 52/53 consideration. A candidate whose target is verified elsewhere
+    (a gallbladder's) is still not read: 43240 cannot describe it. Never a release."""
     read = tuple(event['id'] for event in supporting)
     unsettled = next((event for event in supporting if not usable(event, 'target')), None)
     event = unsettled if unsettled is not None else supporting[0]
@@ -1041,20 +1092,31 @@ def _target_hold(code: str, link: mapping.CodeLink, supporting: Sequence, readin
     unverified = tuple((item['id'], 'target') for item in supporting if not usable(item, 'target')
                        and value(item, 'target') != 'not_stated')
     target = Question('target', question, reason, (event['id'],), _spans(anchors(reading, event)))
-    for group in requirements(link):  # D156 (2): 7.4 over the positive candidates that meet the defining target
-        fitting = [item for item in reading.events.values() if is_candidate(link, group, item)
-                   and value(item, 'status') in verify.POSITIVE + ('uncertain',) and not verified_other_time(item)
-                   and not verified_other_performer(item) and not supports(reading, link, group, item)
-                   and defining_fit(reading, link, item)]
-        if not fitting:
+
+    def positive(group):  # _without_support's positive candidates (repeated in place) that do not support the code
+        return [item for item in reading.events.values() if is_candidate(link, group, item)
+                and value(item, 'status') in verify.POSITIVE + ('uncertain',) and not verified_other_time(item)
+                and not verified_other_performer(item) and not supports(reading, link, group, item)]
+
+    # D156 (2): 7.4 over those that meet the defining target; D161 (2): with none in any group, those whose target
+    # is not usable - never beside one that meets it, whose question 7.4's one question would then displace
+    for reads in (lambda item: defining_fit(reading, link, item), lambda item: not usable(item, 'target')):
+        for group in requirements(link):
+            fitting = [item for item in positive(group) if reads(item)]
+            if fitting:
+                break
+        else:
             continue
         kept = _focused(code, link, group, fitting, reading)
         first = kept.question
-        asked = Question(first.fact, f'{first.question} {target.question}', f'{first.reason} {target.reason}',
-                         tuple(dict.fromkeys(first.events + target.events)), _spans(first.passages + target.passages))
-        return Evaluation(code, link.family, link, 'uncertain', kept.reason, asked.reason, read=read, question=asked,
-                          relation=kept.relation, attempted=kept.attempted,
-                          unverified=tuple(dict.fromkeys(kept.unverified + unverified)))
+        shown = {(span['start'], span['end']) for span in first.passages}  # D161 (3): 7.4's passages as they are
+        asked = Question(first.fact, first.question, first.reason, tuple(dict.fromkeys(first.events + target.events)),
+                         tuple(first.passages) + tuple(span for span in target.passages
+                                                       if (span['start'], span['end']) not in shown))
+        return Evaluation(code, link.family, link, 'uncertain', kept.reason, f'{first.reason} {target.reason}',
+                          read=read, question=asked, relation=kept.relation, attempted=kept.attempted,
+                          unverified=tuple(dict.fromkeys(kept.unverified + unverified)),
+                          second=target)  # D161 (1): the hold's target question, its own clarification
     return Evaluation(code, link.family, link, 'uncertain', SITE if unsettled is not None else ANOTHER_SITE, reason,
                       read=read, question=target, unverified=unverified)
 
@@ -1063,19 +1125,29 @@ def _target_hold(code: str, link: mapping.CodeLink, supporting: Sequence, readin
 
 def _without_support(code: str, link: mapping.CodeLink, group: Sequence[str], kept: Sequence, own: tuple,
                      reading: Reading) -> Evaluation:
+    """7.4-7.6 for a code no event supports. DECISIONS D157 (round 5f): an act of the code's kind IN DOUBT
+    (_kind_in_doubt: a bleeding control in doubt, no candidate of any code) never lets a denial the code cites alone
+    exclude it (_exclusion, D157 (2)); and the code held not documented beside it names that act as the act its
+    question is about (Question.events, support['question_events']; its fact, words, reason and passages unchanged),
+    so coverage.in_doubt_questions passes the act's (family, fact) service slot to an act in doubt no code's question
+    names (D157 (3)): "At that time, cautery was applied to the ulcer base." (in doubt) before "At that time, biopsies
+    of the gastric antrum were taken with cold forceps." with 43255 asks the biopsy's "done at this encounter?", whose
+    answer decides the missing 43239, as f9013e12e and e5628be56 ask it."""
     candidates = [event for event in reading.events.values() if is_candidate(link, group, event)]
     positive = [event for event in candidates if value(event, 'status') in verify.POSITIVE + ('uncertain',)
                 and not verified_other_time(event) and not verified_other_performer(event)]
     if positive:
         return _focused(code, link, group, positive, reading)
-    decided = _exclusion(code, link, group, candidates, kept, reading)
+    in_doubt = _kind_in_doubt(reading, link, group)  # D157
+    decided = _exclusion(code, link, group, candidates, kept, reading, in_doubt)
     if decided is not None:
         return decided
     act = group_label(link, group)
     reason = wording.not_documented_reason(act)
     return Evaluation(code, link.family, link, 'uncertain', NOT_DOCUMENTED, reason,
                       read=tuple(event['id'] for event in candidates),
-                      question=Question('performed_status', wording.performed_question(code), reason, (), own))
+                      question=Question('performed_status', wording.performed_question(code), reason,
+                                        tuple(event['id'] for event in in_doubt), own))  # D157 (3): the act it is about
 
 
 def _focused(code: str, link: mapping.CodeLink, group: Sequence[str], positive: Sequence, reading: Reading
@@ -1632,12 +1704,40 @@ def _doubted(reading: Reading, link: mapping.CodeLink, group: Sequence[str], can
     return False
 
 
+def _kind_in_doubt(reading: Reading, link: mapping.CodeLink, group: Sequence[str]) -> list:
+    """DECISIONS D157 (2): the acts of the code's kind IN DOUBT in the encounter that are no candidate of it - each
+    bleeding control in doubt (mapping.POSSIBLE_BLEEDING_CONTROL: D115's clip or injection, D142's bleeding_control
+    kind, whose own words state no bleeding) stated here (positive or uncertain, verified neither at another time nor by
+    another performer) that, read as the bleeding control it may be, is a candidate of the group (is_candidate: of the
+    code's family); in the reading's order. Structural - the act's catalogue kind against the code's link - never its
+    words. Such an act matches no code (D115), so a candidate reading never sees it; read as an absence it lets a denial
+    decide the code."""
+    return [event for event in reading.events.values()
+            if event.get('catalogue_kind') == mapping.POSSIBLE_BLEEDING_CONTROL
+            and value(event, 'status') in verify.POSITIVE + ('uncertain',)
+            and not verified_other_time(event) and not verified_other_performer(event)
+            and is_candidate(link, group, {**event, 'catalogue_kind': mapping.BLEEDING_CONTROL})]
+
+
 def _exclusion(code: str, link: mapping.CodeLink, group: Sequence[str], candidates: Sequence, kept: Sequence,
-               reading: Reading) -> Optional[Evaluation]:
+               reading: Reading, in_doubt: Sequence = ()) -> Optional[Evaluation]:
+    """7.5. DECISIONS D157 (2) (round 5f; D154's class (iv), and the round-5e review of D154, problem 2): while an act
+    of the code's kind is IN DOUBT in the encounter (``in_doubt``: _kind_in_doubt), a denial of the kind the code cites
+    alone (cover 'citation') never excludes it - a doubt is never a fact (D87), so it cannot be outweighed into "not
+    done". The code is held with the question 7.4 asks of the acts in doubt as of its candidates (_focused's h1-h5:
+    the same-event contradiction naming the act and the denial, the act's unverified time ...), which is the question
+    f9013e12e asked where D149's key read the act as a control done; when none of h1-h5 applies (_focused's last resort,
+    reason UNVERIFIED with nothing unverified), with the statement_scope question on that denial, as on a partial
+    cover, naming the denial and the acts in doubt. "A 12 mm clean-based ulcer was seen in the gastric antrum." /
+    "Cautery was applied to the ulcer base." (in doubt, D142) / "No other bleeding control was required." with 43255
+    citing only the denial was excluded on e5628be56 (f9013e12e held it statement_scope; c2e53f8e holds it
+    performed_status); so was D115's "Two hemostatic clips were placed across the ulcer." with the same denial on every
+    new-path head. Either way the decision reads the denial alone (``read``), so the acts in doubt stay listed in doubt
+    (reconcile lists no act a code reads). A denial with no act of the kind in doubt beside it decides as before."""
     if _doubted(reading, link, group, candidates):
         return None
     places = _kept_places(kept)
-    partial = None
+    partial = cited = None
     act = group_label(link, group)
     for event in reading.events.values():
         if not concerns(link, group, event) or value(event, 'scope') == 'exceptive':  # C-7: never excludes
@@ -1646,6 +1746,9 @@ def _exclusion(code: str, link: mapping.CodeLink, group: Sequence[str], candidat
         if not basis:
             continue
         cover = coverage_of(reading, event, places)
+        if cover == 'citation' and in_doubt:  # D157 (2): beside an act of the kind in doubt, asked - never decided
+            cited = cited or event
+            continue
         if cover == 'citation':
             words = (event[name].get('words') if isinstance(event.get(name), Mapping) else None) \
                 or words_of(event, 'status', 'kind')
@@ -1655,6 +1758,20 @@ def _exclusion(code: str, link: mapping.CodeLink, group: Sequence[str], candidat
                               exclusion=Exclusion(event['id'], name, decided, basis, words, reason, cover))
         if cover == 'partial' and partial is None:
             partial = event
+    if cited is not None:  # D157 (2): never decided. Read stays the denial's alone, as on a partial cover - an act a
+        # code reads is never listed in doubt (reconcile) - so the acts in doubt stay listed
+        found = _focused(code, link, group, in_doubt, reading)  # 7.4 over the acts in doubt, as over candidates
+        if found.reason != UNVERIFIED or found.unverified:  # h1-h5 asks of one (not the last resort): f9013e12e's
+            return Evaluation(code, link.family, link, 'uncertain', found.reason, found.detail, read=(cited['id'],),
+                              question=found.question, relation=found.relation, attempted=found.attempted,
+                              unverified=found.unverified)
+        statement = statement_text(reading, cited)  # else the statement_scope question on the cited denial
+        reason = wording.scope_reason(statement, act)
+        ids = (cited['id'],) + tuple(item['id'] for item in in_doubt)
+        shown = anchors(reading, cited) + [place for item in in_doubt for place in anchors(reading, item)]
+        return Evaluation(code, link.family, link, 'uncertain', STATEMENT_SCOPE, reason, read=(cited['id'],),
+                          question=Question('statement_scope', wording.scope_question(statement, act), reason, ids,
+                                            _spans(shown + list(places))))
     if partial is None:
         return None
     statement = statement_text(reading, partial)

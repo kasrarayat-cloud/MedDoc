@@ -83,11 +83,12 @@ class D104UncertainDefiningAct(SimpleTestCase):
 
     def test_d104_claims_read_an_uncertain_defining_act_and_still_not_a_denied_or_planned_one(self):
         """_claims(43265) is the extraction (E4) for every uncertain wording; nothing for a denied, planned or earlier
-        lithotripsy (D74's unclaimed shapes, unchanged)."""
+        lithotripsy (D74's unclaimed shapes, unchanged). DECISIONS D163 (round 5f): and the held 43265's own uncertain
+        lithotripsy (E3), as a held code keeps the acts its evaluation read; no rival claims E3, so no outcome moves."""
         for name in UNCERTAIN:
             inv, text, lines = uncertain_clearance(name)
             with self.subTest(claimed=name):
-                self.assertEqual(claims(inv, text, '43265', lines['P3']), ('E4',))
+                self.assertEqual(claims(inv, text, '43265', lines['P3']), ('E4', 'E3'))  # D163: E3 too
         unclaimed = {
             'denied': stone_clearance('No lithotripsy was performed for the 15 mm stone in the common bile duct.',
                                       status='not_performed', status_words='No lithotripsy was performed'),

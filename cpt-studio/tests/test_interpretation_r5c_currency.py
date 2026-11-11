@@ -161,12 +161,15 @@ class D131SameDayWordsWhateverTouchesThem(SimpleTestCase):
         """The review's control: 'Earlier today before her visit' (no comma) was ON at 46e461e7f and is ON now, held
         with separate_em as c2e53f8e holds it. What holds no same-day word is unchanged, OFF and READY as at
         46e461e7f: 'Earlier this year, at 8:30' and 'Previously, at 8:30' (another date; c2e53f8e holds both, its
-        routing reading the excision line as performed whatever its time words), and 'earlier in the day, before her
-        visit' - D109's recorded residual (no whole frame; c2e53f8e holds it)."""
-        inv, text = cyst_with_time('Earlier today before her visit')
-        self.assertEqual(day_of(inv), facts.ON)
-        held_for_separate_em(self, em(inv, text), NON_GI_LABEL)
-        for words in ('earlier in the day, before her visit', 'Earlier this year, at 8:30', 'Previously, at 8:30'):
+        routing reading the excision line as performed whatever its time words). DECISIONS D162 (round 5f) closes
+        D109's recorded residual, which this pin held OFF and READY: 'earlier in the day, before her visit' holds a
+        whole frame anywhere in its words, so it is ON and held with separate_em, as c2e53f8e holds it."""
+        for words in ('Earlier today before her visit', 'earlier in the day, before her visit'):
+            with self.subTest(words=words):
+                inv, text = cyst_with_time(words)
+                self.assertEqual(day_of(inv), facts.ON)
+                held_for_separate_em(self, em(inv, text), NON_GI_LABEL)
+        for words in ('Earlier this year, at 8:30', 'Previously, at 8:30'):
             with self.subTest(words=words):
                 inv, text = cyst_with_time(words)
                 self.assertEqual(day_of(inv), facts.OFF)

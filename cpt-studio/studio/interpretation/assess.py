@@ -618,6 +618,8 @@ def _proposal(selection: _Selection, key: str, enc: _Encounter, reading: events.
     if not excluded:
         if evaluation.question is not None:
             clarifications.append(_spec(evaluation.question, selection.family, key))
+        if evaluation.second is not None:  # DECISIONS D161: a second question of the code, its own clarification
+            clarifications.append(_spec(evaluation.second, selection.family, key))
         included = enc.bases.get(selection.code)
         if included:
             held, question = combination.base_hold(selection.code, selection.family, key, included, label)
@@ -749,25 +751,63 @@ def _claims(selection: _Selection, reading: events.Reading) -> tuple:
     dilated with a through-the-scope balloon to 15 mm." and 43248 on "The stricture was then dilated with a Savary dilator
     passed over a guidewire to 17 mm." were both READY for one stricture, where the installed release holds both with
     competing_codes. A code of any technique (43245, 43213) claims as before, and an act is never paired with itself: a
-    technique code held for its site (D29) claims nothing from the one dilation a code of any technique supports."""
+    technique code held for its site (D29) claims nothing from the one dilation a code of any technique supports.
+
+    DECISIONS D163 (round 5f, narrowing only; round5e colon4's STOP, its disagreements 1-3, and review:ercp5 problems
+    0-1): a hold is the final decision, never a lowered input the next reader re-interprets. A held code's evaluation
+    supports nothing, so it claimed nothing here; a RIVAL that competed with it for the same act then lost its
+    competing_codes hold and went READY - a release through the next reader. 43264 held another_role (D124, D146: "Nurse:
+    The stone fragments were extracted ...", "Recovery nurse's note") or nothing_retrieved (D106, D155) left 43265 READY
+    on the lithotripsy of one stone clearance, where the installed release with its participants holds both with
+    competing_codes ("a misread role never releases anything": its held match keeps its acts). A code HELD by any hold
+    (state 'uncertain', no supporting event) now keeps as claims the acts its evaluation names or read - its question's
+    events and the acts the hold was decided on (Evaluation.read) - that it could account for, as it would claim them as
+    supporting were its doubt resolved: acts of its family and of a kind of its requirement groups (events.is_candidate),
+    stated positive or uncertain, possibly current (D62) and not verified as another performer's; for a code that names
+    a technique, of its device class or not verified as a class, and not verified outside its site class (D29), as
+    _technique_doubts reads them (R4: a dilation of another technique is no act the code accounts for). They are ADDED
+    to what D55, D74 and D118 claim above, which read the code's supporting events only and are unchanged, so a hold only
+    ever adds a competition - never READY, never an exclusion, never a question dropped. Only the competition reads
+    them: E* (support.acts) is unchanged. As integrated (variant G4): a TECHNIQUE code (link.technique, a dilation code)
+    held for its SITE (events.SITE: the place unsettled for its class) adds no claim - D118's rule, 'an act is never
+    paired with itself', so FRESH-2 fb07's shape keeps 43245 READY beside 43249 held for its site (the general form
+    held 43245 competing_codes there, a cost on an attested document); a technique code held for any other reason
+    (another_role: a dilation documented only in a nurse's entry) keeps its acts, so its rival keeps competing."""
     evaluation = selection.evaluation
     supporting = tuple(evaluation.supporting)
     link = evaluation.link
+    site = mapping.DILATION_SITES.get(link.code, '')
+
+    def own(event: Mapping) -> bool:  # D163: an act the held code could account for
+        return (any(events.is_candidate(link, group, event) for group in events.requirements(link))
+                and events.value(event, 'status') in events.verify.POSITIVE + ('uncertain',)
+                and coverage.possibly_current(event) and not events.verified_other_performer(event)
+                and (not link.technique or mapping.code_technique(event) in ('', link.technique))
+                and not (site and events.site_fit(reading, event, site) == events.OUTSIDE))
+
+    named = ((tuple(evaluation.question.events) if evaluation.question is not None else ()) + tuple(evaluation.read)
+             if not supporting and evaluation.held
+             and not (link.technique and evaluation.reason == events.SITE) else ())  # D163 G4: D118's site rule
+    held = tuple(eid for eid in dict.fromkeys(named) if eid in reading.events and own(reading.events[eid]))
+
+    def claimed(found: tuple) -> tuple:  # D163: the held code's own acts beside what it claims
+        return found + tuple(eid for eid in held if eid not in found)
+
     if link.technique:  # D118
         supporting = supporting + _stricture_claims(link, supporting, reading)
     if not link.defining:
-        return supporting
+        return claimed(supporting)
     family = [event for event in reading.events.values() if event.get('family') == link.family]
     stated = any((event.get('catalogue_kind') or '') in link.defining
                  and events.value(event, 'status') in events.verify.POSITIVE + ('uncertain',)  # D104
                  and coverage.possibly_current(event)
                  for event in family)
     if not supporting and not stated:
-        return supporting
+        return claimed(supporting)
     kinds = set(link.acts) - set(link.defining)
     extra = tuple(event['id'] for event in family if (event.get('catalogue_kind') or '') in kinds
                   and coverage.current_performed(event) and event['id'] not in supporting)
-    return supporting + extra
+    return claimed(supporting + extra)
 
 
 def _one_stricture(reading: events.Reading, first: Mapping, second: Mapping) -> bool:
@@ -1614,8 +1654,13 @@ def assess(*, inventory, context, normalized: Optional[NormalizedResponse], prov
                                sessions_=sessions_)
     if merge is not None:
         provider.append(_second_review_check(merge, final.unresolved))
-    asked = {(c.family, c.fact, c.question) for p in unanswered for c in p.clarifications}  # D89
-    service_questions = coverage.in_doubt_questions(reading, final, asked)
+    # D89, read after the member answers (round 5f integration; review:eus6 problem 0): the questions the proposals ask
+    # or a member answered (an excluded code keeps the questions its answers closed, _MemberAnswers._excluded), so a
+    # question that left with a code an answer to ANOTHER of its questions excluded never silences the service's same one
+    asked = {(c.family, c.fact, c.question) for p in proposals for c in p.clarifications}
+    service_questions = coverage.in_doubt_questions(reading, final, asked, holding=tuple(  # D157 (3): their acts
+        eid for p in unanswered if (p.support or {}).get('reason') == events.NOT_DOCUMENTED  # review:egd6 problem 0
+        for eid in (p.support or {}).get('question_events') or ()))
     service_questions += coverage.service_extent_questions(reading, sessions_, asked)  # DECISIONS D125
     unsupported = _unsupported(selections)
     answered = response is not None or (harness is not None and any(p.state == 'read' for p in harness.inputs))

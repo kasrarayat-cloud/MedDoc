@@ -9,6 +9,8 @@ entry and round5e/egd5/patch-with-1.diff. Only the corrected claims are built:
   the dilation's question and not the biopsy's, which decides the missing 43239; the biopsy stays listed in doubt.
 - (3) problems 4 and 6: ``holding`` is inert on the live path (assess passes none) - pinned on assess's own call;
   catalogue_kind's docstring says that a device-named event with a verified hemostasis purpose is in doubt too.
+  CHANGED by DECISIONS D157 (3) (round 5f): assess passes the proposals' question events as ``holding`` (the pin below
+  CHANGED); (1) is built there, with its companions (tests/test_interpretation_r5f_egd.py).
 Built with the round-5 EGD builders (tests/test_interpretation_r5_egd.py). Nothing is sent."""
 from __future__ import annotations
 
@@ -81,10 +83,11 @@ class D154QuestionOrderClaim(SimpleTestCase):
                     in_doubt=[(item, 'E3'), (item, 'E4')], covered={'gi.egd': ['43245', '43249']}), holding=holding)
                 self.assertEqual([spec.question for spec in found], [DILATION_QUESTION])
 
-    def test_d154_holding_is_inert_on_the_live_path(self):
-        """assess calls coverage.in_doubt_questions(reading, final, asked) and passes no ``holding`` (the docstring's
-        claim): every call in assess.py has three positional arguments and no keyword."""
+    def test_d154_d157_holding_is_live_on_assess_call(self):
+        """CHANGED with DECISIONS D157 (3) (was test_d154_holding_is_inert_on_the_live_path, asserting no keyword):
+        assess calls coverage.in_doubt_questions(reading, final, asked, holding=...) with the events the proposals' own
+        questions name - its one call in assess.py has three positional arguments and the ``holding`` keyword."""
         tree = ast.parse((APP / 'studio' / 'interpretation' / 'assess.py').read_text(encoding='utf-8'))
         calls = [node for node in ast.walk(tree) if isinstance(node, ast.Call)
                  and isinstance(node.func, ast.Attribute) and node.func.attr == 'in_doubt_questions']
-        self.assertEqual([(len(call.args), [k.arg for k in call.keywords]) for call in calls], [(3, [])])
+        self.assertEqual([(len(call.args), [k.arg for k in call.keywords]) for call in calls], [(3, ['holding'])])

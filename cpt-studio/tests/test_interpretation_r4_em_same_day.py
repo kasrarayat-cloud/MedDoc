@@ -326,15 +326,18 @@ class D109SameDateFrames(SimpleTestCase):
         """facts.day_of over an earlier_encounter EGD: words made only of whole same-date frames are ON (verified by
         their 'earlier', or not: 'later in the day'); words with anything else, or another day's period, are OFF as
         before; a bare 'that day' or 'in the morning' is no frame and, with no earlier marker, UNDATABLE as before;
-        'earlier today' (SAME_DAY_WORDS, read anywhere in the words) is ON as before."""
+        'earlier today' (SAME_DAY_WORDS, read anywhere in the words) is ON as before. DECISIONS D162 (round 5f): a
+        frame standing whole anywhere in the words of a verified earlier time now places it ON - 'earlier in the day,
+        before her visit' (D109's recorded residual), and also 'earlier in the morning of her admission', whose other
+        words name another day (recorded, as c2e53f8e reads it: tests/test_interpretation_r5f_currency.py)."""
         cases = (
             ('earlier in the day', facts.ON), ('Earlier in the day,', facts.ON),
             ('Earlier that day', facts.ON),  # D112 read it by its 'earlier' marker; D132: anaphoric, a frame here
             ('Earlier in the morning', facts.ON), ('later in the day', facts.ON), ('earlier this afternoon', facts.ON),
             ('earlier in the day; earlier today', facts.ON), ('earlier today', facts.ON),
             ('I performed it earlier today', facts.ON), ('Earlier on the same day', facts.ON),
-            ('earlier in the day, before her visit', facts.OFF), ('earlier in the day in 2024', facts.OFF),
-            ('earlier in the morning of her admission', facts.OFF), ('earlier this year', facts.OFF),
+            ('earlier in the day, before her visit', facts.ON), ('earlier in the day in 2024', facts.OFF),  # D162
+            ('earlier in the morning of her admission', facts.ON), ('earlier this year', facts.OFF),  # D162, recorded
             ('earlier in the week', facts.OFF), ('previously', facts.OFF),
             ('that day', facts.UNDATABLE), ('in the morning', facts.UNDATABLE),  # no marker: unverified, as before
         )
@@ -362,13 +365,14 @@ class D109SameDateFrames(SimpleTestCase):
             self.assertNotIn(bare, facts._SAME_DAY_FRAMES)
 
     def test_d109_controls_another_date_stays_off(self):
-        """What the frames must NOT move: an act verified 'in 2024' (finding 14's control) and one whose words carry
-        more than frames are OFF, and 99213 is READY as before."""
+        """What the frames must NOT move: an act verified 'in 2024' (finding 14's control) is OFF, and 99213 is READY
+        as before. DECISIONS D162 (round 5f; D109's recorded residual, the round-5e currency review's problem 5): the
+        act whose words carry more than frames, 'earlier in the day, before her visit', is ON now - a frame standing
+        whole anywhere in a verified earlier time's words - and 99213 is held with separate_em, as c2e53f8e holds it
+        (it was this pin's second control: OFF and READY)."""
         controls = (
             ('in 2024', 'I performed an upper endoscopy in 2024, which showed a clean-based duodenal ulcer.',
              'in 2024'),
-            ('words beyond the frames', 'I performed an upper endoscopy earlier in the day, before her visit.',
-             'earlier in the day, before her visit'),
         )
         for label, line, words in controls:
             with self.subTest(label):
@@ -376,6 +380,12 @@ class D109SameDateFrames(SimpleTestCase):
                                         words)
                 self.assertEqual(day_of(inv), facts.OFF)
                 ready_with_no_procedure_day(self, em(inv, text))
+        with self.subTest('words beyond the frames (D162)'):
+            inv, text = earlier_act('I performed an upper endoscopy earlier in the day, before her visit.',
+                                    'examination', 'upper endoscopy', a('egd', 'upper endoscopy', ['P1']),
+                                    'earlier in the day, before her visit')
+            self.assertEqual(day_of(inv), facts.ON)
+            held_for_separate_em(self, em(inv, text), profiles.PROFILES['gi.egd'].label)
 
 
 # --- findings 15 and 16: a non-GI or unidentified act counts only as an act of this encounter -------------------------

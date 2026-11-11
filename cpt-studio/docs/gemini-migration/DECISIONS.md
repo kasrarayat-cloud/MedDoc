@@ -10358,3 +10358,1593 @@ evidence, and such an argument comes back to the owner of these decisions.
     and flags installed cases assessed on another date (P3). It replays HEAD-normalized inventories, so normalize-level
     changes (D157's) need re-normalizing probes beside it.
   - Saved: gemini-migration/round5e/ (patches, entries, results, journal, workflow, integrate.sh).
+- **D157 D149 (2)'s adjective key is withdrawn where the family's catalogue lists the bleeding control; a denial of the
+  code's kind cited alone never excludes the code while an act of that kind is in doubt; an act a code held not
+  documented names yields its service slot (2026-11-11; round 5f, narrowing only; the round-5d review of D149,
+  round5d/results-wf_2cb07bb8-45e.json 'review:egd4' problem 0; round5e/results-wf_ec2ec26b-bed.json 'repair:egd5'
+  (its release census and disagreements 1-2, its held-back patch-with-1.diff) and 'review:egd5' problems 0-2; builds
+  D154's stopped (1) with its companions; repair key egd6).** Built on f9013e12e. Every input below was run on
+  byte-identical texts and replayed citations through the new path of e5628be56, f9013e12e and this build, each
+  normalizing the input from its Gemini answer on its own tree (round5f/egd6/tools/probe_new.py over the round-5 EGD
+  builders), and through c2e53f8e (probe_installed.py: jobs._assess_child with a replayed proposal response, gi context
+  from the text, an empty reference lookup; once with no participant, once with Astra and Fable both failed - the two
+  gave the same code outcomes on 131 of the 132 inputs; on D142's variant (a), whose outcome does not move here (only
+  43255's question events), c2e53f8e with the participants failed holds 43236 and 43243 competing_codes where it is
+  READY plain). The 132 inputs: egd5's 65
+  (cases_d154.py), egd5's reviewer's 32 (cases_rv.py), this repair's 30 pin inputs (tests/test_interpretation_r5f_egd.py)
+  and 5 more (cases_extra.py). Every input is constructed (synthetic, written to prompt.py's contract). The attested
+  shapes are FRESH's: 'cautery' filed as kind bleeding_control with technique electrocautery and purpose not_stated (11
+  FRESH-2 and 13 FRESH-1 denials, 'No clip or cautery was required at this site.', fresh2-frozen/A/note8/r1 E23, with
+  its scope words 'at this site' and no target lesion); the performed forms are constructed, as is every denial worded
+  'No other bleeding control was required.'.
+  - **As integrated (round 5f integration; review:egd6 problem 0).** Item (3) is narrowed at integration. assess passes
+    as ``holding`` only the question events of the proposals held NOT DOCUMENTED, which is what this entry's title
+    states. The build passed those of every proposal, so the whole act that a bundling-identity question names
+    (act_target, events.py:513-515) also yielded its service slot. That dropped the timed snare's question, which both
+    bases ask and whose answer decides the missing 43251 (or 45385 on the colonoscopy twin). Pinned in
+    tests/test_interpretation_r5f_integration.py. All 86 EGD pins (r5f, r5e, r5d, r5c, r5) pass with the narrowing.
+  - **The source problems, reproduced on f9013e12e** (round5f/egd6/probe/final-*.jsonl; table census/RELEASE-CENSUS-probe.txt):
+    - egd4 problem 0 (critical, introduced by D149 (2)): (a) 'A 4 mm angioectasia was seen in the cecum.' / 'Cautery was
+      applied at this site.' (FRESH's filing, performed), 45382 with 45378 and alone: f9013e12e 45382 READY; e5628be56 and
+      c2e53f8e held [performed_status]. (b) 'Cautery was applied to the ulcer base.' beside 'A 12 mm clean-based ulcer was
+      seen in the gastric antrum.', 43255 alone and with 43235: f9013e12e READY; e5628be56 and c2e53f8e held. (c) '... to
+      prevent bleeding.' (purpose prophylaxis), 'Two hemoclips were placed across the ulcer base.' and 'Two clips were
+      placed across the ulcer.' filed as bleeding_control: f9013e12e READY; held on both others. (d) READY on the wrong
+      act: dilute epinephrine filed as bleeding_control (f9013e12e 43255 READY, 43236 held; c2e53f8e 43255 held, 43236
+      READY) and argon plasma coagulation of 'Three angioectasias were seen in the gastric body.' (f9013e12e 43255 READY,
+      43270 held; c2e53f8e 43270 READY, 43255 held). The reviewer's FRESH-scope variant (45382 citing only FRESH's
+      denial, beside the cecal cautery and a polypectomy): f9013e12e 45382 READY on the cecal cautery; e5628be56 and
+      c2e53f8e excluded.
+    - D154's class (iv) (the EXCLUDE the withdrawal brings back): P6 'A 12 mm clean-based ulcer was seen in the gastric
+      antrum.' / P7 'Cautery was applied to the ulcer base.' / P8 'No other bleeding control was required.' (bleeding_
+      control, not_performed), 43255 citing P8: f9013e12e held [statement_scope] (its control done, the denial
+      unresolved with it); e5628be56 and egd5's (1) build excluded; c2e53f8e held [performed_status]. The one-sentence
+      twin 'Cautery was applied to the ulcer base, and no further bleeding control was required.' citing the denial's
+      words: the same. FRESH's denial filing cited alone by 45382 beside 'Cautery was applied at this site.' (egd5's
+      scope on the polyp's lesion, and unscoped): f9013e12e held [statement_scope]; e5628be56 excluded; c2e53f8e EXCLUDED
+      (not held, as the spec's parenthesis says: c2e53f8e holds the EGD inputs [performed_status] and excludes these).
+    - review:egd5 problem 2 (pre-existing on every new-path head): 'Two hemostatic clips were placed across the ulcer.'
+      (D115) or 'Hemostatic cautery was applied to the ulcer base.' beside the clean-based ulcer, then 'No other bleeding
+      control was required.', 43255 citing only that denial: excluded on e5628be56 and f9013e12e; c2e53f8e held
+      [performed_status].
+    - D154's class (ii) (review:egd5 problem 1, QUESTION-DROPPED against both bases): 'At that time, cautery was applied
+      to the ulcer base.' then 'At that time, biopsies of the gastric antrum were taken with cold forceps.', with 43255 and
+      43235 and with 43255 alone: f9013e12e (43255 held event_time on the cautery) and e5628be56 (43255 not documented;
+      D142's profile order) ask the biopsy's "done at this encounter?", which decides the missing 43239; egd5's (1)
+      build asked the cautery's; c2e53f8e asks none (the biopsy listed not covered).
+  - **(1) The withdrawal, keyed on the family's catalogue (mapping.hemostasis_in_doubt only).** An event of the
+    bleeding_control kind is read by D149's adjective key only when its family's catalogue acts list no bleeding control
+    (catalogue.entry(family).acts; measured on catalogue.py: the upper endoscopy, the enteroscopy, the colonoscopy and
+    the flexible sigmoidoscopy list it; the ERCP, the EUS, the capsule, motility, reflux, anorectal, feeding-tube,
+    sedation, office and 'other' families do not, nor does an event with no family). In the listed families D142's arm
+    stands as e5628be56 has it (whatever its purpose and whatever names it). Measured over a grid of 388,800 events
+    (tools/rule_grid.py: kind, kind words, device words, purpose value/words/state, status value/state, target words,
+    each of the 14 catalogue families and none; real word records, so the adjective and the bleeding words are read;
+    each base's function exec'd beside the build's identical helpers): the build equals e5628be56's rule in the four
+    listed families and f9013e12e's everywhere else, 0 mismatches. Elsewhere the key stays, as egd5's measured
+    alternative 2 (mut-3): the ERCP's
+    'Cautery was applied to the sphincterotomy site.' and 'Dilute epinephrine was injected at the sphincterotomy site.'
+    (filed as bleeding_control) and the EUS's 'Cautery was applied to the puncture site.' keep ('bleeding_control',
+    'not_covered', True) with coding incomplete, as f9013e12e lists them (e5628be56 and c2e53f8e list nothing). Every
+    egd4 problem-0 input above is held again, equal to e5628be56 in every code outcome; the reviewer's FRESH-scope
+    variant is held (below). catalogue_kind's docstring still describes D149's key without the family condition
+    (outside this ownership: recorded).
+  - **(2) A denial cited alone never outweighs a doubt (events.py: _without_support, the new _kind_in_doubt, _exclusion).**
+    _kind_in_doubt: the acts of the code's kind in doubt that no candidate reading sees - each event whose catalogue kind
+    is mapping.POSSIBLE_BLEEDING_CONTROL, stated positive or uncertain, verified neither at another time nor by another
+    performer, that read as the bleeding control (its kind replaced by BLEEDING_CONTROL) is a candidate of the code's
+    group (is_candidate: the code's family on its catalogue route). Structural: catalogue kinds and the code's link,
+    never words. In _exclusion, a denial whose cover is 'citation' (the code cites it and nothing else) beside such an
+    act is never an exclusion. The code is held with the question 7.4 asks of the acts in doubt as of candidates
+    (_focused over them, h1-h5) - which is the question f9013e12e asked where D149's key read the act as a control done:
+    on P6/P7/P8, 'Does "No other bleeding control was required." apply to the possible bleeding control (electrocautery)
+    of the 12 mm clean-based ulcer in the gastric antrum ("was applied")?' (statement_scope, naming E2 and E3; f9013e12e's
+    words with 'bleeding control' read 'possible bleeding control'). When none of h1-h5 applies (_focused's last resort:
+    reason UNVERIFIED with nothing unverified - h4 always records what is unverified), the code is held with the
+    statement_scope question on the cited denial, as on a partial cover, naming the denial and the acts in doubt
+    ('Does "No other bleeding control was required" apply to the bleeding control this code accounts for?'): D115's
+    clip (no relation to the denial) and FRESH's own scope (its words relate the denial to no act). Either way the
+    decision reads the denial alone (Evaluation.read), so the acts in doubt stay listed in doubt: built first with the
+    acts in ``read``, reconcile (which lists in doubt no act a code reads) dropped the cautery's in-doubt item and its
+    service question - a LISTING-DROPPED against e5628be56, caught by this census and pinned (mutants M4a, M4b).
+    Measured alternatives, not kept: the statement_scope question on the denial alone (the first build, mutant M8:
+    beside the timed cautery it asked statement_scope where f9013e12e asks event_time, and on P6/P7/P8 it asked the
+    denial's scope beside the act's near-identical service question); and 7.4 with its last resort (round5f/egd6/mut-3,
+    census/probe-census-varB-refined.txt: the same census classes as this build, but 'Was the possible bleeding control
+    (clip) ... done?' where no rule applies - a done-question about a clip whose doubt is its purpose).
+  - **(3) The service slot (coverage.in_doubt_questions' docstring and comments only - its code is AST-equal to
+    f9013e12e's with docstrings blanked - and assess.py:1618-1619).** D149's ``holding`` order was built and inert: assess
+    passed none. assess.py's one call now passes the events every proposal's own question names (support
+    ['question_events'] of the unanswered proposals: the same proposals whose questions form ``asked``). An act in doubt
+    a code's question names is sorted after the others, so it yields its (family, fact) slot to the next act in doubt
+    and keeps it only when no other act takes that slot: which facts are asked never depends on the order (no fact is
+    dropped), only which act each names; act identity only, and D89's identical-question suppression stands as it was.
+    The spec's premise - 43255's own question asks about the cautery - is NOT true on the (1) build: 43255 is held not
+    documented there, and that question named no event (Question.events ()), so the wiring alone left the input as egd5
+    measured it (the cautery's question, the biopsy's dropped). Built where the spec is not literal: the not-documented
+    hold of a code (_without_support's last return, the exclusion path's fallback) names the acts of its kind in doubt
+    (_kind_in_doubt) as the acts its question is about - Question.events only; its fact, words, reason, passages and
+    ``read`` are unchanged - so the cautery yields the slot and the biopsy's question is asked, as f9013e12e and
+    e5628be56 ask it. RF11 ('At that time, two hemostatic clips were placed across the ulcer.' beside the timed biopsy,
+    with 43235 and alone) returns to e5628be56's question the same way (the biopsy's; f9013e12e asked the clip's - D149
+    had recorded that as a cost).
+  - **(4) RECORDED: a code's own question returns to e5628be56's** (each held where f9013e12e held it; c2e53f8e holds each
+    [performed_status]): the timed cautery's 43255 event_time -> performed_status (with 43235, alone, and the timed
+    cautery alone, where the cautery's own event_time question is then asked at service scope, as e5628be56 asks it);
+    the polypectomy-site cautery ('A 12 mm sessile polyp in the transverse colon was removed with a hot snare.' / 'Cautery
+    was applied to the polypectomy site.', 45385 with 45382; the EGD twin with 43251 and 43255) act_target ->
+    performed_status, the cautery listed in doubt; FRESH's denial with 45382 citing the cautery ('Cautery was applied at
+    this site.'): statement_scope -> performed_status, the same statement_scope question asked at service scope. Each
+    equals e5628be56 in every field but support['question_events'].
+  - **(5) review:egd5 problem 2** is closed by (2): the clip and the adjective-named cautery beside the denial are held
+    [statement_scope], never excluded (c2e53f8e held [performed_status]).
+  - **The costs that return** (held here, as e5628be56 holds them; c2e53f8e READY; all constructed): A6 ('Epinephrine
+    was injected into the ulcer base, followed by bipolar cautery.' beside the oozing visible vessel; c2e53f8e lists the
+    injection not covered); 'Bipolar cautery was applied to the ulcer base.' beside the oozing vessel, alone, with 43235
+    and '... to the vessel.'; the colonoscopy twin (45382 with 45378); the reviewer's A5 ('Bleeding from the ulcer base
+    was controlled with bipolar cautery.'); beside the clean-based ulcer the bipolar cautery, the heater probe, the bipolar
+    cautery to prevent rebleeding and 'Bipolar cautery was applied to the hemostatic clip site.' - 17 HOLD rows over the
+    probe set. 'Bipolar cautery was applied to treat the ulcer.' (purpose hemostasis) stays held, as on f9013e12e
+    (c2e53f8e READY).
+  - **Pins** (tests/test_interpretation_r5f_egd.py, NEW, 19 tests in 5 classes, each from its source's input):
+    D157WithdrawnWhereTheCatalogueListsTheControl (egd4 problem 0 (a), (b)-(c), (d); the ERCP and EUS rows keep the
+    listing; the key read by family over every catalogue family), D157DenialNeverOutweighsADoubt (P6/P7/P8 alone and
+    with 43235, the one-sentence twin, the timed cautery with the denial, FRESH's denial in three scopes, problem 2's
+    clip and adjective-named cautery, and two controls: the denial alone still excludes; a partial cover is asked as
+    before), D157ServiceSlotPassesToTheNextActInDoubt (the timed cautery with 43255 and 43235 and alone, RF11, the
+    named act keeping its slot alone, act identity on in_doubt_questions, assess's call shape), D157RecordedReturns,
+    D157ReturningCosts. Changed pins, each renamed with a CHANGED docstring: tests/test_interpretation_r5d_egd.py's
+    four D149 (2) pins that pinned the release withdrawn here (A6; the bipolar cautery beside the oozing vessel; the
+    colonoscopy twin; four rows of the catalogue-kind table), back to e5628be56's holds, and its RF11 order pin (now the
+    biopsy's question with question_events ['E2']); tests/test_interpretation_r5c_egd.py's RF11 pin, back to
+    e5628be56's BIOPSY_QUESTION; tests/test_interpretation_r5e_egd.py's 'holding is inert' pin, now 'holding is live'.
+  - **Mutation proofs** (tools/mutate.py, each in the copy round5f/egd6/mut-1, its marker present and the file's sha256
+    changed, the restore confirmed by sha256, the copy equal to the work tree by manifest afterwards; baseline 48 OK):
+    M1 D149's key in every family - 18 tests fail; M2 the key withdrawn in every family (egd5's with-1) - 2 (the ERCP/EUS
+    and by-family pins); M3 the guard removed - 5; M4a/M4b the guarded hold reads the acts in doubt - 5 / 2 (the
+    listing); M5 the act read by its own kind - 9; M6 the not-documented hold names no act - 4; M7 assess passes no
+    holding - 6; M8 the 7.4 path removed - 5; and two over-broad mutants for the pins no undoing mutant breaks: M9 the
+    guard firing with no act in doubt - the control 'the denial alone still excludes' fails (an error: _focused has no
+    act to ask of); M10 a named act skipped outright instead of yielding its slot - 5 fail, among them 'a named act
+    keeps its slot' and D149's 'the order never changes which facts are asked' (logs/mutf-*.log; every pin and the
+    mutants that fail it: census/pins-mutants.txt).
+  - **Release census.** Probe set (132 inputs, census/probe-census-final.txt, RELEASE-CENSUS-probe.txt): against
+    e5628be56 no RELEASE, EXCLUDE, QUESTION-DROPPED or LISTING-DROPPED; UNEXCLUDE 23 (the guarded denials above;
+    c2e53f8e holds 16 [performed_status] and excludes the 7 colonoscopy rows with FRESH's denial), LISTING-ADDED 7 (the
+    ERCP/EUS key rows), SERVICE-ACT-CHANGED 4 (F1, f9013e12e's own D149 order, unchanged here), and 19 SERVICE-ASKED-BY-
+    CODE: the held code asks the in-doubt act's question in the very same words, so D89 does not ask it twice (on
+    e5628be56 that code was excluded and the service asked it). Against f9013e12e: HOLD 55 (17 of them costs, above),
+    UNEXCLUDE 5, LISTING-ADDED 87, LISTING-CHANGED 3 (bleeding_control not_covered -> possible_bleeding_control in
+    doubt, the same event), LISTING-WIDENED 1, SERVICE-ACT-CHANGED 3 (RF11 twice and the adjective-named timed cautery:
+    the biopsy's question, = e5628be56), SERVICE-ASKED-BY-CODE 3, and 12 code-level QUESTION-DROPPED, every one class
+    (4) above (each equal to e5628be56 in every field but question_events). No RELEASE or EXCLUDE against either base.
+    Gate (gate5 v2 corpus, 2652 cases, replayed on the final engine; gate/): against f9013e12e 3396 code rows SAME and 2
+    encounter DETAIL rows (RF11 with 43235 and alone, RESTORES-e5628be56); against e5628be56 every non-SAME row equals
+    f9013e12e's own row against e5628be56 (344 of its 346; RF11's two are gone), including its 2 RELEASE rows (44386,
+    r5d/r5c enteroscopy, D148/D141) and 39 LISTING rows (EUS and enteroscopy modules) - none of them this repair's. The
+    gate replays 4f82e5056-normalized inventories, so (1) is invisible to it: the suite census re-normalizes. SUITE
+    CENSUS (tools/recordhook: a read-only sys.monitoring hook recording gate5's result record of every assess call,
+    and every hemostasis_in_doubt return beside f9013e12e's and e5628be56's rules; f9013e12e's own tests - the 87 int5e
+    labels plus every module the gate corpus saw call assess, 129 modules, 2826 tests - run once on f9013e12e and once
+    on f9013e12e with this build's four engine files, mut-2): 3198 and 3197 calls; 1200 tests made calls. Every test's
+    multiset of call records is identical on the two engines except in 5 tests, all of them pins this repair changes
+    (r5c's RF11 pin; r5d's A6, bipolar-cautery, colonoscopy-twin and RF11 pins), once encounter.member_answers - a hash
+    that differs between two runs of the same tests on f9013e12e (census/rec-null-1, -2: 6 of 6 tests) - is set aside.
+    Paired by (test, input, occurrence) and classed by gate.py (census/suite-gate): 2796 pairs, 3526 code rows SAME, 4
+    HOLD (the colonoscopy twin's 45382; the bipolar cautery beside the oozing vessel's 43255, three inputs: costs), 4
+    encounter LISTING (their control listed in doubt) and 4 DETAIL (RF11's question names the biopsy); no RELEASE,
+    EXCLUDE, QUESTION, NEW or GONE. The rule scan: 668 and 661 hemostasis_in_doubt calls; the build's rule differs from
+    a base's only in the four D149 (2) pins (19 events, each equal to e5628be56's rule): no suite input files a
+    device-named control in a family whose catalogue lists no bleeding control. Over a 388,800-event grid the build
+    equals e5628be56 in the four listed families and f9013e12e elsewhere (above).
+  - **Suites** (t.sh, Postgres 127.0.0.1:55461, a new suffix each run): runs/int5e-labels.txt (87 labels) plus
+    tests.test_interpretation_r5f_egd: 2006 tests OK, 3 skipped (1987 plus the 19 new; logs/suite-final.log); the tree
+    manifest before and after differs only in the new module, whose docstring I edited during the run (Django had
+    imported it at discovery); re-run after that edit with the EGD, mapping, coverage, events, assess and guard modules:
+    318 tests OK (logs/suite-final-certify.log). Before the pins were changed: the same 87 labels gave 1987 tests with
+    14 failing subtests, all in the six pins listed above (logs/suite-explore-x1.log). test_interpretation_replay
+    passes; no replay fixture was regenerated. tests.test_guard_static, the guard matrix and
+    tests.test_interpretation_assess.Imports pass (no 're' in the six engine modules).
+  - **Measurement.** FRESH-2 (f2r5f-egd6, final engine): A 96/6, B 177/15, C 171/19 plus 2 safe_hold; 0 of 360 files
+    differ from f2r5d-int (which the round-5e entry records byte-identical to f2r5e-int, not on disk) and from
+    f2r5f-egd6-base (f9013e12e scored here). FRESH-1 (f1r5f-egd6): 0 of 360 files differ from f1r5f-egd6-base. The
+    head-to-head (round5f/egd6/h2h.json) is byte-identical to round5e/h2h-int.json: run 1 214/234 (A 34/34, B 59/64, C
+    121/136), worse 5, better 69, facts moved 0. No new false_ready, false_exclusion, dropped_question or
+    ready_wrong_facts.
+  - **Recorded residuals.** (a) A D115 hemostatic injection ('A hemostatic injection of dilute epinephrine was given
+    into the ulcer base.') with 'No other injection was given.' cited alone by 43236: 43236 excluded on e5628be56,
+    f9013e12e and here; c2e53f8e held [performed_status] (cases_extra.py; pre-existing; the guard reads the act as the
+    bleeding control it may be, not as its own kind, so injection codes are outside it - reading the own kind too would
+    only add holds, not built). (b) catalogue_kind's docstring (outside the ownership) still states D149's key without
+    the family condition. (c) The guarded hold's ``read`` holds the denial alone, so a member answer's fingerprint does
+    not move when the act in doubt's words change. (d) eus6 (D161) lets an Evaluation carry a second question: assess's
+    ``holding`` reads support['question_events'] only. (e) One service question per (family, fact) stays a structural
+    residual where the act a code names is not the one that takes the slot (F1 with 43249, as D154 records).
+  - **Edited:** studio/interpretation/mapping.py (hemostasis_in_doubt: its docstring and the D149 condition);
+    studio/interpretation/events.py (_without_support: docstring, the in-doubt acts, the not-documented question's
+    events; _kind_in_doubt, new; _exclusion: docstring, the ``in_doubt`` parameter, the guard in its loop and the guarded
+    hold); studio/interpretation/coverage.py (in_doubt_questions: docstring, its inner accounted's docstring, one
+    comment; no code); studio/interpretation/assess.py (the one in_doubt_questions call, lines 1618-1619);
+    tests/test_interpretation_r5f_egd.py (NEW); tests/test_interpretation_r5{c,d,e}_egd.py (the pins listed above).
+- **D158 D152's two rules as round 5e built them, and the act's own line read first (2026-11-11; round 5f, narrowing
+  only; round5e/colon4's report (disagreements 1-3), its patch-heldback.diff and census-release-*.txt, round5e
+  review:colon4 problems 1-4, round5d review:colon3 problems 0-1; repair key colon5).** Built on f9013e12e. One engine
+  change, in events.another_role_hold's nested helpers signed, words_at and role_of only, and one new test module.
+  The rival release that the two rules cause on their own is the class D163 (claims6) closes in assess._claims. It is
+  measured here both ways, and is expected on this patch alone.
+  - How the engines were run. e5628be56 and f9013e12e (fresh `git archive`s; e5628be56's 1,084 blobs and the
+    f9013e12e archive's 1,097 match `git ls-tree`) through tests.test_interpretation_events.run, and through
+    events.evaluate over Reading.of(inv) for the path with no text. c2e53f8e (one archive, 701 blobs matching git, no
+    extra files) through engine.assess as tests/test_harness_engine.py's run drives it, with the service date the
+    document states and the new path's test reference rows. It was run with no participant configured, and with
+    Astra and Fable configured, read and proposing nothing (tests.test_interpretation_r3_claims.READ_NOTHING). Every
+    probe input was run in both configurations on every engine (round5f/colon5/tools/probe5f.py and inst5f.py). The
+    inputs are colon4's (tools/cases_src.py, cases_rival.py, cases_cost.py, cases_res.py), the colon4 reviewer's
+    (cases_rv.py, copied verbatim), and this round's (cases_k6.py, cases_next.py, cases_more.py): 155 cases and 6
+    no-text-only entries. Each case was built with the tree's own builders.
+  - The source problems, reproduced on f9013e12e before any edit (round5f/colon5/logs/base-table.txt):
+    - round5d review:colon3 problem 0 (= round5e review:colon4 problem 1). The r5 colon report ('Colonoscopy report
+      (fictional)' / 'Procedure: Colonoscopy' / CECUM_DONE / 'Findings'), then '<label> A 6 mm sessile polyp in the
+      sigmoid colon' / 'was removed with a cold snare.', cited whole. The labels are 'Documented by Jo Rowe, RN:', 'Per
+      nursing note:', 'Entered by Jo Rowe, LPN:' and 'CRNA documented:'. The input also includes 'Endoscopist: see
+      below. Documented by Jo Rowe, RN: ...' wrapped the same way, cited as the signed sentence, as the whole two lines,
+      or from 'A 6 mm'.
+      - f9013e12e and e5628be56: READY in both configurations, and supported on the path with no text.
+      - c2e53f8e: held [performed_status] another_role in both configurations.
+    - Problem 1. The one-line sentence, with Gemini's status (or kind) words 'Documented by Jo Rowe, RN: A 6 mm sessile
+      polyp in the sigmoid colon was removed', for each of the four labels. f9013e12e and e5628be56: READY. c2e53f8e:
+      held.
+    - round5e review:colon4 problem 2. 'Documented by Jo Rowe, RN: The stricture' / 'was dilated with a through-the-
+      scope balloon to 15 mm.', with 43249 and 43214 citing it.
+      - f9013e12e and e5628be56: both held [competing_codes].
+      - c2e53f8e: both held [performed_status] another_role.
+    - colon4's disagreement 1, the STOP. Finding 5's stone clearance (tests.test_interpretation_r3_claims.STONE), with
+      P4 'Documented by Jo Rowe, RN: The stone fragments from the bile duct' / 'were extracted with an extraction
+      balloon.', and the same one-line extraction with status words opening at the label. D146's ERCP report is used
+      with both extraction lines too.
+      - f9013e12e and e5628be56: 43264 and 43265 held [competing_codes] in both configurations.
+      - c2e53f8e: both READY with no participant, both held [competing_codes] with READ_NOTHING.
+    - colon4's disagreement 2, the pre-existing members, unchanged by D158:
+      - The one-line signed extraction, 'Nurse: The stone fragments were extracted ...', D146's four headings, and
+        "Recovery nurse's note".
+      - f9013e12e: 43264 held another_role and 43265 READY.
+      - e5628be56: the same for 'Nurse:' and the four headings. For the one-line signed line and "Recovery nurse's
+        note" it holds both [competing_codes], so those two are round 5d's releases.
+      - c2e53f8e with READ_NOTHING: both held [competing_codes].
+  - **The rule (events.another_role_hold's nested signed, words_at and role_of only).**
+    1. D152 (1), exactly as round5e/colon4/patch-heldback.diff builds it (its events.py hunk, applied to f9013e12e
+       without offset; another_role_hold is then AST-identical to colon4's held-back build).
+       - signed(source, at, begin) reads the label from the start of the line on which the act's passage begins,
+         up to its last colon before the act's own words. It does so on both role_of arms that call it, and on the
+         passage alone when the reading has no text.
+       - ROLE_SIGNATURE's [^.\n] reaches cross no period and no line break. The space after 'by' or 'nursing'
+         (\s+ under re.A) may hold one.
+    2. D152 (2), as built there. words_at reads each of the kind's and status's words after the last colon inside
+       them, so words that open at a label leave that label to signed.
+    3. D158's own reading, for colon4's K6. signed reads the label on the line of `at` (the act's own words) first,
+       as f9013e12e reads it, and that role is the role. Only where that line names none is the label read from the
+       passage's first line (rule 1).
+       - Rule 1 alone read 'CRNA charted the sedation:' / 'Documented by Jo Rowe, RN: <snare>' as one label holding
+         both signatures, and so named the anesthesia entry. f9013e12e and c2e53f8e both name nursing.
+       - It decides no hold, and this holds by construction. With the same `at`, the label on the act's line is a
+         suffix of the label read from the passage's first line. The two end at the same colon, the line break
+         before the act's line is no word character, and no match inside one line crosses a line break. So a
+         signature that names a role on the act's line names one in the longer label too.
+       - So where f9013e12e's signed names a role, D158 names the same role, unless rule 2 moves `at` (see K6g
+         below). Where it names none, D158 reads as rule 1 does.
+  - Why rule 3 is needed (colon4's K6, constructed). With 'CRNA charted the sedation:' / 'Documented by Jo Rowe, RN: A 6
+    mm sessile polyp in the sigmoid colon was removed with a cold snare.', cited as one passage:
+    - f9013e12e: held, nursing entry.
+    - c2e53f8e: held, nursing entry. Its sentence begins after the line a colon ends.
+    - Rule 1 alone: anesthesia. D158: nursing, with f9013e12e's question word for word.
+    - The same holds for 'CRNA documented:' / 'Per nursing note: <snare>'.
+  - **Release census (round5f/colon5/census-*.txt and .json; tools/census5f.py).** Every probe input, code by code, in
+    both configurations and on the path with no text, against f9013e12e and against e5628be56, with c2e53f8e's outcome
+    beside it. The encounter's service questions, unresolved items and not_listed are compared too.
+    - D158 alone (census-release-work.txt): 166 moved rows against f9013e12e.
+      - HOLD 126 (74 code rows on 45385, plus 52 on the path with no text).
+      - QUESTION-ADDED 2: 43248, which asks [performed_status, competing_codes] on the wrapped signed Savary line of
+        D118's balloon-then-Savary input.
+      - QUESTION-CHANGED 2: K6g, below.
+      - RELEASE 16 and QUESTION-REPLACED 20. All are the rival class, in five distinct texts:
+        - Finding 5's stone clearance, wrapped and status-at-label.
+        - D146's ERCP report, wrapped and status-at-label.
+        - The one-dilation shape.
+        - In the four extraction texts 43265 is READY and 43264 asks [performed_status]. In the dilation text 43249
+          and 43214 ask [performed_status]. Both bases ask [competing_codes] in every one.
+      - Against e5628be56 the same rows are HOLD 128, QUESTION-ADDED 2, RELEASE 16 and QUESTION-REPLACED 20.
+      - No EXCLUDE, no dropped service question and no dropped listing item.
+    - D158 with round5e/colon4/experiment-claims.diff in a copy (census-release-exp-vs-claims-only.txt, judged against
+      the same copy without D158): 150 moved rows.
+      - Against that copy: HOLD 126, QUESTION-ADDED 22, QUESTION-CHANGED 2 (K6g). Against e5628be56: HOLD 128,
+        QUESTION-ADDED 22.
+      - No RELEASE, EXCLUDE or dropped question or listing.
+      - On every rival input, 43265 is held [competing_codes], equal to e5628be56 and to c2e53f8e with READ_NOTHING.
+        43264, 43249 and 43214 ask [performed_status, competing_codes].
+      - Against f9013e12e itself (census-release-exp.txt): 214 rows, HOLD 154, QUESTION-ADDED 58, QUESTION-CHANGED 2,
+        none forbidden. That includes the claims change's own moves on the pre-existing members.
+    - Every rival row, in both measurements: round5f/colon5/rival-rows.txt.
+      - D158 alone moves 19 code rows of the rival inputs against f9013e12e.
+      - Under the claims experiment it moves 11 against the claims-only copy, all on the held code's facts
+        (QUESTION-ADDED).
+    - The next readers of the new hold (cases_next.py: 15 constructed cases, each told plain, one-line signed and
+      wrapped signed). The readers are the same-day E/M rule (99213 beside the colonoscopy), the distinct-lesion
+      review and the same-lesion biopsy (45380 beside 45385), and the EGD base code (43235 beside 43239).
+      - 12 HOLD rows, all on 45385. 99213 [setting, patient_status, separate_em], 45380 and 43235 are unchanged in
+        outcome and in facts.
+      - One DETAIL difference outside the census classes: beside the wrapped signed snare, 45380 (READY) loses its
+        distinct-lesion consideration ('Separate lesions are documented: ...'). The distinct-lesion review pairs
+        supported codes only.
+      - This is f9013e12e's own behaviour on the one-line signed form (round 5d's D146). e5628be56 keeps the
+        consideration on all three forms, and the claims experiment does not restore it.
+      - c2e53f8e holds both codes readings_disagree on this builder, so there is no installed comparison.
+    - Further cost probes (cases_more.py, 5 cases): 9 HOLD rows, none forbidden, with or without the claims change.
+  - **Costs (holds where c2e53f8e is READY in both configurations; all constructed):**
+    - colon4's costs:
+      - K1: 'Documented by Jo Rowe, RN:' (or 'Per nursing note:') alone on the line above the snare line, cited as one
+        passage.
+      - K2: the wrap continued with a capital ('Per nursing note: A 6 mm ...' / 'Was removed with a cold snare.').
+      - K3: 'Documented by Jo Rowe, RN: polyp seen.' / the snare line.
+      - K4, from rule 2: 'Snare polypectomy charted by Jo Rowe, RN: 6 mm sigmoid polyp removed with a cold snare.' with
+        the kind words opening at the label.
+      - K5: 'CRNA documented: propofol given.' / the snare line.
+      - K8: 'Documented by' / 'Jo Rowe, RN: <snare>'. K8d: 'Per nursing' / 'note: <snare>'. In both, c2e53f8e's
+        _sentences cuts at the break.
+      - Each is held [performed_status] another_role here. e5628be56 and f9013e12e are READY, and c2e53f8e is READY in
+        both configurations.
+    - Three more of the same classes, measured this round:
+      - K6h: 'CRNA charted the sedation:' / 'Documented by Jo Rowe, RN:' / the snare line. Held, naming the anesthesia
+        entry.
+      - K10: 'Documented by Jo Rowe, RN:' / 'Findings: <snare>'.
+      - K11: 'Per nursing note: specimen labelled.' / the snare line.
+    - No round-5d release is withdrawn by D158, so no cost returns.
+  - Recorded residuals (constructed; wording or outcome as stated):
+    - K6c, wording. 'CRNA charted the sedation:' / 'Documented by Jo Rowe, RN: A 6 mm sessile polyp in the sigmoid
+      colon' / 'was removed with a cold snare.', cited whole. The act's own line holds no colon, so rule 1's label
+      holds both signatures.
+      - D158: held, as c2e53f8e holds it, but naming the anesthesia entry where c2e53f8e names nursing.
+      - f9013e12e and e5628be56: READY.
+    - K6d, wording. 'CRNA charted the sedation and' / 'Documented by Jo Rowe, RN: <snare>'. D158 names nursing, as
+      f9013e12e does. c2e53f8e names anesthesia (its sentence keeps the wrap). Rule 1 alone named anesthesia.
+    - K6g, wording; a QUESTION-CHANGED row against f9013e12e. 'Documented by Jo Rowe, RN: CRNA documented: <snare>'
+      with Gemini's status words opening at 'CRNA documented:'.
+      - Rule 2 moves the act's words past that second label, so the label holds both signatures.
+      - D158: anesthesia, as c2e53f8e and as the same line with the status words at the act. f9013e12e: nursing.
+    - Rule 1's own limit (colon4's disagreement 6): Gemini citing only the continuation line 'was removed with a cold
+      snare.' of the wrapped signed sentence. READY on every new-path tree (D158 included), held on c2e53f8e.
+    - The physician's line cited whole or from 'A 6 mm': held, but the question quotes Gemini's passage where
+      c2e53f8e quotes its own sentence, as D146 records for the one-line form.
+    - D146's residual as D152 corrected it (a role label opening a later sentence of any line, cited whole): READY on
+      every new-path tree, held on c2e53f8e. Unchanged.
+    - The distinct-lesion consideration above (DETAIL, next reader). It lies outside D158's ownership and outside
+      D163's competition-only claims.
+  - Attested and constructed. Every input above is constructed. The shapes these rules read are attested in the FRESH
+    recordings, but none of them with a signature.
+    - Census (tools/census_d158.py; logs/census-d158-*.json). Every recording was read as fresh/score_fresh.py reads
+      it, and every act except examinations was put to the nested helpers of f9013e12e, of the held-back build and of
+      this build, extracted by ast.
+    - FRESH-2: 179 of 179 recordings, 1,122 acts, 2,026 places.
+      - 816 of 2,886 passage places hold a line break.
+      - 126 places have the act's words on a later line than the passage begins on, 51 of them with a colon before
+        those words.
+      - 43 places have kind or status words holding a colon ('Plan: ...', W1S-438's 'Biopsies, cold forceps: ...').
+      - Members, for this build against f9013e12e, the held-back build against f9013e12e, and rule 3 against the
+        held-back build: 0 places and 0 acts each.
+      - Positive controls: a signature label planted at equal length at the start of the passage's first line is
+        read in 126 of 126 places. 'CRNA charted: ' planted on the first line and 'Charted by Jo Rowe, RN: ' on the
+        act's line give anesthesia on the held-back build and nursing on this build in 87 of 87 places.
+    - FRESH-1: 179 recordings, 1,118 acts, 131 rule-1 places, 28 rule-2 places. 0 members. Controls 131 of 131 and 83
+      of 83.
+  - Pins (tests/test_interpretation_r5f_colon.py, NEW, 13 tests in 4 classes, each asserting in subtests):
+    - AWrappedSignatureLabelHoldsItsAct (D158 (1)):
+      - test_d158_a_signature_sentence_hard_wrapped_before_its_act
+      - test_d158_the_physicians_line_hard_wrapped
+      - test_d158_a_reading_without_the_text_reads_the_whole_passage
+      - test_d158_the_space_after_by_or_nursing_may_hold_a_line_break (K8 and K8d, recorded costs)
+      - test_d158_controls_no_other_reach_crosses_a_line_break
+      - test_d158_controls_as_before
+    - WordsOpeningAtTheLabel (D158 (2)):
+      - test_d158_status_or_kind_words_opening_at_the_signature_label
+      - test_d158_controls_a_label_that_names_the_act_is_no_role (W1S-438 E7's attested shape)
+    - TheActsOwnLineNamesItsEntry (D158 (3)):
+      - test_d158_a_label_line_above_does_not_rename_the_acts_own_label (K6, and the no-text path)
+      - test_d158_the_acts_own_line_keeps_its_role_whatever_stands_above (K6d)
+      - test_d158_controls_anesthesia_on_the_acts_line_or_both_in_one_label
+      - test_d158_where_the_acts_line_names_no_role_the_passages_first_line_is_read (K6c: the hold only)
+    - TheRivalOfASignedDilation:
+      - test_d158_two_codes_for_one_signed_wrapped_dilation_keep_their_competition (review:colon4 problem 2)
+      - This is a guard for D163. It FAILS on D158 alone (4 subtests) and passes with the claims change.
+    - No existing test changed. On D158 alone, tests.test_interpretation_r5e_colon's two rival pins fail (4
+      subtests), by design: they pin the release this patch alone causes. With the claims change they pass.
+      D146's test_d146_its_rival_for_the_same_act_is_ready passes on D158 alone and fails (4 headings) only with the
+      claims change. That expectation is D163's to change.
+  - Mutation proof (round5f/colon5/mut-1, a copy of the work tree, equal to it file by file;
+    tools/mutate5f.py):
+    - Each mutant was asserted to occur once and shown applied (marker present, sha256 changed). The module was run,
+      and the file was restored and checked by sha256. The work copy was never mutated.
+    - Failures beyond the unmutated tree's 4 (the dilation guard):
+      - M1 (label from the act's line only, both paths) kills tests 1-4 and 12: 24 failures, the guard passing.
+      - M1b (no-text path) kills test 3 (+5).
+      - M1c (text path) kills tests 1, 2, 4 and 12: 19 failures.
+      - M2 (no line break in \s+) kills test 4 (+4).
+      - M3a, M3b and M3c (each [^.\n] reach crossing a line break) kill test 5 (+1 each).
+      - M4 (no colon arm in words_at) kills test 7 (+5).
+      - M5 (rule 3 undone, colon4's held-back signed) kills tests 9 and 10 (+5).
+      - The over-reaching controls: MC1 (no nursing role) 42 failures. MC2 (every colon label nursing) kills tests 1,
+        5, 6, 8 and 11 (+9). MC3 (passage label first) kills tests 9 and 10 (+5).
+    - M1b's first attempt did not compile (a comment marker inside an expression), so that run proved nothing. It was
+      rebuilt with a valid marker and run again (logs/mut-undo-M1b.json).
+    - M0, D158 undone whole (f9013e12e's events.py in mut-1, sha256 equal to f9013e12e's): 29 failures in tests 1-4,
+      7 and 12 (logs/mut-M0.log). Restored by sha256. Tests 9-11 pass there by design: they pin f9013e12e's own
+      naming, which rule 3 keeps, and M5 and MC3 are their proof. The dilation guard passes there too, because
+      f9013e12e holds nothing.
+    - The guards' proof (tools/mutate_claims.py, in mut-2, a copy of the claims experiment equal to it file by file):
+      - Removing the two experiment lines gives sha256 720d5e73 -> e0e67316, which is f9013e12e's assess.py.
+      - That fails the two r5e rival pins and the dilation guard: 8 subtests.
+      - Restored by sha256, the copy passes: 15 tests OK.
+  - Suites (tools/t.sh, Postgres 127.0.0.1:55461, a new suffix every run; runs/int5e-labels.txt plus the new module,
+    88 labels, round5f/colon5/labels-main.txt):
+    - This build: 2,000 tests, 8 failures (3 skipped). They are the two r5e rival pins and the new dilation guard,
+      each in both configurations. tests.test_interpretation_replay passes, and no fixture was regenerated. The
+      guard, Imports and static modules pass.
+    - The claims experiment: 2,000 tests, 4 failures, all D146's test_d146_its_rival_for_the_same_act_is_ready, one
+      per heading.
+    - The 44 other modules that gate5/labels.txt lists as importing studio.interpretation or driving the interpreter
+      (labels-other.txt, colon4's list) on this build: 916 tests, OK.
+  - Measured on this build (nothing sent):
+    - FRESH-2 (f2r5f-colon5): A 96/6, B 177/15, C 171/19 plus 2 safe_hold. All 360 files are byte-identical to the
+      base fresh2-score/f25e-int, rows.jsonl and runs.jsonl included.
+    - FRESH-1 (f1r5f-colon5-work against f1r5f-colon5-pristine, scored this round): A 97/5, B 174/18, C 165/24 plus 1
+      false_ready (f9013e12e's own) and 2 safe_hold. All 360 files are byte-identical.
+    - The head-to-head (round5f/colon5/h2h.json) is byte-identical to round5e/h2h-int.json (sha256 50ed1b6e...): run 1
+      is 214/234, worse 5, better 69, unstable 7.
+    - The differential gate (gate5/tools-v2; the corpus replayed on this tree: 2,650 ok, 2 identical errors).
+      - Against f9013e12e: 0 non-SAME rows over 3,396 code rows and 2,650 encounters.
+      - Against e5628be56: 346 rows (RELEASE 2, HOLD 152, QUESTION 18, DETAIL 6; encounter LISTING 39, DETAIL 129).
+        All 346 are identical, content for content, to f9013e12e's own rows against e5628be56. The two RELEASE rows
+        are 44386 in the r5c and r5d enteroscopy pouch modules, round 5d's and 5e's, not this change's.
+      - D158 changes nothing at normalize time, so the replayed inventories are this tree's own. The probes
+        re-normalize every input with each tree.
+    - Time (tools/timing_d158.py, best of 5 runs of 200 calls), role_of on one place. A one-line passage: 0.122 ms
+      (f9013e12e 0.122). The 60 wrapped near-miss lines: 1.66 ms (held-back 1.39, f9013e12e 0.21). The same with
+      'by' every three words: 3.68 ms (held-back 4.57). Linear in the passage, as colon4 measured.
+  - Sibling patches. currency6's and eus6's patches as they stood at 15:39Z dry-run cleanly on top of this one.
+    eus6's events.py hunks land 30 lines lower. Applied together in a copy (round5f/colon5/stack), the new module, the
+    r5e, r5d, r5c and r5 colon modules, r3_claims, r4_ercp, r5f_currency and r5f_eus give 113 tests with the same 8
+    expected failures. With experiment-claims.diff added (and the r5e and r5d ERCP and r5e EUS modules) they give 143
+    tests with only D146's 4 heading subtests failing.
+  - Edited (patch.diff, sha256 22e9084ff7180e9c2120400b377f874cf47fad5ea587c50a8ccb9005fe8a334f, 423 lines):
+    - cpt-studio/studio/interpretation/events.py: another_role_hold's signed, words_at and role_of. Nothing else in
+      events.py differs, by AST, another_role_hold's docstring included.
+    - cpt-studio/tests/test_interpretation_r5f_colon.py (NEW).
+    - It dry-runs (patch -p1 --dry-run) from the parent of a fresh f9013e12e archive whose 1,097 blobs match
+      `git ls-tree`.
+- **D159 built, reviewed and NOT integrated (2026-11-11; round 5f, repair key ercp6; round5f/ercp6/, its review in
+  round5f/review-ercp6/ and the workflow journal wf_78933804-741 'review:ercp6').** HEAD keeps f9013e12e's ercp.py.
+  - What ercp6 built. Rule (1): a dropped sentence's denial clause is the act's statement, whatever other events' words
+    it holds (ercp.py:705, `not _holds(clause, others)` removed). Rule (3): a later sentence of the act's own passage
+    is read for a denial (_later_statement).
+  - What those rules fixed. Each holds an input on which f9013e12e is READY:E4 and c2e53f8e holds (readings_disagree)
+    or excludes: rule (1) holds three such inputs, rule (3) the two-sentences-on input.
+  - Why it is not integrated: review:ercp6 problem 1, critical by the registry rule's 'READY on the wrong act' class,
+    introduced, constructed. The input, filed one event per act:
+    - 'The bile duct was swept with an extraction balloon and two stones were removed. The pancreatic duct was then
+      swept with a balloon and no stones were seen.'
+    - E4 is the bile-duct sweep and E5 the pancreatic sweep, both performed stone extractions; 43264 cites the passage.
+    - Rule (1) reads the pancreatic sentence's 'no stones were seen' as E4's denial, with E4's own sentence as its
+      context. D147's simple-clause reader does not read 'two stones were removed' as E4's yield.
+    - retrieval_hold then keeps 43264 READY on E5 ALONE, the act that retrieved nothing. Its detail reads 'The ERCP is
+      documented as performed with stone removal (balloon) at the pancreatic duct.'
+    - f9013e12e, e5628be56 and 4f82e5056 are READY:E4,E5; c2e53f8e is READY on 'two stones were removed.'.
+    - The same holds for the sludge wording, the basket's 'no stones were seen', the comma form, and rule (3)'s
+      '... two stones were removed. The pancreatic duct was then swept with a basket. No stones remained.'
+    - The gate classes it DETAIL: the code's outcome does not move, only its acts. So the round's census
+      (READY/EXCLUDE/QUESTION/LISTING) could not see it, and claims6 does not change it.
+  - Telling W1 apart from rule (1)'s own third input needs the act's own yield to be read. That input is 'The bile duct
+    was swept with an extraction balloon. The pancreatic duct was then swept with a balloon and no stones were
+    retrieved.', on which c2e53f8e holds. A guard keyed on 'another act of the same kind' alone would undo that input's
+    hold, and this round's narrowing rule forbids that. So the repair is a census question for round 5g, not an
+    integration edit.
+  - The review's other problems, carried to round 5g:
+    - Problem 0: the 43265 rival release on the patch alone. G4 closes it (the reviewer measured claims6 and G3: 0
+      RELEASE, 0 EXCLUDE, 0 QUESTION-DROPPED).
+    - Problem 2: the stop on (2) is justified. As worded, (2) releases 43264 on four documents the document does not
+      support ('Two stones were retrieved at an outside hospital in 2023; no stones remained, ...', and others).
+    - Problem 3, pre-existing, critical by the rubric: after an own sentence that states the act's yield, a later
+      RETRIEVAL denial is never read.
+      - The input: 'The bile duct was swept with an extraction balloon and two stones were removed. A plastic biliary
+        stent was placed. No stones were retrieved.'
+      - Every new-path head is READY:E4; c2e53f8e holds it as a conflict.
+      - A hold-only refinement exists in the review: review-ercp6/variants/ercp-review-yieldguard.py. It holds this
+        input, keeps the clearance READY, and passes the 73 ERCP pins.
+    - Problem 4: D159Rival asserts only that 43265 is not excluded.
+- **D160 STOPPED on (1): D153 (2) is NOT rebuilt as a non-moving hold here, because inside the given ownership the act
+  staying in the enteroscopy session releases 44361 and 43235; any pouch route phrase beside the small-intestinal pouch
+  and a gastric pouch or bypass is a doubted route; the place question never names an empty place (2026-11-11; round 5f,
+  narrowing only; the round-5e review of D153, gemini-migration/round5e/results-wf_ec2ec26b-bed.json
+  'review:enteroscopy5' problems 0-7, and 'repair:enteroscopy5' disagreements 1-5; amends D153; repair key
+  enteroscopy6).** Built on f9013e12e.
+  - The inputs. The review's builders (round5e/review-enteroscopy5/tools/rv_cases.py and rv_refute.py) are copied into
+    round5f/enteroscopy6/tools/ (e6_cases_base.py, e6_refute.py: imports changed, nothing else) with this repair's own
+    probes (e6_mine.py): 217 probe rows over 54 constructed cases. Each was reproduced on f9013e12e and measured on
+    e5628be56, 4f82e5056 and c2e53f8e (studio.validation.engine.assess as tests/test_harness_engine.py drives it, and
+    jobs._assess_child; the reviewer's driver, copied). Every source problem reproduces on f9013e12e as the review
+    states (out/reproduce.txt):
+    - problem 0: RF1f, RF1h, RF1a, RF1e and RF1b each ask ONE service question on f9013e12e, where e5628be56 and
+      4f82e5056 ask two (the EGD act's and the enteroscopy act's, under gi.egd and gi.enteroscopy). RF1f: f9013e12e
+      asks only 'Confirm whether the forceps biopsy ... was done on the date of service?' under gi.egd; the ablation's
+      question, which decides a missing 43270, is asked nowhere. c2e53f8e asks neither.
+    - problem 1: RF2d and RF2a (the push enteroscopy told only by its act), 43235 picked: f9013e12e has no enteroscopy
+      session, no (gi.enteroscopy, extent) question and no enteroscopy listing; e5628be56, 4f82e5056 and c2e53f8e ask
+      'How far was the instrument advanced (the landmark reached)?'. 43235: f9013e12e base_included; e5628be56 and
+      4f82e5056 READY; c2e53f8e base_included on RF2a, READY on RF2d.
+    - problem 2: RF4 (the attempted biopsies), 43235 picked: the enteroscopy's no_proposal item lists [E2] on f9013e12e,
+      [E2, E3] on e5628be56 and 4f82e5056.
+    - problem 3: RF6b (the tube replacement, procedure words not in its passage), 43235 picked: E3 is in the marked
+      enteroscopy no_proposal item on e5628be56 and 4f82e5056; on f9013e12e only in an unmarked gi.egd in_doubt item.
+    - problem 4 (critical-class, pre-existing since D148 (1)): D3c, 'The patient has an ileal J-pouch and a Roux-en-Y
+      gastric bypass.' with 'The enteroscope was advanced through the pouch and the Roux limb into the proximal
+      ileum.': 44386 READY on f9013e12e and 4f82e5056; held (extent) on e5628be56 and c2e53f8e. 44385: base_included
+      only on f9013e12e and 4f82e5056; base_included and extent on e5628be56 and c2e53f8e. 44386 beside 44377:
+      competing_codes only on f9013e12e and 4f82e5056; with extent on e5628be56.
+    - problem 5 (low, wording): problem 6's biopsies (target unverified), 44361: 'The documented forceps biopsy (“the
+      distal duodenum”) is at the , which the upper endoscopy of this encounter examines. ...' on f9013e12e; with the
+      target absent 'The documented forceps biopsy is at the , ...', and 44360 alone '... In which procedure was the
+      forceps biopsy (“”) done?'.
+    - problem 6 (problem 6 of round 5d, the spec's control): S6, 'Biopsies of the distal duodenum were taken with cold
+      forceps to evaluate for celiac disease.' at the second portion's landmark, target unverified: 44361 held
+      (performed_status) and 43235 base_included on f9013e12e and c2e53f8e; both READY on e5628be56 and 4f82e5056.
+    - problems 6 and 7 of the review (ownership; gastric_beside's wide arm, the PEG's 'gastric'): recorded; the
+      ownership now lists the D153 helpers, and the wide arm is kept (narrowing it releases, below).
+  - The rules built.
+    - (2) classes.gastric_beside now returns a string: 'bypass' when, beside the verified small-intestinal pouch
+      (routes), the anatomy holds a gastric pouch (an altered pouch entry whose own words hold GASTRIC_POUCH_WORDS:
+      'small gastric pouch') or a gastric bypass (an altered entry whose own words hold 'bypass', 'roux' or 'rygb'), in
+      ANY state - an entry not verified is a doubt of the anatomy (D87) and here it only holds; 'gastric' when only a
+      usable entry's words hold a gastric word (D153's arm, unchanged: the attested PEG 'in the gastric body'); ''
+      otherwise. classes.route_phrase with 'bypass' states no pouch route, whatever the phrase's words ('through the
+      pouch', 'via the pouch', 'into the J-pouch'); the pouch is still named among the examination's own words
+      (named_routes over ROUTE_READ), so examination_route verifies no route and the pouch class is held with the route
+      question (fact extent). Any other truthy value reads as D153 reads it (a gastric word between ends the phrase).
+      named_routes and examination_route only pass the value through (their default becomes '' and their docstrings
+      name D160). class_misfit's call is unchanged (outside the ownership; not needed).
+    - (3) classes.elsewhere_hold: an act whose place is not verified (mapping.target_landmark '') is placed by its own
+      target words, quoted, else 'an unverified place', and the clause becomes 'which the upper endoscopy of this
+      encounter may examine' (the review's problem 5 also named 'yet says the EGD examines it'); a verified place is
+      worded byte for byte as before. wording.procedure_question quotes no empty or blank words: 'In which procedure was
+      the forceps biopsy done?'.
+  - What the inputs give now (pinned in tests/test_interpretation_r5f_enteroscopy.py):
+    - problem 4: 44386 held with the route question (extent), as e5628be56 and c2e53f8e hold it, on 'through the pouch
+      and the Roux limb', 'via the pouch', 'through the J-pouch' and 'into the pouch and on to the proximal ileum'
+      beside the bypass, and beside a 'small gastric pouch' entry; 44385 asks base_included and extent; 44386 beside
+      44377 asks competing_codes and extent. 44377 keeps extent, worded as the route question instead of the class
+      question that named 'through a pouch' (WORDING).
+    - 'whatever its words': the J-pouch's own route ('was advanced through the anus into the J-pouch') beside the
+      bypass or the small gastric pouch: 44386 held (extent), as e5628be56 holds it (c2e53f8e: performed_status and
+      extent). This withdraws D148's release for this anatomy only (f9013e12e and 4f82e5056 READY).
+    - an unverified bypass entry ('Roux limb' at the jejunum, 'RYGB' at the stomach: state unverified): 44386 held
+      (extent), where every new-path tree before this was READY; c2e53f8e holds it (extent).
+    - unchanged controls: the J-pouch alone (44386 READY with 'into the J-pouch' and with 'through the pouch and the
+      Roux limb' - round 5c's problem 5 residual, c2e53f8e holds both); the J-pouch beside the PEG with its own route
+      (D148's release kept: 'gastric', 44386 READY); a sleeve gastrectomy entry (no bypass word; unverified here): 44386
+      READY; an oral enteroscopy beside the J-pouch and the bypass: 44377 READY.
+    - problem 5: 'The documented forceps biopsy is at “the distal duodenum”, which the upper endoscopy of this
+      encounter may examine. Was forceps biopsy performed in the small-bowel enteroscopy on the date of service?'; with
+      no target 'The documented forceps biopsy is at an unverified place, which ...', and 44360 'Is 44360 reported
+      separately from forceps biopsy for this examination? In which procedure was the forceps biopsy done?'. The holds
+      and their facts are unchanged.
+    - problem 6: unchanged (the move stands): 44361 held performed_status, 43235 base_included, as c2e53f8e.
+  - (1) STOPPED - why, with the inputs. Built as specified inside the ownership (held back as hb1:
+    patch-heldback-1-in-ownership.diff, coverage.coding_family returning Gemini's family for a place not verified, as
+    e5628be56 does), the act stays in the enteroscopy session and two readers outside the ownership stop holding:
+    - classes.act_elsewhere (the only way enteroscopy_hold reaches elsewhere_hold) finds no act held by another
+      session, so the enteroscopy act codes lose their hold: problem 6's own input S6, 44361 performed_status ->
+      READY; the review's RF5 and RF6 and this repair's jejunal and absent-target probes alike (44361, 44369, 44373).
+    - the EGD's base code is held base_included only by acts of its own session (event_coding's lists,
+      combination.base_included, the overlay at read time; D119's PEG arm aside): S6, 43235 base_included -> READY;
+      RF2a, RF2c, RF2d, RF1d, RF6, RF6b and the absent target alike.
+    - hb1's census against f9013e12e (probes): RELEASE 27 (43235 18, 44361 6, 44369 2, 44373 1, over 12 cases),
+      QUESTION-DROPPED 34 (44360's procedure question), LISTING-DROPPED 29; the differential gate: RELEASE 1 (44369 on
+      the r5 route pin's input). Forbidden, so not shipped.
+    - The companion that makes it narrowing on every input run here (held back as hb2: patch-heldback-1-with-
+      companion.diff; the part outside the ownership alone: companion-only.diff, 64 lines): coverage.place_doubts (NEW:
+      the enteroscopy session's acts whose place is not verified, beside a done EGD); classes.act_elsewhere treats them
+      as the EGD session's in doubt (so elsewhere_hold holds the codes resting on them, with the place question); and
+      coverage.event_coding records them among the EGD session's 'doubted' entries (so the base rule and the overlay
+      hold 43235 base_included, worded 'forceps biopsy (stated in doubt)'). On hb2 every named input ends as the spec
+      requires: RF1f, RF1h, RF1a, RF1e and RF1b ask both service questions, as e5628be56 and 4f82e5056; RF2d and RF2a
+      keep the enteroscopy session and its extent question, 43235 base_included; RF4's no_proposal item lists [E2, E3];
+      RF6b keeps E3 in the marked item; S6 holds 44361 (performed_status, the place question) and 43235
+      (base_included), as c2e53f8e; 44360 asks base_included and the procedure question. hb2's census against
+      f9013e12e: RELEASE 0, EXCLUDE 0, QUESTION-DROPPED 0, SERVICE-Q-DROPPED 0; LISTING-DROPPED 29 code rows over 20
+      probe inputs and 10 code rows over 7 pin inputs - each one f9013e12e's listing of the MOVED act in an EGD item
+      ('gi.egd|no_proposal|[E1, E3]', 'gi.egd|not_covered|[E3]'), and on each of the 27 inputs hb2's listing equals
+      e5628be56's exactly (a picked enteroscopy code reads the act, now held with the place question). The spec asks
+      for e5628be56's listings AND 'against f9013e12e only HOLD and QUESTION-ADDED'; on these rows the two cannot both
+      hold (disagreement 2). Gate: hb2 against f9013e12e RELEASE 0, EXCLUDE 0, HOLD 1, LISTING 1 (the same kind of
+      row, on the r5 route pin's input); against e5628be56 every row's class equals the build's, and on that case the
+      unresolved items equal e5628be56's - only event_coding differs there (the EGD session's doubted entry).
+      Suites: hb2 fails exactly the 7 pins that assert the move (family gi.egd): test_d114_an_act_whose_place_is_not_
+      verified_is_a_doubt_of_family, test_d153_an_unverified_target_beside_a_done_egd_is_a_doubt_of_family,
+      test_d153_an_act_whose_target_is_absent_is_a_doubt_of_family_too, test_d153_an_unverified_small_bowel_target_is_
+      held_a_cost, test_d153_an_uncertain_or_denied_act_releases_and_excludes_nothing, and this repair's two wording
+      pins (they assert the moved family); nothing else of the 87 int5e labels and the new module fails (1997 run).
+  - Costs. None return and none are new: every outcome this build holds that f9013e12e did not is held by c2e53f8e too
+    (9 HOLD rows over the probes, 9 over the pin inputs; 0 with c2e53f8e READY). The D153 costs recorded in round 5e
+    stay (the move stands): the jejunal APC whose words do not stand, the absent target and the uncertain act (43235
+    base_included or 44369 held where c2e53f8e is READY), and D141's in-sentence third-portion act.
+  - Release census (release-census.txt; out/census-*.jsonl, one record per moved row with all five trees' outcomes;
+    tools/e6_census.py classifies by content: a question counts as dropped only when its words, after the empty quotes
+    are removed, are asked by the code nowhere and its fact is gone; a service question only when its words are asked
+    under no service; a listing only when an event loses its listing or its second-review mark):
+    - probes (217 rows, 54 constructed cases): the build moves 63 code rows against f9013e12e: HOLD 9, QUESTION-ADDED
+      16, WORDING 38; RELEASE, EXCLUDE, QUESTION-DROPPED, SERVICE-Q-DROPPED and LISTING-DROPPED 0. On those rows
+      against e5628be56 and 4f82e5056: no forbidden class introduced (the classes f9013e12e already had against them on
+      rows this repair does not move - problems 0-3, D148's PEG release - are unmoved, and are counted apart).
+    - pin inputs (285 unique engine calls of the r5f, r5e, r5d, r5c, r5 route and r4 enteroscopy modules, captured on
+      the build and replayed on each tree): 33 code rows moved: HOLD 9, QUESTION-ADDED 12, WORDING 12; forbidden 0;
+      none introduced against e5628be56 or 4f82e5056.
+    - the 9 HOLD rows are each 44386 beside the J-pouch and a gastric pouch or bypass (c2e53f8e holds every one); the
+      QUESTION-ADDED rows are extent on 44385 and on 44386 beside 44377; the WORDING rows are the place questions of
+      (3) (44361, 44369, 44373) and the route question that replaces the class question naming 'through a pouch' on
+      44377 and 44376 (fact extent kept). The census compares words with the empty quotes removed, so the rows whose
+      only change is (3)'s procedure question ('(“”)' dropped: 44360, 10 probe rows and 1 pin row) count as unmoved.
+  - Disagreements (each with its input):
+    1. (1) cannot be built inside the ownership: elsewhere_hold is reached only through classes.act_elsewhere, which
+       sees an act held by ANOTHER session, and the EGD's base code reads only its own session's entries. Input S6:
+       44361 and 43235 READY on hb1, where f9013e12e and c2e53f8e hold both. The companion above is the smallest change
+       measured that keeps both held; it edits classes.act_elsewhere and coverage.event_coding and adds
+       coverage.place_doubts (no other round-5f builder edits classes.py; coverage.py's other editor, egd6, owns
+       in_doubt_questions only).
+    2. Even with the companion, 'listings exactly as on e5628be56' and 'against f9013e12e only HOLD and
+       QUESTION-ADDED' conflict on 29 probe rows and 10 pin rows: f9013e12e lists the moved act in an EGD item, and the
+       act that stays is read by the picked enteroscopy code (S6 with 44361 picked: f9013e12e 'gi.egd|no_proposal|[E1,
+       E3]' marked; hb2 and e5628be56 '[E1]'; RF4 with 44360 picked the same). An integration that adopts hb2 judges
+       these as e5628be56's listings restored, or asks reconcile to list a place doubt under the EGD as well (not
+       built).
+    3. (2) 'a gastric pouch or gastric bypass entry' is read by the entry's own words: a pouch entry typed gastric, or
+       an entry naming the bypass ('bypass', 'roux', 'rygb'). These words gate a hold only. Read by D153's wider arm (any
+       gastric word, so the PEG 'in the gastric body' too - mutant M3), it also holds D148's J-pouch-beside-the-PEG
+       release (r5d test_d148_an_ileal_j_pouch_beside_a_peg_is_the_small_intestinal_pouch), an expectation the spec does
+       not change; read narrower (dropping D153's arm), it releases: mutant M8 (probe only, in mut-1, restored by
+       sha256; logs/mut-M8.log) READYs 44386 on 'The enteroscope was advanced through the small gastric pouch and the
+       Roux limb into the proximal ileum.' beside the J-pouch and the verified PEG entry (probe M2n), which f9013e12e,
+       e5628be56, the build and c2e53f8e hold (extent). So both arms stand: 'bypass' for the new hold, 'gastric' for
+       D153's cut.
+    4. (2) reads altered entries in ANY state for the 'bypass' arm (D87). Input: 'The patient has an ileal J-pouch and
+       a Roux limb.' (the attested 'Roux limb' entry, unverified at the jejunum): 44386 held (extent) as c2e53f8e holds
+       it; read from usable entries only (mutant M2), READY as on every new-path tree before.
+    5. (3) also rewords the relative clause for an unverified place ('may examine' for 'examines'): the review's
+       problem 5 names it ('yet says the EGD examines it'); the verified wording is byte-identical (pinned).
+  - Recorded residuals:
+    - problems 0-3 of the review stay on HEAD as f9013e12e gives them (the move stands): RF1f/RF1h/RF1a/RF1e/RF1b ask
+      one service question; RF2d/RF2a lose the enteroscopy session's extent question; RF4's listing [E2]; RF6b's mark.
+      hb2 cures each (above).
+    - the bypass words are a list: an anatomy whose bypass is worded otherwise ('gastrojejunostomy', 'Billroth II')
+      keeps f9013e12e's reading (D153's cut only) - no release, no new hold. The 'bypass' arm also fires on any entry
+      naming a bypass or a Roux reconstruction (a Roux-en-Y hepaticojejunostomy, a vascular bypass if Gemini lists one):
+      fail-closed, a hold.
+    - the review's problem 8 (the reach-words arm of beyond_reach is inert): outside this ownership; unchanged.
+    - ENGINE_VERSION and CODING_VERSION are unchanged: (2) and (3) change outcomes and wording at assess time only.
+  - Corpora: 0 members of each change. FRESH-2 (179 answers, 1476 events) and FRESH-1 (179 answers, 1474 events)
+    hold 0 events filed under the enteroscopy and 0 intestinal pouch entries; the replay fixtures' 173 parsed answers
+    hold 0 events filed under the enteroscopy and 3 pouch entries, all 'small gastric pouch' (measured here). So (2)
+    and (3) are never read on the corpora.
+  - Constructed and attested: every probe and pin input is constructed. Shapes attested in the stored FRESH answers
+    (measured here): the 'small gastric pouch' pouch entry, the 'Roux-en-Y gastric bypass' entry (stomach), the 'Roux
+    limb' entry (jejunum), the PEG entry 'A PEG tube is in place in the gastric body' (gastric_body). The intestinal
+    J-pouch beside a gastric pouch or bypass, every pouch phrase, the 'RYGB' and sleeve entries, and every act filed
+    under the enteroscopy are the review's or this repair's construction.
+- **D160, what was edited.**
+  - studio/interpretation/classes.py: gastric_beside (returns '', 'gastric' or 'bypass'; the docstring), route_phrase
+    ('bypass' states no pouch route; the docstring), named_routes and examination_route (``gastric`` default '' and one
+    docstring line each; pass-through only), elsewhere_hold (the place of an act whose place is not verified; the
+    docstring).
+  - studio/interpretation/wording.py: procedure_question (no empty quotes; a docstring).
+  - tests/test_interpretation_r5f_enteroscopy.py: NEW, 10 tests.
+  - tests/test_interpretation_r5e_enteroscopy.py: test_d153_the_j_pouchs_own_route_beside_a_bypass_is_unchanged renamed
+    test_d153_the_j_pouchs_own_route_beside_a_bypass_is_a_doubted_route (it pinned D148's release, which (2) withdraws
+    for this anatomy: 44386 held with the route question; the old name is in its docstring); one module docstring
+    sentence.
+  - tests/test_interpretation_r5c_enteroscopy.py: test_d141_an_intestinal_pouch_beside_a_gastric_bypass_is_a_doubt
+    (name kept, true again: D148 had changed it to READY; now held, the route question, routes still (pouch, none));
+    one module docstring sentence.
+  - Held back, not in patch.diff: hb1 (coverage.coding_family alone), hb2 (with coverage.place_doubts,
+    classes.act_elsewhere and coverage.event_coding).
+- **Pins.** tests/test_interpretation_r5f_enteroscopy.py, 10 tests.
+  - DoubtedPouchRoute: test_d160_any_pouch_phrase_beside_a_j_pouch_and_a_bypass_is_a_doubted_route (problem 4's input
+    and three more phrasings); test_d160_beside_a_small_gastric_pouch_entry_too; test_d160_the_j_pouchs_own_route_
+    beside_a_bypass_is_a_doubted_route (the bypass and the small gastric pouch); test_d160_a_bypass_entry_not_verified_
+    is_a_doubt_too ('Roux limb', 'RYGB'); test_d160_without_a_gastric_pouch_or_bypass_the_route_reads_as_before (the
+    J-pouch alone twice, the PEG, the oral enteroscopy); test_d160_route_phrase_with_bypass_states_no_pouch_route (unit).
+  - PlaceWording: test_d160_an_unverified_place_is_named_by_the_acts_own_words (problem 6's input: 44361's question and
+    reason, 44360's reason); test_d160_an_absent_target_is_an_unverified_place (44361, and 44360's procedure question);
+    test_d160_a_verified_place_is_worded_as_before (the control); test_d160_procedure_question_quotes_no_empty_words
+    (unit).
+- **Mutation proof.** One copy of the final work tree (mut-1), its 99-test baseline (the six enteroscopy modules) OK
+  first; for each mutant the anchor asserted to occur once, the file written to a new inode, the marker read back, the
+  sha256 shown to change, the six modules run, the file restored from the work tree and its sha256 checked equal to the
+  work tree's and to the pre-mutation copy's (logs/mut-*.log, out/mutants.jsonl). Failing tests:
+  - M1 (2) undone (route_phrase ignores 'bypass'): the 4 DoubtedPouchRoute pins that hold, the unit pin, the renamed r5e
+    pin and the r5c pin.
+  - M2 the 'bypass' arm reads usable entries only: test_d160_a_bypass_entry_not_verified_is_a_doubt_too.
+  - M3 the 'bypass' arm takes every gastric word: test_d160_without_a_gastric_pouch_or_bypass_the_route_reads_as_before
+    and r5d test_d148_an_ileal_j_pouch_beside_a_peg_is_the_small_intestinal_pouch.
+  - M4 (3) undone in elsewhere_hold: test_d160_an_unverified_place_is_named_by_the_acts_own_words and test_d160_an_
+    absent_target_is_an_unverified_place.
+  - M5 (3) undone in procedure_question: test_d160_procedure_question_quotes_no_empty_words and test_d160_an_absent_
+    target_is_an_unverified_place.
+  - M6 the unverified wording for every place: test_d160_a_verified_place_is_worded_as_before and 4 r5 route pins.
+  - M7 gastric_beside never returns 'bypass': the 4 DoubtedPouchRoute pins that hold, the renamed r5e pin and the r5c
+    pin.
+  - M8 (probe only, no suite: D153's 'gastric' arm dropped) READYs 44386 on probe M2n (disagreement 3); restored, sha256
+    equal to the work tree's.
+  Every one of the 10 new pins and both changed pins fails under at least one mutant.
+- **Tests.** t.sh on port 55461, a new suffix every run.
+  - runs/int5e-labels.txt (87 labels: int5d's 81 and the six r5e modules) and the new module on the build: 1997 tests OK
+    (3 skipped). The same 87 labels on the pristine f9013e12e copy: 1987 OK (3 skipped). 1997 = 1987 + 10; the renamed
+    pin replaces its old one. No replay test failed; no fixture was regenerated.
+  - The six enteroscopy modules: 99 OK on the final bytes, on mut-1 before every mutant, and on a fresh f9013e12e archive
+    with the four sibling patches that existed at about 15:45Z applied first (colon5 22e9084f, currency6 62a0ba10, ercp6
+    bdf778bc, eus6 d4aede51) and this one after them, no conflict; no sibling patch edits classes.py, wording.py or the
+    enteroscopy tests.
+- **Measurement.**
+  - FRESH-2 re-scored on the final engine bytes as fresh2-score/f2r5f-enteroscopy6: A 96/6, B 177/15, C 171/19 plus 2
+    safe_hold; all 360 files byte-identical to fresh2-score/f25e-int (the round-5e integration's score, recorded as
+    'f2r5e-int') and to f2r5d-int, each rewritten during this scoring. No row and no assessment file changes.
+  - FRESH-1 scored on f9013e12e (fresh-score/f1r5f-enteroscopy6-pristine) and on the build (fresh-score/f1r5f-
+    enteroscopy6): all 360 files byte-identical.
+  - Head-to-head (round5f/enteroscopy6/h2h.json): equal to round5e/h2h-int.json in every key; run 1 214/234.
+  - The differential gate (gate5's 2652-case corpus replayed on the build with tools-v2/replay.py, compared by gate.py):
+    against f9013e12e RELEASE 0, EXCLUDE 0, HOLD 1 (44386 on r5c test_d141_an_intestinal_pouch_beside_a_gastric_bypass_
+    is_a_doubt's input), QUESTION 0, DETAIL 1 (44369's place question on r5 test_d114_an_act_whose_place_is_not_
+    verified_keeps_geminis_family's input), encounter QUESTION 0, LISTING 0, DETAIL 1 (the same r5c case's summary
+    counts); 2 cases error identically on both. Against e5628be56: RELEASE 1 - D148's J-pouch-beside-the-PEG release
+    (r5d test_d148_an_ileal_j_pouch_beside_a_peg_is_the_small_intestinal_pouch), unmoved here and present in f9013e12e
+    against e5628be56 too; every other non-SAME row is f9013e12e's own against e5628be56 (LISTING 39, all 39 in
+    f9013e12e's comparison), less the r5c row, which goes from RELEASE to DETAIL (e5628be56's hold restored, worded as
+    the route question). The corpus was harvested at 4f82e5056, so the r5e and r5f pins' inputs are measured by the
+    pin-input replay above.
+- **D161 7.4's question and 43240's target hold are two clarifications; with no candidate that meets the target, 7.4
+  reads one whose target is not usable; 7.4's passages are kept as 7.4 gave them (2026-11-11; round 5f, narrowing
+  only; round5e/results-wf_ec2ec26b-bed.json 'review:eus5' problems 0-4 and 'repair:eus5' disagreements 1-4; amends
+  D156; repair key eus6).** Each input below was run on byte-identical texts through c2e53f8e (jobs._assess_child with
+  an empty reference lookup, as tests/test_harness_engine.py drives it), e5628be56, 4f82e5056, f9013e12e and this build,
+  Corti citing the document's own quotes. Each answer was captured once with the test modules' builders on f9013e12e and
+  normalized by each tree itself (round5f/eus6/tools/build_cases5f.py, run_engine.py, run_installed.py; outputs in
+  round5f/eus6/probe/). The inputs are the round-5e review's 26 (its tools/cases_review.py, re-captured; byte-identical
+  to its cases.json), the round-5e builder's and the eus4 review's 67 (round5e/eus5/tools), and 21 of mine
+  (tools/cases_d161.py, cases_order.py). Every input is constructed following prompt.py. The shapes are attested only as
+  far as the review says: a target tied to no lesion (unverified, landmark_missing) is FRESH's commonest unverified
+  reason (204 of FRESH-2's 232 unverified targets); an examination's own target given as its landmark is attested for
+  EGD and colonoscopy examinations in tests/fixtures/interpretation/gemini; FRESH holds no 43240 candidate at all
+  (census below).
+  - **As integrated (round 5f integration; review:eus6 problem 0).** D89's ``asked`` set is now read AFTER the member
+    answers. It is the set of questions the proposals ask or a member answered; an excluded code keeps the questions
+    its answers closed (_MemberAnswers._excluded).
+    - The case it fixes: a member's answer to 43240's target question excludes the code. The 7.4 question, which (1)
+      makes the same words as the service question, leaves with the code unanswered.
+    - Before the fix, the act in doubt was then asked about nowhere on the engine path. Now it takes its slot again,
+      as f9013e12e asks it.
+    - Pinned in tests/test_interpretation_r5f_integration.py.
+    - The read-time overlay path (an earlier-form standing answer, no fingerprint) is a recorded residual of the
+      integration entry.
+  - **(1) review problem 0 (medium, introduced by D156): a fact dropped by key.** D156 asked 7.4's question and the
+    target hold's in ONE question of 7.4's fact, so where R6 asks no structure examined, 4f82e5056's 'target' was only
+    words inside a performed_status question. Member answers, score_fresh's dropped_question and the gate read a question
+    by its (code, family, fact).
+    - The source's input (the review's R_attempted_pfc_exam_landmark_stomach): 'The linear echoendoscope was advanced to
+      the stomach.' (E1, its own target given as its landmark 'stomach') / 'A 9 cm pancreatic pseudocyst was seen
+      abutting the posterior gastric wall.' (L1) / 'EUS-guided transmural drainage of the pseudocyst was attempted but
+      failed.' (E2, target L1) / 'EUS-guided transmural drainage of the common bile duct was performed from the duodenal
+      bulb with a 6 mm lumen-apposing metal stent.' (E3); 43240 cited on P3, and separately on P4.
+      - Reproduced: f9013e12e [performed_status] (e5628be56's question then the hold's, in one); e5628be56
+        [performed_status]; 4f82e5056 [target]; c2e53f8e [performed_status, target].
+      - Now: [performed_status, target]. The first clarification is e5628be56's question and reason word for word ('The
+        drainage of the A 9 cm pancreatic pseudocyst in the pancreas was begun and not completed. Confirm whether 43240
+        describes what was done on the date of service.'), with the 52/53 consideration; the second is the hold's
+        ('Which structure was the drainage (“EUS-guided transmural drainage of the common bile duct was performed ...”)
+        done on: ...?', its reason). Two member rows, (43240, gi.eus, performed_status) and (43240, gi.eus, target); the
+        overlay keeps both held. Never READY, never excluded, on either citation.
+    - Its twins, the same: the gallbladder's drainage beside the landmark examination; the examination's own target the
+      pseudocyst, verified (the round-5e builder's recorded residual, t2_attempted_pfc_exam_target_verified_gb and
+      _cbd, the review's S2_examined_attempted_cbd); the pseudocyst drainage told 'Later, ...' (e5628be56's event_time:
+      [event_time, target]); the 'cystgastrostomy' kind-unlocated drainage ([performed_status, target]); the two-denial
+      drainage beside the landmark examination ([statement_scope, target]).
+    - Where R6 does ask the structure examined (the review's mix_attempted_pfc_beside_cbd, the round-5e source), the
+      code asks three: 7.4's, the hold's, R6's ([performed_status, target, target]). D145 recorded the two 'target'
+      questions (one member row); unchanged.
+    - The rule. events.Evaluation gains ``second`` (a held code's second question; only _target_hold sets one).
+      _target_hold's 7.4 branch returns 7.4's Question as the code's question - its fact, words and reason unchanged,
+      its passages as 7.4 gave them followed by the hold's passages not already among them, its events followed by the
+      hold's - and the hold's Question as ``second``. assess._proposal asks ``second`` as its own clarification, right
+      after the code's question (two lines). The detail (the service.status check) stays D156's, both reasons.
+      support['question_events'], support['reason'], support['acts'] and the source's spans are f9013e12e's on every
+      input D156's branch already took (40 of the 54 moved probe rows); only the clarifications split.
+  - **(2) review problem 1 (pre-existing; the claim broken): a failed drainage whose target is not usable.** D156's
+    7.4 reading took only candidates that meet defining_fit, which is False whenever the candidate's target is not
+    usable.
+    - The review's four inputs: problem 0's document with the attempted drainage's target given as lesion '', landmark
+      'pancreas', words 'the pseudocyst' (R_attempted_pfc_no_lesion_pancreas: unverified, landmark_missing); words that
+      do not locate ('the pancreatic pseudocyst', _target_unlocated: unverified, words_unlocated); a target given absent
+      (_no_lesion_landmark_missing); 'A 9 cm fluid collection' and its attempted drainage
+      (R_attempted_collection_beside_cbd: unverified, landmark_missing).
+      - Reproduced on every one: f9013e12e and 4f82e5056 [target, target], no 52/53 consideration, the failed drainage
+        in no question; e5628be56 [performed_status, target] ('The drainage was begun and not completed. ...' / 'The
+        drainage of the A 9 cm fluid collection was begun and not completed. ...') with the consideration; c2e53f8e
+        [performed_status, target].
+      - Now: [performed_status, target, target] - e5628be56's question first, word for word, with the 52/53
+        consideration, then the hold's, then R6's. support['reason'] attempted; held in the overlay.
+    - The rule, BUILT NARROWER THAN THE SPEC'S LITERAL 'OR', and why. 7.4 reads the positive candidates that do not
+      support the code and meet its defining target; with none in any requirement group, those whose target is not
+      usable. The spec's one reading (meets defining_fit OR target not usable) drops a question f9013e12e asks:
+      constructed input o_h4_untied_later_before_attempted_fit - 'Later, EUS-guided transmural drainage of the pseudocyst
+      was performed from the stomach with a 15 mm lumen-apposing metal stent.' (E2, its target tied to no lesion, time
+      unverified) / the bile duct drainage (E3) / 'EUS-guided transmural drainage of the pseudocyst was attempted but
+      failed.' (E4, target L1) - 7.4 asks ONE question, its first rule that applies, and h4's time rule comes before
+      h4's attempt, so read together E2's time displaces E4's question: f9013e12e [performed_status, target] with the
+      52/53 consideration; the literal OR [event_time, target, target] with neither performed_status nor the
+      consideration (QUESTION-DROPPED and CONSIDERATION-DROPPED: forbidden); the build [performed_status, target, target]
+      with the consideration, E2 listed in doubt with its service-scope time question as on f9013e12e. On every other one
+      of the 114 probe inputs the two forms give the same record (measured as control mutant M2d, probe/*-out-m2d.json).
+      The review's four inputs have no candidate that meets the target, so both forms build them alike.
+    - Other inputs it moves (mine): the same failed drainage tied to no lesion beside the gallbladder's drainage (on P3,
+      on P4, beside 43259), with no EUS examination event, and beside 43259 or 43242; a failed drainage with no target at
+      all ('EUS-guided transmural drainage was attempted but failed.'); the landmark examination with the untied failed
+      drainage ([target] on f9013e12e, [performed_status, target] now); the untied 'Later' drainage ([target, target]
+      then [event_time, target, target], e5628be56's event_time question restored).
+    - Controls, unchanged: a failed GALLBLADDER drainage (its target verified elsewhere: 43240 cannot describe it); an
+      untied failed drainage verified at another occasion; an untied drainage that supports the code (the hold's own,
+      reason SITE); an untied uncertain or contradicted drainage whose relation reaches the bile duct drainage too
+      (nothing supports: _without_support decides, as before).
+  - **(3) review problem 2: the passages.** D156 re-spanned 7.4's passages (_spans), dropping D143's
+    questions.STATEMENT and questions.LEAD marks, so validation.questions read the statement_scope row as before D143.
+    - The review's R_pfc_two_denials_beside_cbd (a done pseudocyst drainage with two denials scoped by their own words,
+      'No stent was placed in the pseudocyst.' and 'The pseudocyst was not drained.', beside the done bile duct
+      drainage). Reproduced: on the P4 citation f9013e12e's statement_scope row showed 3 passages without 'The pseudocyst
+      was not drained.'; e5628be56's showed 4, both denials. Now: support['source'] carries 7.4's passages with their
+      marks, then the bile duct drainage's passage; the statement_scope row shows both denials on both citations (on P4
+      the same four e5628be56 shows; on P3 e5628be56's three and the bile duct passage after them).
+  - **(4) review problem 4 (low): the subTest labels.** test_d156_the_gallbladder_twin_likewise labels its three
+    citations by name ('P3 the attempted pseudocyst drainage', 'P4 the gallbladder drainage', 'P3, beside 43259'), as
+    the new module labels its own.
+- **D161, recorded and not built.**
+  - Review problem 3: a standing member answer now binds the keys the build asks. Earlier-form 'not documented' answers
+    (no fingerprint, bound by key; tools/answer_view.py):
+    - (43240, gi.eus, performed_status) on S2_attempted_pfc_cbd: excluded on e5628be56, f9013e12e and now; held on
+      4f82e5056; c2e53f8e asks that key. Unchanged by D161.
+    - (43240, gi.eus, target) on R_attempted_pfc_exam_landmark_stomach: excluded now and on 4f82e5056; held on f9013e12e
+      and e5628be56 (no target asked); c2e53f8e asks it. The mirror D161 (1) opens.
+    - (43240, gi.eus, performed_status) on R_attempted_pfc_no_lesion_pancreas: excluded now and on e5628be56; held on
+      f9013e12e and 4f82e5056; c2e53f8e asks it. The mirror D161 (2) opens.
+    - Each is the member's own answer to a question the code asks, bound as the installed release binds it; no engine
+      exclusion. Every question added opens its key the same way.
+  - **Flagged for the integration: a service question the code now asks word for word (D89).** Where 7.4's question
+    about an act in doubt is the act's own service-scope question (its focus question), D156's combined words differed
+    from it and the service question was asked as well; with 7.4's words alone, D89 (a code's question suppresses a
+    service question only when it is the same question, fact and words) makes it the code's. 11 probe rows
+    (SERVICE-ASKED-BY-CODE): the 'Later' pseudocyst drainage (the review's mix_later_pfc_beside_cbd, S2_later_pfc_cbd,
+    t2_later_pfc_beside_cbd, t2_later_pfc_exam_target_verified_gb, t2_two_fitting_beside_cbd,
+    t2_later_pfc_and_later_gb_beside_cbd, c1_landmark_exam_later_pfc_beside_cbd, c2_untied_later_pfc_beside_cbd,
+    o_h4_untied_attempted_before_later_fit) and the 'cystgastrostomy' drainage (t2_kind_unlocated_pfc_beside_cbd and
+    _exam_target_verified_gb, its not_covered listing's performed_status). In every one the listing stays as f9013e12e
+    gives it, 43240 asks the same fact and words, and the encounter's questions equal e5628be56's (one more on
+    t2_later_pfc_and_later_gb_beside_cbd, below); the service-scope row
+    ('', gi.eus, fact) is gone, so a standing service-scope answer to it would be NO_LONGER_ASKED. On
+    t2_later_pfc_and_later_gb_beside_cbd the freed (family, fact) slot now asks the gallbladder drainage's time
+    (SERVICE-ADDED). The gate reads the row as an encounter QUESTION 'fewer' on two suite inputs: the r5e 'Later' pin's
+    (which the new D89 pin shares) and the new module's landmark 'Later' twin. I judge it no dropped question - the
+    identical question is asked, by D89's own rule - but it is a move against f9013e12e, so it is the integration's to
+    rule. Keeping the service row would need
+    the code's question in other words (D156's) or a change to coverage.in_doubt_questions / assess.py:1619's ``asked``,
+    neither this repair's.
+  - Pre-existing, unchanged, against e5628be56 (not moved by D161, or moved with the same loss as f9013e12e): a failed
+    gallbladder drainage's 7.4 question beside the bile duct drainage (R_attempted_gb_beside_cbd, and its words before
+    the failed pseudocyst drainage's in R_gb_attempted_then_pfc_attempted: D156's 'not 43240's act'); the 'Later'
+    gallbladder drainage's time asked at service scope instead of at the proposal (t2_nonfit_later_beside_attempted_pfc,
+    D156 (c)); performed_status on a SUPPORTING drainage that misses the target
+    (g1_gallbladder_43240 and the D145 (3) drainages, D156's disagreement 7); e5628be56's event_time at the proposal on
+    o_h4_untied_later_before_attempted_fit (asked at service scope on f9013e12e and now).
+  - One rule, two readers: _without_support's positive-candidate conditions are repeated in _target_hold (now a nested
+    helper), as D156 recorded. The code's question carries the hold's events and passages after 7.4's own, so
+    Evaluation.question.events is f9013e12e's for the coverage reader (egd6's ``holding``) and assess._claims (claims6).
+- **D161, what was edited, the pins, the proofs and the measurement.**
+  - studio/interpretation/events.py: Evaluation - its docstring and one field, ``second: Optional[Question] = None``
+    (line 427); _target_hold only - its docstring (a D161 paragraph), the nested positive() helper and the two readings
+    (lines 1066-1079: those that meet the defining target, else those whose target is not usable), the code's question
+    built from 7.4's as given (lines 1082-1085) and ``second=target`` in the Evaluation it returns (line 1089). The plain
+    hold's return, the call in evaluate, _without_support and _focused are unchanged.
+  - studio/interpretation/assess.py: _proposal lines 621-622 only - after the evaluation's question becomes a
+    clarification, ``evaluation.second`` becomes one too. Nothing else in assess.py is touched.
+  - tests/test_interpretation_r5f_eus.py, NEW, 9 tests: TheTargetHoldsQuestionIsItsOwnClarification
+    (test_d161_problem0_the_examinations_landmark_target_asks_both_facts, test_d161_its_twins_ask_both_facts,
+    test_d161_where_r6_asks_the_structure_examined_both_targets_are_asked,
+    test_d161_controls_a_hold_with_no_candidate_asks_its_own_question_alone,
+    test_d161_a_service_question_the_code_asks_word_for_word_is_asked_once - the D89 consequence, pinned so a change to
+    it is seen); SevenFourReadsACandidateWhoseTargetIsNotUsable
+    (test_d161_problem1_the_failed_drainage_of_an_untied_collection_is_asked,
+    test_d161_never_beside_a_candidate_that_meets_the_target - the narrowing form,
+    test_d161_controls_a_candidate_whose_target_is_verified_elsewhere_is_not_read); SevenFoursPassagesAreKeptAsTheyAre
+    (test_d161_problem2_the_statement_marks_are_kept).
+  - Changed expectations, tests/test_interpretation_r5e_eus.py SevenFourIsAskedBesideTheTargetHold (D156 (2)'s pins of
+    the one combined question; no release is withdrawn - each moves by QUESTION-ADDED): assert_both expects 7.4's
+    question and reason alone first and the hold's as the second clarification;
+    test_d156_an_attempted_pseudocyst_drainage_beside_a_bile_duct_drainage_asks_both [performed_status, target, target],
+    R6's question third; test_d156_the_gallbladder_twin_likewise the same, its labels (4);
+    test_d156_a_pseudocyst_drainage_told_later_asks_its_time_beside_the_target [event_time, target, target], the listing
+    kept and its service question now the code's (D89); test_d156_with_the_examinations_own_target_verified_both_are_
+    still_asked [performed_status, target] (D156's residual closed); two docstrings say so. No r5d, r5c or D87 pin
+    changed.
+  - Suites (t.sh, Postgres 127.0.0.1:55461, a new suffix every run), on the final work copy:
+    - runs/int5e-labels.txt (runs/int5d-labels.txt's 81 labels and the six r5e modules) and the new module: 1996 tests
+      OK, 3 skipped (logs/t-eus6f1-work-int5e-plus-new.log) - the round-5e integration's 1987 on f9013e12e
+      (runs/int5e-suite.log) plus the 9 new pins;
+    - the 44 other modules of gate5/labels.txt (the harness, cux, repairs, h3, operator and second-review modules that
+      drive the new path): 916 OK (logs/t-eus6f2-work-gate-other.log), round 5e's count;
+    - the EUS, D87, r5d EGD, guard-static and assess modules on the final copy: 188 OK (logs/t-eus6a5-work-eusplus.log).
+      No 're' import was added (test_interpretation_assess.Imports, test_guard_static); no replay test fails; no fixture
+      was regenerated.
+    - Before the expectations above moved, the first build failed only the four r5e pins it changes (8 subtests, among
+      them the 'Later' pin's service question: the D89 row); a first control of mine (an untied DENIED drainage, whose
+      relation reaches the bile duct drainage, so _without_support decides) asserted the wrong path and was replaced; the
+      code was not changed for it.
+    - A first form of (2), the spec's literal OR, was built, measured and replaced by the narrowing form once
+      o_h4_untied_later_before_attempted_fit showed its displacement. Its FRESH-2 score
+      (fresh2-score/f2r5f-eus6-firstform, file for file the final one's), its int5e-plus-new run (1995 OK, 3 skipped;
+      logs/t-eus6s1-earlier-form-*) and a stopped other-modules run are kept; every measurement in this entry is of the
+      final form.
+  - Mutation proof (tools/mutate5f.py; one reused copy, mut-1). Before each mutant the four touched files were synced
+    from work/ and compared equal by sha256; each replacement was asserted to occur once, its application confirmed by
+    its MUT- marker and a sha256 change, and its restore by sha256 equality. Labels: the r5f, r5e, r5d, r5c, r5, r3 and
+    r4-lower EUS modules, D87 and r5d EGD (118 tests); the unmutated copy was OK first. The work copy was never mutated.
+    - M0, the engine half undone (f9013e12e's events.py and assess.py, the pins kept): 33 failures in 11 tests.
+    - M1, assess never asks ``second``: 27 in 11. M1b, ``second`` never set: 27 in 11. M2, 7.4 reads only the
+      candidates that meet the target: 4 in 1 (problem 1's). M3, 7.4's passages re-spanned: 3 in 1 (problem 2's).
+    - Control mutants: M1c, D156's combined words kept beside ``second``: 24 in 10; M1d, the plain hold asks its target
+      question twice: 25 in 13 (the no-candidate controls, D136/D145/D149/D87 pins); M2b, every positive non-supporting
+      candidate read: 3 in 2 (the verified-elsewhere control and the narrowing pin); M2c, only the untied candidates
+      read: 31 in 10; M2d, the spec's literal OR: 2 in 1 (the narrowing pin); M3b, the hold's passages not kept: 2 in 1;
+      M3c, the hold's events not kept: 16 in 8.
+    - Every pin fails under at least one mutant (logs/mutation-results.json, logs/mutation-run.txt, logs/mut-*.log).
+  - The release census (RELEASE-CENSUS.md; probe/census-all.json, census-order.json; tools/census5f.py), 114 inputs,
+    156 (input, citation set, code) rows and 144 encounter rows:
+    - against f9013e12e: 56 code rows move, all QUESTION-ADDED; 0 RELEASE, 0 EXCLUDE, 0 HOLD, 0 QUESTION-DROPPED,
+      0 words lost (a base question's words kept whole or as the build's clarifications'), 0 consideration dropped.
+      Encounter: 0 LISTING-DROPPED, 0 SERVICE-LOST, 11 SERVICE-ASKED-BY-CODE (above), 1 SERVICE-ADDED.
+    - against e5628be56, of the rows the build moves: 0 forbidden class introduced; 3 rows carry a loss f9013e12e
+      already has (above).
+    - No cost returns: no release is withdrawn and no row is held where it was READY.
+  - The differential gate (gate5/tools-v2; replay.py and gate.py):
+    - gate5/corpus (2,652 cases, harvested at 4f82e5056): 0 non-SAME rows of 3,396 code and 2,650 encounter rows
+      against out-v2/f9013e12e.jsonl. Against out-v2/e5628be56.jsonl: 346 rows, every one identical to f9013e12e's own
+      comparison (0 introduced, removed or changed): RELEASE 2 (44386 on the enteroscopy pouch pins
+      test_d148_an_ileal_j_pouch_beside_a_peg_is_the_small_intestinal_pouch and
+      test_d141_an_intestinal_pouch_beside_a_gastric_bypass_is_a_doubt: round 5c-5e's, not this repair's), EXCLUDE 0,
+      encounter LISTING 39 (r5c/r5d EUS, r4 EUS-lower, r5c/r5d enteroscopy and route pins: round 5c-5e's).
+    - Positive control: a fact planted in the plain target hold (``second`` on every hold) in mut-1 gave 14 QUESTION rows
+      on that corpus; restored by sha256. The corpus has no input in D156's branch: the r5e modules came after it.
+    - A supplementary corpus, harvested with gate5's hook from the 14 test modules changed since 4f82e5056 on f9013e12e
+      (751 cases; gate/corpus-delta): against f9013e12e 7 QUESTION rows, all 43240, all 'more' (the 7 cases of four r5e
+      D156 pins), 1 encounter QUESTION 'fewer' (the r5e 'Later' pin: the D89 row) and 6 encounter DETAIL (the
+      open-question count); no other code moves. Against e5628be56: 320 rows; against f9013e12e's own comparison 6
+      introduced (encounter DETAIL), 8 changed (the 7 QUESTION rows, now 'more'; the 'Later' encounter row from
+      QUESTION+LISTING 'more' to LISTING 'more'), 0 removed. RELEASE 2 (the same 44386 rows), EXCLUDE 0, encounter
+      LISTING 44 (26 'changed', 11 'more', 7 'same' - the same 44 rows and directions as f9013e12e's own comparison;
+      every listing value is f9013e12e's).
+    - The new module's own inputs (21 cases, harvested on the build; gate/corpus-r5f2): against f9013e12e 17 QUESTION
+      'more', 2 encounter QUESTION 'fewer' (the two D89 rows), 15 DETAIL; against e5628be56 no RELEASE or EXCLUDE, 6
+      encounter LISTING rows all 'more' (f9013e12e's own six), and its 5 'changed' QUESTION rows carry the losses
+      f9013e12e already has against it (the controls' and the narrowing pin's).
+    - The gate replays inventories as f9013e12e normalized them; this change is at assess time (no normalize-time
+      change), and every probe above re-normalizes in each tree.
+  - Measured on the final work copy (host_score.sh; nothing sent, no docker; logs/measured-tree-sha256.txt):
+    - FRESH-2 (f2r5f-eus6): A 96/6, B 177/15, C 171/19 plus 2 safe_hold, the base's (f25e-int). rows.jsonl and runs.jsonl
+      byte-identical; 0 of 360 files differ. Changed rows: none. Changed assessment files: none.
+    - Positive control: a key planted in assess._proposal's support in mut-1 appeared in 21 of 21 corpus-A assessments
+      (f2r5f-eus6-ctl, a control only); restored by sha256.
+    - The head-to-head (h2h.json) equals round5e/h2h-int.json in all 459 leaves: run 1 214/234 (A 34/34, B 59/64, C
+      121/136); worse 5, better 69, unstable 7, facts moved 0.
+    - FRESH-1 (f1r5f-eus6-work against f1r5f-eus6-pristine, both scored here): 0 of 360 files differ; A 97/5, B 174/18, C
+      165/24 plus 1 false_ready and 2 safe_hold on both. That false_ready pre-exists.
+    - No new false_ready, false_exclusion, dropped_question or ready_wrong_facts. No STOP.
+    - Census with the build's helpers (tools/fresh_census5f.py, fresh-census.json): 0 43240 candidates in either corpus,
+      so no FRESH inventory reaches _target_hold; the constructed pins carry the proof.
+  - Informational merge check, not a measurement of record: the six other round-5f patches as present at 16:14Z
+    (claims6 180bdf7a83a2, colon5 22e9084ff718, currency6 92f2ce8fe1c9, egd6 9054a8db905d, enteroscopy6 7bce46197516,
+    ercp6 d63d39614e6f), then this one, apply with patch -p1 to a fresh f9013e12e archive with no reject (this one's
+    events.py hunks at an offset of 30 lines). On that tree the six r5e and seven r5f modules, r5d and r5c EUS, D87, r5d
+    EGD and test_guard_static ran 205 tests, OK (logs/t-eus6mg1-mergecheck.log).
+  - Left in place (rm -rf is denied): round5f/eus6/ (pristine = f9013e12e, work, prev = e5628be56, base = 4f82e5056,
+    installed = c2e53f8e, mut-1, tools, probe, logs, gate); fresh2-score/f2r5f-eus6, f2r5f-eus6-ctl and
+    f2r5f-eus6-firstform (the first form's measurement, the literal OR: identical files); fresh-score/f1r5f-eus6-work,
+    -work-firstform and -pristine; t.sh's runs/state-eus6* and runs/tmp-eus6*; in the session scratchpad,
+    eus6-applycheck, eus6-applycheck2, eus6-mergecheck and eus6-mergecheck2 (fresh archives), and gate5/build's run and
+    tmp dirs.
+- **D162 A same-day frame standing whole anywhere in the time words of an act OFF by its own time places it on the date
+  of service (2026-11-11; round 5f, narrowing only; the round-5e currency review's problem 5, round5e 'review:currency5'
+  in round5e/results-wf_ec2ec26b-bed.json - D109's recorded residual, restated in D131; repair key currency6).** Every
+  input below was measured on byte-identical texts on five trees: c2e53f8e (the installed release:
+  studio.validation.engine.assess with gi_context.extract_context, merge_user_values office/established, detect.route on
+  the date the merged context gives and pages=(), as tests/test_harness_engine.py drives it, the new path's synthetic
+  reference rows), e5628be56 (round 5c), 4f82e5056 (round 5d), f9013e12e (round 5e, the base) and the build. Each was
+  read four ways: Corti proposing 99213 citing the visit line ('em'); no code proposed ('no_em': the visit item); no
+  code with a second review (fable) selecting 99213 for the visit item ('second'); and, for the EGDs, 99213 with 43235
+  ('em_act'). Every input is CONSTRUCTED (synthetic, fictional patients); none is attested (FRESH scan below). Outcomes
+  are written c2e53f8e / the three new-path heads (e5628be56, 4f82e5056 and f9013e12e give the same outcome on every
+  reading the change moves) / the build. Evidence: round5f/currency6/ (RELEASE-CENSUS.md; out/cases.json, np-*.json,
+  inst.json, census-cases.tsv and .md, fresh-time-words.json, harvest-moved-texts.json; gate/; harvest/; logs/).
+  - **The source, reproduced.** The review's two inputs, byte-identical to its cases_extra.py (text sha256 equal): D81's
+    office lines with P2 "Earlier in the day, before her visit, rubber band ligation of one internal hemorrhoid was
+    performed in the office." (band_ligation under gi.other 'rubber band ligation', performed, by the team,
+    earlier_encounter worded "Earlier in the day, before her visit", verified by 'earlier'), and D109's own "I performed
+    an upper endoscopy earlier in the day, before her visit." (the EGD by 'I', earlier_encounter worded "earlier in the
+    day, before her visit", verified). c2e53f8e: 99213 held with separate_em and the modifier 25 consideration ("Other
+    GI service" / "Upper GI endoscopy ... is documented as performed on the same date"), the visit set apart, a second
+    review's 99213 an informational alternative. Every new-path head: day_of OFF (the words are not made only of whole
+    frames, D109), 99213 READY with no question, the visit listed, a second review's 99213 READY. The document places
+    the act on the date of service. It reproduces on f9013e12e exactly as the review reported.
+  - **What changes (studio/interpretation/facts.py, _same_day_frame and day_of only).**
+    - _same_day_frame takes ``anywhere``. With it, the words are also ON when a lexicon.SAME_DAY_FRAMES entry stands
+      whole anywhere in them, whatever other words they hold: the words folded (lexicon.fold), the frame's own folded
+      words found contiguous, with no letter or digit touching either end. "earlier in the day, before her visit",
+      "Before her visit, earlier in the day" and "I performed a flexible sigmoidoscopy earlier in the morning in the
+      endoscopy suite" hold one; "earlier in the daytime", "earlier in the days before her visit", a bare "that day" and
+      "in the morning" do not. An anaphoric frame (lexicon.ANAPHORIC_FRAMES) is never read that way. Without
+      ``anywhere`` D109's whole reading is unchanged.
+    - day_of reads it for an act whose own usable earlier_encounter or future time would place it OFF, whose performer
+      is not verified to another clinician or facility (D132's condition, the same ``other`` reading) and whose words
+      carry no date literal. Such an act is ON. Nothing else in day_of changes.
+    - lexicon.py: no change. No frame is missing for the spec's inputs ("earlier in the day" is in SAME_DAY_FRAMES), and
+      a frame added there would also be read whole for every time value, including an UNDATABLE act (see below).
+    - Proved rather than asserted: every top-level statement of facts.py other than these two functions is
+      byte-identical to f9013e12e's (tools/ownership_check.py); imports unchanged; the six engine modules import no re.
+  - **Built narrower than the literal reading, and why (the spec's (2): a row the document does not support is a STOP
+    for that form, built narrower or recorded).** Read literally ("places the act ON" for every act whose performer is
+    not verified other), the frame would also move an UNDATABLE act - a time that is not usable - ON. That variant (v0,
+    round5f/currency6/var-v0) was built and measured on the same census: beyond the build's moves it gives 10
+    QUESTION-CHANGED readings (event_time dropped, separate_em asked) and 10 RELEASE readings (99213 held asking
+    event_time becomes READY with the modifier 25 consideration beside a documented statement), on five inputs and their
+    stated twins. One of them is a form the document does not support: "Yesterday, later in the evening, she underwent
+    an upper endoscopy, which showed gastritis." (earlier_encounter, no earlier marker: unverified; performer unknown).
+    f9013e12e asks event_time; v0 asks separate_em about an EGD "possibly performed on the same date" and, beside the
+    statement, makes 99213 READY+25; c2e53f8e gives v0's outcome on 99213 (separate_em; READY+25 beside the statement).
+    No rule inside EB1 and these two functions tells that form from the same-day ones (the EGD by 'I' given
+    current_encounter "earlier in the day, before her visit", D35's other occasion; "Later in the day, after her visit"
+    and "On the date of service, before the visit", unverified) without a word list naming other days, so the class is
+    not built: an UNDATABLE act keeps C-3's event_time question, as on every new-path head. Pinned
+    (test_d162_an_undatable_act_keeps_its_event_time_question), mutation-proved (M2).
+  - **What the inputs give now** (c2e53f8e / the new-path heads / the build):
+    - Problem 5's banding and the review's EGD by 'I', D109's own pin input (the finding-14 office lines) and the whole
+      sentence as the time words (FRESH-2 attests whole-line time words): held separate_em+25, set apart, second
+      informational / READY, listed, second READY / as c2e53f8e. With 43235 proposed beside the EGD: 43235 excluded on
+      every new-path tree before and after (it reads its own time, not day_of); it loses only the review.same_day_em
+      warning (D162 holds the E/M itself, so the reinstatement gate no longer applies). For the register, pre-existing
+      and unchanged: c2e53f8e holds that 43235 (asking extent and performed_status) where every new-path tree excludes
+      it as another encounter's act.
+    - The class (same-day words): the flexible sigmoidoscopy by 'I' "Earlier in the morning, before clinic", "Earlier in
+      the afternoon, before her appointment", "Earlier in the day, prior to her visit", "Before her visit, earlier in
+      the day", "earlier in the morning in the endoscopy suite"; the banding filed under the visit ('office'); D94's
+      excision of kind other "Earlier in the day, before her visit, excision ..." (not_gi: "Service outside the GI
+      profiles"), including the r5c pin's own input: held, set apart, second informational / READY, listed / as
+      c2e53f8e.
+    - The same class with the act only POSSIBLE (procedure 'unknown', performer 'unknown', other_clinician without
+      words, the EGD "She underwent ..." by a performer 'unknown', the excision with procedure 'unknown'): held
+      separate_em, the visit set apart, second informational / READY, listed, second READY / held separate_em, the visit
+      LISTED, a second review's 99213 added held - D134's recorded difference (beside a possible act the visit stays
+      listed), a listing kept, never a READY.
+    - Every stated twin of the inputs above (the visit documents a significant, separately identifiable E/M service):
+      READY+25 / READY / READY with the modifier 25 consideration; the visit set apart beside a done act as above.
+    - Controls, unchanged on every tree: a verified other facility's EGD "Earlier in the day, before her visit, ... at
+      an outside hospital" (D132's condition: OFF, READY, as c2e53f8e); a date literal decides ("On 10/30/2026, earlier
+      in the day", "earlier in the day in 2024": OFF, READY, as c2e53f8e); whole frames, "Earlier today, before her
+      visit", "earlier this year", "earlier in the week", "previously", "earlier in the daytime", "earlier in the days
+      before her visit"; problems 1-2 (below).
+  - **Costs this repair adds** (a hold where c2e53f8e is READY; both constructed, both D132's recorded class: an act
+    with no verified other performer):
+    - "Earlier in the day, before her visit, she had undergone an upper endoscopy at an outside hospital." with the
+      performer other_facility WITHOUT words (unverified): READY / READY / held separate_em (a possible EGD), the visit
+      listed; the second review's 99213 held. Its stated twin: READY / READY / READY+25.
+    - D112's melena note (the ED visit on 10/30/2026) with "Earlier in the day, before her ED visit, she had undergone
+      an upper endoscopy at that hospital, ..." and the performer 'unknown': READY / READY / held separate_em, the visit
+      listed. The document places the EGD on 10/30. Stated twin: READY / READY / READY+25.
+  - **Costs that return: none.** D162 withdraws no round-5d release; nothing that a release had cured is held again.
+  - **Recorded residuals.**
+    - 1. Other words of the phrase can name another day beside a whole frame. "Last week, earlier in the day", "At her
+      prior visit, earlier in the day", "Two weeks ago, later in the afternoon", "earlier in the morning of her
+      admission" (the EGD by 'I', verified) and the banding "At her last visit, earlier in the day": held
+      separate_em+25, set apart, second informational / READY, listed, second READY / as c2e53f8e - exactly c2e53f8e's
+      outcome on every reading, which the document does not support (the act is another day's). The LISTING-DROPPED rows
+      here (10 readings) are a forbidden class on constructed inputs, recorded rather than built narrower: inside these
+      two functions the only narrower forms either fail requirement (1) (no anywhere reading), or need a word list
+      naming other days (which would also leave "Earlier in the day, prior to her visit" READY, a same-day form the
+      document places on the date), or need combination.procedure_day (not owned) to keep a frame-anywhere act only
+      possible. The same with a performer 'unknown' ("Yesterday, earlier in the morning, she underwent an upper
+      endoscopy", verified by 'earlier'): held separate_em / READY / held separate_em, the visit listed. D109's own
+      control "earlier in the morning of her admission" is the unit form; that pin's expectation changes (below).
+    - 2. An anaphoric frame beside other words is not read: "Earlier that day, before her visit, I performed an upper
+      endoscopy, ..." and "Earlier that morning, before clinic, ..." (by 'I', verified): held separate_em / READY /
+      READY. The spec names lexicon.SAME_DAY_FRAMES; D132's frames are read whole only. Critical class, constructed.
+    - 3. An UNDATABLE act with a frame anywhere keeps event_time (above): held separate_em (READY+25 stated) / held
+      event_time / held event_time - a cost unchanged from f9013e12e.
+    - 4. Problems 1-2 (RECORD, do not build), unchanged: "I performed her last upper endoscopy three months prior to
+      today's visit, ..." is ON by 'today's' (D131) on every new-path head and here (held, set apart) where c2e53f8e is
+      READY and lists it; D112's other-facility frames ("Earlier that same day" and "That same day" ON by 'same day',
+      "Earlier that day" OFF, "Earlier in the day" ON as a whole frame): as on f9013e12e and e5628be56.
+    - 5. The routing stand-in reads a moved act's family performed where it read historical (47 findings of the census):
+      28 equal c2e53f8e's routing, 12 (the another-day forms and D112's 'unknown' performer) c2e53f8e routes uncertain,
+      2 (the outside EGD, performer unverified) historical, 5 have no c2e53f8e family (the excision of kind other,
+      routed gi.other there; the unit input). A record; nothing in assess reads it.
+  - **Disagreements, for the integration owner.**
+    - 1. The literal requirement (1) releases, so it is built narrower (above): the time condition. Its input:
+      "Yesterday, later in the evening, she underwent an upper endoscopy, which showed gastritis." (unverified,
+      performer unknown).
+    - 2. Requirement (1)'s own outcome, "the visit set apart, as c2e53f8e holds it", is LISTING-DROPPED in this round's
+      vocabulary against f9013e12e and e5628be56 (26 same-day readings: required, document-supported, equal to
+      c2e53f8e), and the same mechanism sets the visit apart on the another-day forms (10 readings: recorded residual 1,
+      equal to c2e53f8e, not document-supported). Built as specified; flagged.
+    - 3. The spec names one existing pin (r4_em_same_day:367-379). Two more existing pins assert the residual D162
+      closes and change too; each is listed below.
+- **D162, what was edited, the pins, the mutation proof, the suites and the measurement.**
+  - **Edited.** studio/interpretation/facts.py: _same_day_frame (the ``anywhere`` reading and its docstring) and day_of
+    (the one arm and its docstring paragraph). lexicon.py and every other source file: no change.
+  - **Existing pins whose expectation changes** (each asserted D109's recorded residual, which D162 closes):
+    - tests/test_interpretation_r4_em_same_day.py test_d109_controls_another_date_stays_off (lines 364-378, the spec's
+      pin): its control 'words beyond the frames' ("I performed an upper endoscopy earlier in the day, before her
+      visit.") is ON and held with separate_em (was OFF, READY); the 'in 2024' control is unchanged.
+    - the same module's test_d109_the_frames_are_read_whole_as_d54_reads_them: 'earlier in the day, before her visit' ON
+      (was OFF), and 'earlier in the morning of her admission' ON (was OFF; recorded residual 1). Its other 16 cases are
+      unchanged.
+    - tests/test_interpretation_r5c_currency.py test_d131_the_no_comma_control_is_unchanged: the excision 'earlier in
+      the day, before her visit' (D109's residual as D131 restated it) is ON and held with separate_em (was OFF, READY);
+      the other three inputs are unchanged.
+    - No r5e currency pin changes.
+  - **New pins** (tests/test_interpretation_r5f_currency.py, 11 tests in 3 classes, from the review's own inputs):
+    - D162AFrameAnywherePlacesAnOffActOnTheDate (5): problem 5's banding (and its stated twin); the review's EGD by 'I',
+      D109's office lines and the whole sentence (and the stated twin, and 43235 excluded beside it); the class's frames
+      and positions; its filings, kinds and performers (done and possible, each with its stated twin); the unit reading
+      of _same_day_frame with and without ``anywhere``.
+    - D162WhatTheReadingNeverMoves (3): an UNDATABLE act keeps event_time, with or without the statement (v0's
+      counterexample and three same-day forms); a verified other and a date literal decide; an anaphoric frame beside
+      other words is not read (recorded residual 2).
+    - D162Recorded (3): the another-day forms (recorded residual 1); the cost on D112's melena note with an unknown
+      performer; problems 1-2 do not move.
+  - **Mutation proof.** One reusable copy (round5f/currency6/mut-1), never the work copy; before each mutant its
+    facts.py was checked equal to the work copy's by sha256; each mutant printed its marker present and the sha256
+    before and after; after each the file was restored and checked equal by sha256; the copy was diff -r equal to work
+    before and after (logs/mut-summary-final.txt, logs/mut-*.log; run twice, the second on the final test module, with
+    the same counts). Each ran the new module, r4_em_same_day, r5c_currency, r5_em, r5_em2, r5d_currency, r5e_currency,
+    facts and combination (157 tests; baseline OK):
+    - M1, f9013e12e's facts.py (the change undone): 58 failing (33 failures, 25 errors: the unit pin's ``anywhere``
+      calls) - the seven pins that assert a move (the five of D162AFrameAnywherePlacesAnOffActOnTheDate, D162Recorded's
+      another-day and cost pins) and the three changed pins; the four controls pass, as they assert what D162 leaves as
+      f9013e12e (test_d162_recorded_problems_1_and_2_do_not_move fails under no mutant: a control).
+    - M2, the literal reading (every time value): 8 fail - test_d162_an_undatable_act_keeps_its_event_time_question, all
+      four inputs with and without the statement.
+    - M3, D132's condition dropped from the new arm: 1 fails (the verified other facility).
+    - M4, the date-literal condition dropped: 3 fail (another date, another year, and r4's 'earlier in the day in
+      2024').
+    - M5, no boundary (a frame inside a longer word): 3 fail ('earlier in the daytime', 'earlier in the days before her
+      visit', 'earlier in the dayx').
+    - M6, the anaphoric frames read anywhere too: 4 fail (the unit pin's two anaphoric cases, recorded residual 2's two
+      inputs).
+  - **Suites** (t.sh on Postgres 127.0.0.1:55461, a new suffix per run; CPT_STUDIO_BASELINE_TREE named a git archive of
+    c2e53f8e's studio, cptstudio and manage.py, so the legacy byte-identity tests ran):
+    - runs/int5e-labels.txt (round 5d's 81 labels plus the six r5e modules) plus tests.test_interpretation_r5f_currency
+      on the work tree: 1,998 tests OK, none skipped (logs/suite-work-full.log). The replay pins pass; no fixture was
+      regenerated. One docstring sentence of the new module changed after that run; the new module, r4_em_same_day,
+      r5c_currency, tests.test_interpretation_assess, tests.test_guard_static, tests.test_interpretation_replay and
+      tests.test_guard_matrix_new_path were re-run on the final tree: 136 tests OK (logs/suite-final-touch.log), and the
+      mutation baseline (157 tests) ran on it too.
+    - The same labels under the gate5 hook (the harvest): 1,998 tests OK.
+    - The 44 modules outside those labels that drive studio.jobs and name the interpreter path (round 5e currency5's
+      list) plus the four that name day_of, the stand-in or procedure_day (test_cux_bind, test_cux_r2_em,
+      test_gi4_corpus, test_repairs_r3_time), 48 modules: 1,003 tests OK (logs/suite-work-extra.log).
+  - **The release census** (RELEASE-CENSUS.md, every input with its outcome on the five trees):
+    - The hand-built census (111 inputs; 52 move; 198 moved readings): against f9013e12e HOLD 81, CONSIDERATION-ADDED
+      45, LISTING-DROPPED 36 (26 same-day, required by (1); 10 another-day, recorded), LISTING-CHANGED 36; identical
+      against e5628be56 and 4f82e5056. No RELEASE, EXCLUDE, QUESTION-DROPPED, QUESTION-CHANGED or PROPOSAL-DROPPED.
+      Against c2e53f8e: 176 equal, 5 COST (the two inputs above), 17 differ (12 a second review's 99213 held or READY+25
+      beside a possible act where c2e53f8e sets the visit apart - D134's recorded difference; 5 the stated twins of the
+      two cost inputs, READY+25 where c2e53f8e is READY without the consideration).
+    - The gate5 corpus (2,652 cases, replayed on the build): against f9013e12e, RELEASE 0, EXCLUDE 0, HOLD 2, encounter
+      DETAIL 2 - the inputs of the two r4/r5c pins above (their texts are census inputs; c2e53f8e gives the build's
+      outcome). Against e5628be56: f9013e12e's own 346 rows plus exactly those 4 (its 2 RELEASE and 39 LISTING rows are
+      f9013e12e's, unchanged).
+    - The harvested suites (2,374 distinct assess calls of the labels above, on the build; replayed through f9013e12e,
+      e5628be56, 4f82e5056 and the build; null control 0 rows): against f9013e12e HOLD 50, DETAIL 15, encounter LISTING
+      40 and DETAIL 30, on 84 cases, every one from the new module or the two changed pins, every one with a
+      byte-identical census text. Against e5628be56 and 4f82e5056 the build adds exactly those 135 rows; none is
+      RELEASE, EXCLUDE, QUESTION, NEW or GONE.
+  - **Measurement.** FRESH-2 re-scored on the work tree (fresh2-score/f2r5f-currency6): A 96/6, B 177/15, C 171/19 plus
+    2 safe_hold; 0 of 360 files differ from f2r5d-int (byte-identical to f2r5e-int per the Round 5e integration entry;
+    fresh2-score/f2r5e-int is not on disk); rows.jsonl, runs.jsonl and the summary JSON identical, so no row and no
+    assessment file changed. Head-to-head (round5f/currency6/h2h.json): byte-identical to round5e/h2h-int.json; run 1
+    214/234, worse 5, better 69, facts moved 0. No new false_ready, false_exclusion, dropped_question or
+    ready_wrong_facts: not a STOP. FRESH time words (tools/scan_fresh.py, the build's readers): 358 answers, 1,127
+    worded times; a frame stands whole anywhere only in 72 current_encounter times that are made of whole frames and
+    hold 'today'; 0 time words of a shape D162 moves.
+  - **Patch.** round5f/currency6/patch.diff (4 files, 528 lines, sha256
+    92f2ce8fe1c948c3edb5168ab4c2bb40c3019714e2b19f3af8846dcc78a62d84) applies with patch -p1 --dry-run from the parent
+    of a fresh archive of f9013e12e (checked by tar -d), with no fuzz or offset; applied for real there it leaves no
+    .orig or .rej and gives a tree diff -r equal to the work tree (logs/patchcheck-final.log). It shares no file with
+    the six other round-5f patches on disk when this was checked (claims6, colon5, egd6, enteroscopy6, ercp6, eus6), and
+    no other round-5f work tree had touched facts.py, lexicon.py, r4_em_same_day or r5c_currency.
+  - **Housekeeping.** t.sh left runs/state-c6* and runs/tmp-c6*; the tools left runs/state-cur6tools and
+    runs/tmp-cur6tools; host_score.sh used the shared runs/state-hostscore. round5f/currency6 holds one pristine
+    (f9013e12e), one c2e53f8e (inst), e5628be56 (base5c) and 4f82e5056 (base5d) for the census, the v0 variant, one
+    reusable mutant copy, the harvest corpus and replays, and a 5 MB c2e53f8e app-code tree for the byte-identity tests
+    (legacy-baseline). rm -rf is denied, so these remain. All data is synthetic; nothing was sent, no docker was used,
+    no sealed set was read, and the worktree was never edited.
+- **D163 A hold never releases a rival: a code held by any hold keeps, as claims for the competition, the acts its
+  evaluation read or names that it could account for (2026-11-11; round 5f, narrowing only; round5e 'repair:colon4'
+  disagreements 1-3, its experiment-claims.diff and census-release-exp-claims-heldback.txt, and 'review:ercp5'
+  problems 0-1; repair key claims6).** Built on f9013e12e. The change is in assess._claims and its docstring only.
+  - **As integrated: variant G4, the integration owner's judgement (2026-11-11).** The build above is G2. Integrated
+    instead is G4, which is G2 except for one case: a TECHNIQUE code (link.technique, a dilation code) held for its
+    SITE (events.SITE: the place is unsettled for its class) adds no claim. That is D118's rule, 'an act is never
+    paired with itself'. A technique code held for any other reason keeps its acts, as G2 has it. Why:
+    - G2's measured extra over N was cost only: FRESH-2 fb07 (attested). 43245 was held [competing_codes] beside 43249,
+      which was held for its site. That made three FRESH-2 false holds and moved the head-to-head from 214 to 213 of
+      234.
+    - G3 (no claims for any technique code) avoids that cost, but stops being narrowing once D158 ships. On review:colon4's
+      second member, a signed balloon dilation documented only in a nurse's entry, 43249 and 43214 are held
+      another_role. Under G3 they claim nothing, so they lose competing_codes against each other. A test proves it:
+      with colon5's patch, the mutant back to G3 fails
+      test_d158_two_codes_for_one_signed_wrapped_dilation_keep_their_competition (tests/test_interpretation_r5f_colon).
+    - G4 keeps both properties. The fb07 costs listed above do not apply to the integrated build.
+    - Pins that G2 had moved for technique codes held for their site are restored to f9013e12e's expectations:
+      - test_interpretation_events, the DilationSite and AnastomosisSite pins;
+      - r5_egd, D118's fb07 shape;
+      - r4_questions, D103's fb07 replay.
+    - New pin: test_d163_g3_a_technique_code_held_for_its_site_adds_no_claim. It is named for G3, and its expectation
+      holds unchanged under G4.
+    Proofs (round5f/claims6-g4/):
+    - the labels of runs/int5e-labels.txt plus the r5f claims module: 1998 tests OK;
+    - G4 with colon5's patch: the colon modules (r5f, r5e, r5d, r5c, r5), r5f claims and r3_claims give 89 OK;
+    - FRESH-2 f2r5f-claims6-g4: 0 of 360 files differ from f2r5e-int;
+    - gate against f9013e12e: 0 RELEASE, 0 EXCLUDE, 4 HOLD, 4 QUESTION-ADDED, 0 LISTING, 4 encounter DETAIL.
+    Patch: round5f/claims6-g4/patch.diff (sha256 7884d918..., 502 lines).
+  - How the engines were run. f9013e12e, e5628be56 and the build (each a fresh `git archive`, or the work copy) through
+    tests.test_interpretation_events.run, each tree with its own test builders. c2e53f8e through
+    studio.validation.engine.assess as tests/test_harness_engine.py drives it (round5e/colon4's probe_inst.py: the
+    document's own date, the new path's test reference rows), in one archive. Every input was run in two settings: no
+    participant ('none'), and Astra and Fable configured, read and proposing nothing ('read':
+    tests.test_interpretation_r3_claims.READ_NOTHING, which that module calls production's). The new path gives one
+    outcome in both settings on every input here; c2e53f8e does not. D152's rules were measured in two copies: d152
+    (f9013e12e plus round5e/colon4/logs/heldback-events-only.diff, the events.py hunk of patch-heldback.diff) and d152w
+    (the build plus the same hunk). Tools and outputs: round5f/claims6/tools/, probe/, census/, gate/, logs/.
+  - The class. A held code's Evaluation supports nothing (`supporting` is empty), so _claims claimed no act for it.
+    combination.competition then found no pair, and a RIVAL that competed with it for the same act lost its
+    competing_codes hold and went READY: a release through the next reader. It is the lesson of round U24 again: a hold
+    must be the final decision, never a lowered input another reader re-interprets.
+  - The source problems, reproduced on f9013e12e before any edit. All inputs are constructed; 43264 cites the
+    extraction (or the sweep) and 43265 the lithotripsy of one stone clearance (D55, D74).
+    - colon4's STOP: finding 5's stone clearance (tests.test_interpretation_r3_claims.STONE) with P4 'Documented by Jo
+      Rowe, RN: The stone fragments from the bile duct' / 'were extracted with an extraction balloon.'. On f9013e12e the
+      wrapped label is not read: both held [competing_codes], as on e5628be56. With D152's rules (d152): 43264 held
+      [performed_status] another_role and 43265 READY, in both settings. c2e53f8e: both READY with no participant, both
+      held [competing_codes] with participants. The same with the status words opening at the label ('Documented by
+      Jo Rowe, RN: The stone fragments were extracted').
+    - colon4 disagreement 2 (pre-existing): 'Nurse: The stone fragments were extracted from the bile duct with an
+      extraction balloon.' (D124's label). e5628be56 and f9013e12e: 43264 held another_role, 43265 READY. c2e53f8e:
+      READY/READY with none, both [competing_codes] with participants.
+    - The one-line signature line and D146's "Recovery nurse's note" heading (round 5d's own releases): e5628be56 both
+      [competing_codes]; f9013e12e 43264 another_role and 43265 READY; c2e53f8e as above.
+    - D146 problem 4's ERCP report under 'Nursing note', 'Nursing note - recovery', 'Nursing note, recovery room' and
+      'Procedure checklist' (pre-existing): 43265 READY on e5628be56 and f9013e12e; c2e53f8e as above.
+    - review:ercp5 problem 0: finding 25's sweep document (tests.test_interpretation_r5_ercp.sweep) with P3 'A 15 mm
+      stone in the common bile duct was fragmented with mechanical lithotripsy.' and P5 'The bile duct was swept with an
+      extraction balloon.' followed by each denial form (R1 '... No stones were retrieved, and a plastic biliary stent
+      was placed.', the semicolon, 'Nothing was retrieved', 'No stones were seen', the stent first, 'No stones
+      remained', the final cholangiogram; R3, R4, R6; the lithotripsy in the dropped sentence; the lithotripsy before
+      the sweep), the sweep's sentence or the whole passage cited. f9013e12e: 43264 held [performed_status]
+      nothing_retrieved and 43265 READY, the competing question gone from both. e5628be56: both [competing_codes].
+      c2e53f8e with participants: 43265 held [competing_codes] or [conflict:stone_extraction] on all but five rows (see
+      the costs).
+    - review:ercp5 problem 1: finding 11's uncertain lithotripsy ('It is unclear from the record whether the 15 mm stone
+      ... was fragmented with mechanical lithotripsy.') beside R1. f9013e12e: 43265 held [performed_status] doubt, its
+      competing_codes question dropped (e5628be56: [performed_status, competing_codes]). c2e53f8e: held
+      [performed_status] readings_disagree in both settings.
+    - The same release before round 5d (review:ercp5's L group): D140's control (the pancreatic sweep and its denial
+      event), the basket with a planned repeat ERCP, and R2 with the stent and the plan, each beside the lithotripsy:
+      43265 READY on e5628be56 and f9013e12e. c2e53f8e with participants: held [competing_codes] (the sweep cited).
+    - Every input reproduced as the sources state it.
+  - The rule (assess._claims; no other function changes).
+    - A code HELD by any hold - its evaluation's state 'uncertain' with no supporting event - keeps as claims the
+      events its evaluation names (Evaluation.question.events) or read (Evaluation.read: the acts the hold was decided
+      on), kept only where the code could account for the act, as it would claim it as supporting were its doubt
+      resolved:
+      - an act of its family and of a kind of its requirement groups (events.is_candidate over events.requirements);
+      - stated positive or uncertain, possibly current (coverage.possibly_current, D62), and not verified as another
+        performer's (D87: a doubted act is a doubt, an absent one is not);
+      - for a code that names a technique, of its device class or not verified as a class, and not verified outside its
+        D29 site class: _technique_doubts' reading. R4: a dilation of another technique is no act the code accounts
+        for, as c2e53f8e's technique_fits reads it.
+    - These claims are ADDED to what D55, D74 and D118 claim. Those still read the code's supporting events only and
+      are unchanged, so the change only ever adds a competition pair. It never makes a code READY or excluded and never
+      removes a question: the only readers of the claims are combination.competition and, through support['competes'],
+      the member-answer reader and the read-time overlay, which release a competing hold only when its rivals are gone.
+      E* (support.acts) is unchanged.
+    - Structural only: no word list, no 're', no legacy reader (EB1: the decision reads the evaluation's own events).
+  - The general form against the narrowest (requirement (2)). Five variants were built and replayed on the gate corpus
+    (gate5/corpus, 2652 cases; tools-v2/replay.py and gate.py against out-v2/f9013e12e.jsonl). Every variant moved only
+    HOLD and QUESTION-ADDED rows (0 RELEASE, 0 EXCLUDE, 0 question dropped, 0 encounter LISTING or QUESTION):
+    - N, the narrowest (another_role_hold and D106's retrieval_hold only): 4 HOLD (43265 under D146's four headings)
+      and 4 QUESTION-ADDED (43264).
+    - G2, the general form with the could-account-for filter (THE BUILD): N's 8 rows; 2 HOLD (43245 beside 43249 held
+      for an unsettled site: FRESH-2 fb07 r1's recording and D118's fb07 shape); 20 QUESTION-ADDED (43245 and 43249,
+      both already held for an unsettled site, now also asking competing_codes: four tests' inputs); 15 encounter
+      DETAIL rows (the completeness counts).
+    - G3, G2 without technique codes (D118's rule left to define a held technique code's claims): exactly N's 8 rows.
+    - G1, G2 without the technique and site filter: 16 HOLD and 41 QUESTION-ADDED. Among them, 43249 READY beside
+      43248 held for another technique (D118's two-balloon control; c2e53f8e READY there) and 43245 READY beside 43249
+      held for a verified other site (the pyloric dilation) become held.
+    - G0, no filter at all (every act named or read): 50 HOLD and 131 QUESTION-ADDED. Among them, 45385 READY beside
+      45382's bundling-identity hold (the polypectomy a clip may be part of), 45390 beside 45388 and 45381, 43251 beside
+      43255, and the three stent-exchange codes asking competing_codes of each other.
+    - G2 is built: it is the general form (every held code) and it moves nothing but HOLD and QUESTION-ADDED on every
+      input run (the gate corpus, the reviews' inputs, the constructed inputs below, FRESH-1 and FRESH-2). G0 and G1 are
+      not the specified rule: they claim acts the code verifiably does not account for (another technique, a verified
+      other site, another act's statement, the other side of an exchange), which no supported code ever claims.
+    - G2's measured extra over N is only cost on the inputs run (fb07, below). G3 has none of it and still closes the
+      7.4 member below; its FRESH-2 score is byte-identical to the base. It is recorded for the integration owner's
+      judgement; it is not built, because the specification names the general form whenever it is narrowing.
+  - What the inputs give now (both settings unless said):
+    - colon4's STOP with D152's rules (d152w): 43264 held [performed_status, competing_codes] another_role and 43265
+      held [competing_codes], c2e53f8e's question with participants word for word for 43265. The wrapped-label and the
+      status-words forms alike. Measured, not pinned on this tree: D152's rules are colon5's. The mechanism is pinned
+      here with the hold made directly (below).
+    - The 'Nurse:' label, the one-line signature, D146's five headings: 43264 [performed_status, competing_codes]
+      another_role, 43265 [competing_codes].
+    - review:ercp5's sweep documents: 43264 [performed_status, competing_codes] nothing_retrieved, 43265
+      [competing_codes]; finding 11's: 43265 [performed_status, competing_codes] doubt (e5628be56's); the L group's:
+      43265 [competing_codes].
+    - A further member of the class, constructed: finding 5's clearance with the extraction's status words unbound
+      (E4: 'were removed' is not in its passage) and a second sweep worded 'During the procedure' (E5, unanchored).
+      43264 is held by 7.4 (unverified), its question naming E4; 43265 claims E5 through D74. e5628be56 and f9013e12e:
+      43265 READY. c2e53f8e with participants: both [competing_codes]; with none, READY/READY. Now 43265 is held
+      [competing_codes]: the read half of the rule decides it (the question names E4 only).
+  - Costs (holds or questions where the document supports one code, or where c2e53f8e is READY). Constructed unless
+    said.
+    - FRESH-2 fb07, ATTESTED (B/fb07 r1-r3): a gastrojejunal anastomotic stricture after a Roux-en-Y bypass,
+      balloon-dilated. 43249 is held for its site: the anastomosis is unsettled for the esophageal class, because an
+      altered landmark is never outside it (D29). It now keeps the dilation as its claim, so 43245, which the anastomosis
+      fits (D34), is held [competing_codes] where it was READY. The document supports 43245 alone. c2e53f8e: READY with
+      no participant; held [competing_codes] with participants (D118's record). Three FRESH-2 false holds, one
+      head-to-head row worse. The suite's two inputs of this shape (D103's fb07 r1 replay and D118's fb07 shape) move the
+      same way. This reverses D118's 'an act is never paired with itself' for an unsettled site only; a dilation
+      verified outside the class is still never claimed.
+    - Both 43245 and 43249 held for an unsettled site (an anastomotic or unplaced dilation; the anastomosis tests'
+      inputs): each also asks competing_codes. They were held already; the question is added (20 gate rows).
+    - 43265 held [competing_codes] where c2e53f8e with participants is READY (5 probe rows): F R3 with the passage
+      cited, the lithotripsy in the dropped sentence (both citations), and L S12 with the passage cited return to
+      e5628be56's outcome; L S01 with the passage cited is a hold against both bases. In each, c2e53f8e holds 43264
+      (performed_status, readings_disagree) and READYs 43265. With no participant, c2e53f8e READYs 43265 on 30 more
+      rows the build holds.
+    - D74's and D104's claims pins: a held 43265 now also claims its own doubted lithotripsy (E3). No rival claims E3,
+      so no outcome moves.
+  - The costs that return. D163 withdraws round 5d's releases of 43265 (the one-line signature line and D146's
+    "Recovery nurse's note") and round 5e's (D155's nothing_retrieved holds beside the lithotripsy): 64 of the 88 probe
+    holds of 43265 restore e5628be56's outcome. Where that release had matched c2e53f8e's READY, the cost returns: 24
+    rows, 20 with no participant (each of the two signature/heading inputs once; F R3, the dropped-sentence
+    lithotripsy, 'Nothing', 'remained', 'seen', L S12, the clearance, the final cholangiogram and the lithotripsy
+    before the sweep twice each) and 4 with participants (F R3 and L S12 with the passage cited, the dropped-sentence
+    lithotripsy under both citations). The other 24 holds are new against both bases (the pre-existing class: D146's
+    four headings, the 'Nurse:' label, L S01, S02 and S05); 11 of them are holds where c2e53f8e in the same setting is
+    READY (10 with no participant, L S01 with the passage cited with participants).
+  - Pins (tests/test_interpretation_r5f_claims.py, NEW, 11 tests in 3 classes, both settings as subtests where the
+    outcome is assessed):
+    - D163AnotherRolesHoldKeepsItsActs: test_d163_an_extraction_told_in_a_nursing_line_holds_the_lithotripsys_43265
+      (the 'Nurse:' label and the one-line signature); test_d163_d146s_nursing_headings_hold_the_lithotripsys_43265
+      (the five headings); test_d163_a_held_another_role_code_claims_its_own_act (the one-line signature's held 43264
+      claims E4; on colon4's wrapped line, the another_role hold D152's rules give it, made directly, claims E4 and
+      competes with 43265's (E3, E4)).
+    - D163RetrievalHoldKeepsItsActs: test_d163_a_sweep_that_retrieved_nothing_holds_the_lithotripsys_43265 (seven
+      denial forms, two citations); test_d163_finding_11s_uncertain_lithotripsy_keeps_its_competing_question;
+      test_d163_d140s_hold_beside_a_lithotripsy_holds_43265_too.
+    - D163WhatAHeldCodeClaims: test_d163_a_code_held_for_an_unsettled_site_keeps_its_dilation_a_recorded_cost (fb07's
+      shape); test_d163_a_7_4_hold_of_two_acts_holds_the_rival_on_the_act_its_question_does_not_name;
+      test_d163_a_held_code_claims_the_acts_its_question_names (D156 (2)'s combined 43240 hold reads E3 and names E2
+      and E3: it claims both; no other code covers a drainage today, so this pins the claim only);
+      test_d163_controls_an_act_verified_as_not_the_codes_is_never_claimed (D118's two-balloon, historical-Savary and
+      pyloric controls, the bleeding control beside the polypectomy, finding 22's exchange);
+      test_d163_controls_an_act_that_is_no_doubt_is_never_claimed (a dilation at another hospital in 2024, both codes
+      held statement_scope, never competing; D74's denied lithotripsy claims nothing and 43264 stays READY).
+  - Existing pins changed, each because D163 changes its expectation:
+    - tests/test_interpretation_r5d_colon.py: test_d146_its_rival_for_the_same_act_is_ready, renamed
+      test_d146_its_rival_for_the_same_act_stays_held, and its class docstring. It pinned a release (pre-existing on
+      e5628be56 for the four headings) that D163 withdraws: 43265 [competing_codes], 43264 [performed_status,
+      competing_codes].
+    - tests/test_interpretation_r5_egd.py: test_d118_control_fb07_shape_an_act_is_never_paired_with_itself, renamed
+      test_d118_fb07_shape_a_code_held_for_an_unsettled_site_keeps_its_dilation: 43245 [competing_codes], 43249
+      [act_target, competing_codes] (the recorded cost).
+    - tests/test_interpretation_r4_questions.py: test_d103_fb07_r1_quotes_the_roux_limb_line_whole, its last assertion
+      only (43245 READY -> [competing_codes], the recorded cost).
+    - tests/test_interpretation_events.py: DilationSite.test_an_anastomotic_or_unplaced_dilation_asks_which_structure_was_dilated
+      and AnastomosisSite.test_what_leaves_the_site_unsettled ([act_target] -> [act_target, competing_codes]).
+    - tests/test_interpretation_r3_claims.py: test_d74_claims_read_a_positive_possibly_current_defining_act_in_any_verification_state,
+      and tests/test_interpretation_r4_ercp.py: test_d104_claims_read_an_uncertain_defining_act_and_still_not_a_denied_or_planned_one
+      (the held 43265's claims ('E4',) -> ('E4', 'E3'); their 'unclaimed' halves unchanged).
+  - Mutation proof (mut-1, a copy of the work tree; each mutant written over its assess.py, the marker and the sha256
+    change printed, the 59 tests of tools/mutation-labels.txt run, the work file restored and the restore confirmed by
+    sha256 f5f0fb7a94bff249 every time; logs/mutation.json):
+    - M0, D163 undone (f9013e12e's assess.py): 16 tests fail - 9 of the 11 new pins (all but the two controls, which
+      hold on f9013e12e by design) and the 7 changed existing pins.
+    - M1, the narrowest: 9 fail - the 7.4 pin, the fb07 cost pin, the 'names' pin, and the site and claims pins.
+    - M2, no technique or site filter: 11 fail - the 'not the code's' control and 10 existing D29/D118 pins.
+    - M3, no filter: 26 fail - both controls, the adjunct, D105 and D29/D118 pins.
+    - M4, no doubt filter: 3 fail - the 'no doubt' control and the D74/D104 'unclaimed' halves.
+    - M5, no kind filter: 13 fail - the 'not the code's' control, the adjunct and D105 pins.
+    - M6, no claims for a technique code (G3): 5 fail - the fb07 cost pin and the site pins.
+    - M7, the question's events only: 1 fails - the 7.4 two-act pin.
+    - M8, the read acts only: 1 fails - the 'names' pin.
+    - Every new pin fails under at least one mutant, and every mutant is killed by a new pin.
+  - Suites (tools/t.sh, Postgres 127.0.0.1:55461, a new suffix every run):
+    - runs/int5e-labels.txt (int5d's 81 labels and the six r5e modules) plus the new module (tools/labels-main.txt, 88
+      labels): 1998 tests, OK (3 skipped: test_guard_matrix_legacy's three tests that skip when no c2e53f8e baseline
+      tree can be built from an archive - the same 3 as the run before the pins changed).
+      The new module was run once more after its last edit (its docstring): 11 tests, OK.
+    - The 44 other modules gate5/labels.txt lists as importing studio.interpretation or driving the interpreter
+      (round5e/colon4/labels-other.txt, copied to tools/labels-other.txt): 916 tests, OK.
+    - Before the pins were changed, the 87 int5e labels gave 1987 tests and 30 failures, all in the 7 changed pins.
+    - tests.test_interpretation_replay passes; no fixture was regenerated.
+  - Measured (host_score.sh; nothing sent):
+    - FRESH-2 f2r5f-claims6: A 96/6, B 174/18, C 171/19 plus 2 safe_hold. Base (the round-5e integration, directory
+      fresh2-score/f25e-int; the spec's 'f2r5e-int' does not exist): A 96/6, B 177/15, C 171/19 plus 2. 4 of 360 files
+      differ: B/fb07/r1-r3's assessments and rows.jsonl. 6 rows change: fb07 r1-r3's 43245 READY/correct ->
+      HELD/false_hold [competing_codes], and 43249 [act_target] -> [act_target, competing_codes] (correct both
+      times). No false_ready, false_exclusion, dropped_question or ready_wrong_facts: no STOP.
+    - Head-to-head (round5f/claims6/h2h.json against round5e/h2h-int.json): run 1 213/234 (was 214/234), worse 6
+      (was 5: B:fb07 43245 added), better 69 (unchanged). B new_run1 58/6 (was 59/5); B all runs 174/18 (was 177/15).
+    - G3 and N scored the same corpora: f2r5f-claims6-alt-g3 and f2r5f-claims6-alt-n are byte-identical to f25e-int in
+      all 360 files.
+    - FRESH-1 f1r5f-claims6 (fresh-score; base f1r5f-colon5-pristine, an f9013e12e score, identical in all 360 files to
+      f1r5f-eus6-pristine and f1r5f-enteroscopy6-pristine): A 97/5, B 174/18, C 165/24 plus 1 false_ready and 2
+      safe_hold, every verdict and agreement figure as the base (the C false_ready is the base's own). 3 of 360 files
+      differ: fb07 r1 and r3, where Gemini's FRESH-1 readings already hold 43245 for its site; 43245 and 43249 each add
+      competing_codes (QUESTION-ADDED; verdicts unchanged).
+    - The differential gate (gate5/tools-v2, the final work tree): against f9013e12e, 0 RELEASE, 0 EXCLUDE, 6 HOLD, 24
+      QUESTION (all added), 15 encounter DETAIL, 0 encounter LISTING or QUESTION. Against e5628be56: 2 RELEASE and 39
+      encounter LISTING rows, every one identical on f9013e12e (gate/differential-vs-e5628be56.txt): the two RELEASE
+      rows are D148's 44386 pouch typing (round 5d; round 5f's D160 is on it) and the LISTING rows are enteroscopy and
+      EUS rows of rounds 5c-5e. D163 moves 45 rows against e5628be56, each SAME -> HOLD, QUESTION-ADDED or encounter
+      DETAIL. D163 changes nothing at normalize time, so the gate's replayed inventories measure it whole.
+  - Release census (census/; every probe input's outcome on e5628be56, f9013e12e, the build and c2e53f8e, per code and
+    setting): 120 source inputs (round5e/colon4's rival cases and review:ercp5's cases.py and cases_refute.py, copied
+    byte for byte) and 3 constructed ones.
+    - Source inputs: 184 code outcomes move against f9013e12e - 88 HOLD (all 43265) and 96 QUESTION-ADDED (92 on
+      43264, 4 on 43265). Against e5628be56: 68 SAME (the build restores e5628be56's outcome), 24 HOLD (43265 READY
+      there too) and 92 QUESTION-ADDED. 0 RELEASE, EXCLUDE, QUESTION-DROPPED, QUESTION-REPLACED or LISTING-DROPPED, 0
+      service-question change.
+    - Constructed inputs: 8 move (the 7.4 two-act input: 4 HOLD of 43265, 4 QUESTION-ADDED of 43264); the dilation at
+      another hospital moves nothing.
+    - The other pins' inputs (probe/pins: D118's fb07 shape and three controls, the bleeding control beside the
+      polypectomy, finding 22's exchange, D156 (2)'s two drainages): 4 move, all on the fb07 shape (43245 HOLD, 43249
+      QUESTION-ADDED, in both settings; c2e53f8e READY/READY with none, both [competing_codes] with participants).
+    - With D152's rules (d152w against d152): 192 move - 92 HOLD and 100 QUESTION-ADDED; against e5628be56 72 SAME, 24
+      HOLD and 96 QUESTION-ADDED. 0 forbidden.
+  - The siblings as they stood at 15:50Z (round5f/currency6, colon5, ercp6, enteroscopy6 and eus6 patch.diff, copied
+    to merge-patches/ with their sha256), applied in that order on a fresh f9013e12e archive with this patch last: every
+    patch applies (this one with a 2-line offset). The six r5f modules, the r5e colon, ERCP and EUS modules and the
+    modules whose pins this patch changes: 223 tests, OK. On the 120 source inputs that merged tree moves 196 code
+    outcomes against f9013e12e, all HOLD or QUESTION-ADDED; with colon5's D152 rules in it, the wrapped-label and
+    status-words stone clearances hold 43265 [competing_codes] - colon4's STOP is closed.
+  - Installed outputs on the general form's other inputs (probe/pins): the fb07 shape - c2e53f8e READY/READY with no
+    participant, both held [competing_codes] with participants, so the build's cost equals c2e53f8e's production
+    configuration; the pyloric dilation - c2e53f8e with participants holds 43245 [competing_codes] where every new-path
+    head is READY (D118's recorded divergence, not moved by D163); the two balloon dilations and the Savary at another
+    encounter - c2e53f8e READY on 43249, as the build.
+  - Recorded residuals:
+    - studio/jobs.py:3047-3050 (_assess_child_events' docstring) still states D146's release ('a code so held supports
+      nothing, so a rival code ... loses that competing_codes hold ... 43265 for the same clearance is then READY, as
+      c2e53f8e READYs both'). It is outside this repair's ownership; a docstring correction for the integration.
+    - The rule names an act only through question.events and read. eus6 (D161) gives an Evaluation a second question.
+      If its events ever stand outside both, _claims must read them too; test_d163_a_held_code_claims_the_acts_its_question_names
+      fails if 43240's 7.4 candidate stops being claimed.
+    - c2e53f8e's competition runs only with its participants configured; with none it READYs both codes of one stone
+      clearance. Which configuration governs is the owner's (colon4's disagreement 4). The new path gives one outcome
+      in both.
+  - Edited (patch.diff, sha256 180bdf7a83a29157dad24070f08cd822d2b50fbf68b3b3a8df33e8b51d42c889, 572 lines; it
+    dry-runs with patch -p1 from the parent of a fresh f9013e12e archive (1097 files, equal to the pristine copy), and
+    the patched archive equals the work tree): studio/interpretation/assess.py (_claims and its docstring only); NEW
+    tests/test_interpretation_r5f_claims.py; the seven pins listed above in tests/test_interpretation_r5d_colon.py,
+    tests/test_interpretation_r5_egd.py, tests/test_interpretation_r4_questions.py, tests/test_interpretation_events.py,
+    tests/test_interpretation_r3_claims.py and tests/test_interpretation_r4_ercp.py.
+- **Round 5f integration (2026-11-11; wf_78933804-741; six of seven repairs integrated, plus two changes of the
+  integration's own).** Round 5f was NARROWING ONLY, as round 5e was. Seven repairs were built on f9013e12e, each with an
+  independent differential reviewer, and their outputs are kept in durable directories (round5f/<key>/,
+  round5f/review-<key>/).
+  - Integrated in this order with git apply onto f9013e12e:
+    - claims6 as variant G4 (D163; round5f/claims6-g4/patch.diff, sha256 7884d918..., not the reviewed G2: see D163's
+      as-integrated note);
+    - currency6 (D162);
+    - colon5 (D158);
+    - enteroscopy6 (D160), as shipped: (2) and (3);
+    - egd6 (D157);
+    - eus6 (D161);
+    - the integration's own change (round5f/integration/fixes.diff, assess.py and one jobs.py docstring) and its pin
+      module, tests/test_interpretation_r5f_integration.py.
+    ercp6 (D159) is NOT integrated; see D159's entry.
+  - Results:
+    - engine and guard suites (runs/int5f2-labels.txt: round 5e's 87 labels, the six integrated r5f modules and the
+      integration module): 2063 tests OK;
+    - FRESH-2 f2r5f-int2: all 360 files byte-identical to f2r5e-int (A 96 correct / 6 false holds, B 177/15, C 171/19 plus 2 safe holds);
+    - the head-to-head (round5f/h2h-int2.json): equal to round 5e's in every key.
+    The first integration run, which included ercp6, gave 2070 tests OK, FRESH-2 identical and the head-to-head equal
+    (round5f/integration/integrate.log).
+  - **The claims variant: the integration owner's judgement.** The reviewed build is G2, the general form. Its measured
+    extra over the narrowest form is cost only: FRESH-2 fb07 (attested) holds 43245 [competing_codes] beside 43249, which
+    is held for its site; that is three false holds, and the head-to-head goes from 214 to 213 of 234. G3 (no technique
+    code claims) avoids that cost, but with colon5 it drops the signed balloon dilation's competing_codes. G4 keeps both
+    (D163's note has the proofs).
+  - **The integration's own change: the service questions read after the member answers** (assess.py; review:egd6
+    problem 0, review:eus6 problem 0):
+    - D157 (3)'s ``holding`` is taken only from the proposals held NOT DOCUMENTED. Before, 43239 held act_target on the
+      group lesion's biopsy, beside the timed snare and a timed biopsy, gave its service slot to the biopsy. f9013e12e
+      and e5628be56 ask the snare's question, whose answer decides the missing 43251; it is asked again (45385 on the
+      colonoscopy twin, the tattoo case). c2e53f8e asks none.
+    - D89's ``asked`` is the questions the proposals ask or a member answered, read AFTER the answers. On S0_later_cbd
+      with a fingerprinted answer to 43240's target question, the pseudocyst drainage's time is asked at service scope
+      again, as f9013e12e asks it. Answered itself, it is not asked a second time.
+    - Pins: tests/test_interpretation_r5f_integration.py, 3 tests. Mutation proofs (round5f/integration/mut-M*.log):
+      M1, egd6's holding: 3 failures in 2 tests; M2, asked read before the answers: 2 failures in 2 tests. The restore
+      was confirmed by sha256 each time.
+    - Considered and NOT built: reading ``holding`` after the answers too. Mutant M3, the form integrated, passes every
+      pin: none of the corpus's 15 not-documented codes with a second question meets the slot competition. Built, the
+      refinement would be a behaviour change with no input. RECORDED RESIDUAL: a code held not documented that an answer
+      to ANOTHER of its questions excludes keeps its acts yielding the slot.
+    - RECORDED RESIDUAL (review:eus6 problem 0, the read-time path). With an earlier-form standing answer (no
+      fingerprint), the exclusion happens at read time (overlay.review_view), and the overlay never re-asks a service
+      question. So the pseudocyst drainage is asked about nowhere until the encounter is assessed again. c2e53f8e asks
+      nothing about that act either; it lists it not covered. That is no regression against the installed release.
+  - **What each review found, and the integration owner's judgements:**
+    - claims6 (the reviewer read G2): narrowing_only true.
+      - Problem 0: the could-account-for filter is a deliberate departure from the literal unfiltered form G0. G0 would
+        hold 43249 and 43245 where c2e53f8e is READY. Ratified.
+      - Problem 1, medium, pre-existing, to round 5g: a held 43264 whose status words do not locate leaves 43265 READY
+        with no competing_codes, because D74's extras read only current_performed acts.
+      - Problem 2, docstring: to round 5g.
+      - Problem 3, the jobs.py docstring that still said 43265 'is then READY': fixed here.
+    - currency6: narrowing_only false.
+      - Problem 0: a release equal to c2e53f8e's Corti 99213 and supported by the document. Once the banding is placed
+        ON, the undatable colonoscopy's event_time is not asked. JUDGED and accepted, as D151's releases were.
+      - Problem 1, medium: 'At her last visit two weeks ago, I performed a flexible sigmoidoscopy later in the morning,
+        ...' is read ON. 99213 is held separate_em and the visit set apart where c2e53f8e is READY. That is a recorded
+        COST, a hold. The anywhere-frame stays: anchoring it at the start of the words would miss D109's own 'I performed
+        an upper endoscopy earlier in the day, before her visit.'.
+      - Problem 2: costs, recorded (a CT or labs 'earlier in the day, before her visit'; a sentence that introduces a
+        section).
+      - Problem 3: ownership, disclosed and necessary. Problem 4: the required outcome is itself a listing change equal
+        to c2e53f8e.
+    - colon5: narrowing_only false only through the rival class, which G4 closes. With G4: the colon modules, r5f
+      claims and r3_claims give 89 OK, including colon5's dilation guard.
+      - Problem 0, medium, to round 5g: D158's another_role hold pre-empts D105's stent-exchange question and D106's
+        nothing-retrieved question, because ercp.ruled applies them only to a READY evaluation.
+      - Problem 2, critical, pre-existing, to round 5g: a hard-wrapped sentence that Gemini cites as TWO line passages
+        after another role's label.
+      - Problem 3: a cost (a physician-labelled line under a nursing line). Problems 4 and 5: wording and a note.
+    - enteroscopy6: narrowing_only true; matches_spec false because (1) is stopped, and the reviewer confirmed the
+      stop was forced inside its ownership.
+      - Round 5e's problems 0-3 therefore remain on HEAD, among them questions dropped against e5628be56 and
+        c2e53f8e. To round 5g, starting from the builder's held-back build with its companion
+        (round5f/enteroscopy6/patch-heldback-1-with-companion.diff). The builder's census shows no RELEASE, no EXCLUDE
+        and no question drops, but nobody has reviewed it yet.
+      - Problems 1-3, critical-class, pre-existing, to round 5g: an ileal J-pouch beside a second altered upper-GI
+        entry.
+      - Problems 4-6: low.
+    - egd6:
+      - Problem 0: fixed here.
+      - Problem 1: the deviation is ratified.
+      - Problem 2, critical-class, pre-existing, to round 5g: the injection denial cited alone excludes 43236 beside
+        D115's hemostatic injection in doubt.
+      - Problem 3: wording, to round 5g. Problem 4: a note.
+    - eus6:
+      - Problem 0: fixed here on the engine path; the read-time path is the residual above.
+      - Problem 1: the narrower form is ratified.
+      - Problem 2: a record, equal to c2e53f8e.
+    - ercp6: not integrated (D159).
+  - **What the round showed.** The narrowing census counted READY, EXCLUDE, QUESTION and LISTING moves. A READY whose
+    acts change is a DETAIL move, and ercp6's READY on the wrong act was one. Every repair round from 5g on counts it: a
+    READY whose supporting acts change is forbidden unless it only adds acts or restores e5628be56's.
+  - Saved: gemini-migration/round5f/ (patches, entries, reviews' directories, the integration's stack, fixed tree,
+    probes, pins, mutants and logs) and runs/int5f2-*.

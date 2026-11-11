@@ -208,15 +208,32 @@ def _frame_parts(text: str) -> list:
     return [piece.strip() for piece in pieces]
 
 
-def _same_day_frame(text: str, anaphoric: bool = False) -> bool:
+def _same_day_frame(text: str, anaphoric: bool = False, anywhere: bool = False) -> bool:
     """D109: whether a time's own words are made only of whole same-date frames (lexicon.SAME_DAY_FRAMES, anchored to
-    today since D112): "Earlier in the day", "Earlier in the morning", "later in the day, earlier today"; never
-    "earlier in the day, before her visit". With ``anaphoric`` (DECISIONS D132: an act whose performer is not verified
-    other) the anaphoric frames count too (lexicon.ANAPHORIC_FRAMES): "Earlier that day", "Later that morning";
-    without it they are no frames, and a bare "that day" never is."""
+    today since D112): "Earlier in the day", "Earlier in the morning", "later in the day, earlier today". With
+    ``anaphoric`` (DECISIONS D132: an act whose performer is not verified other) the anaphoric frames count too
+    (lexicon.ANAPHORIC_FRAMES): "Earlier that day", "Later that morning"; without it they are no frames, and a bare
+    "that day" never is. DECISIONS D162 (round 5f; the round-5e currency review's problem 5, D109's recorded residual):
+    with ``anywhere``, also whether a lexicon.SAME_DAY_FRAMES entry stands whole ANYWHERE in the words, whatever other
+    words they hold - the words folded (lexicon.fold), the frame's own folded words found contiguous with no letter or
+    digit touching either end: "earlier in the day, before her visit", "I performed an upper endoscopy earlier in the
+    day, before her visit."; never "earlier in the daytime" or "earlier in the days before her visit". An anaphoric
+    frame is never read that way. Reads these words only (EB1)."""
     frames = (_SAME_DAY_FRAMES | _ANAPHORIC_FRAMES) if anaphoric else _SAME_DAY_FRAMES
     parts = [part for part in _frame_parts(text or '') if part]
-    return bool(parts) and all(part in frames for part in parts)
+    if parts and all(part in frames for part in parts):
+        return True
+    if not anywhere:
+        return False
+    folded = lexicon.fold(text or '')
+    for frame in sorted(_SAME_DAY_FRAMES):
+        start = folded.find(frame)
+        while start >= 0:
+            end = start + len(frame)
+            if (start == 0 or not folded[start - 1].isalnum()) and (end == len(folded) or not folded[end].isalnum()):
+                return True
+            start = folded.find(frame, start + 1)
+    return False
 
 
 def day_of(event: Mapping, effective) -> str:
@@ -235,7 +252,18 @@ def day_of(event: Mapping, effective) -> str:
     those an act's own time value makes a question (DECISIONS D111). ``effective``: the effective date (a date, an ISO
     string or None); with none, a date literal places nothing. DECISIONS D151 withdrew D144's two exceptions (a
     same-day word right after an anteriority word; an anaphoric frame's SAME_DAY_WORDS for a verified other's act):
-    SAME_DAY_WORDS are read as D131 reads them (_same_day_word), for every performer."""
+    SAME_DAY_WORDS are read as D131 reads them (_same_day_word), for every performer. DECISIONS D162 (round 5f,
+    narrowing only; the round-5e currency review's problem 5, D109's recorded residual): an act whose own usable
+    earlier or future time would place it OFF is ON when a lexicon.SAME_DAY_FRAMES entry stands whole anywhere in its
+    time words (_same_day_frame with ``anywhere``), whatever other words they hold, its performer not verified to
+    another clinician or facility (D132's condition) and no date literal in the words. "Earlier in the day, before her
+    visit, rubber band ligation ..." and "I performed an upper endoscopy earlier in the day, before her visit." were
+    OFF, so 99213 was READY with no question where c2e53f8e holds it with separate_em; now 99213 is held with
+    separate_em (READY with the modifier 25 consideration beside a documented statement) and, beside a done act, the
+    visit is set apart, as c2e53f8e does. Only an OFF act moves: an UNDATABLE act keeps C-3's event_time question,
+    since placing it ON would drop that question and, beside a documented statement, make the E/M READY - also where
+    other words of the phrase name another day ("Yesterday, later in the evening, she underwent an upper
+    endoscopy")."""
     time = event.get('time') or {}
     text = _words_of(time)
     if verify.usable(time) and time.get('value') == 'current_encounter':
@@ -250,6 +278,8 @@ def day_of(event: Mapping, effective) -> str:
     if (_same_day_word(text) or _same_day_frame(text, anaphoric=not other)) and not found:
         return ON
     if verify.usable(time) and time.get('value') in ('earlier_encounter', 'future'):
+        if not other and not found and _same_day_frame(text, anywhere=True):  # D162: an OFF act only
+            return ON
         return OFF
     return UNDATABLE
 

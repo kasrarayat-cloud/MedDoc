@@ -1022,20 +1022,26 @@ def unresolved_record(items: Sequence[dict]) -> list:
 
 def in_doubt_questions(reading, coverage: Coverage, asked=(), holding=()) -> list:
     """A service-scope question for each in_doubt item, with the fact of 7.4 for its event (FINAL 7.8), once per (family,
-    fact), never one a proposal of the family already asks (``asked``: (family, fact) pairs). One service question per
-    (family, fact): the act it names is the first in doubt, in the reading's order, that no proposed code reads or names
-    in its own question (DECISIONS D149, replacing D142's order; its claim corrected by D154). ``holding``: the event
-    ids the proposed codes read or hold on - each counted code's supporting events (Counted.supporting,
-    support['acts']) and the events its own question names (events.Question.events, support['question_events']); with
-    none, the reading's order stands. ``holding`` is inert on the live path: assess calls this with (reading, final,
-    asked) and passes none, so there the act asked about is simply the first in doubt in the reading's order. Nothing
-    here reads which act's answer decides a code that is missing, so that question is NOT guaranteed: beside 43245
-    READY on the pyloric dilation, Corti's 43249 held another_site names E2, the pyloric dilation, not the doubted
-    esophageal one, so the dilation's "done at this encounter?" is asked and the biopsy's, which decides the missing
-    43239, is not - and RF11's clip in doubt takes the question from its biopsy the same way. The other act stays
-    listed in doubt. That is a structural residual of one service question per (family, fact), recorded with D154; the
-    order is not flipped again (round 5c's review gave D142's order the same verdict). Which facts are asked does not
-    depend on the order; which act each question names does."""
+    fact), never one a proposal of the family already asks (``asked``: the (family, fact, question) of the proposals'
+    questions - D89: only that very question). One service question per (family, fact): the act it names is the first
+    in doubt, in the reading's order, that no proposed code names in its own question (DECISIONS D149, replacing D142's
+    order; its claim corrected by D154). ``holding``: the event ids the proposed codes hold on.
+
+    DECISIONS D157 (3) (round 5f; D154's class (ii), and the round-5e review of D154, problem 1): ``holding`` is LIVE -
+    assess passes the events every proposal's own question names (events.Question.events, support['question_events'];
+    assess.py's one call). An act in doubt that a proposed code's own question already names is asked through that
+    code: it yields its (family, fact) service slot to the next act in doubt no code's question names, and keeps the
+    slot only when no such act is left - so which facts are asked never depends on the order (no question is dropped),
+    only which act each one names. Act identity only (event ids), never a fact or a wording: a different act's question
+    is never suppressed (D89 stands). "At that time, cautery was applied to the ulcer base." (a bleeding control in
+    doubt, D142; 43255 held not documented names it, D157) before "At that time, biopsies of the gastric antrum were
+    taken with cold forceps.": the biopsy's "done at this encounter?", whose answer decides the missing 43239, is asked,
+    as f9013e12e and e5628be56 ask it; the cautery's had taken the slot (D154's class (ii)). Nothing here reads which
+    act's answer decides a code that is missing, so that question is still NOT guaranteed where the act named by a code
+    is not the one that takes the slot: beside 43245 READY on the pyloric dilation, Corti's 43249 held another_site
+    names E2, the pyloric dilation (not in doubt), so the doubted esophageal dilation's "done at this encounter?" is
+    asked and the biopsy's, which decides the missing 43239, is not. The other act stays listed in doubt (a structural
+    residual of one service question per (family, fact), recorded with D154)."""
     # D89: ``asked`` holds (family, fact, question) of the proposals' questions; a code's question suppresses a service
     # question only when it IS that question (its fact and its words, which name the act) - a code asking
     # statement_scope about its snare no longer silences the service's statement_scope about another act's denial
@@ -1044,8 +1050,8 @@ def in_doubt_questions(reading, coverage: Coverage, asked=(), holding=()) -> lis
 
     def accounted(eid: str) -> bool:
         """DECISIONS D149 (round 5d; the round-5c review of D142, review_egd3.json problem 0): whether a proposed code
-        reads or holds on the act - ``eid`` among ``holding``, the events given for the codes (none on the live path:
-        assess passes no ``holding``). Never a profile that covers the act's kind: D142 read one, and "At that time, the
+        holds on the act - ``eid`` among ``holding``, the events the proposals' own questions name (D157 (3): assess
+        passes them). Never a profile that covers the act's kind: D142 read one, and "At that time, the
         distal esophageal stricture was dilated with an 18 mm balloon." (in doubt) beside "The pyloric stricture was
         dilated with a 15 mm balloon." (43245 READY on it) was read as accounted for by 43245, whose covers hold the
         dilation kind though it reads only the pyloric dilation - so "At that time, biopsies of the gastric antrum were
@@ -1055,9 +1061,9 @@ def in_doubt_questions(reading, coverage: Coverage, asked=(), holding=()) -> lis
         decides a missing code is never read here (D154)."""
         return eid in held
 
-    # D149 (its claim corrected by D154): one question per (family, fact) - an act a proposed code reads or names in its
-    # own question (``holding``; none on the live path) is asked after the others, each group in the reading's order
-    # (stable). The question that decides a missing code is not guaranteed: the other act stays listed in doubt
+    # D149 (its claim corrected by D154; live since D157 (3)): one question per (family, fact) - an act a proposed code
+    # names in its own question (``holding``) is asked after the others, each group in the reading's order (stable), so
+    # it yields the slot and is asked itself only when no other act takes that (family, fact): no fact is ever dropped
     seen = set()
     out = []
     for item, eid in sorted(coverage.in_doubt, key=lambda pair: accounted(pair[1])):

@@ -17,7 +17,8 @@ route_phrase's gastric word):
 Every outcome this repair moves is a hold, an added question or e5628be56's outcome restored, against 4f82e5056 and
 e5628be56; the controls named are unchanged. The installed release c2e53f8e's outputs are named in each test
 (engine.assess as tests/test_harness_engine.py drives it, and jobs._assess_child: they agree on every probe row).
-Nothing is sent."""
+DECISIONS D160 (the round-5e review of D153, problem 4) changes the J-pouch control's expectation (renamed; its
+docstring names D160); D160's own pins are tests/test_interpretation_r5f_enteroscopy.py's. Nothing is sent."""
 from __future__ import annotations
 
 import inspect
@@ -280,15 +281,20 @@ class GastricPouchRoute(SimpleTestCase):
                 self.assertIs(classes.route_phrase(text, route, gastric), expected)
         self.assertTrue(all(' ' not in word for word in classes.GASTRIC_POUCH_WORDS))  # read token by token
 
-    def test_d153_the_j_pouchs_own_route_beside_a_bypass_is_unchanged(self):
-        """The control D148 released and D153 keeps (D148's own-words typing stands): the pouchoscopy whose status words
-        state the J-pouch's route ('was advanced through the anus into the J-pouch') beside the bypass entry - 44386
-        READY, the code the document supports (c2e53f8e and e5628be56 hold it)."""
+    def test_d153_the_j_pouchs_own_route_beside_a_bypass_is_a_doubted_route(self):
+        """Renamed from test_d153_the_j_pouchs_own_route_beside_a_bypass_is_unchanged: DECISIONS D160 (2) (the round-5e
+        review of D153, problem 4) withdraws the release this pin held for this anatomy. Beside the verified J-pouch and
+        a gastric bypass entry any pouch route phrase is a doubted route, the J-pouch's own included ('was advanced
+        through the anus into the J-pouch'): 44386 is held with the route question (extent), as e5628be56 holds it
+        (c2e53f8e holds it too, performed_status and extent). D148's own-words typing stands (the J-pouch is still the
+        verified small-intestinal pouch)."""
         routed = 'was advanced through the anus into the J-pouch'
         inv, text = pouchoscopy(J_AND_RYGB, (pouch_entry('ileal J-pouch'), RYGB_ENTRY), pouch_words='J-pouch',
                                 status_words=routed)
         self.assertTrue(classes.gastric_beside(events.Reading.of(inv).encounter))
-        ready(self, code_of(inv, text, '44386', 'P7'))
+        self.assertEqual(routes_of(inv), (POUCH, frozenset()))
+        held(self, code_of(inv, text, '44386', 'P7'), classes.POUCH, 'ileum', 'pre-pouch ileum', classes.ROUTE_FORM,
+             through=POUCH)
 
     def test_d153_without_both_entries_the_route_phrase_reads_as_before(self):
         """The narrowest form: the J-pouch alone (round 5c's problem 5: 44386 READY on every new-path tree, c2e53f8e

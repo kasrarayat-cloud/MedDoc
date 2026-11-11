@@ -309,21 +309,25 @@ class ASignatureLabelMakesTheActItsRoles(Held):
 class AHeldCodeSupportsNothing(SimpleTestCase):
     """D146 (5), review_colon2.json problem 4: the corrected jobs._assess_child_events docstring - a code
     another_role_hold holds supports nothing, so a rival that competed with it for the same act loses that
-    competing_codes hold."""
+    competing_codes hold. DECISIONS D163 (round 5f) withdraws that release: a held code keeps its acts as claims for
+    the competition (assess._claims), so the rival stays held."""
 
-    def test_d146_its_rival_for_the_same_act_is_ready(self):
-        """The review's ERCP report with the extraction told under 'Nursing note', 'Nursing note - recovery', 'Nursing
-        note, recovery room' or 'Procedure checklist': 43264 held [performed_status] (another_role), 43265 READY.
-        With no heading, both held [competing_codes]. c2e53f8e: both READY in all five. e5628be56: the same as here."""
+    def test_d146_its_rival_for_the_same_act_stays_held(self):
+        """Formerly test_d146_its_rival_for_the_same_act_is_ready (43264 held [performed_status], 43265 READY; the
+        same on e5628be56; c2e53f8e READY with no participant, both held [competing_codes] with its participants).
+        DECISIONS D163: the review's ERCP report with the extraction told under 'Nursing note', 'Nursing note -
+        recovery', 'Nursing note, recovery room' or 'Procedure checklist': 43264 held another_role asks
+        [performed_status, competing_codes] and 43265 is held [competing_codes]. With no heading, both held
+        [competing_codes], as before."""
         for heading in ('Nursing note', 'Nursing note - recovery', 'Nursing note, recovery room',
                         'Procedure checklist'):
             result = run(*ercp_report(heading))
             with self.subTest(heading=heading):
                 first, second = proposal(result, '43264'), proposal(result, '43265')
                 self.assertEqual((first.status, asked(first), first.support['reason']),
-                                 ('needs_clarification', ['performed_status'], events.ANOTHER_ROLE))
+                                 ('needs_clarification', ['performed_status', 'competing_codes'], events.ANOTHER_ROLE))
                 self.assertEqual((second.status, asked(second), second.support['reason']),
-                                 ('ready', [], events.SUPPORTED))
+                                 ('needs_clarification', ['competing_codes'], events.SUPPORTED))
         result = run(*ercp_report(''))
         with self.subTest(heading='none'):
             for code in ('43264', '43265'):

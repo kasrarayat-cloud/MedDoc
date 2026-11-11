@@ -17,7 +17,8 @@ named in each test (engine.assess as tests/test_harness_engine.py drives it, and
 probe row). DECISIONS D148 (the round-5c review of D141) changes the expectations of the pins whose docstrings name it;
 its own pins are tests/test_interpretation_r5d_enteroscopy.py's. DECISIONS D153 (the round-5d review of D148) changes
 back the region pins whose docstrings name it; its own pins are tests/test_interpretation_r5e_enteroscopy.py's.
-Nothing is sent."""
+DECISIONS D160 (the round-5e review of D153) changes back the pouch pin whose docstring names it; its own pins are
+tests/test_interpretation_r5f_enteroscopy.py's. Nothing is sent."""
 from __future__ import annotations
 
 from django.test import SimpleTestCase
@@ -161,15 +162,17 @@ class PouchType(SimpleTestCase):
         ready(self, code_of(inv, text, '44377'))
 
     def test_d141_an_intestinal_pouch_beside_a_gastric_bypass_is_a_doubt(self):
-        """DECISIONS D148 (the round-5c review of D141, problem 0) changes this pin's expectation: a pouch entry is
+        """DECISIONS D148 (the round-5c review of D141, problem 0) changed this pin's expectation: a pouch entry is
         typed by its OWN words alone, so the 'Roux-en-Y gastric bypass' entry no longer types the 'ileal J-pouch'
-        entry - it is the small-intestinal pouch, and with the route stated ('was advanced through the anus into the
-        J-pouch') 44386 is READY, the code the document supports (46e461e7f READY; c2e53f8e holds it, performed_status
-        and extent: a release the spec states). Name kept."""
+        entry - it is the small-intestinal pouch. DECISIONS D160 (2) (the round-5e review of D153, problem 4) changes it
+        back to a hold: beside that pouch and a gastric bypass entry any pouch route phrase is a doubted route, so with
+        'was advanced through the anus into the J-pouch' 44386 is held with the route question (extent), as e5628be56
+        holds it (its class question) and c2e53f8e holds it (performed_status and extent). Name kept: true again."""
         inv, text = pouchoscopy(BOTH, BOTH_ANATOMY, status_words='was advanced through the anus into the J-pouch')
         encounter = events.Reading.of(inv).encounter
         self.assertEqual((classes.routes(encounter), classes.doubted_routes(encounter)), (POUCH, frozenset()))
-        ready(self, code_of(inv, text, '44386'))
+        held(self, code_of(inv, text, '44386'), classes.POUCH, 'ileum', 'pre-pouch ileum', classes.ROUTE_FORM,
+             through=POUCH)
 
 
 # --- problems 0 and 4: the route only in a route phrase -------------------------------------------------------------
