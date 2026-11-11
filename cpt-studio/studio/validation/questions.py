@@ -33,6 +33,13 @@ MAX_PASSAGES = 4  # a question shows a short list: its act's own passages, the c
 PER_SOURCE = 2  # at most this many from each, so the code's own passage and CPT Studio's located one are both shown
 MIN_PASSAGE_CHARACTERS = 8  # non-space characters: a shorter cited fragment shows nothing a member can read it by
 MIN_PASSAGE_WORDS = 2  # and a single word ("Multiple") is a fragment of a passage, never one
+# DECISIONS D143 (the Gemini migration, round 5c): the statement a passage of CPT Studio's own (``support['source']``)
+# is part of - set only by the new path's question about several statements (interpretation.events._h3_shown), never
+# by the installed release - and the one fact whose row reads it (that question's: whether a statement applies to the
+# act). Every other source, and every other fact's row, is read exactly as before.
+STATEMENT = 'statement'
+LEAD = 'lead'  # True on the one place a statement is quoted by (its status place), and on the act's status place
+STATEMENT_FACT = 'statement_scope'
 # The member answers a question takes (MemberAnswer.VALUES): each says the detail is unavailable from the document,
 # so the code it is asked of is excluded until the answer is withdrawn. No value confirms a clinical fact (decision D7).
 NOT_DOCUMENTED, CANNOT_CONFIRM = 'not_documented', 'cannot_confirm'
@@ -144,7 +151,7 @@ def _spans(items, cited=False) -> list:
     return out
 
 
-def passages(evidence, support, text: Optional[str] = None, acts: Optional[Mapping] = None
+def passages(evidence, support, text: Optional[str] = None, acts: Optional[Mapping] = None, named: bool = False
              ) -> tuple[tuple[int, int, str], ...]:
     """The passages a code's question concerns, as its row shows them and its fingerprint reads them, from three
     sources in this order, at most PER_SOURCE from each: the passages of each act the code was matched to
@@ -153,14 +160,65 @@ def passages(evidence, support, text: Optional[str] = None, acts: Optional[Mappi
     raised the doubt; then CPT Studio's own located passages (``support['source']``) - for a code whose service is in
     doubt, the passages that document the service. Each passage is shown once (_kept); one with fewer than
     MIN_PASSAGE_CHARACTERS non-space characters, or a single word, shows nothing a member could read it by; at most
-    MAX_PASSAGES. With ``text`` (the revision's), each is re-checked as an exact slice of it. (start, end, text) each."""
+    MAX_PASSAGES. With ``text`` (the revision's), each is re-checked as an exact slice of it. (start, end, text) each.
+
+    DECISIONS D143: with ``named`` (question_passages: the STATEMENT_FACT question's row), a source whose passages name
+    their statements (STATEMENT, which only the new path's question about several statements sets) is read by
+    _statements_kept - one passage of each statement before a second of any; every other source, and every other
+    question's row, exactly as before."""
     support = support if isinstance(support, Mapping) else {}
     matched = []
     for act in support.get('acts') or ():
         stored = (acts or {}).get(act.get('id')) if isinstance(act, Mapping) else None
         if isinstance(stored, Mapping):
             matched += _spans(stored.get('evidence'))
-    return _kept((matched, _spans(list(evidence or ()), cited=True), _spans(support.get('source'))), text)
+    cited, source = _spans(list(evidence or ()), cited=True), support.get('source')
+    if named and _names_statements(source):
+        return _statements_kept(matched, cited, source, text)
+    return _kept((matched, cited, _spans(source)), text)
+
+
+def _names_statements(source) -> bool:
+    """DECISIONS D143: whether a source's passages name their statements (STATEMENT, a non-empty string on any)."""
+    return isinstance(source, (list, tuple)) and any(
+        isinstance(item, Mapping) and isinstance(item.get(STATEMENT), str) and bool(item.get(STATEMENT))
+        for item in source)
+
+
+def _statements_kept(matched, cited, source, text: Optional[str]) -> tuple[tuple[int, int, str], ...]:
+    """DECISIONS D143 (1): the passages of a question about several statements, as its member's row shows them and its
+    fingerprint reads them - the code's matched acts' and its own cited passages as passages reads them (at most
+    PER_SOURCE each), then CPT Studio's own located ones (``source``, each naming its statement; the act's own name
+    none): first ONE passage of each statement - its LEAD (the place the question quotes it by), else its first - in
+    the source's order, then the act's (its LEAD, else its first), then every other in the source's order, to
+    MAX_PASSAGES - shown in the source's order, so a statement's passages stay together. Every statement the question
+    quotes is then in the row while MAX_PASSAGES leaves room for one passage of it: finding 3's framed, device and
+    prior-segment denials beside the snare 45385 cites show all three, and a hard-wrapped denial beside the
+    prior-segment one shows both its lines and the other sentence, where PER_SOURCE (2) had shown the first two
+    passages only. The act's own passage, which a code citing the act shows already, comes after the statements: a
+    code citing another passage beside three statements shows that passage and the three statements, not the act's."""
+    spans, first, lead, order = [], {}, {}, {}  # first/lead: statement name ('' the act's) -> index into spans
+    for item in source:
+        found = _span(item)
+        if found is None:
+            continue
+        span = found[1:4]
+        order.setdefault(span[:2], len(order))
+        name = item.get(STATEMENT) if isinstance(item, Mapping) else None
+        name = name if isinstance(name, str) else ''
+        first.setdefault(name, len(spans))
+        if isinstance(item, Mapping) and item.get(LEAD) is True:
+            lead.setdefault(name, len(spans))
+        spans.append(span)
+    picked = [lead.get(name, index) for name, index in first.items() if name]
+    own = [lead.get('', first[''])] if '' in first else []
+    firsts, act = [spans[index] for index in picked], [spans[index] for index in own]
+    rest = [span for index, span in enumerate(spans) if index not in picked and index not in own]
+    out = _chosen((matched, cited, firsts, act, rest), text, PER_SOURCE,
+                  (PER_SOURCE, PER_SOURCE, MAX_PASSAGES, MAX_PASSAGES, MAX_PASSAGES))
+    head = [item for item in out if item[3] < 2]
+    tail = sorted((item for item in out if item[3] >= 2), key=lambda item: order.get((item[0], item[1]), len(order)))
+    return tuple((start, end, quoted) for start, end, quoted, _ in head + tail)
 
 
 def _kept(groups, text: Optional[str], per_source: int = PER_SOURCE) -> tuple[tuple[int, int, str], ...]:
@@ -168,10 +226,17 @@ def _kept(groups, text: Optional[str], per_source: int = PER_SOURCE) -> tuple[tu
     passage inside one already listed adds nothing; one that holds listed ones takes the first one's place and the
     others' (it shows all they show); one that only partly overlaps one listed adds nothing either. At most
     ``per_source`` from each group and MAX_PASSAGES in all."""
+    return tuple((start, end, quoted) for start, end, quoted, _ in _chosen(groups, text, per_source))
+
+
+def _chosen(groups, text: Optional[str], per_source: int, caps: Optional[tuple] = None) -> list:
+    """_kept's choice, [start, end, text, group] each, in order - at most ``per_source`` from each group, or
+    ``caps[group]`` (DECISIONS D143: _statements_kept's), and MAX_PASSAGES in all."""
     out: list = []  # [start, end, text, group]
     for number, group in enumerate(groups):
+        cap = per_source if caps is None else caps[number]
         for start, end, quoted in group:
-            if len(out) >= MAX_PASSAGES or sum(1 for item in out if item[3] == number) >= per_source:
+            if len(out) >= MAX_PASSAGES or sum(1 for item in out if item[3] == number) >= cap:
                 break
             if text is not None and not (end <= len(text) and text[start:end] == quoted):
                 continue
@@ -185,7 +250,7 @@ def _kept(groups, text: Optional[str], per_source: int = PER_SOURCE) -> tuple[tu
                 out = [item for i, item in enumerate(out) if i not in held[1:]]
                 continue
             out.append([start, end, quoted, number])
-    return tuple((start, end, quoted) for start, end, quoted, _ in out)
+    return out
 
 
 REACH_FACTS = ('extent', 'completion')  # a documented service's reading of these rests on its completion passages
@@ -225,12 +290,13 @@ def question_passages(services, family: str, fact: str, evidence, support, text:
     rests on - the extent sentence, never the code's polypectomy sentence ("How far was the instrument advanced?" beside
     "The colonoscope was advanced.") - and for a conflict about an act, each side's own passage, the denial that raised
     the doubt included (service_passages); for any other fact, or where the service reading gives none, the code's own
-    (passages). One reading for every reader: the engine, the review overlay's binding, and the details rows."""
+    (passages). One reading for every reader: the engine, the review overlay's binding, and the details rows.
+    DECISIONS D143: the STATEMENT_FACT question's row reads the statements its source names (passages ``named``)."""
     if fact.startswith('conflict:') or fact in REACH_FACTS:
         found = service_passages(services, family, fact, text)
         if found:
             return found
-    return passages(evidence, support, text, acts)
+    return passages(evidence, support, text, acts, named=fact == STATEMENT_FACT)
 
 
 def instance(scope: str, family: str, fact: str, code: str, question: str, reason: str, shown=()) -> dict:

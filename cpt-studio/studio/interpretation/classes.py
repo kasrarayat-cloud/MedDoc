@@ -53,6 +53,15 @@ question): Gemini's reading of the act as the enteroscopy's is a doubt (D87), ne
 Where its class does not fit either, the one question asks both (D89: a doubt never takes another doubt's question) -
 the class question first, then the act's: its class check carries both reasons.
 
+DECISIONS D141 (the round-5 review of D114, problems 0, 4 and 5): the pouch the stoma and pouch rules read is the
+SMALL-INTESTINAL pouch - an altered-anatomy pouch entry whose own words name one (routes); a gastric pouch never is,
+and a pouch of no stated type is a doubt (doubted_routes): it verifies no pouch class and keeps the examination's own
+route deciding the ileal class. In the words of the examination's own statement, a stoma or a pouch states the route
+only inside a route phrase (route_phrase: through, via, per, into or by way of it; 'transstomal'), never as an anatomy
+mention ('in a patient with an end ileostomy'), which stays a doubt against another route. The diagnostic code's act
+question is added beside the base rule's question, never in its place (elsewhere_hold). The region a moved act must lie
+in is coverage.coding_family's (within the done EGD's verified reach).
+
 Read only from the inventory's verified structure (the reach's landmark, the examination's completion and status, the
 encounter's anatomy, the sessions coverage groups) and the examination's own located words (D114's route) - no passage
 read (EB1). Pure and Django-free; imports nothing from studio.gi but the reference table gi.catalogue.
@@ -89,7 +98,8 @@ ROUTE_WORDS = MappingProxyType({
     ORAL: ('orally', 'oral', 'peroral', 'perorally', 'per oral', 'per os', 'transoral', 'transorally',
            'through the mouth', 'via the mouth', 'by mouth', 'antegrade', 'antegradely', 'anterograde',
            'anterogradely'),
-    THROUGH_STOMA: ('ileostomy', 'ileostomies', 'stoma', 'stomas', 'stomal', 'ostomy', 'ostomies'),
+    THROUGH_STOMA: ('ileostomy', 'ileostomies', 'stoma', 'stomas', 'stomal', 'ostomy', 'ostomies', 'transstomal',
+                    'transstomally'),  # D141: the route phrase's own forms are mentions of the stoma too
     THROUGH_POUCH: ('pouch', 'pouches', 'pouchoscopy', 'reservoir'),
 })
 CLASS_ROUTE = MappingProxyType({ILEAL: ORAL, STOMA: THROUGH_STOMA, POUCH: THROUGH_POUCH})  # the route each class needs
@@ -99,6 +109,33 @@ ROUTE_STATED = ('procedure', 'kind', 'technique', 'status')
 ROUTE_READ = ROUTE_STATED + ('target', 'time', 'performer', 'scope', 'purpose', 'extent', 'completion')
 ROUTE_PHRASES = MappingProxyType({ORAL: 'through the mouth', THROUGH_STOMA: 'through a stoma',
                                   THROUGH_POUCH: 'through a pouch'})
+# DECISIONS D141 (the round-5 review of D114, problems 0 and 4): in the words of the examination's own statement a stoma
+# or a pouch states the route only inside a ROUTE PHRASE - a route word (ROUTE_INTO: through, via, per, into, by way
+# of) followed by one of the route's nouns (ROUTE_NOUNS) with at most PHRASE_REACH words between, none of them a word
+# that ends the phrase (ROUTE_BREAKS) and no mark (a comma, a stop) - or one of the route's own forms (ROUTE_FORMS:
+# 'transstomal', 'stomal intubation'). A noun after a place prefix ('pre-pouch', PLACE_PREFIXES) names a place, never
+# the route. An anatomy mention ('in a patient with an end ileostomy', 'history of ileostomy', 's/p', 'status post')
+# names no route; it stays a doubt against another route (ROUTE_READ, every route word). All in lexicon.fold's form.
+ROUTE_INTO = (('through',), ('via',), ('per',), ('into',), ('by', 'way', 'of'))
+ROUTE_NOUNS = MappingProxyType({
+    THROUGH_STOMA: frozenset({'ileostomy', 'ileostomies', 'stoma', 'stomas', 'stomal', 'ostomy', 'ostomies'}),
+    THROUGH_POUCH: frozenset({'pouch', 'pouches', 'reservoir'})})
+ROUTE_FORMS = MappingProxyType({THROUGH_STOMA: (('transstomal',), ('transstomally',), ('trans', 'stomal'),
+                                                ('trans', 'stomally'), ('stomal', 'intubation')),
+                                THROUGH_POUCH: ()})
+ROUTE_BREAKS = frozenset({
+    'in', 'with', 'of', 'to', 'at', 'on', 'from', 'for', 'by', 'into', 'through', 'via', 'per', 'after', 'before',
+    'without', 'within', 'beyond', 'past', 'above', 'below', 'under', 'over', 'across', 'along', 'around', 'near',
+    'toward', 'towards', 'until', 'up', 'down', 'onto', 'upon', 'than', 'as', 'and', 'or', 'but', 'nor', 'then', 'who',
+    'which', 'that', 'whose', 'where', 'was', 'were', 'is', 'are', 'be', 'been', 'being', 'has', 'have', 'had',
+    'having', 'not', 'no', 'never', 'history', 'status', 'post'})
+PLACE_PREFIXES = frozenset({'pre', 'post', 'peri', 'para', 'supra', 'sub', 'infra'})
+PHRASE_REACH = 3  # a determiner and two modifiers: "through the patient's end ileostomy", "into the ileal J-pouch"
+# DECISIONS D141 (problem 0): the words of an altered-anatomy pouch entry that name the small-intestinal pouch, and the
+# words of a gastric pouch or a gastric bypass, matched in lexicon.fold's form, word-bounded
+INTESTINAL_POUCH_WORDS = ('ileal', 'ileoanal', 'ileo anal', 'j pouch', 's pouch', 'w pouch', 'kock', 'pelvic',
+                          'continent ileostomy', 'ipaa', 'reservoir')
+GASTRIC_POUCH_WORDS = ('gastric', 'stomach', 'bypass', 'roux', 'sleeve')
 
 # CPT Studio's own words for each class (never a descriptor), and the check's id and label: the EUS class check's id
 # (wording.EXAMINATION_CLASS_CHECK), with the enteroscopy's label
@@ -113,6 +150,10 @@ CHECK = ('facts.examination_class', 'Small-bowel enteroscopy examination class')
 ELSEWHERE_CHECK = ('service.act_elsewhere', 'Coded act documented in another service')
 # checks.FACT_QUESTIONS['extent'] (copied; pinned equal to the question R6 asks of an unverified enteroscopy reach)
 EXTENT_QUESTION = '{label}: confirm the furthest extent reached.'
+# DECISIONS D141 (problem 5): the base rule's question (combination.base_hold's, copied; pinned equal to it), and the
+# words it adds to the label of an act in doubt (combination.base_included's)
+BASE_QUESTION = 'Is {code} reported separately from {included} for this examination?'
+IN_DOUBT = ' (stated in doubt)'
 
 
 def code_class(code) -> str:
@@ -124,12 +165,43 @@ def code_class(code) -> str:
     return next((name for first, last, name in RANGES if first <= number <= last), '')
 
 
+def _altered(encounter: Mapping) -> list:
+    """The encounter's usable (verified, not opened) altered-anatomy entries."""
+    return [entry for entry in (encounter.get('anatomy') or ()) if isinstance(entry, Mapping)
+            and entry.get('anatomy') == 'altered' and verify.usable(entry)]
+
+
+def pouch_types(encounter: Mapping) -> tuple:
+    """DECISIONS D141 (problem 0): for each usable altered-anatomy pouch entry, (whether its own words name the
+    small-intestinal pouch - INTESTINAL_POUCH_WORDS, whether its own words or the document's verified altered anatomy
+    name a gastric pouch or a gastric bypass - GASTRIC_POUCH_WORDS). Only the entries' own words are read (EB1)."""
+    altered = _altered(encounter)
+    gastric = any(lexicon.holds(_words(entry), GASTRIC_POUCH_WORDS) for entry in altered)
+    return tuple((lexicon.holds(_words(entry), INTESTINAL_POUCH_WORDS), gastric) for entry in altered
+                 if entry.get('value') == 'pouch')
+
+
 def routes(encounter: Mapping) -> frozenset:
-    """The routes the encounter's anatomy verifies: 'stoma' (mapping.has_stoma, D43's own reader) and 'pouch' (a usable
-    altered-anatomy pouch entry, read the same way)."""
-    pouch = any(isinstance(entry, Mapping) and entry.get('value') == 'pouch' and entry.get('anatomy') == 'altered'
-                and verify.usable(entry) for entry in (encounter.get('anatomy') or ()))
+    """The routes the encounter's anatomy verifies: 'stoma' (mapping.has_stoma, D43's own reader) and 'pouch' -
+    DECISIONS D141 (problem 0): the SMALL-INTESTINAL pouch, a usable altered-anatomy pouch entry whose own words name an
+    intestinal pouch (INTESTINAL_POUCH_WORDS: ileal, ileoanal, J-, S-, W-, Kock, pelvic, continent ileostomy, IPAA,
+    reservoir) where neither those words nor the document's verified altered anatomy names a gastric pouch or a gastric
+    bypass (GASTRIC_POUCH_WORDS: gastric, stomach, bypass, Roux, sleeve). Read as any pouch, "small gastric pouch"
+    beside "Roux-en-Y gastric bypass" made 44386 READY on an enteroscopy through the gastric pouch and the Roux limb
+    into the proximal ileum, where the installed release holds it."""
+    pouch = any(intestinal and not gastric for intestinal, gastric in pouch_types(encounter))
     return frozenset(name for name, held in (('stoma', mapping.has_stoma(encounter)), ('pouch', pouch)) if held)
+
+
+def doubted_routes(encounter: Mapping) -> frozenset:
+    """DECISIONS D141: 'pouch' when a usable altered-anatomy pouch entry may be the small-intestinal pouch without
+    being verified as it - its words name no type, or name the intestinal pouch beside a gastric word (D87: a possible
+    pouch is a doubt, never a fact). Such a pouch verifies no pouch class, and keeps the examination's own route
+    deciding the ileal class (route_read), as a verified one does: read as no pouch, "The patient has a pouch after a
+    proctocolectomy." left 44377 READY on a pouchoscopy into the pre-pouch ileum. A pouch only gastric reads no
+    route."""
+    doubt = any(intestinal == gastric for intestinal, gastric in pouch_types(encounter))
+    return frozenset({'pouch'}) if doubt and 'pouch' not in routes(encounter) else frozenset()
 
 
 def incomplete(examination: Optional[Mapping]) -> bool:
@@ -148,9 +220,49 @@ def _words(record) -> str:
     return (words.get('text') or '') if isinstance(words, Mapping) else ''
 
 
-def named_routes(examination: Mapping, names, usable_only: bool) -> dict:
+def _tokens(text: str) -> list:
+    """D141: ``text`` in lexicon.fold's form as its words, in order, with '' for each mark between them (a comma, a
+    stop, a parenthesis, a slash), so a route phrase never runs across one."""
+    out, word = [], []
+    for char in lexicon.fold(text):
+        if char.isalnum() or char == "'":
+            word.append(char)
+            continue
+        if word:
+            out.append(''.join(word).strip("'"))  # a quote around a word is no part of it
+            word = []
+        if not char.isspace():
+            out.append('')
+    if word:
+        out.append(''.join(word).strip("'"))
+    return out
+
+
+def route_phrase(text: str, route: str) -> bool:
+    """D141: whether ``text`` states ``route`` (THROUGH_STOMA or THROUGH_POUCH) in a route phrase - one of ROUTE_INTO,
+    then one of the route's ROUTE_NOUNS with at most PHRASE_REACH words between, none in ROUTE_BREAKS and no mark, the
+    noun not after a place prefix (PLACE_PREFIXES: "into the pre-pouch ileum" names a place) - or one of its
+    ROUTE_FORMS."""
+    tokens = _tokens(text)
+    for index in range(len(tokens)):
+        if any(tuple(tokens[index:index + len(form)]) == form for form in ROUTE_FORMS[route]):
+            return True
+        opening = next((words for words in ROUTE_INTO if tuple(tokens[index:index + len(words)]) == words), None)
+        if opening is None:
+            continue
+        for between, token in enumerate(tokens[index + len(opening):index + len(opening) + PHRASE_REACH + 1]):
+            if token in ROUTE_NOUNS[route] and not (between and tokens[index + len(opening) + between - 1]
+                                                    in PLACE_PREFIXES):
+                return True
+            if not token or token in ROUTE_BREAKS:
+                break
+    return False
+
+
+def named_routes(examination: Mapping, names, usable_only: bool, phrased: bool = False) -> dict:
     """D114: {route: the first words naming it} over the located words of ``examination``'s attributes ``names`` - only
-    the usable ones (verified, not opened) when ``usable_only``."""
+    the usable ones (verified, not opened) when ``usable_only``. ``phrased`` (D141): the stoma and the pouch are named
+    only in a route phrase (route_phrase); otherwise by any of their ROUTE_WORDS (a doubt reads every mention)."""
     found = {}
     for name in names:
         record = examination.get(name)
@@ -158,17 +270,26 @@ def named_routes(examination: Mapping, names, usable_only: bool) -> dict:
             continue
         text = _words(record)
         for route_name, phrases in ROUTE_WORDS.items():
-            if text and route_name not in found and lexicon.holds(text, phrases):
+            if not text or route_name in found:
+                continue
+            if phrased and route_name in ROUTE_NOUNS:
+                named = route_phrase(text, route_name)  # D141: the stoma or the pouch only in a route phrase
+            else:
+                named = lexicon.holds(text, phrases)
+            if named:
                 found[route_name] = text
     return found
 
 
 def examination_route(examination: Optional[Mapping]) -> tuple:
     """D114: (the examination's verified route, the words that state it): ('', '') unless the usable words of its own
-    statement (ROUTE_STATED) name exactly one route and none of its own located words (ROUTE_READ) names another."""
+    statement (ROUTE_STATED) name exactly one route - DECISIONS D141: the stoma or the pouch only in a route phrase
+    (route_phrase), never as an anatomy mention ("Double-balloon enteroscopy in a patient with an end ileostomy", which
+    made 44382 READY on an oral enteroscopy) - and none of its own located words (ROUTE_READ) names another by any of
+    its ROUTE_WORDS."""
     if examination is None:
         return '', ''
-    stated = named_routes(examination, ROUTE_STATED, True)
+    stated = named_routes(examination, ROUTE_STATED, True, phrased=True)
     if len(stated) != 1 or set(named_routes(examination, ROUTE_READ, False)) != set(stated):
         return '', ''
     return next(iter(stated.items()))
@@ -176,7 +297,8 @@ def examination_route(examination: Optional[Mapping]) -> tuple:
 
 def route_read(verified_routes, landmark: str) -> bool:
     """D114: whether the examination's own route decides the class - an ileal reach beside the encounter's verified
-    stoma or pouch (a pouch reach is the pouch's; with neither, D108's classes as built)."""
+    stoma or pouch, or (D141) a pouch in doubt (a pouch reach is the pouch's; with neither, D108's classes as
+    built)."""
     return bool(verified_routes) and landmark in ILEAL_REACH
 
 
@@ -275,10 +397,25 @@ def act_elsewhere(code: str, reading, sessions_: Mapping) -> Optional[tuple]:
     return None
 
 
-def elsewhere_hold(code: str, family: str, key: str, reading, event: Mapping, holder, what: str) -> tuple:
+def base_asked(reading, sessions_: Mapping) -> bool:
+    """DECISIONS D141 (problem 5): whether the base rule asks the enteroscopy's diagnostic code base_included from its
+    own session's acts - combination.base_included's arms (b) and (c), read over event_coding's lists of the same
+    session: an act of that session reportable or doubted (coverage.reportable, coverage.doubted)."""
+    session = sessions_.get(FAMILY)
+    return session is not None and any(
+        coverage.reportable(reading, reading.events[eid]) or coverage.doubted(reading, reading.events[eid])
+        for eid in session.events if eid in reading.events)
+
+
+def elsewhere_hold(code: str, family: str, key: str, reading, event: Mapping, holder, what: str, *,
+                   asked_beside: bool = True) -> tuple:
     """D114: (check, clarification) of an enteroscopy code whose act ``event`` the session ``holder`` holds for coding,
     in another_site's form: held, never READY and never excluded - an act code with performed_status, and a code that
-    accounts for the examination itself (``what`` '') with the act's procedure question (wording.procedure_question)."""
+    accounts for the examination itself (``what`` '') with the act's procedure question (wording.procedure_question).
+    DECISIONS D141 (problem 5): the act's question is added BESIDE the base rule's, never in its place. Where the base
+    rule no longer asks it (``asked_beside`` False: base_asked - the act was the only act of the enteroscopy's session,
+    and the move took it), the one question asks the base rule's question first (BASE_QUESTION, as the base rule asked
+    it of this act at 1caaf0609 and as the installed release asks it), then the act's."""
     place = wording.landmark_label(mapping.target_landmark(event))
     words = _words(event.get('target'))
     said, shown = (f' ({wording.quote(words)})', f' ({wording.quote(words, 120)})') if words else ('', '')
@@ -287,9 +424,14 @@ def elsewhere_hold(code: str, family: str, key: str, reading, event: Mapping, ho
         reason = (f'The {act} is filed under the small-bowel enteroscopy and documented at the {place}{said}, which '
                   f'the {holder.label} of this encounter examines, so CPT Studio reads it as an act of the '
                   f'{holder.label}; if it was done in the enteroscopy, {code} is included in the code for it.')
+        question = wording.procedure_question(kind, words)
+        if not asked_beside:  # D141: the base rule's question stays, the act's beside it
+            included = wording.act_label(event.get('catalogue_kind') or '') + (
+                '' if coverage.reportable(reading, event) else IN_DOUBT)
+            question = f'{BASE_QUESTION.format(code=code, included=included)} {question}'
         return (Check(*ELSEWHERE_CHECK, 'warn', reason, wording.SOURCE),
-                ClarificationSpec(scope='proposal', fact='procedure', question=wording.procedure_question(kind, words),
-                                  reason=reason, family=family, proposal_key=key))
+                ClarificationSpec(scope='proposal', fact='procedure', question=question, reason=reason, family=family,
+                                  proposal_key=key))
     reason = (f'The {act} is documented at the {place}{said}, which the {holder.label} of this encounter examines, so '
               f'CPT Studio reads it as an act of the {holder.label}; {code} accounts for {what} in a small-bowel '
               'enteroscopy, which CPT Studio could not find in the document.')
@@ -316,7 +458,7 @@ def enteroscopy_hold(code: str, family: str, key: str, reading, sessions_: Mappi
     elsewhere = act_elsewhere(code, reading, sessions_)  # D114 (parity note 1)
     if elsewhere is None:
         return misfit
-    region = elsewhere_hold(code, family, key, reading, *elsewhere)
+    region = elsewhere_hold(code, family, key, reading, *elsewhere, asked_beside=base_asked(reading, sessions_))
     if misfit is None:
         return region
     check, spec = misfit
@@ -335,8 +477,9 @@ def class_misfit(code: str, exam_class: str, family: str, key: str, reading, ses
     session = sessions_.get(FAMILY)
     examination = reading.events.get(session.event) if session is not None and session.event else None
     verified_routes = routes(reading.encounter)
+    read_routes = verified_routes | doubted_routes(reading.encounter)  # D141: a possible pouch keeps the route deciding
     stated = incomplete(examination)
-    taken, taken_words = examination_route(examination) if route_read(verified_routes, landmark) else (None, '')
+    taken, taken_words = examination_route(examination) if route_read(read_routes, landmark) else (None, '')
     if fits(exam_class, landmark, verified_routes, stated, taken):
         return None
     if stated and fits(exam_class, landmark, verified_routes, False, taken):
@@ -351,7 +494,7 @@ def class_misfit(code: str, exam_class: str, family: str, key: str, reading, ses
     record = extent.get('words') if isinstance(extent, Mapping) else None
     words = (record.get('text') or '') if isinstance(record, Mapping) else ''
     reason, question = class_hold(code, exam_class, wording.landmark_label(landmark), words, form, route=taken or '',
-                                  route_words=taken_words, through=verified_routes, stated_incomplete=stated)
+                                  route_words=taken_words, through=read_routes, stated_incomplete=stated)
     return (Check(*CHECK, 'warn', reason, wording.SOURCE),
             ClarificationSpec(scope='proposal', fact='extent', question=question, reason=reason, family=family,
                               proposal_key=key))

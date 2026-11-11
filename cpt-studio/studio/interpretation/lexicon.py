@@ -598,6 +598,11 @@ def dated_frame(rest: str) -> bool:
 # afternoon", "that same day", ...) are removed: they name whatever day the previous sentence names ("On 10/30/2026 she
 # was seen in the emergency department of another hospital. Earlier that day she had undergone an upper endoscopy at
 # that hospital"), so such a time is read by its own value and marker, as before D109.
+# DECISIONS D132 (the review of D111-D113, em problems 2, 4 and 5): the anaphoric frames are ANAPHORIC_FRAMES below,
+# read by facts.day_of for every act whose performer is NOT verified to another clinician or facility - an act of this
+# note's own team, with no other day named, is the visit's own day ("Earlier that morning, I performed a flexible
+# sigmoidoscopy", which c2e53f8e holds) - and never for an act whose performer IS verified other (problem 3's outside
+# EGD "Earlier that day ... at that hospital" stays read by its own value and marker).
 SAME_DAY_FRAMES = (
     'today', 'earlier today', 'later today', 'tonight', 'this morning', 'this afternoon', 'this evening',
     'earlier this morning', 'earlier this afternoon', 'earlier this evening', 'later this morning',
@@ -607,6 +612,13 @@ SAME_DAY_FRAMES = (
     'later in the afternoon', 'earlier in the evening', 'later in the evening',
     'same day', 'the same day', 'on the same day', 'same date', 'the same date', 'on the same date',
     'on the date of service', 'on the same date of service',
+)
+# DECISIONS D132: the anaphoric frames D112 removed from SAME_DAY_FRAMES, exactly (d353e64df's list less today's): each
+# names the day the sentence before it names. Read whole, as SAME_DAY_FRAMES are, and only for an act whose performer is
+# not verified to another clinician or facility (facts.day_of).
+ANAPHORIC_FRAMES = (
+    'earlier that day', 'later that day', 'earlier that same day', 'later that same day', 'earlier that morning',
+    'earlier that afternoon', 'later that morning', 'later that afternoon', 'later that evening', 'that same day',
 )
 
 

@@ -340,9 +340,24 @@ def endoscopic_examination(event: Mapping) -> bool:
     return not (usable(event, 'technique') and value(event, 'technique') == DIGITAL)
 
 
+def defining_fit(reading: Reading, link: mapping.CodeLink, event: Mapping) -> bool:
+    """DECISIONS D136 (the round-5 review of D120, problem 1): whether ``event`` meets the code's defining-target
+    requirement (mapping.defining_target, D120), read with the record of the lesion its target is verified to be
+    (identity.verified_lesion): True for every code but 43240, whose drainage must be of a pancreatic fluid collection -
+    its usable target's words or its verified lesion's words name one, and no verified place of it is biliary or in the
+    liver. A drainage that misses it supports nothing: 'EUS-guided transmural drainage of the gallbladder was performed
+    from the duodenal bulb with a 15 mm lumen-apposing metal stent.' (its target verified at the gallbladder), a bile
+    duct's, a liver abscess's or one whose target is not verified stays a positive candidate, so 43240 is held on it
+    (7.4), never READY - d353e64df READY; the installed release holds every 43240."""
+    lesion = identity.verified_lesion(event)
+    return mapping.defining_target(link.code, event, reading.lesions.get(lesion) if lesion else None)
+
+
 def supports(reading: Reading, link: mapping.CodeLink, group: Sequence[str], event: Mapping) -> bool:
-    """7.3 lines 1-4, 6 and 7 (line 5, the device class, is R4's)."""
+    """7.3 lines 1-4, 6 and 7 (line 5, the device class, is R4's), and (D136) the code's defining target."""
     if not is_candidate(link, group, event) or (event.get('catalogue_kind') or '') in mapping.UMBRELLAS:
+        return False
+    if not defining_fit(reading, link, event):  # D136: 43240's drainage is of a pancreatic fluid collection
         return False
     if event.get('catalogue_kind') in mapping.EXAMINATION_KINDS and not endoscopic_examination(event):
         return False
@@ -552,31 +567,39 @@ ANOTHER_ROLE = 'another_role'  # Evaluation.reason of another_role_hold (the ins
 # this module holds no pattern (tests.test_interpretation_assess.Imports). Per role, its NAMES (a label with its colon:
 # "Nurse:", "RN:", "Pathology:", "Anesthesia:"), the names that head an entry alone on their line ("NURSING",
 # "Pathology:"), and its ENTRY phrases, a name, a middle and an entry word ("Nursing note", "Nursing procedure record",
-# "Pathology report", "Anesthesia record"), each a whole label: followed by no letter, digit or apostrophe.
+# "Pathology report", "Anesthesia record") or an entry form of no name ("Procedure checklist"). A name is a whole
+# label: followed by no letter, digit or apostrophe. An entry phrase ends where services.ROLE_HEADINGS' \b ends it: no
+# ASCII letter or digit joins it ("Nursing note's ..." holds the phrase, "Nursing notebook" does not: DECISIONS D139).
 _ROLE_NURSE = ('pre-procedure nursing', 'intra-procedure nursing', 'post-procedure nursing', 'preprocedure nursing',
                'intraprocedure nursing', 'postprocedure nursing', 'recovery nurse', "nurse's", 'nursing', 'nurses',
                'nurse', 'lpn', 'rn')
-_ROLE_FORMS = (  # (role, names, heading names, entry names, entry middles, entry words): each list longest first
+_ROLE_FORMS = (  # (role, names, heading names, entry names, entry middles, entry words, entry forms of no name): each
+    # list longest first
     ('nursing', _ROLE_NURSE, _ROLE_NURSE, _ROLE_NURSE,
      ('pre-procedure ', 'intra-procedure ', 'post-procedure ', 'preprocedure ', 'intraprocedure ', 'postprocedure ',
       'procedure ', ''),
-     ('documentation', 'assessment', 'flow sheet', 'flowsheet', 'comments', 'entries', 'records', 'comment', 'handoff',
-      'summary', 'record', 'report', 'entry', 'notes', 'note')),
+     ('documentation', 'assessment', 'flow sheet', 'flowsheet', 'checklist', 'comments', 'entries', 'records',
+      'comment', 'handoff', 'summary', 'record', 'report', 'entry', 'notes', 'note'),
+     ('procedure checklist',)),
     ('anesthesia', ('anaesthesiologist', 'anesthesiologist', 'anaesthetist', 'anesthetist', 'anaesthesia', 'anesthesia',
                     'crna'), ('anaesthesia', 'anesthesia'), ('anaesthesia', 'anesthesia', 'sedation'), ('',),
-     ('record', 'report', 'note')),
+     ('record', 'report', 'note'), ()),
     ('pathology', ('surgical pathology', 'pathology'), ('surgical pathology', 'pathology'),
-     ('surgical pathology', 'pathology'), ('',), ('addendum', 'results', 'result', 'report')),
-    ('radiology', (), (), ('radiology', 'imaging'), ('',), ('results', 'result', 'report')),
+     ('surgical pathology', 'pathology'), ('',), ('addendum', 'results', 'result', 'report'), ()),
+    ('radiology', (), (), ('radiology', 'imaging'), ('',), ('results', 'result', 'report'), ()),
 )
+# An entry phrase that opens its line heads an entry when at most this many characters follow it, whatever they are
+# (services.ROLE_HEADINGS' [^\n]{0,60}$, c2e53f8e: "Pathology Report: Final", "Nursing note - recovery"): DECISIONS D139
+_ROLE_HEADING_TAIL = 60
 # A line its own author's label opens ("Endoscopist: ...", "Physician addendum: ...") is the physician's own line.
 _ROLE_PHYSICIAN = (('performing physician', 'proceduralist', 'endoscopist', 'physician', 'attending', 'surgeon', 'md'),
                    (' attestation', ' statement', ' addendum', ' comment', ' note', ''))
 _ROLE_LEAD = ' \t-*#>•·'  # what may open a line before its label: a bullet, a heading mark
 _ROLE_DASHES = '-–—'
 # The next heading, which ends an entry: services.GENERIC_HEADING's shape (c2e53f8e) - a line of at most 61 characters
-# opening with a capital or a digit, of letters, digits and these marks only, at most a closing colon
-_ROLE_HEADING_MARKS = frozenset(" /&,()'’-")
+# opening with a capital or a digit, of letters, digits and these marks only, at most a closing colon. No apostrophe:
+# GENERIC_HEADING's [A-Za-z0-9 /&,()\-] allows none, so "Patient's vital signs stable throughout" ends no entry (D139)
+_ROLE_HEADING_MARKS = frozenset(" /&,()-")
 
 
 def another_role_hold(code: str, link: mapping.CodeLink, own_acts: Sequence, reading: Reading, read: tuple,
@@ -595,11 +618,13 @@ def another_role_hold(code: str, link: mapping.CodeLink, own_acts: Sequence, rea
     one: the passage begins with a role label (label_of: "Nurse:", "RN:", "Nursing note", "Pathology:", "Pathology
     report", "Anesthesia:", "Anesthesia record" and the like, as whole labels - never "Nursing staff:", "Pathology from
     jars 1-3 ...", "Anesthesia, equipment, and quality measures"); or, read from the document's lines, the line it
-    stands on opens with such a label, or is a role's heading line (heading_of), or follows one with no heading between
-    (heading_end: the next heading ends the entry; a blank line does not), and is no line the physician's own label
-    opens (physician). The lines are ``reading.text``: the revision text the assessment receives (assess.assess hands it
-    over); a reading without it (the review overlay's counted codes, a unit test's Reading) reads the passages' own
-    labels only, and so is a place the text does not hold verbatim.
+    stands on opens with such a label, or is a role's heading line (heading_of: an entry phrase opening its line and
+    followed by at most 60 characters of anything, as services.ROLE_HEADINGS reads it - DECISIONS D139), or follows one
+    with no heading between (heading_end: the next heading ends the entry, never the entry's own heading line; a blank
+    line does not), and is no line the physician's own label opens (physician). The lines are ``reading.text``: the
+    revision text the assessment receives (assess.assess hands it over); a reading without it (the review overlay's
+    counted codes, a unit test's Reading) reads the passages' own labels only, and so is a place the text does not hold
+    verbatim.
 
     This is no evidence binding (ADJUDICATION EB1): it reads none of Gemini's values and changes none - the act stays
     performed, current and the documenting team's - and it only ever turns a supported code into a hold, with ONE
@@ -619,6 +644,9 @@ def another_role_hold(code: str, link: mapping.CodeLink, own_acts: Sequence, rea
     def whole(rest: str) -> bool:  # what follows a name or a phrase: no letter, digit or apostrophe joins it
         return not rest or not (rest[0].isalnum() or rest[0] == "'")
 
+    def phrase_end(rest: str) -> bool:  # what follows an entry phrase: no ASCII letter or digit joins it (its
+        return not rest or not (rest[0].isascii() and rest[0].isalnum())  # ROLE_HEADINGS \b: "Nursing note's"; D139)
+
     def entry_rest(folded: str, form: tuple) -> Optional[str]:  # what follows the form's entry phrase folded opens with
         for entry_name in form[3]:
             if not folded.startswith(entry_name + ' '):
@@ -629,8 +657,11 @@ def another_role_hold(code: str, link: mapping.CodeLink, own_acts: Sequence, rea
                     continue
                 tail = rest[len(middle):]
                 for word in form[5]:
-                    if tail.startswith(word) and whole(tail[len(word):]):
+                    if tail.startswith(word) and phrase_end(tail[len(word):]):
                         return tail[len(word):]
+        for phrase in form[6]:  # an entry form of no name ("Procedure checklist": DECISIONS D139)
+            if folded.startswith(phrase) and phrase_end(folded[len(phrase):]):
+                return folded[len(phrase):]
         return None
 
     def label_of(line: str) -> str:
@@ -650,15 +681,24 @@ def another_role_hold(code: str, link: mapping.CodeLink, own_acts: Sequence, rea
 
     def heading_of(line: str) -> str:
         """The role whose entry heading ``line`` is: the whole line a heading name ("NURSING", "Nursing:",
-        "Pathology:") or an entry phrase, with at most a bracketed note ("(Delphine Oakes, LPN)", "(final)"), a date or
-        a time after a colon or a dash ("Nursing note: 10/14/2026 08:30") and a closing colon - else ''."""
+        "Pathology:"); or an entry phrase opening it and followed by at most _ROLE_HEADING_TAIL characters of anything,
+        as services.ROLE_HEADINGS reads it (DECISIONS D139: "Pathology Report: Final", "Nursing note - recovery",
+        "NURSING NOTE (Jo Rowe, RN) 08:30", "Procedure checklist"), counted on the folded line, which holds no more
+        characters than the line itself but for what case folding adds ("ß" is "ss"), so that is allowed; or
+        followed by at most a bracketed note ("(Delphine Oakes, LPN)", "(final)"), a date or a time after a colon or a
+        dash ("Nursing note: 10/14/2026 08:30") and a closing colon - else ''. A line opening with an entry phrase is
+        therefore never read as the NEXT heading (heading_end): it is this entry's own heading, or it is longer than
+        any heading of either kind."""
         folded = fold(line)
+        grown = len(line.replace('’', "'").casefold()) - len(line)
         for form in _ROLE_FORMS:
             if any(folded.startswith(head) and folded[len(head):].strip() in ('', ':') for head in form[2]):
                 return form[0]
             rest = entry_rest(folded, form)
             if rest is None:
                 continue
+            if len(rest) <= _ROLE_HEADING_TAIL + grown:  # DECISIONS D139
+                return form[0]
             rest = rest.strip()
             if rest.startswith('('):
                 close = rest.find(')')
@@ -883,11 +923,17 @@ def _without_support(code: str, link: mapping.CodeLink, group: Sequence[str], ke
 def _focused(code: str, link: mapping.CodeLink, group: Sequence[str], positive: Sequence, reading: Reading
              ) -> Evaluation:
     """7.4: the first rule that applies (h1-h5, in order), over the positive candidates in document order, decides the
-    ONE question; its passages are that candidate's own (both sides of a relation for h1-h3)."""
+    ONE question; its passages are that candidate's own (both sides of a relation for h1-h3).
+
+    DECISIONS D143 (4), per D89 (a doubt never takes another doubt's question): a doubt h2 finds never displaces the
+    same-event contradictions h3 asks of the act it doubts - the one question then asks them and the doubt together
+    (_h3_beside_doubt)."""
     read = tuple(event['id'] for event in positive)
     for rule in (_h1_contradiction, _h2_doubt, _h3_unresolved, _h4_unverified, _h4_attempted, _h5_method):
         for event in positive:
             found = rule(code, link, event, reading)
+            if found is not None and rule is _h2_doubt:  # D143 (4): the denial is asked beside the doubt
+                found = _h3_beside_doubt(code, event, reading, found, positive) or found
             if found is not None:
                 return Evaluation(code, link.family, link, 'uncertain', found['reason'], found['question'].reason,
                                   read=read, question=found['question'], relation=found.get('relation'),
@@ -967,19 +1013,20 @@ def _h3_asks_contradiction(reading: Reading, relation: Mapping, event: Mapping) 
     relation whose act side is the unusable one keeps that attribute's question (D91), and a status, kind or part_of
     relation keeps performed_status (D91).
 
-    DECISIONS D126 (4): on the technique, only while the STATEMENT's own device is not usable. Both devices verified
-    and still UNKNOWN to the pairing table - the act's device wider than the statement's ("removed with a snare" beside
-    "No cold snare was used for the 6 mm sessile polyp."), or both 'other' - is no doubt on the statement's side: the
-    doubt is which device the act used, and the relation keeps its technique question (C-16)."""
+    DECISIONS D143 (2) withdraws D126 (4), which on the technique had asked the contradiction only while the
+    STATEMENT's own device was not usable: the act's device usable asks it whatever the statement's own device, as
+    d353e64df did. "No cold snare was used for the 6 mm sessile polyp." beside "A 6 mm sessile polyp in the sigmoid
+    colon was removed with a snare." asks whether that denial applies to the snare removal (statement_scope), never
+    only which technique was used: the installed release asks conflict:snare there, and against that expectation a
+    technique question alone is a dropped question (score_fresh.verdict's adjudication reads statement_scope as the
+    contradiction). The technique question is not asked beside it: the code has one question (FINAL 7.4)."""
     statement = reading.events.get(relation['statement']) or {}
     if not _h3_denial(statement):
         return False
     attribute = relation['attribute']
     if attribute in ('target', 'scope'):
         return True
-    if attribute not in _H3_STATEMENT_SIDE or not usable(event, attribute):
-        return False
-    return attribute != 'technique' or not usable(statement, 'technique')
+    return attribute in _H3_STATEMENT_SIDE and usable(event, attribute)
 
 
 # DECISIONS D126 (0): the precedence of an act's same-event contradictions, in the one question of its code
@@ -1019,6 +1066,36 @@ def _h3_place(reading: Reading, statement: Mapping, name: str) -> Optional[dict]
     return None
 
 
+def _h3_unlocated(reading: Reading, statement: Mapping, name: str) -> list:
+    """DECISIONS D143 (3): the located places of the attribute's own passages when Gemini gave its words and they do
+    not locate in them (its reasons hold words_unlocated) - no place holds the words, so the statement is quoted with
+    those passages whole; [] otherwise."""
+    record = statement.get(name)
+    if not isinstance(record, Mapping) or isinstance(record.get('words'), Mapping) \
+            or 'words_unlocated' not in (record.get('reasons') or ()):
+        return []
+    return reading.places(record.get('passages') or ())
+
+
+def _h3_quoted(reading: Reading, statement: Mapping) -> list:
+    """The places a statement_scope question quotes of ``statement`` (_h3_whole_statement): the place holding its
+    status words (else its status's first located passage), then - each once, in document order - the places holding
+    its target's and its scope's words (D126 (1)) and its scope's own passages when Gemini's scope words do not locate
+    (D143 (3), _h3_unlocated). [] without a status place. DECISIONS D143 (1): the status place first - the lead a
+    question about several statements shows the statement by (_h3_shown)."""
+    status = statement.get('status') if isinstance(statement.get('status'), Mapping) else {}
+    own = reading.places(status.get('passages') or ())
+    first = _h3_place(reading, statement, 'status') or (own[0] if own else None)
+    if first is None:
+        return []
+    places = {(place['start'], place['end']): place
+              for place in (first, _h3_place(reading, statement, 'target'), _h3_place(reading, statement, 'scope'),
+                            *_h3_unlocated(reading, statement, 'scope'))
+              if place is not None}
+    lead = (first['start'], first['end'])
+    return [places[lead]] + [places[key] for key in sorted(places) if key != lead]
+
+
 def _h3_whole_statement(reading: Reading, statement: Mapping) -> str:
     """DECISIONS D103: what a statement_scope question quotes - the statement whole, never its status words alone: the
     text of the place, among its own passages (its status's first), that holds its status words - the sentence, clause
@@ -1030,15 +1107,16 @@ def _h3_whole_statement(reading: Reading, statement: Mapping) -> str:
     on" / "this splenic-flexure lesion during the present encounter." (FRESH-2 C2MEM-023 r1) is quoted as the one
     sentence, which says what the statement is about. Each place once, in document order: a place within another adds
     nothing, one overlapping or touching another adds the rest of its text, one a line break away (_H3_WRAP) follows
-    after a space, one further away after an ellipsis."""
-    status = statement.get('status') if isinstance(statement.get('status'), Mapping) else {}
-    own = reading.places(status.get('passages') or ())
-    first = _h3_place(reading, statement, 'status') or (own[0] if own else None)
-    if first is None:
+    after a space, one further away after an ellipsis.
+
+    DECISIONS D143 (3): a scope whose words do not locate adds its own passages whole (_h3_unlocated), so the sentence
+    is quoted across the wrap there too: FRESH-1 C2MEM-031 r3's E17 ("... they were not taken from any" / its next
+    line), whose scope words Gemini gave are in neither line, is quoted as its two scope passages joined, never the
+    status words' one line."""
+    quoted = _h3_quoted(reading, statement)
+    if not quoted:
         return statement_text(reading, statement)
-    places = {(place['start'], place['end']): place
-              for place in (first, _h3_place(reading, statement, 'target'), _h3_place(reading, statement, 'scope'))
-              if place is not None}
+    places = {(place['start'], place['end']): place for place in quoted}
     text, end = '', None
     for start, stop in sorted(places):
         place = places[(start, stop)]
@@ -1051,6 +1129,112 @@ def _h3_whole_statement(reading: Reading, statement: Mapping) -> str:
         else:
             text, end = text + (' ' if start - end <= _H3_WRAP else ' … ') + place['text'], stop
     return text
+
+
+def _h3_contradictions(reading: Reading, event: Mapping) -> list:
+    """DECISIONS D101, D126 (0): the act's same-event contradictions among its UNRESOLVED relations
+    (_h3_asks_contradiction), in the stated precedence (_h3_rank: a stable sort keeps the stored order); [] with
+    none."""
+    found = [item for item in reading.relations_of(event['id'], (relations.UNRESOLVED,))
+             if _h3_asks_contradiction(reading, item, event)]
+    return sorted(found, key=lambda item: _h3_rank(reading, item, event)) if len(found) > 1 else found
+
+
+# DECISIONS D143 (1): a relation's statement side (relations._passages: the statement's status, kind, scope and target
+# passages), whose places a question about several statements names by their statement
+_H3_STATEMENT_OWN = ('status', 'kind', 'scope', 'target')
+
+
+def _h3_shown(reading: Reading, found: Sequence, event: Mapping) -> tuple:
+    """DECISIONS D143 (1): the passages of a question about SEVERAL statements - every one's, in the question's order
+    (each relation's, both sides), each once, exactly as before - with every place of a statement's own passages
+    naming that statement (questions.STATEMENT; a place two statements share is named by the first), and the place
+    the question quotes it by, its status place (_h3_quoted), marked as its lead (questions.LEAD); so is the act's
+    (``event``'s) place holding its status words, else its kind words. The statement_scope question's member row reads
+    them (validation.questions.passages): one passage of each statement - its lead - then the act's, before a second
+    passage of any. The installed release's row shows every statement of a conflict; PER_SOURCE (2) alone had shown
+    the first two passages here, so a third statement (finding 3's prior-segment denial beside the framed and device
+    denials) or the second statement beside a hard-wrapped first one (S2w over two lines) was in the question and not
+    in the row. The order is unchanged, so every other question of the code, whose row reads the source as before,
+    shows what it showed."""
+    from studio.validation import questions  # the key the member's row reads (a field only the new path sets)
+    act_lead = _h3_place(reading, event, 'status') or _h3_place(reading, event, 'kind')
+    act_key = (act_lead['start'], act_lead['end']) if act_lead is not None else None
+    out, seen = [], set()
+    for item in found:
+        statement = item['statement']
+        own = {(place['start'], place['end'])
+               for place in reading.places(own_passages(statement, _H3_STATEMENT_OWN))}
+        lead = {(place['start'], place['end']) for place in _h3_quoted(reading, statement)[:1]}
+        for span in item['passages']:
+            key = (span['start'], span['end'])
+            if key in seen:
+                continue
+            seen.add(key)
+            entry = {'start': span['start'], 'end': span['end'], 'text': span['text']}
+            if key in own and statement.get('id'):
+                entry[questions.STATEMENT] = statement['id']
+                if key in lead:
+                    entry[questions.LEAD] = True
+            elif key == act_key:
+                entry[questions.LEAD] = True
+            out.append(entry)
+    return tuple(out)
+
+
+def _h3_contradiction_question(reading: Reading, event: Mapping, chosen: Sequence,
+                               doubt: Optional[Mapping] = None) -> dict:
+    """The code's one statement_scope question over the act's same-event contradictions ``chosen``, in their
+    precedence (D126 (0)) - and, DECISIONS D143 (4), the DOUBT relation ``doubt`` h2 found on the act, after them:
+    whether any of their statements applies to the act, each quoted whole (D103, D126 (1)) and once; its events and
+    passages every one's, in that order (a question about several statements names each passage's statement:
+    _h3_shown). The relation recorded is the first contradiction."""
+    found = [_relation_question(reading, item, event) for item in chosen]
+    if doubt is not None:
+        found.append(_relation_question(reading, doubt, event))
+    act = event_label(reading, event)
+    words = statement_text(reading, event)
+    said = list(dict.fromkeys(_h3_whole_statement(reading, item['statement']) for item in found))
+    question = wording.scope_question(said[0], act, words, whole=True, also=said[1:])
+    reason = wording.scope_reason(said[0], act, whole=True, also=said[1:])
+    asked = tuple(dict.fromkeys(eid for item in found for eid in item['events']))
+    shown = (_h3_shown(reading, found, event) if len(found) > 1
+             else _spans(span for item in found for span in item['passages']))
+    return {'reason': UNRESOLVED, 'relation': chosen[0],
+            'question': Question('statement_scope', question, reason, asked, shown)}
+
+
+def _h3_beside_doubt(code: str, event: Mapping, reading: Reading, doubt: Mapping, positive: Sequence
+                     ) -> Optional[dict]:
+    """DECISIONS D143 (4), per D89 (a doubt never takes another doubt's question): the doubt h2 found never displaces
+    the same-event contradictions (_h3_contradictions) of the act it doubts. The doubt is ``doubt``, h2's finding on
+    ``event``: a DOUBT relation of the act ``event``, or - the doubting statement listed before the act, itself a
+    positive candidate - ``event``'s own uncertain status, whose DOUBT relations name the acts it doubts (among
+    ``positive``, in their order). With any contradiction of such an act, the code's one question asks them, in their
+    precedence, and the doubt's statement after them (statement_scope, which the scoring adjudication reads as asking a
+    contradiction and a performed_status alike) - None otherwise (h2's question stands), or with no code
+    (focus_question reads h1-h3 directly).
+
+    The input: an undated note's 'On 11/09/2026, a 6 mm sessile polyp in the sigmoid colon was removed with a cold
+    snare.' (its day a pending check), 'Impression: No polypectomy was performed.' (D128 stores UNRESOLVED(time)) and
+    'It is unclear whether the sigmoid polyp was removed completely.' (DOUBT), the member's date 2026-11-09: h2 had
+    asked performed_status quoting the doubt alone, and the denial was shown nowhere; the installed release asks
+    conflict:snare (its conflicts check warns), and the document dated 11/09/2026 asks conflict:snare (h1)."""
+    if not code:
+        return None
+    relation = doubt.get('relation')
+    if relation is not None:
+        doubted = [(event, relation)]
+    else:  # the doubting statement itself, a candidate: the acts its DOUBT relations name
+        order = {item['id']: index for index, item in enumerate(positive)}
+        doubted = sorted(((reading.events[item['event']], item) for item in reading.by_statement.get(event['id'], ())
+                          if item['type'] == relations.DOUBT and item['event'] in order),
+                         key=lambda pair: order[pair[0]['id']])
+    for act, item in doubted:
+        contradictions = _h3_contradictions(reading, act)
+        if contradictions:
+            return _h3_contradiction_question(reading, act, contradictions, doubt=item)
+    return None
 
 
 def _h3_unresolved(code, link, event, reading):
@@ -1092,34 +1276,37 @@ def _h3_unresolved(code, link, event, reading):
     ''), which reads the first relation stored: coverage.in_doubt_questions asks one question per family and fact, so
     moving that question to statement_scope dropped it where the family's codes ask statement_scope (FRESH-2 C2MEM-031
     r1: the balloon dilation's "done at this encounter?"). Only the question changes: the code is held as before, never
-    READY and never excluded."""
+    READY and never excluded.
+
+    DECISIONS D143: the contradictions' question is _h3_contradiction_question's (a question about several
+    statements names each passage's statement, (1)); (2) the technique arm is d353e64df's again
+    (_h3_asks_contradiction); (3) a scope whose words do not locate is quoted by its own passages
+    (_h3_whole_statement); (4) h2's doubt never displaces the contradictions of the act it doubts (_focused,
+    _h3_beside_doubt)."""
     unresolved = reading.relations_of(event['id'], (relations.UNRESOLVED,))
     if not unresolved:
         return None
-    chosen, fact = [unresolved[0]], ''
-    if code:  # D101: every relation of the act is read; a same-event contradiction (D86/D91/D102) is the question
-        contradictions = [item for item in unresolved if _h3_asks_contradiction(reading, item, event)]
-        if contradictions:  # D126 (0): every one, in the stated precedence (a stable sort keeps the stored order)
-            chosen = (sorted(contradictions, key=lambda item: _h3_rank(reading, item, event))
-                      if len(contradictions) > 1 else contradictions)
-            fact = 'statement_scope'
-    relation = chosen[0]
-    fact = fact or RELATION_FACTS.get(relation['attribute'], 'performed_status')
-    found = [_relation_question(reading, item, event) for item in chosen]
+    # D101: every relation of the act is read; a same-event contradiction (D86/D91/D102) is the question - D126 (0):
+    # every one, in the stated precedence
+    contradictions = _h3_contradictions(reading, event) if code else []
+    if contradictions:
+        return _h3_contradiction_question(reading, event, contradictions)
+    relation = unresolved[0]
+    fact = RELATION_FACTS.get(relation['attribute'], 'performed_status')
+    found = _relation_question(reading, relation, event)
     act = event_label(reading, event)
     words = statement_text(reading, event)
-    if fact == 'statement_scope' and _h3_denial(found[0]['statement']):  # D103, D126: the denials, each quoted whole
-        said = list(dict.fromkeys(_h3_whole_statement(reading, item['statement']) for item in found))
-        question = wording.scope_question(said[0], act, words, whole=True, also=said[1:])
-        reason = wording.scope_reason(said[0], act, whole=True, also=said[1:])
+    if fact == 'statement_scope' and _h3_denial(found['statement']):  # D103: a denial, quoted whole
+        said = _h3_whole_statement(reading, found['statement'])
+        question = wording.scope_question(said, act, words, whole=True)
+        reason = wording.scope_reason(said, act, whole=True)
     elif fact == 'statement_scope':  # D126 (3): no denial - D86's wording
-        said = statement_text(reading, found[0]['statement'])
+        said = statement_text(reading, found['statement'])
         question, reason = wording.scope_question(said, act, words), wording.scope_reason(said, act)
     else:
         question, reason = _attribute_question(fact, act, words)
-    asked = tuple(dict.fromkeys(eid for item in found for eid in item['events']))
-    shown = _spans(span for item in found for span in item['passages'])
-    return {'reason': UNRESOLVED, 'relation': relation, 'question': Question(fact, question, reason, asked, shown)}
+    return {'reason': UNRESOLVED, 'relation': relation,
+            'question': Question(fact, question, reason, found['events'], _spans(found['passages']))}
 
 
 def _attribute_question(fact: str, act: str, words: str) -> tuple:

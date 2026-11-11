@@ -294,13 +294,14 @@ class D112TodayAnchoredFrames(SimpleTestCase):
 
     def test_d112_finding_14s_g2_earlier_that_day_is_read_by_its_marker(self):
         """Finding 14's G2 ('Earlier that day, I performed a flexible sigmoidoscopy, which showed internal
-        hemorrhoids.', earlier_encounter, by 'I'): D109 placed it ON the date; D112 reads it by its own marker, OFF, so
-        99213 is READY. THE SPEC'S COST, recorded: c2e53f8e holds 99213 there with separate_em (an anaphoric frame with
-        no other day named reads as the visit's own day to the installed routing)."""
+        hemorrhoids.', earlier_encounter, by 'I'): D109 placed it ON the date; D112 read it by its own marker, OFF, and
+        99213 was READY where c2e53f8e holds it with separate_em. DECISIONS D132 (the review of D111-D113, em problem
+        4): the anaphoric frames are read for an act whose performer is not verified other, so G2 is ON again and
+        99213 is held with separate_em, as c2e53f8e holds it (tests/test_interpretation_r5c_currency.py)."""
         inv, text = earlier_act(THAT_DAY_LINE, 'examination', 'flexible sigmoidoscopy',
                                 a('flex_sig', 'flexible sigmoidoscopy', ['P1']), 'Earlier that day')
-        self.assertEqual(facts.day_of(reading_of(inv).events['E1'], DAY), facts.OFF)
-        ready_with_no_procedure_day(self, em(inv, text))
+        self.assertEqual(facts.day_of(reading_of(inv).events['E1'], DAY), facts.ON)
+        held_for_separate_em(self, em(inv, text), 'Flexible sigmoidoscopy')
 
     def test_d112_controls_today_anchored_frames_stay_on(self):
         """What D112 must NOT move: today-anchored frames place an earlier_encounter act on the date - 'earlier in the

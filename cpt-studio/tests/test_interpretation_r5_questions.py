@@ -15,7 +15,8 @@
   both, as D103 built it.
 - (4) D102 asked the contradiction of a technique relation whose two devices are both verified ("removed with a snare"
   beside "No cold snare was used for the 6 mm sessile polyp."): that is no doubt on the statement's side, and the
-  relation keeps its technique question.
+  relation keeps its technique question. (DECISIONS D143 (2) withdraws (4): the contradiction is asked again, as
+  d353e64df asked it - tests/test_interpretation_r5c_questions.py.)
 
 Only the question changes: status, bucket, READY and the exclusion are untouched. SYNTHETIC: the shared S08 builders
 (tests.test_interpretation_events, tests.test_interpretation_identity) over fictional documents, in the shapes of the
@@ -237,8 +238,8 @@ class D126TheWholeSentence(Asks):
     def test_d126_the_service_question_reads_the_sentence_across_the_wrap(self):
         # FRESH-1 C2MEM-031 r3's shape, with the scope's words LOCATED on the next line: focus_question's
         # statement_scope question about an in_doubt biopsy beside a denial - a denial's, so quoted whole (D103), now
-        # the whole sentence. (The recorded E17's scope words are unlocated and its target absent, so no place holds
-        # them and its question keeps the one line: DECISIONS D126, residual 1.)
+        # the whole sentence. (The recorded E17's scope words are unlocated and its target absent: DECISIONS D143 (3)
+        # quotes its scope's own passages, test_d126_recorded_unlocated_scope_words_quote_the_scopes_own_passages.)
         lines = {'P1': COLONOSCOPE, 'P2': 'Biopsies were taken from the ileocolonic anastomosis with cold forceps.',
                  'P3': 'Random biopsies were collected for dysplasia surveillance; they were not taken from any',
                  'P4': 'polyp or lesion described below.'}
@@ -257,10 +258,11 @@ class D126TheWholeSentence(Asks):
                          f'Does {said} apply to the forceps biopsy (cold forceps) at the anastomosis (“were taken”)?')
         self.assertTrue(question.reason.startswith(f'The document states {said};'), question.reason)
 
-    def test_d126_recorded_unlocated_scope_words_keep_the_one_line(self):
-        # RECORDED, not repaired (DECISIONS D126, residual 1): FRESH-1 C2MEM-031 r3's E17 as recorded - its target
-        # absent, its scope's words not in the document (words_unlocated), its scope's passages this line and the next.
-        # No place holds a target's or scope's words, so the quote is the status words' line alone, as at d353e64df
+    def test_d126_recorded_unlocated_scope_words_quote_the_scopes_own_passages(self):
+        # FRESH-1 C2MEM-031 r3's E17 as recorded - its target absent, its scope's words not in the document
+        # (words_unlocated), its scope's passages this line and the next. D126 recorded it (residual 1: no place holds
+        # a target's or scope's words, so the quote was the status words' line alone, as at d353e64df); DECISIONS D143
+        # (3) quotes the scope's own passages whole, the sentence across the wrap
         lines = {'P1': COLONOSCOPE, 'P2': 'Biopsies were taken from the ileocolonic anastomosis with cold forceps.',
                  'P3': 'Random biopsies were collected for dysplasia surveillance; they were not taken from any',
                  'P4': 'polyp or lesion described below.'}
@@ -275,8 +277,8 @@ class D126TheWholeSentence(Asks):
         self.assertEqual((scope['state'], scope['words'], scope['passages']), ('unverified', None, ['P3', 'P4']))
         self.assertEqual(relations_of(inv), [('E3', 'E2', 'scope', 'scope_unresolved')])
         question = events.focus_question(reading, reading.events['E2'])
-        self.assertEqual(question.question, f'Does “{lines["P3"]}” apply to the forceps biopsy (cold forceps) at the '
-                                            'anastomosis (“were taken”)?')
+        self.assertEqual(question.question, f'Does “{lines["P3"]} {lines["P4"]}” apply to the forceps biopsy (cold '
+                                            'forceps) at the anastomosis (“were taken”)?')
 
     def test_d126_places_apart_are_joined_with_an_ellipsis(self):
         # FRESH-2 C2MEM-031 r1 E25's shape: the target's words are stated sentences away from the status words
@@ -399,10 +401,12 @@ def no_cold(eid: str = 'E3', pid: str = 'P3') -> dict:
 
 
 class D126BothDevicesVerified(Asks):
-    """Problem 4: D102's "the act's own value is usable" caught a technique relation whose devices are both verified."""
+    """Problem 4: D102's "the act's own value is usable" caught a technique relation whose devices are both verified.
+    DECISIONS D143 (2) withdraws D126 (4): that relation asks the contradiction again, as d353e64df did."""
 
-    def test_d126_a_technique_relation_whose_two_devices_are_verified_keeps_its_question(self):
-        # the review's input: the act's snare (verified) is wider than the denial's cold snare (verified)
+    def test_d126_a_technique_relation_whose_two_devices_are_verified_asks_the_contradiction(self):
+        # the review's input: the act's snare (verified) is wider than the denial's cold snare (verified). D126 (4)
+        # asked which technique was used; DECISIONS D143 (2): whether the denial applies to the snare removal
         polyp = removed(technique=a('snare', 'snare', ['P2']), status_words='was removed with a snare')
         inv, text = colonoscopy(no_cold(), lines={'P2': SNARE_ONLY, 'P3': NO_COLD}, polyp=polyp)
         self.assertEqual(relations_of(inv), [('E3', 'E2', 'technique', 'technique_unresolved')])
@@ -410,12 +414,7 @@ class D126BothDevicesVerified(Asks):
         self.assertTrue(events.usable(reading.events['E2'], 'technique'))
         self.assertTrue(events.usable(reading.events['E3'], 'technique'))
         p = proposal(run(inv, text, [('45385', SNARE_ONLY)]), '45385')
-        self.assertEqual((p.status, [c.fact for c in p.clarifications], p.support['reason']),
-                         ('needs_clarification', ['technique'], events.UNRESOLVED))
-        self.assertEqual(p.clarifications[0].question, f'Which technique was used for the {WIDER} '
-                                                       '(“was removed with a snare”)?')
-        self.assertEqual(p.clarifications[0].reason, 'CPT Studio could not confirm from the document which technique '
-                                                     f'was used for the {WIDER}.')
+        self.assert_asks(p, [NO_COLD], act=WIDER, words='(“was removed with a snare”)?')
         # the statement's own device unverified is still the contradiction (D102, kept: note8 r3's shape)
         line = 'The EMR snare was not used on this polyp in the sigmoid colon.'
         denial = act('E3', 'P3', 'snare', 'snare', status='not_performed', status_words='was not used',
@@ -427,12 +426,13 @@ class D126BothDevicesVerified(Asks):
         self.assert_asks(proposal(run(inv, text, [('45385', POLYP)]), '45385'), [line])
 
     def test_d126_beside_a_target_denial_the_contradiction_is_the_question(self):
-        # one question per code: the prior-segment denial's contradiction is asked (D101), and the technique relation,
-        # no contradiction, is not among its statements
+        # one question per code: the contradictions are asked (D101, D126 (0)) - since DECISIONS D143 (2) the
+        # technique denial is one of them again (the act's own lesion: a same-site denial, first), then the
+        # prior-segment denial; under D126 (4) it was no contradiction and was not among the statements
         polyp = removed(technique=a('snare', 'snare', ['P2']), status_words='was removed with a snare')
         inv, text = colonoscopy(no_cold(), prior('E4', 'P4'), lines={'P2': SNARE_ONLY, 'P3': NO_COLD, 'P4': PRIOR},
                                 polyp=polyp)
         self.assertEqual([item[2] for item in relations_of(inv)], ['technique', 'target'])
         p = proposal(run(inv, text, [('45385', SNARE_ONLY)]), '45385')
-        self.assert_asks(p, [PRIOR], act=WIDER, words='(“was removed with a snare”)?')
-        self.assertEqual(p.support['question_events'], ['E2', 'E4'])
+        self.assert_asks(p, [NO_COLD, PRIOR], act=WIDER, words='(“was removed with a snare”)?')
+        self.assertEqual(p.support['question_events'], ['E2', 'E3', 'E4'])

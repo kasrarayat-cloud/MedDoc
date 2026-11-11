@@ -169,9 +169,15 @@ def _words_of(attribute: Mapping) -> str:
 
 
 def _same_day_word(text: str) -> bool:
+    """Whether a time's own words hold a SAME_DAY_WORDS entry, matched at word boundaries whatever punctuation touches
+    it (DECISIONS D131, the review of D111-D113, em problem 0): folded, every character that is not a letter or a digit
+    turned into a space, the spaces collapsed, then ' word ' matched. "Earlier today, excision ...", "This morning,
+    before clinic" and "Earlier today, at 8:30" hold "today" or "this morning" as "Earlier today before her visit"
+    does; read with its punctuation, "today," never matched, so the act was OFF by its verified "earlier"."""
     if not text:
         return False
-    folded = ' ' + ' '.join(lexicon.fold(text).replace('-', ' ').split()) + ' '
+    spaced = ''.join(char if char.isalnum() else ' ' for char in lexicon.fold(text))
+    folded = ' ' + ' '.join(spaced.split()) + ' '
     return any(f' {word} ' in folded for word in SAME_DAY_WORDS)
 
 
@@ -179,8 +185,10 @@ def _same_day_word(text: str) -> bool:
 # reads a current time's words (lexicon.current_frame): folded, the punctuation and whitespace at the edges stripped
 # (lexicon._FRAME_EDGES: every character that is not alphanumeric), split at commas, semicolons and a standalone " and "
 # (lexicon._FRAME_JOINS), each part stripped - the same split, written here without a pattern and pinned equal to
-# lexicon's by tests/test_interpretation_r4_em_same_day.py.
+# lexicon's by tests/test_interpretation_r4_em_same_day.py. DECISIONS D132: the anaphoric frames
+# (lexicon.ANAPHORIC_FRAMES) are read the same way, for an act whose performer is not verified other only (day_of).
 _SAME_DAY_FRAMES = frozenset(lexicon.fold(frame) for frame in lexicon.SAME_DAY_FRAMES)
+_ANAPHORIC_FRAMES = frozenset(lexicon.fold(frame) for frame in lexicon.ANAPHORIC_FRAMES)
 
 
 def _frame_parts(text: str) -> list:
@@ -194,24 +202,32 @@ def _frame_parts(text: str) -> list:
     return [piece.strip() for piece in pieces]
 
 
-def _same_day_frame(text: str) -> bool:
-    """D109: whether a time's own words are made only of whole same-date frames: "Earlier in the day", "earlier that
-    day", "Earlier in the morning", "later in the day, earlier today"; never "earlier in the day, before her visit"."""
+def _same_day_frame(text: str, anaphoric: bool = False) -> bool:
+    """D109: whether a time's own words are made only of whole same-date frames (lexicon.SAME_DAY_FRAMES, anchored to
+    today since D112): "Earlier in the day", "Earlier in the morning", "later in the day, earlier today"; never
+    "earlier in the day, before her visit". With ``anaphoric`` (DECISIONS D132: an act whose performer is not verified
+    other) the anaphoric frames count too (lexicon.ANAPHORIC_FRAMES): "Earlier that day", "Later that morning";
+    without it they are no frames, and a bare "that day" never is."""
+    frames = (_SAME_DAY_FRAMES | _ANAPHORIC_FRAMES) if anaphoric else _SAME_DAY_FRAMES
     parts = [part for part in _frame_parts(text or '') if part]
-    return bool(parts) and all(part in _SAME_DAY_FRAMES for part in parts)
+    return bool(parts) and all(part in frames for part in parts)
 
 
 def day_of(event: Mapping, effective) -> str:
     """Whether an event is ON the date of service, OFF it, or UNDATABLE (ADJUDICATION C-3: procedure_day is by date of
     service). ON: a usable current_encounter time; or time words whose date literals are all at day precision and equal
-    to the effective date; or time words that say so (SAME_DAY_WORDS: "earlier today"; DECISIONS D109: or words made
-    only of whole same-date frames, lexicon.SAME_DAY_FRAMES - "earlier in the day", "Earlier in the morning" - whatever
-    time Gemini gives, earlier_encounter included; DECISIONS D112: frames anchored to today only, never the anaphoric
-    "Earlier that day", which names whatever day the sentence before it names). OFF: a usable earlier or future time
-    whose words place it on no such day. UNDATABLE: a time that is not usable (unknown, unverified, open, discarded) and
-    whose words place it on no such day - "any event whose date is unresolved" (C-3); combination.procedure_day reads
-    which of those an act's own time value makes a question (DECISIONS D111). ``effective``: the effective date (a
-    date, an ISO string or None); with none, a date literal places nothing."""
+    to the effective date; or time words that say so (SAME_DAY_WORDS: "earlier today", matched whatever punctuation
+    touches it, DECISIONS D131: "Earlier today, at 8:30"; DECISIONS D109: or words made only of whole same-date frames,
+    lexicon.SAME_DAY_FRAMES - "earlier in the day", "Earlier in the morning" - whatever time Gemini gives,
+    earlier_encounter included; DECISIONS D112: those frames are anchored to today; DECISIONS D132: the anaphoric
+    frames, lexicon.ANAPHORIC_FRAMES - "Earlier that day", "Later that morning", which name the day the sentence before
+    them names - count for an act whose performer is NOT verified to another clinician or facility, the reading
+    events.verified_other_performer gives, and never for one whose performer is: problem 3's outside EGD "Earlier that
+    day ... at that hospital" is read by its own value and marker). OFF: a usable earlier or future time whose words
+    place it on no such day. UNDATABLE: a time that is not usable (unknown, unverified, open, discarded) and whose words
+    place it on no such day - "any event whose date is unresolved" (C-3); combination.procedure_day reads which of
+    those an act's own time value makes a question (DECISIONS D111). ``effective``: the effective date (a date, an ISO
+    string or None); with none, a date literal places nothing."""
     time = event.get('time') or {}
     text = _words_of(time)
     if verify.usable(time) and time.get('value') == 'current_encounter':
@@ -221,7 +237,9 @@ def day_of(event: Mapping, effective) -> str:
     if service is not None and found and all(precision == literals.DAY and literals.iso_date(value) == service
                                              for value, precision in found):
         return ON
-    if (_same_day_word(text) or _same_day_frame(text)) and not found:
+    performer = event.get('performer')  # D132: events.verified_other_performer's reading, pinned equal to it
+    other = verify.usable(performer) and performer.get('value') in ('other_clinician', 'other_facility')
+    if (_same_day_word(text) or _same_day_frame(text, anaphoric=not other)) and not found:
         return ON
     if verify.usable(time) and time.get('value') in ('earlier_encounter', 'future'):
         return OFF

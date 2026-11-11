@@ -273,10 +273,51 @@ def eus_act(event: Mapping) -> bool:
     PROCEDURE usable as 'eus'. An act whose family is in doubt (its procedure unsettled: a colonoscopy's 'Random biopsies
     were taken from the rectum.' filed under 'eus' with no words, D75) is a doubt, never a fact (D87): read as one, it
     made the EUS session lower and 43235 READY beside 43242. DECISIONS D121: with no done EUS examination, these acts
-    are the session C-4 reads - placed nowhere lower, an upper EUS whose endoscopic portion today's EGD is."""
+    are the session C-4 reads - placed nowhere lower, an upper EUS whose endoscopic portion today's EGD is - and
+    (DECISIONS D135) so is every other done EUS-guided act (eus_guided_act); only these acts are lower EVIDENCE."""
     return (event.get('family') == 'gi.eus' and event.get('catalogue_kind') in EUS_ACTS and events.done(event)
             and events.usable(event, 'kind') and events.usable(event, 'procedure')
             and events.value(event, 'procedure') == 'eus')
+
+
+def eus_guided_act(event: Mapping) -> bool:
+    """DECISIONS D135 (the round-5 review of D121, problem 0): a DONE EUS-guided act of ANY kind - an event of the EUS
+    family done at this encounter (events.done) that is no examination, its kind usable (an act of no catalogue kind,
+    Gemini's 'other', included) and its own PROCEDURE usable as 'eus'. With no done EUS examination these acts, not
+    eus_act's alone, are the session C-4 reads (D121): an EUS told only through 'EUS-guided through-the-needle
+    microforceps biopsy of the 3 cm cyst in the pancreatic body was performed.' (a biopsy), an EUS-guided
+    radiofrequency ablation, a gastroenterostomy's lumen-apposing stent or a coil embolization ('other') is an EUS as one
+    told through its FNA is - read from EUS_ACTS alone, it left today's EGD part of nothing and 43235 READY beside 43242,
+    43259 and alone, where the installed release holds it base_included. They are the EUS's for the SESSION only: an
+    act of a kind that is not the EUS's own is never lower evidence (D96, eus_act), and placed lower it is a doubt
+    about the EUS's place (D123, sessions)."""
+    return (event.get('family') == 'gi.eus' and event.get('catalogue_kind') not in mapping.EXAMINATION_KINDS
+            and events.done(event) and events.usable(event, 'kind') and events.usable(event, 'procedure')
+            and events.value(event, 'procedure') == 'eus')
+
+
+def eus_unprofiled_entries(reading, members) -> list:
+    """DECISIONS D137 (the round-5 review of D122, problem 2): the event-coding entries (_entry's) of the done EUS-guided
+    acts among ``members`` (eus_guided_act: performed or begun, events.done) whose kind the EUS's catalogue entry does
+    not list among its acts - a gastroenterostomy's lumen-apposing stent, a radiofrequency ablation, a coil embolization
+    read as 'other' - and that are part of no other act (bundled_reason: never a clip, NOT_REPORTED). No EUS code
+    accounts for such an act, and the examination is the endoscopic portion of that procedure: event_coding records
+    them among the session's 'reportable' entries, so an examination-only EUS code beside them (combination._base:
+    43231, 43237, 43259, 45341, 45391, 44406) is held base_included, by combination.base_included at assess time and by
+    the read-time overlay over the same record. Read as no act, 'From the gastric body, a 20 mm lumen-apposing metal
+    stent was deployed into a distended jejunal loop.' beside its EUS examination left 43259 READY with coding
+    complete_pending_review, where the installed release holds 43259. An act of no catalogue kind is labelled by its own
+    kind words ('coil embolization'; EB1), else its event label (events.event_label), never ''."""
+    listed = catalogue.entry('gi.eus').acts
+    out = []
+    for event in members:
+        if (eus_guided_act(event) and (event.get('catalogue_kind') or '') not in listed
+                and not bundled_reason(reading, event)):
+            entry = _entry(reading, event)
+            words = events.words_of(event, 'kind')
+            named = ' '.join((words.get('text') or '').split()) if words else ''
+            out.append({**entry, 'label': entry['label'] or named or events.event_label(reading, event)})
+    return out
 
 
 def lower_evidence(reading) -> list:
@@ -305,28 +346,37 @@ def unsettled_eus_examinations(reading) -> list:
             and events.value(event, 'status') in verify.POSITIVE]
 
 
-def doubted_eus_acts(reading) -> list:
+def doubted_eus_acts(reading, unnamed: bool = False) -> list:
     """DECISIONS D123 (the round-4 review of D96, problems 1 and 2): today's DONE acts filed under the EUS that C-4 cannot
     read as the EUS's own (eus_act) - an act of an EUS kind whose kind or procedure is not usable (an FNA filed under
     'eus' with no words: procedure_unsettled), or an act of a kind that is no EUS act (a forceps biopsy: 'Radial EUS was
     then performed; forceps biopsies of the rectal mass were taken.') - in the reading's order. They are doubts, never
     facts (D87): never lower evidence (D96 kept), and never the reason the EGD is read as the EUS's endoscopic portion. An
     examination (a digital rectal examination, FINAL 5.6 E13) and an event of no catalogue kind (a rectal medication read
-    as 'other', DECISIONS D96 finding 0) are not acts here."""
+    as 'other', DECISIONS D96 finding 0) are not acts here. DECISIONS D135: with ``unnamed`` (C-4's upper doubts, which
+    take every kind), an act of no catalogue kind that is no EUS-guided act (eus_guided_act: its kind or its procedure
+    not usable - 'Coil embolization of the gastric fundal varix was performed.' filed under 'eus' with no words) is a
+    doubted act too."""
     return [event for event in reading.events.values() if event.get('family') == 'gi.eus' and events.done(event)
-            and event.get('catalogue_kind') and event.get('catalogue_kind') not in mapping.EXAMINATION_KINDS
-            and not eus_act(event)]
+            and event.get('catalogue_kind') not in mapping.EXAMINATION_KINDS
+            and (event.get('catalogue_kind') or (unnamed and not eus_guided_act(event))) and not eus_act(event)]
 
 
 def possible_eus_acts(reading) -> list:
-    """DECISIONS D121 (D62's rule for an act): the EUS acts of an EUS kind (EUS_ACTS) stated performed or begun and only
-    POSSIBLY of this encounter (possibly_current, not done: 'After the EGD, EUS-FNA of a 22 mm hypoechoic mass in the
-    pancreatic body was performed ...', its time unanchored), in the reading's order. A possible upper EUS - a doubt,
-    never the session and never lower evidence: read as an absence, it left 43235 READY beside 43242, where the
-    installed release holds it base_included."""
+    """DECISIONS D121 (D62's rule for an act): the EUS acts stated performed or begun and only POSSIBLY of this encounter
+    (possibly_current, not done: 'After the EGD, EUS-FNA of a 22 mm hypoechoic mass in the pancreatic body was performed
+    ...', its time unanchored), in the reading's order. A possible upper EUS - a doubt, never the session and never lower
+    evidence: read as an absence, it left 43235 READY beside 43242, where the installed release holds it base_included.
+    DECISIONS D135: an act of ANY kind, not of EUS_ACTS alone ('After the EGD, EUS-guided radiofrequency ablation of the
+    15 mm insulinoma in the pancreatic tail was performed.': 43235 READY beside 43259 and alone, held base_included by
+    the installed release). DECISIONS D138 (the round-5 review of D121, problem 3): never an act verified at another time
+    or by another performer, as doubted reads a doubt - an FNA 'performed by Dr. Lena Ortiz (fictional) of the advanced
+    endoscopy service', its performer verified as another clinician, is that clinician's act, not a possible upper EUS of
+    this encounter: read as one, it held 43235 base_included where d353e64df and the installed release are READY."""
     return [event for event in reading.events.values() if event.get('family') == 'gi.eus'
-            and event.get('catalogue_kind') in EUS_ACTS and not events.done(event) and possibly_current(event)
-            and events.value(event, 'status') in verify.POSITIVE]
+            and event.get('catalogue_kind') not in mapping.EXAMINATION_KINDS and not events.done(event)
+            and possibly_current(event) and events.value(event, 'status') in verify.POSITIVE
+            and not events.verified_other_time(event) and not events.verified_other_performer(event)]
 
 
 # DECISIONS D123 (the round-4 review of D96, problem 0): the regions of a verified target landmark that place an act in no
@@ -384,6 +434,56 @@ def _placed_eus(found) -> bool:
 # services.FAMILY_REGIONS gives them ('gi.egd': the upper tract - the esophagus, the stomach and the duodenum;
 # 'gi.enteroscopy': the small bowel alone, a region mapping.REGION_OF keeps apart from the duodenum's)
 EGD_REGIONS = frozenset({'esophagus', 'stomach', 'duodenum'})
+# DECISIONS D141 (the round-5 review of D114, problem 1): the EGD's regions in the order its examination reaches them,
+# the duodenum's portions in order (its generic landmark names none), and the attributes whose located words tell an
+# act and an examination's own statement (told_with_its_examination)
+UPPER_ORDER = ('esophagus', 'stomach', 'duodenum')
+DUODENAL_PORTIONS = ('duodenal_bulb', 'second_portion_duodenum')
+GENERIC_DUODENUM = 'duodenum'
+ACT_TOLD = ('kind', 'status', 'technique', 'target')
+EXAMINATION_TOLD = ('kind', 'status', 'technique', 'extent')
+
+
+def beyond_reach(examination: Mapping, landmark: str) -> bool:
+    """DECISIONS D141: whether the done EGD ``examination``'s VERIFIED reach stops short of ``landmark``, an act's place
+    in EGD_REGIONS - in an earlier region (UPPER_ORDER: a reach in the stomach is short of the duodenum), or, in the
+    duodenum, at an earlier portion (DUODENAL_PORTIONS: a reach at the bulb is short of the second portion). Never
+    short, and so possibly covering the act (fail-closed: the act moves), when the reach is not verified, lies beyond
+    the upper tract or in no region of it, or where either is the generic duodenum's landmark (which names no
+    portion)."""
+    extent = examination.get('extent')
+    if not verify.usable(extent):
+        return False
+    reach = extent.get('value') or ''
+    reached, at = mapping.region(reach), mapping.region(landmark)
+    if reached not in UPPER_ORDER or at not in UPPER_ORDER:
+        return False
+    if reached != at:
+        return UPPER_ORDER.index(reached) < UPPER_ORDER.index(at)
+    if reach not in DUODENAL_PORTIONS or landmark not in DUODENAL_PORTIONS:
+        return False
+    return DUODENAL_PORTIONS.index(reach) < DUODENAL_PORTIONS.index(landmark)
+
+
+def _told_in(event: Mapping, names) -> set:
+    """The passages where the located words of ``event``'s usable attributes ``names`` stand."""
+    found = set()
+    for name in names:
+        record = event.get(name)
+        if verify.usable(record) and isinstance(record.get('words'), Mapping):
+            found.update(record.get('passages') or ())
+    return found
+
+
+def told_with_its_examination(reading, event: Mapping) -> bool:
+    """DECISIONS D141: whether the act is told in its own family's done examination's statement - the located words of
+    its kind, status, technique or target (ACT_TOLD) stand in a passage where that examination's kind, status,
+    technique or reach words stand (EXAMINATION_TOLD) - and in no passage of a done EGD examination's. Passages are
+    compared, never read (EB1); the act's procedure words, Gemini's filing itself, are not among them."""
+    own = _told_in(event, ACT_TOLD)
+    family = set().union(*(_told_in(exam, EXAMINATION_TOLD) for exam in done_examinations(reading, event['family'])))
+    egd = set().union(*(_told_in(exam, EXAMINATION_TOLD) for exam in done_examinations(reading, 'gi.egd')))
+    return bool(own & family) and not own & egd
 
 
 def coding_family(reading, event: Mapping) -> str:
@@ -395,14 +495,29 @@ def coding_family(reading, event: Mapping) -> str:
     enteroscopy's, "Two gastric antral angioectasias were treated with argon plasma coagulation." beside a done EGD and
     a push enteroscopy left 43235 READY beside it, where the installed release holds 43235 base_included (and holds
     44369, classes.act_elsewhere's rule). An act whose place is not verified (mapping.target_landmark: '' for an
-    unusable or unplaced target) keeps Gemini's family, and an examination (the session itself) never moves."""
+    unusable or unplaced target) keeps Gemini's family, and an examination (the session itself) never moves.
+
+    DECISIONS D141 (the round-5 review of D114, problem 1): only an act at a place within the done EGD's verified reach
+    moves. An act beyond it - every done EGD examination's verified reach short of its place (beyond_reach: a reach at
+    the bulb beside an act at the second portion) - keeps Gemini's family, and so does an act at the generic duodenum
+    (its portion unnamed) told in its own examination's statement (told_with_its_examination): "Push enteroscopy: The
+    enteroscope was then advanced to the proximal jejunum, and an angioectasia in the third portion of the duodenum was
+    treated with argon plasma coagulation." beside an EGD to the second portion moved to the EGD and held 44369 and
+    43235, where the installed release READYs both. The same act on a line of its own may be either scope's - the EGD
+    reached the duodenum - so it moves, as the installed release reads it (44369 held, 43235 base_included)."""
     family = event.get('family') or ''
     kind = event.get('catalogue_kind') or ''
     if family != 'gi.enteroscopy' or not kind or kind in NOT_ACT_KINDS:
         return family
-    if mapping.region(mapping.target_landmark(event)) not in EGD_REGIONS:
+    landmark = mapping.target_landmark(event)
+    if mapping.region(landmark) not in EGD_REGIONS:
         return family
-    return 'gi.egd' if done_examinations(reading, 'gi.egd') else family
+    egds = done_examinations(reading, 'gi.egd')
+    if not egds or all(beyond_reach(examination, landmark) for examination in egds):  # D141
+        return family
+    if landmark == GENERIC_DUODENUM and told_with_its_examination(reading, event):  # D141
+        return family
+    return 'gi.egd'
 
 
 def sessions(reading) -> dict:
@@ -460,20 +575,27 @@ def sessions(reading) -> dict:
     # FNA, an injection, a drainage) and no done examination - is the session C-4 reads: today's EGD is its endoscopic
     # portion, as the installed release reads an EUS its act makes (services._included). Read from examinations alone,
     # 'EUS-FNA of a 22 mm hypoechoic mass in the pancreatic body was performed' beside an EGD left 43235 READY beside
-    # 43242. Beside a possible examination (D62's, D97's) it is the doubt below, never the fact
-    acts = [event for event in evidence if eus_act(event)]
+    # 43242. Beside a possible examination (D62's, D97's) it is the doubt below, never the fact. D135 (the round-5 review
+    # of D121, problem 0): every done EUS-guided act, whatever its kind (eus_guided_act: an EUS-guided microforceps
+    # biopsy, a radiofrequency ablation, a gastroenterostomy's stent, a coil embolization read as 'other'), not eus_act's
+    # alone - read from EUS_ACTS only, those EUSes left the EGD part of nothing and 43235 READY
+    acts = [event for event in reading.events.values() if eus_guided_act(event)] if eus is not None else []
     session_events = done_eus or acts
     # D123 (the round-4 review of D96, problems 1 and 2): a done act filed under the EUS that is not the EUS's own
     # (doubted_eus_acts: its family or kind in doubt, or a forceps biopsy) is never lower evidence (D96) - and, placed
     # lower where no done EUS event places the EUS, never lets C-4 read the EGD as the EUS's endoscopic portion either:
-    # its doubt makes the upper reading a doubt (possibly_part_of), so the EGD keeps its own items and 43235 is held
+    # its doubt makes the upper reading a doubt (possibly_part_of), so the EGD keeps its own items and 43235 is held.
+    # D135: so does an act-only session's own act placed lower, an act of no catalogue kind included ('EUS-guided
+    # injection of the rectal varix was performed.' read as 'other', which doubted_eus_acts does not hold): no lower
+    # evidence (D96), and never the premise of an upper EUS either
     doubted = doubted_eus_acts(reading) if eus is not None else []
-    possibly_lower = not lower and not _placed_eus(evidence) and _lower_eus(doubted)
+    possibly_lower = not lower and not _placed_eus(evidence) and _lower_eus(doubted + ([] if done_eus else acts))
     upper_eus = bool(session_events) and not lower and not possibly_lower and (bool(done_eus) or not doubts)
-    # D87, D121: an act of an EUS kind whose own family or kind is in doubt, or that is only possibly of this encounter
-    # (D62), is a possible upper EUS, never a fact
-    upper_doubts = doubts + [event for event in doubted if event.get('catalogue_kind') in EUS_ACTS] + (
-        possible_eus_acts(reading) if eus is not None else [])
+    # D87, D121: an act whose own family or kind is in doubt, or that is only possibly of this encounter (D62), is a
+    # possible upper EUS, never a fact - D135: whatever its kind (doubted_eus_acts with unnamed, possible_eus_acts), not
+    # an act of EUS_ACTS alone
+    upper_doubts = doubts + (doubted_eus_acts(reading, unnamed=True) + possible_eus_acts(reading)
+                             if eus is not None else [])
     possibly_upper = not upper_eus and not lower and (
         bool(session_events) or any(not _lower_eus([event]) for event in upper_doubts))
     for family, session in list(found.items()):
@@ -664,8 +786,14 @@ def reconcile(reading, counted: Sequence[Counted], *, procedure_day: bool = Fals
         if not codes and inclusion_asks_no_code(sessions_, session, counted):
             pass  # the including session's code covers the examination; its own acts still count
         elif not codes:
-            if session.family == 'gi.office_em' and (procedure_day or any_other_done - {session.family}):
-                continue  # never push an office visit beside a same-day procedure (listed as not_listed below)
+            # never push an office visit beside a procedure DONE on the date of service (listed as not_listed
+            # below): DECISIONS D134 - beside one only POSSIBLY done it stays listed, 'has no supported proposal'.
+            # ``procedure_day`` is the assessment's combination.ProcedureDay (its done ``labels`` are read here, never
+            # its ``possible``), or a bool where only that answer is known (the read-time overlay's, from the items the
+            # assessment listed)
+            if session.family == 'gi.office_em' and (getattr(procedure_day, 'labels', procedure_day)
+                                                     or any_other_done - {session.family}):
+                continue
             done_ids = [event['id'] for event in members if events.done(event)]
             out.unresolved.append(_item(session, done_ids, '', f'{session.label} (documented as '
                                         f'{"incomplete" if session.incomplete else "performed"}) has no supported '
@@ -715,6 +843,25 @@ def reconcile(reading, counted: Sequence[Counted], *, procedure_day: bool = Fals
                                     'why': why, 'event': event['id']})
                 continue
             if kind not in entry.acts:
+                # DECISIONS D142 (round 5c; the round-5b review of D116, problem 2, and the committed eus2 review's
+                # problems 1-2, the listing): a done act of a kind its session's family does not list among its acts -
+                # the EGD's stent removal or exchange ("The fully covered esophageal stent was removed by its retrieval
+                # loop ..." beside 43239), an EUS-guided gastroenterostomy's stent beside 43259 - is listed as not
+                # covered when it is reportable and no proposed code covers it: its kind and procedure usable, a kind a
+                # supported family of the catalogue lists among its acts (never an E/M visit, which is never an act of a
+                # procedure; never D115's bleeding control in doubt, a kind no family lists - in a family that holds the
+                # bleeding control it is listed in doubt below), and read by no counted code. Skipped, it left 43239
+                # READY with coding complete, where the installed release lists the stent not covered. Never the
+                # examination, an umbrella (D117's removal, listed in doubt below) or a bundled, unsupported or
+                # read-under act: each is decided above
+                if (event['id'] not in read_by and events.usable(event, 'kind') and events.usable(event, 'procedure')
+                        and kind not in lexicon.EM_KINDS and any(
+                            kind in other.acts for other in catalogue.CATALOGUE.values()
+                            if other.support == catalogue.SUPPORTED)):
+                    out.unresolved.append(_item(session, [event['id']], kind,
+                                                f'{events.event_label(reading, event)} in the {session.label}',
+                                                'coverage_unknown' if unknown else 'not_covered',
+                                                events.anchors(reading, event)))
                 continue
             if bundling_doubt(reading, event) is not None and event['id'] in read_by:
                 continue  # a code depends on its identity and asks it (act_target)
@@ -799,14 +946,33 @@ def unresolved_record(items: Sequence[dict]) -> list:
 
 def in_doubt_questions(reading, coverage: Coverage, asked=()) -> list:
     """A service-scope question for each in_doubt item, with the fact of 7.4 for its event (FINAL 7.8), once per (family,
-    fact), never one a proposal of the family already asks (``asked``: (family, fact) pairs)."""
+    fact), never one a proposal of the family already asks (``asked``: (family, fact) pairs) - asking first (DECISIONS
+    D142) the acts no proposed code of their session accounts for, then the acts one does, each group in the reading's
+    order. Which facts are asked does not depend on that order; which act each question names does."""
     # D89: ``asked`` holds (family, fact, question) of the proposals' questions; a code's question suppresses a service
     # question only when it IS that question (its fact and its words, which name the act) - a code asking
     # statement_scope about its snare no longer silences the service's statement_scope about another act's denial
     codes_asked = {tuple(entry) for entry in asked}
+
+    def accounted(item: Mapping, eid: str) -> bool:
+        """DECISIONS D142 (round 5c; the round-5b review of D115, problem 1): whether a counted code of the item's
+        session accounts for the act's kind by its profile (its covers, read as events.is_candidate reads a kind: an
+        umbrella, a tattoo and an injection as one act) - D115's bleeding control in doubt read as the bleeding control
+        it may be. That code is proposed and its own reading or question covers the act, so the act's question decides
+        no code that is missing."""
+        kind = reading.events[eid].get('catalogue_kind') or ''
+        kind = mapping.BLEEDING_CONTROL if kind == mapping.POSSIBLE_BLEEDING_CONTROL else kind
+        profiles_ = [catalogue.code_profile(code) for code in coverage.covered.get(item['service'], ())]
+        return any(profile is not None and profile.family == item['family']
+                   and any(mapping.covers(kind, wanted) for wanted in profile.covers) for profile in profiles_)
+
+    # D142: one question per (family, fact), so an act no proposed code accounts for (its question decides a missing
+    # code) is asked before an act a proposed code already accounts for - read in the reading's order, the clip in doubt
+    # 43255 holds on ("At that time, two hemostatic clips ...") took the family's event_time question from "At that time,
+    # biopsies of the gastric antrum were taken ...", whose answer decides 43239 (stable: each group keeps its order)
     seen = set()
     out = []
-    for item, eid in coverage.in_doubt:
+    for item, eid in sorted(coverage.in_doubt, key=lambda pair: accounted(*pair)):
         question = events.focus_question(reading, reading.events[eid])
         if question is None or (item['family'], question.fact) in seen \
                 or (item['family'], question.fact, question.question) in codes_asked:
@@ -936,7 +1102,8 @@ def event_coding(reading, sessions_: Mapping, codes: Mapping) -> dict:
             'possible': list(session.possible),
             # the session's own service is never an act beside itself: an office visit's visit event (lexicon.EM_KINDS)
             'reportable': [_entry(reading, event) for event in members if reportable(reading, event)
-                           and events.value(event, 'kind') not in lexicon.EM_KINDS],
+                           and events.value(event, 'kind') not in lexicon.EM_KINDS]
+                          + eus_unprofiled_entries(reading, members),  # D137: an act no EUS code accounts for
             'doubted': [_entry(reading, event) for event in members if doubted(reading, event)
                         and events.value(event, 'kind') not in lexicon.EM_KINDS],
         }

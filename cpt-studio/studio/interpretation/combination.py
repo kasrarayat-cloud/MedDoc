@@ -232,13 +232,22 @@ SAME_DAY_KINDS = frozenset(
 # holds it with separate_em ("Other GI service is documented as performed on the same date"). Such an act is a
 # POSSIBLE same-day procedure (never a done one: its kind names no procedure, D87) when the date of service is its own
 # (facts.day_of ON) and its own STATUS words state that it was performed (DONE_STATEMENTS, read whole and word-bounded
-# in those words only, EB1) - and never when the words that name the act (its kind and target words: NAMING_WORDS)
+# in those words only, EB1) - and never when the words that name the act (its kind words' head, D133: NAMING_WORDS)
 # name a test, an order, an interpretation, a lab or imaging, or counseling (NOT_PROCEDURES). Words that state neither
 # ("was excised", "I performed", no status words) leave it uncounted, as before: a recorded cost, never a READY this
 # rule makes.
 VISIT_FAMILIES = frozenset(lexicon.family_of(procedure) for procedure in lexicon.EM_PROCEDURES)
 DONE_STATEMENTS = ('was performed', 'were performed', 'was done', 'were done', 'underwent')
-NAMING_WORDS = ('kind', 'target')  # the attributes whose words name the act (its status words state its status)
+# DECISIONS D133 (the review of D130, em2 problem 1): the class is read in the KIND words only - the target words name
+# what the act was done to ("2 cm lipoma on the upper back, seen on ultrasound"), the status words how it stands - and
+# only in their HEAD: the words before the first HEAD_MARKS character or the first HEAD_ENDS word ("Excision" of
+# "Excision of the lipoma seen on CT"; "CT abdomen", "An ECG", "Labs" whole). A head that also holds a GUIDED word names
+# a procedure done with imaging ("Ultrasound-guided paracentesis"), never the imaging, so it is never set apart.
+NAMING_WORDS = ('kind',)  # the attribute whose words name the act (its target's say what it was done to)
+HEAD_MARKS = (',', ':', ';')
+HEAD_ENDS = ('of', 'on', 'in', 'at', 'for', 'with', 'under', 'by', 'from', 'to', 'after', 'before', 'during', 'seen',
+             'shown', 'noted', 'which', 'that', 'who', 'performed', 'done', 'was', 'were')
+GUIDED = ('guided', 'guidance', 'assisted')
 NOT_PROCEDURES = (
     ('test', ('test', 'tests', 'testing', 'ecg', 'ekg', 'electrocardiogram')),
     ('order', ('order', 'orders', 'ordered')),
@@ -259,12 +268,31 @@ def _own_words(event: Mapping, name: str) -> str:
 
 def _stated_procedure(event: Mapping) -> bool:
     """D130: whether an act of kind 'other' states by its own words that a procedure was performed - its status words
-    hold a DONE_STATEMENTS phrase, and none of the words that name it (its kind and target words, NAMING_WORDS) names a
-    NOT_PROCEDURES class. Reads those words only, never a passage."""
+    hold a DONE_STATEMENTS phrase, and the words that name it name no NOT_PROCEDURES class. DECISIONS D133: those are
+    its kind words only (NAMING_WORDS), read in their head - folded, cut at the first HEAD_MARKS character, then before
+    the first HEAD_ENDS word (compared with its edge punctuation stripped) - and a head that holds a GUIDED word is
+    never set apart. Reads those words only, never a passage."""
     if not lexicon.holds(_own_words(event, 'status'), DONE_STATEMENTS):
         return False
     named = [phrase for _, phrases in NOT_PROCEDURES for phrase in phrases]
-    return not any(lexicon.holds(_own_words(event, name), named) for name in NAMING_WORDS)
+    for name in NAMING_WORDS:
+        words = lexicon.fold(_own_words(event, name))
+        for mark in HEAD_MARKS:
+            words = words.split(mark, 1)[0]
+        head = []
+        for token in words.split():
+            core = token
+            while core and not core[0].isalnum():
+                core = core[1:]
+            while core and not core[-1].isalnum():
+                core = core[:-1]
+            if core in HEAD_ENDS:
+                break
+            head.append(token)
+        head_words = ' '.join(head)
+        if lexicon.holds(head_words, named) and not lexicon.holds(head_words, GUIDED):
+            return False
+    return True
 
 
 @dataclass(frozen=True)
@@ -289,9 +317,10 @@ def procedure_day(reading, effective, codes: Sequence[tuple] = ()) -> ProcedureD
     procedure it is filed under - gi.office_em, gi.em_other, gi.sedation, and (DECISIONS D111) gi.unsupported or none -
     read as another GI service, done only with its kind usable too; and (DECISIONS D130) an act of kind 'other' filed
     under the visit (VISIT_FAMILIES) whose own status words state it was performed and whose own statement names no
-    test, order, interpretation, lab, imaging or counseling (_stated_procedure): another GI service, only ever POSSIBLE,
-    and only ON the date of service (D130's spec: "placed on the date") - OFF or UNDATABLE, it is not counted.
-    DECISIONS D111: ONE currency rule for every one of them but D130's, facts.day_of - never Gemini's time value alone:
+    test, order, interpretation, lab, imaging or counseling (_stated_procedure): another GI service, only ever POSSIBLE.
+    DECISIONS D111: ONE currency rule for every one of them, facts.day_of - never Gemini's time value alone (DECISIONS
+    D133: D130's arm too; counted only ON the date, it dropped an undatable act, "During this visit, excision ...",
+    which neither counted nor asked, so 99213 was READY where c2e53f8e holds it):
     - ON (a usable current time, or its own words or literals place it on the date: an earlier_encounter time worded
       "Earlier today" or "Earlier in the day" included): done with status, time, performer and procedure usable and
       positive, possible otherwise;
@@ -320,8 +349,8 @@ def procedure_day(reading, effective, codes: Sequence[tuple] = ()) -> ProcedureD
         if family in CURRENT_ONLY_FAMILIES and events.verified_other_performer(event):
             continue  # D109 (finding 15): never another clinician's or facility's verified read
         day = facts.day_of(event, effective)
-        if day == facts.OFF or (by_statement and day != facts.ON):
-            continue  # C-3: another date; D130: an act read by its statement counts only ON the date
+        if day == facts.OFF:
+            continue  # C-3: another date (D133: an act read by its statement as every other)
         if (day == facts.UNDATABLE and not by_family
                 and events.value(event, 'time') in ('earlier_encounter', 'future')):
             continue  # D109, D111 (finding 16): a history mention Gemini places at another encounter

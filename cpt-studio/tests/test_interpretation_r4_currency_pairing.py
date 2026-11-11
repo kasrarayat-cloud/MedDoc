@@ -438,17 +438,18 @@ class D99UndatedDenial(SimpleTestCase):
                 p = proposal(result, '45385')
                 self.assertEqual((p.bucket, p.status), ('selected', 'needs_clarification'))
 
-    def test_d99_an_earlier_denial_sets_the_act_apart_as_the_dated_document_does(self):
-        """'Pairs as current' reads the row both ways. Beside a denial Gemini places at an earlier encounter
-        ('Previously, no polyp was removed.', verified by its marker) the unchecked day is another time (INDEPENDENT,
-        another_time), as on the dated document. So once the member's date equals the day, 45385 is READY exactly as
-        the document's own date makes it (and as D67's control makes the act with no denial). With no date, or another
-        date, the snare stays held on its own time. The one direction of D99 that is not a hold: 437b708bb held it
-        (event_time) on the stale UNRESOLVED(time) relation although assess had verified the time.
+    def test_d99_an_earlier_denial_sets_the_act_apart_only_on_the_dated_document(self):
+        """Beside a denial Gemini places at an earlier encounter ('Previously, no polyp was removed.', verified by its
+        marker), only the document's OWN date sets the snare apart: the dated document's snare day is a usable current
+        time, the pair is another time (INDEPENDENT, another_time), and 45385 is READY. On the undated note the snare's
+        day is a pending check, and a pending check never sets a pair apart (DECISIONS D128 (1)): the relation is
+        UNRESOLVED(time), and 45385 is held, never READY - asking the denial as its scope (statement_scope) with the
+        member's date equal to the day, and its own time (event_time) with no date or another date.
 
-        DECISIONS D128 (1) moved this pin's expectations on the undated note: a pending check never sets a pair apart,
-        so the relation is UNRESOLVED(time) and the member's equal date asks the denial as its scope (held, never READY);
-        the document's own date still sets the act apart (READY)."""
+        History: D99 read the pending check as current on both sides, so on the undated note the member's equal date
+        made 45385 READY as the document's own date does (this test's earlier name, "...sets the act apart as the dated
+        document does", said that); 437b708bb had held it (event_time) on the stale UNRESOLVED(time) relation. D128 (1)
+        moved the undated note's expectations, and DECISIONS D143 (5) renamed the test to say what it asserts."""
         earlier = 'Previously, no polyp was removed.'
         for name, options, member, status in (
                 ("the document's own date", dict(date_lines={'P0': DATE_LINE}, date_of_service=STATED), None, 'ready'),

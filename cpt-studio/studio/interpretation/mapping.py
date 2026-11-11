@@ -215,10 +215,21 @@ def hemostasis_in_doubt(event: Mapping) -> bool:
     "hemostatic clipping" still denies a control of bleeding). Reads only the event's own attribute words (EB1), so a
     bleeding stated only for its lesion, elsewhere ("A 12 mm ulcer with an oozing visible vessel ..."), is not read here
     (the event alone carries no lesion record): that act stays in doubt too - fail-closed, as the installed release
-    reads it - recorded with D115."""
+    reads it - recorded with D115.
+
+    DECISIONS D142 (round 5c; the round-5b review of D115, problem 0, critical): an event whose OWN kind is the bleeding
+    control (Gemini's bleeding_control) is read the same way, by the same five words, whatever its purpose. Gemini files
+    "Hemostatic cautery was applied to the ulcer base." beside a clean-based ulcer as kind bleeding_control worded
+    'Hemostatic cautery' (technique electrocautery 'cautery', purpose hemostasis 'Hemostatic' - the filing FRESH-2
+    attests, in its denials, for 'hemostatic cautery' and 'injection for bleeding'); read as a bleeding control done,
+    43255 was READY on it (45382 in a colonoscopy), where the installed release holds it ("leaves the bleeding control
+    in doubt"). Named only by the adjective, it is a bleeding control in doubt too; the 14 performed bleeding_control
+    events of FRESH-2 each state the oozing they treat ("Minor oozing from the cut mucosal edge resolved ...") and keep
+    it."""
     kind = event['kind']['value']
     purpose = event.get('purpose') or {}
-    if kind not in HEMOSTASIS_KINDS or not (verify.usable(purpose) and purpose.get('value') == 'hemostasis'):
+    if kind != BLEEDING_CONTROL and (kind not in HEMOSTASIS_KINDS or not (
+            verify.usable(purpose) and purpose.get('value') == 'hemostasis')):  # D142: the kind itself, whatever purpose
         return False
     status = event.get('status')
     if not (verify.usable(status) and status.get('value') == 'performed'):
@@ -229,16 +240,17 @@ def hemostasis_in_doubt(event: Mapping) -> bool:
 def catalogue_kind(event: Mapping) -> str:
     """The catalogue kind of an event (module docstring): its kind's value read in its family, with a clip's or an
     injection's VERIFIED hemostasis purpose - a bleeding control, or (DECISIONS D115) a bleeding control in doubt where
-    its own words state no bleeding (hemostasis_in_doubt). The kind's own state is not read here: a consumer reads it
-    (7.3 line 1)."""
+    its own words state no bleeding (hemostasis_in_doubt), as (D142) an event of the bleeding_control kind itself whose
+    own words state none. The kind's own state is not read here: a consumer reads it (7.3 line 1)."""
     kind = event['kind']['value']
     if kind == EXAMINATION:
         return EUS_EXAMINATION if event.get('family') == 'gi.eus' else EXAMINATION
     if kind == 'other' or kind not in schema.KINDS:
         return ''
     purpose = event.get('purpose') or {}
-    if kind in HEMOSTASIS_KINDS and verify.usable(purpose) and purpose.get('value') == 'hemostasis':
-        return POSSIBLE_BLEEDING_CONTROL if hemostasis_in_doubt(event) else BLEEDING_CONTROL  # D115
+    if kind == BLEEDING_CONTROL or (kind in HEMOSTASIS_KINDS and verify.usable(purpose)
+                                    and purpose.get('value') == 'hemostasis'):  # D115, D142
+        return POSSIBLE_BLEEDING_CONTROL if hemostasis_in_doubt(event) else BLEEDING_CONTROL
     return kind
 
 

@@ -178,17 +178,21 @@ class RouteOfTheExamination(SimpleTestCase):
              classes.ROUTE_FORM, through=STOMA)
 
     def test_d114_44377_on_a_pouchoscopy_into_the_pre_pouch_ileum_is_held(self):
-        """Problem 0's pouch input: with 'Pouchoscopy' its procedure words, the route is the pouch - 44377 asks its
-        class with the route named, and 44386 is READY. With no route in its words, both ask the route question."""
+        """Problem 0's pouch input. DECISIONS D141 (the round-5 review of D114, problems 0 and 4) changes this pin's
+        expectation: 'Pouchoscopy' names the pouch in no route phrase, so it verifies no route - 44377 and 44386 both
+        ask the route question, never READY (c2e53f8e holds both, extent and performed_status). Its READY control, the
+        route named in a route phrase ('was advanced through the anus into the J-pouch'), is
+        tests/test_interpretation_r5c_enteroscopy.py's. With no route in its words ('Endoscopy'), both ask the route
+        question too."""
         inv, text = pouchoscopy()
-        self.assertEqual(classes.examination_route(events.Reading.of(inv).events['E1']),
-                         (classes.THROUGH_POUCH, 'Pouchoscopy'))
-        held(self, code_of(inv, text, '44377'), classes.ILEAL, 'ileum', 'pre-pouch ileum', classes.CLASS_FORM,
-             route=classes.THROUGH_POUCH, route_words='Pouchoscopy')
-        ready(self, code_of(inv, text, '44386'))
+        self.assertEqual(classes.examination_route(events.Reading.of(inv).events['E1']), ('', ''))
+        for code, exam_class in (('44377', classes.ILEAL), ('44386', classes.POUCH)):
+            with self.subTest(code=code, words='Pouchoscopy'):
+                held(self, code_of(inv, text, code), exam_class, 'ileum', 'pre-pouch ileum', classes.ROUTE_FORM,
+                     through=POUCH)
         inv, text = pouchoscopy(landmark='neo_terminal_ileum', place='neo-terminal ileum')
         held(self, code_of(inv, text, '44377'), classes.ILEAL, 'neo terminal ileum', 'neo-terminal ileum',
-             classes.CLASS_FORM, route=classes.THROUGH_POUCH, route_words='Pouchoscopy')
+             classes.ROUTE_FORM, through=POUCH)
         inv, text = pouchoscopy(procedure_words='Endoscopy', procedure_line='Procedure: Endoscopy.')
         for code, exam_class in (('44377', classes.ILEAL), ('44386', classes.POUCH)):
             with self.subTest(code=code):
@@ -522,13 +526,17 @@ class RegionOfTheAct(SimpleTestCase):
         Moved to the EGD for coding, it would have left 44360 READY (as c2e53f8e READYs it); Gemini's own reading of the
         act as the enteroscopy's stays a doubt, so 44360 is held with the act's procedure question - beside 44369's
         base_included too. A denial at the stomach holds nothing (as at 1caaf0609), and a jejunal act keeps D108's
-        base_included alone."""
+        base_included alone. DECISIONS D141 (the round-5 review of D114, problem 5) changes the question's expectation:
+        the act's question is added beside the base rule's, never in its place - the move took the base rule's only act
+        of the enteroscopy, so the one question asks the base rule's question first ('Is 44360 reported separately
+        from ablation for this examination?', as at 1caaf0609), then the act's."""
         inv, text = egd_push()
         reason = ('The ablation (argon plasma) of the Two gastric antral angioectasias is filed under the small-bowel '
                   'enteroscopy and documented at the gastric antrum (“Two gastric antral angioectasias”), which the '
                   'upper endoscopy of this encounter examines, so CPT Studio reads it as an act of the upper '
                   'endoscopy; if it was done in the enteroscopy, 44360 is included in the code for it.')
-        question = 'In which procedure was the ablation (“Two gastric antral angioectasias”) done?'
+        question = ('Is 44360 reported separately from ablation for this examination? In which procedure was the '
+                    'ablation (“Two gastric antral angioectasias”) done?')
         for picks, facts in (((('44360', 'P6'),), ['procedure']), ((('44360', 'P6'), ('43235', 'P5')), ['procedure']),
                              ((('44360', 'P6'), ('44369', 'P7')), ['base_included', 'procedure'])):
             p = proposal(run(inv, text, [(code, line(text, pid)) for code, pid in picks]), '44360')

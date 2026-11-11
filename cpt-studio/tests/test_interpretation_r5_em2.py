@@ -164,12 +164,15 @@ class D130KindOtherFiledUnderTheVisit(SimpleTestCase):
                 self.assertNotIn('documented as performed', check(em(inv, text), 'em.same_day_procedure').detail)
 
     def test_d130_with_no_e_m_proposed_the_visit_item_is_not_pushed(self):
-        """An effect, as for every same-day procedure: with no E/M code proposed, the visit's 'has no supported
-        proposal' item is not listed beside it. 1caaf0609 listed it; c2e53f8e lists nothing (the visit beside a
-        procedure)."""
+        """An effect: with no E/M code proposed, 46e461e7f set the visit's 'has no supported proposal' item apart
+        (not_listed) beside the excision. DECISIONS D134 (the review of D130, em2 problem 3): beside a procedure only
+        POSSIBLY done - and an act read by its statement is never more - the visit stays listed, as 1caaf0609 listed
+        it. c2e53f8e sets it apart here (its routing reads the excision as a performed other GI service): a listing
+        where c2e53f8e lists nothing, never a READY (recorded in DECISIONS D134)."""
         inv, text = note(EXCISION, other(CYST, 'was performed'))
         result = run(inv, text, [], user_values=MEMBER)
-        self.assertNotIn(NO_PROPOSAL, [str(item.get('label')) for item in result.completeness['unresolved_items']])
+        self.assertIn(NO_PROPOSAL, [str(item.get('label')) for item in result.completeness['unresolved_items']])
+        self.assertEqual(result.completeness['not_listed'], [])
 
     def test_d130_beside_an_undatable_act_the_e_m_asks_separate_em(self):
         """An effect of assess's existing order (a procedure day asks separate_em; only without one does an undatable
@@ -246,9 +249,10 @@ class D130WhatTheStatementNeverCounts(SimpleTestCase):
                 ready_with_no_procedure_day(self, em(inv, text))
 
     def test_d130_only_on_the_date_of_service(self):
-        """'Placed on the date': an excision verified 'in 2024' (OFF), one whose time Gemini left 'unknown' (UNDATABLE
-        - RECORDED RESIDUAL: c2e53f8e holds it with separate_em; it is not listed for event_time either, as the spec
-        reads only an act placed on the date), and a planned one: READY with no question, as at 1caaf0609."""
+        """'Placed on the date': an excision verified 'in 2024' (OFF) and a planned one are READY with no question, as
+        at 1caaf0609. One whose time Gemini left 'unknown' (UNDATABLE) was READY too (the recorded residual: c2e53f8e
+        holds it with separate_em); DECISIONS D133 (the review of D130, em2 problem 0) dates the statement arm by the
+        one currency rule, so it is listed undatable and 99213 asks its event_time (held), as mutant M3 showed."""
         cases = (
             ("verified 'in 2024'", 'Excision of a 1 cm sebaceous cyst on the upper back was performed in 2024.',
              other(CYST, 'was performed', time=a('earlier_encounter', 'in 2024', ['P2'])), facts.OFF),
@@ -262,6 +266,13 @@ class D130WhatTheStatementNeverCounts(SimpleTestCase):
             with self.subTest(label):
                 inv, text = note(line, item)
                 self.assertEqual(facts.day_of(reading_of(inv).events['E1'], DAY), day)
+                if day == facts.UNDATABLE:  # D133
+                    self.assertEqual(procedure_day(inv), combination.ProcedureDay(undatable=('E1',)))
+                    p = em(inv, text)
+                    self.assertEqual((p.status, asked(p)), ('needs_clarification', ['event_time']))
+                    self.assertEqual(p.clarifications[0].question,
+                                     'Was the act (“was performed”) done at this encounter?')
+                    continue
                 self.assertEqual(procedure_day(inv), combination.ProcedureDay())
                 ready_with_no_procedure_day(self, em(inv, text))
 
@@ -284,8 +295,9 @@ class D130WhatTheStatementNeverCounts(SimpleTestCase):
         words say 'was performed' and whose words name none of the never-counted classes is held, where c2e53f8e is
         READY ('removal' is no procedure word of detect's; 'history' and 'reconciliation' are not procedures): a
         perianal skin-tag removal, a history and physical, a medication reconciliation, and an answer off the contract
-        (status performed, words 'No excision was performed'). The spec's 'names imaging' never counts an
-        ultrasound-guided paracentesis, READY where c2e53f8e holds it."""
+        (status performed, words 'No excision was performed'). The spec's 'names imaging' never counted an
+        ultrasound-guided paracentesis, READY where c2e53f8e holds it; DECISIONS D133 (the review of D130, em2
+        problem 1) never sets apart a head holding 'guided', so it is held now, as c2e53f8e holds it."""
         holds = (
             ('a skin-tag removal', 'Removal of a perianal skin tag was performed in the office today.',
              other('Removal of a perianal skin tag', 'was performed')),
@@ -302,7 +314,7 @@ class D130WhatTheStatementNeverCounts(SimpleTestCase):
                 held_as_possible(self, inv, text)
         inv, text = note('Ultrasound-guided paracentesis was performed in the office today.',
                          other('Ultrasound-guided paracentesis', 'was performed'))
-        ready_with_no_procedure_day(self, em(inv, text))
+        held_as_possible(self, inv, text)  # D133
 
 
 class D130TheStatementReader(SimpleTestCase):
@@ -327,15 +339,17 @@ class D130TheStatementReader(SimpleTestCase):
         self.assertFalse(self.stated(kind_words='Excision was performed', status_words='today'))
 
     def test_d130_the_never_counted_classes_are_read_in_the_kind_and_target_words(self):
-        """The words that name the act (NAMING_WORDS): its kind's and its target's - never its status words, which
-        state its status ('in order to' names no order)."""
-        self.assertEqual(combination.NAMING_WORDS, ('kind', 'target'))
+        """The words that name the act (NAMING_WORDS): DECISIONS D133 (the review of D130, em2 problem 1) - its kind
+        words only, in their head; never its target words (they say what the act was done to: 'under ultrasound' sets
+        nothing apart now) nor its status words, which state its status ('in order to' names no order). A head holding
+        'guided' is never set apart (D133: 'CT-guided drainage' is counted now)."""
+        self.assertEqual(combination.NAMING_WORDS, ('kind',))
         self.assertFalse(self.stated(kind_words='ECG'))
-        self.assertFalse(self.stated(target_words='under ultrasound'))
+        self.assertTrue(self.stated(target_words='under ultrasound'))  # D133
         self.assertTrue(self.stated(status_words='was performed in order to relieve pain'))
         self.assertTrue(self.stated(status_words='ECG was performed'))  # a name in the status words is not read
         self.assertFalse(self.stated(kind_words='X-ray'))
-        self.assertFalse(self.stated(kind_words='CT-guided drainage'))
+        self.assertTrue(self.stated(kind_words='CT-guided drainage'))  # D133
         for named in ('test', 'order', 'interpretation', 'lab', 'imaging', 'counseling'):
             phrases = dict(combination.NOT_PROCEDURES)[named]
             for phrase in phrases:

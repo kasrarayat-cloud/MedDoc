@@ -796,9 +796,14 @@ class D119PegUnderTheFeedingTube(SimpleTestCase):
         held_base(self, result, '43235', 'gastrostomy (PEG) placement')
 
     def test_d119_gap_h1_43235_beside_43246_stays_held(self):
+        """DECISIONS D142 (4; the round-5b review, problem 4): 43246's own state is pinned too - held with
+        performed_status at assess time and at read time, as c2e53f8e holds it. D119's "43246 is supported by it" is
+        not built (events.is_candidate reads only the code's own family); this pin fails if a change makes it READY."""
         result = assessed(H1)
         p = proposal(result, '43235')
-        self.assertEqual((p.status, asked(p)), ('needs_clarification', ['base_included']))
+        with self.subTest(code='43235'):
+            self.assertEqual((p.status, asked(p)), ('needs_clarification', ['base_included']))
+        held(self, result, '43246', ['performed_status'])  # D142
 
     def test_d119_a_doubted_feeding_tube_peg_holds_43235(self):
         held_base(self, assessed(H_DOUBT), '43235', 'gastrostomy (PEG) placement (stated in doubt)')

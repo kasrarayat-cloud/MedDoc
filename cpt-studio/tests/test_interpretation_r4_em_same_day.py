@@ -11,8 +11,9 @@ unidentified act only as an act of this encounter.
 - Finding 14: facts.day_of read "earlier in the day", "Earlier that day" and "Earlier in the morning" (a verified
   earlier_encounter time: an endoscopy at its own encounter earlier on the same date) as OFF the date, so 99213 was
   READY beside it; c2e53f8e holds it with separate_em. lexicon.SAME_DAY_FRAMES, read whole as D54 reads a current
-  time's words, place such an act ON the date - DECISIONS D112: only frames anchored to today, so the anaphoric
-  "Earlier that day" (G2) is OFF again (tests/test_interpretation_r5_em.py pins it).
+  time's words, place such an act ON the date - DECISIONS D112: only frames anchored to today; DECISIONS D132: the
+  anaphoric "Earlier that day" (G2) is ON again for an act whose performer is not verified other
+  (tests/test_interpretation_r5_em.py and tests/test_interpretation_r5c_currency.py pin it).
 - Findings 15 and 16 (D94 narrowed): an act of gi.unsupported or of no family counts only when its time is
   current_encounter (any state) and its performer is not verified to another clinician or facility. A CT "interpreted
   separately by the radiology service" (fb13's attested shape) asked separate_em, and an abdominal ultrasound named in
@@ -328,7 +329,7 @@ class D109SameDateFrames(SimpleTestCase):
         'earlier today' (SAME_DAY_WORDS, read anywhere in the words) is ON as before."""
         cases = (
             ('earlier in the day', facts.ON), ('Earlier in the day,', facts.ON),
-            ('Earlier that day', facts.OFF),  # DECISIONS D112: anaphoric, no frame - read by its 'earlier' marker
+            ('Earlier that day', facts.ON),  # D112 read it by its 'earlier' marker; D132: anaphoric, a frame here
             ('Earlier in the morning', facts.ON), ('later in the day', facts.ON), ('earlier this afternoon', facts.ON),
             ('earlier in the day; earlier today', facts.ON), ('earlier today', facts.ON),
             ('I performed it earlier today', facts.ON), ('Earlier on the same day', facts.ON),

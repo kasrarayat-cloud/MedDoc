@@ -46,6 +46,19 @@ before - never READY, never an exclusion, never another code's question - but fo
   - the cannulation stated both achieved and not achieved is the installed release's conflict (cannulation_conflict):
     every ERCP code asks it.
 
+- D140, as the review of D127 asked (problems 0-2):
+  - the yield that clears D106's hold is the act's OWN statement (_states_yield): read in the act's own attribute words
+    (its kind, status, target and technique words; the structural reading, _own_yield), or in a clause of the act's own
+    whose subject is a stone word with a past yield verb and that holds no purpose, condition or doubt, or other-time
+    word (the clause reading, _yields, which keeps D127's pinned clearances) - never a purpose clause ("to ensure all
+    stones had been removed"), a device as the subject ("the balloon was removed"), a doubt ("It is unclear whether any
+    stones were removed"), an earlier yield ("after stones were removed at the prior ERCP") or the past perfect ("had
+    been removed"). A false yield no longer stops the next sentence's read either;
+  - the sentence that follows the act's own is never dropped as another act's when it holds the words of an event that
+    is not performed - a denial or an uncertain statement Gemini files as its own event ("No stones or sludge were
+    retrieved.", not_performed), or a plan or an act begun and not completed: that is the act's statement, not another
+    act's.
+
 Where they run: D105 and D106 sit inside the per-code rule itself - ``ruled`` is events.evaluate's one call site, its
 first statement - so every reader of the per-code rule (the assessment, its participants and second review, and the
 review overlay's counted codes, overlay.counted_codes: "the evaluation the engine made, made again") reads one
@@ -196,8 +209,30 @@ FIND_WORDS = ('find', 'finds', 'found')
 OBJECT_NEGATORS = ('nothing', 'none')
 # D127 (the review of D106, problem 3): the verbs that state a yield - a stone, calculus, debris or sludge retrieved,
 # extracted or removed ("Multiple stones were extracted ... until no stones remained.") - past forms only, never after
-# "to" or "be" (an intent: "to extract", "could not be extracted") or a negator
+# "to" or "be" (an intent: "to extract", "could not be extracted") or a negator. DECISIONS D140 (the review of D127,
+# problems 0 and 2): the verb states a yield only with a stone word as its subject (_states_yield) - D127 read any
+# stone word of the clause, so "the balloon was removed" beside "swept for stones" was a yield, and "been" before the
+# verb ("to ensure all stones had been removed") was no guard.
 YIELD_VERBS = ('retrieved', 'extracted', 'removed', 'delivered', 'recovered', 'yielded')
+# D140: the subject of a yield - the stone word the past yield verb's clause names before it, at most AUXILIARY_REACH
+# auxiliaries between ("several small stones were removed", "all stones have been removed", "two stones extracted").
+# The past perfect is not the act's own yield ("had" is no auxiliary here): "to ensure all stones had been removed",
+# and "Several stones had been removed ...; no stones remained" is held, as the installed release holds it (act_missing)
+YIELD_SUBJECTS = ('stone', 'stones', 'sludge', 'debris', 'calculus', 'calculi', 'fragments')
+YIELD_AUXILIARIES = ('was', 'were', 'has', 'have', 'been')
+AUXILIARY_REACH = 2
+# D140: the words that make a clause's yield no yield of the act's - a purpose ("to ensure", "in order to", "so
+# that"), a condition or doubt ("It is unclear whether any stones were removed"), or another time ("after stones were
+# removed at the prior ERCP")
+PURPOSE_WORDS = ('to',)
+PURPOSE_PAIRS = (('so', 'that'),)
+DOUBT_WORDS = ('whether', 'if', 'unclear', 'possible', 'possibly', 'may', 'might', 'suspected', 'any')
+OTHER_TIME_WORDS = ('prior', 'previous', 'previously', 'earlier', 'index', 'last')
+# D140: the attributes whose words are the act's own statement of its yield (the structural reading, EB1)
+YIELD_ATTRIBUTES = ('kind', 'status', 'target', 'technique')
+# D140 (problem 1): the one status value of an act done; the sentence after the act's own that holds the words of an
+# event with any other value (a denial, an uncertain statement, a plan, an act begun and not completed) is never dropped
+PERFORMED = 'performed'
 # The words between a negator and the stone word that make the negation exceptive (C-7: "no further stones" is about
 # stones beyond those the document reports removed) or partial ("not all stones"): such a negation states nothing about
 # whether anything was retrieved. D127: "nothing else" is exceptive too.
@@ -276,11 +311,6 @@ def _governed(tokens: Sequence[str], index: int) -> list:
     return out
 
 
-def _negated(tokens: Sequence[str]) -> set:
-    """The positions of the stone words some negator governs in one clause (_governed)."""
-    return {position for index, token in enumerate(tokens) if _negator(token) for position in _governed(tokens, index)}
-
-
 def _denial(clauses: Sequence[Mapping]) -> tuple:
     """D106 over a statement's clauses (D127: the act's own sentence and the sentence that continues it), with a
     retrieval or find word anywhere in the statement: 'retrieval' when a negation denies a retrieval - a negator over a
@@ -306,28 +336,73 @@ def _denial(clauses: Sequence[Mapping]) -> tuple:
     return ('presence' if presence else ''), presence
 
 
+def _guarded(tokens: Sequence[str]) -> bool:
+    """D140: whether one clause's folded words hold a purpose word (PURPOSE_WORDS, PURPOSE_PAIRS), a condition or doubt
+    word (DOUBT_WORDS) or an other-time word (OTHER_TIME_WORDS): such a clause states no yield of the act's."""
+    if any(token in PURPOSE_WORDS or token in DOUBT_WORDS or token in OTHER_TIME_WORDS for token in tokens):
+        return True
+    return any(pair in PURPOSE_PAIRS for pair in zip(tokens, tokens[1:]))
+
+
+def _states_yield(tokens: Sequence[str]) -> bool:
+    """DECISIONS D140 (the review of D127, problems 0 and 2): whether one clause's folded words state a yield - a past
+    yield verb (YIELD_VERBS) no negator precedes whose subject is a stone word (YIELD_SUBJECTS: the word before the
+    verb, past at most AUXILIARY_REACH auxiliaries - "several small stones were removed", "all stones have been
+    removed"), in a clause that holds no purpose, condition or doubt, or other-time word (_guarded). "The sphincterotome
+    was removed and the bile duct was swept for stones" states none (the verb's subject is the device); neither does
+    "to ensure all stones had been removed", "It is unclear whether any stones were removed" or "after stones were
+    removed at the prior ERCP". D127's intent guard ("to extract", "could not be extracted") is the subject rule's now:
+    neither "to" nor "be" is a stone word or an auxiliary, and "to" is a purpose word."""
+    if _guarded(tokens):
+        return False
+    for index, token in enumerate(tokens):
+        if token not in YIELD_VERBS or any(_negator(word) for word in tokens[:index]):
+            continue
+        subject = index - 1
+        while subject >= 0 and index - subject <= AUXILIARY_REACH and tokens[subject] in YIELD_AUXILIARIES:
+            subject -= 1
+        if subject >= 0 and tokens[subject] in YIELD_SUBJECTS:
+            return True
+    return False
+
+
+def _attribute_words(event: Mapping) -> list:
+    """D140: the located words of the act's own attributes that state its yield (YIELD_ATTRIBUTES: kind, status, target
+    and technique), each {start, end, text}."""
+    return [event[name]['words'] for name in YIELD_ATTRIBUTES
+            if isinstance(event.get(name), Mapping) and isinstance(event[name].get('words'), Mapping)]
+
+
+def _own_yield(event: Mapping, others: Sequence[Mapping] = ()) -> bool:
+    """DECISIONS D140, the structural reading (EB1): whether the act's own attribute words (_attribute_words: kind,
+    status, target and technique) state its yield (_states_yield), each clause of those words read in those words alone
+    ("Multiple stones were extracted" as the act's kind words) - and none of them another event's words (``others``:
+    that event's yield, never this act's)."""
+    for item in _attribute_words(event):
+        for piece in _clauses(item):
+            if not _holds(piece, others) and _states_yield(piece['tokens']):
+                return True
+    return False
+
+
 def _yields(clauses: Sequence[Mapping], others: Sequence[Mapping] = (),
             mine: Optional[Sequence[Mapping]] = None) -> bool:
-    """D127 (problem 3): whether a clause of the act's own sentence states the act's yield - a stone word no negator
-    governs and a yield verb (YIELD_VERBS) no negator precedes in the clause and that does not follow "to" or "be" - in
-    a clause that holds one of the act's own words (``mine``; None: every clause is the act's, a sentence read alone)
-    and no other event's (``others``: that event's yield, never this act's). Such a sentence's denial of the stones'
-    presence is a clearance ("until no stones remained", "no stones remained on the final cholangiogram")."""
+    """D127 (problem 3): whether the act's own sentence (its ``clauses``) states the act's yield; such a sentence's
+    denial of the stones' presence is a clearance ("until no stones remained", "no stones remained on the final
+    cholangiogram"). DECISIONS D140 (the review of D127, problems 0 and 2): this is the CLAUSE reading, which keeps
+    D127's pinned clearances whose yield lies in no attribute's words (_own_yield is the structural one): a clause of
+    the sentence that holds one of the act's own words (``mine``: kind, status or target; None: every clause is the
+    act's, a sentence read alone) and no other event's (``others``: that event's yield, never this act's) states a
+    yield (_states_yield: a stone word the subject of a past yield verb, and no purpose, doubt or other-time word) -
+    "Multiple stones were extracted ... until no stones remained." with the kind words "extracted". Never another word
+    of the passage: a purpose clause, a device as the subject, a doubt or another time is no yield."""
     for clause in clauses:
         if any(clause['start'] < item['end'] and item['start'] < clause['end'] for item in others):
             continue
         if mine is not None and not any(clause['start'] < item['end'] and item['start'] < clause['end']
                                         for item in mine):
             continue
-        tokens = clause['tokens']
-        negated = _negated(tokens)
-        if not any(token in STONE_WORDS and index not in negated for index, token in enumerate(tokens)):
-            continue
-        for index, token in enumerate(tokens):
-            if token not in YIELD_VERBS or any(_negator(word) for word in tokens[:index]):
-                continue
-            if index and tokens[index - 1] in ('to', 'be'):
-                continue
+        if _states_yield(clause['tokens']):
             return True
     return False
 
@@ -383,12 +458,27 @@ def nothing_retrieved(reading, event: Mapping, kept: Sequence = ()) -> Optional[
       sits in a clause that holds another act's words (a sentence of two acts, D106's own sentence read whole: held, as
       before); a denial of a retrieval ('retrieval') in the act's own sentence is read whatever the sentence states
       beside it, as before. An own sentence that states the act's yield is the act's own word on what it retrieved, so
-      the sentence after it - read only because it may continue the act - is not read."""
+      the sentence after it - read only because it may continue the act - is not read.
+    DECISIONS D140, as the review of D127 asks it:
+    - (problems 0 and 2) the yield is the act's own statement (_yields: its own attribute words, or a clause of its own
+      whose subject is a stone word with a past yield verb, no purpose, doubt or other-time word): "...to ensure all
+      stones had been removed; no stones remained." and "The sphincterotome was removed and the bile duct was swept for
+      stones ...; no stones were found." state none, so the denial holds - and a false yield no longer stops the read
+      of the sentence after ("The sphincterotome was removed and ... . No stones or sludge were retrieved.");
+    - (problem 1) the following sentence is never dropped as another act's when it holds the words of an event that is
+      not performed (its status value, in any verification state, anything but PERFORMED: a denial or an uncertain
+      statement, and a planned act or one begun and not completed): "No stones or sludge were retrieved." filed as its
+      own not_performed event is the act's statement, not another act's."""
     from studio.interpretation import events
 
     words = _own_words(event)
     others = [span for other in reading.events.values() if other.get('id') != event.get('id')
               for span in _own_words(other)]
+    # D140 (problem 1): the words of the events that are not performed - a denial or an uncertain statement, and a
+    # planned act or one begun and not completed: every status value but 'performed', in any verification state
+    unperformed = [span for other in reading.events.values() if other.get('id') != event.get('id')
+                   and events.value(other, 'status') != PERFORMED for span in _own_words(other)]
+    stated = _own_yield(event, others)  # D140: the act's own words state its yield (the structural reading)
     places = reading.places(events.own_passages(event))
     evidence = [place for place in _kept(kept) if any(_holds(place, [mine]) for mine in places)]
     own, seen = [], set()
@@ -408,7 +498,7 @@ def nothing_retrieved(reading, event: Mapping, kept: Sequence = ()) -> Optional[
     candidates = [sentence for place in located + _kept(kept) for sentence in _sentences(place)]
     for sentence in sorted(own, key=lambda item: (item['start'], item['end'])):
         clauses = _clauses(sentence)
-        yields, (denial, where) = _yields(clauses, others, words), _denial(clauses)
+        yields, (denial, where) = stated or _yields(clauses, others, words), _denial(clauses)
         shared = any(_holds(clause, others) for clause in where)  # a presence denial in a clause of another act's
         if denial == 'retrieval' or (denial == 'presence' and (not yields or shared)):
             return [_trimmed(sentence)]
@@ -417,8 +507,11 @@ def nothing_retrieved(reading, event: Mapping, kept: Sequence = ()) -> Optional[
         after = [item for item in candidates
                  if sentence['end'] <= item['start'] <= sentence['end'] + CONTINUES_WITHIN]
         first = min((item['start'] for item in after), default=None)
-        following = list({(item['start'], item['end']): item for item in after
-                          if item['start'] == first and not _holds(item, others)}.values())
+        # D140 (problem 1): another act's sentence does not continue the act - but one that holds the words of an event
+        # that is not performed (a denial, an uncertain statement, a plan, an act begun and not completed) is never
+        # dropped
+        following = list({(item['start'], item['end']): item for item in after if item['start'] == first
+                          and (not _holds(item, others) or _holds(item, unperformed))}.values())
         if following and _denial(clauses + [clause for item in following for clause in _clauses(item)])[0]:
             return [_trimmed(item) for item in (sentence, *following)]
     return None

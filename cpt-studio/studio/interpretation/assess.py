@@ -309,9 +309,13 @@ def _incomplete_session(family: str, reading: events.Reading, sessions_: Mapping
     attempted_not_completed (verified by its failure marker, as the base code's own state reads it) gives them too, in
     its failure-marker words; a verified 'incomplete' completion's words come first. DECISIONS D107 (the round-4
     refutation, finding 26): an ERCP whose access act - its cannulation, done at this encounter - was begun and not
-    completed ("Multiple attempts at biliary cannulation were unsuccessful.") gives them too, in that act's
-    failure-marker words (ercp.access_not_completed), after the examination's own: the installed release reads a failed
-    cannulation as an incomplete ERCP, and a READY 43260 had carried neither."""
+    completed ("Multiple attempts at biliary cannulation were unsuccessful.") gives them too
+    (ercp.access_not_completed), after the examination's own: the installed release reads a failed cannulation as an
+    incomplete ERCP, and a READY 43260 had carried neither. DECISIONS D127 (the review of D107, problem 4; this
+    docstring corrected by D140): the warn quotes the sentence that states that act's failure - the sentence of its own
+    located passages that holds its verified failure-marker words ("Multiple attempts at biliary cannulation were
+    unsuccessful."), as the installed release quotes it - and those words alone only where no own sentence holds
+    them."""
     from studio.interpretation import ercp
 
     if family not in sessions_:
@@ -822,6 +826,9 @@ def _support(selection: _Selection, evaluation: events.Evaluation, shown: dict, 
         shown_acts = list(evaluation.question.events[:1])
     elif not shown_acts and evaluation.reason == events.BUNDLED:
         shown_acts = [eid for eid, _ in evaluation.bundled]
+    elif not shown_acts and evaluation.reason == events.ANOTHER_ROLE and evaluation.question is not None:
+        # DECISIONS D139: every act told only in another role's entry, as engine._another_roles_hold's match keeps them
+        shown_acts = list(evaluation.question.events)
     acts = [{'id': eid, 'kind': reading.events[eid].get('catalogue_kind') or '',
              'label': events.event_label(reading, reading.events[eid]),
              'status': events.value(reading.events[eid], 'status')}
@@ -1552,7 +1559,7 @@ def assess(*, inventory, context, normalized: Optional[NormalizedResponse], prov
                                                          wording.MAX_LISTED_CODE))
         selections = [_select(group, text, pages, reading) for group in _merge_selected(listable)]
         if second is not None:
-            first_day = combination.procedure_day(reading, day).procedure_day
+            first_day = combination.procedure_day(reading, day)  # D134: coverage reads its done labels
             selections, second_alternatives, merge = _second_review(second, second_scope or {}, selections, text,
                                                                     pages, reading, sessions_, first_day)
         else:
@@ -1602,7 +1609,7 @@ def assess(*, inventory, context, normalized: Optional[NormalizedResponse], prov
         proposals = answering.apply(proposals, enc)
     # the reconciliation counts every code the decisions leave selected, a code a member's answer excluded included: a
     # member's answer never releases what its code's presence covers or holds (engine.assess reads its selections)
-    final = coverage.reconcile(reading, _counted_of(selections, keys), procedure_day=day_info.procedure_day,
+    final = coverage.reconcile(reading, _counted_of(selections, keys), procedure_day=day_info,  # D134
                                sessions_=sessions_)
     if merge is not None:
         provider.append(_second_review_check(merge, final.unresolved))
