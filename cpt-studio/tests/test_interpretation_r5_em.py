@@ -292,12 +292,13 @@ class D112TodayAnchoredFrames(SimpleTestCase):
                 p = em(inv, text, MELENA_VISIT)
                 self.assertEqual((p.status, asked(p)), ('needs_clarification' if question else 'ready', question))
 
-    def test_d112_finding_14s_g2_earlier_that_day_is_read_by_its_marker(self):
+    def test_d112_finding_14s_g2_earlier_that_day_is_read_by_the_anaphoric_frame(self):
         """Finding 14's G2 ('Earlier that day, I performed a flexible sigmoidoscopy, which showed internal
         hemorrhoids.', earlier_encounter, by 'I'): D109 placed it ON the date; D112 read it by its own marker, OFF, and
         99213 was READY where c2e53f8e holds it with separate_em. DECISIONS D132 (the review of D111-D113, em problem
         4): the anaphoric frames are read for an act whose performer is not verified other, so G2 is ON again and
-        99213 is held with separate_em, as c2e53f8e holds it (tests/test_interpretation_r5c_currency.py)."""
+        99213 is held with separate_em, as c2e53f8e holds it (tests/test_interpretation_r5c_currency.py). Named
+        '..._is_read_by_its_marker' until DECISIONS D144 (currency3 review problem 7) named it by what it asserts."""
         inv, text = earlier_act(THAT_DAY_LINE, 'examination', 'flexible sigmoidoscopy',
                                 a('flex_sig', 'flexible sigmoidoscopy', ['P1']), 'Earlier that day')
         self.assertEqual(facts.day_of(reading_of(inv).events['E1'], DAY), facts.ON)

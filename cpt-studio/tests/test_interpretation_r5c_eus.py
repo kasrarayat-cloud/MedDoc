@@ -286,13 +286,15 @@ def gallbladder(examination_target=None):
     return inventory(GB, events=found, reach=[reached('E1', 'duodenal_bulb', 'duodenal bulb', 'P2')])
 
 
-def held_on_the_drainage(test, result, facts: list) -> None:
-    """43240 is held, never READY, at assess time and in the read-time overlay, as a positive candidate: the drainage
-    (E2) supports nothing, and the question CPT Studio asks of it quotes its own words."""
+def held_on_the_drainage(test, result, facts: list, reason: str = events.ANOTHER_SITE) -> None:
+    """43240 is held, never READY, at assess time and in the read-time overlay: the drainage (E2) supports nothing, and
+    the question CPT Studio asks of it - DECISIONS D145: the target question (events._target_hold), its exact words
+    pinned in tests/test_interpretation_r5d_eus.py - quotes its own sentence."""
     p = proposal(result, '43240')
-    test.assertEqual((p.status, asked(p), p.support['reason']), ('needs_clarification', facts, events.UNVERIFIED))
+    test.assertEqual((p.status, asked(p), p.support['reason']), ('needs_clarification', facts, reason))
     test.assertEqual((p.support['acts'], p.support['question_events']), ([], ['E2']))
-    test.assertIn('(“was performed”)', p.clarifications[0].question)
+    test.assertEqual(p.clarifications[0].fact, 'target')
+    test.assertIn('transmural drainage', p.clarifications[0].question)  # its sentence, not its status words alone
     view = reviewed(result, '43240')
     test.assertEqual((view.status, view.released), ('needs_clarification', ()))
 
@@ -309,10 +311,11 @@ class TheDefiningTargetIsRead(SimpleTestCase):
             drainage = reading.events['E2']
             self.assertEqual((mapping.target_landmark(drainage), events.defining_fit(reading, link, drainage)),
                              ('gallbladder', False))
-            self.assertFalse(events.supports(reading, link, ('drainage',), drainage))
+            # DECISIONS D145: the defining target is read after R3 (evaluate), no longer by supports
+            self.assertTrue(events.supports(reading, link, ('drainage',), drainage))
         result = run(inv, text, [('43240', GB['P4'])])
         with self.subTest(part='assess'):  # 46e461e7f: READY
-            held_on_the_drainage(self, result, ['performed_status', 'target'])
+            held_on_the_drainage(self, result, ['target', 'target'])  # D145: the hold's target, then R6's
         with self.subTest(part='completeness'):
             self.assertEqual(result.completeness['state'], 'incomplete')
 
@@ -321,7 +324,7 @@ class TheDefiningTargetIsRead(SimpleTestCase):
             inv, text = drainage_case(name)
             with self.subTest(target=name):  # 46e461e7f: READY
                 held_on_the_drainage(self, run(inv, text, [('43240', DRAINAGE_LINES[name])]),
-                                     ['performed_status', 'target'])
+                                     ['target', 'target'])  # D145
 
     def test_d136_a_drainage_whose_target_is_not_verified_holds_43240(self):
         """'the walled-off necrosis' with no lesion: its target is not verified, so it meets no requirement (46e461e7f
@@ -330,13 +333,13 @@ class TheDefiningTargetIsRead(SimpleTestCase):
         with self.subTest(part='fixture'):
             self.assertEqual(events.Reading.of(inv).events['E2']['target']['state'], 'unverified')
         held_on_the_drainage(self, run(inv, text, [('43240', DRAINAGE_LINES['necrosis'])]),
-                             ['performed_status', 'target'])
+                             ['target', 'target'], events.SITE)  # D145
 
     def test_d136_the_examinations_own_target_never_releases_it(self):
         """With the examination's target verified at the gallbladder the structure examined is documented, and 43240 is
-        still held on its drainage (performed_status)."""
+        still held on its drainage (DECISIONS D145: its target)."""
         inv, text = gallbladder(tg('', 'gallbladder', 'the gallbladder', ['P3']))
-        held_on_the_drainage(self, run(inv, text, [('43240', GB['P4'])]), ['performed_status'])
+        held_on_the_drainage(self, run(inv, text, [('43240', GB['P4'])]), ['target'])  # D145
 
     def test_d136_controls_a_pancreatic_fluid_collection_supports_43240(self):
         """A verified pseudocyst, walled-off necrosis, or a lesion verified to be a pseudocyst: READY, as at 46e461e7f.
@@ -447,7 +450,8 @@ class AnExaminationOnlyCodeBesideAnUnlistedEusGuidedAct(SimpleTestCase):
 
     def test_d137_an_act_begun_and_not_completed_is_done_too(self):
         """A done act is performed or begun (events.done): the gastroenterostomy's stent 'attempted but failed' holds
-        43259 the same way (46e461e7f: READY; c2e53f8e: held)."""
+        43259 (46e461e7f: READY; c2e53f8e: held) - DECISIONS D145: through the session's 'doubted' entries, never
+        recorded as reportable (pinned in tests/test_interpretation_r5d_eus.py)."""
         stent = act('E2', 'P4', 'stent', 'lumen-apposing metal stent', status='attempted_not_completed',
                     status_words='was attempted but failed', procedure=a('eus', 'EUS-guided', ['P1']),
                     technique=a('stent', 'lumen-apposing metal stent', ['P4']),
@@ -461,7 +465,8 @@ class AnExaminationOnlyCodeBesideAnUnlistedEusGuidedAct(SimpleTestCase):
         p = proposal(run(inv, text, [('43259', lines['P2'])]), '43259')
         with self.subTest(part='assess'):  # 46e461e7f: READY
             self.assertEqual((p.status, asked(p), [spec.question for spec in p.clarifications]),
-                             ('needs_clarification', ['base_included'], [base_question('43259', 'stent placement')]))
+                             ('needs_clarification', ['base_included'],
+                              [base_question('43259', 'stent placement (stated in doubt)')]))  # D145
 
     def test_d137_control_a_clip_is_never_an_unlisted_act(self):
         """A clip is never separately reported (catalogue.NOT_REPORTED: bundled_reason), so it is recorded nowhere and

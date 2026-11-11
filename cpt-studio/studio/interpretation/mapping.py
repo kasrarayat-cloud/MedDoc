@@ -218,18 +218,34 @@ def hemostasis_in_doubt(event: Mapping) -> bool:
     reads it - recorded with D115.
 
     DECISIONS D142 (round 5c; the round-5b review of D115, problem 0, critical): an event whose OWN kind is the bleeding
-    control (Gemini's bleeding_control) is read the same way, by the same five words, whatever its purpose. Gemini files
-    "Hemostatic cautery was applied to the ulcer base." beside a clean-based ulcer as kind bleeding_control worded
-    'Hemostatic cautery' (technique electrocautery 'cautery', purpose hemostasis 'Hemostatic' - the filing FRESH-2
-    attests, in its denials, for 'hemostatic cautery' and 'injection for bleeding'); read as a bleeding control done,
-    43255 was READY on it (45382 in a colonoscopy), where the installed release holds it ("leaves the bleeding control
-    in doubt"). Named only by the adjective, it is a bleeding control in doubt too; the 14 performed bleeding_control
-    events of FRESH-2 each state the oozing they treat ("Minor oozing from the cut mucosal edge resolved ...") and keep
-    it."""
+    control (Gemini's bleeding_control) is read the same way, by the same five words - named by the adjective (D149
+    below). Gemini files "Hemostatic cautery was applied to the ulcer base." beside a clean-based ulcer as kind
+    bleeding_control worded 'Hemostatic cautery' (technique electrocautery 'cautery', purpose hemostasis 'Hemostatic' -
+    the filing FRESH-2 attests, in its denials, for 'hemostatic cautery' and 'injection for bleeding'); read as a
+    bleeding control done, 43255 was READY on it (45382 in a colonoscopy), where the installed release holds it ("leaves
+    the bleeding control in doubt"). Named only by the adjective, it is a bleeding control in doubt too; the 14 performed
+    bleeding_control events of FRESH-2 each state the oozing they treat ("Minor oozing from the cut mucosal edge resolved
+    ...") and keep it.
+
+    DECISIONS D149 (round 5d; the round-5c review of D142, review_egd3.json problem 1): D142's arm for an event of the
+    bleeding_control kind whose purpose is NOT a verified hemostasis reads it only when its own words NAME THE CONTROL BY
+    THE ADJECTIVE - 'hemostatic' or 'hemostasis' (or 'haemostatic', 'haemostasis') a whole word of its kind, technique or
+    purpose words - as the installed release keys its rule (c2e53f8e services.py:7075-7081: a bleeding control named by
+    HEMOSTATIC_ADJECTIVE alone, no bleeding stated). D142 read every such event whatever its purpose, so "Epinephrine was
+    injected into the ulcer base, followed by bipolar cautery." beside an oozing visible vessel (Gemini's bleeding_control
+    worded 'bipolar cautery', purpose not_stated) held 43255 where c2e53f8e and 46e461e7f are READY; named by its device,
+    not the adjective, it keeps the bleeding control. One whose hemostasis purpose IS verified is read as D115 reads a
+    clip or an injection (RF1's 'Hemostatic', the hemostatic injection filed as bleeding_control). Its words are read
+    whatever their state: an adjective in words that do not bind still puts the act in doubt (a hold, never READY)."""
     kind = event['kind']['value']
     purpose = event.get('purpose') or {}
-    if kind != BLEEDING_CONTROL and (kind not in HEMOSTASIS_KINDS or not (
-            verify.usable(purpose) and purpose.get('value') == 'hemostasis')):  # D142: the kind itself, whatever purpose
+    hemostasis = verify.usable(purpose) and purpose.get('value') == 'hemostasis'
+    if kind == BLEEDING_CONTROL:  # D142; D149: with no verified hemostasis purpose, only one named by the adjective
+        named = {token for name in ('kind', 'technique', 'purpose')
+                 for token in _WORD.findall(lexicon.fold(_words_text(event.get(name) or {})))}
+        if not hemostasis and not named & {'hemostatic', 'hemostasis', 'haemostatic', 'haemostasis'}:
+            return False
+    elif kind not in HEMOSTASIS_KINDS or not hemostasis:
         return False
     status = event.get('status')
     if not (verify.usable(status) and status.get('value') == 'performed'):
@@ -241,7 +257,8 @@ def catalogue_kind(event: Mapping) -> str:
     """The catalogue kind of an event (module docstring): its kind's value read in its family, with a clip's or an
     injection's VERIFIED hemostasis purpose - a bleeding control, or (DECISIONS D115) a bleeding control in doubt where
     its own words state no bleeding (hemostasis_in_doubt), as (D142) an event of the bleeding_control kind itself whose
-    own words state none. The kind's own state is not read here: a consumer reads it (7.3 line 1)."""
+    own words name it by the adjective (D149) and state none. The kind's own state is not read here: a consumer reads it
+    (7.3 line 1)."""
     kind = event['kind']['value']
     if kind == EXAMINATION:
         return EUS_EXAMINATION if event.get('family') == 'gi.eus' else EXAMINATION

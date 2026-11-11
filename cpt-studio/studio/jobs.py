@@ -3042,10 +3042,12 @@ def _assess_child_events(stored, context, normalized, reference, provider_status
     """The events engine's assessment of ``stored`` - the context's EventInventory as interpretation.store.load read it
     - in one bounded child (DB-free; its denied executions counted by sentinel.run_counted): the engine reads the
     inventory and the gemini context's facts for meaning, and the revision ``text`` for the exactness of the proposers'
-    spans and the member answers' passages and, since DECISIONS D124, for its entry lines: the role labels and headings
-    around a done act, to tell whether it is documented only in another role's entry (a nursing note, a pathology
-    report), which can only hold its code, never release or exclude one (studio/interpretation/assess.py;
-    events.another_role_hold)."""
+    spans and the member answers' passages and, since DECISIONS D124, for its entry lines: the role labels, signatures
+    and headings around a done act, to tell whether it is documented only in another role's entry (a nursing note, a
+    pathology report). That holds the act's code and never excludes one; but a code so held supports nothing, so a
+    rival code that competed with it for the same act loses that competing_codes hold (DECISIONS D146: 43264 for a
+    stone extraction told only under a nursing heading is held, and 43265 for the same clearance is then READY, as
+    c2e53f8e READYs both) (studio/interpretation/assess.py; events.another_role_hold)."""
     return events_engine.assess(
         inventory=stored, context=context, normalized=normalized, provider_status=provider_status, reference=reference,
         text=text, pages=pages, extraction_status=extraction_status, extraction_messages=extraction_messages,

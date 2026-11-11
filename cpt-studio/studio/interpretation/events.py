@@ -345,19 +345,21 @@ def defining_fit(reading: Reading, link: mapping.CodeLink, event: Mapping) -> bo
     requirement (mapping.defining_target, D120), read with the record of the lesion its target is verified to be
     (identity.verified_lesion): True for every code but 43240, whose drainage must be of a pancreatic fluid collection -
     its usable target's words or its verified lesion's words name one, and no verified place of it is biliary or in the
-    liver. A drainage that misses it supports nothing: 'EUS-guided transmural drainage of the gallbladder was performed
-    from the duodenal bulb with a 15 mm lumen-apposing metal stent.' (its target verified at the gallbladder), a bile
-    duct's, a liver abscess's or one whose target is not verified stays a positive candidate, so 43240 is held on it
-    (7.4), never READY - d353e64df READY; the installed release holds every 43240."""
+    liver. A drainage that misses it never supports 43240: 'EUS-guided transmural drainage of the gallbladder was
+    performed from the duodenal bulb with a 15 mm lumen-apposing metal stent.' (its target verified at the gallbladder),
+    a bile duct's, a liver abscess's or one whose target is not verified holds 43240, never READY - d353e64df READY; the
+    installed release holds every 43240. DECISIONS D145 (the round-5c review of D136, problem 1): read after R3, by
+    evaluate, as D29's site class is - a supporting drainage that misses it is kept out of the code's support, and with
+    none left the code takes _target_hold's target question - no longer in supports, where it sent the drainage to
+    7.4's last-resort question, whether it was done."""
     lesion = identity.verified_lesion(event)
     return mapping.defining_target(link.code, event, reading.lesions.get(lesion) if lesion else None)
 
 
 def supports(reading: Reading, link: mapping.CodeLink, group: Sequence[str], event: Mapping) -> bool:
-    """7.3 lines 1-4, 6 and 7 (line 5, the device class, is R4's), and (D136) the code's defining target."""
+    """7.3 lines 1-4, 6 and 7 (line 5, the device class, is R4's; the code's defining target is read after R3 -
+    DECISIONS D145: defining_fit, in evaluate)."""
     if not is_candidate(link, group, event) or (event.get('catalogue_kind') or '') in mapping.UMBRELLAS:
-        return False
-    if not defining_fit(reading, link, event):  # D136: 43240's drainage is of a pancreatic fluid collection
         return False
     if event.get('catalogue_kind') in mapping.EXAMINATION_KINDS and not endoscopic_examination(event):
         return False
@@ -485,6 +487,10 @@ def evaluate(code: str, kept: Sequence, reading: Reading, link: Optional[mapping
         if not fitting:
             return _site_hold(code, link, supporting, reading, name, site)
         supporting = fitting
+    fitting = [event for event in supporting if defining_fit(reading, link, event)]
+    if not fitting:  # D145 (D136): the code's defining target - 43240's drainage is of a pancreatic fluid collection
+        return _target_hold(code, link, supporting, reading)
+    supporting = fitting
     own_acts, doubts, bundled = [], [], []
     for event in supporting:  # R5: bundling (7.7)
         why = coverage.bundled_reason(reading, event)
@@ -568,11 +574,18 @@ ANOTHER_ROLE = 'another_role'  # Evaluation.reason of another_role_hold (the ins
 # "Nurse:", "RN:", "Pathology:", "Anesthesia:"), the names that head an entry alone on their line ("NURSING",
 # "Pathology:"), and its ENTRY phrases, a name, a middle and an entry word ("Nursing note", "Nursing procedure record",
 # "Pathology report", "Anesthesia record") or an entry form of no name ("Procedure checklist"). A name is a whole
-# label: followed by no letter, digit or apostrophe. An entry phrase ends where services.ROLE_HEADINGS' \b ends it: no
-# ASCII letter or digit joins it ("Nursing note's ..." holds the phrase, "Nursing notebook" does not: DECISIONS D139).
-_ROLE_NURSE = ('pre-procedure nursing', 'intra-procedure nursing', 'post-procedure nursing', 'preprocedure nursing',
-               'intraprocedure nursing', 'postprocedure nursing', 'recovery nurse', "nurse's", 'nursing', 'nurses',
-               'nurse', 'lpn', 'rn')
+# label: followed by no letter, digit or apostrophe. An entry phrase ends where no ASCII letter or digit joins it
+# ("Nursing note's ..." holds the phrase, "Nursing notebook" does not: DECISIONS D139). That is services.ROLE_HEADINGS'
+# \b but for '_', which \b counts as a word character under re.A: "Nursing note_x" heads an entry here and not there, a
+# hold where the installed release is READY (a cost, DECISIONS D139 and D146).
+# The nursing names cover services._NURSE (c2e53f8e) in full, generated longest first (DECISIONS D146): each optional
+# lead - pre-procedure, intra-procedure and recovery as there, and D124's post-procedure - with each name, and 'lpn'
+# (ROLE_LABEL's), so "Recovery nurse's note" is a nursing heading, as there.
+_ROLE_NURSE = tuple(sorted({lead + nurse for lead in ('pre-procedure ', 'preprocedure ', 'intra-procedure ',
+                                                      'intraprocedure ', 'post-procedure ', 'postprocedure ',
+                                                      'recovery ', '')
+                            for nurse in ('nursing', "nurse's", 'nurses', 'nurse', 'rn')} | {'lpn'},
+                           key=lambda nurse: (-len(nurse), nurse)))
 _ROLE_FORMS = (  # (role, names, heading names, entry names, entry middles, entry words, entry forms of no name): each
     # list longest first
     ('nursing', _ROLE_NURSE, _ROLE_NURSE, _ROLE_NURSE,
@@ -596,6 +609,19 @@ _ROLE_PHYSICIAN = (('performing physician', 'proceduralist', 'endoscopist', 'phy
                    (' attestation', ' statement', ' addendum', ' comment', ' note', ''))
 _ROLE_LEAD = ' \t-*#>•·'  # what may open a line before its label: a bullet, a heading mark
 _ROLE_DASHES = '-–—'
+# What role_of trims from a line's ends: ASCII whitespace only, as services' patterns read a line under re.A (\s is
+# [ \t\n\r\f\v]), so a line a no-break or other Unicode space opens or ends ("\xa0Findings") is no next heading,
+# as it is no GENERIC_HEADING there (DECISIONS D146)
+_ROLE_SPACE = ' \t\r\f\v'
+# services.ROLE_SIGNATURE (c2e53f8e), re-typed (DECISIONS D146): read only in the label an act's passage, or its line,
+# opens with, closed by a colon before the act's own words, and case-blind over ASCII letters only (re.A | re.I). Its
+# words: (nursing) a record word, 'by' within 60 characters after it and a nurse word within 60 after 'by' and its
+# space ("Documented by Jo Rowe, RN:"), or 'nursing', its space and an entry word ("Per nursing note:"); (anesthesia) an
+# anesthetist word with a record word within 40 characters after it ("CRNA documented:"). No reach crosses a period or a
+# line break ([^.\n]).
+_ROLE_SIGNATURE = (('recorded', 'entered', 'documented', 'completed', 'charted'), ('rn', 'lpn', 'nurse'),
+                   ('checklist', 'entry', 'note', 'handoff'), ('crna', 'anesthesiologist', 'anaesthetist'),
+                   ('recorded', 'documented', 'charted'))
 # The next heading, which ends an entry: services.GENERIC_HEADING's shape (c2e53f8e) - a line of at most 61 characters
 # opening with a capital or a digit, of letters, digits and these marks only, at most a closing colon. No apostrophe:
 # GENERIC_HEADING's [A-Za-z0-9 /&,()\-] allows none, so "Patient's vital signs stable throughout" ends no entry (D139)
@@ -616,15 +642,20 @@ def another_role_hold(code: str, link: mapping.CodeLink, own_acts: Sequence, rea
     passages, where the act itself is stated (OWN's target passages may be where the physician describes the LESION:
     "Findings: A 6 mm polyp in the sigmoid colon." beside "Nurse: The polyp was removed with a cold snare.") - lies in
     one: the passage begins with a role label (label_of: "Nurse:", "RN:", "Nursing note", "Pathology:", "Pathology
-    report", "Anesthesia:", "Anesthesia record" and the like, as whole labels - never "Nursing staff:", "Pathology from
-    jars 1-3 ...", "Anesthesia, equipment, and quality measures"); or, read from the document's lines, the line it
-    stands on opens with such a label, or is a role's heading line (heading_of: an entry phrase opening its line and
-    followed by at most 60 characters of anything, as services.ROLE_HEADINGS reads it - DECISIONS D139), or follows one
-    with no heading between (heading_end: the next heading ends the entry, never the entry's own heading line; a blank
-    line does not), and is no line the physician's own label opens (physician). The lines are ``reading.text``: the
-    revision text the assessment receives (assess.assess hands it over); a reading without it (the review overlay's
-    counted codes, a unit test's Reading) reads the passages' own labels only, and so is a place the text does not hold
-    verbatim.
+    report", "Anesthesia:", "Anesthesia record" and the like, as whole labels, after any characters that are not ASCII
+    letters, digits or '_' ("– Nurse:", as services.ROLE_LABEL's ^\\W* reads it: DECISIONS D146) - never "Nursing
+    staff:", "Pathology from jars 1-3 ...", "Anesthesia, equipment, and quality measures"); or, read from the document's
+    lines, the line it stands on opens with such a label, or is a role's heading line (heading_of: an entry phrase
+    opening its line and followed by at most 60 characters of anything, as services.ROLE_HEADINGS reads it - DECISIONS
+    D139), or follows one with no heading between (heading_end: the next heading ends the entry, never the entry's own
+    heading line; a blank line does not; a line is trimmed of ASCII whitespace only, so "\\xa0Findings" ends nothing:
+    D146), and is no line the physician's own label opens (physician); or, when none of these places it in an entry,
+    the label the passage or its line opens with, closed by a colon before the act's own words, holds another role's
+    signature (signed: services.ROLE_SIGNATURE, "Documented by Jo Rowe, RN:", "Per nursing note:" - D146), on a line
+    the physician's label opens too ("Endoscopist: see below. Documented by Jo Rowe, RN: ..."). The lines
+    are ``reading.text``: the revision text the assessment receives (assess.assess hands it over); a reading without it
+    (the review overlay's counted codes, a unit test's Reading) reads the passages' own labels and signatures only, and
+    so is a place the text does not hold verbatim.
 
     This is no evidence binding (ADJUDICATION EB1): it reads none of Gemini's values and changes none - the act stays
     performed, current and the documenting team's - and it only ever turns a supported code into a hold, with ONE
@@ -644,8 +675,14 @@ def another_role_hold(code: str, link: mapping.CodeLink, own_acts: Sequence, rea
     def whole(rest: str) -> bool:  # what follows a name or a phrase: no letter, digit or apostrophe joins it
         return not rest or not (rest[0].isalnum() or rest[0] == "'")
 
-    def phrase_end(rest: str) -> bool:  # what follows an entry phrase: no ASCII letter or digit joins it (its
-        return not rest or not (rest[0].isascii() and rest[0].isalnum())  # ROLE_HEADINGS \b: "Nursing note's"; D139)
+    def phrase_end(rest: str) -> bool:  # what follows an entry phrase: no ASCII letter or digit joins it ("Nursing
+        return not rest or not (rest[0].isascii() and rest[0].isalnum())  # note's"; D139; ROLE_HEADINGS' \b but '_')
+
+    def unlead(line: str) -> str:  # from its first ASCII letter, digit or '_' (ROLE_LABEL's ^\W* under re.A: D146)
+        for index, char in enumerate(line):
+            if char.isascii() and (char.isalnum() or char == '_'):
+                return line[index:]
+        return ''
 
     def entry_rest(folded: str, form: tuple) -> Optional[str]:  # what follows the form's entry phrase folded opens with
         for entry_name in form[3]:
@@ -667,16 +704,19 @@ def another_role_hold(code: str, link: mapping.CodeLink, own_acts: Sequence, rea
     def label_of(line: str) -> str:
         """The role whose label ``line`` (a passage, or a line) opens with - a name and its colon ("Nurse:", "RN:",
         "Pathology:"), or an entry phrase followed by its end, a colon, a bracket or a dash ("Nursing note: ...",
-        "Pathology report (final): ...") - else ''."""
-        folded = fold(line)
-        for form in _ROLE_FORMS:
-            for label in form[1]:
-                if folded.startswith(label) and whole(folded[len(label):]) \
-                        and folded[len(label):].lstrip().startswith(':'):
+        "Pathology report (final): ...") - else ''. Read as fold reads it, and then from its first ASCII letter, digit
+        or '_' (unlead): a label may follow any characters that are not these ("– Nurse:", "◦ Nurse:", "▪ Nurse:"), as
+        services.ROLE_LABEL's ^\\W* reads it under re.A (DECISIONS D146); no label the first reading finds is
+        lost."""
+        for folded in dict.fromkeys((fold(line), fold(unlead(line)))):
+            for form in _ROLE_FORMS:
+                for label in form[1]:
+                    if folded.startswith(label) and whole(folded[len(label):]) \
+                            and folded[len(label):].lstrip().startswith(':'):
+                        return form[0]
+                rest = entry_rest(folded, form)
+                if rest is not None and (not rest.strip() or rest.lstrip()[0] in ':(' + _ROLE_DASHES):
                     return form[0]
-            rest = entry_rest(folded, form)
-            if rest is not None and (not rest.strip() or rest.lstrip()[0] in ':(' + _ROLE_DASHES):
-                return form[0]
         return ''
 
     def heading_of(line: str) -> str:
@@ -728,27 +768,89 @@ def another_role_hold(code: str, link: mapping.CodeLink, own_acts: Sequence, rea
         return (2 <= len(body) <= 61 and body[0].isascii() and (body[0].isupper() or body[0].isdigit())
                 and all((char.isascii() and char.isalnum()) or char in _ROLE_HEADING_MARKS for char in body))
 
-    def role_of(place: Mapping) -> str:
+    def signed(source: str, at: int) -> str:
+        """The role whose signature (_ROLE_SIGNATURE: services.ROLE_SIGNATURE, c2e53f8e) stands in the label closed by
+        a colon before ``at`` - the text of ``at``'s line in ``source`` up to its last colon before ``at``, as the
+        installed release reads the sentence up to its last colon before the act ("Documented by Jo Rowe, RN: A 6 mm
+        polyp ...", "Per nursing note: ..."): anesthesia when both roles' signatures stand in it (the installed
+        release's last match), else nursing, else ''. A signature anywhere else in the sentence names no role ("...,
+        placed in formalin and documented by Jo Rowe, RN": DECISIONS D146)."""
+        head = source[source.rfind('\n', 0, at) + 1:at]
+        colon = head.rfind(':')
+        if colon < 0:
+            return ''
+        label = ''.join(chr(ord(char) + 32) if 'A' <= char <= 'Z' else char for char in head[:colon])  # re.A | re.I
+        records, nurses, entries, anesthetists, charted = _ROLE_SIGNATURE
+
+        def word(part: str, index: int) -> bool:  # an ASCII letter, digit or '_' at ``index`` (\w under re.A)
+            return 0 <= index < len(part) and part[index].isascii() and (part[index].isalnum() or part[index] == '_')
+
+        def standing(part: str, terms) -> list:  # (start, end) of each of ``terms`` standing whole in it (\b...\b)
+            out = []
+            for term in terms:
+                index = part.find(term)
+                while index >= 0:
+                    if not word(part, index - 1) and not word(part, index + len(term)):
+                        out.append((index, index + len(term)))
+                    index = part.find(term, index + 1)
+            return out
+
+        def spaced(part: str, term: str) -> list:  # (start, end of its space) of each ``term`` a word starts, \s+ after
+            out = []
+            index = part.find(term)
+            while index >= 0:
+                end = index + len(term)
+                if not word(part, index - 1) and end < len(part) and part[end] in _ROLE_SPACE:
+                    while end < len(part) and part[end] in _ROLE_SPACE:
+                        end += 1
+                    out.append((index, end))
+                index = part.find(term, index + 1)
+            return out
+
+        role = ''
+        for part in label.split('.'):  # no reach crosses a period; the label, on one line, holds no line break
+            ended = {end for _, end in standing(part, records)}
+            nurse_at = {start for start, _ in standing(part, nurses)}
+            if any(any(end in ended for end in range(by - 60, by + 1))  # a record word within 60 before 'by'
+                   and any(start in nurse_at for start in range(after, after + 61))  # a nurse word within 60 after
+                   for by, after in spaced(part, 'by')) \
+                    or any(part.startswith(entry, after) and not word(part, after + len(entry))
+                           for _, after in spaced(part, 'nursing') for entry in entries):
+                role = 'nursing'
+            anesthetist_end = {end for _, end in standing(part, anesthetists)}
+            if any(any(end in anesthetist_end for end in range(start - 40, start + 1))
+                   for start, _ in standing(part, charted)):
+                return 'anesthesia'
+        return role
+
+    def words_at(place: Mapping, event: Mapping) -> Optional[int]:  # where the act's own words begin in ``place``
+        starts = [record['words']['start'] for record in (event.get('kind'), event.get('status'))
+                  if isinstance(record, Mapping) and isinstance(record.get('words'), Mapping)
+                  and place['start'] <= record['words']['start'] < place['end']]
+        return min(starts) if starts else None
+
+    def role_of(place: Mapping, event: Mapping) -> str:
+        own = words_at(place, event)  # its kind's and status's words (the place's start where neither stands in it)
         role = label_of(place['text'])
         if role or text is None or text[place['start']:place['end']] != place['text']:
-            return role
+            return role or (signed(place['text'], own - place['start']) if own is not None else '')
         at = place['start'] + len(place['text']) - len(place['text'].lstrip())
         start = text.rfind('\n', 0, at) + 1
         stop = text.find('\n', at)
-        line = text[start:len(text) if stop < 0 else stop].strip()
-        if physician(line):
-            return ''
+        line = text[start:len(text) if stop < 0 else stop].strip(_ROLE_SPACE)  # ASCII whitespace only (D146)
+        if physician(line):  # the physician's line - unless a signature label closes before the act's words (D146)
+            return signed(text, at if own is None else own)
         role = label_of(line) or heading_of(line)
         while not role and start > 0:  # the lines above, up to the nearest heading
             above_end = start - 1
             start = text.rfind('\n', 0, above_end) + 1
-            above = text[start:above_end].strip()
+            above = text[start:above_end].strip(_ROLE_SPACE)
             if not above:
                 continue
             role = heading_of(above)
             if not role and heading_end(above):
-                return ''
-        return role
+                break
+        return role or signed(text, at if own is None else own)  # no entry places it: its signature (D146)
 
     roles: set = set()
     shown: list = []
@@ -757,7 +859,7 @@ def another_role_hold(code: str, link: mapping.CodeLink, own_acts: Sequence, rea
                         key=lambda item: (item['start'], item['end']))
         if not places:
             return None
-        found = [role_of(place) for place in places]
+        found = [role_of(place, event) for place in places]
         if not all(found):
             return None
         roles.update(found)
@@ -898,6 +1000,37 @@ def _site_hold(code: str, link: mapping.CodeLink, supporting: Sequence, reading:
     return Evaluation(code, link.family, link, 'uncertain', SITE, reason, read=read,
                       question=Question('act_target', wording.target_question(act, statement_text(reading, unsettled)),
                                         reason, (unsettled['id'],), _spans(anchors(reading, unsettled))),
+                      unverified=unverified)
+
+
+def _target_hold(code: str, link: mapping.CodeLink, supporting: Sequence, reading: Reading) -> Evaluation:
+    """DECISIONS D145 (the round-5c review of D136, problem 1, high): no supporting act meets the code's defining target
+    (defining_fit: D120's requirement, 43240's drainage of a pancreatic fluid collection). Called in evaluate after R3
+    and R4, as D29's _site_hold is - the code is held, never READY and never excluded - with the TARGET question (fact
+    'target') of one such act: the first whose target is not verified (reason SITE: CPT Studio could not confirm which
+    structure it was done on), else the first (ANOTHER_SITE: its target verified, and no pancreatic fluid collection).
+    The question quotes the act's own sentence - the sentence of its own passages that holds its target words,
+    else its kind or its status words (ercp.statement_sentence) - and its reason says what the code describes and where
+    the document places the act, never that it was not confirmed as done: R3 verified it performed. As D136 built it the
+    drainage supported nothing, so 'EUS-guided transmural drainage of the gallbladder was performed from the duodenal bulb
+    with a 15 mm lumen-apposing metal stent.' took 7.4's last resort ('Was the drainage (stent) at the gallbladder (“was
+    performed”) done on the date of service?', whose reason said CPT Studio could not confirm it was done), and beside
+    an EUS examination whose own target is verified 43240 asked no target at all; the installed release asks its
+    target. Asked whatever the examination's target."""
+    read = tuple(event['id'] for event in supporting)
+    unsettled = next((event for event in supporting if not usable(event, 'target')), None)
+    event = unsettled if unsettled is not None else supporting[0]
+    places = site_places(reading, event) if unsettled is None else ()
+    sentence = next((found for found in (ercp.statement_sentence(reading, event, name)
+                                         for name in ('target', 'kind', 'status')) if found is not None), None)
+    words = sentence['text'] if sentence is not None else statement_text(reading, event)
+    reason, question = wording.defining_target_hold(code, wording.event_kind_label(event.get('catalogue_kind') or ''),
+                                                    wording.landmark_label(places[0]) if places else '', words)
+    unverified = tuple((item['id'], 'target') for item in supporting if not usable(item, 'target')
+                       and value(item, 'target') != 'not_stated')
+    return Evaluation(code, link.family, link, 'uncertain', SITE if unsettled is not None else ANOTHER_SITE, reason,
+                      read=read, question=Question('target', question, reason, (event['id'],),
+                                                   _spans(anchors(reading, event))),
                       unverified=unverified)
 
 
@@ -1219,17 +1352,27 @@ def _h3_beside_doubt(code: str, event: Mapping, reading: Reading, doubt: Mapping
     snare.' (its day a pending check), 'Impression: No polypectomy was performed.' (D128 stores UNRESOLVED(time)) and
     'It is unclear whether the sigmoid polyp was removed completely.' (DOUBT), the member's date 2026-11-09: h2 had
     asked performed_status quoting the doubt alone, and the denial was shown nowhere; the installed release asks
-    conflict:snare (its conflicts check warns), and the document dated 11/09/2026 asks conflict:snare (h1)."""
+    conflict:snare (its conflicts check warns), and the document dated 11/09/2026 asks conflict:snare (h1).
+
+    DECISIONS D150 (1): in BOTH branches the acts read are every positive act the doubting statement doubts - its
+    DOUBT relations (the statement of the relation h2 found, else ``event`` itself) whose act is among ``positive`` -
+    h2's own act first, then the others in ``positive``'s order. D143 read only the act h2 met when h2 found a DOUBT
+    relation, so a doubt of two removals displaced the denial of the other: the undated note's 'A 6 mm sessile polyp
+    in the sigmoid colon was removed with a cold snare.', 'On 11/09/2026, a 4 mm sessile polyp in the rectum was
+    removed with a cold snare.', 'No polypectomy of the rectal polyp was performed.' (UNRESOLVED(time) beside the
+    rectal snare) and 'It is unclear whether any polyp was removed.' (DOUBT of both removals), the member's date
+    2026-11-09: with the doubting event listed after the removals, h2 met the sigmoid removal's DOUBT first and asked
+    performed_status about it, and the rectal denial was asked and shown nowhere; with it listed first, the rectal
+    denial was asked beside the doubt. The installed release asks conflict:snare in both orders. Now both orders ask
+    whether the rectal denial or the doubt applies to the rectal snare."""
     if not code:
         return None
     relation = doubt.get('relation')
-    if relation is not None:
-        doubted = [(event, relation)]
-    else:  # the doubting statement itself, a candidate: the acts its DOUBT relations name
-        order = {item['id']: index for index, item in enumerate(positive)}
-        doubted = sorted(((reading.events[item['event']], item) for item in reading.by_statement.get(event['id'], ())
-                          if item['type'] == relations.DOUBT and item['event'] in order),
-                         key=lambda pair: order[pair[0]['id']])
+    doubting = relation['statement'] if relation is not None else event['id']  # D150 (1): one reading, both branches
+    order = {item['id']: index for index, item in enumerate(positive)}
+    doubted = sorted(((reading.events[item['event']], item) for item in reading.by_statement.get(doubting, ())
+                      if item['type'] == relations.DOUBT and item['event'] in order),
+                     key=lambda pair: (pair[0]['id'] != event['id'], order[pair[0]['id']]))
     for act, item in doubted:
         contradictions = _h3_contradictions(reading, act)
         if contradictions:

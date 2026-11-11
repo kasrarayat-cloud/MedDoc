@@ -299,10 +299,15 @@ def _stated_procedure(event: Mapping) -> bool:
 class ProcedureDay:
     """``labels``: the procedure families documented as done on the date of service; ``possible``: those whose doing on
     that date is not established (fail-closed, as checks._same_day_subject words them); ``undatable``: procedure events
-    whose date CPT Studio could not establish (C-3: an E/M code gets UNRESOLVED(time), a question, never READY)."""
+    whose date CPT Studio could not establish (C-3: an E/M code gets UNRESOLVED(time), a question, never READY);
+    ``unidentified`` (DECISIONS D144, the review of D134, currency3 problem 1): those of ``possible`` whose act is ON
+    the date with every attribute ``labels`` needs usable and positive but its PROCEDURE (D81's banding "performed in
+    the office today" whose procedure Gemini left 'unknown') - a procedure done on the date for coverage.reconcile's
+    office-visit rule only; every other reader reads ``labels`` and ``possible`` as before."""
     labels: tuple = ()
     possible: tuple = ()
     undatable: tuple = ()
+    unidentified: tuple = ()
 
     @property
     def procedure_day(self) -> bool:
@@ -323,7 +328,8 @@ def procedure_day(reading, effective, codes: Sequence[tuple] = ()) -> ProcedureD
     which neither counted nor asked, so 99213 was READY where c2e53f8e holds it):
     - ON (a usable current time, or its own words or literals place it on the date: an earlier_encounter time worded
       "Earlier today" or "Earlier in the day" included): done with status, time, performer and procedure usable and
-      positive, possible otherwise;
+      positive, possible otherwise - and (DECISIONS D144) ``unidentified`` too when its procedure alone keeps it from
+      done (never an act read by its statement);
     - OFF (a usable earlier or future time whose words place it on no such day): never counts;
     - UNDATABLE (a time 'unknown', a current time that does not verify, an open time): listed for the E/M's time
       question - UNRESOLVED(time), never READY - except an act outside the procedure families and gi.other that Gemini
@@ -332,7 +338,7 @@ def procedure_day(reading, effective, codes: Sequence[tuple] = ()) -> ProcedureD
       gi.other keeps C-3's question (D81: a hold, never a READY).
     ``codes``: (code, family, state, procedural, label) of the counted codes - a counted procedural code adds its label
     to the done (performed) or possible (held) list, as engine._encounter adds the selected procedural codes."""
-    labels, possible, undatable = [], [], []
+    labels, possible, undatable, unidentified = [], [], [], []
     for event in reading.events.values():
         family = event.get('family') or ''
         kind = events.value(event, 'kind')
@@ -367,6 +373,9 @@ def procedure_day(reading, effective, codes: Sequence[tuple] = ()) -> ProcedureD
                 labels.append(label)
             else:
                 possible.append(label)
+                if (not by_statement and status in verify.POSITIVE and not events.usable(event, 'procedure')
+                        and all(events.usable(event, name) for name in needed if name != 'procedure')):
+                    unidentified.append(label)  # D144: done but for its procedure (the office-visit rule only)
         elif day == facts.UNDATABLE:
             undatable.append(event['id'])
     for code, family, state, procedural, label in codes:
@@ -378,7 +387,8 @@ def procedure_day(reading, effective, codes: Sequence[tuple] = ()) -> ProcedureD
             possible.append(label)
     labels = list(dict.fromkeys(labels))
     possible = [label for label in dict.fromkeys(possible) if label not in labels]
-    return ProcedureDay(tuple(labels), tuple(possible), tuple(undatable))
+    unidentified = [label for label in dict.fromkeys(unidentified) if label in possible]  # D144: a part of possible
+    return ProcedureDay(tuple(labels), tuple(possible), tuple(undatable), tuple(unidentified))
 
 
 def separate_statement(reading, event_ids: Sequence[str]) -> Optional[str]:

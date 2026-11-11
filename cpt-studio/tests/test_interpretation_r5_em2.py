@@ -163,12 +163,13 @@ class D130KindOtherFiledUnderTheVisit(SimpleTestCase):
                 self.assertEqual((found.labels, found.possible), ((), (OTHER_GI_LABEL,)))
                 self.assertNotIn('documented as performed', check(em(inv, text), 'em.same_day_procedure').detail)
 
-    def test_d130_with_no_e_m_proposed_the_visit_item_is_not_pushed(self):
+    def test_d130_with_no_e_m_proposed_the_visit_item_is_listed(self):
         """An effect: with no E/M code proposed, 46e461e7f set the visit's 'has no supported proposal' item apart
         (not_listed) beside the excision. DECISIONS D134 (the review of D130, em2 problem 3): beside a procedure only
         POSSIBLY done - and an act read by its statement is never more - the visit stays listed, as 1caaf0609 listed
         it. c2e53f8e sets it apart here (its routing reads the excision as a performed other GI service): a listing
-        where c2e53f8e lists nothing, never a READY (recorded in DECISIONS D134)."""
+        where c2e53f8e lists nothing, never a READY (recorded in DECISIONS D134). Named '..._is_not_pushed' until
+        DECISIONS D144 (currency3 review problem 7) named it by what it asserts."""
         inv, text = note(EXCISION, other(CYST, 'was performed'))
         result = run(inv, text, [], user_values=MEMBER)
         self.assertIn(NO_PROPOSAL, [str(item.get('label')) for item in result.completeness['unresolved_items']])
@@ -279,12 +280,16 @@ class D130WhatTheStatementNeverCounts(SimpleTestCase):
     def test_d130_only_under_the_visit(self):
         """The statement arm reads office_em and em_other only (the spec's 'filed under the visit'): the excision filed
         as sedation is READY (RECORDED RESIDUAL: c2e53f8e holds it). D94's arm is unchanged: not_gi keeps 'Service
-        outside the GI profiles' (done), 'unknown' 'A procedure CPT Studio could not identify' (possible)."""
+        outside the GI profiles' (done), 'unknown' 'A procedure CPT Studio could not identify' (possible) - and, by
+        DECISIONS D144, unidentified too: done on the date but for its procedure, so the office-visit rule sets the
+        visit apart beside it (tests/test_interpretation_r5d_currency.py)."""
         inv, text = note(EXCISION, other(CYST, 'was performed', a('sedation')))
         self.assertEqual(procedure_day(inv), combination.ProcedureDay())
         ready_with_no_procedure_day(self, em(inv, text))
+        unidentified = (combination.UNIDENTIFIED_PROCEDURE,)
         for value, expected in (('not_gi', combination.ProcedureDay(labels=('Service outside the GI profiles',))),
-                                ('unknown', combination.ProcedureDay(possible=(combination.UNIDENTIFIED_PROCEDURE,)))):
+                                ('unknown', combination.ProcedureDay(possible=unidentified,
+                                                                     unidentified=unidentified))):  # D144
             with self.subTest(procedure=value):
                 inv, _ = note(EXCISION, other(CYST, 'was performed', a(value, CYST, ['P2']) if value == 'not_gi'
                                               else a(value)))
@@ -338,11 +343,13 @@ class D130TheStatementReader(SimpleTestCase):
         # a done statement in the kind words is not the status words'
         self.assertFalse(self.stated(kind_words='Excision was performed', status_words='today'))
 
-    def test_d130_the_never_counted_classes_are_read_in_the_kind_and_target_words(self):
+    def test_d130_the_never_counted_classes_are_read_in_the_kind_words_head(self):
         """The words that name the act (NAMING_WORDS): DECISIONS D133 (the review of D130, em2 problem 1) - its kind
         words only, in their head; never its target words (they say what the act was done to: 'under ultrasound' sets
         nothing apart now) nor its status words, which state its status ('in order to' names no order). A head holding
-        'guided' is never set apart (D133: 'CT-guided drainage' is counted now)."""
+        'guided' is never set apart (D133: 'CT-guided drainage' is counted now). Named
+        '..._in_the_kind_and_target_words' until DECISIONS D144 (currency3 review problem 7) named it by what it
+        asserts."""
         self.assertEqual(combination.NAMING_WORDS, ('kind',))
         self.assertFalse(self.stated(kind_words='ECG'))
         self.assertTrue(self.stated(target_words='under ultrasound'))  # D133

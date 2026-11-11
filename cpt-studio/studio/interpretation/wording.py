@@ -368,6 +368,21 @@ def site_reason(act: str, required: str) -> str:
             f'{act} was done on.')
 
 
+def defining_target_hold(code: str, act: str, place: str, words: str) -> tuple[str, str]:
+    """(reason, question) of a code held because no act it rests on meets its defining target (DECISIONS D145, over
+    D120's requirement: mapping.DEFINING_TARGETS names 43240 alone, the transmural drainage of a pancreatic fluid
+    collection). The reason says what the code describes and where the document places the ``act`` - ``place``, the
+    label of its verified place, or '' when CPT Studio could not confirm which structure it was done on - never that
+    the act was not confirmed as done; the question asks its target (fact 'target'), quoting the act's own sentence
+    (``words``)."""
+    where = (f'the document places this {act} at the {place}' if place
+             else f'CPT Studio could not confirm from the document which structure this {act} was done on')
+    return (f'{code} describes the transmural drainage of a pancreatic fluid collection (a pseudocyst or walled-off '
+            f'necrosis); {where}. Held for the reviewer, not excluded.',
+            f'Which structure was the {act} ({quote(words)}) done on: a pancreatic fluid collection (a pseudocyst or '
+            'walled-off necrosis), or another structure?')
+
+
 EXAMINATION_CLASS_WORDS = {'full': 'a full endoscopic ultrasound examination (to the duodenum or beyond)',
                            'limited': 'a limited endoscopic ultrasound examination (short of the duodenum)',
                            'sigmoidoscopic': 'an endoscopic ultrasound examination through a flexible sigmoidoscopy (the '

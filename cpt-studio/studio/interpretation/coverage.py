@@ -296,28 +296,76 @@ def eus_guided_act(event: Mapping) -> bool:
             and events.value(event, 'procedure') == 'eus')
 
 
-def eus_unprofiled_entries(reading, members) -> list:
-    """DECISIONS D137 (the round-5 review of D122, problem 2): the event-coding entries (_entry's) of the done EUS-guided
-    acts among ``members`` (eus_guided_act: performed or begun, events.done) whose kind the EUS's catalogue entry does
-    not list among its acts - a gastroenterostomy's lumen-apposing stent, a radiofrequency ablation, a coil embolization
-    read as 'other' - and that are part of no other act (bundled_reason: never a clip, NOT_REPORTED). No EUS code
-    accounts for such an act, and the examination is the endoscopic portion of that procedure: event_coding records
-    them among the session's 'reportable' entries, so an examination-only EUS code beside them (combination._base:
-    43231, 43237, 43259, 45341, 45391, 44406) is held base_included, by combination.base_included at assess time and by
-    the read-time overlay over the same record. Read as no act, 'From the gastric body, a 20 mm lumen-apposing metal
-    stent was deployed into a distended jejunal loop.' beside its EUS examination left 43259 READY with coding
-    complete_pending_review, where the installed release holds 43259. An act of no catalogue kind is labelled by its own
-    kind words ('coil embolization'; EB1), else its event label (events.event_label), never ''."""
+def eus_unprofiled_entries(reading, members, doubted: bool = False) -> list:
+    """DECISIONS D137 (the round-5 review of D122, problem 2): the event-coding entries (_entry's) of the EUS-guided acts
+    among ``members`` whose kind the EUS's catalogue entry does not list among its acts - a gastroenterostomy's
+    lumen-apposing stent, a radiofrequency ablation, a coil embolization read as 'other', a tattoo - and that are part of
+    no other act (bundled_reason: never a clip, NOT_REPORTED). The examination is the endoscopic portion of that
+    procedure, and the examination-only EUS codes do not account for the act: event_coding records it among the
+    session's entries, so an examination-only EUS code beside it (combination._base: 43231, 43237, 43259, 45341, 45391,
+    44406) is held base_included, by combination.base_included at assess time and by the read-time overlay over the same
+    record. Read as no act, 'From the gastric body, a 20 mm lumen-apposing metal stent was deployed into a distended
+    jejunal loop.' beside its EUS examination left 43259 READY with coding complete_pending_review, where the installed
+    release holds 43259.
+
+    DECISIONS D145 (the round-5c review of D137, problem 5) corrects the premise D137 stated here, that no EUS code
+    accounts for such an act: a tattoo is an injection for coding (mapping.ONE_ACT), so 43253 is supported by 'EUS-guided
+    placement of three gold fiducial markers into the pancreatic head mass was performed.' read as 'tattoo'. The act is
+    recorded all the same - the examination-only code does not account for it, and the installed release holds 43259
+    beside it - and such an act (a kind mapping.ONE_ACT makes one act with the injection) is labelled by its own kind
+    words before its catalogue label: read by the label first, the fiducial placement was asked 'Is 43259 reported
+    separately from submucosal tattoo for this examination?'. Any other act keeps D137's label: its catalogue label,
+    else its own kind words ('coil embolization'; EB1); and either, else its event label (events.event_label), never
+    ''.
+
+    DECISIONS D145 (problem 4): the 'reportable' entries (``doubted`` False) are the DONE EUS-guided acts
+    (eus_guided_act) whose status is a usable 'performed', reportable's 7.8 frame. The 'doubted' entries (``doubted``
+    True) are the ones begun and not completed - recorded as reportable, an attempted and failed stent was printed as a
+    stent placement among the EUS service's acts (readers.EventReader.services_section reads 'reportable') - and
+    (problem 0) the acts of the class in doubt (eus_unprofiled_doubt). The base rule holds the examination-only code
+    beside either."""
     listed = catalogue.entry('gi.eus').acts
     out = []
     for event in members:
-        if (eus_guided_act(event) and (event.get('catalogue_kind') or '') not in listed
-                and not bundled_reason(reading, event)):
-            entry = _entry(reading, event)
-            words = events.words_of(event, 'kind')
-            named = ' '.join((words.get('text') or '').split()) if words else ''
-            out.append({**entry, 'label': entry['label'] or named or events.event_label(reading, event)})
+        if event.get('family') != 'gi.eus' or (event.get('catalogue_kind') or '') in listed:
+            continue
+        guided, status = eus_guided_act(event), events.value(event, 'status')
+        if doubted:  # D145: begun and not completed, or in doubt
+            chosen = (guided and status == 'attempted_not_completed') or eus_unprofiled_doubt(reading, event)
+        else:  # D145: performed (reportable's 7.8 frame)
+            chosen = guided and status == 'performed'
+        if not chosen or bundled_reason(reading, event):
+            continue
+        entry = _entry(reading, event)
+        words = events.words_of(event, 'kind')
+        named = ' '.join((words.get('text') or '').split()) if words else ''
+        # D145: an act read as a tattoo - an injection for coding (mapping.ONE_ACT) - by its own words first
+        first, then = (named, entry['label']) if entry['kind'] in mapping.ONE_ACT else (entry['label'], named)
+        out.append({**entry, 'label': first or then or events.event_label(reading, event)})
     return out
+
+
+def eus_unprofiled_doubt(reading, event: Mapping) -> bool:
+    """DECISIONS D145 (the round-5c review of D137, problem 0, critical): whether ``event`` is an act of D137's class IN
+    DOUBT - an event of the EUS family that is no examination, of a kind the EUS's catalogue entry does not list among
+    its acts, stated positive or uncertain and neither verified at another time nor by another performer
+    (_stated_here), and in doubt: its PROCEDURE not usable while it is possibly current (D75's arm: 'A 20 mm
+    lumen-apposing metal stent was deployed from the gastric body into a distended jejunal loop.' filed under 'eus' with
+    no procedure words where an EGD and an EUS are both current - procedure_unsettled), its status uncertain, its time
+    only possibly current (not done and possibly_current, possible_eus_acts' class: the same stent told 'Later, ...'),
+    or a CONTRADICTION, DOUBT or UNRESOLVED relation on it. A doubt, never an absence (D87): eus_unprofiled_entries
+    records it among the session's 'doubted' entries, so an examination-only EUS code beside it is held base_included
+    (combination.base_included's doubt arm). D137 read only the done acts whose procedure is usable, so the first stent
+    left 43259 READY alone and beside 43235, and the second beside its EUS examination, where the installed release
+    holds it."""
+    kind = event.get('catalogue_kind') or ''
+    if (event.get('family') != 'gi.eus' or kind in mapping.EXAMINATION_KINDS or kind in catalogue.entry('gi.eus').acts
+            or not _stated_here(event)):
+        return False
+    return ((not events.usable(event, 'procedure') and possibly_current(event))  # D75's arm
+            or events.value(event, 'status') == 'uncertain'
+            or (not events.done(event) and possibly_current(event))  # possible_eus_acts' class
+            or bool(reading.relations_of(event['id'])))
 
 
 def lower_evidence(reading) -> list:
@@ -435,22 +483,33 @@ def _placed_eus(found) -> bool:
 # 'gi.enteroscopy': the small bowel alone, a region mapping.REGION_OF keeps apart from the duodenum's)
 EGD_REGIONS = frozenset({'esophagus', 'stomach', 'duodenum'})
 # DECISIONS D141 (the round-5 review of D114, problem 1): the EGD's regions in the order its examination reaches them,
-# the duodenum's portions in order (its generic landmark names none), and the attributes whose located words tell an
-# act and an examination's own statement (told_with_its_examination)
+# and the duodenum's portions in order (its generic landmark names none). DECISIONS D148 (the round-5c review of D141,
+# problems 1 and 2): the last portion is the place beyond the second portion, which no landmark names - the generic
+# duodenum's landmark or the second portion's (which also takes third-portion words) is placed there only by the
+# record's own words (BEYOND_SECOND_WORDS)
 UPPER_ORDER = ('esophagus', 'stomach', 'duodenum')
-DUODENAL_PORTIONS = ('duodenal_bulb', 'second_portion_duodenum')
+DUODENAL_PORTIONS = ('duodenal_bulb', 'second_portion_duodenum', 'beyond_second_portion')
 GENERIC_DUODENUM = 'duodenum'
-ACT_TOLD = ('kind', 'status', 'technique', 'target')
-EXAMINATION_TOLD = ('kind', 'status', 'technique', 'extent')
+# DECISIONS D148: the words that name a duodenal portion beyond the second, matched in lexicon.fold's form, word-bounded
+# (lexicon.holds). A closed list read only in a record's own located words: a form missing here leaves the act at its
+# landmark, where the EGD's reach may cover it - it moves and is held, never READY.
+BEYOND_SECOND_WORDS = ('third portion', 'fourth portion', 'third part', 'fourth part', 'd3', 'd4', 'distal duodenum')
 
 
-def beyond_reach(examination: Mapping, landmark: str) -> bool:
+def beyond_reach(examination: Mapping, landmark: str, words: str = '') -> bool:
     """DECISIONS D141: whether the done EGD ``examination``'s VERIFIED reach stops short of ``landmark``, an act's place
     in EGD_REGIONS - in an earlier region (UPPER_ORDER: a reach in the stomach is short of the duodenum), or, in the
     duodenum, at an earlier portion (DUODENAL_PORTIONS: a reach at the bulb is short of the second portion). Never
     short, and so possibly covering the act (fail-closed: the act moves), when the reach is not verified, lies beyond
     the upper tract or in no region of it, or where either is the generic duodenum's landmark (which names no
-    portion)."""
+    portion).
+
+    DECISIONS D148 (the round-5c review of D141, problems 1 and 2): ``words``, the act's own target words, place an act
+    at the generic duodenum's landmark or the second portion's BEYOND the second portion (DUODENAL_PORTIONS' last) when
+    they name such a portion (BEYOND_SECOND_WORDS: 'An angioectasia in the third portion of the duodenum'), so a
+    verified reach at the bulb or the second portion stops short of it. The reach's own located words are read alike:
+    a reach whose words name a portion beyond the second never stops short of an act there (fail-closed). A reach at
+    the generic duodenum's landmark, whatever its words, is short of nothing in the duodenum."""
     extent = examination.get('extent')
     if not verify.usable(extent):
         return False
@@ -460,30 +519,15 @@ def beyond_reach(examination: Mapping, landmark: str) -> bool:
         return False
     if reached != at:
         return UPPER_ORDER.index(reached) < UPPER_ORDER.index(at)
+    record = extent.get('words')
+    reach_words = (record.get('text') or '') if isinstance(record, Mapping) else ''
+    reach = (DUODENAL_PORTIONS[-1] if reach == DUODENAL_PORTIONS[1] and lexicon.holds(reach_words, BEYOND_SECOND_WORDS)
+             else reach)  # D148: a reach the second portion's landmark takes from third-portion words
+    landmark = (DUODENAL_PORTIONS[-1] if landmark in (GENERIC_DUODENUM, DUODENAL_PORTIONS[1])
+                and lexicon.holds(words, BEYOND_SECOND_WORDS) else landmark)  # D148: the act's own words
     if reach not in DUODENAL_PORTIONS or landmark not in DUODENAL_PORTIONS:
         return False
     return DUODENAL_PORTIONS.index(reach) < DUODENAL_PORTIONS.index(landmark)
-
-
-def _told_in(event: Mapping, names) -> set:
-    """The passages where the located words of ``event``'s usable attributes ``names`` stand."""
-    found = set()
-    for name in names:
-        record = event.get(name)
-        if verify.usable(record) and isinstance(record.get('words'), Mapping):
-            found.update(record.get('passages') or ())
-    return found
-
-
-def told_with_its_examination(reading, event: Mapping) -> bool:
-    """DECISIONS D141: whether the act is told in its own family's done examination's statement - the located words of
-    its kind, status, technique or target (ACT_TOLD) stand in a passage where that examination's kind, status,
-    technique or reach words stand (EXAMINATION_TOLD) - and in no passage of a done EGD examination's. Passages are
-    compared, never read (EB1); the act's procedure words, Gemini's filing itself, are not among them."""
-    own = _told_in(event, ACT_TOLD)
-    family = set().union(*(_told_in(exam, EXAMINATION_TOLD) for exam in done_examinations(reading, event['family'])))
-    egd = set().union(*(_told_in(exam, EXAMINATION_TOLD) for exam in done_examinations(reading, 'gi.egd')))
-    return bool(own & family) and not own & egd
 
 
 def coding_family(reading, event: Mapping) -> str:
@@ -499,12 +543,20 @@ def coding_family(reading, event: Mapping) -> str:
 
     DECISIONS D141 (the round-5 review of D114, problem 1): only an act at a place within the done EGD's verified reach
     moves. An act beyond it - every done EGD examination's verified reach short of its place (beyond_reach: a reach at
-    the bulb beside an act at the second portion) - keeps Gemini's family, and so does an act at the generic duodenum
-    (its portion unnamed) told in its own examination's statement (told_with_its_examination): "Push enteroscopy: The
-    enteroscope was then advanced to the proximal jejunum, and an angioectasia in the third portion of the duodenum was
-    treated with argon plasma coagulation." beside an EGD to the second portion moved to the EGD and held 44369 and
-    43235, where the installed release READYs both. The same act on a line of its own may be either scope's - the EGD
-    reached the duodenum - so it moves, as the installed release reads it (44369 held, 43235 base_included)."""
+    the bulb beside an act at the second portion) - keeps Gemini's family.
+
+    DECISIONS D148 (the round-5c review of D141, problems 1 and 2): D141's shared-passage test is gone - it compared
+    every passage an attribute cites, never the one its words stand in, and could not tell an act the gastroscope did
+    before the exchange from one told in the enteroscopy's sentence. An act at the generic duodenum (its portion
+    unnamed) beside an EGD whose reach is in the duodenum or not verified moves, as D114 moved it, unless its OWN target
+    words name a portion beyond the second (BEYOND_SECOND_WORDS) and every done EGD examination's verified reach stops
+    at or before the second portion (beyond_reach); an act at the second portion's landmark whose own target words name
+    a portion beyond it is read alike. D141's earlier region stands: a verified reach in the stomach is short of the
+    duodenum, whatever the words. "An angioectasia in the third portion of the duodenum was treated with argon plasma
+    coagulation." beside an EGD verified to the second portion stays the enteroscopy's, on a line of its own or in the
+    push enteroscopy's sentence (44369 READY); "A duodenal angioectasia was treated with argon plasma coagulation."
+    moves wherever it is told (44369 held, 43235 base_included, as the installed release holds both). An EGD reach not
+    verified, or at the generic duodenum, may cover the act: it moves."""
     family = event.get('family') or ''
     kind = event.get('catalogue_kind') or ''
     if family != 'gi.enteroscopy' or not kind or kind in NOT_ACT_KINDS:
@@ -513,9 +565,9 @@ def coding_family(reading, event: Mapping) -> str:
     if mapping.region(landmark) not in EGD_REGIONS:
         return family
     egds = done_examinations(reading, 'gi.egd')
-    if not egds or all(beyond_reach(examination, landmark) for examination in egds):  # D141
-        return family
-    if landmark == GENERIC_DUODENUM and told_with_its_examination(reading, event):  # D141
+    record = event['target'].get('words')  # D148: the act's own target words (its target is verified here)
+    words = (record.get('text') or '') if isinstance(record, Mapping) else ''
+    if not egds or all(beyond_reach(examination, landmark, words) for examination in egds):  # D141, D148
         return family
     return 'gi.egd'
 
@@ -788,10 +840,12 @@ def reconcile(reading, counted: Sequence[Counted], *, procedure_day: bool = Fals
         elif not codes:
             # never push an office visit beside a procedure DONE on the date of service (listed as not_listed
             # below): DECISIONS D134 - beside one only POSSIBLY done it stays listed, 'has no supported proposal'.
-            # ``procedure_day`` is the assessment's combination.ProcedureDay (its done ``labels`` are read here, never
-            # its ``possible``), or a bool where only that answer is known (the read-time overlay's, from the items the
+            # ``procedure_day`` is the assessment's combination.ProcedureDay (its done ``labels`` are read here, and
+            # DECISIONS D144 its ``unidentified``: an act done but for its procedure - never the rest of its
+            # ``possible``), or a bool where only that answer is known (the read-time overlay's, from the items the
             # assessment listed)
             if session.family == 'gi.office_em' and (getattr(procedure_day, 'labels', procedure_day)
+                                                     or getattr(procedure_day, 'unidentified', ())
                                                      or any_other_done - {session.family}):
                 continue
             done_ids = [event['id'] for event in members if events.done(event)]
@@ -944,35 +998,37 @@ def unresolved_record(items: Sequence[dict]) -> list:
             for index, item in enumerate(items)]
 
 
-def in_doubt_questions(reading, coverage: Coverage, asked=()) -> list:
+def in_doubt_questions(reading, coverage: Coverage, asked=(), holding=()) -> list:
     """A service-scope question for each in_doubt item, with the fact of 7.4 for its event (FINAL 7.8), once per (family,
     fact), never one a proposal of the family already asks (``asked``: (family, fact) pairs) - asking first (DECISIONS
-    D142) the acts no proposed code of their session accounts for, then the acts one does, each group in the reading's
-    order. Which facts are asked does not depend on that order; which act each question names does."""
+    D149, replacing D142's order) the acts no proposed code READS or HOLDS ON, then the acts one does, each group in the
+    reading's order. ``holding``: the event ids the proposed codes read or hold on, as assess records them - each
+    counted code's supporting events (Counted.supporting, support['acts']) and the events its own question names
+    (events.Question.events, support['question_events']); none given, no act is held on and the reading's order stands.
+    Which facts are asked does not depend on that order; which act each question names does."""
     # D89: ``asked`` holds (family, fact, question) of the proposals' questions; a code's question suppresses a service
     # question only when it IS that question (its fact and its words, which name the act) - a code asking
     # statement_scope about its snare no longer silences the service's statement_scope about another act's denial
     codes_asked = {tuple(entry) for entry in asked}
+    held = frozenset(holding)
 
-    def accounted(item: Mapping, eid: str) -> bool:
-        """DECISIONS D142 (round 5c; the round-5b review of D115, problem 1): whether a counted code of the item's
-        session accounts for the act's kind by its profile (its covers, read as events.is_candidate reads a kind: an
-        umbrella, a tattoo and an injection as one act) - D115's bleeding control in doubt read as the bleeding control
-        it may be. That code is proposed and its own reading or question covers the act, so the act's question decides
-        no code that is missing."""
-        kind = reading.events[eid].get('catalogue_kind') or ''
-        kind = mapping.BLEEDING_CONTROL if kind == mapping.POSSIBLE_BLEEDING_CONTROL else kind
-        profiles_ = [catalogue.code_profile(code) for code in coverage.covered.get(item['service'], ())]
-        return any(profile is not None and profile.family == item['family']
-                   and any(mapping.covers(kind, wanted) for wanted in profile.covers) for profile in profiles_)
+    def accounted(eid: str) -> bool:
+        """DECISIONS D149 (round 5d; the round-5c review of D142, review_egd3.json problem 0): whether a proposed code
+        reads or holds on the act - ``eid`` among ``holding``, the events assess records for the codes. Never a profile
+        that covers the act's kind: D142 read one, and "At that time, the distal esophageal stricture was dilated with
+        an 18 mm balloon." (in doubt) beside "The pyloric stricture was dilated with a 15 mm balloon." (43245 READY on
+        it) was read as accounted for by 43245, whose covers hold the dilation kind though it reads only the pyloric
+        dilation - so "At that time, biopsies of the gastric antrum were taken ..." took the family's event_time
+        question, and the dilation's, whose answer decides a missing 43249, was not asked. An act in doubt is never
+        among the counted codes' supporting or read events (reconcile lists in doubt only an act no counted code
+        reads), so only the events a code's question names can hold one."""
+        return eid in held
 
-    # D142: one question per (family, fact), so an act no proposed code accounts for (its question decides a missing
-    # code) is asked before an act a proposed code already accounts for - read in the reading's order, the clip in doubt
-    # 43255 holds on ("At that time, two hemostatic clips ...") took the family's event_time question from "At that time,
-    # biopsies of the gastric antrum were taken ...", whose answer decides 43239 (stable: each group keeps its order)
+    # D149: one question per (family, fact), so an act no proposed code reads or holds on (its question decides a code
+    # that is missing) is asked before an act a proposed code holds on (stable: each group keeps the reading's order)
     seen = set()
     out = []
-    for item, eid in sorted(coverage.in_doubt, key=lambda pair: accounted(*pair)):
+    for item, eid in sorted(coverage.in_doubt, key=lambda pair: accounted(pair[1])):
         question = events.focus_question(reading, reading.events[eid])
         if question is None or (item['family'], question.fact) in seen \
                 or (item['family'], question.fact, question.question) in codes_asked:
@@ -1105,7 +1161,8 @@ def event_coding(reading, sessions_: Mapping, codes: Mapping) -> dict:
                            and events.value(event, 'kind') not in lexicon.EM_KINDS]
                           + eus_unprofiled_entries(reading, members),  # D137: an act no EUS code accounts for
             'doubted': [_entry(reading, event) for event in members if doubted(reading, event)
-                        and events.value(event, 'kind') not in lexicon.EM_KINDS],
+                        and events.value(event, 'kind') not in lexicon.EM_KINDS]
+                       + eus_unprofiled_entries(reading, members, doubted=True),  # D145: such an act begun or in doubt
         }
     coded_codes = {}
     for key, (session, supporting) in codes.items():

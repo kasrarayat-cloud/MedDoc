@@ -99,12 +99,15 @@ class D87PossibleExaminationIsNoFactSource(Possible):
                 self.assert_possible(reading, 'E2', reasons)  # the input reaches the path
                 result = run(inv, text, [(code, line)])
                 p = proposal(result, code)  # the outcome first, then the structure that gives it
-                # DECISIONS D136: a drainage naming no place meets no defining target, so it supports no 43240 - held on
-                # it as a positive candidate (performed_status), and the target still asked
+                # DECISIONS D136: a drainage naming no place meets no defining target, so it supports no 43240 - D145:
+                # held on it with the drainage's own target question (events._target_hold, its target not established),
+                # and the structure examined still asked after it
                 self.assertEqual((p.status, asked(p), p.support['reason']),
-                                 ('needs_clarification', ['performed_status', 'target'], events.UNVERIFIED)
+                                 ('needs_clarification', ['target', 'target'], events.SITE)
                                  if code == '43240' else ('needs_clarification', ['target'], events.SUPPORTED))
-                self.assertEqual(question_of(p, 'target'), 'Endoscopic ultrasound: confirm the structure examined.')
+                targets = [spec.question for spec in p.clarifications if spec.fact == 'target']
+                self.assertEqual(targets[-1] if code == '43240' else question_of(p, 'target'),
+                                 'Endoscopic ultrasound: confirm the structure examined.')
                 self.assertEqual(check(p, 'facts.required').detail, 'Not documented: structure examined.')
                 self.assertEqual(result.completeness['state'], 'incomplete')
                 self.assertEqual(session_shape(reading, 'gi.eus'), ('', True, ('E1',), ('E2',), '', ''))

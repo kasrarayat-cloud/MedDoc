@@ -196,7 +196,18 @@ def _statements_kept(matched, cited, source, text: Optional[str]) -> tuple[tuple
     prior-segment denials beside the snare 45385 cites show all three, and a hard-wrapped denial beside the
     prior-segment one shows both its lines and the other sentence, where PER_SOURCE (2) had shown the first two
     passages only. The act's own passage, which a code citing the act shows already, comes after the statements: a
-    code citing another passage beside three statements shows that passage and the three statements, not the act's."""
+    code citing another passage beside three statements shows that passage and the three statements, not the act's.
+
+    DECISIONS D150 (2): whatever number of passages the code cites. The code's own passages are still chosen as
+    passages chooses them (its matched acts', then its cited ones, at most PER_SOURCE from each), but only the FIRST
+    of them is kept before the statements: the others come after one passage of each statement, so each statement
+    keeps its first passage beside the code's first while MAX_PASSAGES leaves room. D143 kept the code's two cited
+    passages first, which left room for two statements: finding 3's framed and device denials beside the
+    prior-segment denial, 45385 citing the snare's line and the colonoscope's, showed [the snare, the colonoscope, the
+    first two statements] and never the prior-segment denial; it now shows [the snare, the three statements]. Shown as
+    before: first the code's chosen passages (a passage that holds one shown in its place), in the code's order, then
+    the others in the source's order. MAX_PASSAGES still bounds the row, so beside the code's first passage at most
+    three statements are shown."""
     spans, first, lead, order = [], {}, {}, {}  # first/lead: statement name ('' the act's) -> index into spans
     for item in source:
         found = _span(item)
@@ -214,10 +225,17 @@ def _statements_kept(matched, cited, source, text: Optional[str]) -> tuple[tuple
     own = [lead.get('', first[''])] if '' in first else []
     firsts, act = [spans[index] for index in picked], [spans[index] for index in own]
     rest = [span for index, span in enumerate(spans) if index not in picked and index not in own]
-    out = _chosen((matched, cited, firsts, act, rest), text, PER_SOURCE,
-                  (PER_SOURCE, PER_SOURCE, MAX_PASSAGES, MAX_PASSAGES, MAX_PASSAGES))
-    head = [item for item in out if item[3] < 2]
-    tail = sorted((item for item in out if item[3] >= 2), key=lambda item: order.get((item[0], item[1]), len(order)))
+    code = [item[:3] for item in _chosen((matched, cited), text, PER_SOURCE)]  # D150 (2): the code's, as before
+    out = _chosen((code[:1], firsts, code[1:], act, rest), text, PER_SOURCE,
+                  (1, MAX_PASSAGES, MAX_PASSAGES, MAX_PASSAGES, MAX_PASSAGES))
+    rank = {}  # a chosen passage that is, or holds, one of the code's: the first such code passage's place
+    for index, (start, end, _, _) in enumerate(out):
+        covered = [number for number, (a, b, _) in enumerate(code) if start <= a and b <= end]
+        if covered:
+            rank[index] = covered[0]
+    head = [out[index] for index in sorted(rank, key=lambda index: rank[index])]
+    tail = sorted((item for index, item in enumerate(out) if index not in rank),
+                  key=lambda item: order.get((item[0], item[1]), len(order)))
     return tuple((start, end, quoted) for start, end, quoted, _ in head + tail)
 
 

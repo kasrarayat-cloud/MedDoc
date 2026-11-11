@@ -529,16 +529,19 @@ class RegionOfTheAct(SimpleTestCase):
         base_included alone. DECISIONS D141 (the round-5 review of D114, problem 5) changes the question's expectation:
         the act's question is added beside the base rule's, never in its place - the move took the base rule's only act
         of the enteroscopy, so the one question asks the base rule's question first ('Is 44360 reported separately
-        from ablation for this examination?', as at 1caaf0609), then the act's."""
+        from ablation for this examination?', as at 1caaf0609), then the act's. DECISIONS D148 (the round-5c review of
+        D141, problem 3) changes the third pick set's expectation: with 44369 picked the base rule asks base_included
+        itself (its arm (a)), so the act's question is its own and the base question is asked once."""
         inv, text = egd_push()
         reason = ('The ablation (argon plasma) of the Two gastric antral angioectasias is filed under the small-bowel '
                   'enteroscopy and documented at the gastric antrum (“Two gastric antral angioectasias”), which the '
                   'upper endoscopy of this encounter examines, so CPT Studio reads it as an act of the upper '
                   'endoscopy; if it was done in the enteroscopy, 44360 is included in the code for it.')
-        question = ('Is 44360 reported separately from ablation for this examination? In which procedure was the '
-                    'ablation (“Two gastric antral angioectasias”) done?')
-        for picks, facts in (((('44360', 'P6'),), ['procedure']), ((('44360', 'P6'), ('43235', 'P5')), ['procedure']),
-                             ((('44360', 'P6'), ('44369', 'P7')), ['base_included', 'procedure'])):
+        own = 'In which procedure was the ablation (“Two gastric antral angioectasias”) done?'
+        prefixed = f'Is 44360 reported separately from ablation for this examination? {own}'
+        for picks, facts, question in (((('44360', 'P6'),), ['procedure'], prefixed),
+                                       ((('44360', 'P6'), ('43235', 'P5')), ['procedure'], prefixed),
+                                       ((('44360', 'P6'), ('44369', 'P7')), ['base_included', 'procedure'], own)):
             p = proposal(run(inv, text, [(code, line(text, pid)) for code, pid in picks]), '44360')
             with self.subTest(picks=[code for code, _ in picks]):
                 self.assertEqual((p.status, asked(p), check(p, ELSEWHERE).status, check(p, ELSEWHERE).detail,

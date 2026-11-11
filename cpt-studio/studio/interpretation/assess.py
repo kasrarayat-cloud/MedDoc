@@ -613,7 +613,8 @@ def _proposal(selection: _Selection, key: str, enc: _Encounter, reading: events.
     states = _fact_states(selection, enc.context, reading, enc.sessions)
     exam_class = _examination_class(selection, reading, enc.sessions, key)  # D28 (R6)
     exam_class = exam_class or classes.enteroscopy_hold(selection.code, selection.family, key, reading, enc.sessions,
-                                                        _reach(selection.family, reading, enc.sessions))  # D108 (R6)
+                                                        _reach(selection.family, reading, enc.sessions),  # D108 (R6)
+                                                        enc.bases.get(selection.code) or ())  # D148: base arm (a)
     if not excluded:
         if evaluation.question is not None:
             clarifications.append(_spec(evaluation.question, selection.family, key))

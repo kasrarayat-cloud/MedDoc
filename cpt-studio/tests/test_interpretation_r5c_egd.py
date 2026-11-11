@@ -8,7 +8,10 @@ proposer's citations replayed) and its controls:
   in DOUBT, read by the same five attribute words as D115's clip and injection: 43255 (45382) is held, never READY.
 - (2) problem 1: coverage.in_doubt_questions asks once per (family, fact); an act no proposed code accounts for (its
   question decides a missing code) is asked before an act a proposed code already holds on - RF11's biopsy "done at this
-  encounter?" is asked again, beside the clip in doubt 43255 holds on.
+  encounter?" is asked again, beside the clip in doubt 43255 holds on. DECISIONS D149 (round 5d) replaced that order: it
+  reads the events the proposed codes read or hold on, never a profile, and no record ties 43255 to RF11's clip, so the
+  reading's order asks the clip's question (the two tests below CHANGED with D149; its pins are in
+  tests/test_interpretation_r5d_egd.py).
 - (3) problem 2 and the eus2 listing: reconcile lists as not covered a done act of a kind its session's family does not
   list among its acts, when the act is reportable and no proposed code covers it - the EGD's stent removal and stent
   exchange (RF5) and the EUS-guided gastroenterostomy stent beside 43259 - never an act a proposed code covers, D117's
@@ -295,13 +298,16 @@ class D142QuestionForTheMissingCode(SimpleTestCase):
     instead (one question per family and fact, in the reading's order), so the question that decides a missing 43239 was
     gone. c2e53f8e lists the biopsy not covered and asks no service question."""
 
-    def test_d142_rf11_the_biopsys_question_is_asked_beside_the_clip_43255_holds_on(self):
+    def test_d142_rf11_d149_the_reading_order_asks_the_clips_question(self):
+        """CHANGED with DECISIONS D149 (was test_d142_rf11_the_biopsys_question_is_asked_beside_the_clip_43255_holds_on,
+        asserting BIOPSY_QUESTION): 43255 is held not_documented and its records name no event, so no proposed code reads
+        or holds on either act and the reading's order asks the clip's question, as 46e461e7f did."""
         for name in (RF11, RF11_ALONE):
             result = assessed(name)
             with self.subTest(case=name):
                 held(self, result, '43255', ['performed_status'])
                 self.assertEqual([(spec.fact, spec.question) for spec in result.clarifications],
-                                 [('event_time', BIOPSY_QUESTION)])
+                                 [('event_time', CLIP_QUESTION)])
                 self.assertEqual(items(result), [(mapping.POSSIBLE_BLEEDING_CONTROL, 'in_doubt'), ('biopsy', 'in_doubt')])
 
     def test_d142_control_with_no_code_accounting_for_either_act_the_reading_order_stands(self):
@@ -309,13 +315,15 @@ class D142QuestionForTheMissingCode(SimpleTestCase):
         self.assertEqual([(spec.fact, spec.question) for spec in result.clarifications],
                          [('event_time', CLIP_QUESTION)])
 
-    def test_d142_the_order_reads_which_proposed_code_accounts_for_the_act(self):
-        """coverage.in_doubt_questions over RF11's reading: the act whose kind a counted code of its session accounts
-        for (its profile covers, the bleeding control in doubt read as a bleeding control) is asked after the other."""
+    def test_d142_d149_the_order_reads_no_profile(self):
+        """CHANGED with DECISIONS D149 (was test_d142_the_order_reads_which_proposed_code_accounts_for_the_act, where
+        ['43255', '43235'] asked BIOPSY_QUESTION): coverage.in_doubt_questions over RF11's reading reads no profile that
+        covers an act's kind - with nothing held (assess's records), every set of counted codes keeps the reading's
+        order."""
         reading = events.Reading.of(built(RF11)[0])
         item = {'service': 'gi.egd', 'family': 'gi.egd'}
         in_doubt = [(item, 'E2'), (item, 'E3')]
-        for codes, expected in ((['43255', '43235'], BIOPSY_QUESTION), (['43239'], CLIP_QUESTION),
+        for codes, expected in ((['43255', '43235'], CLIP_QUESTION), (['43239'], CLIP_QUESTION),
                                 (['43235'], CLIP_QUESTION), (['43255', '43239'], CLIP_QUESTION)):
             with self.subTest(codes=codes):
                 found = coverage.in_doubt_questions(

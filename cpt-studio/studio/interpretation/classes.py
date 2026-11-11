@@ -62,6 +62,11 @@ mention ('in a patient with an end ileostomy'), which stays a doubt against anot
 question is added beside the base rule's question, never in its place (elsewhere_hold). The region a moved act must lie
 in is coverage.coding_family's (within the done EGD's verified reach).
 
+DECISIONS D148 (the round-5c review of D141, problems 0 and 3): a pouch entry is typed by its OWN words alone
+(pouch_types reads no other anatomy entry, so a PEG 'in the gastric body' never types an untyped pouch as gastric): a
+pouch whose words name neither an intestinal nor a gastric pouch, or both, is a doubt. The base rule's question is
+never asked twice: base_asked reads its arm (a), a counted code of the family that accounts for an act, as well.
+
 Read only from the inventory's verified structure (the reach's landmark, the examination's completion and status, the
 encounter's anatomy, the sessions coverage groups) and the examination's own located words (D114's route) - no passage
 read (EB1). Pure and Django-free; imports nothing from studio.gi but the reference table gi.catalogue.
@@ -172,21 +177,23 @@ def _altered(encounter: Mapping) -> list:
 
 
 def pouch_types(encounter: Mapping) -> tuple:
-    """DECISIONS D141 (problem 0): for each usable altered-anatomy pouch entry, (whether its own words name the
-    small-intestinal pouch - INTESTINAL_POUCH_WORDS, whether its own words or the document's verified altered anatomy
-    name a gastric pouch or a gastric bypass - GASTRIC_POUCH_WORDS). Only the entries' own words are read (EB1)."""
-    altered = _altered(encounter)
-    gastric = any(lexicon.holds(_words(entry), GASTRIC_POUCH_WORDS) for entry in altered)
-    return tuple((lexicon.holds(_words(entry), INTESTINAL_POUCH_WORDS), gastric) for entry in altered
-                 if entry.get('value') == 'pouch')
+    """DECISIONS D141 (problem 0), as D148 amends it (the round-5c review of D141, problem 0): for each usable
+    altered-anatomy pouch entry, (whether its OWN words name the small-intestinal pouch - INTESTINAL_POUCH_WORDS,
+    whether its OWN words name a gastric pouch or a gastric bypass - GASTRIC_POUCH_WORDS). A pouch entry is typed by its
+    own words alone; no other anatomy entry is read (EB1). Typed by every altered entry's words, an untyped pouch beside
+    'A PEG tube is in place in the gastric body' read as a gastric pouch: no route, no doubt, and 44377 READY on a
+    pouchoscopy into the pre-pouch ileum, where the installed release holds it."""
+    return tuple((lexicon.holds(_words(entry), INTESTINAL_POUCH_WORDS),
+                  lexicon.holds(_words(entry), GASTRIC_POUCH_WORDS))
+                 for entry in _altered(encounter) if entry.get('value') == 'pouch')
 
 
 def routes(encounter: Mapping) -> frozenset:
     """The routes the encounter's anatomy verifies: 'stoma' (mapping.has_stoma, D43's own reader) and 'pouch' -
-    DECISIONS D141 (problem 0): the SMALL-INTESTINAL pouch, a usable altered-anatomy pouch entry whose own words name an
-    intestinal pouch (INTESTINAL_POUCH_WORDS: ileal, ileoanal, J-, S-, W-, Kock, pelvic, continent ileostomy, IPAA,
-    reservoir) where neither those words nor the document's verified altered anatomy names a gastric pouch or a gastric
-    bypass (GASTRIC_POUCH_WORDS: gastric, stomach, bypass, Roux, sleeve). Read as any pouch, "small gastric pouch"
+    DECISIONS D141 (problem 0), as D148 amends it: the SMALL-INTESTINAL pouch, a usable altered-anatomy pouch entry
+    whose own words name an intestinal pouch (INTESTINAL_POUCH_WORDS: ileal, ileoanal, J-, S-, W-, Kock, pelvic,
+    continent ileostomy, IPAA, reservoir) and no gastric pouch or gastric bypass (GASTRIC_POUCH_WORDS: gastric, stomach,
+    bypass, Roux, sleeve), read in that entry's own words alone (pouch_types). Read as any pouch, "small gastric pouch"
     beside "Roux-en-Y gastric bypass" made 44386 READY on an enteroscopy through the gastric pouch and the Roux limb
     into the proximal ileum, where the installed release holds it."""
     pouch = any(intestinal and not gastric for intestinal, gastric in pouch_types(encounter))
@@ -194,12 +201,13 @@ def routes(encounter: Mapping) -> frozenset:
 
 
 def doubted_routes(encounter: Mapping) -> frozenset:
-    """DECISIONS D141: 'pouch' when a usable altered-anatomy pouch entry may be the small-intestinal pouch without
-    being verified as it - its words name no type, or name the intestinal pouch beside a gastric word (D87: a possible
-    pouch is a doubt, never a fact). Such a pouch verifies no pouch class, and keeps the examination's own route
-    deciding the ileal class (route_read), as a verified one does: read as no pouch, "The patient has a pouch after a
-    proctocolectomy." left 44377 READY on a pouchoscopy into the pre-pouch ileum. A pouch only gastric reads no
-    route."""
+    """DECISIONS D141, as D148 amends it: 'pouch' when a usable altered-anatomy pouch entry may be the small-intestinal
+    pouch without being verified as it - its own words name neither an intestinal nor a gastric pouch ('pouch',
+    'pouch-anal anastomosis', 'total proctocolectomy with pouch formation'), or name both (D87: a possible pouch is a
+    doubt, never a fact) - and no entry verifies one. Such a pouch verifies no pouch class, and keeps the examination's
+    own route deciding the ileal class (route_read), as a verified one does: read as no pouch, "The patient has a pouch
+    after a proctocolectomy." left 44377 READY on a pouchoscopy into the pre-pouch ileum. A pouch whose own words name
+    only a gastric pouch reads no route."""
     doubt = any(intestinal == gastric for intestinal, gastric in pouch_types(encounter))
     return frozenset({'pouch'}) if doubt and 'pouch' not in routes(encounter) else frozenset()
 
@@ -397,10 +405,17 @@ def act_elsewhere(code: str, reading, sessions_: Mapping) -> Optional[tuple]:
     return None
 
 
-def base_asked(reading, sessions_: Mapping) -> bool:
-    """DECISIONS D141 (problem 5): whether the base rule asks the enteroscopy's diagnostic code base_included from its
-    own session's acts - combination.base_included's arms (b) and (c), read over event_coding's lists of the same
-    session: an act of that session reportable or doubted (coverage.reportable, coverage.doubted)."""
+def base_asked(reading, sessions_: Mapping, included=()) -> bool:
+    """DECISIONS D141 (problem 5): whether the base rule asks the enteroscopy's diagnostic code base_included -
+    combination.base_included's arms (b) and (c), read over event_coding's lists of the same session: an act of that
+    session reportable or doubted (coverage.reportable, coverage.doubted). DECISIONS D148 (the round-5c review of D141,
+    problem 3): and its arm (a), another counted code of the family matched to the session that accounts for an act -
+    ``included``, the base rule's own holding of this code (assess's ``bases`` entry: combination.base_included over the
+    counted codes, which no reading or session holds). Read without arm (a), 44360 beside a picked 44369 asked 'Is 44360
+    reported separately from 44369 for this examination?' and then began its act question with 'Is 44360 reported
+    separately from ablation for this examination?' - the base question twice."""
+    if included:
+        return True  # D148: arm (a) - the base rule holds the code beside a counted code that accounts for an act
     session = sessions_.get(FAMILY)
     return session is not None and any(
         coverage.reportable(reading, reading.events[eid]) or coverage.doubted(reading, reading.events[eid])
@@ -413,9 +428,10 @@ def elsewhere_hold(code: str, family: str, key: str, reading, event: Mapping, ho
     in another_site's form: held, never READY and never excluded - an act code with performed_status, and a code that
     accounts for the examination itself (``what`` '') with the act's procedure question (wording.procedure_question).
     DECISIONS D141 (problem 5): the act's question is added BESIDE the base rule's, never in its place. Where the base
-    rule no longer asks it (``asked_beside`` False: base_asked - the act was the only act of the enteroscopy's session,
-    and the move took it), the one question asks the base rule's question first (BASE_QUESTION, as the base rule asked
-    it of this act at 1caaf0609 and as the installed release asks it), then the act's."""
+    rule no longer asks it (``asked_beside`` False: base_asked, all three of the base rule's arms (D148) - the act was
+    the only act of the enteroscopy's session, the move took it, and no counted code of the family accounts for an
+    act), the one question asks the base rule's question first (BASE_QUESTION, as the base rule asked it of this act at
+    1caaf0609 and as the installed release asks it), then the act's."""
     place = wording.landmark_label(mapping.target_landmark(event))
     words = _words(event.get('target'))
     said, shown = (f' ({wording.quote(words)})', f' ({wording.quote(words, 120)})') if words else ('', '')
@@ -442,7 +458,8 @@ def elsewhere_hold(code: str, family: str, key: str, reading, event: Mapping, ho
                               family=family, proposal_key=key))
 
 
-def enteroscopy_hold(code: str, family: str, key: str, reading, sessions_: Mapping, reach: tuple) -> Optional[tuple]:
+def enteroscopy_hold(code: str, family: str, key: str, reading, sessions_: Mapping, reach: tuple,
+                     included=()) -> Optional[tuple]:
     """D108: (check, clarification) of an enteroscopy code whose class its session examination's verified reach - the
     extent fact's (``reach``: assess._reach's (landmark, extent record)) - the encounter's routes and (D114) the
     examination's own route do not fit (class_misfit), or (D114) whose act another session holds (act_elsewhere), in
@@ -458,7 +475,8 @@ def enteroscopy_hold(code: str, family: str, key: str, reading, sessions_: Mappi
     elsewhere = act_elsewhere(code, reading, sessions_)  # D114 (parity note 1)
     if elsewhere is None:
         return misfit
-    region = elsewhere_hold(code, family, key, reading, *elsewhere, asked_beside=base_asked(reading, sessions_))
+    region = elsewhere_hold(code, family, key, reading, *elsewhere,
+                            asked_beside=base_asked(reading, sessions_, included))  # D148: ``included``, arm (a)
     if misfit is None:
         return region
     check, spec = misfit
