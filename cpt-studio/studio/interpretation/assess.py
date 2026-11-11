@@ -364,6 +364,15 @@ def _inventory_fact(name: str, family: str, selection: _Selection, reading: even
                             _span_of(event['target'].get('words')))
         return None
     if name == 'cannulation':
+        from studio.interpretation import ercp
+
+        # DECISIONS D127: the outcome stated both achieved and not achieved is the installed release's conflict, never
+        # a pick of the first cannulation (ercp.cannulation_conflict)
+        conflict = ercp.cannulation_conflict(reading, family)
+        if conflict is not None:
+            note, places = conflict
+            return Fact('cannulation', None, 'conflict', tuple(span for place in places for span in _span_of(place)),
+                        note)
         for event in reading.events.values():
             if event.get('family') != family or event.get('catalogue_kind') != 'cannulation':
                 continue
@@ -724,10 +733,23 @@ def _claims(selection: _Selection, reading: events.Reading) -> tuple:
     'uncertain' (the document leaves it in doubt: "It is unclear from the record whether the 15 mm stone ... was
     fragmented with mechanical lithotripsy.") may have been done, so it is such a doubt too - 43264 and 43265 for one
     stone clearance compete whenever the lithotripsy is stated positive OR uncertain and possibly current; a denied or
-    planned one still claims nothing."""
+    planned one still claims nothing.
+
+    DECISIONS D118 (the round-4 family parity audit, EGD gap C): a code whose profile names a technique (the dilation
+    codes, CodeProfile.technique) also claims every current performed act of its family and kinds done on ONE stricture
+    with one of its own acts (_one_stricture: one lesion, or a place not verifiably apart, as the installed release's
+    _same_claim reads it, erring toward one) - whatever its technique. Its own acts are its supporting events, or - as
+    D74 reads a defining act only doubted - its own technique's acts in doubt when it has none (_technique_doubts). The
+    technique filter (R4) gives two dilation codes of different techniques disjoint E*, so 43249 on "The stricture was
+    dilated with a through-the-scope balloon to 15 mm." and 43248 on "The stricture was then dilated with a Savary dilator
+    passed over a guidewire to 17 mm." were both READY for one stricture, where the installed release holds both with
+    competing_codes. A code of any technique (43245, 43213) claims as before, and an act is never paired with itself: a
+    technique code held for its site (D29) claims nothing from the one dilation a code of any technique supports."""
     evaluation = selection.evaluation
     supporting = tuple(evaluation.supporting)
     link = evaluation.link
+    if link.technique:  # D118
+        supporting = supporting + _stricture_claims(link, supporting, reading)
     if not link.defining:
         return supporting
     family = [event for event in reading.events.values() if event.get('family') == link.family]
@@ -741,6 +763,53 @@ def _claims(selection: _Selection, reading: events.Reading) -> tuple:
     extra = tuple(event['id'] for event in family if (event.get('catalogue_kind') or '') in kinds
                   and coverage.current_performed(event) and event['id'] not in supporting)
     return supporting + extra
+
+
+def _one_stricture(reading: events.Reading, first: Mapping, second: Mapping) -> bool:
+    """DECISIONS D118: whether two acts may be done on one stricture, as the installed release's _same_claim reads it and
+    erring toward one: both verified to lesions - one lesion, or two that identity does not establish as distinct
+    (distinct_from, either way); otherwise unless every verified place of one (events.site_places: its target landmark,
+    its verified lesion's site) is disjoint from every verified place of the other (lexicon.disjoint) - a place unread,
+    one place holding or inside the other, or a surgically made place never sets them apart."""
+    one, two = identity.verified_lesion(first), identity.verified_lesion(second)
+    if one and two:
+        if one == two:
+            return True
+        apart = ((reading.lesions.get(one) or {}).get('distinct_from') or (),
+                 (reading.lesions.get(two) or {}).get('distinct_from') or ())
+        return two not in apart[0] and one not in apart[1]
+    places, others = events.site_places(reading, first), events.site_places(reading, second)
+    if places and others:
+        return not all(lexicon.disjoint(place, other) for place in places for other in others)
+    return True
+
+
+def _technique_doubts(link: mapping.CodeLink, reading: events.Reading) -> list:
+    """DECISIONS D118 (as D74 reads a doubted defining act): the acts a technique code with no supporting event may still
+    account for - events of its family and kinds stated positive or uncertain and possibly current (D62), not verified to
+    another performer, whose device is of the code's class or not verified as a class (mapping.code_technique ''), and -
+    for a site-specific dilation code (D29) - not verified outside its site class; in the reading's order."""
+    site = mapping.DILATION_SITES.get(link.code, '')
+    return [event for event in reading.events.values()
+            if event.get('family') == link.family and (event.get('catalogue_kind') or '') in link.acts
+            and events.value(event, 'status') in events.verify.POSITIVE + ('uncertain',)
+            and coverage.possibly_current(event) and not events.verified_other_performer(event)
+            and mapping.code_technique(event) in ('', link.technique)
+            and not (site and events.site_fit(reading, event, site) == events.OUTSIDE)]
+
+
+def _stricture_claims(link: mapping.CodeLink, supporting: tuple, reading: events.Reading) -> tuple:
+    """DECISIONS D118: the current performed acts (coverage.current_performed) of a technique code's family and kinds,
+    not among ``supporting``, done on one stricture (_one_stricture) with ANOTHER of the code's own acts - its supporting
+    events, else its own technique's acts in doubt (_technique_doubts) - never with itself; in the reading's order, ()
+    with none."""
+    own = [reading.events[eid] for eid in supporting if eid in reading.events] or _technique_doubts(link, reading)
+    if not own:
+        return ()
+    return tuple(event['id'] for event in reading.events.values()
+                 if event['id'] not in supporting and event.get('family') == link.family
+                 and (event.get('catalogue_kind') or '') in link.acts and coverage.current_performed(event)
+                 and any(mine is not event and _one_stricture(reading, event, mine) for mine in own))
 
 
 def _support(selection: _Selection, evaluation: events.Evaluation, shown: dict, reading: events.Reading,
@@ -1467,6 +1536,7 @@ def assess(*, inventory, context, normalized: Optional[NormalizedResponse], prov
     reading = events.Reading({'passages': list(stored.passages.values()), 'lesions': list(stored.lesions.values()),
                               'events': events.verify.rejudged(stored.events.values(), day),
                               'relations': stored.relations}, stored.encounter, stored.open_questions)
+    reading.text = text  # DECISIONS D124: the document's lines, which events.another_role_hold reads
     sources = tuple(reference.sources())
     provider = list(checks.provider_checks(provider_status, response))
     sessions_ = coverage.sessions(reading)
@@ -1538,6 +1608,7 @@ def assess(*, inventory, context, normalized: Optional[NormalizedResponse], prov
         provider.append(_second_review_check(merge, final.unresolved))
     asked = {(c.family, c.fact, c.question) for p in unanswered for c in p.clarifications}  # D89
     service_questions = coverage.in_doubt_questions(reading, final, asked)
+    service_questions += coverage.service_extent_questions(reading, sessions_, asked)  # DECISIONS D125
     unsupported = _unsupported(selections)
     answered = response is not None or (harness is not None and any(p.state == 'read' for p in harness.inputs))
     encounter_checks = [*provider, checks.extraction_check(extraction_status, extraction_messages),

@@ -276,9 +276,20 @@ class ClassesThatFit(SimpleTestCase):
                 ready(self, proposal(run(inv, text, [('44377', line(text, 'P6'))]), '44377'))
 
     def test_d108_an_ileoscopy_through_the_encounters_verified_stoma_fits_44380_to_44384(self):
+        """DECISIONS D114 (the round-4 review of D108, problem 0) changes this control's expectation: the encounter's
+        verified stoma says a stoma exists, never that the examination went through it, and this answer's examination
+        words ('ILEOSCOPY', 'enteroscope', 'was advanced') name no route - so 44382 is held with D114's route question,
+        never READY. Its READY control, the route named in the examination's own words, is
+        tests/test_interpretation_r5_enteroscopy_route.py's test_d114_44382_on_the_ileoscopy_is_ready_only_through_its_
+        verified_stoma_route."""
         inv, text = ileoscopy()
         self.assertEqual(classes.routes(events.Reading.of(inv).encounter), frozenset({'stoma'}))
-        ready(self, proposal(run(inv, text, [('44382', line(text, 'P6'))]), '44382'))
+        p = proposal(run(inv, text, [('44382', line(text, 'P6'))]), '44382')
+        reason, question = classes.class_hold('44382', classes.STOMA, 'neo terminal ileum', 'neo-terminal ileum',
+                                              classes.ROUTE_FORM, through=frozenset({'stoma'}))
+        self.assertEqual((p.bucket, p.status, asked(p), check(p, EXAMINATION_CLASS).status,
+                          check(p, EXAMINATION_CLASS).detail, p.clarifications[0].question),
+                         ('selected', 'needs_clarification', ['extent'], 'warn', reason, question))
 
     def test_d108_a_pouch_examination_with_the_encounters_verified_pouch_fits_44385_and_44386(self):
         inv, text = pouchoscopy()

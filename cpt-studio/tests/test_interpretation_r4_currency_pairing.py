@@ -321,6 +321,7 @@ def stored_relations(inv) -> list:
 
 
 CONTRADICTED = [('contradiction', 'E3', 'E2', 'status', 'same_act')]
+UNRESOLVED_TIME = [('unresolved', 'E3', 'E2', 'time', 'time_unresolved')]  # DECISIONS D128
 # the finding's variants of the undated document: (document options, the snare line, its time words)
 UNDATED = {
     'no date line': ({}, DATED_POLYP, 'On 11/09/2026'),
@@ -351,10 +352,12 @@ class D99TimeRow(SimpleTestCase):
         self.assertEqual(relations.time_row(default, unchecked), relations.Row('time', relations.SAME))
         self.assertEqual(relations.time_row(unchecked, default), relations.Row('time', relations.SAME))
         self.assertEqual(relations.time_row(unchecked, unchecked), relations.Row('time', relations.SAME))
-        # against another time it is a difference, and never a HARD one: a date no date has checked is no literal
+        # DECISIONS D128 (1) moved this expectation: against another time a pending check is no difference - a date no
+        # date has checked is no literal, and no fact (it was DIFFERENT, another_time, never hard). Beside a denial,
+        # D128 (0) narrows the rest: tests.test_interpretation_r5_currency.D128TimeRow
         earlier = self.side('earlier_encounter', found={'markers': ['previously']})
         self.assertEqual(relations.time_row(earlier, unchecked),
-                         relations.Row('time', relations.DIFFERENT, 'another_time', False))
+                         relations.Row('time', relations.UNKNOWN, 'time_unresolved'))
         self.assertEqual(verify.exclusion_basis('time', unchecked['time']), '')
         self.assertFalse(verify.usable(unchecked['time']))  # the act's own code still reads it as unverified
 
@@ -396,6 +399,8 @@ class D99UndatedDenial(SimpleTestCase):
         self.assertIn('1 conflict in the record', result.completeness['reasons'])
 
     def test_d99_the_same_day_denial_is_a_contradiction_on_the_undated_note(self):
+        """DECISIONS D128 (0) moved this pin's expectation: the act's own check is still pending at normalize, so the
+        pair is UNRESOLVED(time) - stored before any date can say whether the snare is that day's."""
         for name, (options, line, words) in UNDATED.items():
             inv, _, _ = denial_document(line, words, **options)
             snared = next(item for item in inv.events['events'] if item['id'] == 'E2')
@@ -403,14 +408,20 @@ class D99UndatedDenial(SimpleTestCase):
                 self.assertIsNone(inv.encounter_facts['date_of_service']['value'])
                 self.assertEqual((snared['time']['state'], snared['time']['reasons']), ('unverified',
                                                                                         ['date_unchecked']))
-                self.assertEqual(stored_relations(inv), CONTRADICTED)
+                self.assertEqual(stored_relations(inv), UNRESOLVED_TIME)
 
     def test_d99_the_members_date_asks_the_contradiction(self):
+        """DECISIONS D128 (0) moved this pin's expectation: with the member's equal date the re-judged time is usable,
+        and the denial's UNRESOLVED(time) relation asks the contradiction as the statement's scope (D102); the conflicts
+        check is pass (assess reuses the stored relation; recorded)."""
         for name, (options, line, words) in UNDATED.items():
             inv, text, line = denial_document(line, words, **options)
             with self.subTest(name):
-                self.assert_contradiction_asked(run(inv, text, [('45385', line)],
-                                                    user_values={'service_date': '2026-11-09'}))
+                result = run(inv, text, [('45385', line)], user_values={'service_date': '2026-11-09'})
+                p = proposal(result, '45385')
+                self.assertEqual((p.bucket, p.status, asked(p)), ('selected', 'needs_clarification',
+                                                                  ['statement_scope']))
+                self.assertEqual(conflicts_check(result).status, 'pass')
 
     def test_d99_control_the_documents_own_date_asks_the_contradiction(self):
         inv, text, line = denial_document(date_lines={'P0': DATE_LINE}, date_of_service=STATED)
@@ -433,11 +444,15 @@ class D99UndatedDenial(SimpleTestCase):
         another_time), as on the dated document. So once the member's date equals the day, 45385 is READY exactly as
         the document's own date makes it (and as D67's control makes the act with no denial). With no date, or another
         date, the snare stays held on its own time. The one direction of D99 that is not a hold: 437b708bb held it
-        (event_time) on the stale UNRESOLVED(time) relation although assess had verified the time."""
+        (event_time) on the stale UNRESOLVED(time) relation although assess had verified the time.
+
+        DECISIONS D128 (1) moved this pin's expectations on the undated note: a pending check never sets a pair apart,
+        so the relation is UNRESOLVED(time) and the member's equal date asks the denial as its scope (held, never READY);
+        the document's own date still sets the act apart (READY)."""
         earlier = 'Previously, no polyp was removed.'
         for name, options, member, status in (
                 ("the document's own date", dict(date_lines={'P0': DATE_LINE}, date_of_service=STATED), None, 'ready'),
-                ("the undated note, the member's equal date", {}, '2026-11-09', 'ready'),
+                ("the undated note, the member's equal date", {}, '2026-11-09', 'needs_clarification'),
                 ('the undated note, no date', {}, None, 'needs_clarification'),
                 ("the undated note, the member's other date", {}, '2026-11-10', 'needs_clarification')):
             value, lines = denial_answer(denied=False, **options)
@@ -449,12 +464,13 @@ class D99UndatedDenial(SimpleTestCase):
             text = '\n'.join(lines.values()) + '\n'
             inv = normalize.normalize(accepted(value), text)
             with self.subTest(name):
-                self.assertEqual(stored_relations(inv), [('independent', 'E3', 'E2', 'time', 'another_time')])
+                self.assertEqual(stored_relations(inv), [('independent', 'E3', 'E2', 'time', 'another_time')]
+                                 if options else UNRESOLVED_TIME)  # D128 (1): the undated note's pending check
                 p = proposal(run(inv, text, [('45385', DATED_POLYP)],
                                  user_values={'service_date': member} if member else {}), '45385')
                 self.assertEqual(p.status, status)
                 if status != 'ready':
-                    self.assertEqual(asked(p), ['event_time'])
+                    self.assertEqual(asked(p), ['statement_scope'] if member == '2026-11-09' else ['event_time'])
 
     def test_d99_control_a_date_unchecked_examination_never_unresolves_the_pairing(self):
         """D99 is the time ROW's. The pairing table's unresolved sessions still count VERIFIED current examinations
@@ -530,14 +546,16 @@ class D99Chain(EventsCase):
         return assessment, stored
 
     def assert_contradiction_asked(self, assessment, stored):
+        """DECISIONS D128 (0) moved this pin's expectations: the frozen inventory's pair is UNRESOLVED(time), and with
+        the member's equal date 45385 asks the denial as its scope (D102) with the conflicts check pass."""
         self.assertEqual(assessment.context.facts['service_date']['state'], 'supplies')
-        self.assertEqual(stored_relations(stored), CONTRADICTED)
+        self.assertEqual(stored_relations(stored), UNRESOLVED_TIME)
         held = self.proposal(assessment, '45385')
         self.assertEqual((held.status, [spec.fact for spec in held.clarifications.all()]),
-                         ('needs_clarification', ['conflict:snare']))
+                         ('needs_clarification', ['statement_scope']))
         found = next(item for item in assessment.encounter_checks if item['id'] == 'services.conflicts')
-        self.assertEqual(found['status'], 'warn')
-        self.assertIn('1 conflict in the record', assessment.completeness['reasons'])
+        self.assertEqual(found['status'], 'pass')
+        self.assertNotIn('1 conflict in the record', assessment.completeness['reasons'])
 
     def test_d99_the_members_date_at_upload_and_saved_afterwards_asks_the_contradiction(self):
         self.assert_contradiction_asked(*self.drained(self.upload_with({'service_date': '2026-11-09'})))

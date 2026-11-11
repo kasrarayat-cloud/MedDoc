@@ -502,6 +502,9 @@ def evaluate(code: str, kept: Sequence, reading: Reading, link: Optional[mapping
                           question=Question('performed_status', question, detail, (event['id'],),
                                             _spans(anchors(reading, event))),
                           bundled=tuple((item['id'], reason) for item, reason in bundled))
+    held = another_role_hold(code, link, own_acts, reading, read, name, bundled)  # DECISIONS D124
+    if held is not None:
+        return held
     performed = [event for event in own_acts if value(event, 'status') == 'performed']
     labels = [event_label(reading, event) for event in own_acts[:4]]
     if not performed:  # an examination begun and not completed (7.3 line 2): its failure-marker words (R-4)
@@ -539,6 +542,199 @@ def recognised_only_hold(code: str, link: mapping.CodeLink, own: tuple) -> Evalu
               + ' Held for the reviewer, not excluded.')
     return Evaluation(code, link.family, link, 'uncertain', mapping.RECOGNISED_ONLY, detail,
                       question=Question('performed_status', wording.performed_question(code), detail, (), own))
+
+
+# --- DECISIONS D124: an act documented only in another role's entry ---------------------------------------------------
+
+ANOTHER_ROLE = 'another_role'  # Evaluation.reason of another_role_hold (the installed release's reason, engine.py:964)
+# another_role_hold's own tables, read case-folded with straight apostrophes and single spaces (its fold): the forms of
+# services.ROLE_HEADINGS and ROLE_LABEL (c2e53f8e), re-typed - the legacy reader is never called on the new path, and
+# this module holds no pattern (tests.test_interpretation_assess.Imports). Per role, its NAMES (a label with its colon:
+# "Nurse:", "RN:", "Pathology:", "Anesthesia:"), the names that head an entry alone on their line ("NURSING",
+# "Pathology:"), and its ENTRY phrases, a name, a middle and an entry word ("Nursing note", "Nursing procedure record",
+# "Pathology report", "Anesthesia record"), each a whole label: followed by no letter, digit or apostrophe.
+_ROLE_NURSE = ('pre-procedure nursing', 'intra-procedure nursing', 'post-procedure nursing', 'preprocedure nursing',
+               'intraprocedure nursing', 'postprocedure nursing', 'recovery nurse', "nurse's", 'nursing', 'nurses',
+               'nurse', 'lpn', 'rn')
+_ROLE_FORMS = (  # (role, names, heading names, entry names, entry middles, entry words): each list longest first
+    ('nursing', _ROLE_NURSE, _ROLE_NURSE, _ROLE_NURSE,
+     ('pre-procedure ', 'intra-procedure ', 'post-procedure ', 'preprocedure ', 'intraprocedure ', 'postprocedure ',
+      'procedure ', ''),
+     ('documentation', 'assessment', 'flow sheet', 'flowsheet', 'comments', 'entries', 'records', 'comment', 'handoff',
+      'summary', 'record', 'report', 'entry', 'notes', 'note')),
+    ('anesthesia', ('anaesthesiologist', 'anesthesiologist', 'anaesthetist', 'anesthetist', 'anaesthesia', 'anesthesia',
+                    'crna'), ('anaesthesia', 'anesthesia'), ('anaesthesia', 'anesthesia', 'sedation'), ('',),
+     ('record', 'report', 'note')),
+    ('pathology', ('surgical pathology', 'pathology'), ('surgical pathology', 'pathology'),
+     ('surgical pathology', 'pathology'), ('',), ('addendum', 'results', 'result', 'report')),
+    ('radiology', (), (), ('radiology', 'imaging'), ('',), ('results', 'result', 'report')),
+)
+# A line its own author's label opens ("Endoscopist: ...", "Physician addendum: ...") is the physician's own line.
+_ROLE_PHYSICIAN = (('performing physician', 'proceduralist', 'endoscopist', 'physician', 'attending', 'surgeon', 'md'),
+                   (' attestation', ' statement', ' addendum', ' comment', ' note', ''))
+_ROLE_LEAD = ' \t-*#>•·'  # what may open a line before its label: a bullet, a heading mark
+_ROLE_DASHES = '-–—'
+# The next heading, which ends an entry: services.GENERIC_HEADING's shape (c2e53f8e) - a line of at most 61 characters
+# opening with a capital or a digit, of letters, digits and these marks only, at most a closing colon
+_ROLE_HEADING_MARKS = frozenset(" /&,()'’-")
+
+
+def another_role_hold(code: str, link: mapping.CodeLink, own_acts: Sequence, reading: Reading, read: tuple,
+                      name: str, bundled: Sequence = ()) -> Optional[Evaluation]:
+    """DECISIONS D124 (the round-4 parity audit, colon-sig gap 0; owner directive 2026-11-06, item 2: other-provider
+    acts stay distinct from completed current services): a code the per-code rule would support is held, never READY,
+    when every act it accounts for (its supporting events but the examination, which is the session: C-1) is documented
+    only in another role's entry - a nursing note, an anesthesia record, a pathology report, a radiology report - as the
+    installed release's engine._another_roles_hold holds it (c2e53f8e engine.py:948-973). None otherwise: an act with
+    any statement passage outside such entries leaves the code as it is, and so does a code that accounts for no act (a
+    base code, an examination-only EUS code: the installed release's match lists no act for them either).
+
+    An act is told only in another role's entry when EVERY located place of its statement - its kind's and status's own
+    passages, where the act itself is stated (OWN's target passages may be where the physician describes the LESION:
+    "Findings: A 6 mm polyp in the sigmoid colon." beside "Nurse: The polyp was removed with a cold snare.") - lies in
+    one: the passage begins with a role label (label_of: "Nurse:", "RN:", "Nursing note", "Pathology:", "Pathology
+    report", "Anesthesia:", "Anesthesia record" and the like, as whole labels - never "Nursing staff:", "Pathology from
+    jars 1-3 ...", "Anesthesia, equipment, and quality measures"); or, read from the document's lines, the line it
+    stands on opens with such a label, or is a role's heading line (heading_of), or follows one with no heading between
+    (heading_end: the next heading ends the entry; a blank line does not), and is no line the physician's own label
+    opens (physician). The lines are ``reading.text``: the revision text the assessment receives (assess.assess hands it
+    over); a reading without it (the review overlay's counted codes, a unit test's Reading) reads the passages' own
+    labels only, and so is a place the text does not hold verbatim.
+
+    This is no evidence binding (ADJUDICATION EB1): it reads none of Gemini's values and changes none - the act stays
+    performed, current and the documenting team's - and it only ever turns a supported code into a hold, with ONE
+    question (FINAL 7.4): performed_status, naming the entry and quoting the act's first passage in it, worded as the
+    installed release words it. Never an exclusion, and the act stays the code's read event (coverage counts it as
+    accounted for, as the installed release's held match keeps its acts). It matches no pattern (this module imports no
+    re: tests.test_interpretation_assess.Imports): its labels are compared as case-folded strings."""
+    acts = [event for event in own_acts if (event.get('catalogue_kind') or '') not in mapping.EXAMINATION_KINDS]
+    if not acts:
+        return None
+    text = getattr(reading, 'text', None)
+    text = text if isinstance(text, str) else None
+
+    def fold(line: str) -> str:  # case folded, a curly apostrophe straight, single spaces, no leading bullet or mark
+        return ' '.join(line.replace('’', "'").casefold().split()).lstrip(_ROLE_LEAD)
+
+    def whole(rest: str) -> bool:  # what follows a name or a phrase: no letter, digit or apostrophe joins it
+        return not rest or not (rest[0].isalnum() or rest[0] == "'")
+
+    def entry_rest(folded: str, form: tuple) -> Optional[str]:  # what follows the form's entry phrase folded opens with
+        for entry_name in form[3]:
+            if not folded.startswith(entry_name + ' '):
+                continue
+            rest = folded[len(entry_name) + 1:]
+            for middle in form[4]:
+                if not rest.startswith(middle):
+                    continue
+                tail = rest[len(middle):]
+                for word in form[5]:
+                    if tail.startswith(word) and whole(tail[len(word):]):
+                        return tail[len(word):]
+        return None
+
+    def label_of(line: str) -> str:
+        """The role whose label ``line`` (a passage, or a line) opens with - a name and its colon ("Nurse:", "RN:",
+        "Pathology:"), or an entry phrase followed by its end, a colon, a bracket or a dash ("Nursing note: ...",
+        "Pathology report (final): ...") - else ''."""
+        folded = fold(line)
+        for form in _ROLE_FORMS:
+            for label in form[1]:
+                if folded.startswith(label) and whole(folded[len(label):]) \
+                        and folded[len(label):].lstrip().startswith(':'):
+                    return form[0]
+            rest = entry_rest(folded, form)
+            if rest is not None and (not rest.strip() or rest.lstrip()[0] in ':(' + _ROLE_DASHES):
+                return form[0]
+        return ''
+
+    def heading_of(line: str) -> str:
+        """The role whose entry heading ``line`` is: the whole line a heading name ("NURSING", "Nursing:",
+        "Pathology:") or an entry phrase, with at most a bracketed note ("(Delphine Oakes, LPN)", "(final)"), a date or
+        a time after a colon or a dash ("Nursing note: 10/14/2026 08:30") and a closing colon - else ''."""
+        folded = fold(line)
+        for form in _ROLE_FORMS:
+            if any(folded.startswith(head) and folded[len(head):].strip() in ('', ':') for head in form[2]):
+                return form[0]
+            rest = entry_rest(folded, form)
+            if rest is None:
+                continue
+            rest = rest.strip()
+            if rest.startswith('('):
+                close = rest.find(')')
+                if close < 0 or close > 61 or '(' in rest[1:close]:
+                    continue
+                rest = rest[close + 1:].strip()
+            if rest and rest[0] in ':' + _ROLE_DASHES:
+                when = rest[1:].strip()
+                for suffix in ('a.m.', 'p.m.', 'am', 'pm'):
+                    if when.endswith(suffix) and when[:1].isdigit():
+                        when = when[:-len(suffix)].strip()
+                if not when or (when[0].isdigit() and all(char.isdigit() or char in '/.:- ' for char in when)):
+                    rest = ''
+            if rest in ('', ':'):
+                return form[0]
+        return ''
+
+    def physician(line: str) -> bool:  # the line opens with the physician's own label ("Endoscopist:", ...)
+        folded = fold(line)
+        names, kinds = _ROLE_PHYSICIAN
+        return any(folded.startswith(label + kind) and folded[len(label + kind):].lstrip().startswith(':')
+                   for label in names for kind in kinds)
+
+    def heading_end(line: str) -> bool:  # a heading of any kind (_ROLE_HEADING_MARKS), which ends the entry above it
+        body = line.lstrip(' \t-*#')
+        body = body[:-1] if body.endswith(':') else body
+        return (2 <= len(body) <= 61 and body[0].isascii() and (body[0].isupper() or body[0].isdigit())
+                and all((char.isascii() and char.isalnum()) or char in _ROLE_HEADING_MARKS for char in body))
+
+    def role_of(place: Mapping) -> str:
+        role = label_of(place['text'])
+        if role or text is None or text[place['start']:place['end']] != place['text']:
+            return role
+        at = place['start'] + len(place['text']) - len(place['text'].lstrip())
+        start = text.rfind('\n', 0, at) + 1
+        stop = text.find('\n', at)
+        line = text[start:len(text) if stop < 0 else stop].strip()
+        if physician(line):
+            return ''
+        role = label_of(line) or heading_of(line)
+        while not role and start > 0:  # the lines above, up to the nearest heading
+            above_end = start - 1
+            start = text.rfind('\n', 0, above_end) + 1
+            above = text[start:above_end].strip()
+            if not above:
+                continue
+            role = heading_of(above)
+            if not role and heading_end(above):
+                return ''
+        return role
+
+    roles: set = set()
+    shown: list = []
+    for event in acts:
+        places = sorted(reading.places(own_passages(event, ('kind', 'status'))),
+                        key=lambda item: (item['start'], item['end']))
+        if not places:
+            return None
+        found = [role_of(place) for place in places]
+        if not all(found):
+            return None
+        roles.update(found)
+        shown.extend(places)
+    what = group_label(link, accounted(link))
+    entry = wording.join(sorted(roles))
+    passage = f' ({wording.quote(shown[0]["text"], 120)})' if shown else ''
+    labels = [event_label(reading, event) for event in own_acts[:4]]
+    detail = (f'The {name} is documented as performed with {"; ".join(labels)}. But the {what} it accounts for is '
+              f'documented only in the {entry} entry{passage}, not by the physician performing the {name}. Held for '
+              'the reviewer, not excluded.')
+    question = (f'The {what} is documented only in the {entry} entry{passage}. Was it performed in this {name} on the '
+                'date of service?')
+    return Evaluation(code, link.family, link, 'uncertain', ANOTHER_ROLE, detail, read=read,
+                      question=Question('performed_status', question, detail, tuple(event['id'] for event in acts),
+                                        _spans(sorted(shown, key=lambda item: (item['start'], item['end'])))),
+                      bundled=tuple((item['id'], why) for item, why in bundled))
 
 
 def session_examination(event: Mapping, families) -> bool:

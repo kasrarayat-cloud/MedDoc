@@ -44,6 +44,7 @@ Pure and Django-free.
 """
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
@@ -148,9 +149,88 @@ def service_kind(family_slug: str) -> str:
     return SERVICE_KIND.get(family_slug, '')
 
 
+# --- a bleeding control in doubt (DECISIONS D115; the round-4 family parity audit, EGD gap D, critical) -----------------
+
+# The catalogue kind of a clip or an injection done today whose hemostasis purpose is verified but for which its own
+# words state no bleeding and name no hemostasis: "Two hemostatic clips were placed across the ulcer." beside "A 12 mm
+# clean-based ulcer ...". The adjective names the device; a prophylactic clip is no control of bleeding (the installed
+# release's HEMOSTATIC_ADJECTIVE rule, refutation multi-3, closed in ACCURACY-RESIDUALS). No code profile covers this
+# kind, so no code is matched by it - neither the bleeding-control codes (43255, 43227, 44366, 44378, 44391, 45334,
+# 45382: held with performed_status, never READY) nor the injection codes (43236, 43243: never READY on an act that may
+# be a control of bleeding) - and the coverage reads it as a bleeding control in DOUBT (coverage.doubted), never as an
+# absence: the base code beside it is held and the act is listed in doubt.
+POSSIBLE_BLEEDING_CONTROL = 'possible_bleeding_control'
+# D115: what states that bleeding is treated - the words the design names (bleeding, oozing, hemorrhage, a visible vessel,
+# an adherent clot, stigmata of recent bleeding) with their inflections, and spurting (the installed BLEEDING_PRESENT's)
+# - or names the hemostasis itself as the act (the noun: "for hemostasis", "to achieve hemostasis"; the installed rule
+# reads any bleeding-control word but the adjective as the act). An inclusion list for the READY side: a word missing here
+# leaves the act in doubt, a hold, never READY.
+BLEEDING_STATED = ('bleeding', 'bleed', 'bleeds', 'bled', 'rebleeding', 'rebleed', 'oozing', 'ooze', 'oozes', 'oozed',
+                   'hemorrhage', 'hemorrhages', 'hemorrhaged', 'hemorrhaging', 'haemorrhage', 'haemorrhages',
+                   'haemorrhaged', 'haemorrhaging', 'spurting', 'spurt', 'spurts', 'spurted', 'visible vessel',
+                   'visible vessels', 'adherent clot', 'adherent clots', 'stigmata of recent bleeding',
+                   'stigmata of recent hemorrhage', 'stigmata of recent haemorrhage', 'hemostasis', 'haemostasis')
+# D115: a word before such a word in the same words that negates it ("without stigmata of recent bleeding", "no active
+# bleeding, oozing or visible vessel", "non-bleeding"): lexicon.NEGATORS and the words of an absence. Fail-closed: any
+# one of them anywhere before it, whatever stands between (a list keeps its negation across its commas).
+BLEEDING_NEGATORS = frozenset(lexicon.NEGATORS) | frozenset({'non', 'absent', 'absence', 'free', 'negative'})
+# D115: words that make the bleeding words wherever they stand a prevention, a risk, a hedge, a condition or another
+# occasion - no bleeding treated today ("to prevent delayed bleeding", "to ensure hemostasis", "if bleeding recurs", "a
+# previously bleeding ulcer"). The act then stays in doubt (fail-closed).
+NOT_BLEEDING_NOW = frozenset({
+    'prevent', 'prevents', 'prevented', 'preventing', 'prevention', 'preventive', 'preventative', 'prophylaxis',
+    'prophylactic', 'prophylactically', 'risk', 'risks', 'reduce', 'reduces', 'reduced', 'reducing', 'minimize',
+    'minimise', 'minimizing', 'minimising', 'avoid', 'avoids', 'avoiding', 'ensure', 'ensures', 'ensuring', 'secure',
+    'securing', 'maintain', 'maintaining', 'delayed', 'future', 'potential', 'potentially', 'possible', 'possibly',
+    'probable', 'probably', 'suspected', 'suspicion', 'concern', 'concerning', 'anticipated', 'if', 'unless', 'should',
+    'would', 'could', 'may', 'might', 'history', 'historical', 'previous', 'previously', 'prior', 'ago'})
+_BLEEDING_PHRASES = tuple(tuple(lexicon.fold(phrase).split()) for phrase in BLEEDING_STATED)
+_WORD = re.compile(r"\w+(?:'\w+)*")  # a folded word, a contraction kept whole ("wasn't")
+# D115: the event's own words read (EB1: the act's own attribute words, never a passage, a neighbouring sentence or
+# another record): its kind, status, target, device and purpose words.
+HEMOSTASIS_WORDS = ('kind', 'status', 'target', 'technique', 'purpose')
+
+
+def bleeding_stated(text: str) -> bool:
+    """D115: whether one span of words ``text`` states bleeding treated, or names the hemostasis as the act: a
+    BLEEDING_STATED phrase (folded, whole words) with no BLEEDING_NEGATORS word (or a contraction in n't) anywhere before
+    it in the span, in a span holding no NOT_BLEEDING_NOW word."""
+    tokens = _WORD.findall(lexicon.fold(text))
+    if any(token in NOT_BLEEDING_NOW for token in tokens):
+        return False
+    for start in range(len(tokens)):
+        if not any(tuple(tokens[start:start + len(phrase)]) == phrase for phrase in _BLEEDING_PHRASES):
+            continue
+        if not any(token in BLEEDING_NEGATORS or token.endswith("n't") for token in tokens[:start]):
+            return True
+    return False
+
+
+def hemostasis_in_doubt(event: Mapping) -> bool:
+    """DECISIONS D115: whether ``event`` is a clip or an injection whose hemostasis purpose is verified (usable), stated
+    done (its status a usable 'performed'), for which none of its own words (HEMOSTASIS_WORDS) states bleeding or names
+    the hemostasis as the act (bleeding_stated): its catalogue kind is then POSSIBLE_BLEEDING_CONTROL, a bleeding control
+    in doubt, never one done. A statement that is not a usable 'performed' - a denial, a plan, a doubt, an attempt, a
+    status whose words do not bind - keeps the bleeding control: its own rule holds or excludes it as before (a denial of
+    "hemostatic clipping" still denies a control of bleeding). Reads only the event's own attribute words (EB1), so a
+    bleeding stated only for its lesion, elsewhere ("A 12 mm ulcer with an oozing visible vessel ..."), is not read here
+    (the event alone carries no lesion record): that act stays in doubt too - fail-closed, as the installed release
+    reads it - recorded with D115."""
+    kind = event['kind']['value']
+    purpose = event.get('purpose') or {}
+    if kind not in HEMOSTASIS_KINDS or not (verify.usable(purpose) and purpose.get('value') == 'hemostasis'):
+        return False
+    status = event.get('status')
+    if not (verify.usable(status) and status.get('value') == 'performed'):
+        return False
+    return not any(bleeding_stated(_words_text(event.get(name) or {})) for name in HEMOSTASIS_WORDS)
+
+
 def catalogue_kind(event: Mapping) -> str:
     """The catalogue kind of an event (module docstring): its kind's value read in its family, with a clip's or an
-    injection's VERIFIED hemostasis purpose. The kind's own state is not read here: a consumer reads it (7.3 line 1)."""
+    injection's VERIFIED hemostasis purpose - a bleeding control, or (DECISIONS D115) a bleeding control in doubt where
+    its own words state no bleeding (hemostasis_in_doubt). The kind's own state is not read here: a consumer reads it
+    (7.3 line 1)."""
     kind = event['kind']['value']
     if kind == EXAMINATION:
         return EUS_EXAMINATION if event.get('family') == 'gi.eus' else EXAMINATION
@@ -158,7 +238,7 @@ def catalogue_kind(event: Mapping) -> str:
         return ''
     purpose = event.get('purpose') or {}
     if kind in HEMOSTASIS_KINDS and verify.usable(purpose) and purpose.get('value') == 'hemostasis':
-        return BLEEDING_CONTROL
+        return POSSIBLE_BLEEDING_CONTROL if hemostasis_in_doubt(event) else BLEEDING_CONTROL  # D115
     return kind
 
 

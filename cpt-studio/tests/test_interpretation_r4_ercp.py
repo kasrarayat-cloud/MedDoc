@@ -340,8 +340,11 @@ class D106NothingRetrieved(SimpleTestCase):
             with self.subTest(not_said=sentence):
                 self.assertFalse(ercp.states_nothing_retrieved(sentence))
         # the recorded cost of reading the act's whole SENTENCE (D106 as specified): a negation over stones in one clause
-        # and a retrieval in another are read together - held, never READY and never excluded (fail-closed)
-        self.assertTrue(ercp.states_nothing_retrieved(
+        # and a retrieval in another are read together. DECISIONS D127 (the review's problem 3): read ALONE, every clause
+        # the act's, the sentence states a yield ("sludge was retrieved"), so its "no stones were seen" is a clearance -
+        # False here; in the sweep's own reading the yield's clause holds none of the sweep's words, so the sweep is
+        # still held, never READY and never excluded (fail-closed; tests.test_interpretation_r5_ercp pins it)
+        self.assertFalse(ercp.states_nothing_retrieved(
             'The bile duct was swept with an extraction balloon; no stones were seen; sludge was retrieved.'))
 
     def test_d106_controls_a_retrieval_and_another_supporting_extraction_keep_43264_ready(self):
@@ -379,6 +382,9 @@ FAILED = {'P1': 'The duodenoscope was advanced to the second portion of the duod
           'P2': 'The major papilla was located within a large periampullary diverticulum.',
           'P3': 'Multiple attempts at biliary cannulation were unsuccessful.',
           'P4': 'The procedure was terminated; no sphincterotomy and no stent placement were performed.'}
+# DECISIONS D127 (the review's problem 4): the warn quotes the sentence that states the failure, as the installed release
+# quotes it, no longer the bare failure-marker words ('were unsuccessful')
+FAILURE = FAILED['P3']
 
 
 def failed_cannulation(p4: str = FAILED['P4'], examination=None, cannulation=None, completion=None):
@@ -408,8 +414,8 @@ class D107AccessNotCompleted(SimpleTestCase):
     def test_d107_finding_26_a_failed_cannulation_gives_every_code_of_the_ercp_both_signals(self):
         """Finding 26's text, and the stronger variant without 'The procedure was terminated;', with no participant and
         with Astra and Fable read and proposing nothing: 43260 keeps READY and gains the service.incomplete warn (in the
-        cannulation's failure-marker words, R-4) and the installed release's 52/53 consideration; a held code of the
-        session (43261, no biopsy documented) carries both; the excluded 43262 and 43274 carry neither."""
+        sentence of the cannulation's failure-marker words, D127) and the installed release's 52/53 consideration; a held
+        code of the session (43261, no biopsy documented) carries both; the excluded 43262 and 43274 carry neither."""
         for p4 in (FAILED['P4'], 'No sphincterotomy and no stent placement were performed.'):
             inv, text, codes = failed_cannulation(p4)
             record = events.Reading.of(inv).events['E2']
@@ -420,7 +426,7 @@ class D107AccessNotCompleted(SimpleTestCase):
                     result = run(inv, text, codes[:3], participants=participants)
                     base = proposal(result, '43260')
                     self.assertEqual((base.status, asked(base), carried(base)),
-                                     ('ready', [], signals('43260', 'were unsuccessful')))
+                                     ('ready', [], signals('43260', FAILURE)))
                     self.assertEqual(check(base, INCOMPLETE).status, 'warn')
                     for code in ('43262', '43274'):
                         p = proposal(result, code)
@@ -431,7 +437,7 @@ class D107AccessNotCompleted(SimpleTestCase):
                     for code in ('43261', '43260'):
                         p = proposal(result, code)
                         self.assertEqual((p.status, carried(p)),
-                                         ('needs_clarification', signals(code, 'were unsuccessful')), code)
+                                         ('needs_clarification', signals(code, FAILURE)), code)
 
     def test_d107_the_examination_stated_terminated_keeps_its_own_words_first(self):
         """The examination's own statement is read first (D61's completion, then D71's status): stated begun and not
@@ -474,7 +480,7 @@ class D107AccessNotCompleted(SimpleTestCase):
                                  (['cannulation'] if name == 'earlier' else [], ((), [])))
         inv, text, _codes = failed_cannulation()
         reading = events.Reading.of(inv)
-        self.assertEqual(ercp.access_not_completed(reading, 'gi.ercp'), 'were unsuccessful')
+        self.assertEqual(ercp.access_not_completed(reading, 'gi.ercp'), FAILURE)
         self.assertIsNone(ercp.access_not_completed(reading, 'gi.egd'))
         self.assertIsNone(assess._incomplete_session('gi.egd', reading, coverage.sessions(reading)))
 
@@ -487,10 +493,14 @@ class D107AccessNotCompleted(SimpleTestCase):
                  'P2': 'Deep biliary cannulation was achieved with a sphincterotome.'}
         achieved = ercp_act('E2', 'P2', 'cannulation', 'Deep biliary cannulation', 'was achieved',
                             target=tg('', 'bile_duct', 'biliary', ['P2']))
+        # DECISIONS D127: the biliary attempt beside the access achieved is the cannulation stated both achieved and not
+        # (the parity audit's note 1): 43260 is held with the cannulation question, as the installed release holds it,
+        # and keeps both signals, quoting the failure's sentence (the review's problem 4)
         shapes = {'pancreatic': ('Pancreatic duct cannulation was unsuccessful.',
                                  tg('', 'pancreatic_duct', 'Pancreatic duct', ['P3']), 'was unsuccessful', None),
                   'biliary, before': ('Initial attempts at biliary cannulation were unsuccessful.',
-                                      tg('', 'bile_duct', 'biliary', ['P3']), 'were unsuccessful', 'were unsuccessful')}
+                                      tg('', 'bile_duct', 'biliary', ['P3']), 'were unsuccessful',
+                                      'Initial attempts at biliary cannulation were unsuccessful.')}
         for name, (p3, target, words, expected) in shapes.items():
             failed = ercp_act('E3', 'P3', 'cannulation', 'cannulation', words, status='attempted_not_completed',
                               target=target)
@@ -501,5 +511,6 @@ class D107AccessNotCompleted(SimpleTestCase):
                 self.assertEqual(reading.events['E3']['target']['state'], 'verified')
                 self.assertEqual(ercp.access_not_completed(reading, 'gi.ercp'), expected)
                 base = proposal(run(inv, text, [('43260', lines['P1'])]), '43260')
-                self.assertEqual((base.status, carried(base)),
-                                 ('ready', signals('43260', expected) if expected else ((), [])))
+                self.assertEqual((base.status, asked(base), carried(base)),
+                                 ('needs_clarification', ['cannulation'], signals('43260', expected)) if expected else
+                                 ('ready', [], ((), [])))

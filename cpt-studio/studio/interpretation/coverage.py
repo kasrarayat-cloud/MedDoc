@@ -380,11 +380,36 @@ def _placed_eus(found) -> bool:
                for event in found for place in eus_places(event) if place)
 
 
+# DECISIONS D114 (the round-4 review of D108, parity note 1): the regions an EGD examines, as the installed release's
+# services.FAMILY_REGIONS gives them ('gi.egd': the upper tract - the esophagus, the stomach and the duodenum;
+# 'gi.enteroscopy': the small bowel alone, a region mapping.REGION_OF keeps apart from the duodenum's)
+EGD_REGIONS = frozenset({'esophagus', 'stomach', 'duodenum'})
+
+
+def coding_family(reading, event: Mapping) -> str:
+    """DECISIONS D114 (the round-4 review of D108, parity note 1): the family whose session ``event`` belongs to for
+    coding - Gemini's (normalize's ``family``), except an ACT Gemini files under the enteroscopy whose VERIFIED target
+    lies in a region the EGD examines (EGD_REGIONS), outside the small bowel the enteroscopy examines, in an encounter
+    with a DONE EGD examination (done_examinations): that act is the EGD session's, as the installed release gives an
+    act to the family whose regions hold its site (services._family_for_act_in over FAMILY_REGIONS). Read as the
+    enteroscopy's, "Two gastric antral angioectasias were treated with argon plasma coagulation." beside a done EGD and
+    a push enteroscopy left 43235 READY beside it, where the installed release holds 43235 base_included (and holds
+    44369, classes.act_elsewhere's rule). An act whose place is not verified (mapping.target_landmark: '' for an
+    unusable or unplaced target) keeps Gemini's family, and an examination (the session itself) never moves."""
+    family = event.get('family') or ''
+    kind = event.get('catalogue_kind') or ''
+    if family != 'gi.enteroscopy' or not kind or kind in NOT_ACT_KINDS:
+        return family
+    if mapping.region(mapping.target_landmark(event)) not in EGD_REGIONS:
+        return family
+    return 'gi.egd' if done_examinations(reading, 'gi.egd') else family
+
+
 def sessions(reading) -> dict:
     """{session id (the family slug): Session} of every family with an event, in the families' order."""
     by_family: dict = {}
     for event in reading.events.values():
-        family = event.get('family') or ''
+        family = coding_family(reading, event)  # D114: the family an act belongs to for coding, by its region
         if family:
             by_family.setdefault(family, []).append(event)
     found = {}
@@ -480,17 +505,55 @@ def session_of(sessions_: Mapping, family: str) -> str:
 
 # --- reportable and doubted events ---------------------------------------------------------------------------------------
 
+# DECISIONS D116 (the round-4 family parity audit, EGD gap A): the stent's own acts besides its placement. Gemini files
+# "The fully covered esophageal stent was removed by its retrieval loop without difficulty." as a stent_removal and "The
+# esophageal stent was exchanged for a new 18 mm fully covered esophageal stent ..." as a stent_exchange (prompt.py's
+# KINDS), and only the ERCP's catalogue entry lists them: read as no act of the EGD, they left 43235 READY beside them,
+# where the installed release reads a stent act there and holds it base_included.
+STENT_ACTS = frozenset({'stent_removal', 'stent_exchange'})
+
+
 def reportable_kind(event: Mapping) -> bool:
+    """A kind of the family's catalogue acts - not the examination, an umbrella or NOT_REPORTED - or (DECISIONS D116) a
+    stent removal or a stent exchange in a family whose catalogue acts hold the stent placement (the EGD, the
+    enteroscopy, the colonoscopy, the sigmoidoscopy; the ERCP lists them itself): a reportable kind of its session for
+    the base rule, and doubted when in doubt, whether or not a code profile of the family accounts for it."""
     entry = catalogue.entry(event.get('family', ''))
     kind = event.get('catalogue_kind') or ''
-    return (entry is not None and kind in entry.acts and kind not in NOT_ACT_KINDS
-            and kind not in catalogue.NOT_REPORTED)
+    if entry is None or kind in NOT_ACT_KINDS or kind in catalogue.NOT_REPORTED:
+        return False
+    return kind in entry.acts or (kind in STENT_ACTS and 'stent' in entry.acts)  # D116
 
 
 def reportable(reading, event: Mapping) -> bool:
     """7.8: performed, current and by the documenting team, of a reportable kind, not bundled."""
     return (events.done(event) and events.value(event, 'status') == 'performed' and events.usable(event, 'kind')
             and events.usable(event, 'procedure') and reportable_kind(event) and not bundled_reason(reading, event))
+
+
+def _stated_here(event: Mapping) -> bool:
+    """Stated positive or uncertain, and neither verified at another time nor by another performer (doubted's frame)."""
+    return (events.value(event, 'status') in verify.POSITIVE + ('uncertain',)
+            and not events.verified_other_time(event) and not events.verified_other_performer(event))
+
+
+def _removal_in_doubt(event: Mapping) -> bool:
+    """DECISIONS D117: a positive or uncertain removal of unstated method (the 'removal' umbrella), not verified at
+    another time or by another performer, in a family whose catalogue acts hold a removal method
+    (mapping.REMOVAL_MEMBERS: the EGD, the enteroscopy, the colonoscopy, the sigmoidoscopy)."""
+    entry = catalogue.entry(event.get('family', ''))
+    return (event.get('catalogue_kind') == mapping.REMOVAL and entry is not None
+            and any(member in entry.acts for member in mapping.REMOVAL_MEMBERS) and _stated_here(event))
+
+
+def _bleeding_control_in_doubt(reading, event: Mapping) -> bool:
+    """DECISIONS D115: a bleeding control in doubt (mapping.POSSIBLE_BLEEDING_CONTROL) of a family whose catalogue acts
+    hold the bleeding control, not verified at another time or by another performer, that read as the bleeding control
+    would not be part of a removal (bundled_reason: D30's procedural adjunct, D79's attempted whole)."""
+    entry = catalogue.entry(event.get('family', ''))
+    return (event.get('catalogue_kind') == mapping.POSSIBLE_BLEEDING_CONTROL and entry is not None
+            and mapping.BLEEDING_CONTROL in entry.acts and _stated_here(event)
+            and not bundled_reason(reading, {**event, 'catalogue_kind': mapping.BLEEDING_CONTROL}))
 
 
 def doubted(reading, event: Mapping) -> bool:
@@ -504,7 +567,22 @@ def doubted(reading, event: Mapping) -> bool:
     as one, it was neither reportable nor doubted and 43235 went READY beside four EGD biopsies, where the installed
     release asks base_included. Unverified is a doubt, never an absence (D62's rule, for the procedure). This reads the
     act in the session of the family its procedure names, the one session event_coding lists it in; an act whose
-    procedure is absent has no family and no session (the cross-family part of D75 is recorded, not built here)."""
+    procedure is absent has no family and no session (the cross-family part of D75 is recorded, not built here).
+
+    Two acts no code can rest on are doubts of their session, never absences:
+    - DECISIONS D117 (the round-4 family parity audit, EGD gap B): a removal whose method is not stated (Gemini's
+      'removal' umbrella: "A polypectomy of the gastric body polyp was performed.", attested in fb08, v4 and fb09)
+      stated positive or uncertain, in a family whose catalogue acts hold a removal method (_removal_in_doubt). It may
+      be any of those reportable acts; as an umbrella (NOT_ACT_KINDS) it was neither reportable nor doubted, and 43235
+      alone was READY with coding complete, where the installed release reads a snare there and holds it base_included.
+    - DECISIONS D115 (the round-4 family parity audit, EGD gap D, critical): a bleeding control in doubt
+      (mapping.POSSIBLE_BLEEDING_CONTROL: a hemostatic clip or injection whose own words state no bleeding), in a family
+      whose catalogue acts hold the bleeding control (_bleeding_control_in_doubt) - unless, read as the bleeding control,
+      it would be part of a removal (D30, D79: bundled_reason's procedural-adjunct arm), which no rule reports alone.
+      Read as an absence, "Two hemostatic clips were placed across the ulcer." beside a clean-based ulcer left 43235
+      READY, where 437b708bb held it base_included beside the bleeding control it read there."""
+    if _removal_in_doubt(event) or _bleeding_control_in_doubt(reading, event):  # D117, D115
+        return True
     if not reportable_kind(event) or events.value(event, 'status') not in verify.POSITIVE + ('uncertain',):
         return False
     if events.verified_other_time(event) or events.verified_other_performer(event):
@@ -736,6 +814,50 @@ def in_doubt_questions(reading, coverage: Coverage, asked=()) -> list:
         seen.add((item['family'], question.fact))
         out.append(ClarificationSpec(scope='service', fact=question.fact, question=question.question,
                                      reason=question.reason, family=item['family']))
+    return out
+
+
+def service_extent_questions(reading, sessions_: Mapping, asked=()) -> list:
+    """DECISIONS D125 (the round-4 parity audit: colon-sig gap 1, egd gap I; the enteroscopy review's parity note 2):
+    the service-scope extent question of the installed release's reconcile.documentation_clarifications (c2e53f8e
+    reconcile.py:960-967, asked through engine._service_questions) - for each documented session (a done event: the
+    services the reconciliation reads) of a colonoscopy, a flexible sigmoidoscopy, an upper endoscopy or an enteroscopy
+    whose done examinations (done_examinations) state neither a reach nor a completion, and for which no proposal of
+    the family already asks the extent (``asked``: the (family, fact[, question]) of the proposals' questions, as assess
+    passes in_doubt_questions; an excluded proposal asks none), once per family: the catalogue's own question
+    (catalogue.ENDOSCOPIC_QUESTIONS, "How far was the instrument advanced (the landmark reached)?"), counted among the
+    open questions as there.
+
+    A reach or a completion counts as stated when it is usable (verified, or default-accepted, and not opened) - a reach
+    that names a place (not 'not_stated'), a completion stated complete or incomplete. One that is unverified or opened
+    is a doubt, never a fact (DECISIONS D87): it establishes no extent, so the question is asked, never dropped; so is a
+    reach only an examination D62 reads as possibly current states (never ``done_examinations``'), and a session told
+    only by its acts, which no reach entry can name. A question only: no code's status changes."""
+    families = ('gi.egd', 'gi.colonoscopy', 'gi.flex_sig', 'gi.enteroscopy')  # reconcile.py:961-962's (c2e53f8e)
+    proposed = {(entry[0], entry[1]) for entry in asked}
+    out = []
+    for session in sessions_.values():
+        family = session.family
+        entry = catalogue.entry(family)
+        if family not in families or not session.done or entry is None or entry.support != catalogue.SUPPORTED:
+            continue
+        question = dict(entry.questions).get('extent')
+        if not question or (family, 'extent') in proposed:
+            continue
+        stated = False
+        for exam in done_examinations(reading, family):
+            reach, completion = exam.get('extent'), exam.get('completion')
+            if (verify.usable(reach) and reach.get('value') not in ('', 'not_stated')) or (
+                    verify.usable(completion) and completion.get('value') in ('complete', 'incomplete')):
+                stated = True
+                break
+        if stated:
+            continue
+        proposed.add((family, 'extent'))
+        out.append(ClarificationSpec(
+            scope='service', fact='extent', question=question, family=family,
+            reason=(f"CPT Studio's reading of the documented {session.label} does not establish how far the instrument "
+                    'was advanced or whether the examination was completed.')))
     return out
 
 

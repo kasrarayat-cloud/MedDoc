@@ -4032,3 +4032,1333 @@ evidence, and such an argument comes back to the owner of these decisions.
     The head-to-head is unchanged (214/234; worse on 5 rows, all holds).
   - Before ANY merge: the reviews of these three patches, the rebuilt second-review, the five unbuilt repairs and
     refutation round 5 must all run, as AGENTS.md's mandatory adversarial pass requires.
+
+- **D114 An ileal reach beside a stoma or pouch fits a class only through the examination's own route; an enteroscopy
+  act in the upper tract beside a done EGD is the EGD session's (2026-11-11; the round-4 review of D108, problems 0, 2
+  and 4, and its parity note 1; amends D108).**
+  - Problems 0 and 2 (critical-class by finding 24's grading). D108 read the stoma and pouch classes' route from the
+    ENCOUNTER's anatomy (D43's has_stoma). The anatomy says a stoma or a pouch exists; it never says the examination went
+    through it. So with a verified stoma or pouch and an ileal reach, the oral class and the stoma or pouch class were
+    both READY when each was proposed alone, and one of them is wrong on every such document.
+    - The review's input (the author's own READY control, tests/test_interpretation_r4_enteroscopy.py ileoscopy(), and the
+      review's stoma_ileoscopy): 'The patient has an end ileostomy after a total proctocolectomy for Crohn disease.' /
+      'The enteroscope was advanced through the ileostomy into the neo-terminal ileum for 25 cm.' / 'Biopsies of the
+      neo-terminal ileum were taken with cold forceps.'. 1caaf0609: 44377 READY beside the correct 44382, READY too.
+    - The pouch input (pouch_prepouch): 'The endoscope was advanced through the anus into the J-pouch and through the
+      pouch inlet into the pre-pouch ileum for 15 cm.', a verified J-pouch. 1caaf0609: 44377 READY.
+    - The twins whose Procedure line names an enteroscopy, and the 'distal ileum' reaches: 44377 READY.
+  - Problem 4 (the disclosed residual, extended). An ORAL double-balloon enteroscopy to the proximal ileum ('The
+    double-balloon enteroscope was advanced orally to the proximal ileum.') beside an end ileostomy made 44382 READY,
+    and beside an ileal J-pouch made 44386 READY.
+  - The installed release c2e53f8e holds every one of these inputs: extent, with performed_status on the ileoscopy and
+    pouchoscopy documents (engine.assess as tests/test_harness_engine.py drives it, and jobs._assess_child: the two
+    drivers agree on all 128 probe rows).
+  - The rule (classes.py; no other file):
+    - When the encounter has a verified stoma or pouch (classes.routes: D43's has_stoma, and a usable altered pouch
+      entry), an ileal reach (the ileum, the terminal or neo-terminal ileum) fits:
+      - ILEAL (44376-44379) only when the examination's route is verified oral;
+      - STOMA (44380-44384) only when it is verified through the stoma (and the anatomy's stoma, as D108);
+      - POUCH (44385-44386) only when it is verified through the pouch (and the anatomy's pouch, as D108).
+      A route not verified fits none of them: every such code is held, never READY and never excluded.
+    - The route is verified (examination_route) when the usable words of the examination's own statement - its
+      procedure, kind, technique and status words (ROUTE_STATED) - name exactly one route of ROUTE_WORDS, and no other
+      route is named in ANY of its own located words (ROUTE_READ: its reach, completion, target, time, performer, scope
+      and purpose words too).
+      - ROUTE_WORDS, matched in lexicon.fold's form and word-bounded (lexicon.found): oral - 'orally', 'oral',
+        'peroral', 'perorally', 'per oral', 'per os', 'transoral', 'transorally', 'through the mouth', 'via the mouth',
+        'by mouth', 'antegrade', 'antegradely', 'anterograde', 'anterogradely'; the stoma - 'ileostomy', 'ileostomies',
+        'stoma', 'stomas', 'stomal', 'ostomy', 'ostomies'; the pouch - 'pouch', 'pouches', 'pouchoscopy', 'reservoir'.
+      - EB1: only the words Gemini cited for the examination's own attributes, located in their own passages, are
+        read; no passage is scanned. Unlocated words are not stored, so they name nothing.
+      - Why the reach words never VERIFY a route: they name the point reached, and a stoma or pouch named there is a
+        place ("the pre-pouch ileum", "the distal ileum, 20 cm proximal to the ileostomy"). They still DOUBT another
+        route (D87): a route named anywhere else in the examination's words leaves the route not verified.
+    - Without a verified stoma or pouch the classes read as D108 built them, and a reach at the pouch itself is the
+      pouch class's whatever the words (D114 reads the route for an ileal reach only).
+    - The hold, fact extent (classes.class_hold):
+      - ROUTE_FORM, where the reach, the anatomy and the incompleteness fit the code's own class and only the route is
+        not verified: 'The documented enteroscopy (“neo-terminal ileum”) reached the neo terminal ileum; CPT Studio
+        could not confirm from the document whether it was passed through the mouth or through the documented stoma.
+        Was a small-bowel enteroscopy past the second portion of the duodenum that reaches the ileum performed on the
+        date of service?'. An examination also stated incomplete adds ' and is stated to be incomplete' to the same one
+        question (both doubts in it; with the oral route verified, D108's incomplete form).
+      - D108's CLASS_FORM where the route is verified as another class's, the route named: '... reached the ileum
+        through the mouth (“was advanced orally”). Was an examination of the ileum through a stoma performed on the date
+        of service?'.
+      - D108's other arms unchanged. "Another class fits" still reads the reach and the anatomy only, so 44361 on an
+        unrouted ileal reach beside a stoma keeps D108's class question, never R6's extent question.
+  - Parity note 1 (the review's report-only rule gap). c2e53f8e gives an act to the family whose regions hold its site
+    (services.FAMILY_REGIONS: 'gi.enteroscopy' the small bowel alone; 'gi.egd' the esophagus, the stomach and the
+    duodenum; _family_for_act_in). The new path followed Gemini's procedure for the act.
+    - The note's input: 'EGD AND PUSH ENTEROSCOPY REPORT' / 'Procedure: EGD and push enteroscopy.' / 'EGD: The
+      gastroscope was advanced to the second portion of the duodenum.' / 'Push enteroscopy: The enteroscope was then
+      advanced to the proximal jejunum.' / 'Two gastric antral angioectasias were treated with argon plasma
+      coagulation.', the APC filed under the push enteroscopy.
+    - 1caaf0609: 44369 READY; 43235 READY alone and beside 44369; 43270 held (performed_status); 44360 held
+      (base_included). c2e53f8e: 44369 held (performed_status), 43235 held (base_included), 43270 READY, 44360 READY.
+    - The rule:
+      - coverage.coding_family (NEW) and its ONE call, where sessions() groups the events by family: an ACT Gemini files
+        under the enteroscopy whose VERIFIED target (mapping.target_landmark) lies in an EGD region (EGD_REGIONS, the
+        installed FAMILY_REGIONS['gi.egd'], pinned equal to it by a test-only import) is the EGD session's when the
+        encounter has a DONE EGD examination (done_examinations). An examination never moves, and an act whose place is
+        not verified keeps Gemini's family. So event_coding lists the act in the EGD session (43235 base_included), and
+        coverage lists it there.
+      - classes.act_elsewhere / elsewhere_hold: an enteroscopy code each of whose supporting acts (events.supports), for
+        one of its requirement groups, its own session does not hold - the grouping the call made - is held:
+        service.act_elsewhere (the installed release's id and label), warn; fact performed_status: 'The documented
+        ablation (“Two gastric antral angioectasias”) is at the gastric antrum, which the upper endoscopy of this
+        encounter examines. Was ablation performed in the small-bowel enteroscopy on the date of service?'. Never READY,
+        never excluded.
+      - The enteroscopy's diagnostic code (44360, 44376, 44380, 44385: a code that accounts for the examination
+        itself) is held beside such a moved act when it is reportable or doubted (coverage.reportable / doubted - what
+        held it base_included in its own session at 1caaf0609): service.act_elsewhere, warn; fact procedure,
+        wording.procedure_question: 'In which procedure was the ablation (“Two gastric antral angioectasias”) done?'.
+        Without this arm the move would turn 44360 from held (base_included) to READY, which c2e53f8e does but the spec
+        does not ask; Gemini's own reading of the act as the enteroscopy's stays a doubt (D87). A denial at the stomach
+        holds nothing (as at 1caaf0609).
+      - D89 (questions are never displaced): a code held by its class AND by its act's region asks both in one question,
+        the class question first (its check carries both reasons). The input: the note's document with the push
+        enteroscopy 'advanced to the third portion of the duodenum' (the second portion's landmark). 1caaf0609 asked 44369
+        R6's extent question; it still does, followed by the act's.
+    - The new path after D114 on the note's input: 44369 held (service.act_elsewhere), 43235 held base_included alone and
+      beside 44369, 44360 held (its base_included question becomes the act's procedure question; beside 44369 it asks
+      both), 43270 held as before (performed_status; see "not built").
+  - Pins: tests/test_interpretation_r5_enteroscopy_route.py, 23 tests.
+    - RouteOfTheExamination:
+      - test_d114_44377_on_an_ileoscopy_through_the_ileostomy_is_held (problem 0; the route question, and the class
+        question with the route named when the words name the ileostomy);
+      - test_d114_44382_on_the_ileoscopy_is_ready_only_through_its_verified_stoma_route (READY with 'Ileoscopy through
+        the ileostomy' as procedure words, or 'was advanced through the ileostomy' as status words; held otherwise);
+      - test_d114_44377_on_a_pouchoscopy_into_the_pre_pouch_ileum_is_held (problem 0's pouch input; 44386 READY through
+        'Pouchoscopy'; both held with no route words);
+      - test_d114_the_oral_dbe_in_an_ileostomy_patient_holds_44382_and_readies_44377_only_orally (problem 4);
+      - test_d114_the_oral_dbe_in_a_j_pouch_patient_holds_44386_and_readies_44377_only_orally (problem 4's pouch
+        analogue);
+      - test_d114_the_specs_oral_words_verify_the_oral_route ('peroral', 'antegrade', 'per os', 'through the mouth');
+      - test_d114_a_route_named_two_ways_is_not_verified ('orally' beside 'pre-pouch ileum'; beside '20 cm proximal to
+        the ileostomy');
+      - test_d114_reach_words_never_verify_a_route;
+      - test_d114_words_of_an_unusable_attribute_never_verify_a_route (procedure words opened by Gemini's own question);
+      - test_d114_an_incomplete_examination_asks_one_route_question_naming_both.
+    - ScopeOfTheRoute:
+      - test_d114_without_a_stoma_or_pouch_the_oral_classes_read_as_d108_built_them (the spec's control: 44377 READY on
+        a verified ileal reach; c2e53f8e holds it, extent and performed_status, as it holds D108's controls);
+      - test_d114_a_reach_at_the_pouch_is_the_pouchs_whatever_the_words (44386 READY, as D108; c2e53f8e holds it);
+      - test_d114_the_jejunal_class_reads_its_reach_only_beside_a_stoma;
+      - test_d114_the_route_words_are_the_specs_and_no_sentence_names_a_vendor.
+    - RegionOfTheAct:
+      - test_d114_the_gastric_apc_filed_under_the_enteroscopy_is_the_egd_sessions;
+      - test_d114_44369_is_held_on_the_gastric_apc_and_43235_base_included_beside_it;
+      - test_d114_the_esophagus_and_the_duodenum_are_the_egds_regions_too;
+      - test_d114_a_small_bowel_act_stays_the_enteroscopys (control: 44369 and 43235 READY);
+      - test_d114_an_act_whose_place_is_not_verified_keeps_geminis_family;
+      - test_d114_without_a_done_egd_the_act_keeps_its_family (no EGD; a planned EGD);
+      - test_d114_a_code_held_by_its_class_and_by_its_acts_region_asks_both_in_one_question;
+      - test_d114_the_enteroscopys_base_code_stays_held_beside_its_moved_act (alone, beside 43235, beside 44369; the
+        denial and the jejunal controls);
+      - test_d114_an_examination_and_an_egds_own_act_never_move.
+  - One existing expectation changed, as the spec requires:
+    test_d108_an_ileoscopy_through_the_encounters_verified_stoma_fits_44380_to_44384 (test_interpretation_r4_enteroscopy).
+    Its answer's examination words ('ILEOSCOPY', 'enteroscope', 'was advanced') name no route, so 44382 is now held with
+    the route question; the READY control with the route named is the new module's. Its name is kept for traceability.
+  - Mutation proof: 22 mutants, each made in its own copy of the final tree (hard-linked, the mutated file written as a
+    new inode), applied exactly once and confirmed by its marker; each copy differs from the work tree in that file
+    alone (sha256), and the work tree's manifest is the same before and after. Every mutant fails at least one pin, and
+    every new pin and the changed one fails under at least one mutant.
+    - M1 the call in sessions() removed; M2 the act_elsewhere hold removed; M3 the target read unverified; M4 no done EGD
+      needed; M5 the small bowel among EGD_REGIONS; M6 an examination moved too.
+    - M7 the route never decides; M8 a route named elsewhere no doubt; M9 the reach words verify a route; M10 an
+      unusable attribute's words verify; M11 the route read for a pouch reach; M12 no oral words; M13 the route question
+      never chosen; M14 the route question drops the incompleteness; M15 the class question no longer names the route;
+      M16 "another class fits" reads the route (44361 falls to R6's question); M17 the stoma and pouch routes swapped; M18
+      the route read with no stoma or pouch.
+    - M19 the act's region hold displaces the class hold; M20 the class hold displaces the region hold.
+    - M21 the diagnostic code's arm removed (44360 READY beside its moved act); M22 that arm held beside any moved event,
+      a denial too.
+  - Suites (t.sh, Postgres 127.0.0.1:55461, a new suffix each run):
+    - the 46 tests.test_interpretation_* modules (45 at 1caaf0609, the replay pins among them), with
+      test_pipeline_assess_events, test_readers_dispatch, test_guard_static and test_guard_mutation: 1,303 tests at
+      1caaf0609, OK; 1,326 on the repair, OK (1,303 + the 23 new; the changed D108 pin passes);
+    - the modules that switch on the new chain (test_change_context_events, both guard matrices,
+      test_overlay_differential, test_peer_heading, test_pipeline_api, test_pipeline_interpret,
+      test_retry_reading_api, test_models_event_inventory, test_repairs_7c8_p1reports, test_repairs_7c8_p1sends,
+      test_repairs_ec5_reportruns): 266 tests, OK, 3 skipped, on the repair.
+  - Cost on FRESH-2 (f2r5b-enteroscopy-route against f2r5int): none.
+    - The summary is unchanged: A 96/6, B 177/15, C 171/19 plus 2 safe_hold.
+    - 0 of 486 rows change in any field, and all 360 scored files are byte-identical (diff -rq; every file rewritten
+      after the scoring began). FRESH-2 has no enteroscopy session and no act filed under one.
+    - The head-to-head (h2h.json) is identical to h2h-r5int.json in every key: run 1 214/234, worse on the same 5 rows
+      (all holds), better on 69, facts moved 0, 7 unstable, 126 rows run three times.
+    - 0 new false READY, false exclusion, dropped question or ready-on-wrong-facts. The replay pins pass unchanged.
+  - Cost on the 128 probe rows (tools/cases.py; pristine 1caaf0609, the build, c2e53f8e by both drivers, which agree on
+    all 128): 0 held turned READY, 0 excluded; 66 rows change (status, facts, checks or wording), each from READY to
+    held, by an added question or by a question's wording, except three where 44360's question changes fact
+    (base_included to procedure, above). The holds of a code c2e53f8e also holds but that may be correct:
+    - 44382 on the author's ileoscopy control and 44377 on an oral examination whose words name no route (the route
+      not verified): the spec's fail-closed rule;
+    - 44377 on 'The double-balloon enteroscope was advanced orally to the pre-pouch ileum.' with 'orally' verified: the
+      J-pouch named in the reach words is a doubt.
+  - Not built, recorded:
+    - 43270 is not made READY on the note's input. A code's support reads the act's OWN family (events.is_candidate,
+      events.py: event['family'] != link.family), outside this repair's ownership; the call in sessions() changes the
+      sessions, event_coding and coverage only. c2e53f8e READYs 43270 there; the new path holds it (performed_status), as
+      at 1caaf0609.
+    - Without a verified stoma or pouch, a route through a stoma named in the examination's own words is not read (the
+      spec: D108 as built). 'Procedure: Ileoscopy through the ileostomy.' with no anatomy entry: 44377 READY (1caaf0609
+      READY; c2e53f8e holds).
+    - The spec's rule (a route word NAMED in the statement's words) cannot tell a route from a place inside those words.
+      Status words 'was advanced to the distal ileum, 20 cm proximal to the ileostomy' verify the stoma route: 44382
+      READY (1caaf0609 READY; c2e53f8e holds extent). Closing it needs route phrases or a route attribute in the schema
+      (a new INTERPRETATION_VERSION).
+    - A stoma's type is still not read (D108's residual), now through the words too: 'was advanced through the colostomy
+      stoma into the terminal ileum' beside an 'end colostomy' entry names 'stoma': 44382 READY (1caaf0609 READY;
+      c2e53f8e holds).
+    - The jejunal class reads its reach only (the spec reads the route for an ileal reach): an ileoscopy 'through the
+      ileostomy' to the proximal jejunum: 44361 READY (1caaf0609 READY; c2e53f8e holds).
+    - The retrograde route is not read without a stoma or pouch (D108's residual): 44377 READY on the retrograde DBE.
+    - The region rule needs a DONE EGD (the spec). Beside an EGD that is only possibly this encounter's (D62: its time
+      words 'At the index visit'), the gastric act stays the enteroscopy's: 44369 READY (1caaf0609 READY; c2e53f8e holds
+      performed_status). D87's reading would make the act's family a doubt.
+    - An EGD Gemini makes the push enteroscopy's endoscopic portion (part_of) is still a done EGD session: the gastric act
+      moves to it and 44369 is held there too (a hold; c2e53f8e reads no part_of).
+    - The region rule moves only enteroscopy acts into a done EGD. An EGD act in the small bowel beside a done
+      enteroscopy, and an enteroscopy act at the colon or the ampulla, keep Gemini's family.
+    - A code held by both its class and its act's region carries one check, the class check, with both reasons; the
+      service.act_elsewhere id appears only where the region holds it alone.
+    - By construction (not probed): a DOUBTED enteroscopy act that moves to the EGD lists its in_doubt item, and asks its
+      service question, in the EGD session (coverage.reconcile reads session.events), not the enteroscopy's.
+    - An act code with one supporting act in its own session and another moved (a jejunal and a gastric APC, both filed
+      under the enteroscopy) is READY on its own act, as before, whichever passage it cites; its events.match check
+      still lists both acts (support reads Gemini's family). c2e53f8e READYs 44369 citing the jejunal APC and holds it
+      (performed_status) citing the gastric one; the new path READYs it citing either.
+    - The route words are an engine list in classes.py (read at assess time over the stored located words), not one of
+      lexicon.py's binding lists versioned by INVENTORY_VERSION; ENGINE_VERSION is unchanged, as for D108.
+    - "OUTSIDE the small bowel (the stomach, the esophagus)": EGD_REGIONS follows the installed FAMILY_REGIONS and
+      includes the duodenum, whose region mapping.REGION_OF keeps apart from the small bowel's. 'Two duodenal bulb
+      angioectasias were treated with argon plasma coagulation.' moves to the EGD and holds 44369 (pinned); c2e53f8e
+      holds it too and READYs 43270.
+
+- **D115 A hemostatic clip or injection whose own words state no bleeding is a bleeding control in doubt (2026-11-11;
+  the round-4 family parity audit, EGD gap D, critical; amends FINAL 7.7's clip rule as mapping.catalogue_kind reads it;
+  repair key egd).** catalogue_kind read any clip or injection whose purpose 'hemostasis' is verified as a bleeding
+  control. The purpose is verified when its words bind (normalize.py:602), so the adjective alone made a control of
+  bleeding.
+  - The gap's input (audit case D1): 'The gastroscope was advanced to the second portion of the duodenum.' / 'A 12 mm
+    clean-based ulcer was seen in the gastric antrum.' / 'Two hemostatic clips were placed across the ulcer.' Gemini: E2
+    clip, performed, technique 'hemostatic clips', target L1, purpose hemostasis worded 'hemostatic' (the attested note8
+    and C2MEM purpose shape). 43255 cites the clip sentence.
+    - 1caaf0609: 43255 READY on "bleeding control (clip) of the 12 mm clean-based ulcer".
+    - c2e53f8e (harness configured, as production runs it): 43255 held [performed_status], "The documented upper
+      endoscopy leaves the bleeding control in doubt (...). Was a bleeding control performed on the date of service?"
+      (HEMOSTATIC_ADJECTIVE, refutation multi-3).
+  - The rule (mapping.catalogue_kind's bleeding-control arm, mapping.hemostasis_in_doubt, mapping.bleeding_stated). A
+    clip or an injection with a usable hemostasis purpose and a usable 'performed' status is a bleeding control only
+    when one of its OWN words (kind, status, target, device, purpose) states bleeding or names the hemostasis as the act:
+    - BLEEDING_STATED: bleeding (bleed, bled, rebleeding), oozing, hemorrhage, spurting, a visible vessel, an adherent
+      clot, stigmata of recent bleeding or hemorrhage, and the noun hemostasis ("for hemostasis", "to achieve
+      hemostasis"; the installed rule reads any bleeding-control word but the adjective as the act);
+    - not counted when a negator stands anywhere before it in the same words (lexicon.NEGATORS, non, absent, absence,
+      free, negative, a contraction in n't: "no active bleeding, oozing or visible vessel", "the non-bleeding ulcer",
+      "without stigmata of recent bleeding");
+    - not counted in words that hold a prevention, risk, hedge, condition or other-occasion word (NOT_BLEEDING_NOW: "to
+      prevent delayed bleeding", "to ensure hemostasis", "if bleeding recurs", "a previously bleeding ulcer").
+    - Otherwise its catalogue kind is mapping.POSSIBLE_BLEEDING_CONTROL: a bleeding control in DOUBT. No code profile
+      covers it, so no code is matched by it. The bleeding-control codes (43255, 43227, 44366, 44378, 44391, 45334, 45382)
+      are held [performed_status], never READY. The injection codes (43236, 43243) take no act that may be a control of
+      bleeding: held, as at 1caaf0609.
+    - A statement that is not a usable 'performed' (a denial, a plan, a doubt, an attempt, status words that do not bind)
+      keeps the bleeding control, so its own rule holds or excludes as before. FRESH's "No hemostatic cautery, hemostatic
+      clipping, injection for bleeding, or band ligation was performed" still denies a control of bleeding (55 such
+      denials, 27 in FRESH-2 and 28 in FRESH-1, unchanged).
+  - Never an absence (D62, D87; coverage.doubted, coverage._bleeding_control_in_doubt). The doubted act is a doubted
+    reportable act of its session in a family whose catalogue acts hold the bleeding control:
+    - the base code beside it stays held (1caaf0609 held it beside the bleeding control it read). On D1 with 43235:
+      held, "Is 43235 reported separately from possible bleeding control (stated in doubt) for this examination?";
+      c2e53f8e is READY there;
+    - it is listed in doubt (in_doubt, completeness incomplete), and its own unusable attributes are asked at service
+      scope (an unanchored time: event_time, which 1caaf0609 asked on 43255 itself);
+    - except where, read as the bleeding control, it would be a removal's procedural adjunct (bundled_reason: D30's
+      verified part_of or the removal's lesion, D79's attempted whole). "Two hemostatic clips were placed on the
+      polypectomy site of the polyp." is then not listed and adds no base hold, as 1caaf0609 bundled it; 43255 stays
+      held.
+  - Pins (tests/test_interpretation_r5_egd.py, D115BleedingControlInDoubt, 12 tests): gap D's D1 (43255 held, its
+    citation shown, the overlay held, listed in doubt); D1 beside 43235; the hemostatic injection with 43255, 43236,
+    43243 and 43235; the own-words controls (an oozing vessel, the noun, "to control the bleeding": READY, as on both
+    engines); prevention, non-bleeding and without-stigmata (held); every family (45382, 45334, 43227, 44366 held with
+    performed_status, their base held); the statement-status table; the words table; the adjunct; the unanchored time;
+    and the recorded cost below.
+  - Installed outputs on the pin inputs (c2e53f8e, both drivers): equal on D1, prevention, without-stigmata, the four
+    families, the injection's 43255, the adjunct, the unanchored time (43255 held [performed_status]) and the own-words
+    controls. c2e53f8e READYs 43255 on "Two hemostatic clips were placed across the non-bleeding ulcer." (its
+    BLEEDING_PRESENT matches "bleeding ulcer"); this repair holds it. On the injection c2e53f8e holds 43236 and 43243 with competing_codes (harness) or READYs them (no participant);
+    this repair holds both, as 1caaf0609 does.
+  - Built where the spec is not literal (recorded, a disagreement):
+    1. "in its own sentence or for its lesion": catalogue_kind(event) is called with the event alone (map_events and
+       relations.Context, outside this ownership), and an event carries neither its passages' text nor its lesion's
+       record. So it reads the event's own attribute WORDS (EB1), never the sentence beyond them and never the lesion.
+       Gap D's D3 ('A 12 mm ulcer with an oozing visible vessel was seen in the gastric antrum.' / 'Two hemostatic clips
+       were placed across the ulcer.', target words 'the ulcer') is held [performed_status], as c2e53f8e holds it, where
+       the spec and the audit expect READY (pinned as the recorded cost). Reading the lesion needs the bleeding test
+       where the reading is - events.supports or a catalogue_kind given the draft - outside this ownership.
+    2. "held with performed_status naming the statement": 43255 is held through the not-documented route (no event is
+       a candidate): "Confirm whether 43255 is supported by what was done on the date of service.", its source the code's
+       own cited spans (the clip sentence when it cites it, pinned). The fact is the installed one; the installed's
+       sentence ("leaves the bleeding control in doubt (...)") needs a doubt hold for a candidate that does not support -
+       events.py, outside this ownership.
+  - Residuals:
+    1. The in_doubt item's fixed wording (coverage.reconcile, outside this ownership) reads "CPT Studio could not confirm
+       from the document that it was done at this encounter"; what is in doubt is whether it controls bleeding.
+    2. A denial that concerns only the bleeding control ("No bleeding control was needed.") no longer pairs with a clip
+       in doubt (their catalogue kinds differ and their raw kinds differ). 43255 is then held not documented, never
+       READY. With 43255 citing only such a denial it could be excluded by it, as for any act that is no bleeding
+       control; with the clip sentence cited it is held (C-10).
+    3. Inventories normalized before this change keep 'bleeding_control' (catalogue_kind is stored by map_events). The new
+       path is not installed, so none exists in production.
+    4. A word list decides the READY side: a missing word leaves the act in doubt (a hold), never READY. Missing words are
+       false holds by construction (for example "Forrest Ib", "a clot", "fresh blood").
+    5. 43255 is matched by no event, so a question 1caaf0609 asked of it BECAUSE the bleeding control supported it is
+       not its question any more: a Gemini open question on the session (D31) or a removal's procedural-adjunct identity
+       (D41). Probed on D1 with Gemini's open question {about: performer, events: [E1]}: 1caaf0609 asks 43255
+       [event_performer, extent], this repair [performed_status, extent], and no service question. With 43235 proposed
+       too, 43235 asks event_performer, so the question is lost only when 43255 is the session's one code. The act's
+       own unusable attributes are still asked at service scope (the unanchored-time pin). 43255 is held either way, never
+       READY. Keeping those questions needs a doubted candidate in the per-code rule (events.py, outside this
+       ownership). 0 FRESH members.
+
+- **D116 An EGD stent removal or exchange is a reportable act of its session (2026-11-11; the round-4 family parity
+  audit, EGD gap A; repair key egd).** coverage.reportable_kind required the kind in the family's catalogue acts, and only
+  the ERCP's lists stent_removal and stent_exchange.
+  - The gap's input (A1): '...advanced to the second portion of the duodenum.' / 'The fully covered esophageal stent was
+    removed by its retrieval loop without difficulty.' Gemini: E2 stent_removal, performed, target esophagus; 43235 alone.
+    A3: '...was exchanged for a new 18 mm fully covered esophageal stent across the stricture.' as stent_exchange.
+    - 1caaf0609: 43235 READY, coding complete_pending_review.
+    - c2e53f8e: 43235 held [base_included] ("includes stent placement"), stent not_covered.
+  - The rule (coverage.reportable_kind, STENT_ACTS): a stent removal or exchange is a reportable kind of its session in
+    every family whose catalogue acts hold the stent placement - the EGD, the enteroscopy, the colonoscopy, the
+    sigmoidoscopy (the ERCP lists them itself; the EUS holds no stent act). Reportable when done, doubted when in doubt,
+    so base_included holds the base code beside it ("stent removal", "stent exchange", "(stated in doubt)"), at assess
+    time and in the overlay.
+  - Pins (D116StentRemovalAndExchange, 4 tests): A1, A3, the removal in doubt ("was possibly removed"), the colonoscopy's
+    45378 and the families table. c2e53f8e: equal on A1, A3 and the colonoscopy; it READYs 43235 on the doubted removal
+    (this repair holds it).
+  - Not built (a disagreement): "the act is listed not covered when no code covers it". coverage.reconcile skips every
+    kind outside the family's catalogue acts (`if kind not in entry.acts: continue`), outside this ownership. On A5 (the
+    removal beside 'Biopsies of the gastric antrum were taken with cold forceps.', 43239 alone) 43239 is READY and coding
+    is complete_pending_review; c2e53f8e lists 'stent' not_covered. On A1 and A3 coding is incomplete through the base
+    question. The one-line change (`kind not in entry.acts and not reportable_kind(event)`) would list it as 'unsupported'
+    (no EGD code profile covers a stent removal), with no second-review mark.
+
+- **D117 A removal of unstated method is a doubted act of its session (2026-11-11; the round-4 family parity audit, EGD gap
+  B; repair key egd).** The 'removal' umbrella was in NOT_ACT_KINDS, so it was neither reportable nor doubted and
+  coverage.reconcile skipped it.
+  - The gap's input (B1): 'A 7 mm sessile polyp was seen in the gastric body.' / 'A polypectomy of the gastric body polyp
+    was performed.' Gemini: E2 removal (words 'polypectomy'), performed, target L1 (attested: fb08, v4, fb09). 43235
+    alone; B4 adds a biopsy and proposes 43239 alone.
+    - 1caaf0609: 43235 READY with coding complete; on B4, 43239 READY with coding complete (the polypectomy invisible).
+    - c2e53f8e: 43235 held [base_included] ("includes snare removal"), snare not_covered; on B4 43239 READY, coding
+      incomplete.
+  - The rule (coverage.doubted, _removal_in_doubt): a 'removal' umbrella stated positive or uncertain, not verified at
+    another time or by another performer, in a family whose catalogue acts hold a removal method (the EGD, the
+    enteroscopy, the colonoscopy, the sigmoidoscopy), is doubted. The base code is held ("removal (stated in doubt)"),
+    the act is listed in doubt, and its method is asked at service scope (act_method, focus_question's h5) unless a
+    proposal of the family already asks it. A removal at another encounter ("... removed at her colonoscopy in January
+    2024") is no doubt: 45378 READY, as on both engines.
+  - Pins (D117RemovalOfUnstatedMethod, 7 tests): B1, B4, B3 ('The gastric body polyp was removed.'), control B2 (43251
+    beside it asks act_method and holds 43235, no second item), the colonoscopy's 45378, the history control, and the
+    families-and-frame table shared with D115. c2e53f8e: equal on B1 and the colonoscopy (held); it READYs 43235 on B3
+    (no snare word), where this repair holds it - the method of a removal is never the diagnostic code's.
+  - Residual: two removals of unstated method in one session are one in_doubt item and one act_method service question
+    (in_doubt_questions asks once per family and fact, D89); each removal's own method code asks its own.
+
+- **D118 Two dilation codes of different techniques for one stricture compete (2026-11-11; the round-4 family parity
+  audit, EGD gap C; amends D40, D55; repair key egd).** combination.competition compares the codes' claims, and the
+  technique filter (R4) gives a balloon code and a guide-wire code disjoint E* on one stricture.
+  - The gap's input (C1): 'A benign-appearing peptic stricture was seen in the distal esophagus at 37 cm.' / 'The
+    stricture was dilated with a through-the-scope balloon to 15 mm.' / 'The stricture was then dilated with a Savary
+    dilator passed over a guidewire to 17 mm.' Gemini: E2 balloon and E3 wire_bougie on L1; 43249 and 43248.
+    - 1caaf0609: both READY.
+    - c2e53f8e with the harness configured (production): both held [competing_codes]; with no participant both READY.
+  - The rule (assess._claims, _stricture_claims, _one_stricture, _technique_doubts). A code whose profile names a
+    technique also claims every current performed act of its family and kinds done on ONE stricture with another of its
+    own acts, whatever its technique:
+    - its own acts are its supporting events, else (as D74 reads a doubted defining act) its own technique's acts in
+      doubt: positive or uncertain, possibly current, not another performer's, a device of its class or not verified as
+      a class, and not verified outside its D29 site class;
+    - one stricture: one verified lesion, or two identity does not establish as distinct; otherwise unless every verified
+      place of one is disjoint from every verified place of the other; a place unread competes (the installed
+      _same_claim's order, erring toward one);
+    - an act is never paired with itself, so a technique code held for its site claims nothing from the one dilation a
+      code of any technique supports (FRESH-2 fb07: 43245 READY, 43249 held for its site, unchanged).
+    - Each code keeps its own E* (support.acts); only the competition reads the claims. The overlay releases the hold
+      once the other code is rejected (support.competes).
+  - Pins (D118DilationsOfOneStricture, 10 tests): C1 (both held, each other's rival, overlay held); the release on
+    rejection; the Savary dilation whose site is unread (both held, 43248 with act_target and competing_codes, as
+    c2e53f8e holds both); and the controls: two places verifiably apart (both READY); two strictures verified distinct
+    by their distances (both READY); 43245 with 43249 on one pyloric dilation and on two (43245 READY, 43249 held for
+    its site); fb07's anastomotic shape (D34; the same); a Savary dilation at another encounter (fb02's shape: 43249
+    READY, 43248 held technique); two balloon dilations with 43248 (43249 READY, 43248 held technique).
+  - Installed outputs (harness configured): equal on C1, the unread Savary site and the two places apart; with two
+    balloon dilations 43249 is READY on both (c2e53f8e holds 43248 [performed_status], this repair [technique]); with the
+    Savary dilation at another encounter c2e53f8e excludes 43248, this repair holds it [technique] as 1caaf0609 does.
+    c2e53f8e also holds both codes on the two distinct strictures (its reader leaves them one site) and holds 43245 with
+    competing_codes beside the wrong-site 43249 (one or two pyloric dilations, fb07's shape). This repair keeps 1caaf0609
+    there, by the installed rule's own structure (lesion records compared whole, a code verified at another site claims
+    nothing); recorded, not repaired, and FRESH-2 fb07's 43245 is expected READY.
+
+- **D119 A PEG filed under the feeding tube is an act of the EGD done with it too (2026-11-11; the round-4 family parity
+  audit, EGD gap H; repair key egd).** coverage.sessions groups events by Gemini's procedure family, and base_included
+  read only the EGD's own session.
+  - The gap's input (H2): 'UPPER ENDOSCOPY WITH PEG PLACEMENT' / '...advanced to the second portion of the duodenum.' /
+    'A 20 Fr pull-type PEG tube was placed under endoscopic guidance without difficulty.' Gemini: E2 peg, performed,
+    procedure feeding_tube worded 'PEG' from the heading; 43235 alone.
+    - 1caaf0609: 43235 READY. c2e53f8e: 43235 held [base_included, performed_status] ("includes gastrostomy (PEG)
+      placement").
+  - The rule (combination.base_included, _acts_beside): an EGD base code matched to a done EGD session reads, as (b) and
+    (c), the reportable and doubted PEG entries of the encounter's feeding-tube session. The PEG kind only (a tube
+    replacement or placement under the feeding tube is not read), and the EGD's codes only. The overlay applies it at
+    read time over the same record.
+  - Pins (D119PegUnderTheFeedingTube, 6 tests): H2 (held, "gastrostomy (PEG) placement", the PEG still the feeding-tube
+    session's), H1 (43235 held beside 43246), a doubted PEG ("(stated in doubt)"), control H3 (the PEG under the EGD),
+    a PEG in 2023 (no hold), and the kind-and-family unit table. c2e53f8e: equal on H2, H1, H3 and the doubted PEG; it
+    also holds 43235 beside the 2023 PEG, where this repair is READY as 1caaf0609 is.
+  - Not built (a disagreement): "43246 is supported by it (not 'not documented')". A code's candidates are events of its
+    own family (events.is_candidate, events.py), outside this ownership. On H1 (43246 citing the PEG line beside 43235)
+    43246 stays held [performed_status], "CPT Studio's reading of the document records no gastrostomy (PEG) placement
+    documented as done"; c2e53f8e holds it [performed_status] too, so this is no regression against it.
+  - Residual: the feeding-tube session keeps its own no_proposal item; c2e53f8e lists 'peg' not_covered under the EGD.
+
+- **D115-D119, what was edited, and the measurement.**
+  - Edited (patch.diff on 1caaf0609):
+    - studio/interpretation/mapping.py: catalogue_kind's bleeding-control arm and its D115 block (POSSIBLE_BLEEDING_CONTROL,
+      BLEEDING_STATED, BLEEDING_NEGATORS, NOT_BLEEDING_NOW, HEMOSTASIS_WORDS, bleeding_stated, hemostasis_in_doubt) and
+      `import re`;
+    - studio/interpretation/coverage.py: reportable_kind (D116, STENT_ACTS) and doubted (D115, D117; helpers _stated_here,
+      _removal_in_doubt, _bleeding_control_in_doubt);
+    - studio/interpretation/combination.py: base_included (D119; _acts_beside);
+    - studio/interpretation/assess.py: _claims (D118; _one_stricture, _technique_doubts, _stricture_claims);
+    - tests/test_interpretation_r5_egd.py is NEW, with 38 tests. No existing test changed.
+  - Suites (t.sh, Postgres 127.0.0.1:55461; every tests.test_interpretation_* module, test_pipeline_assess_events,
+    test_readers_dispatch, test_guard_static, test_guard_mutation and the 12 other modules that import the new path - 61
+    modules): 1569 OK, 3 skipped on 1caaf0609; with the new module on this patch 1607 OK, 3 skipped (1569 plus its
+    38). tests.test_interpretation_replay passes: no replay fixture was regenerated.
+  - Mutation proof: 25 mutants, each in its own copy re-synced from the work tree, its replacement asserted once and its
+    application confirmed by a marker; the unmutated module ran first (38 OK); the work tree's sha256 was unchanged.
+    Every one is killed:
+    - D115: M01 (the arm undone) 10 failing tests; M02 (the doubted arm undone) 4; M03 (the adjunct exception) 1; M04
+      (negation) 2; M05 (the prevention words) 2; M06 (the status condition) 1; M07 (purpose words only) 1; M08 (the
+      family condition) 1.
+    - D116: M09 (undone) 4; M10 (the stent-family condition) 1.
+    - D117: M11 (undone) 5; M12 (the family condition) 1; M13 and M14 (the time and performer frame) 2 and 1.
+    - D118: M15 (undone) 3; M16 (the doubts undone) 1; M17 (one stricture always) 2; M18 (distinct lesions ignored) 1;
+      M19 (the D29 exclusion undone) 1; M20 (an act paired with itself) 1; M21 (another class admitted as one's own) 1;
+      M22 (an act at another encounter admitted) 1.
+    - D119: M23 (undone) 3; M24 (every feeding-tube kind) 1; M25 (every family's base) 1.
+    - A first draft filtered D118's claims to acts of another technique; its removal survived (no input separates them:
+      a same-class act on one stricture is either supported or claimed by no rival), so the filter was dropped.
+  - The new module on 1caaf0609: 25 of its 38 tests fail (35 failing and 36 erroring subtests); the 13 that pass there
+    are the controls (unchanged behaviour).
+  - FRESH-2 (f2r5b-egd): A 96/6, B 177/15, C 171/19 plus 2 safe_hold. Against f2r5int: 0 of 486 rows, and 179 of 179
+    assessments and 179 of 179 inventories byte-identical. Positive control: a planted event-coding key appeared in all
+    21 FRESH-2 A assessments (f2r5b-egd-posctl) and nothing else moved, so the scorer read this tree.
+  - FRESH-1 (f1r5b-egd): A 97/5, B 174/18, C 165/24 plus 1 false_ready and 2 safe_hold, the false_ready pre-existing.
+    Against f1r5b-currency2-pristine and f1r5b-em2-base: 0 of 486 rows, 358 of 358 per-run files byte-identical.
+  - The head-to-head (h2h.json) is identical to h2h-r5int.json: run 1 214/234 (A 34/34, B 59/64, C 121/136); worse 5,
+    better 69; facts moved 0. No new false_ready, false_exclusion, dropped_question or ready_wrong_facts.
+  - Census (tools/census.py) over FRESH-2 and FRESH-1 inventories: 0 performed hemostatic clips or injections (55
+    denials, 27 and 28, unchanged), 0 positive stent removals or exchanges, 0 positive current removal umbrellas (every recorded
+    one is verified at another encounter), 0 feeding-tube PEGs, and one EGD with dilations of two device classes (fb02 r3,
+    whose wire-guided dilation is verified on June 4, 2026: no claim). So the corpus measures none of these classes:
+    the cost is 0 rows because the classes have no members.
+  - The audit's own 30 cases (repair4/audit-egd/cases): 8 outcomes change, each READY to held: A1, A3, B1, B3, C1, D1,
+    D3, H2; each equals c2e53f8e (harness) except B3 (c2e53f8e READY) and D3 (the recorded cost).
+
+- **D124 An act documented only in another role's entry holds its code (2026-11-11; the round-4 family parity audit,
+  colon-sig gap 0; owner directive 2026-11-06, item 2: other-provider acts stay distinct from completed current
+  services; repair key colon).**
+  - The gap (high). No rule on the new path read where an act is documented. On the contract's frame defaults
+    (performer documenting_team, time current_encounter, no words) an act told only in a nursing note or under a
+    pathology report heading is done, and supports its code. The audit's inputs, each a structured colonoscopy report
+    ('Colonoscopy report (fictional)' / 'Place of service: ...' / 'Procedure: Colonoscopy' / 'The colonoscope was
+    advanced to the cecum and the examination was completed.'):
+    - T02: 'Nursing note' / 'Nurse: A 6 mm polyp in the sigmoid colon was removed with a cold snare and retrieved.',
+      45385 citing the nurse's line.
+    - U05: 'Nursing note' / 'Nurse: Cold forceps biopsies of the sigmoid colon polyp were obtained and sent to
+      pathology.', 45380.
+    - T03: 'Pathology report' / 'Sigmoid colon polyp, cold forceps biopsy: tubular adenoma.', 45380.
+    - 1caaf0609: READY on all three, no question, coding complete_pending_review.
+    - c2e53f8e (engine.assess as tests/test_harness_engine.py drives it, same texts and codes): held [performed_status].
+      T02 and U05 with engine._another_roles_hold's question, "The snare removal is documented only in the nursing
+      entry (“Nurse: ...”). Was it performed in this colonoscopy on the date of service?"; T03 act_missing ("CPT
+      Studio could not find a forceps biopsy in the documented colonoscopy. ...").
+  - The rule (events.another_role_hold, called once in evaluate, after the bundling holds and before the performed and
+    incomplete returns). A code the per-code rule would support is held when EVERY act it accounts for (its supporting
+    events but the examination, which is the session: C-1) is told only in another role's entry. An act is so told when
+    every located place of its KIND and STATUS passages lies in one:
+    - the passage begins with a role label, as a whole label: a name and its colon ('Nurse:', 'RN:', 'Pathology:',
+      'Anesthesia:', 'CRNA:'), or an entry phrase followed by its end, a colon, a bracket or a dash ('Nursing note',
+      'Nursing procedure record', 'Pathology report', 'Anesthesia record', 'Radiology report');
+    - or, read from the document's lines: the line it stands on opens with such a label; or the line is a role's
+      heading line (a heading name alone, 'NURSING', 'Pathology:'; or an entry phrase with at most a bracketed note, a
+      date or time after a colon or dash, a closing colon); or it lies in the lines after such a heading line and
+      before the next heading. The next heading is services.GENERIC_HEADING's shape (c2e53f8e): a line of at most 61
+      characters opening with a capital or a digit, of letters, digits and / & , ( ) ' - only, at most a closing colon.
+      A blank line does not end an entry. An act's own line is content, never the next heading.
+    - never a line the physician's own label opens ('Endoscopist: ...', 'Physician addendum: ...').
+    - Never a label or heading: 'Nursing staff: ...', 'Nurse: Jo Rowe, RN' and 'RN: Jo Rowe' as staff fields (they
+      label their own line only and head nothing: services.ROLE_HEADINGS' refutation r1 missed-1), 'Nurse present
+      throughout the procedure.', FRESH's own 'Anesthesia, equipment, and quality measures', 'Recovery instructions and
+      management plan' and '- Pathology from jars 1-3 will be sent ...'.
+    - An act with any statement passage outside such entries leaves the code as it is (U06: the physician's own line,
+      alone or restated by the nurse; and a code over the physician's own biopsy beside the nurse's), and so does a
+      code that accounts for no act (a base code, an examination-only EUS code: c2e53f8e's match lists no act either).
+    - The hold: Evaluation reason 'another_role' (events.ANOTHER_ROLE, c2e53f8e's reason), state uncertain, E* empty
+      and the acts in ``read``, so coverage still counts them as the code's (they are listed nowhere as uncovered, as
+      the installed release's held match keeps its acts). ONE question, performed_status, worded as c2e53f8e words it -
+      the entry's role and the act's first passage in it, quoted at 120 characters; the detail is "The colonoscopy is
+      documented as performed with ... But the snare removal it accounts for is documented only in the nursing entry
+      (...), not by the physician performing the colonoscopy. Held for the reviewer, not excluded." Never an exclusion.
+  - Three readings beyond the spec's words, each only ADDING holds against its literal reading:
+    1. The act's kind and status passages, not OWN's (kind, status AND target). The target's passages can be where the
+       physician describes the LESION: 'Findings: A 6 mm sessile polyp in the sigmoid colon.' / 'Nursing note' /
+       'Nurse: The polyp was removed with a cold snare and retrieved.' with the snare's target passage the findings
+       line. Read as OWN, that place is outside the entry and 45385 is READY (mutant M5); c2e53f8e holds it with its
+       another-role question. Kind and status are a subset of OWN, so the rule holds wherever the literal one does.
+    2. "The passage begins with a role label" includes the line it stands on: Gemini may cite the clause after the
+       label (prompt.py: "a sentence, a clause or a line"). 'A 6 mm polyp ... retrieved.' cited from 'Nurse: A 6 mm
+       polyp ... retrieved.' with no heading above: READY without it (mutant M16); c2e53f8e holds it.
+    3. The examination is not an act (C-1). A base code's supporting event is its session, and c2e53f8e lists no act
+       for a base code, so it never holds one this way either.
+  - The text, and the one statement outside the spec's ownership. evaluate receives no text, and the inventory holds
+    only text_sha256, so "read the text the assess call receives" cannot be built inside events.py alone: T03's
+    'Pathology report' is no passage of any event, and its biopsy line carries no label. assess.assess hands the revision
+    text to the reading it builds (``reading.text = text``, one statement beside the Reading's construction; the spec
+    gives assess.py only the service-question call). Without it (mutant M8) T03, the blank-line and the nursing-lines
+    inputs are READY again. A reading without the text - overlay.counted_codes, a unit test's Reading - reads the
+    passages' own labels only: T02 is still held there, T03 supported. The overlay reads only E* and ``read`` from it,
+    the same event set either way (pinned).
+  - No pattern. The first build compiled regular expressions in events.py, and tests.test_interpretation_assess.Imports
+    failed: the six engine modules import no ``re`` ("no pattern here can be a denied pattern's twin"). The labels are
+    compared as case-folded strings (curly apostrophes straight, whitespace runs one space), re-typed from
+    services.ROLE_HEADINGS and ROLE_LABEL (c2e53f8e) - never imported, never called (the guard tests pass). The helpers
+    are nested in the one new function; its tables (ANOTHER_ROLE and the _ROLE_* constants) sit beside it.
+  - This is no evidence binding (ADJUDICATION EB1): no value of Gemini's is read or changed - the act stays performed,
+    current and the documenting team's - and it only turns a supported code into a hold. It does read the document's
+    lines around an act, which EB1 forbids a binding check to do, so it is recorded as the owner-designed exception it
+    is: it can hold, never release or exclude.
+  - Pins (tests/test_interpretation_r5_colon.py; c2e53f8e's outputs on every input are in each docstring):
+    - AnActToldOnlyInAnotherRolesEntryIsHeld: test_d124_a_snare_told_only_in_a_nursing_note_is_held (T02),
+      test_d124_a_biopsy_told_only_in_a_nursing_note_is_held (U05),
+      test_d124_a_biopsy_told_only_under_a_pathology_report_heading_is_held (T03),
+      test_d124_the_label_opening_the_line_of_a_cited_clause,
+      test_d124_a_lesion_the_physician_describes_does_not_release_the_nurses_removal, test_d124_beside_its_base_code.
+      Each asserts the question word for word, the support reason, the read-time overlay (still held) and that the act
+      is listed nowhere as uncovered. c2e53f8e holds all six [performed_status]: its question is identical word for
+      word on T02, U05, the lesion input and beside the base code (and on the blank-line and nursing-lines inputs
+      below), quotes the whole line on the clause input, and is act_missing's on T03.
+    - TheEntryIsWhatItsLabelsAndHeadingsSay: test_d124_controls_the_physicians_own_line_states_the_act (U06, both
+      forms), test_d124_controls_one_act_of_the_physicians_beside_one_of_the_nurses,
+      test_d124_controls_an_unknown_performer_keeps_its_own_question (U07),
+      test_d124_the_next_heading_ends_the_entry_and_a_blank_line_does_not (four cases),
+      test_d124_a_staff_field_or_a_section_naming_a_role_is_no_entry (eight lines),
+      test_d124_a_reading_without_the_text_reads_the_passages_own_labels. c2e53f8e gives the same outcomes, with two
+      differences that are not D124's: on U07 it asks its another-role question where the build asks event_performer
+      (C6: an unknown performer is never a match, so D124 is never reached; held on both), and under 'Recovery
+      instructions and management plan' it holds the physician's snare for its own reading of that section
+      ("a passage it cites about this service reads as uncertain").
+- **D125 A documented endoscopic session that states no extent asks it at service scope (2026-11-11; the round-4
+  family parity audit, colon-sig gap 1 and egd gap I; the round-4 enteroscopy review's parity note 2; repair key
+  colon).**
+  - The gap (medium, low). c2e53f8e's reconcile.documentation_clarifications (reconcile.py:960-967, through
+    engine._service_questions) asks "How far was the instrument advanced (the landmark reached)?" of a documented
+    gi.egd, gi.colonoscopy, gi.flex_sig or gi.enteroscopy service with no extent and an unknown completion, unless a
+    proposal of the family already asks the extent, and counts it among the open questions. The new path asked service
+    questions only for in_doubt items (FINAL 7.8). The inputs:
+    - T04: 'Colonoscopy was performed with good preparation.' / the cold snare of a sigmoid polyp, no reach entry, no
+      code. T05: the same for a flexible sigmoidoscopy. T06: T04 with 'No biopsies were taken.' and 45380 citing it
+      (excluded on both engines).
+    - egd I2: 'UPPER ENDOSCOPY REPORT' / 'The gastroscope was introduced through the mouth under direct vision.' /
+      antral biopsies, no reach, no code.
+    - The enteroscopy note: 'PUSH ENTEROSCOPY REPORT' / 'Procedure: Push enteroscopy.' / 'The enteroscope was
+      introduced and the small bowel was examined.' / jejunal biopsies, with only 43239 proposed.
+    - 1caaf0609: no question anywhere; T04's reasons ['1 documented service or act without a supported proposal'].
+      c2e53f8e: the service question on every one, T04's reasons [..., '1 open question'].
+  - The rule (coverage.service_extent_questions; assess adds its questions after in_doubt_questions'). For each
+    documented session (session.done: the sessions the reconciliation reads) of those four families whose catalogue
+    entry is supported and has the extent question:
+    - when no done examination of the session (coverage.done_examinations) has a USABLE reach naming a place or a
+      USABLE completion stated complete or incomplete;
+    - and no proposal of the family asks the extent (``asked``, the D89 triples assess already builds, read as
+      (family, fact): any of the family's extent questions, the R6 one or D28's and D108's class questions; an excluded
+      proposal asks none);
+    - one question per family: the catalogue's own question (catalogue.ENDOSCOPIC_QUESTIONS), scope service, fact
+      extent, counted among the open questions. Never a hold; no code's status changes.
+  - Two readings beyond the spec's words:
+    1. "No stated reach" is no USABLE reach. An unverified or opened reach is a doubt, never a fact (D87), and
+       establishes no extent: T04's text with a reach Gemini takes from the snare's sentence (D36 reach_inferred), or
+       a reach to the cecum whose words its passage does not hold (words_unlocated), is asked. The literal reading
+       drops it (mutant M10); c2e53f8e asks it on that text. So is a session told only by its acts, which no reach
+       entry can name, and one whose reach only an examination D62 reads as possibly current states.
+    2. The reason follows P10 (CPT Studio's reading, never a statement about the document): "CPT Studio's reading of
+       the documented colonoscopy does not establish how far the instrument was advanced or whether the examination was
+       completed." c2e53f8e: "The documented colonoscopy does not state ...". The question is identical.
+  - Pins (TheServiceAsksItsExtent): test_d125_a_colonoscopy_with_no_reach_and_no_proposal (T04, reasons pinned),
+    test_d125_a_flexible_sigmoidoscopy_with_no_reach_and_no_proposal (T05), test_d125_its_only_proposal_excluded (T06),
+    test_d125_an_upper_endoscopy_with_no_reach_and_no_proposal (I2), test_d125_an_enteroscopy_beside_an_upper_endoscopy_code
+    (43239 still [performed_status, extent]; c2e53f8e [extent]), test_d125_controls_a_proposal_of_the_family_asks_it_itself
+    (S05, I3, 44361), test_d125_controls_a_stated_reach_or_an_undocumented_session,
+    test_d125_controls_a_stated_incomplete_completion (D93's landmark-less 'incomplete' is stated),
+    test_d125_an_unverified_reach_establishes_no_extent, test_d125_once_per_family. c2e53f8e gives every outcome but
+    the planned control's (below).
+- **D124-D125, what was edited, the proofs and the measurement.**
+  - Edited (patch.diff removes no line):
+    - studio/interpretation/events.py: ``another_role_hold`` and its tables, new; its one call in evaluate (three
+      lines). Nothing else.
+    - studio/interpretation/coverage.py: ``service_extent_questions``, new, after in_doubt_questions.
+    - studio/interpretation/assess.py: the call adding its questions beside in_doubt_questions', and the one
+      statement handing the text to the reading (outside the spec's ownership, above).
+    - tests/test_interpretation_r5_colon.py, NEW: 22 tests. No existing test changed.
+  - Suites (t.sh, Postgres 127.0.0.1:55461): every tests.test_interpretation_* module (45 and the new one),
+    test_pipeline_assess_events, test_readers_dispatch, test_guard_static, test_guard_mutation and
+    test_overlay_differential: 1327 OK (1caaf0609: 1305, plus the 22). The other 11 modules that import the package:
+    264 OK, 3 skipped. No replay test failed.
+  - On 1caaf0609 the new module gives 30 failures and 1 error in its 15 behaviour pins; its 7 controls pass.
+  - Mutation proof: 18 mutants, one reused copy (mut-1); each replacement asserted to occur once, applied (marker and
+    sha256 change) and restored (sha256 equal to work's); work's sha256s unchanged. Every one is killed: M1 (the call
+    removed) 15 failures; M2 (no label read) 3; M3 (no heading read) 4; M4 (no heading ends an entry) 1; M5 (OWN's
+    target passages too) 2; M6 (the physician's label not read) 1; M7 (one act in an entry suffices) 1; M8 (the text
+    not handed over) 6; M9 (the service call removed) 16; M10 (a reach counted when merely given) 4; M11 (no proposal
+    suppresses it) 3; M12 (one question per examination) 1; M13 (no documented-session gate) 1; M14 (a completion never
+    counts) 1; M15 (a heading name followed by anything heads an entry) 7; M16 (the line's own label not read) 2; M17
+    (one place in an entry suffices) 1; M18 (a reach never counts) 1. Every pin but U07's control fails under at least
+    one; U07's cannot, by construction: its code is held before D124 is reached.
+  - FRESH-2 (f2r5b-colon): A 96/6, B 177/15, C 171/19 plus 2 safe_hold.
+    - Against f2r5int (1caaf0609): 0 of 486 rows, 179 of 179 inventories identical, 177 of 179 assessments identical.
+    - The two others gain the service extent question [gi.colonoscopy], and one open question: C/PAR-008 r1 and
+      C/W1-u31a-reg-p7-codes-025 r1, both 'ENDOSCOPY NOTE - EGD AND COLONOSCOPY, SAME SESSION' with only an EGD code
+      (43239) or an ERCP code (43264) proposed. Both state no colonoscopy reach ('The colonoscope was inserted and
+      advanced under direct vision.'), and c2e53f8e's head-to-head run asks 'extent' on both (results-installed-h2h.json:
+      its colonoscopy service performed, extent '', completion unknown). They are parity, not cost - and the
+      scorer's positive control: only this tree asks that question.
+    - D124's census: 0 members among the 452 done acts of the 179 FRESH-2 inventories (0 of 479 in FRESH-1's). Its
+      positive control - the same instrument with the line above one done act rewritten at equal length as 'Nursing
+      note' - finds that act (A/note8 r1 E10), and does not without the plant. The class has no members in the corpus,
+      so its cost is 0 rows.
+  - FRESH-1 (f1r5b-colon) against f1r5b-currency2-pristine and f1r5b-em2-base (1caaf0609): 0 of 486 rows; the same two
+    assessments gain the same question.
+  - Head-to-head: identical to h2h-r5int.json in all 459 leaves. Run 1 214/234 (A 34/34, B 59/64, C 121/136); worse 5,
+    better 69, unstable 7, facts moved 0. No new false_ready, false_exclusion, dropped_question or ready_wrong_facts.
+  - Time: assess over the 179 FRESH-2 inventories, 0.469 s on 1caaf0609 and 0.485 s here (mean 2.6 and 2.7 ms).
+    another_role_hold's worst case - one act on the last line of a 19,457-character, 247-line document with no heading
+    above it, every line scanned (INTERPRET_MAX_CHARS is 20,000) - 2.8 ms a call.
+  - Applies on 1caaf0609 (dry run and a real apply, byte-identical to the work tree), and on top of the five round-5b
+    patches in progress (egd, enteroscopy-route, ercp2, currency2, em2) with offsets only.
+  - Residuals, recorded, not built:
+    1. D125, an examination only in doubt: 'It is unclear whether the colonoscopy was performed.' (no done event).
+       c2e53f8e asks the extent of its 'uncertain' service; the build asks nothing - no documented session, and
+       coverage counts it 'not established as performed'. Asking the extent presupposes the procedure was done. The
+       owner's call.
+    2. D125, a completion stated with no landmark: 'Colonoscopy was performed and the examination was completed.' The
+       contract carries no completion-only reach (prompt.py: "Leave out an examination whose reach the document does
+       not state"; normalize keeps a landmark-less completion only when it is 'incomplete', D93), so the build asks
+       where c2e53f8e, reading completion 'complete', does not. A question, never a hold.
+    3. D125, a colonoscopy stated only as planned under 'Procedure: Colonoscopy': c2e53f8e reads the heading as a
+       documented colonoscopy, lists it no_proposal and asks the extent; the build reads no documented session (no
+       done event) and asks nothing. The extent of a procedure not yet done is no genuine question (pinned).
+    4. D124, a line shaped as a heading inside an entry ('Vital signs stable', no period) ends it, as c2e53f8e's
+       GENERIC_HEADING does, so an act below it in a nursing note is not held (as at 1caaf0609).
+    5. D124, a role named only in a sentence ('The nurse removed the polyp.') is no label and holds nothing. That is
+       the performer's attribute, Gemini's to state.
+    6. D124, support['acts'] is empty for the hold, as for every hold but conflict and bundled (assess._support), so
+       the record shows the act through the question's passages and events only.
+    7. A role-only act no code covers is listed not_covered; c2e53f8e's reconcile skips other roles' acts. Unchanged
+       here: more items, never fewer.
+    8. D124, a bare 'Anesthesia:' or 'Pathology:' heading line (the spec's labels, alone on their line; c2e53f8e's
+       anesthesia and pathology headings need 'record', 'note', 'report', 'result' or 'addendum') opens an entry that a
+       field line does not end: 'Anesthesia:' / 'Monitored anesthesia care by the anesthesia team.' / 'Procedure: The
+       colonoscope was advanced to the cecum; a 6 mm sessile polyp in the sigmoid colon was removed with a cold snare.'
+       holds 45385 with the anesthesia-entry question. A hold, never a READY; c2e53f8e holds it too, for its own reading
+       ("a passage it cites about this service reads as uncertain"). FRESH-1 and FRESH-2 have no such line.
+    9. Pre-existing differences seen on the pins' inputs, not D124's or D125's: on the push enteroscopy c2e53f8e holds
+       43239 [extent] only and the build [performed_status, extent]; U07 and the 'Recovery instructions ...' line
+       above.
+
+- **D127 The ERCP rules read what their review found them missing (2026-11-11; the review of D104-D107, ercp problems
+  0-4; the family parity audit's ERCP notes 1 and 2; amends D105, D106 and D107; repair key ercp2).** Five defects of
+  the round-4 ERCP rules, each measured against c2e53f8e (jobs._assess_child, as the head-to-head assesses) on the
+  pins' own texts and citations, with no participant and with Astra and Fable read and proposing nothing:
+  - problem 0: finding 25's document with a period where the semicolon was ("The bile duct was swept several times
+    with an extraction balloon. No stones or sludge were retrieved.", one passage) made 43264 READY, Corti citing both
+    sentences or the first (c2e53f8e: EXCLUDED, act_denied, and HELD performed_status). So did the denial on its own
+    line, as a passage of Gemini's no attribute of the sweep cites, or as no passage at all with Corti citing both
+    lines (c2e53f8e: HELD). D106's builder's disagreement 1 (the parity audit's note 2) left three more READY: "...;
+    nothing was retrieved." (no stone word; c2e53f8e HELD, act_missing), "...with a balloon; no stones were found." (no
+    retrieval word; c2e53f8e HELD on the builder's document - a family-level doubt that also held its control "two
+    small stones were retrieved" - and READY on a clean one), and Gemini's passage only the sentence's first clause
+    with Corti citing the sentence (c2e53f8e EXCLUDED).
+  - problem 1: an exchange Gemini files as stent_exchange (the Procedure line's kind words, the placement's status and
+    target) beside the stent_removal it includes made 43275 and 43276 both READY; the mirror (stent_exchange on the
+    removal's sentence, beside a stent placement) made 43274 and 43276 both READY. c2e53f8e holds 43275 and 43276
+    act_missing and READYs 43274.
+  - problem 2: the review's surviving mutant - read every sentence of the act's passages - passed all 16 D104-D107
+    pins.
+  - problem 3 (a cost D106 introduced): a complete clearance worded with "no stones" was held nothing_retrieved -
+    "Multiple stones were extracted from the bile duct with an extraction balloon until no stones remained.", "...and
+    several small stones were removed; no stones remained on the final cholangiogram." (c2e53f8e READY on both).
+  - problem 4: D107's warn quoted the failure-marker words alone ("were unsuccessful"); c2e53f8e quotes the statement
+    of the failure.
+  - parity note 1: a cannulation stated achieved and one begun and not completed ("Deep biliary cannulation was achieved
+    with a sphincterotome." / "Initial attempts at biliary cannulation were unsuccessful.") made 43260 READY, with
+    D107's warn and 52/53; c2e53f8e holds it [cannulation] (detect._cannulation: "both documented is a conflict for a
+    reviewer, never a pick"), with the warn and 52/53.
+  - The rules (studio/interpretation/ercp.py; one arm of assess._inventory_fact).
+    - (0) D106 reads an act's STATEMENT: each own sentence (D106's: a sentence of its own located passages that holds
+      one of its kind, status or target words, or a passage none of whose sentences does, read whole), the sentences of
+      the code's own exact evidence (the kept spans, already verified exact) that overlap one of its own passages and
+      hold one of its words (Gemini's passage may be a clause of the sentence), and - when the own sentence states no
+      yield - the sentence that immediately follows it: one that begins within CONTINUES_WITHIN (2) characters of the
+      own sentence's end, in the same passage, in a located passage or in a kept span, and holds no other event's own
+      words ("names no other act"). The following sentence is read for a denial only. A negator that is itself what was
+      retrieved ('nothing', 'none'; not exceptive: "nothing else" is) denies beside a retrieval word in its own clause;
+      'find', 'finds' and 'found' join the retrieval words as the context a negation over stones needs. ruled now
+      passes the code's kept spans to retrieval_hold, so overlay.counted_codes (which re-evaluates from the stored exact
+      evidence) reads the same.
+    - (2) Only those: another act's sentence in the act's own passage, before or after the act's own, is never read; a
+      following sentence that holds another event's words does not continue the act.
+    - (3) A denial is of a RETRIEVAL when its clause holds a retrieval word after the negator, or the two words before it
+      hold one ("no stones or sludge were retrieved", "retrieved no stones", "without retrieval of any stones", "nothing
+      was retrieved"), else of the stones' PRESENCE ("no stones remained", "no stones were seen", "no stones were
+      found"). A sentence states the act's YIELD when a clause of it that holds the act's own words and no other event's
+      holds a stone word no negator governs and a past-form yield verb (retrieved, extracted, removed, delivered,
+      recovered, yielded) no negator precedes and that does not follow "to" or "be". A presence denial in a sentence
+      that states the act's yield is a clearance: it denies nothing. A retrieval denial in the act's own sentence holds
+      whatever the sentence states beside it, as before. Unless the presence denial sits in a clause that holds another
+      event's words: a sentence of two acts is D106's own sentence read whole, and keeps its hold. An own sentence that
+      states the yield is the act's own word on it, so the sentence after it is not read.
+    - (1) exchange_pairs pairs, after D105's (removal, placement), every positive stent removal with a positive stent
+      exchange, and every exchange with a positive stent placement, ducts read as D105 reads them (both verified and
+      different keep them apart). A READY 43275 whose removal is a side, a READY 43274 whose placement is a side, and
+      43276 (D105's literal choice, READY or not documented) are held with one question: "Was the stent removal (snare)
+      at the bile duct (“was removed with a snare”) part of the stent exchange at the common bile duct (“was placed”),
+      one stent exchange (43276), or a separate stent removal (43275)?" (the placement's form names 43274). A session
+      with all three events keeps D105's question, its pair first. Reason possible_exchange, as D105.
+    - (4) access_not_completed returns the sentence of the access act's own passages that holds its verified
+      failure-marker words (statement_sentence), the words themselves where no own sentence holds them.
+    - (5) cannulation_conflict: an ERCP cannulation with status value performed and one attempted_not_completed, each in
+      any verification state (D87: a doubted outcome is a question), possibly current (D62) and not verified as another
+      performer's, of ducts nothing sets apart (D45's reading: D107's pancreatic avoidance is no conflict). The
+      cannulation arm of assess._inventory_fact makes it Fact('cannulation', None, 'conflict', the two statements,
+      'Conflicting documented values: bile duct cannulated, bile duct not achieved.'), so every ERCP code (the profile
+      requires the cannulation) asks "ERCP: confirm whether, and which, duct was cannulated." with the reason "The
+      document gives conflicting values for the cannulation outcome: “Deep biliary cannulation was achieved with a
+      sphincterotome.”, “Initial attempts at biliary cannulation were unsuccessful.”." - c2e53f8e's question and its
+      facts.required wording ("Conflicting values documented: cannulation outcome."); an excluded code waits for it.
+      D107's signals are unchanged.
+  - What the inputs give now (each pinned): every problem-0 shape, the five disagreement-1 wordings and their
+    two-sentence variants hold 43264 nothing_retrieved, the question quoting the statement; the exchange filed with its
+    removal holds 43275 and 43276, the mirror holds 43274 and 43276; the review's two clearances, "no stones were seen on
+    the final cholangiogram" after a stated removal, and "Two stones were extracted ... No stones remained." across a
+    period are READY on the extraction; D107 quotes "Multiple attempts at biliary cannulation were unsuccessful."; the
+    parity note's two documents hold 43260 [cannulation] (with 43262 too: base_included and cannulation, cannulation),
+    with the warn and 52/53.
+  - The one release, and where it stops. The clearance turns held codes READY only where the act's own clause states its
+    yield and a denial of the stones' presence follows: on every probe that release lands c2e53f8e READYs the code too
+    (the review's two inputs and the cholangiogram one). Kept held, each pinned: a stated extraction beside a denied
+    retrieval ("A stone was extracted with a basket and the duct was then swept ...; no stones were retrieved.":
+    c2e53f8e conflict:stone_extraction); "until no stones remained" with no yield; "no stones were seen" with no yield
+    (c2e53f8e READY: as 1caaf0609); "no stones were retrieved and none remained" (EXCLUDED there); an intent ("were to
+    be extracted"); a yield in a clause none of the act's words are in ("Stones were extracted at the index ERCP in
+    2024; today the duct was swept ... and no stones were seen."); a retrieval denied four words after the stones; two
+    acts in one sentence, the basket's yield beside the sweep's denial (c2e53f8e conflict:stone_extraction) or in a
+    clause both share (c2e53f8e READY) - fail-closed false holds of the right code; and D106's recorded cost "...; no
+    stones were seen; sludge was retrieved." (c2e53f8e READY), whose yield's clause holds none of the sweep's words.
+  - Built where the spec is not literal (disagreements, recorded):
+    - (4) "matches the installed release's wording on problem 4's input" cannot be met on finding 26's own text.
+      c2e53f8e quotes “The procedure was terminated” (cue “incomplete: The procedure was terminated”, documented
+      service); on the refuter's reading those words are the first clause of the denials' passage and the words of no
+      attribute. Quoting them would read passage words of no attribute through a "terminated" word list (EB1, EB4).
+      Built: the failure's own sentence, which is exactly the words c2e53f8e quotes on the variant without "The
+      procedure was terminated;", and on every other failed-cannulation probe (4 of 4); the "(cue …, documented
+      service)" provenance is the legacy reader's and is not copied. When Gemini gives the examination the terminated
+      words (status or completion), D61 and D71 quote them first, as before. Input left: finding 26's text, 43260
+      READY with “Multiple attempts at biliary cannulation were unsuccessful.” where c2e53f8e has “The procedure was
+      terminated”.
+    - (4) R-4 words the warn "from the event's verified failure-marker words"; the sentence that holds them is quoted,
+      not the words alone. For the owner.
+    - (0) EB1 ("a check never scans the rest of a passage, a neighbouring sentence ...") is departed from further than
+      D106 did: the rule now reads the next sentence and the proposer's exact evidence. It only holds, never READYs
+      or excludes; the clearance it gained reads only the act's own sentence. For the owner, with D106's own note.
+    - (0) "no stones were found" (disagreement 1(b)) is built as specified although c2e53f8e READYs it on a clean
+      document; holding it adds a hold only.
+    - (1) D105's literal choice is extended to the new pairs: 43276 READY on its own stent_exchange beside the removal it
+      includes is held - a false hold of the right code; the other reading would leave 43276 READY beside a held
+      rival.
+  - Recorded, not built (the spec names none of these; each a READY or a missing signal, never introduced):
+    - the denial in no passage and no evidence (Gemini's passage the first clause and Corti citing it; the next line no
+      passage and Corti citing the first): READY, c2e53f8e HELD - nothing in the inventory holds the words (EB4);
+    - "...; stones and sludge were not retrieved." (a negator after the stone word): READY, c2e53f8e HELD
+      (performed_status);
+    - "...; the sweeps were negative for stones and sludge." and "...with a balloon; no stones were seen." (no retrieval
+      or find word): READY, c2e53f8e READY too;
+    - a following sentence that names an act Gemini filed no event for is read as the continuation ("The bile duct was
+      swept with an extraction balloon. The pancreatic duct was then swept with a balloon; no stones were retrieved."
+      with no event for the pancreatic sweep): HELD, c2e53f8e HELD (pinned as the cost);
+    - a biliary cannulation that failed beside the PANCREATIC duct's achieved (two ducts set apart, no conflict): READY
+      with D107's signals; c2e53f8e HELD [cannulation];
+    - a failed cannulation whose failure words do not bind (status unverified): held [cannulation] by the conflict, but
+      D107 (a usable status only) gives no warn and no 52/53, where c2e53f8e gives both;
+    - finding 26's text plus "Deep biliary cannulation was then achieved with a precut sphincterotome.": HELD
+      [cannulation] where c2e53f8e is READY (it reads "was then achieved" as no success); a hold only;
+    - the exchange filed beside its placement holds 43274 where c2e53f8e READYs it - D105's recorded cost, in the new
+      pair;
+    - D105's removal filed as foreign_body still pairs with nothing (unchanged).
+- **D127, what was edited.**
+  - studio/interpretation/ercp.py: the module docstring; D105's exchange_pairs, exchange_question and exchange_hold's
+    pair filter; D106's reader - FIND_WORDS, OBJECT_NEGATORS, YIELD_VERBS, NOT_NOTHING's "else", CONTINUES_WITHIN, and
+    _clauses, _governed, _negated, _denial, _yields, states_nothing_retrieved, _trimmed, _own_words, _holds, _kept,
+    nothing_retrieved (it takes the kept spans and returns the statement's places) and retrieval_hold (kept, and the
+    statement quoted); ruled passes kept; D107's statement_sentence and access_not_completed; cannulation_conflict, new.
+  - studio/interpretation/assess.py: _inventory_fact's cannulation arm only (a local import of ercp and the conflict's
+    Fact before the first-cannulation loop, which is unchanged).
+  - tests/test_interpretation_r5_ercp.py: NEW, 16 tests.
+  - tests/test_interpretation_r4_ercp.py: four expectations changed, and the comments and one docstring that name them.
+    D104-D107's original module, run on the new code, fails exactly these (7 subtests in 4 tests):
+    - test_d106_the_negation_read_in_the_acts_own_sentence: the recorded-cost sentence read alone is now False (it
+      states a yield); in the sweep's own reading the cost stands (pinned in r5);
+    - test_d107_finding_26_a_failed_cannulation_gives_every_code_of_the_ercp_both_signals: the warn's words are the
+      failure's sentence (FAILURE);
+    - test_d107_controls_a_cannulation_achieved_or_of_another_occasion_gives_nothing: access_not_completed returns the
+      sentence;
+    - test_d107_the_defining_access_act_a_pancreatic_failure_beside_the_biliary_access_achieved: the 'biliary, before'
+      shape is the conflict - held [cannulation], with both signals in the sentence's words; the pancreatic shape is
+      unchanged.
+- **Pins.** tests/test_interpretation_r5_ercp.py, 16 tests.
+  - D127NextSentence: test_d127_problem_0_finding_25_with_a_period_the_next_sentence_continues_the_sweep (4 subtests);
+    test_d127_problem_0_the_denial_on_its_own_line (6); test_d127_disagreement_1_the_wordings_the_installed_release_
+    holds_or_excludes (10, and the sentence reader on 4 sentences).
+  - D127OwnSentence: test_d127_problem_2_another_acts_sentence_in_the_acts_own_passage_is_never_read (2: the other act
+    filed, and not filed beside a basket extraction); test_d127_problem_2_the_next_sentence_names_another_act_and_does_
+    not_continue (and its recorded cost).
+  - D127Clearance: test_d127_problem_3_a_complete_clearance_supports_43264 (6, across a period, and 3 sentences);
+    test_d127_problem_3_controls_a_denied_retrieval_or_no_yield_still_holds (8, 2 sentences, 2 two-act sentences).
+  - D127ExchangeFiled: the exchange beside its removal (6) and beside its placement (6), with each code alone;
+    a held code keeps its question and three events keep D105's; the controls (the exchange alone, a pancreatic
+    removal, a removal denied, a removal at an earlier ERCP).
+  - D127IncompleteWording: test_d127_problem_4_the_warn_quotes_the_sentence_that_states_the_failure (4).
+  - D127CannulationConflict: the parity note's first document (2, and with 43262), its second (finding 26 with the
+    access achieved, the excluded codes' waits), ducts nothing sets apart and a doubted failure (3), the controls (4:
+    the pancreatic failure, an earlier ERCP, two achieved, the biliary failure beside the pancreatic access).
+  - Every pin's input was run through c2e53f8e (74 assessments); the outcomes are quoted in each docstring.
+  - On 1caaf0609's code the module gives 40 failures and 13 errors (the new functions and nothing_retrieved's new
+    return) across 15 of its 16 tests; the exchange controls pass there, as a control should.
+- **Mutation proof.** One copy of the final work tree, each of 24 mutants applied in turn (the anchor asserted to occur
+  once, "mutation applied" and the sha256 change printed), run over the r5 and r4 ERCP modules, then restored and its
+  sha256 checked equal to the work tree's; the copy equals the work tree after the run. Every mutant fails at least one
+  pin, by assertion, with 0 errors (failing tests in the r5 and r4 modules):
+  - m01 the following sentence never read: 4 (problem 0's two, disagreement 1, problem 2's cost);
+  - m02 the evidence never extends the own sentence: 1 (disagreement 1(c)); m03 the continuation never from the
+    evidence: 1 (the line that is no passage); m20 ruled passes no kept spans: 2;
+  - m04 "nothing" no denial: 2; m05 no find words: 1;
+  - m06 every sentence of the act's passages read (the review's surviving mutant): 2; m07 a following sentence of
+    another act continues: 1;
+  - m08 no clearance: 2 (r5's clearances and r4's recorded-cost sentence); m09 a yield releases a denied retrieval: 1;
+    m10 "were to be extracted" a yield: 1; m11 "were not removed" a yield: 1; m12 another event's clause the act's
+    yield: 1; m21 a clause without the act's words the act's yield: 1; m22 the retrieval word read only three words
+    past the stones: 1; m23 a two-act sentence released: 1;
+  - m13 no exchange-event pairs: 3; m24 ducts verified apart still pair: 2 (the r5 exchange controls and D105's own);
+  - m14 the bare failure-marker words: 6 (r4's three changed D107 pins, r5's wording and two conflict pins);
+  - m15 no conflict: 4; m16 ducts never apart: 2; m17 any time: 1; m18 verified statuses only: 1; m19 the assess call
+    site removed: 4.
+- **Tests.** t.sh on port 55461, a new suffix every run.
+  - tests.test_interpretation_* (46 modules, the new one included), test_pipeline_assess_events, test_readers_dispatch,
+    test_guard_static, test_guard_mutation and test_overlay_differential: 1321 OK. 1caaf0609, the same modules without
+    the new one: 1305 OK. So 1321 = 1305 + 16.
+  - The 49 other modules that import the new path (the round-4 builder's 45 and four more, test_guard_matrix_new_path,
+    test_guard_matrix_legacy and the pipeline and repairs modules among them): 1070 OK, 3 skipped; 1caaf0609 the same,
+    1070 OK, 3 skipped.
+  - Replay pins: the committed answers (tests/fixtures/interpretation, 161 read as test_interpretation_replay reads
+    them) hold 24 ERCP stone_extraction events and 3 ERCP cannulations, all performed, and no stent kind - more than
+    the round-4 entry's "none of these kinds" suggests. Read through the new rules, as through 1caaf0609's: 0 retrieve
+    nothing, 0 pairs, 0 access acts begun and not completed, 0 conflicts. The replay modules pin the reading's
+    structure, never a code, and pass unchanged; no fixture was regenerated.
+- **Measurement.**
+  - FRESH-2 re-scored as fresh2-score/f2r5b-ercp2: A 96/6, B 177/15, C 171/19 plus 2 safe_hold, as f2r5int. rows.jsonl
+    is byte-identical to f2r5int's (0 of 486 rows), and 0 of 179 assessments and 0 of 179 inventories differ.
+  - Head-to-head (h2h.json): JSON-equal to h2h-r5int.json. Run 1 214/234 (A 34/34, B 59/64, C 121/136), worse 5,
+    better 69, unstable 7, facts moved 0. No new false_ready, false_exclusion, dropped_question or ready_wrong_facts.
+  - Census of the stored inventories (FRESH-2 f2r5int and FRESH-1 f1final, 358), the new reader without evidence spans:
+    48 ERCP stone_extraction events, none read as retrieving nothing; 0 stent removal, placement or exchange events, so
+    0 pairs; 6 cannulations, all performed, so 0 access acts begun and not completed and 0 conflicts. That is why no
+    corpus row moves.
+  - Probes (synthetic, 71 cases, each with and without the participants, on 1caaf0609, the work tree and c2e53f8e): 70
+    rows change. Every change is READY to held, a question added, or the warn's quoted words - but for the clearance's
+    6 rows (3 inputs, each in both settings), which go from held to READY and so lose D106's nothing_retrieved
+    question, c2e53f8e READY on each. No exclusion; no other question dropped.
+
+- **D128 A current time no date has checked yet pairs as current beside a denial only on the denial's own side, and
+  never sets a pair apart (2026-11-11; the review of D99, currency-pairing problems 0, 1 and 2; narrows D99; repair key
+  currency2).** D99 read a "pending check" - a current_encounter time whose ONLY failure is date_unchecked (D67(a): a
+  day literal no service date could check yet), unopened - as current on both sides of relations.time_row. The pairing
+  is made once, at normalize, before any date can decide the day; assess re-judges the times (D67(b)) but reuses the
+  stored relations (D67's residual). So the relation D99 stored was right for the one date that equals the pending day,
+  and could be wrong for every other.
+  - Problem 0 (CONFIRMED by the review). The undated note 'The colonoscope was advanced to the cecum.' / 'On 06/02/2025,
+    a 6 mm sessile polyp in the sigmoid colon was removed with a cold snare.' (E2, current_encounter worded 'On
+    06/02/2025') / 'Impression: No polypectomy was performed.' (E3: removal, not_performed, all_of_kind), and the
+    member's 2026-11-09. Each run first-hand on byte-identical texts (the installed release with a 'PROCEDURE:
+    Colonoscopy' header so that its routing finds the colonoscopy; jobs._assess_child as h2h/run_registry.py builds
+    it):
+    - 1caaf0609: stored contradiction(status, same_act); 45385 asks [conflict:snare], conflicts warn, completeness '1
+      conflict in the record' - the snare is another day's. The same on 'On 11/09/2026' with the member's 2026-11-10 or
+      2026-11-08, on 'several' dates ('Date of service: 11/08/2026 or 11/09/2026.') settled on 2026-11-08, and with no
+      date at all.
+    - Installed c2e53f8e: [performed_status], conflicts pass, on each (bare: [extent, performed_status]); with the
+      member's EQUAL date (11/09 and 2026-11-09): [conflict:snare], warn.
+    - 437b708bb: [event_time] on each.
+  - Problem 1 (PLAUSIBLE, constructed). The same dated snare beside 'As previously noted, no polypectomy was performed.'
+    (E3: earlier_encounter worded 'As previously noted', verified only by the C1 marker 'previously'). 1caaf0609 stores
+    independent(time, another_time) and makes 45385 READY with the member's 2026-11-09; installed asks [conflict:snare]
+    (warn). Beside round 4's 'Previously, no polyp was removed.': 1caaf0609 READY; installed READY with 2026-11-09 and
+    EXCLUDED (historical) with 2026-11-10. 437b708bb held both (event_time).
+  - Problem 2. The examination Counter in relations.Context.__init__ (the pairing's unresolved sessions) never read
+    D99 (round 4's deliberate deviation); the spec asks to apply it there consistently or record why not.
+  - The rule (time_row). Two usable times pair as before. A pending check pairs as the SAME time against a current time
+    or another pending check, except:
+    - beside a DENIAL (status not_performed), only the denial's own pending check pairs, and only against an act whose
+      time is verified current. The ACT's pending check beside a denial is UNKNOWN (time_unresolved), as before D99,
+      and so are two pending checks. The act's time is its own code's question until a date decides it: with the
+      member's date equal to its day the re-judged time is usable, so the denial's UNRESOLVED(time) relation asks the
+      contradiction as the statement's scope (D102), quoting the impression whole (D103): "Does “Impression: No
+      polypectomy was performed.” apply to the snare removal (cold snare) of the 6 mm sessile polyp in the sigmoid
+      colon (“was removed with a cold snare”)?"; with another date or none it asks the act's time (event_time);
+    - a pending check is never DIFFERENT, beside any statement: against a usable earlier or future time it is UNKNOWN
+      (problem 1: a day no date has checked is no literal, C-11, and no fact).
+    The denial's own pending check stays paired because the act's time is then verified, so no question of its code is
+    displaced, and the installed release asks [conflict:snare] (warn) on that text - 'A 6 mm sessile polyp ... removed
+    with a cold snare.' beside 'On 11/09/2026, no polypectomy was performed.' - with no date, 2026-11-09 and 2026-11-10,
+    and on the document dated 11/10/2026. Beside a doubt (uncertain), a planned act a claim names, and the other act of
+    a claim between two acts, D99's reading stands unchanged (below). The act's own code reads its time through
+    verify.usable (supports, h4), unchanged.
+  - Why a doubt keeps D99 (built after a measured failure of this repair's first build, recorded). The first build
+    applied the act-side rule to EVERY statement (mutant M3 below). A DOUBT relation keeps every code of its kinds from
+    an exclusion (events._doubted, FINAL 7.5 (4): a DOUBT from a statement covering the code's kinds), and the first
+    build turned it into UNRESOLVED(time). The input, recorded by an earlier, interrupted build of this same repair
+    (scratchpad repair5/currency2) and run first-hand here:
+    - 'EGD: the gastroscope was advanced to the duodenum.' / 'EGD: On 11/09/2026, a 5 mm polyp in the gastric body was
+      removed with a cold snare.' (a pending check) / 'EGD: It is unclear whether the gastric body polyp was removed.'
+      (removal, uncertain) / 'Colonoscopy: The colonoscope was advanced to the cecum.' / 'Colonoscopy: No polyp was
+      removed.' (all_of_kind), which 45385 cites; Corti also proposes 43251;
+    - 1caaf0609 and this repair: doubt(status, in_doubt); 45385 held [performed_status] with no date, 2026-11-09 and
+      2026-11-10, and on the document dated 11/09/2026; 43251 held [performed_status, extent];
+    - the first build: 45385 EXCLUDED with every date on the undated note (the dated document held it) - a held code
+      excluded, which no repair here may do;
+    - installed: 45385 EXCLUDED on every one of these texts, 43251 READY with 2026-11-09 - FINAL 7.5 (4)'s own
+      difference from it, which this repair does not reopen.
+    For a claim between two acts the narrowing would only have changed the question ([performed_status] to
+    [event_time], stale with the member's equal date); it is not built there either.
+  - (2), recorded with pins rather than built: the Counter is unchanged. D128 keeps D99's reading only where it can only
+    hold, and counting a pending examination can release: it makes every all_of_kind pair of the family
+    session_unresolved before any date (the pairing's unresolved sessions count VERIFIED current examinations, D87).
+    Two measured reasons, each mutation-proved by M5 (D99 carried into the Counter):
+    - a contradiction's question: the undated note's 'On 11/09/2026, the colonoscope was reinserted to the cecum.' (E4,
+      an examination Gemini calls current) beside the snare and the impression's denial. Not counted, the pair is the
+      contradiction and 45385 asks [conflict:snare, extent] with no date, 2026-11-09 and 2026-11-10; installed asks
+      [conflict:snare] (warn) on all three, and the document's own 11/10/2026 asks the contradiction. Counted: the denial
+      is asked as its scope with every date, the second colonoscope another day's or not;
+    - a doubt's exclusion guard: an EGD with 'EGD: On 11/09/2026, the gastroscope was reinserted to the duodenum.', a
+      snare and the all_of_kind doubt 'EGD: It is unclear whether any polyp was removed.', beside the colonoscopy's
+      'No polyp was removed.' that 45385 cites. Not counted: DOUBT, and 45385 held [performed_status] with every date,
+      as with the document's own 11/10/2026. Counted: session_unresolved, the guard goes, and 45385 is EXCLUDED with
+      every date, 2026-11-10 included. Installed excludes 45385 on all of these texts.
+    The Counter's comment records it; its code is unchanged.
+  - Built where the spec is not literal (recorded). The spec's example - "a date_unchecked time pairs as
+    UNRESOLVED(time) when the denial is itself undated, and as CONTRADICTION only when the other side's time is
+    verified current" - is built as two sides of a denial: the first clause is the ACT's pending check (beside a denial
+    with no date of its own), the second the DENIAL's. Read with both clauses on the act's side, it contradicts itself
+    on problem 0's own input: 'Impression: No polypectomy was performed.' has no date (clause 1: UNRESOLVED) and its
+    default time is verified current (clause 2: CONTRADICTION). No fix inside time_row can ask [conflict:snare] with the
+    member's equal date and [event_time] with another, because the stored relation is one for every date: built
+    UNRESOLVED(time), which asks statement_scope with the equal date; the scoring adjudication of 2026-11-10
+    (score_fresh.verdict, h2h/compare.py EQUIVALENT) reads statement_scope as asking an expectation's conflict:<kind> or
+    performed_status. And the example names denials only: beside a doubt the narrowing is not built (above).
+  - Cost, on constructed inputs (nothing in FRESH-1 or FRESH-2 reaches it; census below). Held in every case, never
+    READY, never excluded:
+    - finding 8's own input with the member's equal date (round 4's D99 pins, moved below): 45385 asks [statement_scope]
+      where D99 asked [conflict:snare]; the conflicts check is pass instead of warn and completeness drops '1 conflict
+      in the record'. Installed: [conflict:snare] (warn). The document's own 11/09/2026 still asks [conflict:snare];
+    - 'Previously, no polyp was removed.' with the member's 2026-11-09: held [statement_scope] where installed is READY
+      (437b708bb held it, event_time). The hold direction;
+    - two pending checks beside a denial ('On 11/09/2026' on the snare and on the denial): [event_time] with no date and
+      with 2026-11-10, [statement_scope] with 2026-11-09, where D99 asked [conflict:snare] (warn) with every date.
+      Installed: [performed_status], [performed_status], [conflict:snare] (warn);
+    - a pending denial beside an act Gemini dates earlier ('Previously, a 6 mm sessile polyp ... removed with a cold
+      snare.'): stored independent(time) -> unresolved(time); 45385 asks [statement_scope] either way (the exclusion
+      arm, 7.5); installed [performed_status].
+  - Measured (host_score.sh on the final work copy; nothing sent): see "D128, the measurement" below.
+  - Pins (tests/test_interpretation_r5_currency.py, NEW, 20 tests; synthetic, nothing sent):
+    - D128TimeRow: test_d128_a_statements_pending_check_pairs_against_a_verified_current_act (9 subtests);
+      test_d128_beside_a_denial_an_acts_pending_check_never_pairs_and_no_pending_check_sets_a_pair_apart (11);
+      test_d128_beside_a_doubt_a_planned_act_or_a_claim_d99_stands (12); test_d128_control_every_other_unverified_
+      statement_time_stays_unknown (D99's control with a denial's and a doubt's status on either side, 18);
+      test_d128_control_two_usable_times_pair_as_before.
+    - D128MemberDates (problem 0's inputs): test_d128_another_day_asks_the_acts_time_and_never_a_conflict (the review's
+      06/02/2025 with 2026-11-09; 11/09 with 2026-11-10 and 2026-11-08; 'several' settled on 2026-11-08);
+      test_d128_with_no_date_the_act_is_asked_its_time; test_d128_the_members_equal_date_asks_the_contradiction_as_the_
+      statements_scope (round 4's five undated variants); test_d128_control_the_documents_own_date_decides_at_normalize.
+    - D128EarlierDenial (problem 1's input): test_d128_an_earlier_denial_verified_by_its_marker_never_sets_the_pending_
+      act_apart ('As previously noted' and 'Previously', three dates each);
+      test_d128_control_the_documents_own_date_still_sets_it_apart.
+    - D128StatementSide: test_d128_a_statements_pending_check_beside_a_verified_current_act_is_the_contradiction (three
+      dates); test_d128_two_pending_checks_never_pair; test_d128_a_pending_denial_never_sets_an_earlier_act_apart.
+    - D128PositiveClaim: test_d128_a_claim_between_two_acts_keeps_d99s_reading (the claim on either event, three dates).
+    - D128DoubtKept: test_d128_a_doubt_beside_a_pending_act_still_keeps_its_kinds_from_an_exclusion (the undated note,
+      the doubt worded 'On 11/09/2026' too, the dated document).
+    - D128Counter (problem 2): test_d128_a_pending_examination_is_no_second_examination_of_the_pairings_session;
+      test_d128_control_the_documents_own_date_counts_a_verified_second_examination;
+      test_d128_a_pending_examination_never_takes_a_doubts_exclusion_guard.
+    - D128Chain.test_d128_both_member_dates_through_the_chain: the production chain, the legacy entry points failing if
+      called - the member's 2026-11-10 at upload asks [event_time], 2026-11-09 saved afterwards (jobs.change_context)
+      asks [statement_scope], the conflicts check pass on both.
+  - Round 4's pins whose expectations D128 moves (tests/test_interpretation_r4_currency_pairing.py; a constant
+    UNRESOLVED_TIME added):
+    - D99TimeRow.test_d99_a_current_time_whose_only_failure_is_date_unchecked_pairs_as_current: (earlier, unchecked)
+      DIFFERENT another_time -> UNKNOWN (its other three SAME rows read sides with no status, no denial, and stand);
+    - D99UndatedDenial.test_d99_the_same_day_denial_is_a_contradiction_on_the_undated_note: stored contradiction ->
+      unresolved(time);
+    - D99UndatedDenial.test_d99_the_members_date_asks_the_contradiction: [conflict:snare], warn, '1 conflict in the
+      record' -> [statement_scope], pass;
+    - D99UndatedDenial.test_d99_an_earlier_denial_sets_the_act_apart_as_the_dated_document_does: on the undated note
+      independent -> unresolved(time), and the member's equal date READY -> held [statement_scope]; the document's own
+      date unchanged (READY);
+    - D99Chain.test_d99_the_members_date_at_upload_and_saved_afterwards_asks_the_contradiction (its
+      assert_contradiction_asked): contradiction, [conflict:snare], warn -> unresolved(time), [statement_scope], pass.
+    The other 16 round-4 tests are unchanged.
+  - Mutation proof: 8 mutants in one reusable copy (mut-1), each anchor asserted once, each application proved by its
+    marker and a sha256 change, each restoration proved by sha256 before the next. Counts are failing tests and
+    subtests over the r5 and r4 modules (41 tests); every one an assertion failure, none an error; every behaviour pin
+    fails under at least one, and the four controls (the dated paths and two usable times) under none, as references:
+    - M0, D128 undone (time_row as at 1caaf0609): 39;
+    - M1, beside a denial the act's pending check pairs again: 27;
+    - M2, a pending check set apart by a usable earlier or future time: 12;
+    - M3, the denial arm applied to every statement (this repair's first build): 16 - D128DoubtKept (its DOUBT gone;
+      45385 EXCLUDED with every date in the M3 probe log), the claim and doubt pins, and round 4's D99TimeRow SAME
+      rows;
+    - M4, beside a denial nothing pairs (the denial's own pending check no longer pairs): 4;
+    - M5, D99 carried into the Counter: 4 (both D128Counter behaviour pins, and two subtests of round 4's aside
+      control);
+    - M6, a denial's pending check pairs against the act's pending check too: 3;
+    - M7, a pending check is any date_unchecked time, opened or with other reasons: 9 (round 4's control now reaches
+      the arm too: its sides have no status, no denial).
+  - Recorded residuals:
+    - The pairing is still made once, at normalize. With the member's equal date the denial's contradiction is asked as
+      statement_scope and the conflicts check says pass (installed and the document-date twin: [conflict:snare], warn).
+      The repair belongs in assess (assess.py reuses stored.relations): relate again over the re-judged reading.
+    - A denial's own pending check stays a CONTRADICTION whatever the date: with the member's 2026-11-10 the denial
+      'On 11/09/2026, ...' is another day's, and the conflicts check reports a conflict the document's own 11/10/2026
+      would not (that twin asks statement_scope, pass). Installed asks [conflict:snare] (warn) on both. The code's own
+      time is not in question; held.
+    - Beside a doubt, a planned act a claim names and a claim's other act, D99's reading still decides before the date,
+      as at 1caaf0609: the DOUBT or the claim's "no difference" stands when the member's date makes the act another
+      day's (the code is held by it; the uncertain statement asks its own performed_status anyway).
+    - The normalize-time and assess-time Counters can disagree: the assess-time Context (Reading.context) reads the
+      re-judged times, so with the member's 2026-11-09 the pending second colonoscope IS counted at assess (coverage
+      asks the extent; events.broad and D126's ranking read the session as unresolved) while the stored pairing read one
+      examination. Held either way.
+    - Outside D128, pre-existing (D87, unchanged): with the document's own 11/09/2026 the second gastroscope of the
+      doubt-guard input is verified, the doubt's pair is session_unresolved, and 45385 is EXCLUDED by the colonoscopy's
+      denial (as installed excludes it); the undated note and the document's own 11/10/2026 hold it.
+    - Outside D128, pre-existing (the standard table's DIFFERENT, unchanged since 437b708bb): on the DATED twin,
+      'As previously noted, no polypectomy was performed.' (earlier_encounter, verified by 'previously') sets the snare
+      apart and 45385 is READY, where installed asks [conflict:snare] (warn). Not attested: none of the 74 earlier- or
+      future-dated statements in FRESH-1 and FRESH-2 is worded with a discourse phrase (the round-4 review's census).
+      A repair (a marker-only earlier or future time never setting a pair apart) is in time_row's reach but outside the
+      spec, which names D99's direction only; it would only add holds.
+    - Stale prose, outside this repair's ownership: the round-4 module's docstring still describes D99 unnarrowed (each
+      moved test says D128 moved it), and relations' module docstring table never described D99 or D128.
+
+- **D128, what was edited, the suites and the measurement.**
+  - studio/interpretation/relations.py: time_row (its docstring and the D99 arm), and a comment in the examination
+    Counter of Context.__init__ (its code unchanged). Nothing else in the module, its docstring included.
+  - tests/test_interpretation_r5_currency.py: NEW, 20 tests.
+  - tests/test_interpretation_r4_currency_pairing.py: the five expectations above, and the constant UNRESOLVED_TIME.
+  - Suites (t.sh, Postgres 127.0.0.1:55461, a new suffix every run), 65 labels: the 46 tests.test_interpretation_*
+    modules (the new one included), test_pipeline_assess_events, test_readers_dispatch, test_guard_static,
+    test_guard_mutation, test_guard_matrix_legacy, test_guard_matrix_new_path, test_change_context_events,
+    test_models_event_inventory, test_overlay_differential, test_peer_heading, test_pipeline_api,
+    test_pipeline_interpret, test_repairs_7c8_p1reports, test_repairs_7c8_p1sends, test_repairs_ec5_reportruns,
+    test_retry_reading_api, test_harness_pipeline, test_harness2_pipeline and test_services_second_review - every test
+    module that imports studio.interpretation. 1caaf0609: 1697 OK, 3 skipped (the legacy guard matrix's three
+    skipTest sites, its c2e53f8e baseline tree). The final work copy: 1717 OK, 3 skipped - the 1697 plus the 20 pins.
+    Before the pins and the moved expectations (the first build), the only failures were the round-4 subtests whose
+    expectations D128 moves. The replay pins (tests.test_interpretation_replay) pass; no fixture was regenerated.
+    INVENTORY_VERSION is unchanged.
+  - Measured on the final work copy (host_score.sh; nothing sent; the first build was measured too, with the same
+    zeros):
+    - FRESH-2 (f2r5b-currency2): A 96/6, B 177/15, C 171/19 plus 2 safe_hold, as f2r5int. Against f2r5int: 0 of 486
+      rows, 0 of 179 runs and 0 of 358 per-recording files (assessments and inventories) differ.
+    - The scorer reads the given tree. Positive control: a plant (every time row UNKNOWN) in a copy of the final tree,
+      corpus A only (f2r5b-currency2-plantA, a control, not a measurement): 8 of 102 rows and 21 of 42 files differ.
+    - The head-to-head (h2h/compare.py) is identical to h2h-r5int.json in all 7 keys: run 1 214/234 (A 34/34, B 59/64,
+      C 121/136); installed 150/234 with 16 false_ready and 2 ready_wrong_facts; worse 5, better 69, unstable 7, facts
+      moved 0. No new false_ready, false_exclusion, dropped_question or ready_wrong_facts.
+    - FRESH-1 (f1r5b-currency2-pristine against f1r5b-currency2-work): 0 of 486 rows, 0 of 179 runs, 0 of 358 files;
+      A 97/5, B 174/18, C 165/24 plus 1 false_ready and 2 safe_hold on both (that false_ready pre-exists).
+    - Census of pending checks over the 358 frozen answers: FRESH-2 has 3 times carrying date_unchecked and none
+      pending (each also carries current_unanchored and is opened by Gemini's question, all in aside-of-twins-019 r1,
+      as D99 recorded); FRESH-1 has one pending time, a positive event in no relation (aside-of-twins-019 r1's EGD
+      examination E1, '2026-09-30'). The corpora hold no member of the classes D128 changes: the cost is 0 rows
+      because the classes are empty, which is why the constructed pins carry the proof.
+
+- **D130 An act of kind 'other' filed under the visit whose own status words state it was performed is a possible
+  same-day procedure; the routine pre-procedure visit's performed_status question is recorded, not repaired
+  (2026-11-11; the round-4 em-same-day repair's parity notes (a) and (e), measured on 437b708bb; amends D109's residual
+  "an act of kind 'other' filed under the visit makes no procedure day"; repair key em2).** Each input below was
+  measured on byte-identical texts against c2e53f8e (studio.validation.engine.assess with gi_context.extract_context,
+  merge_user_values and detect.route on 2026-11-09, as tests/test_harness_engine.py drives it), 1caaf0609 and the
+  repair, Corti proposing 99213 citing the visit line, member values office and established unless it says otherwise.
+  - **Note (a), the source.** The families review's office document (D94's CYST_TEXT: "Office visit: established
+    patient seen today for rectal bleeding." / "Total time on the date of the encounter: 25 minutes." / "Excision of a
+    1 cm sebaceous cyst on the upper back was performed in the office today." / "Plan: fiber; recheck in 6 weeks."),
+    and finding 20's office lines (the same with "Anoscopy showed grade 2 internal hemorrhoids.", which no event reads).
+    Gemini files the excision under the visit: E1 kind other "Excision of a 1 cm sebaceous cyst", status performed "was
+    performed", procedure office_em by its own word "office" (or the visit line's "Office visit", or em_other with no
+    words), the current encounter and the documenting team by the frame defaults.
+    - c2e53f8e: 99213 held, separate_em, "Other GI service is documented as performed on the same date; a significant,
+      separately identifiable E/M service is not established by this document." Its routing reads the excision as
+      gi.other performed (detect's procedure-word routing).
+    - 1caaf0609: READY, em.same_day_coverage not_verified. The act's family is gi.office_em, and no arm of
+      combination.procedure_day read it: not D81's families, not D94's gi.unsupported or no family, and not D109's
+      procedural kinds, since 'other' is none.
+  - **The rule (combination.procedure_day and its module-level helpers).** A fourth arm, by STATEMENT: an act of kind
+    'other' whose family is one the visit's procedure gives (VISIT_FAMILIES = the families of lexicon.EM_PROCEDURES:
+    gi.office_em and gi.em_other) counts when combination._stated_procedure holds:
+    - its status words hold a DONE_STATEMENTS phrase: "was performed", "were performed", "was done", "were done" or
+      "underwent". These are read whole and word-bounded (lexicon.holds) in the status attribute's own words only (EB1);
+    - and none of the NAMING_WORDS (the kind's and the target's words, which name the act) names a NOT_PROCEDURES class:
+      - test: test, tests, testing, ECG, EKG, electrocardiogram;
+      - order: order, orders, ordered;
+      - interpretation: interpretation, interpretations, interpreted;
+      - lab: lab, labs, laboratory, laboratories, bloodwork, blood work;
+      - imaging: imaging, image, images, CT, MRI, MRCP, ultrasound, sonogram, sonography, x-ray, x-rays, xray,
+        radiograph, radiographs, fluoroscopy, scan, scans;
+      - counseling: counseling, counselling, counseled, counselled.
+
+    Such an act counts only when facts.day_of places it ON the date of service (the spec's "placed on the date"). OFF
+    and UNDATABLE are not counted and not listed. It passes the same status gate as every arm (positive or uncertain).
+    It is labelled "Other GI service" (OTHER_GI's label, as the installed routing reads it) and is ONLY EVER POSSIBLE:
+    "Other GI service is possibly performed on the same date (its performance is not established)". Its kind names no
+    procedure, so the words alone never make it a fact (D87). The other three arms are untouched: by_statement is
+    disjoint from them (VISIT_FAMILIES lie outside SAME_DAY_FAMILIES and CURRENT_ONLY_FAMILIES, and 'other' is no
+    SAME_DAY_KIND). The rule only ever adds a possible label, so it can make nothing READY that was held.
+  - **Built where the spec is not literal (recorded, each pinned and mutation-proved):**
+    - The plural "were performed" and "were done" are read as the spec's own phrases in the plural (mutant M12). Input:
+      "Excisions of two sebaceous cysts on the upper back were performed in the office today." With the spec's three
+      phrases only, 99213 is READY; c2e53f8e holds it.
+    - "Performed" is read as procedure_day's shared status gate (positive or uncertain; D62 and D75: a doubt is never an
+      absence). An uncertain excision with "was performed" is possible, as c2e53f8e holds the same text (mutant M13).
+    - "Names a test ..." is read in the words that name the act, the kind's and the target's, never the status words.
+      Those state its status, and a status-word read is a second use of an attribute's words that EB1 does not give.
+      Input: "Excision of a 1 cm sebaceous cyst on the upper back was performed in order to relieve pain today.",
+      status words "was performed in order to relieve pain". Reading the status words too, its "order" excluded the
+      act and 99213 was READY; c2e53f8e holds it. Now it is held (mutant M14).
+    - The class words are my closed lists: the spec names the classes, not their words. A test, lab or imaging study
+      named by another word ("FIT", "FibroScan", "hydrogen breath study") is counted as possible. That is a hold, the
+      safe direction.
+    - No negator is read in the status words. "was performed without complication" holds lexicon's negator "without",
+      and reading negators would lift that hold. Cost: an answer off the contract (status performed with the words "No
+      excision was performed") is held where c2e53f8e is READY.
+  - **What the inputs give now** (c2e53f8e / 1caaf0609 / the repair):
+    - Note (a)'s input, both documents, every filing (office words, visit words, em_other, a verified "today"): held
+      separate_em / READY / held separate_em. With no member values: separate_em / setting, patient_status / setting,
+      patient_status, separate_em.
+    - "was done", "underwent", "were performed", "was performed without complication", "was performed in order to
+      relieve pain", "Earlier today, excision ..." and "Earlier in the day, excision ..." (earlier_encounter, ON):
+      held / READY / held, each separate_em. So is "Excision of a labial cyst was performed ..." (word-bounded: a labial
+      cyst is no lab).
+    - Never counted, READY on all three: "A 12-lead ECG was performed in clinic today."; "A hydrogen breath test was
+      performed ..."; "An order for a colonoscopy was done today."; "Interpretation of the outside CT images was
+      performed today."; "Labs were done ..."; "An abdominal ultrasound was performed ..."; "A CT of the abdomen was
+      done today."; "Counseling on a high-fiber diet was done today."; "Moderate sedation was performed today." (kind
+      moderate_sedation: no statement arm); the excision "in 2024" (OFF); the excision planned "at the next visit";
+      D109's control "Counseling was provided.".
+  - **Effects besides.**
+    - With no E/M proposed, the visit's "has no supported proposal" item moves to not_listed: "office / outpatient visit
+      beside a procedure done or possibly done the same day". This is coverage.reconcile's rule for every procedure day,
+      and c2e53f8e lists no visit item beside the excision. The encounter stays incomplete. For the same reason, a
+      second review's E/M code finds no marked visit item to be added through (assess._second_review reads the same
+      reconcile), as on every procedure day; no input here has a second review.
+    - Beside an act C-3 cannot date, 99213 asks separate_em, no longer that act's event_time. This is assess's existing
+      order: a procedure day asks separate_em, and only without one does an undatable act ask event_time. Input: note
+      (a)'s document plus P4 "Rubber band ligation of one internal hemorrhoid was performed." (band_ligation filed
+      office_em, time 'unknown'). The three engines give separate_em / event_time / separate_em. The same order already
+      holds at 1caaf0609 for every possible label: D111's banding of no family "today" beside that undatable banding
+      asks separate_em there. The banding stays listed undatable. Without the excision it still asks event_time
+      (c2e53f8e: separate_em).
+    - A procedure day closes assess's reinstatement gate (gate = reinstatable and visits and not procedure_day): an E/M
+      beside an excluded procedural code asks separate_em directly instead of carrying same_day_if_reinstated. This is
+      generic to procedure_day; no input here has an excluded procedural code.
+  - **Note (e), RECORDED, NOT REPAIRED (outside this repair's ownership).**
+    - Input: "Date of service: 11/09/2026." / "Procedure: Colonoscopy" / "The colonoscope was advanced to the cecum and
+      the examination was completed." / "History and physical: routine pre-procedure assessment; no separate E/M service
+      was provided.". Corti proposes 45378 (citing "The colonoscope was advanced to the cecum") and 99213 (citing the
+      history and physical line).
+    - c2e53f8e: 99213 held with performed_status, em_basis and separate_em in every reading. services.EM_ROUTINE negates
+      the documented visit.
+    - 1caaf0609 and the repair, by Gemini's reading:
+      - the visit performed (em_visit "pre-procedure assessment", status words "routine pre-procedure assessment"):
+        em_basis, separate_em;
+      - the visit not performed ("no separate E/M service was provided"): statement_scope, em_basis, separate_em;
+      - no visit event: performed_status, em_basis, separate_em.
+
+      99213 is held and 45378 is READY in every case.
+    - Why not here: the question is the visit code's own. It belongs to its supporting em_visit event (events.evaluate)
+      and to assess's fact questions. procedure_day returns only the date-of-service lists (labels, possible,
+      undatable), which assess turns into separate_em or event_time, so nothing it returns can carry a performed_status
+      question for 99213. It belongs in events.evaluate or assess, reading the visit event's own status words, or in the
+      prompt. The pin holds the three readings as they are, so the residual stays visible.
+  - **Cost measured.**
+    - FRESH-2, re-scored on the final work copy (fresh2-score/f2r5b-em2): A 96/6, B 177/15, C 171/19 plus 2 safe_hold,
+      equal to f2r5int. Row by row, 0 of 486 rows, 0 of 179 runs (runs.jsonl byte-identical) and 0 of 358 assessment
+      and inventory files differ. The summary JSON is byte-identical.
+    - FRESH-1, on the repair (fresh-score/f1r5b-em2) and on 1caaf0609 (f1r5b-em2-base): A 97/5, B 174/18, C 165/24 plus
+      1 false_ready and 2 safe_hold on both. The false_ready is 1caaf0609's own. 0 of 486 rows, 0 runs and 0 of 358
+      files differ.
+    - Head-to-head (repair5b/em2/h2h.json): byte-identical to h2h-r5int.json in all 7 sections. Run 1 is 214/234 (A
+      34/34, B 59/64, C 121/136) against the installed engine's 150/234. It is worse on the same 5 rows, all holds:
+      fb03 45385, fb12 43242, p20-xexcl-003 45388 (safe_hold), guard-bolus-005 43247 and PAIR-5-W3 45385. Better: 69.
+    - No new false_ready, false_exclusion, dropped_question or ready_wrong_facts: not a STOP. No replay test fails,
+      and no fixture was regenerated.
+    - Census: the rule has no member in any recording.
+      - 358 stored FRESH-1 and FRESH-2 inventories, read by both trees: procedure_day differs on 0.
+      - Acts filed under the visit families: gi.office_em on em_visit only (14 in each corpus).
+      - Kind 'other' acts (FRESH-2 / FRESH-1): gi.unsupported 23/25, gi.other 18/5, gi.colonoscopy 6/4, gi.sedation 2/2
+        (monitored anesthesia care: filed as sedation, and no done statement in their status words), and no family
+        0/2. None is filed under the visit.
+      - 976 distinct recorded events in fresh-frozen, fresh2-frozen and tests/fixtures/interpretation: under the visit,
+        office_em on em_visit only (12); 0 of kind 'other'.
+  - **Pins.** tests/test_interpretation_r5_em2.py (NEW), 16 tests:
+    - D130KindOtherFiledUnderTheVisit:
+      - test_d130_note_a_the_office_excision_filed_under_the_visit_asks_separate_em (both documents; no member values);
+      - test_d130_however_gemini_files_it_under_the_visit (3);
+      - test_d130_its_own_status_words_state_it_performed_on_the_date (7);
+      - test_d130_it_is_only_ever_possible (2);
+      - test_d130_with_no_e_m_proposed_the_visit_item_is_not_pushed;
+      - test_d130_beside_an_undatable_act_the_e_m_asks_separate_em.
+    - D130WhatTheStatementNeverCounts:
+      - test_d130_a_test_an_order_an_interpretation_a_lab_imaging_or_counseling_never_counts (9, control);
+      - test_d130_words_that_cannot_tell_are_not_counted (4, control, and the recorded cost);
+      - test_d130_only_on_the_date_of_service (3, control, and the residual);
+      - test_d130_only_under_the_visit (control, and the residual; D94's arm unchanged);
+      - test_d130_the_recorded_costs_are_holds (4 holds, and the paracentesis READY).
+    - D130TheStatementReader:
+      - test_d130_the_done_statements_are_read_in_the_status_words_only;
+      - test_d130_the_never_counted_classes_are_read_in_the_kind_and_target_words;
+      - test_d130_the_words_are_word_bounded;
+      - test_d130_the_visit_families_are_office_em_and_em_other.
+    - D130RoutineVisitRecorded: test_d130_note_e_the_routine_visit_is_held_in_every_reading (3, the recorded residual).
+    - At 1caaf0609 the module gives 21 failures and 23 errors across 11 tests. The 5 control tests pass there. No
+      existing test changed.
+  - **Mutation proof.** Each mutant is a fresh copy of the final work tree, checked equal to it before the one mutation.
+    The anchor was asserted once, the sha256 printed before and after, and "mutation applied: True" read back. Each copy
+    ran the r5_em2, r5_em, r4_em_same_day, r3_families, r3_integration_d90_d92_d94 and combination modules (92 tests).
+    The 76 tests outside the new module pass under every mutant.
+    - M0, the whole change undone: 21 failures and 23 errors.
+    - M1, no statement arm: 21 fail.
+    - M2, no never-counted classes: 10 fail.
+    - M3, the statement arm under D111's one currency rule (UNDATABLE listed): 1 fails, the time-'unknown' residual.
+    - M4, done when every attribute is usable: 16 fail.
+    - M5, the done statements read in the kind and target words too: 1 fails.
+    - M6, sedation filed under the visit too: 2 fail.
+    - M7, the visit family's own label: 20 fail.
+    - M8, the classes read in the kind words only: 1 fails.
+    - M9, the classes matched inside words: 5 fail.
+    - M10, a bare "performed" or "done": 5 fail.
+    - M11, moderate sedation read by its statement: 1 fails.
+    - M12, no plural: 3 fail.
+    - M13, status "performed" only: 1 fails.
+    - M14, the classes read in the status words too: 2 fail.
+    - The note (e) record changes with no D130 decision, so no D130 mutant touches it. Its liveness is shown
+      instead by M15, visit_basis always giving a basis: all 3 of its subtests fail.
+  - **Suites** (t.sh on Postgres 55461, a new suffix per run):
+    - every tests.test_interpretation_* module (46 with the new one), tests.test_pipeline_assess_events,
+      tests.test_readers_dispatch, tests.test_guard_static and tests.test_guard_mutation: 1,319 tests, OK. The same set
+      on 1caaf0609 (45 modules): 1,303 tests, OK.
+    - test_change_context_events, both guard matrices, test_overlay_differential, test_pipeline_api,
+      test_pipeline_interpret, test_retry_reading_api, test_models_event_inventory, test_peer_heading,
+      test_repairs_ec5_reportruns, test_repairs_7c8_p1reports, test_repairs_7c8_p1sends and
+      test_repairs_r3_integration_guards: 267 tests, OK, 3 skipped.
+    - The patch applied to a fresh archive of 1caaf0609 (patch -p1, no .orig or .rej) is byte-identical to the work
+      tree. No ops file changed.
+  - **Edited.** studio/interpretation/combination.py: procedure_day (the statement arm, its label, never done, ON only)
+    and its docstring, plus the module-level helpers VISIT_FAMILIES, DONE_STATEMENTS, NAMING_WORDS, NOT_PROCEDURES,
+    _own_words and _stated_procedure. No import changed.
+  - **Recorded residuals and costs** (constructed; a hold unless it says otherwise):
+    - The spec's "placed on the date": the excision filed under the visit with Gemini's time 'unknown' ("Excision of a
+      1 cm sebaceous cyst on the upper back was performed in the office.") is READY, as at 1caaf0609; c2e53f8e holds it,
+      separate_em.
+      - The alternative is D111's one currency rule for this arm: drop "or (by_statement and day != facts.ON)", mutant
+        M3. It asks event_time there ("Was the act (“was performed”) done at this encounter?").
+      - It moves nothing else probed and has no recorded member.
+      - Not built, because the spec says "placed on the date".
+    - The spec's filing "office_em or em_other": the same excision filed as sedation is READY, as at 1caaf0609;
+      c2e53f8e holds it.
+    - When its words cannot tell: "was excised", "I performed ..." and "was completed" are READY, as at 1caaf0609.
+      c2e53f8e holds each, reading "completed" and "I performed" as done and "excised" as gi.other uncertain.
+    - "Names imaging": "Ultrasound-guided paracentesis was performed ..." and "Endoscopic ultrasound was performed ..."
+      are never counted, READY as at 1caaf0609. c2e53f8e holds both; it routes the second as gi.eus.
+    - Held where c2e53f8e is READY: "Removal of a perianal skin tag was performed ..." ("removal" is no procedure word
+      of detect's, but the act is a procedure), "A history and physical was performed today.", "Medication
+      reconciliation was performed today." and the off-contract "No excision was performed today.". The classes the
+      spec names do not cover the visit, its history and physical, or a reconciliation. The installed reader's
+      _NOT_A_PROCEDURE list (visit, evaluation, history, review, assessment, education, ...) would; adding it removes
+      only holds this rule adds. With no E/M proposed, each moves the visit item to not_listed where c2e53f8e lists it.
+    - Note (e), above.
+    - D109's residuals are unchanged: services.inventory and derived.procedure_day still omit an act filed under the
+      visit, and the routing stand-in lists it under gi.office_em.
+  - **Housekeeping.** t.sh left runs/state-em2* and runs/tmp-em2* under gemini-migration/runs, and the measurement
+    wrote fresh2-score/f2r5b-em2, fresh-score/f1r5b-em2 and fresh-score/f1r5b-em2-base (with their summary JSON).
+    rm -rf is denied, so they remain. All data is synthetic, nothing was sent, no docker was used, and the worktree
+    was never edited (HEAD is still 1caaf0609).
+  - **Evidence.**
+    - The three engines on the probe inputs: repair5b/em2/out/table.txt, raw outputs in
+      out/{installed,np-base,np-work}.json.
+    - The pins' own inputs: out/pin-table.txt, raw in out/pin-installed.json and out/pin-replay-{base,work}.json. These
+      texts were recorded by running the pin module, and the installed side was also run through t.sh in the c2e53f8e
+      archive, with identical output.
+    - Mutants: out/mut-<n>.log and out/mutation-summary.txt. Census: out/census-*.json.
+
+- **Round 5b integration (2026-11-11; wf_488a1307-ad1, integrated as built).** After the owner reset the usage limit,
+  six repairs were built on 1caaf0609, each with an independent reviewer: colon (D124-D125), ercp2 (D127),
+  enteroscopy-route (D114), egd (D115-D119), currency2 (D128) and em2 (D130). The three patches committed unreviewed
+  at 1caaf0609 (em D111-D113, eus2 D120-D123, questions2 D126) were reviewed independently against d353e64df.
+  - The six patches applied in sequence with git apply and no conflict. Engine and guard suites: 1704 tests OK.
+  - FRESH-2 (f2r5b-int): A 96/6, B 177/15, C 171/19 plus 2 safe_hold. rows.jsonl is byte-identical to f2r5int's.
+    Two assessments gain D125's service extent question (C/PAR-008 r1 and C/W1-u31a-reg-p7-codes-025 r1, both
+    EGD-and-colonoscopy notes with no colonoscopy reach); c2e53f8e asks extent on both. The head-to-head is equal to
+    h2h-r5int.json in every key (run 1 214/234; worse on 5 rows, all holds).
+  - The reviews found, on constructed on-contract inputs, a wrong READY against the document AND c2e53f8e in these
+    places. Each is a regression under the owner's registry rule, so round 5c repairs them before refutation round
+    5. Only ercp2's was INTRODUCED by its patch; the others were present before it, or are left open by a repair
+    that set out to close them:
+    - em: SAME_DAY_WORDS never matched a word followed by punctuation ('Earlier today, excision ...'), present
+      since D109. D112's removal of the anaphoric frames releases 'Earlier that morning, I performed a flexible
+      sigmoidoscopy ...' (G2), where d353e64df and c2e53f8e hold the E/M.
+    - eus2: an EUS told only through an EUS-guided act of a kind outside EUS_ACTS (a biopsy, RFA, stent or coil);
+      D120 (43240's defining target) and D122 (a diagnostic EUS beside an unlisted EUS-guided act) are recorded but
+      read by nothing.
+    - colon: D124 misses role headings that carry trailing words ('Pathology Report: Final', 'Nursing note -
+      recovery').
+    - ercp2 (introduced): D127's clearance release reads a purpose clause, a device subject or a doubt as a yield.
+      'The bile duct was swept with an extraction balloon to ensure all stones had been removed; no stones
+      remained.' turns 43264 from held to READY.
+    - enteroscopy-route: a Roux-en-Y gastric pouch is read as the small-intestinal pouch (44386 READY); an anatomy
+      mention ('in a patient with an end ileostomy') is read as the route (44382 READY on an oral enteroscopy).
+    - egd: a bleeding_control act named only 'Hemostatic' (43255 READY).
+    - em2: an act read by its statement that is undatable is dropped; a class word in the target words sets the
+      act apart.
+  - High or medium problems repaired in 5c:
+    - questions2: the TARGET denial falls out of the member's details row, and D126's (4) asks technique where
+      d353e64df asked statement_scope.
+    - currency2: a denial's unresolved relation is displaced by a doubt on the same act.
+    - egd: a doubted clip takes another act's service question, and the stent removal is never listed.
+    - enteroscopy-route: duodenal acts beyond the EGD's reach are moved to the EGD.
+  - Saved: gemini-migration/round5b/ (every report and review, each patch and DECISIONS entry, and the workflow).

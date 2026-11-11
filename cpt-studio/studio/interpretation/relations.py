@@ -211,7 +211,16 @@ class Context:
         # rule, as coverage.sessions, done_examinations and events.supports read it: a digital rectal examination
         # Gemini lists as the family's examination (its device verified as manual) is no session (FINAL 5.6 E13).
         # Counted here, it made "No biopsies were taken." beside the biopsy ask in which procedure the biopsy was done
-        # (session_unresolved), never the contradiction, while coverage read the colonoscopy as the one session
+        # (session_unresolved), never the contradiction, while coverage read the colonoscopy as the one session.
+        # D128 (the review of D99, problem 2): and an examination whose current time no date has checked yet (D67(a):
+        # date_unchecked alone) is no current examination here. D128 keeps D99's reading only where it can only hold,
+        # and counting can release: it makes every all_of_kind pair of the family session_unresolved before any date.
+        # Counted, the undated note's "On 11/09/2026, the colonoscope was reinserted to the cecum." took the
+        # contradiction's question from the denial whatever the member's date, the second colonoscope another day's or
+        # not, where the installed release asks conflict:snare; and an all_of_kind doubt's DOUBT, which keeps every
+        # code of its kinds from an exclusion (events._doubted), became UNRESOLVED - "Colonoscopy: No polyp was
+        # removed." then excluded 45385 with the member's 2026-11-10, where the document's own 11/10/2026 holds it. A
+        # possible examination is a doubt, never a fact (D87)
         self.unresolved_sessions = frozenset(family for family, count in exams.items() if count >= 2)
         self.facts = identity.lesion_facts(draft)
         self.kinds = {eid: mapping.catalogue_kind(event) for eid, event in draft.events.items()}
@@ -305,20 +314,45 @@ def procedure_row(context: Context, statement: Mapping, act: Mapping) -> Row:
 
 def time_row(statement: Mapping, act: Mapping) -> Row:
     """The time row (module docstring). DECISIONS D99 (the round-4 refutation, finding 8): a current_encounter time
-    whose ONLY failure is date_unchecked - D67(a): a day literal no service date could check yet, unopened - pairs as
-    current. It is a pending date check, not a doubt about the encounter. Read as UNKNOWN, the snare "On 11/09/2026, ...
-    was removed" of an undated note beside "Impression: No polypectomy was performed." was UNRESOLVED(time) instead of
-    a CONTRADICTION, so the contradiction was asked nowhere (45385 asked only event_time, and the conflicts check said
-    there was none) where the installed release asks conflict:snare. Only the pairing reads it so: the act's own code is
-    still held by its unverified time until a date decides it (supports and h4 read verify.usable), and a time no date
-    has checked is never a literal for a hard difference (verify.exclusion_basis reads only a usable time)."""
-    def pairs(time) -> bool:
-        return verify.usable(time) or (
-            isinstance(time, Mapping) and time.get('value') == 'current_encounter' and time.get('state') == 'unverified'
-            and not time.get('open') and list(time.get('reasons') or ()) == ['date_unchecked'])
+    whose ONLY failure is date_unchecked - D67(a): a day literal no service date could check yet, unopened - is a
+    pending date check, not a doubt about the encounter. A time no date has checked is never a literal for a hard
+    difference (verify.exclusion_basis reads only a usable time).
+
+    DECISIONS D128 (the review of D99, problems 0-2) keeps that reading only where it can only hold. The pairing is made
+    once, at normalize, before any date can decide the day; assess re-judges the times but reuses the stored relations
+    (D67's residual). So a pending check pairs as current - against a current time, or another pending check - except:
+    - beside a DENIAL (status not_performed), only the denial's own pending check pairs, and only against an act whose
+      time is verified current: the act's time is then not in question, so no question of its code is displaced, and
+      the installed release asks the conflict on that text whatever the member's date ("On 11/09/2026, no polypectomy
+      was performed." beside the snare: conflict:snare). The ACT's pending check beside a denial is UNKNOWN, as before
+      D99, and so are two: paired as the day it names, the undated note's snare "On 06/02/2025, ... was removed" beside
+      "Impression: No polypectomy was performed." stayed a CONTRADICTION after the member's 2026-11-09 made it another
+      day's, and 45385 asked conflict:snare where its own time is the question (event_time). Left UNKNOWN, a member's
+      date equal to its day verifies the act's time and the denial's relation asks the contradiction as the
+      statement's scope (D102); a differing date or none asks the act's time;
+    - a pending check never sets a pair apart (D128 (1)): beside a denial Gemini dates earlier_encounter, verified only
+      by its C1 marker ("As previously noted, no polypectomy was performed."), the pending act was INDEPENDENT and
+      READY once the member's date equalled its day, where the installed release asks conflict:snare - it stays in
+      doubt.
+    Beside a doubt (uncertain), a planned act a claim names, or the other act of a claim between two acts, D99's reading
+    stands: the pair is a DOUBT or a claim's UNRESOLVED, which only holds - and a DOUBT keeps every code of its kinds
+    from an exclusion (events._doubted, FINAL 7.5 (4)): read UNKNOWN there, the EGD's doubted snare "On 11/09/2026, ..."
+    let "Colonoscopy: No polyp was removed." exclude 45385 on the undated note, where the dated document holds it. The
+    act's own code reads its time through verify.usable (supports, h4) as before."""
+    def pending(time) -> bool:
+        return (isinstance(time, Mapping) and time.get('value') == 'current_encounter'
+                and time.get('state') == 'unverified' and not time.get('open')
+                and list(time.get('reasons') or ()) == ['date_unchecked'])
+
+    def current(time) -> bool:  # a usable current_encounter time, or a pending check
+        return pending(time) or (verify.usable(time) and time.get('value') == 'current_encounter')
 
     first, second = statement['time'], act['time']
-    if not (pairs(first) and pairs(second)):
+    if not (verify.usable(first) and verify.usable(second)):
+        if (pending(first) or pending(second)) and current(first) and current(second) and (
+                (statement.get('status') or {}).get('value') != 'not_performed'
+                or (pending(first) and not pending(second))):
+            return Row('time', SAME)  # D128: a denial's pairing only on its own pending check, against a current act
         return Row('time', UNKNOWN, 'time_unresolved')
     if first['value'] == second['value']:
         return Row('time', SAME)

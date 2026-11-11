@@ -1,6 +1,7 @@
-"""The ERCP rules of the events engine (DECISIONS D105, D106 and D107; the round-4 refutation, findings 22, 25 and 26):
-holds and signals the per-code rule and the session's reading give an ERCP's codes, each only ADDING a hold, a question
-or a warning to what the engine decided before - never READY, never an exclusion, never another code's question.
+"""The ERCP rules of the events engine (DECISIONS D105, D106 and D107; the round-4 refutation, findings 22, 25 and 26;
+completed by D127, the review of those rules and the family parity audit): holds and signals the per-code rule and the
+session's reading give an ERCP's codes, each only ADDING a hold, a question or a warning to what the engine decided
+before - never READY, never an exclusion, never another code's question - but for D127's one release (a clearance, below).
 
 - D105, a possible stent exchange. An ERCP session with a positive stent REMOVAL and a positive stent PLACEMENT whose
   ducts nothing sets apart is a possible stent exchange (43276: "removal and exchange of stent(s)"), so 43275 (the
@@ -31,14 +32,29 @@ or a warning to what the engine decided before - never READY, never an exclusion
   gives nothing. The examination stated terminated - its status begun and not completed, or its reach's completion
   'incomplete' - is D61's and D71's arm, read before this one (assess._incomplete_session).
 
+- D127, as the review asked (each arm's docstring names its problem):
+  - D105 reads an exchange Gemini files as stent_exchange beside the stent_removal or the stent placement it includes as
+    a possible exchange too (exchange_pairs), so 43275 or 43274 is never READY beside it;
+  - D106 reads the act's own sentence AND the sentence that immediately follows it when that one continues the act
+    (names no other act), the sentences of the code's own exact evidence that hold the act's words (Gemini's passage
+    may be the sentence's first clause), "nothing was retrieved" and "no stones were found" - and never another act's
+    sentence of the act's passage. A sentence that states a yield ("Multiple stones were extracted ... until no stones
+    remained.") is a clearance: its denial of the stones' PRESENCE ("no stones remained", "no stones were seen") supports
+    43264 again, as the installed release reads it - the one release, never of a denied RETRIEVAL ("no stones were
+    retrieved"), which still holds;
+  - D107 quotes the sentence that states the failure, as the installed release does;
+  - the cannulation stated both achieved and not achieved is the installed release's conflict (cannulation_conflict):
+    every ERCP code asks it.
+
 Where they run: D105 and D106 sit inside the per-code rule itself - ``ruled`` is events.evaluate's one call site, its
 first statement - so every reader of the per-code rule (the assessment, its participants and second review, and the
 review overlay's counted codes, overlay.counted_codes: "the evaluation the engine made, made again") reads one
 evaluation, and events.evaluate stays the function its module defines. D107 is read by assess._incomplete_session.
 
 Pure apart from one context variable (``_RULING``, set only while ``ruled`` has the per-code rule evaluate one code):
-it reads the stored attributes' values and states and the literal words of an act's own located passages, never the
-revision text; it imports nothing from studio.gi.
+it reads the stored attributes' values and states, the literal words of the inventory's located passages and of the
+code's own exact evidence (the proposer's spans, verified against the revision text before the rule runs), never the
+revision text itself; it imports nothing from studio.gi.
 """
 from __future__ import annotations
 
@@ -71,17 +87,24 @@ def _stent_side(event: Mapping, kind: str) -> bool:
 
 def exchange_pairs(reading) -> list:
     """D105: (removal, placement) of every positive stent removal and positive stent placement of the ERCP family whose
-    ducts nothing sets apart - not both verified (coverage.duct_side) and different - in the reading's order."""
+    ducts nothing sets apart - not both verified (coverage.duct_side) and different - in the reading's order. DECISIONS
+    D127 (the review of D105, problem 1): then (removal, exchange) of every such removal beside a positive stent
+    EXCHANGE, and (exchange, placement) of every such exchange beside a placement, read alike - an exchange Gemini files
+    as stent_exchange plus the stent_removal it includes, or as stent_exchange beside the placement it includes, is a
+    possible exchange too, so the removal (43275) or the placement (43274) is never READY beside it. The D105 pairs come
+    first, so a session with all three keeps D105's question."""
     from studio.interpretation import coverage
 
     removals = [event for event in reading.events.values() if _stent_side(event, REMOVAL)]
     placements = [event for event in reading.events.values() if _stent_side(event, PLACEMENT)]
+    exchanges = [event for event in reading.events.values() if _stent_side(event, EXCHANGE)]
     pairs = []
-    for removal in removals:
-        for placement in placements:
-            one, two = coverage.duct_side(removal), coverage.duct_side(placement)
-            if not one or not two or one == two:
-                pairs.append((removal, placement))
+    for first, second in ([(removal, placement) for removal in removals for placement in placements]
+                          + [(removal, exchange) for removal in removals for exchange in exchanges]
+                          + [(exchange, placement) for exchange in exchanges for placement in placements]):
+        one, two = coverage.duct_side(first), coverage.duct_side(second)
+        if not one or not two or one == two:
+            pairs.append((first, second))
     return pairs
 
 
@@ -96,13 +119,28 @@ def _spans(places) -> tuple:
 
 
 def exchange_question(reading, removal: Mapping, placement: Mapping) -> tuple[str, str]:
-    """D105: (question, reason) of a code held because its stent removal and placement may be one exchange."""
+    """D105: (question, reason) of a code held because its stent removal and placement may be one exchange. D127: a
+    pair one of whose sides is a stent exchange asks whether the other side - the removal or the placement - was part of
+    that exchange (43276) or a separate service (43275 or 43274)."""
     from studio.interpretation import events
 
-    removed, placed = events.event_label(reading, removal), events.event_label(reading, placement)
-    question = (f'Were the {removed} ({wording.quote(events.statement_text(reading, removal), 120)}) and the {placed} '
-                f'({wording.quote(events.statement_text(reading, placement), 120)}) one stent exchange (43276), or '
-                'separate services (a stent removal, 43275, and a stent placement, 43274)?')
+    def said(event: Mapping) -> str:
+        return wording.quote(events.statement_text(reading, event), 120)
+
+    if EXCHANGE in ((removal.get('catalogue_kind') or ''), (placement.get('catalogue_kind') or '')):
+        whole, part = (removal, placement) if (removal.get('catalogue_kind') or '') == EXCHANGE else (placement, removal)
+        separate = ('a separate stent removal (43275)' if (part.get('catalogue_kind') or '') == REMOVAL
+                    else 'a separate stent placement (43274)')
+        question = (f'Was the {events.event_label(reading, part)} ({said(part)}) part of the '
+                    f'{events.event_label(reading, whole)} ({said(whole)}), one stent exchange (43276), or {separate}?')
+        reason = ('The document states a stent exchange and a stent removal or placement at this ERCP, in ducts nothing '
+                  'in the document sets apart. A removal or a placement that is part of a stent exchange is reported '
+                  'with the exchange (43276), not separately (43275, 43274); CPT Studio does not choose between them. '
+                  'Held for the reviewer, not excluded.')
+        return question, reason
+    first, second = events.event_label(reading, removal), events.event_label(reading, placement)
+    question = (f'Were the {first} ({said(removal)}) and the {second} ({said(placement)}) one stent exchange (43276), '
+                'or separate services (a stent removal, 43275, and a stent placement, 43274)?')
     reason = ('The document states a stent removal and a stent placement at this ERCP, in ducts nothing in the '
               'document sets apart. A stent removed and replaced in the same duct at one session is one stent exchange '
               '(43276), not a removal (43275) and a placement (43274); CPT Studio does not choose between them. Held '
@@ -126,9 +164,11 @@ def exchange_hold(evaluation, reading):
     if not sides or not (ready or not_documented):
         return evaluation
     own = set(evaluation.supporting)
-    pairs = [(removal, placement) for removal, placement in exchange_pairs(reading)
-             if EXCHANGE in sides or (REMOVAL in sides and removal['id'] in own)
-             or (PLACEMENT in sides and placement['id'] in own)]
+    # D127: a pair's first event is its removal or its exchange, its second its exchange or its placement - and a code's
+    # own supporting act is never an exchange but for 43276's, which EXCHANGE holds whatever its pair
+    pairs = [(first, second) for first, second in exchange_pairs(reading)
+             if EXCHANGE in sides or (REMOVAL in sides and first['id'] in own)
+             or (PLACEMENT in sides and second['id'] in own)]
     if not pairs:
         return evaluation
     removal, placement = pairs[0]
@@ -140,7 +180,7 @@ def exchange_hold(evaluation, reading):
                                                       _spans(places)))
 
 
-# --- D106: a stone removal that retrieved nothing --------------------------------------------------------------------
+# --- D106: a stone removal that retrieved nothing (as DECISIONS D127 completes it) ---------------------------------
 
 STONE_EXTRACTION = 'stone_extraction'
 NOTHING_RETRIEVED = 'nothing_retrieved'  # the reason (events.Evaluation.reason) of D106's hold
@@ -148,14 +188,28 @@ STONE_WORDS = ('stone', 'stones', 'calculus', 'calculi', 'debris', 'sludge')
 RETRIEVAL_WORDS = ('retrieve', 'retrieved', 'retrieves', 'retrieving', 'retrieval', 'extract', 'extracted', 'extracts',
                    'extracting', 'extraction', 'remove', 'removed', 'removes', 'removing', 'removal', 'deliver',
                    'delivered', 'recover', 'recovered', 'yield', 'yielded')
+# D127 (disagreement 1(b) of D106's builder): "no stones were found" after a sweep denies its yield as "were retrieved"
+# does - the words that make a negation over stones about the act's yield are the retrieval words and these
+FIND_WORDS = ('find', 'finds', 'found')
+# D127: the negators that are themselves what was retrieved - "nothing was retrieved", "none were extracted" - read
+# only beside a retrieval word in their own clause (disagreement 1(a))
+OBJECT_NEGATORS = ('nothing', 'none')
+# D127 (the review of D106, problem 3): the verbs that state a yield - a stone, calculus, debris or sludge retrieved,
+# extracted or removed ("Multiple stones were extracted ... until no stones remained.") - past forms only, never after
+# "to" or "be" (an intent: "to extract", "could not be extracted") or a negator
+YIELD_VERBS = ('retrieved', 'extracted', 'removed', 'delivered', 'recovered', 'yielded')
 # The words between a negator and the stone word that make the negation exceptive (C-7: "no further stones" is about
 # stones beyond those the document reports removed) or partial ("not all stones"): such a negation states nothing about
-# whether anything was retrieved.
+# whether anything was retrieved. D127: "nothing else" is exceptive too.
 NOT_NOTHING = ('further', 'other', 'additional', 'more', 'residual', 'remaining', 'retained', 'all', 'every', 'each',
-               'both', 'only')
+               'both', 'only', 'else')
 NEGATOR_REACH = 3  # at most this many words between the negator and the stone word it governs
 CLAUSE_BREAKS = frozenset(',;:()[]')
 SENTENCE_ENDS = frozenset('.!?')
+# D127 (the review of D106, problem 0): the sentence that continues an act begins at most this many characters after
+# the act's own sentence ends - in the same passage, or in the located passage or the code's own exact evidence that
+# starts on the next line ("...extraction balloon." then "No stones or sludge were retrieved.")
+CONTINUES_WITHIN = 2
 
 
 def _sentences(place: Mapping) -> list:
@@ -191,52 +245,191 @@ def _tokens(text: str) -> list:
     return out
 
 
+def _clauses(sentence: Mapping) -> list:
+    """D127: the clauses of one sentence {start, end, text}, each {start, end, text, tokens}: split at a clause break or
+    a sentence end, each clause's folded words (_tokens)."""
+    text, start = sentence['text'], sentence['start']
+    out, begin = [], 0
+    for index, char in enumerate(text + '.'):
+        if char in CLAUSE_BREAKS or char in SENTENCE_ENDS or index == len(text):
+            piece = text[begin:index]
+            tokens = [token for token in _tokens(piece) if token != '|']
+            if tokens:
+                out.append({'start': start + begin, 'end': start + index, 'text': piece, 'tokens': tokens})
+            begin = index + 1
+    return out
+
+
 def _negator(token: str) -> bool:
     return token in lexicon.NEGATORS or token.endswith("n't")
 
 
-def states_nothing_retrieved(text: str) -> bool:
-    """D106: whether ``text`` (one sentence) holds a negator over a stone word - the negator, then at most NEGATOR_REACH
-    words with no clause break and no exceptive or partial word (NOT_NOTHING), then STONE_WORDS - and a retrieval or
-    extraction word (RETRIEVAL_WORDS)."""
-    tokens = _tokens(text)
-    if not any(token in RETRIEVAL_WORDS for token in tokens):
-        return False
-    for index, token in enumerate(tokens):
-        if not _negator(token):
+def _governed(tokens: Sequence[str], index: int) -> list:
+    """The positions of the stone words the negator at ``index`` governs in its clause: within NEGATOR_REACH words after
+    it, before any exceptive or partial word (NOT_NOTHING)."""
+    out = []
+    for later in range(index + 1, min(len(tokens), index + 2 + NEGATOR_REACH)):
+        if tokens[later] in NOT_NOTHING:
+            break
+        if tokens[later] in STONE_WORDS:
+            out.append(later)
+    return out
+
+
+def _negated(tokens: Sequence[str]) -> set:
+    """The positions of the stone words some negator governs in one clause (_governed)."""
+    return {position for index, token in enumerate(tokens) if _negator(token) for position in _governed(tokens, index)}
+
+
+def _denial(clauses: Sequence[Mapping]) -> tuple:
+    """D106 over a statement's clauses (D127: the act's own sentence and the sentence that continues it), with a
+    retrieval or find word anywhere in the statement: 'retrieval' when a negation denies a retrieval - a negator over a
+    stone word (_governed) with a retrieval word in its clause after the negator, or in the two words before it ("no
+    stones or sludge were retrieved", "retrieved no stones", "without retrieval of any stones"), or a negator that is
+    itself what was retrieved ("nothing was retrieved": OBJECT_NEGATORS, not exceptive, beside a retrieval word in its
+    own clause); 'presence' when it denies only that stones were there ("no stones were found", "no stones remained",
+    "no stones were seen"); '' when neither - with the clauses of the presence denials."""
+    context = any(token in RETRIEVAL_WORDS or token in FIND_WORDS for clause in clauses for token in clause['tokens'])
+    presence = []
+    for clause in clauses:
+        tokens = clause['tokens']
+        for index, token in enumerate(tokens):
+            if (token in OBJECT_NEGATORS and (index + 1 == len(tokens) or tokens[index + 1] not in NOT_NOTHING)
+                    and any(word in RETRIEVAL_WORDS for word in tokens)):
+                return 'retrieval', []
+            if not context or not _negator(token) or not _governed(tokens, index):
+                continue
+            if any(word in RETRIEVAL_WORDS for word in tokens[max(0, index - 2):index] + tokens[index + 1:]):
+                return 'retrieval', []
+            if clause not in presence:
+                presence.append(clause)
+    return ('presence' if presence else ''), presence
+
+
+def _yields(clauses: Sequence[Mapping], others: Sequence[Mapping] = (),
+            mine: Optional[Sequence[Mapping]] = None) -> bool:
+    """D127 (problem 3): whether a clause of the act's own sentence states the act's yield - a stone word no negator
+    governs and a yield verb (YIELD_VERBS) no negator precedes in the clause and that does not follow "to" or "be" - in
+    a clause that holds one of the act's own words (``mine``; None: every clause is the act's, a sentence read alone)
+    and no other event's (``others``: that event's yield, never this act's). Such a sentence's denial of the stones'
+    presence is a clearance ("until no stones remained", "no stones remained on the final cholangiogram")."""
+    for clause in clauses:
+        if any(clause['start'] < item['end'] and item['start'] < clause['end'] for item in others):
             continue
-        for later in tokens[index + 1:index + 2 + NEGATOR_REACH]:
-            if later == '|' or later in NOT_NOTHING:
-                break
-            if later in STONE_WORDS:
-                return True
+        if mine is not None and not any(clause['start'] < item['end'] and item['start'] < clause['end']
+                                        for item in mine):
+            continue
+        tokens = clause['tokens']
+        negated = _negated(tokens)
+        if not any(token in STONE_WORDS and index not in negated for index, token in enumerate(tokens)):
+            continue
+        for index, token in enumerate(tokens):
+            if token not in YIELD_VERBS or any(_negator(word) for word in tokens[:index]):
+                continue
+            if index and tokens[index - 1] in ('to', 'be'):
+                continue
+            return True
     return False
 
 
-def nothing_retrieved(reading, event: Mapping) -> Optional[dict]:
-    """D106: the act's own sentence (a place {start, end, text}) that states nothing was retrieved, else None. The
-    act's own sentences are those of its own located passages (events.own_passages: kind, status, target) that hold one
-    of its own words (kind, status or target words); a passage of the act none of whose sentences holds them is read
-    whole."""
+def states_nothing_retrieved(text: str) -> bool:
+    """D106 over one sentence read alone as the act's own (every clause the act's), as D127 completes it: a negator
+    over stones, calculi, debris or sludge (at most NEGATOR_REACH words between, no clause break and no exceptive or
+    partial word) beside a retrieval or find word, or "nothing" or "none" retrieved (_denial) - a denial of a retrieval
+    always, a denial of the stones' presence only where the sentence states no yield (_yields: "until no stones
+    remained" after "Multiple stones were extracted" is a clearance). nothing_retrieved reads an act's own sentence with
+    the act's own words: only a clause that holds them states the act's yield."""
+    clauses = _clauses({'start': 0, 'end': len(text), 'text': text})
+    denial, _ = _denial(clauses)
+    return denial == 'retrieval' or (denial == 'presence' and not _yields(clauses))
+
+
+def _trimmed(place: Mapping) -> dict:
+    """``place`` ({start, end, text}) without its surrounding whitespace, its offsets moved with it."""
+    text = place['text']
+    lead = len(text) - len(text.lstrip())
+    body = text.strip()
+    return {'start': place['start'] + lead, 'end': place['start'] + lead + len(body), 'text': body}
+
+
+def _own_words(event: Mapping) -> list:
+    return [event[name]['words'] for name in ('kind', 'status', 'target')
+            if isinstance(event.get(name), Mapping) and isinstance(event[name].get('words'), Mapping)]
+
+
+def _holds(place: Mapping, spans: Sequence[Mapping]) -> bool:
+    return any(place['start'] < item['end'] and item['start'] < place['end'] for item in spans)
+
+
+def _kept(kept: Sequence) -> list:
+    return [{'start': span.start, 'end': span.end, 'text': span.text} for span in kept or ()
+            if getattr(span, 'exact', True) and span.text]
+
+
+def nothing_retrieved(reading, event: Mapping, kept: Sequence = ()) -> Optional[list]:
+    """D106: the act's statement that nothing was retrieved (its places, [{start, end, text}], in document order), else
+    None. The act's own sentences are those of its own located passages (events.own_passages: kind, status, target) that
+    hold one of its own words (kind, status or target words); a passage of the act none of whose sentences holds them is
+    read whole. DECISIONS D127, as the review of D106 asks it:
+    - (problem 0) a statement is an own sentence AND the sentence that immediately follows it when that one continues
+      the act - it begins within CONTINUES_WITHIN characters of the sentence's end, in the same passage or in a located
+      passage or the code's exact evidence (``kept``) that starts there, and holds no other event's own words ("The
+      bile duct was swept several times with an extraction balloon. No stones or sludge were retrieved.");
+    - (disagreement 1(c)) a sentence of the code's own exact evidence that overlaps one of the act's own passages and
+      holds one of its own words is an own sentence too: Gemini's passage may be only the sentence's first clause;
+    - (problem 2) only those: another act's sentence in the act's own passage is never read;
+    - (problem 3) a sentence that denies only the stones' presence ('presence', _denial) where a clause of it that
+      holds the act's own words states a yield (_yields) is a clearance, and denies nothing - unless a presence denial
+      sits in a clause that holds another act's words (a sentence of two acts, D106's own sentence read whole: held, as
+      before); a denial of a retrieval ('retrieval') in the act's own sentence is read whatever the sentence states
+      beside it, as before. An own sentence that states the act's yield is the act's own word on what it retrieved, so
+      the sentence after it - read only because it may continue the act - is not read."""
     from studio.interpretation import events
 
-    words = [event[name]['words'] for name in ('kind', 'status', 'target')
-             if isinstance(event.get(name), Mapping) and isinstance(event[name].get('words'), Mapping)]
-    for place in reading.places(events.own_passages(event)):
+    words = _own_words(event)
+    others = [span for other in reading.events.values() if other.get('id') != event.get('id')
+              for span in _own_words(other)]
+    places = reading.places(events.own_passages(event))
+    evidence = [place for place in _kept(kept) if any(_holds(place, [mine]) for mine in places)]
+    own, seen = [], set()
+    for place in places:
         sentences = _sentences(place)
-        own = [sentence for sentence in sentences
-               if any(sentence['start'] < item['end'] and item['start'] < sentence['end'] for item in words)]
-        for sentence in own or sentences:
-            if states_nothing_retrieved(sentence['text']):
-                return sentence
+        for sentence in [item for item in sentences if _holds(item, words)] or sentences:
+            if (sentence['start'], sentence['end']) not in seen:
+                seen.add((sentence['start'], sentence['end']))
+                own.append(sentence)
+    for place in evidence:
+        for sentence in _sentences(place):
+            if _holds(sentence, words) and (sentence['start'], sentence['end']) not in seen:
+                seen.add((sentence['start'], sentence['end']))
+                own.append(sentence)
+    located = [place for record in reading.passages.values() if record.get('state') != 'unlocated'
+               for place in record['spans']]
+    candidates = [sentence for place in located + _kept(kept) for sentence in _sentences(place)]
+    for sentence in sorted(own, key=lambda item: (item['start'], item['end'])):
+        clauses = _clauses(sentence)
+        yields, (denial, where) = _yields(clauses, others, words), _denial(clauses)
+        shared = any(_holds(clause, others) for clause in where)  # a presence denial in a clause of another act's
+        if denial == 'retrieval' or (denial == 'presence' and (not yields or shared)):
+            return [_trimmed(sentence)]
+        if yields:  # the act's own sentence states what it retrieved: a sentence after it never denies that
+            continue
+        after = [item for item in candidates
+                 if sentence['end'] <= item['start'] <= sentence['end'] + CONTINUES_WITHIN]
+        first = min((item['start'] for item in after), default=None)
+        following = list({(item['start'], item['end']): item for item in after
+                          if item['start'] == first and not _holds(item, others)}.values())
+        if following and _denial(clauses + [clause for item in following for clause in _clauses(item)])[0]:
+            return [_trimmed(item) for item in (sentence, *following)]
     return None
 
 
-def retrieval_hold(evaluation, reading):
+def retrieval_hold(evaluation, reading, kept: Sequence = ()):
     """D106 over one code's evaluation: a READY code of the stone removal (its one requirement group is
     stone_extraction: 43264) whose supporting acts each state that nothing was retrieved is held with the
     performed_status question naming that statement; when another act supports it, the code keeps READY on that act and
-    the act that retrieved nothing leaves E* (the decision still read it). Any other evaluation is returned unchanged."""
+    the act that retrieved nothing leaves E* (the decision still read it). Any other evaluation is returned unchanged.
+    D127: ``kept`` is the code's own exact evidence, which nothing_retrieved also reads."""
     from studio.interpretation import events
 
     link = evaluation.link
@@ -247,9 +440,9 @@ def retrieval_hold(evaluation, reading):
         return evaluation
     stated = []
     for eid in evaluation.supporting:
-        sentence = nothing_retrieved(reading, reading.events[eid])
-        if sentence is not None:
-            stated.append((eid, sentence))
+        statement = nothing_retrieved(reading, reading.events[eid], kept)
+        if statement is not None:
+            stated.append((eid, statement))
     if not stated:
         return evaluation
     apart = {eid for eid, _ in stated}
@@ -258,16 +451,16 @@ def retrieval_hold(evaluation, reading):
         labels = [events.event_label(reading, reading.events[eid]) for eid in left[:4]]
         return replace(evaluation, supporting=left, detail=f'The {events.service_label(link.family)} is documented as '
                                                            f'performed with {"; ".join(labels)}.')
-    eid, sentence = stated[0]
+    eid, statement = stated[0]
+    said = ' '.join(' '.join(place['text'].split()) for place in statement)
     act = events.event_label(reading, reading.events[eid])
-    question = (f'Was any stone, calculus, debris or sludge removed with the {act} '
-                f'({wording.quote(sentence["text"], 120)})?')
-    reason = (f'The document states that nothing was retrieved with the {act} ({wording.quote(sentence["text"], 140)}). '
+    question = f'Was any stone, calculus, debris or sludge removed with the {act} ({wording.quote(said, 120)})?'
+    reason = (f'The document states that nothing was retrieved with the {act} ({wording.quote(said, 140)}). '
               'CPT Studio does not read a sweep or an extraction that retrieved nothing as a removal of stones or '
               'debris. Held for the reviewer, not excluded.')
     return events.Evaluation(evaluation.code, link.family, link, 'uncertain', NOTHING_RETRIEVED, reason,
                              read=evaluation.read,
-                             question=events.Question('performed_status', question, reason, (eid,), _spans([sentence])))
+                             question=events.Question('performed_status', question, reason, (eid,), _spans(statement)))
 
 
 def _read_by_a_rule(link) -> bool:
@@ -305,7 +498,7 @@ def ruled(code: str, kept: Sequence, reading, link: Optional[mapping.CodeLink] =
         evaluation = events.evaluate(code, kept, reading, link)
     finally:
         _RULING.reset(token)
-    return retrieval_hold(exchange_hold(evaluation, reading), reading)
+    return retrieval_hold(exchange_hold(evaluation, reading), reading, kept)  # D127: the code's own exact evidence
 
 
 # --- D107: an ERCP whose access act was begun and not completed ------------------------------------------------------
@@ -313,15 +506,34 @@ def ruled(code: str, kept: Sequence, reading, link: Optional[mapping.CodeLink] =
 ACCESS_KINDS = ('cannulation',)  # the ERCP's access act: the duct's cannulation
 
 
+def statement_sentence(reading, event: Mapping, name: str = 'status') -> Optional[dict]:
+    """DECISIONS D127: the sentence ({start, end, text}) of ``event``'s own located passages that holds its ``name``
+    words - the statement that verifies them - else None."""
+    from studio.interpretation import events
+
+    record = event.get(name)
+    words = record.get('words') if isinstance(record, Mapping) else None
+    if not isinstance(words, Mapping):
+        return None
+    for place in reading.places(events.own_passages(event)):
+        for sentence in _sentences(place):
+            if sentence['start'] <= words['start'] and words['end'] <= sentence['end']:
+                return sentence
+    return None
+
+
 def access_not_completed(reading, family: str) -> Optional[str]:
-    """D107: the failure-marker words (its status words) of the first access act of the ERCP session (ACCESS_KINDS) done
-    at this encounter (events.done: a usable status, current time and documenting-team performer) whose status is
-    attempted_not_completed - "Multiple attempts at biliary cannulation were unsuccessful." - else None; None for any
-    family but the ERCP's. The session's DEFINING access act: a cannulation of the pancreatic duct begun and not
-    completed beside a cannulation of the bile duct achieved (both ducts verified, coverage.duct_side) is not the
-    session's access failing - the installed release's pancreatic avoidance (detect._pancreatic_avoidance: "a deliberate
-    choice, not a failed ERCP") - so it gives nothing; any other begun and not completed, an earlier attempt before the
-    access was achieved included, gives the signals as the installed release does."""
+    """D107: the statement of the first access act of the ERCP session (ACCESS_KINDS) done at this encounter
+    (events.done: a usable status, current time and documenting-team performer) whose status is attempted_not_completed
+    - "Multiple attempts at biliary cannulation were unsuccessful." - else None; None for any family but the ERCP's.
+    DECISIONS D127 (the review of D107, problem 4): the statement is the sentence that holds its verified failure-marker
+    words (statement_sentence), as the installed release quotes the sentence that states the failure, no longer the
+    bare words ("were unsuccessful"); the words themselves where no own sentence holds them. The session's DEFINING
+    access act: a cannulation of the pancreatic duct begun and not completed beside a cannulation of the bile duct
+    achieved (both ducts verified, coverage.duct_side) is not the session's access failing - the installed release's
+    pancreatic avoidance (detect._pancreatic_avoidance: "a deliberate choice, not a failed ERCP") - so it gives nothing;
+    any other begun and not completed, an earlier attempt before the access was achieved included, gives the signals as
+    the installed release does."""
     from studio.interpretation import coverage, events
 
     if family != ERCP:
@@ -334,6 +546,46 @@ def access_not_completed(reading, family: str) -> Optional[str]:
             continue
         if coverage.duct_side(event) == 'pancreas' and 'biliary' in achieved:
             continue
+        sentence = statement_sentence(reading, event)
+        if sentence is not None:
+            return _trimmed(sentence)['text']
         words = events.words_of(event, 'status')
         return words['text'] if words else ''
+    return None
+
+
+# --- D127: the cannulation stated both achieved and not achieved -----------------------------------------------------
+
+def cannulation_conflict(reading, family: str) -> Optional[tuple]:
+    """DECISIONS D127 (the parity audit of D107, note 1): (note, places) of the ERCP session's cannulation outcome when
+    the document states it both achieved and not achieved - a cannulation stated performed and one stated begun and not
+    completed ("Initial attempts at biliary cannulation were unsuccessful." beside "Deep biliary cannulation was
+    achieved with a sphincterotome."), of ducts nothing sets apart (not both verified, coverage.duct_side, and
+    different: a pancreatic failure beside the biliary access is D107's avoidance, no conflict) - else None. Each is read
+    as a value in any verification state, possibly current (coverage.possibly_current) and not verified as another
+    performer's act (D87: a doubted outcome is a question, never a fact). assess._inventory_fact makes it the
+    cannulation's conflict Fact, as the installed release's detect._cannulation does ("both documented is a conflict for
+    a reviewer, never a pick"), so every ERCP code - the profile requires the cannulation - asks it. ``places``: each
+    side's statement (statement_sentence, else its status words), in document order."""
+    from studio.interpretation import coverage, events
+
+    if family != ERCP:
+        return None
+    access = [event for event in reading.events.values() if event.get('family') == ERCP
+              and (event.get('catalogue_kind') or '') in ACCESS_KINDS and coverage.possibly_current(event)
+              and not events.verified_other_performer(event)]
+    for achieved in [event for event in access if events.value(event, 'status') == 'performed']:
+        for failed in [event for event in access if events.value(event, 'status') == 'attempted_not_completed']:
+            one, two = coverage.duct_side(achieved), coverage.duct_side(failed)
+            if one and two and one != two:
+                continue
+            values, places = [], []
+            for event, outcome in ((achieved, 'cannulated'), (failed, 'not achieved')):
+                where = wording.landmark_label(mapping.target_landmark(event))
+                values.append(f'{where} {outcome}' if where else outcome)
+                place = statement_sentence(reading, event) or events.words_of(event, 'status', 'kind', 'target')
+                if isinstance(place, Mapping):
+                    places.append(_trimmed(place))
+            places.sort(key=lambda item: (item['start'], item['end']))
+            return 'Conflicting documented values: ' + ', '.join(values) + '.', places
     return None

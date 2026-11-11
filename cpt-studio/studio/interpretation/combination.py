@@ -55,11 +55,33 @@ def _base(code: str) -> bool:
 
 # --- base (engine.base_included) ---------------------------------------------------------------------------------------
 
+# DECISIONS D119 (the round-4 family parity audit, EGD gap H): a PEG Gemini files under the feeding-tube procedure is an
+# act of the EGD done with it too - the one cross-family reading of the base rule, for the PEG kind only (the
+# catalogue's own note: "A PEG placed during an EGD is reconciled under the upper GI family (its own EGD code)"; the
+# installed release reads a PEG placed during an upper endoscopy as that endoscopy's act, services.py:196-200).
+EGD, FEEDING_TUBE, PEG = 'gi.egd', 'gi.feeding_tube', 'peg'
+
+
+def _acts_beside(family: str, session: Mapping, coding: Mapping, part: str) -> list:
+    """The ``part`` ('reportable' or 'doubted') entries the base rule reads beside a base code of ``family`` matched to
+    ``session``: the session's own, and - for an EGD code (DECISIONS D119) - the PEG entries of the encounter's
+    feeding-tube session."""
+    found = list(session.get(part) or ())
+    if family == EGD:
+        tube = _session(coding, FEEDING_TUBE) or {}
+        found += [item for item in tube.get(part) or () if isinstance(item, Mapping) and item.get('kind') == PEG]
+    return found
+
+
 def base_included(members: Sequence[tuple], coding: Mapping) -> tuple:
     """A family's base (diagnostic) code matched to session S is held, never excluded, beside (a) another counted code
     of its family matched to S that accounts for an act (its profile covers one), (b) S's reportable events, or (c) S's
     doubted reportable-kind events: (base code, the other codes - or, with none, the labels of those acts), in member
-    order."""
+    order. DECISIONS D119: an EGD base code matched to a done EGD session reads, as (b) and (c), the reportable and
+    doubted PEG placements of the encounter's feeding-tube session too - "A 20 Fr pull-type PEG tube was placed under
+    endoscopic guidance without difficulty." under "UPPER ENDOSCOPY WITH PEG PLACEMENT", which Gemini attributes to the
+    feeding-tube procedure, left 43235 READY where the installed release reads the PEG as the EGD's act and holds it
+    base_included. The overlay applies the same rule at read time over the same record."""
     bases = []
     for index, (code, family, session_id) in enumerate(members):
         session = _session(coding, session_id)
@@ -69,8 +91,8 @@ def base_included(members: Sequence[tuple], coding: Mapping) -> tuple:
                        if position != index and other_family == family
                        and (catalogue.code_profile(other) or catalogue.CodeProfile('')).covers
                        and other_session == session_id)
-        reportable = session.get('reportable') or ()
-        doubted = session.get('doubted') or ()
+        reportable = _acts_beside(family, session, coding, 'reportable')  # D119
+        doubted = _acts_beside(family, session, coding, 'doubted')
         if others or reportable or doubted:
             bases.append((code, others or tuple(sorted({item['label'] for item in reportable}
                                                        | {item['label'] + ' (stated in doubt)' for item in doubted}))))
@@ -204,6 +226,45 @@ SAME_DAY_KINDS = frozenset(
     for kind in (catalogue.CATALOGUE[family].acts + tuple(item for item, _ in catalogue.CATALOGUE[family].bundled)
                  + tuple(item for item, _ in catalogue.CATALOGUE[family].unsupported_acts))
     if kind in mapping.CATALOGUE_KINDS) | mapping.EXAMINATION_KINDS | frozenset(mapping.UMBRELLAS)
+# DECISIONS D130 (the round-4 em-same-day repair's parity note (a)): an act of kind 'other' that Gemini files under the
+# visit (procedure office_em or em_other: VISIT_FAMILIES) made no procedure day, so the office excision of a sebaceous
+# cyst read that way left 99213 READY where c2e53f8e, whose routing reads "Excision ... was performed" as gi.other,
+# holds it with separate_em ("Other GI service is documented as performed on the same date"). Such an act is a
+# POSSIBLE same-day procedure (never a done one: its kind names no procedure, D87) when the date of service is its own
+# (facts.day_of ON) and its own STATUS words state that it was performed (DONE_STATEMENTS, read whole and word-bounded
+# in those words only, EB1) - and never when the words that name the act (its kind and target words: NAMING_WORDS)
+# name a test, an order, an interpretation, a lab or imaging, or counseling (NOT_PROCEDURES). Words that state neither
+# ("was excised", "I performed", no status words) leave it uncounted, as before: a recorded cost, never a READY this
+# rule makes.
+VISIT_FAMILIES = frozenset(lexicon.family_of(procedure) for procedure in lexicon.EM_PROCEDURES)
+DONE_STATEMENTS = ('was performed', 'were performed', 'was done', 'were done', 'underwent')
+NAMING_WORDS = ('kind', 'target')  # the attributes whose words name the act (its status words state its status)
+NOT_PROCEDURES = (
+    ('test', ('test', 'tests', 'testing', 'ecg', 'ekg', 'electrocardiogram')),
+    ('order', ('order', 'orders', 'ordered')),
+    ('interpretation', ('interpretation', 'interpretations', 'interpreted')),
+    ('lab', ('lab', 'labs', 'laboratory', 'laboratories', 'bloodwork', 'blood work')),
+    ('imaging', ('imaging', 'image', 'images', 'ct', 'mri', 'mrcp', 'ultrasound', 'sonogram', 'sonography', 'x ray',
+                 'x rays', 'xray', 'radiograph', 'radiographs', 'fluoroscopy', 'scan', 'scans')),
+    ('counseling', ('counseling', 'counselling', 'counseled', 'counselled')),
+)
+
+
+def _own_words(event: Mapping, name: str) -> str:
+    """The text of the words an event's attribute ``name`` cites ('' when it cites none)."""
+    record = event.get(name)
+    words = record.get('words') if isinstance(record, Mapping) else None
+    return words.get('text') or '' if isinstance(words, Mapping) else ''
+
+
+def _stated_procedure(event: Mapping) -> bool:
+    """D130: whether an act of kind 'other' states by its own words that a procedure was performed - its status words
+    hold a DONE_STATEMENTS phrase, and none of the words that name it (its kind and target words, NAMING_WORDS) names a
+    NOT_PROCEDURES class. Reads those words only, never a passage."""
+    if not lexicon.holds(_own_words(event, 'status'), DONE_STATEMENTS):
+        return False
+    named = [phrase for _, phrases in NOT_PROCEDURES for phrase in phrases]
+    return not any(lexicon.holds(_own_words(event, name), named) for name in NAMING_WORDS)
 
 
 @dataclass(frozen=True)
@@ -226,8 +287,11 @@ def procedure_day(reading, effective, codes: Sequence[tuple] = ()) -> ProcedureD
     (SAME_DAY_FAMILIES, DECISIONS D81); an act of gi.unsupported or of no family (D94), never one whose performer is
     verified to another clinician or facility (D109); and an act of a procedural KIND (SAME_DAY_KINDS, D109) whatever
     procedure it is filed under - gi.office_em, gi.em_other, gi.sedation, and (DECISIONS D111) gi.unsupported or none -
-    read as another GI service, done only with its kind usable too.
-    DECISIONS D111: ONE currency rule for every one of them, facts.day_of - never Gemini's time value alone:
+    read as another GI service, done only with its kind usable too; and (DECISIONS D130) an act of kind 'other' filed
+    under the visit (VISIT_FAMILIES) whose own status words state it was performed and whose own statement names no
+    test, order, interpretation, lab, imaging or counseling (_stated_procedure): another GI service, only ever POSSIBLE,
+    and only ON the date of service (D130's spec: "placed on the date") - OFF or UNDATABLE, it is not counted.
+    DECISIONS D111: ONE currency rule for every one of them but D130's, facts.day_of - never Gemini's time value alone:
     - ON (a usable current time, or its own words or literals place it on the date: an earlier_encounter time worded
       "Earlier today" or "Earlier in the day" included): done with status, time, performer and procedure usable and
       positive, possible otherwise;
@@ -249,25 +313,28 @@ def procedure_day(reading, effective, codes: Sequence[tuple] = ()) -> ProcedureD
         manual = (kind == mapping.EXAMINATION and events.usable(event, 'technique')
                   and events.value(event, 'technique') == events.DIGITAL)
         by_kind = not by_family and kind in SAME_DAY_KINDS and not manual  # D109; D111: gi.unsupported and '' too
-        if not (by_family or by_kind or family in CURRENT_ONLY_FAMILIES):
+        by_statement = (kind == 'other' and family in VISIT_FAMILIES
+                        and _stated_procedure(event))  # D130: possibly a procedure, by its own status words
+        if not (by_family or by_kind or by_statement or family in CURRENT_ONLY_FAMILIES):
             continue  # an act of no procedural kind filed under the visit, its sedation or another E/M (D109)
         if family in CURRENT_ONLY_FAMILIES and events.verified_other_performer(event):
             continue  # D109 (finding 15): never another clinician's or facility's verified read
         day = facts.day_of(event, effective)
-        if day == facts.OFF:
-            continue  # C-3: another date
+        if day == facts.OFF or (by_statement and day != facts.ON):
+            continue  # C-3: another date; D130: an act read by its statement counts only ON the date
         if (day == facts.UNDATABLE and not by_family
                 and events.value(event, 'time') in ('earlier_encounter', 'future')):
             continue  # D109, D111 (finding 16): a history mention Gemini places at another encounter
         status = events.value(event, 'status')
         if status not in verify.POSITIVE + ('uncertain',):
             continue
-        label = (profiles.PROFILES[OTHER_GI].label if by_kind
+        label = (profiles.PROFILES[OTHER_GI].label if by_kind or by_statement
                  else profiles.PROFILES[family].label if family in profiles.PROFILES
-                 else family or UNIDENTIFIED_PROCEDURE)  # D94; D109: an act read by its kind is another GI service
+                 else family or UNIDENTIFIED_PROCEDURE)  # D94; D109, D130: by its kind or statement, another GI service
         if day == facts.ON:
             needed = ('status', 'performer', 'procedure', 'time') + (('kind',) if by_kind else ())
-            if status in verify.POSITIVE and all(events.usable(event, name) for name in needed):
+            if (not by_statement and status in verify.POSITIVE
+                    and all(events.usable(event, name) for name in needed)):  # D130: never done by its words alone
                 labels.append(label)
             else:
                 possible.append(label)
