@@ -3053,3 +3053,16 @@ its files were hashed, and its four-result counterexample registry (1,374 entrie
 
 (h) **Spending.** Gemini calls run in purposeful, bounded batches with concurrency one; every request's usage is recorded and
 reported. The legacy reader's code stays in the tree for rollback only and is not deleted in this change.
+
+## Owner message, 2026-11-11 — the Gemini spending cap raised to about $300
+
+Received 2026-11-11T06:27Z in session 30a58364, after the session reported that the project's monthly spending cap (reached
+2026-11-10 13:56Z at about $26) blocked the migration's live checks. Verbatim:
+
+> i SET HIGH SPENING LIMIT AROUND 300 CAP FOR NOW DONT WORRY ABOUYT IT
+
+**Session interpretation.** This is the money decision (standing authority class d). The cap is now about $300 for the month.
+The migration's planned live checks may send within it: g1 x3 on the test instance (about $4.60 in all), the test-instance
+walk, and the c6/c7 blind walks after the install. Interpretation (h) of the 2026-11-09 directive still governs every send:
+purposeful, bounded batches with concurrency one, each with its own cost cap, and every request's usage recorded and reported.
+A 429 with no QuotaFailure detail is still a hold, never retried in a loop (DECISIONS D39).
