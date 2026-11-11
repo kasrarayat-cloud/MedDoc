@@ -79,6 +79,7 @@
       "Bash(bash scripts/check-ingress-tls.sh:*)",
       "Bash(bash scripts/check-bind-mount-agreement.sh:*)",
       "Bash(bash scripts/check-icd-rederivation-trigger.sh:*)",
+      "Bash(bash scripts/check-icd-edition-current.sh:*)",
       "Bash(bash scripts/check-composite-fk.sh:*)",
       "Bash(bash scripts/check-qa-tag-isolation.sh:*)",
       "Bash(bash scripts/check-billing-source-no-deleter.sh:*)",
