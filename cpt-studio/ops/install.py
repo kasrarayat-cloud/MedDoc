@@ -5086,8 +5086,9 @@ def replaced_since(ctx, entry) -> dt.datetime:
     pair is no more the target's than before); one that failed once its switch had finished (D83 may read it as the
     target); one undone after it parked a role (replaced={'worker'}); a swap undone after its web had served, whose
     receipt records no 'replaced' (finding 21: hazards, stages_closed and states_put_back); one interrupted, or refused
-    before anything changed. Any of them may have put this revision's pair in front of traffic, and its receipt cannot
-    always say so, so none is asked whether it served: an earlier since names more encounters, which only refuses more
+    before anything changed. Most of them may have put this revision's pair in front of traffic without the receipt
+    saying so (one refused before anything changed did not, and says so); the rule reads no receipt's account of that,
+    so none is asked whether it served: an earlier since names more encounters, which only refuses more
     (fail-closed). Receipts are ordered by the stamps their names carry (written_after); one whose order cannot be told
     is counted (fail-closed). The since is the earliest time those receipts record for their phases (receipt_moments:
     main's started_at, taken before anything of that phase ran, and the steps a blue/green switch stamped); a counted

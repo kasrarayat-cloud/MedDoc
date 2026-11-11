@@ -2950,6 +2950,31 @@ class D110SinceCountsEveryAppReceiptTests(TemporaryDirectoryTest):
                 put(stamp, started, ok=False, **record)
                 self.assertEqual(since(), at(expected))
 
+    def test_d110_a_receipt_whose_order_cannot_be_told_from_its_name_is_counted(self):
+        # INSTALL.md (Switching back): "A receipt whose order cannot be told from its name is counted too". An app
+        # receipt of this revision whose name carries no stamp (receipt_stamp None, so written_after None) counts
+        # toward the since as one written after the bound does: an earlier since refuses more (fail-closed). The
+        # round-4 review's mutant ME (written_after(...) is not True) skipped it and passed every test before this one.
+        ctx = install.Context(switch_back_args(self.receipts), self.receipts)
+
+        def put(name, started, *, phase='app', revision=REVISION, **record):
+            path = self.receipts / f'{phase}-{name}.json'
+            path.write_text(json.dumps({'phase': phase, 'revision': revision, 'started_at': started, **record}))
+            return path
+        since = lambda: install.replaced_since(ctx, install.require_receipt_entry(ctx, 'app'))  # noqa: E731
+        put('20261103T100300000000Z', '2026-11-03T10:03:00Z', phase='switch-back', ok=True,
+            details={'previous': {'image': OLD_IMAGE, 'revision': OLD}})
+        put('20261103T103000000000Z', '2026-11-03T10:30:00Z', ok=True,
+            details={'replaced': {'web': {'image': OLD_IMAGE, 'revision': OLD}}})
+        self.assertEqual(since(), at('10:30:00'))
+        unstamped = put('copied-by-hand', '2026-11-03T10:12:00Z', ok=False, details={'replaced': {}})
+        self.assertIsNone(install.receipt_stamp(unstamped))
+        self.assertEqual(since(), at('10:12:00'))
+        # control: another revision's unstamped receipt is never read
+        unstamped.unlink()
+        put('copied-by-hand', '2026-11-03T10:12:00Z', revision='e' * 40, ok=False)
+        self.assertEqual(since(), at('10:30:00'))
+
     def test_d110_cost_an_app_that_failed_at_s1_counts_so_a_record_the_target_wrote_meanwhile_refuses(self):
         # the recorded cost (finding 18's control): A1 (10:02:30) fails at S1 - its incoming web never became ready,
         # nothing was parked and OLD served alone throughout; OLD writes e2's record at 10:20 ('unknown': a reason it

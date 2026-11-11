@@ -657,17 +657,19 @@ revision**). For a switch-back that check is read against the revision it
 returns to (DECISIONS D51): a reason that revision reads is no hazard to it -
 participants and second reviews when its worker runs their stages, a member's
 answer and a chosen modifier when its own models read them - and an encounter
-with no record created since this revision replaced that pair holds only what
-that pair left there. That time is the earliest `started_at` of the `app`
+with no record created since this revision's pair could last have served in that
+pair's place holds only what that pair left there. That time is the earliest `started_at` of the `app`
 receipt the pair is read from and of every `app` receipt of this revision
 written after this revision's last successful `switch-back` to that pair,
 whatever it replaced and however it ended (DECISIONS D59, D65, D82, D95 and
 D110): a successful one, over that pair or another; one that failed once its
 switch had finished; one undone after it parked a role; a swap undone after its
 web had served, whose receipt records nothing it replaced; one interrupted, or
-refused before anything changed. Any of them may have put this revision's pair
-in front of traffic, and its receipt cannot always say so, so none is left out:
-an earlier time names more encounters, which only refuses more. A receipt
+refused before anything changed. Most of them may have put this revision's pair
+in front of traffic without the receipt saying so (one refused before anything
+changed did not, and says so), and the rule asks none of them whether it
+served, so none is left out: an earlier time names more encounters, which only
+refuses more. A receipt
 whose order cannot be told from its name is counted too. It never reaches
 across that `switch-back`: what the pair wrote while it served again after it,
 until this revision's next `app` began, is its own. A `switch-back` that did
