@@ -1,0 +1,24 @@
+{
+  "url": "https://www.cms.gov/files/zip/2027-code-descriptions-tabular-order.zip",
+  "page": "https://www.cms.gov/medicare/coding-billing/icd-10-codes",
+  "retrieved": "2026-09-05",
+  "zipSha256": "91c6c9d1117764ce72375a0f3a5493b1725dafbc1ab283b55799076c9e194965",
+  "zipBytes": 2208022,
+  "codesFile": "icd10cm_codes_2027.txt",
+  "orderFile": "icd10cm_order_2027.txt",
+  "codesSha256": "3c0583a38ee0e848f7dc0ac8ce88e8f001bbba8c6385ed825d44d46f6e5297c9",
+  "orderSha256": "38981fb2c1226e2b92393cef7d921d2293494dd184b5ad039dde08e4b364265f",
+  "effectiveFrom": "2026-10-01",
+  "effectiveTo": "2027-09-30",
+  "edition": "fy2027",
+  "counts": {
+    "billable": 74879,
+    "headers": 23524,
+    "total": 98403
+  },
+  "payloadSha256": {
+    "billable": "f65563ee47b96b6d53c1aa00a9d4d8551ac65810de8c49e1130523b3d51655bb",
+    "headers": "a921b1441f3f371ef52f45e340642d19a9308cf75836f99e23034afce2537027"
+  },
+  "note": "Counts are CMS's own, quoted verbatim from icd10cm_order_addenda_2026.txt. payloadSha256 digests the EMITTED code lists, which is what binds the committed data to this source."
+}
