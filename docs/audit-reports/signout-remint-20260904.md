@@ -126,3 +126,64 @@ Reproduce against the QA stack with the app logs retained, and answer the one op
 question: **at the moment the cookie survives, does the `UserSession` row still
 validate?** That single query separates "ugly race" from "sign-out does not sign
 you out", and the remedy differs completely between them.
+
+---
+
+# ⚠️ CORRECTION, 2026-09-04 — THE LOAD-BEARING CLAIM ABOVE IS FALSE
+
+**Appended, not rewritten.** The original text is kept above because the
+correction is the point: what follows says which part was wrong, how it was
+found, and what the mechanism actually is.
+
+## WHAT WAS WRONG
+
+> *"`sessionId` is read in three places and written in none … the targeted
+> `revokeSession(sessionId)` path is **dead code**."*
+
+**It is written.** `packages/auth/src/index.ts` assigns it inside the shared
+`jwt()` callback on the sign-in branch, and `apps/transcribe-md/src/lib/
+nextauth.ts` inherits that callback wholesale — it declares no `callbacks` key
+of its own. `revokeSession` is therefore live and resolves.
+
+⚠️ **THE ERROR WAS A SCOPED GREP.** I searched `apps/transcribe-md` and the
+write is in `packages/auth`. One workspace of a monorepo is not the tree, and
+the search returned a confident, complete-looking zero — the
+incomplete-watched-set failure, with the watched set drawn along a directory
+boundary nobody had reason to question. Found by an adversarial verification
+lens and confirmed by hand before this correction was written.
+
+## THE MECHANISM, WHICH IS WORSE
+
+The original symptom was real and correctly measured: `POST /api/auth/signout`
+answered **200 with no `Set-Cookie`**, the session cookie survived, and the UI
+stayed authenticated. The cause is not the `sessionId` claim.
+
+`events.signOut` holds **both** the `revokeSession` call **and** the LOGOUT
+audit row, and `@auth/core/lib/index.js` reaches it only through
+`actions.signOut`, which is gated:
+
+    case "signout":
+        validateCSRF(action, csrfTokenVerified);
+        return await actions.signOut(cookies, sessionStore, options);
+
+A failed CSRF check throws first, so **the revoke and the audit row are skipped
+together** — the session stays live for the remaining 7 days of the JWT's
+`maxAge`, and the incident leaves no artefact.
+
+The 200 comes from the client always sending `X-Auth-Return-Redirect`, which
+makes the framework's error path answer `Response.json({ url })` — status 200,
+no cookies. And the trigger needs **no race**: `getCsrfToken()` in
+`next-auth/react` ends `return response?.csrfToken ?? ""`, so one transient blip
+on the preceding GET silently produces an unverifiable POST. It is
+self-concealing: the client lands on `/login?error=MissingCSRF`, and `/login`
+bounces a still-authenticated user to `/board` — the exact measured symptom.
+
+**Every link above was read first-hand in `node_modules`**, not inferred.
+
+## STATUS
+
+Fixed by ruling #182 (PR #965), which routes every client sign-out through a
+server action that revokes in-process, so there is no CSRF token to lose and no
+200 that means nothing. What survives from the original filing: the observation,
+its positive control, the intermittency, and the note that re-running a failed
+job destroys the logs you needed.
