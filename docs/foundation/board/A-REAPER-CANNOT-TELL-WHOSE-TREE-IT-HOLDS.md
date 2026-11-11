@@ -79,3 +79,49 @@ the moment the tooling is under pressure is the moment it stops asking whose
 tree it is holding.
 
 **Recorded as ruling #206.** This filing is the addressee's copy, not the ruling.
+
+---
+
+## ⚠️ AMENDED 2026-09-07 — I BUILT THE MARKER AND GOT THE PID WRONG
+
+**Filed by the same session, after using the marker shape this document asks
+for.** Four lens sandboxes were created for PR #1018's round-three pass, each
+given a marker in exactly the form proposed above. **The pid in all four was
+useless**, and the failure is one the implementer would otherwise meet on their
+first run.
+
+The marker was written from inside the creating shell:
+
+    printf 'owner_pid=%s\nowner_starttime=%s\n' "$$" "$(awk '{print $22}' /proc/$$/stat)"
+
+⚠️ **`$$` IN A TOOL-INVOKED SHELL IS A FRESH SUBSHELL, NOT THE SESSION.**
+Measured across two calls minutes apart in one session: `$$` was **3119743**,
+then **3464396**. The first process was already gone by the time the sandbox
+was used — so an alive-check against that marker answers **"owner is dead"**
+for a tree whose owner is very much alive, and **the reaper deletes it.**
+
+> **A LIVENESS CHECK THAT FAILS TOWARD "DEAD" IS WORSE THAN NO CHECK AT ALL.**
+> It reads as a guard, it passes review, and it green-lights exactly the
+> deletion this ruling exists to prevent — with an audit trail saying the owner
+> was checked.
+
+**WHAT TO RECORD INSTEAD.** The stable identity here is the **session id**, which
+does not change across tool calls and is what actually distinguishes the three
+sessions sharing this account. If a pid is wanted as well, it must be the
+**long-lived agent process**, discovered rather than assumed —
+
+    pgrep -f 'claude --dangerously-skip-permissions'   # 2 live right now
+
+— and paired with its start time, because pids are reused. ⚠️ **And note the
+count: two.** A marker scheme validated against a box with one session running
+will look correct and discriminate nothing.
+
+**THE SESSION-ID CHECK IS SUFFICIENT ON ITS OWN, AND IT IS THE ONE I ACTUALLY
+USED.** Reaping my own four, the guard that ran was a string comparison of
+`owner_session` against this session's id — not the pid. That check was
+correct, and it is the one worth shipping first; the pid is an optimisation for
+the case where a session has ended and its trees should become reapable.
+
+**And the reaper today checks none of it.** Measured on `main` at the time of
+writing: `grep -c 'owner\|pid\|alive' scripts/reap-lens-sandbox.sh` returns
+**0**, and the script calls `git worktree remove --force` unconditionally.
