@@ -75,3 +75,38 @@ issue tracker, a templating engine, a model's tool schema. **`-F` bought safety
 from ONE reader.** Ask, every time, *which parsers see this text* — the answer
 is rarely one.
 
+
+---
+
+## ⚠️ AND THE GUARD RAN POST-HOC TWICE, SO IT BECAME A DOOR
+
+**Appended 2026-09-06.**
+
+This entry's own remedy — *scan the body file for a closing keyword
+next to an issue number before `gh pr create`* — was followed twice by one session and **prevented
+nothing both times**, because the grep was piped in the same breath as the
+create. It reported on a PR that was already open.
+
+| when | the body said | outcome |
+|---|---|---|
+| PR #967 | a body naming PR #951 after the verb *closed* | already closed; harmless by luck |
+| PR #1005 | the same verb, narrating what GitHub itself had done to PR #951 | narrative; no link created, confirmed by GraphQL |
+
+**Neither did harm and neither was prevented.** The check was performed
+correctly, reported accurately, and could not have stopped anything — it ran
+second. That is canon 93's shape: *a rule that depends on remembering has a
+failure rate; when it fails twice, stop restating it and start counting.*
+
+> **`bash scripts/create-pr.sh` is the door.** The scan runs BEFORE the create
+> and a match is a REFUSAL, not a warning printed next to a URL.
+
+⚠️ **AND IT CARRIES A POSITIVE CONTROL ON ITS OWN REGEX**, because a guard whose
+pattern silently stopped matching would report every body clean forever. It
+refuses to run unless its pattern still matches a known offender.
+
+⚠️ **THE CONTROLS MATTER AS MUCH AS THE ARMS.** A bare issue URL and a body that
+merely names `#946` and `#951` must NOT trip it — a guard that fires on every
+`#N` gets disabled within a day, and a disabled guard is worse than none.
+
+The legitimate override is a DECLARATION, never a flag:
+`DECLARE_INTENTIONAL_CLOSE="…"`, refused as a bare token or under 20 characters.
