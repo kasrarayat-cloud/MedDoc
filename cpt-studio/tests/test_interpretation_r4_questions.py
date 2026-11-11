@@ -7,7 +7,8 @@ its statement_scope question quotes. Finding 5 is RECORDED, not repaired: its pi
   her index colonoscopy: no polypectomy was performed.") or after a denial of another device ("Neither the EMR
   electrosurgical snare nor cautery was used to treat this polyp.") was never asked and never shown: 45385 asked the
   snare's own verified time or technique. EVERY relation is now read: a same-event contradiction is the code's question
-  in any stored order, the one resting on the target first.
+  in any stored order, the one resting on the target first. (DECISIONS D126 replaces that tie-break: the one question
+  asks every contradiction, the act's same-site denial first - tests/test_interpretation_r5_questions.py.)
 - D102 (finding 4): D91 narrowed D86 by the relation's ATTRIBUTE. A denial whose OWN time, performer, device or session
   is the unknown side ("During withdrawal, no polypectomy was performed in the sigmoid colon.", its time unanchored)
   made 45385 ask the snare's own verified time, with the reason "could not confirm from the document when the snare
@@ -94,6 +95,16 @@ class Held(SimpleTestCase):
         self.assertEqual(reason, f'The document states “{said}”; CPT Studio could not confirm from the document '
                                  f'whether that statement applies to the {act}.')
 
+    def assert_scope_all(self, p, first: str, second: str, act: str = SNARE, words: str = SNARE_WORDS):
+        """DECISIONS D126: held, unresolved, its one question whether ``first`` or ``second`` - each quoted whole, in that
+        order - applies to the act."""
+        self.assertEqual((p.bucket, p.status, [c.fact for c in p.clarifications], p.support['reason']),
+                         ('selected', 'needs_clarification', ['statement_scope'], events.UNRESOLVED))
+        question, reason = p.clarifications[0].question, p.clarifications[0].reason
+        self.assertEqual(question, f'Does “{first}” or “{second}” apply to the {act} {words}')
+        self.assertEqual(reason, f'The document states “{first}” and “{second}”; CPT Studio could not confirm from the '
+                                 f'document whether those statements apply to the {act}.')
+
 
 # --- D101: every UNRESOLVED relation of the act is read --------------------------------------------------------------
 
@@ -106,8 +117,9 @@ class D101EveryRelation(Held):
         self.assertEqual(relations_of(inv), [('E3', 'E2', 'time', 'time_unresolved'),
                                              ('E4', 'E2', 'target', 'site_unresolved')])
         p = proposal(run(inv, text, [('45385', POLYP)]), '45385')
-        self.assert_scope(p, PRIOR)
-        self.assertEqual(p.support['question_events'], ['E2', 'E4'])
+        # D126: asked with the framed denial, the act's same-site denial (every polypectomy of the session), first
+        self.assert_scope_all(p, FRAMED, PRIOR)
+        self.assertEqual(p.support['question_events'], ['E2', 'E3', 'E4'])
         self.assertIn(PRIOR, sources(p))  # shown: at 437b708bb this sentence appeared nowhere in the assessment
 
     def test_d101_the_prior_segment_denial_after_a_device_denial_is_the_question(self):
@@ -116,8 +128,8 @@ class D101EveryRelation(Held):
         self.assertEqual(relations_of(inv), [('E3', 'E2', 'technique', 'technique_unresolved'),
                                              ('E4', 'E2', 'target', 'site_unresolved')])
         p = proposal(run(inv, text, [('45385', POLYP)]), '45385')
-        self.assert_scope(p, PRIOR)
-        self.assertEqual(p.support['question_events'], ['E2', 'E4'])
+        self.assert_scope_all(p, DEVICE, PRIOR)  # D126: the device denial of the snare's own polyp first
+        self.assertEqual(p.support['question_events'], ['E2', 'E3', 'E4'])
         self.assertIn(PRIOR, sources(p))
 
     def test_d101_the_question_is_the_same_in_every_sentence_order(self):
@@ -125,7 +137,7 @@ class D101EveryRelation(Held):
             with self.subTest(order=names):
                 inv, text = snare_beside(*names)
                 p = proposal(run(inv, text, [('45385', POLYP)]), '45385')
-                self.assert_scope(p, PRIOR)
+                self.assert_scope_all(p, FRAMED if 'framed' in names else DEVICE, PRIOR)  # D126
                 self.assertIn(PRIOR, sources(p))
 
     CLIP = 'Oozing at the biopsy site was controlled with a clip.'
@@ -189,12 +201,13 @@ class D101EveryRelation(Held):
     def test_d101_two_contradictions_resting_on_no_target_ask_the_first_stored(self):
         # D101's tie: neither denial rests on the target (each on its own unknown side, D102), so the first stored is
         # asked - a statement_scope question in either order, quoting the sentence stored first
-        for names, said in ((('framed', 'device'), FRAMED), (('device', 'framed'), DEVICE)):
+        for names, said in ((('framed', 'device'), (FRAMED, DEVICE)), (('device', 'framed'), (DEVICE, FRAMED))):
             with self.subTest(order=names):
                 inv, text = snare_beside(*names)
                 self.assertEqual([item[2] for item in relations_of(inv)],
                                  ['time', 'technique'] if names[0] == 'framed' else ['technique', 'time'])
-                self.assert_scope(proposal(run(inv, text, [('45385', POLYP)]), '45385'), said)
+                # D126: both are asked, the first stored first (both the act's same-site denials)
+                self.assert_scope_all(proposal(run(inv, text, [('45385', POLYP)]), '45385'), *said)
 
     def test_d101_with_no_contradiction_the_first_relation_stored_keeps_its_question(self):
         # the snare's own time is unanchored ("During withdrawal"), so both denials' relations rest on the ACT's unknown

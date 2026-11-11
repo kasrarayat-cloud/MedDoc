@@ -11,7 +11,8 @@ unidentified act only as an act of this encounter.
 - Finding 14: facts.day_of read "earlier in the day", "Earlier that day" and "Earlier in the morning" (a verified
   earlier_encounter time: an endoscopy at its own encounter earlier on the same date) as OFF the date, so 99213 was
   READY beside it; c2e53f8e holds it with separate_em. lexicon.SAME_DAY_FRAMES, read whole as D54 reads a current
-  time's words, place such an act ON the date.
+  time's words, place such an act ON the date - DECISIONS D112: only frames anchored to today, so the anaphoric
+  "Earlier that day" (G2) is OFF again (tests/test_interpretation_r5_em.py pins it).
 - Findings 15 and 16 (D94 narrowed): an act of gi.unsupported or of no family counts only when its time is
   current_encounter (any state) and its performer is not verified to another clinician or facility. A CT "interpreted
   separately by the radiology service" (fb13's attested shape) asked separate_em, and an abdominal ultrasound named in
@@ -273,9 +274,7 @@ FINDING_14 = (
      'Earlier in the day', OTHER_GI_LABEL),
     ('B6: a flexible sigmoidoscopy earlier in the morning', MORNING_LINE, 'examination', 'flexible sigmoidoscopy',
      a('flex_sig', 'flexible sigmoidoscopy', ['P1']), 'Earlier in the morning', profiles.PROFILES['gi.flex_sig'].label),
-    ('G2: a flexible sigmoidoscopy earlier that day', THAT_DAY_LINE, 'examination', 'flexible sigmoidoscopy',
-     a('flex_sig', 'flexible sigmoidoscopy', ['P1']), 'Earlier that day', profiles.PROFILES['gi.flex_sig'].label),
-)
+)  # DECISIONS D112: G2 ("Earlier that day", THAT_DAY_LINE) is anaphoric - tests/test_interpretation_r5_em.py
 
 
 def frame_parts_as_d54(text: str) -> list:
@@ -288,10 +287,10 @@ class D109SameDateFrames(SimpleTestCase):
     time Gemini gives - earlier_encounter included."""
 
     def test_d109_finding_14_an_act_earlier_in_the_day_is_on_the_date(self):
-        """Finding 14's four inputs (verified earlier_encounter times, the act by 'I'): 437b708bb read each OFF the date
-        and made 99213 READY ('Stated but not as done today'); c2e53f8e holds 99213 with separate_em naming the
-        family. Each is now ON, 99213 asks separate_em, and the routing stand-in reads the family performed, as the
-        installed routing does."""
+        """Finding 14's inputs B4-B6 (verified earlier_encounter times, the act by 'I'; G2 is D112's, the r5 module):
+        437b708bb read each OFF the date and made 99213 READY ('Stated but not as done today'); c2e53f8e holds 99213
+        with separate_em naming the family. Each is now ON, 99213 asks separate_em, and the routing stand-in reads the
+        family performed, as the installed routing does."""
         for label, line, kind, kind_words, procedure, words, family_label in FINDING_14:
             with self.subTest(label):
                 inv, text = earlier_act(line, kind, kind_words, procedure, words)
@@ -328,7 +327,8 @@ class D109SameDateFrames(SimpleTestCase):
         before; a bare 'that day' or 'in the morning' is no frame and, with no earlier marker, UNDATABLE as before;
         'earlier today' (SAME_DAY_WORDS, read anywhere in the words) is ON as before."""
         cases = (
-            ('earlier in the day', facts.ON), ('Earlier in the day,', facts.ON), ('Earlier that day', facts.ON),
+            ('earlier in the day', facts.ON), ('Earlier in the day,', facts.ON),
+            ('Earlier that day', facts.OFF),  # DECISIONS D112: anaphoric, no frame - read by its 'earlier' marker
             ('Earlier in the morning', facts.ON), ('later in the day', facts.ON), ('earlier this afternoon', facts.ON),
             ('earlier in the day; earlier today', facts.ON), ('earlier today', facts.ON),
             ('I performed it earlier today', facts.ON), ('Earlier on the same day', facts.ON),

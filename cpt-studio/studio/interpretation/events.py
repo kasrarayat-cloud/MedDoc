@@ -769,28 +769,92 @@ def _h3_asks_contradiction(reading: Reading, relation: Mapping, event: Mapping) 
     performer or the technique while the act's OWN value of that attribute is usable - the unknown side is then the
     statement's, and the act's own attribute question would ask what is verified, with a reason that is not true. A
     relation whose act side is the unusable one keeps that attribute's question (D91), and a status, kind or part_of
-    relation keeps performed_status (D91)."""
-    if not _h3_denial(reading.events.get(relation['statement']) or {}):
+    relation keeps performed_status (D91).
+
+    DECISIONS D126 (4): on the technique, only while the STATEMENT's own device is not usable. Both devices verified
+    and still UNKNOWN to the pairing table - the act's device wider than the statement's ("removed with a snare" beside
+    "No cold snare was used for the 6 mm sessile polyp."), or both 'other' - is no doubt on the statement's side: the
+    doubt is which device the act used, and the relation keeps its technique question (C-16)."""
+    statement = reading.events.get(relation['statement']) or {}
+    if not _h3_denial(statement):
         return False
     attribute = relation['attribute']
-    return attribute in ('target', 'scope') or (attribute in _H3_STATEMENT_SIDE and usable(event, attribute))
+    if attribute in ('target', 'scope'):
+        return True
+    if attribute not in _H3_STATEMENT_SIDE or not usable(event, attribute):
+        return False
+    return attribute != 'technique' or not usable(statement, 'technique')
+
+
+# DECISIONS D126 (0): the precedence of an act's same-event contradictions, in the one question of its code
+_H3_SAME_SITE, _H3_TARGET, _H3_OTHER = 0, 1, 2
+
+
+def _h3_rank(reading: Reading, relation: Mapping, event: Mapping) -> int:
+    """DECISIONS D126 (0): where a same-event contradiction stands among the act's several. _H3_SAME_SITE: the act's
+    SAME-SITE denial - the pairing table's own target row (relations.target_row) reads the statement as the act's own
+    target (its place contains every place of the act's, it names the act's verified lesion, or it covers every act of
+    its kind in the act's session), and what is unknown is its own procedure, time, performer, device or kind (D102):
+    "During withdrawal, no polypectomy was performed in the sigmoid colon." beside the sigmoid snare. _H3_TARGET: a
+    TARGET denial (D86) - whether its place or lesion is the act's is the unknown: "No polypectomy was performed in the
+    prior segment.". _H3_OTHER: any other - a scope the statement leaves unresolved, a session the table cannot resolve,
+    a denial whose own site is unknown as well."""
+    if relation['attribute'] == 'target':
+        return _H3_TARGET
+    row = relations.target_row(reading.context, reading.events.get(relation['statement']) or {}, event)
+    return _H3_SAME_SITE if (row.attribute, row.result) == ('target', relations.SAME) else _H3_OTHER
+
+
+# DECISIONS D126 (1): two places of one statement at most this many characters apart are one sentence across a hard
+# wrap (the line break between them: "\n", or "\r\n"); further apart, the quote marks what it leaves out ("…")
+_H3_WRAP = 2
+
+
+def _h3_place(reading: Reading, statement: Mapping, name: str) -> Optional[dict]:
+    """The place, among the statement's own passages of attribute ``name`` and then all its others, that holds that
+    attribute's own words; None when they are not located."""
+    record = statement.get(name)
+    words = record.get('words') if isinstance(record, Mapping) else None
+    if not isinstance(words, Mapping):
+        return None
+    for place in reading.places(record.get('passages') or ()) + reading.places(all_passages(statement)):
+        if place['start'] <= words['start'] and words['end'] <= place['end']:
+            return place
+    return None
 
 
 def _h3_whole_statement(reading: Reading, statement: Mapping) -> str:
     """DECISIONS D103: what a statement_scope question quotes - the statement whole, never its status words alone: the
     text of the place, among its own passages (its status's first), that holds its status words - the sentence, clause
     or line Gemini cited, as the document words it. Without located status words: the first located place of its
-    status's passages, else statement_text."""
+    status's passages, else statement_text.
+
+    DECISIONS D126 (1): and the places that hold its target's and its scope's own words with it - the whole SENTENCE
+    across a hard wrap, never one wrapped line: "No biopsy, snare resection, ablation, or balloon dilation was performed
+    on" / "this splenic-flexure lesion during the present encounter." (FRESH-2 C2MEM-023 r1) is quoted as the one
+    sentence, which says what the statement is about. Each place once, in document order: a place within another adds
+    nothing, one overlapping or touching another adds the rest of its text, one a line break away (_H3_WRAP) follows
+    after a space, one further away after an ellipsis."""
     status = statement.get('status') if isinstance(statement.get('status'), Mapping) else {}
     own = reading.places(status.get('passages') or ())
-    words = status.get('words')
-    if isinstance(words, Mapping):
-        for place in own + reading.places(all_passages(statement)):
-            if place['start'] <= words['start'] and words['end'] <= place['end']:
-                return place['text']
-    if own:
-        return own[0]['text']
-    return statement_text(reading, statement)
+    first = _h3_place(reading, statement, 'status') or (own[0] if own else None)
+    if first is None:
+        return statement_text(reading, statement)
+    places = {(place['start'], place['end']): place
+              for place in (first, _h3_place(reading, statement, 'target'), _h3_place(reading, statement, 'scope'))
+              if place is not None}
+    text, end = '', None
+    for start, stop in sorted(places):
+        place = places[(start, stop)]
+        if end is None:
+            text, end = place['text'], stop
+        elif stop <= end:
+            continue
+        elif start <= end:
+            text, end = text + place['text'][end - start:], stop
+        else:
+            text, end = text + (' ' if start - end <= _H3_WRAP else ' … ') + place['text'], stop
+    return text
 
 
 def _h3_unresolved(code, link, event, reading):
@@ -807,17 +871,25 @@ def _h3_unresolved(code, link, event, reading):
     own time unanchored) asked when the snare, verified as today's, was done (D102).
 
     DECISIONS D101: EVERY UNRESOLVED relation of the act is read, not only the first stored: when any of them is a
-    same-event contradiction, that is the code's question, whatever order the relations were stored in - the first
-    contradiction resting on the target (D86's own arm: where the pairing table rests on the target, every row before
-    it - procedure, time, performer, technique - read the same), else the first contradiction stored. A framed earlier
-    denial or a denial of another device listed before C1CL3-001's prior-segment denial had asked the snare's own time
-    or technique, and the prior-segment sentence was shown nowhere. With no contradiction, the first relation stored
-    asks its attribute's fact, as before.
+    same-event contradiction, that is the code's question, whatever order the relations were stored in. A framed
+    earlier denial or a denial of another device listed before C1CL3-001's prior-segment denial had asked the snare's
+    own time or technique, and the prior-segment sentence was shown nowhere. With no contradiction, the first relation
+    stored asks its attribute's fact, as before.
+
+    DECISIONS D126 (0), which replaces D101's "the first resting on the target, else the first stored": the code's ONE
+    question (FINAL 7.4) asks EVERY same-event contradiction of the act, in a stated precedence (_h3_rank, stable over
+    the stored order): the act's same-site denials first, then the target denials, then the others - whether any of
+    their statements applies to the act. Its events and passages are every one's, in that order, so none is hidden and
+    none is dropped. D101's target-first rule asked "No polypectomy was performed in the prior segment." beside the
+    sigmoid snare and showed "During withdrawal, no polypectomy was performed in the sigmoid colon." nowhere, in either
+    sentence order; the installed release asks conflict:snare in both. One contradiction asks as before.
 
     DECISIONS D103: a statement_scope question and its reason quote the statement WHOLE (_h3_whole_statement: the
-    passage its status words are stated in), never only its status words, so a statement about other findings reads as
-    what it says ("... small internal hemorrhoids were incidental findings and required no therapy.", never "required no
-    therapy").
+    passage its status words are stated in; D126 (1): with its target's and scope's, across a hard wrap), never only its
+    status words, so a statement about other findings reads as what it says ("... small internal hemorrhoids were
+    incidental findings and required no therapy.", never "required no therapy"). D126 (3): a DENIAL's statement - D103
+    is about denials; a statement_scope question whose statement is no denial (a doubt's unresolved scope, on either
+    arm) keeps D86's wording: statement_text, cut as before.
 
     A doubt, a planned act a claim names and a positive event (a claim that two acts are one) keep their attribute's
     question. So does focus_question's service-scope question about an event no code depends on (FINAL 7.8; ``code``
@@ -828,24 +900,30 @@ def _h3_unresolved(code, link, event, reading):
     unresolved = reading.relations_of(event['id'], (relations.UNRESOLVED,))
     if not unresolved:
         return None
-    relation, fact = unresolved[0], ''
+    chosen, fact = [unresolved[0]], ''
     if code:  # D101: every relation of the act is read; a same-event contradiction (D86/D91/D102) is the question
         contradictions = [item for item in unresolved if _h3_asks_contradiction(reading, item, event)]
-        if contradictions:
-            relation = next((item for item in contradictions if item['attribute'] == 'target'), contradictions[0])
+        if contradictions:  # D126 (0): every one, in the stated precedence (a stable sort keeps the stored order)
+            chosen = (sorted(contradictions, key=lambda item: _h3_rank(reading, item, event))
+                      if len(contradictions) > 1 else contradictions)
             fact = 'statement_scope'
+    relation = chosen[0]
     fact = fact or RELATION_FACTS.get(relation['attribute'], 'performed_status')
-    found = _relation_question(reading, relation, event)
+    found = [_relation_question(reading, item, event) for item in chosen]
     act = event_label(reading, event)
     words = statement_text(reading, event)
-    if fact == 'statement_scope':  # D103: the statement quoted whole
-        said = _h3_whole_statement(reading, found['statement'])
-        question = wording.scope_question(said, act, words, whole=True)
-        reason = wording.scope_reason(said, act, whole=True)
+    if fact == 'statement_scope' and _h3_denial(found[0]['statement']):  # D103, D126: the denials, each quoted whole
+        said = list(dict.fromkeys(_h3_whole_statement(reading, item['statement']) for item in found))
+        question = wording.scope_question(said[0], act, words, whole=True, also=said[1:])
+        reason = wording.scope_reason(said[0], act, whole=True, also=said[1:])
+    elif fact == 'statement_scope':  # D126 (3): no denial - D86's wording
+        said = statement_text(reading, found[0]['statement'])
+        question, reason = wording.scope_question(said, act, words), wording.scope_reason(said, act)
     else:
         question, reason = _attribute_question(fact, act, words)
-    return {'reason': UNRESOLVED, 'relation': relation,
-            'question': Question(fact, question, reason, found['events'], found['passages'])}
+    asked = tuple(dict.fromkeys(eid for item in found for eid in item['events']))
+    shown = _spans(span for item in found for span in item['passages'])
+    return {'reason': UNRESOLVED, 'relation': relation, 'question': Question(fact, question, reason, asked, shown)}
 
 
 def _attribute_question(fact: str, act: str, words: str) -> tuple:

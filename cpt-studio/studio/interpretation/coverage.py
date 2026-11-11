@@ -272,7 +272,8 @@ def eus_act(event: Mapping) -> bool:
     event of the EUS family done at this encounter (events.done), its kind usable and one of EUS_ACTS, and its own
     PROCEDURE usable as 'eus'. An act whose family is in doubt (its procedure unsettled: a colonoscopy's 'Random biopsies
     were taken from the rectum.' filed under 'eus' with no words, D75) is a doubt, never a fact (D87): read as one, it
-    made the EUS session lower and 43235 READY beside 43242."""
+    made the EUS session lower and 43235 READY beside 43242. DECISIONS D121: with no done EUS examination, these acts
+    are the session C-4 reads - placed nowhere lower, an upper EUS whose endoscopic portion today's EGD is."""
     return (event.get('family') == 'gi.eus' and event.get('catalogue_kind') in EUS_ACTS and events.done(event)
             and events.usable(event, 'kind') and events.usable(event, 'procedure')
             and events.value(event, 'procedure') == 'eus')
@@ -304,18 +305,54 @@ def unsettled_eus_examinations(reading) -> list:
             and events.value(event, 'status') in verify.POSITIVE]
 
 
+def doubted_eus_acts(reading) -> list:
+    """DECISIONS D123 (the round-4 review of D96, problems 1 and 2): today's DONE acts filed under the EUS that C-4 cannot
+    read as the EUS's own (eus_act) - an act of an EUS kind whose kind or procedure is not usable (an FNA filed under
+    'eus' with no words: procedure_unsettled), or an act of a kind that is no EUS act (a forceps biopsy: 'Radial EUS was
+    then performed; forceps biopsies of the rectal mass were taken.') - in the reading's order. They are doubts, never
+    facts (D87): never lower evidence (D96 kept), and never the reason the EGD is read as the EUS's endoscopic portion. An
+    examination (a digital rectal examination, FINAL 5.6 E13) and an event of no catalogue kind (a rectal medication read
+    as 'other', DECISIONS D96 finding 0) are not acts here."""
+    return [event for event in reading.events.values() if event.get('family') == 'gi.eus' and events.done(event)
+            and event.get('catalogue_kind') and event.get('catalogue_kind') not in mapping.EXAMINATION_KINDS
+            and not eus_act(event)]
+
+
+def possible_eus_acts(reading) -> list:
+    """DECISIONS D121 (D62's rule for an act): the EUS acts of an EUS kind (EUS_ACTS) stated performed or begun and only
+    POSSIBLY of this encounter (possibly_current, not done: 'After the EGD, EUS-FNA of a 22 mm hypoechoic mass in the
+    pancreatic body was performed ...', its time unanchored), in the reading's order. A possible upper EUS - a doubt,
+    never the session and never lower evidence: read as an absence, it left 43235 READY beside 43242, where the
+    installed release holds it base_included."""
+    return [event for event in reading.events.values() if event.get('family') == 'gi.eus'
+            and event.get('catalogue_kind') in EUS_ACTS and not events.done(event) and possibly_current(event)
+            and events.value(event, 'status') in verify.POSITIVE]
+
+
+# DECISIONS D123 (the round-4 review of D96, problem 0): the regions of a verified target landmark that place an act in no
+# organ of its own - no region (an unplaced landmark, 'other') and a lymph node, which lies beside any organ - where the
+# act's own target words are read for a landmark too (eus_places)
+UNPLACED_REGIONS = frozenset({'', 'node'})
+
+
 def eus_places(event: Mapping) -> list:
     """The places C-4 reads an EUS event at: its verified target landmark, its usable reach, and - for an ACT (DECISIONS
     D96, the round-4 refutation, finding 12) - every landmark its own verified target's words name (verify.landmark_words
     over those words, EB1's landmark literal): 'a perirectal lymph node in the rectum' at the verified landmark
     'lymph_node' names the rectum too. Read at its landmark alone, such an FNA placed the radial EUS nowhere lower, the
-    EGD became its endoscopic portion, and the EGD's own no_proposal item and second-review mark were dropped."""
+    EGD became its endoscopic portion, and the EGD's own no_proposal item and second-review mark were dropped.
+    DECISIONS D123 (the round-4 review of D96, problem 0): the words are read only where the verified landmark places the
+    act in no organ of its own (UNPLACED_REGIONS: a lymph node, or no region). An act verified at an organ is at that
+    organ, whatever its words name beside it: read at 'pancreatic pseudocyst abutting the transverse colon', an upper
+    drainage of the pancreas made the EUS lower, and 43235 was READY beside 43240 (and the same words cancelled D70's
+    doubt beside 43242), where 437b708bb and the installed release hold it base_included."""
     places = [mapping.target_landmark(event)]
     extent = event.get('extent')
     if verify.usable(extent):
         places.append(extent.get('value', ''))
     target = event.get('target')
-    if event.get('catalogue_kind') not in mapping.EXAMINATION_KINDS and verify.usable(target):
+    if (event.get('catalogue_kind') not in mapping.EXAMINATION_KINDS and verify.usable(target)
+            and mapping.region(places[0]) in UNPLACED_REGIONS):  # D123: never beside an organ landmark of its own
         words = target.get('words')
         text = (words.get('text') or '') if isinstance(words, Mapping) else ''
         if text:
@@ -333,6 +370,14 @@ def _lower_eus(found) -> bool:
         if any(mapping.region(place) in LOWER_REGIONS for place in eus_places(event) if place):
             return True
     return False
+
+
+def _placed_eus(found) -> bool:
+    """DECISIONS D123: whether one of the EUS events ``found`` places the EUS at an organ of the tract or beside it - a place
+    of a region that is neither lower (LOWER_REGIONS: _lower_eus reads those) nor UNPLACED_REGIONS (no region, a lymph
+    node, which lies beside any organ)."""
+    return any(mapping.region(place) not in LOWER_REGIONS | UNPLACED_REGIONS
+               for event in found for place in eus_places(event) if place)
 
 
 def sessions(reading) -> dict:
@@ -386,8 +431,26 @@ def sessions(reading) -> dict:
     evidence = lower_evidence(reading) if eus is not None else []
     doubts = possible_eus + (unsettled_eus_examinations(reading) if eus is not None else [])  # D62's, and D97's
     lower = _lower_eus(evidence)
-    upper_eus = bool(done_eus) and not lower
-    possibly_upper = not upper_eus and not lower and any(not _lower_eus([event]) for event in doubts)
+    # D121 (the round-4 parity audit, EUS gap 1): an EUS told only through its done acts - a done EUS act (eus_act: an
+    # FNA, an injection, a drainage) and no done examination - is the session C-4 reads: today's EGD is its endoscopic
+    # portion, as the installed release reads an EUS its act makes (services._included). Read from examinations alone,
+    # 'EUS-FNA of a 22 mm hypoechoic mass in the pancreatic body was performed' beside an EGD left 43235 READY beside
+    # 43242. Beside a possible examination (D62's, D97's) it is the doubt below, never the fact
+    acts = [event for event in evidence if eus_act(event)]
+    session_events = done_eus or acts
+    # D123 (the round-4 review of D96, problems 1 and 2): a done act filed under the EUS that is not the EUS's own
+    # (doubted_eus_acts: its family or kind in doubt, or a forceps biopsy) is never lower evidence (D96) - and, placed
+    # lower where no done EUS event places the EUS, never lets C-4 read the EGD as the EUS's endoscopic portion either:
+    # its doubt makes the upper reading a doubt (possibly_part_of), so the EGD keeps its own items and 43235 is held
+    doubted = doubted_eus_acts(reading) if eus is not None else []
+    possibly_lower = not lower and not _placed_eus(evidence) and _lower_eus(doubted)
+    upper_eus = bool(session_events) and not lower and not possibly_lower and (bool(done_eus) or not doubts)
+    # D87, D121: an act of an EUS kind whose own family or kind is in doubt, or that is only possibly of this encounter
+    # (D62), is a possible upper EUS, never a fact
+    upper_doubts = doubts + [event for event in doubted if event.get('catalogue_kind') in EUS_ACTS] + (
+        possible_eus_acts(reading) if eus is not None else [])
+    possibly_upper = not upper_eus and not lower and (
+        bool(session_events) or any(not _lower_eus([event]) for event in upper_doubts))
     for family, session in list(found.items()):
         # D87: a session left unresolved only by POSSIBLE examinations keeps the structure of its one done examination
         # (C3, C-4) - read without it, an aside EGD ("Previously, ...") beside today's EGD within an upper EUS asked

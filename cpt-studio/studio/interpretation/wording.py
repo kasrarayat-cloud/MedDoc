@@ -396,19 +396,25 @@ def examination_class_hold(code: str, exam_class: str, reached: str, words: str,
             'on the date of service?')
 
 
-def scope_question(statement: str, act: str, words: str = '', whole: bool = False) -> str:
+def scope_question(statement: str, act: str, words: str = '', whole: bool = False, also: Sequence[str] = ()) -> str:
     """FINAL 7.4 h3 (scope) and ADJUDICATION C-10: whether a statement applies to an act. ``whole`` (DECISIONS D103,
-    h3's question): the statement is quoted uncut - it is one passage, which the read bounds to 600 characters - so the
-    words that make it a denial are never cut off the end of a long sentence."""
-    said = quote(statement, len(statement) + 1) if whole else quote(statement, 120)
+    h3's question): the statement is quoted uncut - it is its own passages, which the read bounds to 600 characters
+    each - so the words that make it a denial are never cut off the end of a long sentence. ``also`` (DECISIONS D126,
+    h3's question): the act's other same-event contradictions' statements, after ``statement`` in their precedence -
+    the one question asks whether any of them applies, so none is dropped."""
+    quoted = [quote(item, len(item) + 1) if whole else quote(item, 120) for item in (statement, *also)]
+    said = quoted[0] if len(quoted) == 1 else ', '.join(quoted[:-1]) + ' or ' + quoted[-1]
     if words:
         return f'Does {said} apply to the {act} ({quote(words, 120)})?'
     return f'Does {said} apply to the {act} this code accounts for?'
 
 
-def scope_reason(statement: str, act: str, whole: bool = False) -> str:
-    said = quote(statement, len(statement) + 1) if whole else quote(statement, 140)
-    return (f'The document states {said}; CPT Studio could not confirm from the document whether that statement '
+def scope_reason(statement: str, act: str, whole: bool = False, also: Sequence[str] = ()) -> str:
+    quoted = [quote(item, len(item) + 1) if whole else quote(item, 140) for item in (statement, *also)]
+    if len(quoted) > 1:  # DECISIONS D126: every statement the question asks about
+        return (f'The document states {join(quoted)}; CPT Studio could not confirm from the document whether those '
+                f'statements apply to the {act}.')
+    return (f'The document states {quoted[0]}; CPT Studio could not confirm from the document whether that statement '
             f'applies to the {act}.')
 
 

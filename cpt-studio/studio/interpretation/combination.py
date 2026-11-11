@@ -181,11 +181,12 @@ OTHER_GI = 'gi.other'  # engine.OTHER_GI
 SAME_DAY_FAMILIES = lexicon.PROCEDURAL_FAMILIES | frozenset({OTHER_GI, 'gi.unsupported'})  # D94: a non-GI procedure too
 UNIDENTIFIED_PROCEDURE = 'A procedure CPT Studio could not identify'  # D94: the label of an act of family ''
 # DECISIONS D109 (the round-4 refutation, findings 15 and 16; D94 narrowed): an act of gi.unsupported, or of no family
-# (Gemini's procedure 'unknown'), counts only when its time is current_encounter - in any state - and its performer is
-# not verified to another clinician or facility. A CT "interpreted separately by the radiology service" (fb13's attested
-# shape) and an imaging study named in the indication with an earlier or undatable time (fb14's) made a procedure day,
-# or asked the E/M's event_time, where c2e53f8e is READY; the office excision (D94) and an unidentified act today still
-# count.
+# (Gemini's procedure 'unknown'), never counts when its performer is verified to another clinician or facility, nor as
+# an act Gemini places at another encounter that nothing places on the date. A CT "interpreted separately by the
+# radiology service" (fb13's attested shape) and an imaging study named in the indication with an earlier time whose
+# marker is missing (fb14's) made a procedure day, or asked the E/M's event_time, where c2e53f8e is READY; the office
+# excision (D94) and an unidentified act today still count. DECISIONS D111 (the review of D109, problems 0-2): their
+# date is read by C-3's one currency rule, as every other act's is (procedure_day) - never by Gemini's time value alone.
 CURRENT_ONLY_FAMILIES = frozenset({'gi.unsupported', ''})
 # DECISIONS D109 (findings 13 and 23): the same-day rule reads an act by its KIND, not only its family. An in-office
 # band ligation Gemini files under the visit (procedure office_em: the note's only heading is the visit's) has family
@@ -194,8 +195,10 @@ CURRENT_ONLY_FAMILIES = frozenset({'gi.unsupported', ''})
 # acts), the examination kinds (an endoscopic examination such as an anoscopy; never one whose device is verified
 # manual - a digital rectal examination, E13) and the umbrellas: every act kind but the visit's, prolonged time,
 # moderate sedation and 'other'. Such an act of a family outside SAME_DAY_FAMILIES (gi.office_em, gi.em_other,
-# gi.sedation) is another GI service (OTHER_GI's label, as the installed routing reads it) when C-3 counts it: its time
-# is current_encounter, in any state, or its own words place it on the date (facts.day_of ON).
+# gi.sedation) is another GI service (OTHER_GI's label, as the installed routing reads it) when C-3 counts it.
+# DECISIONS D111 (the review of D109, problem 2): the kind arm reads an act of gi.unsupported or of no family too (a
+# band ligation whose procedure Gemini left 'unknown' is another GI service, as c2e53f8e words it), and every arm reads
+# its date by one currency rule (procedure_day).
 SAME_DAY_KINDS = frozenset(
     kind for family in sorted(lexicon.PROCEDURAL_FAMILIES) if family in catalogue.CATALOGUE
     for kind in (catalogue.CATALOGUE[family].acts + tuple(item for item, _ in catalogue.CATALOGUE[family].bundled)
@@ -218,38 +221,44 @@ class ProcedureDay:
 
 
 def procedure_day(reading, effective, codes: Sequence[tuple] = ()) -> ProcedureDay:
-    """The procedure day by DATE OF SERVICE (C-3). Every procedure event (of a procedural family or gi.other -
-    SAME_DAY_FAMILIES, DECISIONS D81 - and not an E/M visit) stated done or in doubt, by any performer (as
-    derived.procedure_day reads it, contract 8.3, gi.other added by D81), is ON the date (facts.day_of:
-    a usable current time, or a time whose own words or literals place it on the effective date), OFF it, or UNDATABLE.
-    ON with status, time, performer and procedure usable and positive: done; ON otherwise: possible; UNDATABLE: listed
-    for the E/M's time question. DECISIONS D109: an act of gi.unsupported or of no family counts only when its time is
-    current_encounter (any state) and its performer is not verified to another clinician or facility
-    (CURRENT_ONLY_FAMILIES); an act of a procedural KIND (SAME_DAY_KINDS) filed under a family outside SAME_DAY_FAMILIES
-    (gi.office_em, gi.em_other, gi.sedation) counts as another GI service when its time is current_encounter (any state)
-    or its own words place it on the date - done only with its kind usable too. ``codes``: (code, family, state,
-    procedural, label) of the counted codes - a counted procedural code adds its label to the done (performed) or
-    possible (held) list, as engine._encounter adds the selected procedural codes."""
+    """The procedure day by DATE OF SERVICE (C-3). The acts it reads, never an E/M visit, stated done or in doubt, by
+    any performer (as derived.procedure_day reads it, contract 8.3): an act of a procedure family or gi.other
+    (SAME_DAY_FAMILIES, DECISIONS D81); an act of gi.unsupported or of no family (D94), never one whose performer is
+    verified to another clinician or facility (D109); and an act of a procedural KIND (SAME_DAY_KINDS, D109) whatever
+    procedure it is filed under - gi.office_em, gi.em_other, gi.sedation, and (DECISIONS D111) gi.unsupported or none -
+    read as another GI service, done only with its kind usable too.
+    DECISIONS D111: ONE currency rule for every one of them, facts.day_of - never Gemini's time value alone:
+    - ON (a usable current time, or its own words or literals place it on the date: an earlier_encounter time worded
+      "Earlier today" or "Earlier in the day" included): done with status, time, performer and procedure usable and
+      positive, possible otherwise;
+    - OFF (a usable earlier or future time whose words place it on no such day): never counts;
+    - UNDATABLE (a time 'unknown', a current time that does not verify, an open time): listed for the E/M's time
+      question - UNRESOLVED(time), never READY - except an act outside the procedure families and gi.other that Gemini
+      places at another encounter (earlier_encounter or future, its marker missing): a history mention (finding 16's
+      study named in the indication, an indication's banding) never counts, as at D109; an act of a procedure family or
+      gi.other keeps C-3's question (D81: a hold, never a READY).
+    ``codes``: (code, family, state, procedural, label) of the counted codes - a counted procedural code adds its label
+    to the done (performed) or possible (held) list, as engine._encounter adds the selected procedural codes."""
     labels, possible, undatable = [], [], []
     for event in reading.events.values():
         family = event.get('family') or ''
         kind = events.value(event, 'kind')
         if kind in lexicon.EM_KINDS:
             continue
-        current = events.value(event, 'time') == 'current_encounter'
+        by_family = family in SAME_DAY_FAMILIES and family not in CURRENT_ONLY_FAMILIES  # D81: procedure or gi.other
+        manual = (kind == mapping.EXAMINATION and events.usable(event, 'technique')
+                  and events.value(event, 'technique') == events.DIGITAL)
+        by_kind = not by_family and kind in SAME_DAY_KINDS and not manual  # D109; D111: gi.unsupported and '' too
+        if not (by_family or by_kind or family in CURRENT_ONLY_FAMILIES):
+            continue  # an act of no procedural kind filed under the visit, its sedation or another E/M (D109)
+        if family in CURRENT_ONLY_FAMILIES and events.verified_other_performer(event):
+            continue  # D109 (finding 15): never another clinician's or facility's verified read
         day = facts.day_of(event, effective)
-        by_kind = False
-        if family in CURRENT_ONLY_FAMILIES:
-            if not current or events.verified_other_performer(event):
-                continue  # D109 (D94 narrowed): D94's gi.unsupported, and an act whose procedure Gemini left 'unknown'
-                # (family '' - never done, its procedure unusable, so only a possible same-day procedure, fail-closed),
-                # count only as acts of this encounter: never an earlier, future or undated study, never another's read
-        elif family not in SAME_DAY_FAMILIES:
-            manual = (kind == mapping.EXAMINATION and events.usable(event, 'technique')
-                      and events.value(event, 'technique') == events.DIGITAL)
-            if kind not in SAME_DAY_KINDS or manual or not (current or day == facts.ON):
-                continue  # D81: gi.other too; D109: an act of a procedural kind, whatever procedure it is filed under
-            by_kind = True
+        if day == facts.OFF:
+            continue  # C-3: another date
+        if (day == facts.UNDATABLE and not by_family
+                and events.value(event, 'time') in ('earlier_encounter', 'future')):
+            continue  # D109, D111 (finding 16): a history mention Gemini places at another encounter
         status = events.value(event, 'status')
         if status not in verify.POSITIVE + ('uncertain',):
             continue
@@ -278,17 +287,28 @@ def procedure_day(reading, effective, codes: Sequence[tuple] = ()) -> ProcedureD
 
 def separate_statement(reading, event_ids: Sequence[str]) -> Optional[str]:
     """The documented statement of a significant, separately identifiable E/M (checks.separate_em_statement's event
-    form): the words of a usable ``stated`` separately_identifiable of the visit events ``event_ids``, else of any visit
-    event; None when there is none."""
-    visits = [reading.events[eid] for eid in event_ids if eid in reading.events]
-    visits += [event for event in reading.events.values() if event not in visits]
-    for event in visits:
+    form), read from TODAY's visit only (DECISIONS D113; FINAL 7.9: "its visit event's separately_identifiable"): the
+    words of the first usable ``stated`` separately_identifiable of the visit events ``event_ids`` (the code's own),
+    else of another visit event of this encounter - a usable current_encounter time and no performer verified to
+    another clinician or facility. Never another encounter's visit ("At her office visit on 10/01/2026, a significant,
+    separately identifiable E/M service was provided."): the installed reader refuses a statement about another
+    encounter. A ``stated`` value whose own words are negated (lexicon.negation, the reader a denial is verified by) is
+    no statement, and a denial never releases; neither silences another visit's statement (FRESH-2 fb10: the GERD
+    visit stated beside the rectal bleeding assessment that "is not a separate E/M service"). None when there is
+    none."""
+    own = [reading.events[eid] for eid in dict.fromkeys(event_ids) if eid in reading.events]
+    mine = {event['id'] for event in own}
+    today = [event for event in reading.events.values() if event['id'] not in mine
+             and events.usable(event, 'time') and events.value(event, 'time') == 'current_encounter'
+             and not events.verified_other_performer(event)]
+    for event in own + today:
         visit = event.get('visit')
-        if not isinstance(visit, Mapping):
+        separate = visit.get('separately_identifiable') if isinstance(visit, Mapping) else None
+        if not verify.usable(separate) or separate.get('value') != 'stated' or not separate.get('words'):
             continue
-        separate = visit.get('separately_identifiable')
-        if verify.usable(separate) and separate.get('value') == 'stated' and separate.get('words'):
-            return separate['words']['text']
+        words = separate['words']['text']
+        if not lexicon.negation(words):
+            return words
     return None
 
 

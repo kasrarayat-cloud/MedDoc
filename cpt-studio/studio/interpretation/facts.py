@@ -205,11 +205,13 @@ def day_of(event: Mapping, effective) -> str:
     """Whether an event is ON the date of service, OFF it, or UNDATABLE (ADJUDICATION C-3: procedure_day is by date of
     service). ON: a usable current_encounter time; or time words whose date literals are all at day precision and equal
     to the effective date; or time words that say so (SAME_DAY_WORDS: "earlier today"; DECISIONS D109: or words made
-    only of whole same-date frames, lexicon.SAME_DAY_FRAMES - "earlier in the day", "Earlier that day" - whatever time
-    Gemini gives, earlier_encounter included). OFF: a usable earlier or future time whose words place it on no such day.
-    UNDATABLE: a time that is not usable (unknown, unverified, open, discarded) and whose words place it on no such day
-    - "any event whose date is unresolved" (C-3). ``effective``: the effective date (a date, an ISO string or None);
-    with none, a date literal places nothing."""
+    only of whole same-date frames, lexicon.SAME_DAY_FRAMES - "earlier in the day", "Earlier in the morning" - whatever
+    time Gemini gives, earlier_encounter included; DECISIONS D112: frames anchored to today only, never the anaphoric
+    "Earlier that day", which names whatever day the sentence before it names). OFF: a usable earlier or future time
+    whose words place it on no such day. UNDATABLE: a time that is not usable (unknown, unverified, open, discarded) and
+    whose words place it on no such day - "any event whose date is unresolved" (C-3); combination.procedure_day reads
+    which of those an act's own time value makes a question (DECISIONS D111). ``effective``: the effective date (a
+    date, an ISO string or None); with none, a date literal places nothing."""
     time = event.get('time') or {}
     text = _words_of(time)
     if verify.usable(time) and time.get('value') == 'current_encounter':

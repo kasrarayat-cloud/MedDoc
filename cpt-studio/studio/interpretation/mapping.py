@@ -331,6 +331,46 @@ DEFINING = MappingProxyType({code: kinds for code, kinds in ((code, _defining(co
                                                               for code, profile in catalogue.CODES.items()) if kinds})
 
 
+# --- the target of a defining act (DECISIONS D120; the round-4 parity audit, EUS gap 0) ---------------------------------
+
+# 43240 is the transmural drainage of a PSEUDOCYST (its covers: the EUS examination and a drainage; D27 narrows it to the
+# drainage). The catalogue states that an EUS-guided drainage of anything else - biliary, the gallbladder, a
+# gastroenterostomy - has no profiled code (the gi.eus entry's unsupported_acts, UNSUPPORTED_SERVICES), and the installed
+# release never READYs 43240. DEFINING_TARGETS: code -> what its defining act's VERIFIED target words, or the words of the
+# lesion its target is verified to be, must name - here a pancreatic fluid collection (a pseudocyst, walled-off necrosis,
+# a pancreatic or peripancreatic fluid collection). It is an inclusion list for SUPPORT, so it fails closed: a drainage
+# whose words name none of these never supports the code (held, never READY), whatever they name instead.
+# DEFINING_TARGET_APART: the regions where a verified place of the act (its target landmark, its lesion's verified site)
+# sets it apart whatever its words name - a drainage at the gallbladder, a bile duct or the liver is another drainage.
+PANCREATIC_FLUID_COLLECTION = ('pseudocyst', 'pseudocysts', 'walled off necrosis', 'walled off pancreatic necrosis',
+                               'won', 'pancreatic fluid collection', 'pancreatic fluid collections',
+                               'peripancreatic fluid collection', 'peripancreatic fluid collections',
+                               'pancreatic collection', 'peripancreatic collection', 'pfc', 'necrotic collection',
+                               'necrotic collections', 'pancreatic necrosis')
+DEFINING_TARGETS = MappingProxyType({'43240': PANCREATIC_FLUID_COLLECTION})
+DEFINING_TARGET_APART = frozenset({'biliary', 'liver'})
+
+
+def defining_target(code: str, event: Mapping, lesion: Mapping | None = None) -> bool:
+    """DECISIONS D120: whether ``event`` - an act of ``code``'s defining kind - meets the code's defining-target
+    requirement (DEFINING_TARGETS): True for a code with none. For 43240: the event's own target is usable and its words
+    name a pancreatic fluid collection, or ``lesion`` - the record of the lesion its target is verified to be (the
+    caller's identity.verified_lesion; this table module reads no identity rule) - has words that name one; and no verified
+    place of it (its target landmark, that lesion's verified site) lies in DEFINING_TARGET_APART. Reads the attribute's
+    own words (EB1) and verified values only, never a passage."""
+    names = DEFINING_TARGETS.get(code)
+    if names is None:
+        return True
+    target = event.get('target') or {}
+    lesion = lesion or {}
+    site = lesion.get('site') or {}
+    places = [target_landmark(event)] + ([site.get('value', '')] if verify.usable(site) else [])
+    if any(region(place) in DEFINING_TARGET_APART for place in places if place):
+        return False
+    texts = [_words_text(target) if verify.usable(target) else '', _words_text(lesion)]
+    return any(text and lexicon.holds(text, names) for text in texts)
+
+
 # --- the EUS examination class (DECISIONS D28; FINAL 7.2 R6) -------------------------------------------------------------
 
 FULL, LIMITED = 'full', 'limited'
