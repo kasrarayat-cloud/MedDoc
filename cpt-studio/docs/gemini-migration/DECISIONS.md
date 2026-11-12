@@ -14170,3 +14170,477 @@ evidence, and such an argument comes back to the owner of these decisions.
     - failures;
     - reload persistence;
     - actual exports.
+
+## Build waves 1 and 2: the arbiter triage's rulings (2026-11-12, session 68197eb1)
+
+- **How they were made.** Workflow wf_2a18b1d2-4b1 (one arbiter, 12:22Z-13:34Z, 1,107,882 tokens) triaged every item of
+  waves 1 and 2 (steps 0b, 1a-1f, 2a-2d): 86 review problems and 238 builder deviations and requests, 324 items in all.
+  - Classes: 97 ruling items (grouped into D185-D207 below), 49 repairs, 13 integration requests, 31 hand-offs to later
+    steps and 134 accepted readings.
+  - The record is `build-v2/triage-w12/TRIAGE.json` in the session directory. Every run used synthetic data,
+    PostgreSQL 127.0.0.1:55461 and a fresh test-database suffix. No repository file was changed.
+  - The eleven patches apply in order to one fresh archive of 46ac0fa8c (code-identical to c0d6d52a7) with no
+    conflict. They touch 54 files, none of them in two patches. On the combined tree all 45 new modules import together,
+    and the cross-step tests run 96 of 96 green.
+- **What the integration owner checked before adopting.**
+  - The three blocking findings, from the arbiter's run logs:
+    - 1d#1: base plus 0b green (arbw12g); with 1d, two failures naming `appraisal_run_id` (arbw12h); with 1d's
+      requests diff, green (arbw12i).
+    - 2d#1: the `{snare}` mutant is really in the mutant copy (facts.py sha256 `18b20832...` to `cb5ccec4...`, the
+      marker line in the diff), and 56 of 56 tests pass with it (arbw12j) as without it (arbw12k).
+    - 2d#2: read on 2d's own fixture (`probes-arb/q_2d2.out`).
+  - D197 against FINAL-V2 Appendix A, which already says "Route (b) codes (46221) ... are held, never READY". The
+    ruling adds only the hold's item (D182's one item per held code), on D80's precedent.
+  - D203 against D183, which approved the second call and accepted 7.1's per-document cost. The cost statement is a
+    report, so its last bullet is reworded below.
+  - None of the rulings adds a word reader or a semantic veto (owner directive of 2026-11-09). Each one does one of
+    four things:
+    - it reads the design literally where the design was ambiguous;
+    - it completes a table or an interface the design names;
+    - it removes a hold the design does not ask for (D191, D198, D199);
+    - it records a builder's reading.
+- **Changes the integration owner made to the proposed text:** D197 gains its class-b note, and D203's last bullet
+  is reworded. Everything else is the arbiter's proposal as written.
+
+- **D185 Object and unit ids have one grammar, checked at S1 (FINAL-V2 3.1 S1, 1.4, 1.8; arbiter triage of waves 1
+  and 2: 0b#4, 1d#5).**
+  - Every object id is its family's letter followed by its number in canonical decimal digits: E events, X sessions,
+    N sections, L lesions, Y anatomy entries, P people (`E1`, `N0`; never `E01`, `e1` or `E 1`). Every id-valued
+    reference, every object a doubt names and every cited unit id (`S<k>`) has the same shape.
+  - S1's ids stage (`contract/extract_read.id_error`) checks it. A breach refuses the whole answer, as v1's ids stage
+    refuses an id outside its shape.
+  - Item-level, as 1.8 says: a well-formed id that names no object or names an object of another family (I4,
+    `reference_invalid`), and a well-formed unit id the segmentation does not have (I1, `unit_unknown`).
+  - Why: the engine holds ids as `Id(family, number)` (4.1) and the store refuses every other form, because P9 forbids
+    storing model text. Under v1's shape an answer with `E01` passed the reader and failed at the store after both sends
+    (store.py:880), or at the FactSet (engine/types.py:63-74).
+  - Changes: 1b's `is_id` and `id_error`; one sentence in 2a's OBJECTS part if it does not already state the shape (the
+    instruction pin is recomputed). `Id.parse` and `store._v2_id` are unchanged.
+
+- **D186 Reason's closed list gains K1's fourteen reasons and one appraisal reading (FINAL-V2 3.1 K1, G2; 3.3; 3.2.3;
+  arbiter triage: 0b#3, 2b#6, 2b R1, 1d dev 8, 1c R2).**
+  - `contract/types.Reason` gains K1's reasons, one per rule of 3.1 K1, with 2b's values: `structure_scope`,
+    `structure_yield`, `structure_access_outcome`, `structure_cause`, `structure_part_of`, `structure_endoscopic`,
+    `structure_visit`, `structure_other_class`, `structure_status_time`, `structure_exceptive`,
+    `structure_listed_targets`, `structure_single_target`, `structure_segment`, `structure_umbrella`.
+  - It gains `appraisal_qualified`: a `qualified` verdict that names no qualifier.
+  - A `supports` verdict that names qualifiers is read as `qualified`: A3 defines `supports` as a statement "with no
+    qualification", so the fail-closed reading wins. It settles `unresolved` with `appraisal_qualified:<q>` for each
+    qualifier it names.
+  - G2 keeps its two reasons. An unlocated closing source is `section_start_unlocated`; a closer before its start or an
+    overlap is `section_order` (1c's mapping). Both demote exactly the facts 3.1 names.
+  - The cross-object rules of 3.1 add no reason. An inherited fact is settled on its section's fact (3.3), so it carries
+    that fact's reasons.
+  - Until a v2 row is stored on a served site, Reason may grow in the same commit as `tests/v2/test_types.py` and the
+    store's SHAPE_PINS; after that, a change is `gemini-inventory@3` (2.5).
+
+- **D187 The date of service is a generic settled fact (FINAL-V2 1.4, 1.3, 3.3; arbiter triage: 0b#7, 1d dev 7(e)).**
+  - Settle maps pass 1's DATE_STATES onto the fact states:
+    - `stated` is `supported`, with its value and sources;
+    - `several` is `contradicted`: value `""`, each candidate date an option with its own sources (3.3 row 1);
+    - `not_stated` is silent: no claim, `unknown`, `silent` (3.3 row 3).
+  - The store, the FactSet and the engine read it as the encounter's `date_of_service` fact like any other. A doubt
+    about the date of service is applied by 3.3 row 2.
+  - This is the stored contract 1d built (its v2 section) and 2d reads. 1b's S2 shape for the date of service is
+    confirmed: stated has a value and sources and no options; several has no value, sources, and two or more distinct
+    dates as options; not_stated has none of them.
+
+- **D188 The engine reads a fact's source offsets, links and inheritance through a text-free view (FINAL-V2 4.1, 1.7,
+  4.5, 4.6 condition 4, 3.2.5, 5.7 measure 4; arbiter triage: 2d#2, 0b#1, 0b#5).**
+  - `engine/types.Fact` keeps 4.1's six fields and gains three, each with an empty default:
+    - `cited`, one `Cited(link, units, at)` per stored source: the link, the span of its cited units, and the
+      located words' offsets (`None` when the words are `""`);
+    - `inherited_from`: the section an act's fact was inherited from; `None` when it is the act's own slot;
+    - `counter`: the evidence units of a `contradicts` or `qualified` verdict (3.2.5), quoted in the hold question.
+  - `store.textfree_v2` (outside `engine/`) gives the engine a copy of the row in which every source's `words` record
+    is `at` {start, end} and every `text` is dropped. `engine/facts.py` builds only from it, so measure 4 stays
+    categorical: no `words` or `text` name in `engine/`, and no exception.
+  - C-10 (4.6 condition 4) reads D's statement-linked target and timing words as the `at` spans of the `statement`
+    sources of D's target and timing facts. The performer row (4.5) reads "D's own statement names a performer" as a
+    performer fact that is not silent and has no `inherited_from`.
+  - Why: 2d's FactSet kept only whole-unit spans and dropped links and inheritance (verified in the triage on 2d's own
+    fixture: a kept span inside a statement's unit but outside its target words). Built on it, C-10 would count such
+    a span as cover, turning a partial cover into an exclusion, and the performer row could not tell an inherited
+    performer from a named one.
+
+- **D189 HeldFact carries its witness's result (FINAL-V2 4.2, 4.4, 9.1; arbiter triage: 0b#2).**
+  - `engine/types.HeldFact` gains `result: Result | None`, the settled result of the fact the hold rests on. It is
+    `None` for a hold that is about no single fact (a coding relation, member context).
+  - 4.2 calls each witness `(subject, attribute, result, reason)` and 9.1 exports `held_facts[].result`. Re-deriving
+    the result from the FactSet would be ambiguous for a multi-valued attribute and impossible when `attribute` is
+    `None`, so the field is needed.
+
+- **D190 Additive changes to kept modules and their existing tests ship in the change's own merge (FINAL-V2 8.0, 6.3,
+  5.0, 5.7; arbiter triage: 1d#1, 2d#5).**
+  - 6.3's `EventInventory.appraisal_run` makes three existing tests enumerate one more column, foreign key or migration:
+    `test_interpretation_store` ModelTests, `test_models_event_inventory` EventInventoryRowTests, and ops
+    `test_install_harness2` MigrationReceiptTests. No `store.FIELDS` keeps the first one green, so "v1's store tests
+    pass unchanged" cannot hold with the column.
+  - The integration owner applies `build-v2/1d/requests/requests.diff` (sha256 `dce1f527...a94561`) in the same merge
+    as step 1d, each edit commented with FINAL-V2 6.3. The ops file is 6b's, so it is applied on 6b's behalf. Verified
+    by the arbiter: green on base plus 0b, the three red with 1d, all green with the diff.
+  - A kept module may gain a keyword-only parameter whose default runs v1's path byte for byte, when another section
+    of the design needs it. 2d's `dates.member_date_state(..., quote=None)` is accepted: derive returns v1's context
+    record with its quoted evidence, which 6.4 keeps.
+  - The 17 retired modules and their tests are never edited (5.0, 8.0).
+
+- **D191 The kinds of a session family are one table, read by K2 and by `possibly`'s kind arm (FINAL-V2 4.2, 4.5,
+  3.1 K2, 4.7, 9.4 P-UNKNOWN-KIND; arbiter triage: 2d#1, 2b#4, 2b R4, 1e#1).**
+  - `engine/requirements_table.FAMILY_KINDS` (generated by 1f from 1e's tables) is THE answer to "the kinds of a
+    session family". Family F's set is the union of:
+    - F's catalogue acts, its bundled kinds, its unsupported kinds, and every kind one of its codes accounts for;
+    - for an endoscopic family, the examination and the never-reported kinds (clip, cannulation);
+    - an umbrella (`removal`, `intervention`) when one of its members is in the set;
+    - moderate sedation, for a procedural family;
+    - `other`, when the set is not empty.
+  - K2 ("an act's session kind admits its kind") reads this table instead of `catalogue.family_codes_act`, which
+    answers whether a CODE of the family accounts for the kind. Read literally, it made every ERCP cannulation's
+    session unresolved (and so every ERCP code held through R6:cannulation) and every hemostasis clip's session too.
+    An act the family cannot hold (a peg in a colonoscopy session) is still demoted.
+  - `facts.possibly_of_family` reads the same table. A statement whose kind is not established is then possibly every
+    kind its established session can hold. The arbiter's in-memory prototype gives no P-UNKNOWN-KIND violation over
+    every family and kind. 2d's own table had left out cannulation, clip, esd, balloon expulsion, the umbrellas and the
+    examination, and a mutant table of `{snare}` survived all of 2d's tests.
+  - 1e ports `BUNDLED_KINDS` and `UNSUPPORTED_KINDS` (the Kind-valued parts of v1's FamilyEntry), which 4.7's bundling
+    reads too. 2d's tests pin P-UNKNOWN-KIND over the whole table, and the `{snare}` mutant must turn them red.
+
+- **D192 K3's reach table is v1's FAMILY_REGIONS, by value (FINAL-V2 3.1 K3, 3.5; arbiter triage: 2b#7, 2b R3).**
+  - `engine/catalogue.FAMILY_REACH` holds v1's `studio.gi.services.FAMILY_REGIONS` over 1e's Region enumeration:
+    - egd: esophagus, stomach, duodenum;
+    - colonoscopy: colon, rectum, anus, small bowel;
+    - flex_sig: colon, rectum, anus;
+    - enteroscopy: small bowel.
+
+    A family that is not in the table is not judged.
+  - K3 reads it through settle's Vocabulary, typed over Region and SessionKind rather than `Hashable`. 3a pins that K3
+    fires with the real Vocabulary.
+  - K3 only demotes, and nothing is ever moved. Its known over-holds are fail-closed residuals, counted as
+    `session_unreachable` in D3 and reported: an EGD biopsy at the ampulla (REGION_OF puts the ampulla in the biliary
+    region), and a push enteroscopy's gastric act. Changing the table needs a DECISIONS entry on development evidence.
+
+- **D193 L1 judges every literal at its own precision, and an act's own date against its effective relation (FINAL-V2
+  3.1 L1, 3.8 probe (b), 3.3; arbiter triage: 2b#1, 2b#2, 2b#5, 2d D5, 2d D6).**
+  - `on_date_of_service` needs every literal of the timing fact to hold the effective date at the literal's own
+    precision: a day equal to it, a month or a year containing it. 3.1 L1's "any day literal" is read with 3.8 probe
+    (b), "a date 2023 fails L1 against on_date_of_service". This is v1's rule (D54) and 2d's re-judge.
+  - `literal_unchecked` stays day-only when no effective date exists. R7 already holds every code without a date of
+    service.
+  - An act's own supported `date` is judged against its EFFECTIVE date relation, its section's occasion when the act
+    has no relation of its own. The finding demotes the act's per-act relation only, never the section's fact. The
+    per-act fact stores the section's literals and the act's own date literals, so the re-judge at assess and read
+    time sees both.
+  - Only a supported date's literals are read. A negated date is not evidence of when the act was done.
+  - 2b's claim-time rule and 2d's re-judge stay two implementations (`engine/` cannot import `date_literals`), pinned
+    equal over a generated grid by one test.
+
+- **D194 The umbrellas are codable; every codable kind on a READY or exclusion path has a sibling (FINAL-V2 3.2.1,
+  4.10, 4.6, 3.2.3; arbiter triage: 1f#4, 1f R7, 2c F2).**
+  - `removal` and `intervention` are codable kinds for CLAIMED: an umbrella act's and an umbrella statement's facts are
+    claimed like any other's. K1 still makes `intervention` a statement kind only.
+  - Why: 4.10's broad denial ("No polyp was removed today.": kind removal, breadth all_of_kind, its session and date
+    relation established, "its breadth claim has a control") must be able to exclude an uncited code and to
+    CONTRADICT a snare (`conflict:snare`). With nothing claimed it could do neither. A positive umbrella's status must
+    be claimed for rank 9's `act_method` (h5) to surface.
+  - KIND_SIBLINGS gains siblings chosen outside the kind, so a faithful second reading rejects them: removal/biopsy,
+    intervention/examination, em_prolonged/em_visit (99417 has a READY path).
+  - `moderate_sedation` and `other` get no sibling: no READY or exclusion path reads their kind (D80 holds 99152 and
+    99153 before any group is read; `other` has no catalogue kind). 1f marks every read of them as a hold path.
+  - CLAIMED, KIND_SIBLINGS and CONTROLS are re-pinned. No recording exists yet, so no version bump is needed (D202).
+
+- **D195 CLAIMED covers every attribute a rule reads, per kind (FINAL-V2 3.2.1, 9.4 P-READSET, 4.3, 4.5; arbiter
+  triage: 1f#5, 1f#6, 2c F5, 1f R3-R6).**
+  - CLAIMED gains:
+    - an act's places and lesion for every codable act kind that has a target: every codable kind but the visit,
+      prolonged visit time, moderate sedation and `other`, the examination included (R6:target reads its places);
+    - a lesion's places, for lesions of claimed acts (SITE's lesion arm);
+    - a statement's own named person, with the statement-phrased template "This statement is about {kind label}s by
+      the person named at {units}." and the control naming another person's units, when another person is named
+      (4.5's performer row).
+  - Why: 3.2.1 says an omitted fact can only hold and that P-READSET fails in CI when the engine reads an attribute
+    CLAIMED does not list. These omissions held every exam-only EUS code forever, made SITE's lesion arm and 4.5's
+    person arm unmeetable, and held pairs that 4.5 means to set apart.
+  - P-READSET is checked per kind.
+  - The claims no rule reads (a statement's anatomy and duct, an anatomy entry's organ and joins, and the kind-level
+    extras 1f lists) stay as 3.2.1 lists them: they release nothing, and trimming them is a cost question for D3.
+
+- **D196 P-CONTROLLED is completed: each gap is decided (FINAL-V2 3.2.3, 9.4 P-CONTROLLED; arbiter triage: 2c#1,
+  2c#4, 2c#5, 2c F1, 2c F6, 1f#1).**
+  - P-CONTROLLED is checked per object class, attribute, kind and value, from 1f's read-sets and the control rules'
+    kinds and values. A check per attribute alone missed 13 kinds' places and 9 session kinds.
+  - `act.target.places`: CONTRAST_PLACES' control for every kind whose places a READY or exclusion path reads.
+    CONTRAST_PLACES becomes an ordered list of candidates per landmark. The control takes the first candidate that is
+    disjoint from every place of the object, and from the whole range of a segment statement. A control equal to the
+    object's own other place, or inside its segment, was true by construction.
+  - `act.target.duct`: biliary against pancreatic, pancreatic against biliary, cystic against pancreatic.
+  - `session.through`: "... passed through anatomy {another anatomy entry}" when one exists. With a single anatomy
+    entry it is UNCONTROLLED, because the class fit also needs the approach and the entry's type, both controlled.
+  - `session.part_of_session` is UNCONTROLLED: it only bundles (base_within), and its absence is read by `possibly`.
+    1f marks its read as a hold path.
+  - SESSION_SIBLINGS gains office_em/em_other, motility/reflux, reflux/motility, anorectal/motility and
+    feeding_tube/egd. KIND_SIBLINGS follows D194.
+  - `lesion.multiplicity`: 1f marks its bundling read as a READY path (an established group un-bundles the biopsy), so
+    3.2.3's "the other value" control is generated.
+  - The control of a performed act is the statement-phrased "This statement says that {kind label} was not done.", a
+    real-claim form on an event card. The restatement and completeness contraries stay the forms 3.2.3 prescribes,
+    pinned as own forms.
+  - Pair controls are generated for bundling identity by place (3.2.3 names it), both directions, for every pair of
+    acts of one session whose kinds such a rule reads.
+  - A control is needed only for values on a READY or exclusion path. `achieved_after_failed_attempts` takes the
+    failed form; approaches other than oral, through_stoma and through_pouch, tract pancreatobiliary, and anatomy types
+    outside 3.2.3's row decide no code and need none.
+
+- **D197 Route (b) is never READY (FINAL-V2 Appendix A, 4.3 row 6, 4.4; arbiter triage: 1f#3).**
+  - A route (b) code (46221) is held and never READY, as Appendix A says. 4.3 row 6's route (b) arm still decides which
+    acts support it, and exclusion, base and competition read those acts.
+  - The hold has one item: `performed_status` at rank 4, cause `coding_rule:route_b`, raised by a ROUTE_B row of the
+    requirement table. Without it a code held by NEVER_READY had no clarification (4.8).
+  - This is a fail-closed parity difference. v1 made 46221 READY on a supported banding; parity is diagnostic (D180).
+  - **Class b, for the owner.** Against c2e53f8e this is a lost READY. It is raised before the install with the count
+    measured in D3 and in the acceptance run, beside the other owner items. Until the owner answers, the design's hold
+    stands.
+
+- **D198 G5: an act's anchor or restatement infers a reach; a denial's anchor does not (FINAL-V2 3.1 G5, G6, 3.2.1;
+  D36; arbiter triage: 1c#4).**
+  - G5's "a unit that is the anchor of NO act" counts the anchors AND the valid restatements of every event whose
+    claimed status is not negated, other than the session's own examination. A reach, completion, stations, approach
+    or through source lying only in such units is `extent_inferred`.
+  - A denial's anchor is not an act's. "The terminal ileum was intubated and no biopsies were taken." is a reach
+    sentence, and it no longer gives `extent_inferred`.
+  - Why: an impression line restating a biopsy ("Ascending colon biopsies for microscopic colitis.") is D36's hazard
+    reached by another route. The examination's own anchor and restatements always place its reach.
+  - G6's broad reading is kept: restatement units are never act anchors, of any event.
+
+- **D199 An empty N0 has no span and orders before everything (FINAL-V2 1.4, 3.1 G2; arbiter triage: 1c#7).**
+  - An N0 whose start cites no unit (1.4: units `[]`, words `""`) is a part of length zero at offset 0. It does not
+    conflict with a section that starts at the text's first character, and it contains no unit.
+  - Read literally, G2 gave both `section_order`, and every act of the document's first labelled section lost its
+    inheritance: a whole-document hold for any note that opens with a label ("Per nursing note: ...").
+  - A `document_frame` source then has no N0 unit to lie in and fails G1, as before. Every other G2 rule stands.
+
+- **D200 The doubt mapping: 1b's attribute rows confirmed, and a doubt that names no object (FINAL-V2 3.1 S2, 1.3,
+  3.3, 3.2.6; arbiter triage: 1b#3, 1b dev 3, 1b dev 5).**
+  - `contract/extract_schema.DOUBT_ATTRIBUTES` is confirmed as 1b built it:
+    - date_relation: an act's date relation and date, a section's occasion, a session's encounter;
+    - entry: an act's entry and a section's owner;
+    - target: an act's five target fields and a lesion's places;
+    - identity: a lesion's multiplicity, `same_as` and `distinct_from`;
+    - technique: an act's device and route, a session's approach and through;
+    - extent: reached, device_reached, reached_anatomy and completion;
+    - part_of: also a session's part_of_session;
+    - kind: also an act's other_class;
+    - session: an act's session only;
+    - date_of_service: the encounter.
+
+    A change to a row is `gemini-inventory@3` once a v2 row is stored.
+  - A malformed doubt that names no object (other than one about the date of service) applies to every claimed fact
+    of every event whose anchor units include one of its units. When no event qualifies, it is kept as an unlisted
+    doubt with no kind and no session (3.2.6 rule 4). This reads unit ids only.
+  - A date_of_service doubt's readings must be day dates, as the date of service itself must be.
+  - 2d's attachment of readings by named object is wider than this table, and is accepted: it widens `possibly` only
+    on facts that are already not established.
+
+- **D201 P-INDEP-SETTLE's listed couplings include the checks' own cross-object reads (FINAL-V2 4.9, 3.1; arbiter
+  triage: 2b R5).**
+  - Perturbing one object's fact may change another object's facts only through:
+    - 4.9's five rules (an invalid anchor; a section's owner, occasion and performer; a session's kind; a doubt
+      naming several objects);
+    - inheritance (1.5), K8's join and doubt joins;
+    - the checks of 3.1 that read other objects:
+      - K1's exceptive rule (the excepted events' kind and status);
+      - K2 arms 2 and 4 (the examination's session fact, and its effective date relation);
+      - K3 (the session's kind);
+      - K4 (anatomy entries against places);
+      - K5 (the person's role and the documenting clinician);
+      - K7 (a section's role and owner);
+      - L1 (the date of service and, by D193, the containing section's occasion).
+  - Read as exhaustive, 4.9's list would fail the property on rules the design specifies. The property still catches
+    any coupling outside this table, which is HO-7's purpose.
+
+- **D202 Pins are written after the wave's repairs and frozen by the first recording (FINAL-V2 1.1, 2.5; arbiter
+  triage: 1f R1, 1b R2, 2a R1, 1a R1).**
+  - The integration owner writes each pin of `interpretation/__init__.py` after the last repair that changes its
+    object, in one commit.
+  - Until the first recording under a label (D1 for `gemini-events@2`, D2 for `gemini-appraisal@1`), a changed pinned
+    object needs only a recomputed pin, and no version bump: nothing stored or recorded depends on the label yet. After
+    it, 2.5's rule applies, and a changed byte is a new version.
+  - The enumeration definitions have no pin of their own. 2a renders them verbatim into INSTRUCTIONS_2, so its pin
+    covers them, and a test shows that a changed definition changes it.
+  - SEGMENTATION_SHA256 stays the rule's constants (2.5). A test pins `segment.py`'s code by a normalized-AST sha256,
+    so a rule change that keeps the constants is still seen.
+
+- **D203 Pass 1's RESPONSE schema is measured at D1 before any compaction; the measured cost is stated to the owner
+  (FINAL-V2 7.1, 7.3; D178 condition 3; D183; arbiter triage: 1b dev 1, 2a#6).**
+  - RESPONSE_SCHEMA_2 is 95,046 canonical characters, 7.9 times v1's. With the instruction, pass 1's fixed input is
+    about 31,000 to 42,000 tokens, an estimate not a measurement, where 7.1 assumed about 10,000.
+  - Nothing is compacted before D1. D1, on one development document, records the provider's `promptTokenCount`, whether
+    it accepts the schema, and whether it accepts `""` as an enumeration value.
+  - On a refusal, or when G-SIZE fails, 7.3's compaction is made as new pass-1 content before any recording (D202).
+  - The per-document cost from D1 and D2's measured tokens is reported to the owner beside 7.1's model, in the
+    install report. It asks nothing: D183 approved the second call and accepted 7.1's cost, and development batches
+    follow D183's cost guard.
+
+- **D204 The third and fourth portions of the duodenum stand where v1's duodenum stands (FINAL-V2 1.4, 4.3 ENT;
+  arbiter triage: 1e#2, 1e R4).**
+  - `third_portion_duodenum` and `fourth_portion_duodenum` lie under the duodenum and the small bowel. In every class
+    table they stand exactly where v1's duodenum and second portion stand: in the EUS full reach and in the
+    gastric/duodenal dilation site, and not in the jejunal enteroscopy class.
+  - v1 read "third portion" words as the second portion, so this keeps v1's coding. An enteroscopy reaching them fits
+    no class and is held (fail-closed). D108's descriptor reading, which would make them jejunal, needs a coding rule
+    recorded on evidence.
+
+- **D205 SingleCharacterGeometry admits isalpha, isupper and a one-character int() (FINAL-V2 1.2 rule 3, 5.7 measure
+  4; arbiter triage: 1a#1, 1a#2, 1a R4).**
+  - The rule admits `isalpha` and `isupper` (character classes, like the `isalnum` it already admits), `int()` of a
+    single character, and slices of the text whose only use is copying units into the framed text.
+  - `contract/segment.py` then states 1.2 rule 3 exactly: an initial or short title is one or two letters whose first
+    letter is uppercase. 1a's approximation had counted subscripts, fractions, Roman-numeral characters and caseless
+    letters as uppercase letters, which under-splits ("... of O₂. The scope was inserted." stays one unit) and was
+    recorded nowhere.
+  - 6a's rule also refuses the three forms the interim checker missed: a `getattr` call of a str method, and a
+    comparison of a multi-character slice with a named string constant (as `x in` and as `==`). Each gets a planted
+    control.
+
+- **D206 The check orchestration is one function outside WordsNeverDecide; settle and claims read its results as data
+  (FINAL-V2 8.1 rows 3a and 5b, 5.7 measure 4, 7.4; arbiter triage: 1c R1, 2c R4).**
+  - `contract/checks.check(text, pages, read)` runs the segmentation, 1b's item-level findings, geometry (G1-G6,
+    closures, section places) and consistency (K1-K8, L1, Q1). It returns one typed `Checked` record. Step 3a owns the
+    module, which is added to its row.
+  - `Checked` and the records inside it (`Citation`, `SectionPlace`) are defined in `contract/types.py`, so
+    `settle.py` and `claims.py` import types and never segment or geometry. WordsNeverDecide is unchanged.
+  - 5b's interpret stage calls `check` at claim time, and the re-settle path calls it before settle. The claim set and
+    the settled inventory then rest on one implementation, and stay a pure function of the revision text and pass 1's
+    bytes (7.4).
+  - `claims.build_request` takes the findings as a required keyword. A caller can no longer omit them and claim facts
+    that failed their checks.
+
+- **D207 The builders' readings of waves 1 and 2 are recorded (arbiter triage of 2026-11-12; every builder's
+  REPORT.md was refused by the harness).**
+  - The readings below were accepted without change. Each is fail-closed or literal to the design, and the triage
+    (`build-v2/triage-w12/TRIAGE.json`, class ACCEPT) gives each item's reason and FINAL-V2 lines.
+  - Each step's next repair points its REPORT.md citations here.
+  - 0b:
+    - Span lives in contract and the engine re-exports it.
+    - The extra records (Option, Unlisted, the settled sub-records, Id, IsoDate, Anchor, Cover, Exclusion, ItemKind).
+    - `Evaluation.exclusion`.
+    - HeldFact's `fact` and `cause` are parameterized strings, and its `rank` is optional.
+    - The meaning of `Fact.options`, and the FactSet's layout.
+    - Attribute paths from 1.4.
+    - CheckStatus ok and failed.
+    - The duodenal enumeration order.
+    - The jsonschema keyword Enum.
+    - The `: object` annotations.
+    - One pin per 2.5 item.
+    - None for the wire's `""`.
+  - 1a:
+    - Rule 6's closer reading and its backward-first bound.
+    - A page boundary ends a unit but not a paragraph.
+    - Indentation is ignored at a wrap.
+    - A no-break space is a space.
+    - Every forced piece is marked and trimmed.
+    - A framed line is a run of joined source lines.
+    - The marker and document lines belong to the request builders.
+    - Counting from 1.
+    - The residuals, recorded as limits: lowercase list items join; a two-letter token at a sentence end suppresses
+      the cut; a digit enumerator stands alone; a period-ended over-split is bridged only when pass 1 cites both
+      units; closures pull unpunctuated headers, up to the 12-unit cap.
+  - 1b:
+    - The S2 rules the design implies: a source cites at least one unit, a contradicted fact's options are distinct,
+      and the conditions of a malformed doubt.
+    - Cycle edges.
+    - Other dates at their own precision.
+    - The 8-source bound on options and on the date of service.
+    - `read()` refuses while its pin is empty.
+    - `participants.reading` is imported, not copied.
+    - DEFINITIONS are written as meanings, and family keys follow the answer's.
+    - v1's copies are made as character tests.
+  - 1c:
+    - The I2 slice edge is judged by the revision's neighbouring character.
+    - An act is placed by its own words.
+    - N0 is found by position.
+    - A section's span is unknown while the next start is unknown.
+    - G5 reads where the words lie, and ignores an examination anchor that fails I3.
+    - G3's antecedent ends before the act's words.
+    - G1 `section` with a mid-unit start.
+    - `bounded_positions('')` is empty.
+    - Eight date parsers; 3.1 L1's "six" is an erratum.
+    - The fold classes are strings.
+    - The frame units.
+    - A session's statement is its examination's anchor or that anchor's closure.
+    - The encounter and anatomy facts with a `statement` link need only existing units.
+  - 1d:
+    - The `_V2` names and `_v1_reader`.
+    - The lazy import of `contract/`.
+    - The stored shapes of its v2 section: claims with their verdicts, the completeness record, a restatement's role,
+      and doubt readings as values.
+  - 1e:
+    - Code-keyed tables keyed by int.
+    - `eus_exam` is the EUS family's examination.
+    - The ENT approach and anatomy follow 4.3.
+    - `catalogue_kind`'s enumeration arm.
+    - The tables left out.
+    - `key` is not ported.
+  - 1f:
+    - The generated CODABLE_KINDS stands in for KIND_SIBLINGS' coverage.
+    - ROUTE_KINDS without `fiducial` (3.2.1's `fiducial` is an erratum: no such Kind).
+    - EXTRACTION_KINDS from design A.
+    - A statement's targets.
+    - The ERCP kinds.
+    - SUP.1's rank-4 item.
+    - RECOGNISED and route (d) take no groups.
+    - SUP.7 reads the examination's own facts.
+    - ATT is BASE plus EUS_EXAM.
+    - `dependencies()` works at schema level.
+    - Each requirement carries its items.
+    - The emitted enums.
+    - COMBINATION explains `base_included` (1.9).
+  - 2a:
+    - v1's second line.
+    - Empty text is refused.
+    - Composite acts as parts (BF10, XCHG).
+    - BF9's places reconciled with P13.
+    - "as part of" is reworded.
+    - The scan definitions.
+    - The id-pin scope.
+    - The D3 exception for catalogue words.
+    - The body dict.
+    - SEGMENTATION in `check_pins`.
+    - BF5's `anus` is an erratum for `anal_canal`.
+  - 2b:
+    - The injected Vocabulary.
+    - K8's containment direction.
+    - K2's terms.
+    - K5's roles and its double demotion.
+    - K1 demotes the dependent value only.
+    - K4's scope.
+    - Each object's own facts.
+    - L1 on supported facts only, and over several sources.
+    - K7 counts a contradicted side.
+  - 2c:
+    - The content key covers the rendered parameters.
+    - The verdict count bound.
+    - "The evidence is ignored" means the whole evidence list.
+    - Cards and units.
+    - A fact is rendered only when claimable.
+    - The forms 3.2.2 does not give.
+    - The conditional contraries.
+    - Pair controls across unstated sessions.
+    - The control labels.
+    - CLAIMED's conditions.
+    - The findings as an input.
+    - No instrument template.
+    - The verbatim "this procedure".
+    - `act.date` rendered as ISO (claims copy no text).
+    - Card-identity grouping by rendered text, which only demotes; it joins 5.6's allowlist.
+  - 2d:
+    - Other dates take part with a possible role.
+    - Readings attach by object.
+    - An unknown session kind leaves every kind possible.
+    - `done` includes row 5.
+    - A negated date of service is unverified.
+    - Readings exclude other dates by value.
+    - Member values are trimmed with `isspace`.
+    - `context_of` passes the stored quote through, for display only.
+    - A pair control whose value is outside its attribute refuses.
+    - `factset()` is public.
+    - `apart_by_place` reads `target.places` only.
+    - A value is None only for an empty claim.
