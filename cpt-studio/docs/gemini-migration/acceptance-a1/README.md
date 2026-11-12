@@ -134,5 +134,38 @@ whitespace stripped. That is 288 hashes for 216 documents, the dropped variant i
 - A guard test can check every fixture against the list.
 - The sealed g1, c6 and c7 sets stay protected by the standing rule that nobody who builds reads them.
 
+## Scoring (fixed 2026-11-12, before the new path is measured)
+- **The scorer** is `tools/a1_score.py` in the session directory (sha256 `a90b4b7471e6765b2de6a2fcf1baa348078d47805e9c4dda2cc7ba1797482c88`). It implements THRESHOLDS.md's classes
+  per code row and run.
+- **What the scorer cannot decide** goes to the independent evaluator workflow `workflows/a1-score-checks.js` (sha256
+  `3e956886f80c25e348a1ccd057ecee7ae49143d965c6cd5ea88ae6d7c6935b4b`). Two checks need it:
+  - **ACT**: does a READY stand on the expected act? A different act, or no act passage at all, is a WRONG READY.
+  - **TOPIC**: does a HELD ask the expected fact? If not, it is a DROPPED QUESTION.
+- **Visit and examination codes.** Some codes stand on the visit or the examination itself: the catalogue's base codes
+  (combination._base), meaning office visits and diagnostic or examination-only endoscopy codes. `tools/act_free_codes.json`
+  lists 30 of them (sha256 `a249eccf0ae0dd02673641b282543d538b1576b2ea1e155dbbb6843775c4ed59`). They name no procedure act. For them, a READY with no act passage is judged by its
+  outcome alone, and noted "act-free". A procedure code must still name its act, and any act passage that is given is
+  still checked.
+
+  This rule came from the installed baseline, before any new-path measurement: 11 of its READY rows on such codes carried
+  no act passage, and none was a wrong act.
+
+## Baseline: the installed release c2e53f8e on v2 (a diagnostic, and THRESHOLDS condition 4's comparison)
+The release was run through `tools/a1_installed.py` (sha256 `4e0d1230d8077796d88d087f92a82d9d9f910b6e7a189da0e26fc7cc0ea486b9`, h2h/run_registry's assessment) and scored as above. The
+act and topic checks were made by the independent evaluator (wf_43444c53-b1b).
+
+| Kind | Rows | Correct | Wrong READY | Wrong excl. | Dropped question | Unnecessary hold | Safe mismatch | Hold rate | READY rate |
+|---|---|---|---|---|---|---|---|---|---|
+| regression | 168 | 81 | 21 | 2 | 25 | 29 | 10 | 43.9% | 56.1% |
+| paraphrase | 168 | 57 | 5 | 3 | 33 | 56 | 14 | 84.9% | 13.6% |
+| variant | 127 | 64 | 12 | 0 | 14 | 25 | 12 | 40.3% | 59.7% |
+| independent | 83 | 49 | 12 | 0 | 4 | 18 | 0 | 30.5% | 69.5% |
+| **all** | **546** | **251** | **50** | **5** | **76** | **128** | **36** | **50.6%** | **49.0%** |
+
+"Hold rate" is the share of READY-expected rows that were held. "READY rate" is the share of READY-expected rows that were
+READY.
+
+The installed release fails every pass condition on this set.
+
 ## Next
 The design's step 0a verifies this commit before any instruction text is written and before any fresh call.
