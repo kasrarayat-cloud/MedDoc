@@ -149,7 +149,11 @@ class D168WhoseDenial(SimpleTestCase):
         and 05a881a75 are; D159 was READY on E5 alone (W1-W5). c2e53f8e is READY on the sweep's act ('stone removal at
         the bile duct') on W1, on both acts on W2, W4, W5 and W7, and HELD conflict:stone_extraction on W3. The reader,
         beside E5: E4's own sentence states its yield (_clause_yield), so the denial in E5's words is E5's - no
-        statement; read alone (no other act beside it), it is the sweep's statement, as D159 read it."""
+        statement; read alone (no other act beside it), it is the sweep's statement, as D159 read it. DECISIONS D173 (2)
+        (round 5h; review:ercp7 problem 0) changes W4's reader beside E5 only: "No stones remained." stands in a later
+        sentence that holds no rival's words, so it is read again as the sweep's statement (D168 read every sentence
+        past the rival's as the rival's); the outcome is unchanged - a widened statement only holds, and E4, whose own
+        sentence states its yield, carries 43264 (D173 (3)), so READY on E4 and E5."""
         for name, (p5, second) in W.items():
             for cited in (REMOVED if p5.startswith(REMOVED) else p5.split('. ')[0] + '.', None):
                 for chosen in PARTICIPANTS:
@@ -157,7 +161,11 @@ class D168WhoseDenial(SimpleTestCase):
                         ready_on(self, proposal(assessed(p5, cited, chosen, **SW, more=[second()]), '43264'),
                                  ('E4', 'E5'))
             with self.subTest(reader=name):
-                self.assertIsNone(statement(p5, ('E4', 'E5'), **SW, more=[second()]))
+                if name == 'W4':  # DECISIONS D173 (2): the later sentence after the rival's is read again
+                    self.assertEqual(statement(p5, ('E4', 'E5'), **SW, more=[second()]),
+                                     [REMOVED, 'No stones remained'])
+                else:
+                    self.assertIsNone(statement(p5, ('E4', 'E5'), **SW, more=[second()]))
                 self.assertIsNotNone(statement(p5, (), **SW, more=[second()]))
 
     def test_d168_1_the_other_sweeps_own_denial_leaves_the_code_ready_on_this_one(self):
@@ -168,7 +176,11 @@ class D168WhoseDenial(SimpleTestCase):
         retrieved." (rule (1); c2e53f8e READY on the sweep's act with its sentence cited, HELD readings_disagree with
         the passage cited) and "... and two stones were removed. The pancreatic duct was then swept with a balloon. No
         stones were retrieved." (rule (3); c2e53f8e HELD conflict:stone_extraction), the second with the yield in the
-        status words too (D147's reading; the same outcomes)."""
+        status words too (D147's reading; the same outcomes). DECISIONS D173 (2) (round 5h; review:ercp7 problem 0)
+        changes the rule (3) form: its later sentence "No stones were retrieved." holds no rival's words, so it is read
+        again, and a RETRIEVAL denial is read after an own yield (D168 (2)) - the sweep's statement too, so both sweeps
+        state nothing retrieved and 43264 is held nothing_retrieved, as c2e53f8e holds it (conflict:stone_extraction);
+        the rule (1) form, whose denial stands in the rival's own sentence, stays READY on E4."""
         retrieval = second_sweep('swept with a retrieval balloon', ('balloon', 'retrieval balloon'))
         p5 = f'{REMOVED} The pancreatic duct was then swept with a retrieval balloon and no stones were retrieved.'
         later = f'{REMOVED} The pancreatic duct was then swept with a balloon. No stones were retrieved.'
@@ -178,8 +190,11 @@ class D168WhoseDenial(SimpleTestCase):
                 for chosen in PARTICIPANTS:
                     with self.subTest(p5=text[len(REMOVED):][:60], status=options['status_words'], cited=bool(cited),
                                       participants=len(chosen)):
-                        ready_on(self, proposal(assessed(text, cited, chosen, **options, more=[more]), '43264'),
-                                 ('E4',))
+                        p = proposal(assessed(text, cited, chosen, **options, more=[more]), '43264')
+                        if text == later:  # DECISIONS D173 (2)
+                            held_nothing_retrieved(self, p, f'{REMOVED} No stones were retrieved')
+                        else:
+                            ready_on(self, p, ('E4',))
 
     def test_d168_1_with_no_yield_of_its_own_the_denial_stays_the_acts(self):
         """Where this act's own sentence states no yield, a denial in another supporting stone extraction's words stays
@@ -227,12 +242,19 @@ class D168WhoseDenial(SimpleTestCase):
         pancreatic duct was then swept with a balloon and no stones were seen." (this repair's own): the sweep's own
         sentence states no yield, so the denial in the other act's clause is the sweep's statement (the reader), but
         43264 stays READY on E4 and E5, as at e5628be56, f9013e12e and 05a881a75. D159 was READY on E5 alone on both.
-        c2e53f8e: READY on its act 'stone removal (basket)' on the first; HELD readings_disagree on the second."""
+        c2e53f8e: READY on its act 'stone removal (basket)' on the first; HELD readings_disagree on the second.
+        DECISIONS D173 (3) (round 5h; review:ercp7 problem 1, WV4) changes the second's outcome: the pancreatic sweep
+        states nothing either (no yield, no finding), so no act E* keeps carries 43264, and the denial stays the
+        bile-duct sweep's statement - held nothing_retrieved, the question quoting it, as c2e53f8e holds it. The first
+        stays READY on E4 and E5: the basket's own sentence states its yield. E* still moves only by D155's reading."""
         seen = (f'{SWEPT_ONCE} Two stones were extracted with a basket and no stones were seen on the final '
                 'cholangiogram.')
         none_seen = f'{SWEPT_ONCE} The pancreatic duct was then swept with a balloon and no stones were seen.'
         for p5, other in ((seen, basket()), (none_seen, second_sweep('swept with a balloon', ('balloon', 'balloon')))):
-            ready_in_both(self, p5, [other], acts=('E4', 'E5'))
+            if p5 == none_seen:  # DECISIONS D173 (3)
+                held_in_both(self, p5, p5[:-1], [other])
+            else:
+                ready_in_both(self, p5, [other], acts=('E4', 'E5'))
             with self.subTest(reader=p5[len(SWEPT_ONCE):][:40]):
                 self.assertEqual(statement(p5, ('E4', 'E5'), **SW, more=[other]),
                                  [SWEPT_ONCE, p5[len(SWEPT_ONCE) + 1:-1]])
@@ -289,10 +311,23 @@ class D168DenialClause(SimpleTestCase):
         further stones were seen and a plastic biliary stent was placed.") states nothing - READY on E4 (c2e53f8e
         READY, and HELD act_missing / READY on the exceptive form); the denial also filed as its own event is D140's
         (the sentence read whole) - held, as at e5628be56, f9013e12e and 05a881a75 (c2e53f8e HELD readings_disagree with
-        the sweep's sentence cited, EXCLUDED with the passage cited)."""
+        the sweep's sentence cited, EXCLUDED with the passage cited). DECISIONS D173 (6) (round 5h; refute6 judges
+        finding 9) changes the exceptive form's outcome: the sweep states no yield (an exceptive denial states none
+        either) and is done to no finding, so 43264 is held no_yield - c2e53f8e HELD act_missing with the sweep's
+        sentence cited, READY with the passage cited (a COST there). "... and sludge was retrieved." states the sweep's
+        yield in the sentence that continues it (a free clause, as D155 reads one for a denial), so it stays READY."""
         for second in ('A plastic biliary stent was placed and sludge was retrieved.',
                        'No further stones were seen and a plastic biliary stent was placed.'):
-            ready_in_both(self, f'{SWEPT_ONCE} {second}', [stent()])
+            if second.startswith('No further'):  # DECISIONS D173 (6)
+                for cited in (SWEPT_ONCE, None):
+                    for chosen in PARTICIPANTS:
+                        with self.subTest(p5=second[:40], cited=bool(cited), participants=len(chosen)):
+                            p = proposal(assessed(f'{SWEPT_ONCE} {second}', cited, chosen, **SW, more=[stent()]),
+                                         '43264')
+                            self.assertEqual((p.status, asked(p), p.support['reason']),
+                                             ('needs_clarification', ['performed_status'], ercp.NO_YIELD))
+            else:
+                ready_in_both(self, f'{SWEPT_ONCE} {second}', [stent()])
             with self.subTest(reader=second):
                 self.assertIsNone(statement(f'{SWEPT_ONCE} {second}', **SW, more=[stent()]))
         held_in_both(self, f'{SWEPT_ONCE} {NO_BREAK}', f'{SWEPT_ONCE} {NO_BREAK}', [stent(), denial()])
@@ -373,17 +408,28 @@ class D168LaterSentence(SimpleTestCase):
         sentence cited and EXCLUDES each with the passage cited. And only the act's OWN passage is read (EB1): with
         Gemini's passage for the sweep its sentence alone and the stent's passage the whole line, the later denial is
         in no passage of the sweep's - a RECORDED RESIDUAL, READY on E4 as on every new-path tree (c2e53f8e HELD
-        readings_disagree; EXCLUDED with the passage cited)."""
-        ready_in_both(self, f'{SWEPT_ONCE} A plastic biliary stent was placed.', [stent()],
-                      more_lines={'P6': 'No stones were retrieved.'})
+        readings_disagree; EXCLUDED with the passage cited). DECISIONS D173 (6) (round 5h; refute6 judges finding 9)
+        changes every outcome here, never the reader: in each the sweep's own sentence ("The bile duct was swept with an
+        extraction balloon.") states no yield, nothing after it does, and the sweep is done to no finding the inventory
+        lists, so 43264 is held no_yield - as c2e53f8e holds each (act_missing or readings_disagree), but for the
+        denial before the sweep's sentence, which it READYs with the passage cited (a COST there)."""
+        def no_yield_in_both(p5: str, more, citations=(SWEPT_ONCE, None), **options) -> None:
+            for cited in citations:
+                for chosen in PARTICIPANTS:
+                    with self.subTest(p5=p5[len(SWEPT_ONCE):][:70], cited=bool(cited), participants=len(chosen)):
+                        p = proposal(assessed(p5, cited, chosen, **dict(SW, **options), more=more), '43264')
+                        self.assertEqual((p.bucket, p.status, asked(p), p.support['reason'], p.support['acts']),
+                                         ('selected', 'needs_clarification', ['performed_status'], ercp.NO_YIELD, []))
+
+        no_yield_in_both(f'{SWEPT_ONCE} A plastic biliary stent was placed.', [stent()],
+                         more_lines={'P6': 'No stones were retrieved.'})
         overlapping = dict(passages={'P5': SWEPT_ONCE, 'P7': TWO_ON})
-        ready_in_both(self, TWO_ON, [ercp_act('E5', 'P7', 'stent', 'plastic biliary stent', 'was placed')],
-                      **overlapping)
+        no_yield_in_both(TWO_ON, [ercp_act('E5', 'P7', 'stent', 'plastic biliary stent', 'was placed')], **overlapping)
         with self.subTest(reader='overlapping passage'):
             self.assertIsNone(statement(TWO_ON, **SW, **overlapping,
                                         more=[ercp_act('E5', 'P7', 'stent', 'plastic biliary stent', 'was placed')]))
-        ready_in_both(self, f'No stones were seen. {SWEPT_ONCE}', [])
-        ready_in_both(self, f'{SWEPT_ONCE} A plastic biliary stent was placed. No further stones were seen.', [stent()])
+        no_yield_in_both(f'No stones were seen. {SWEPT_ONCE}', [])
+        no_yield_in_both(f'{SWEPT_ONCE} A plastic biliary stent was placed. No further stones were seen.', [stent()])
         second_stent = stent('E6', kind_words='5 Fr pancreatic stent',
                              target=tg('', 'pancreatic_duct', 'pancreatic', ['P5']))
         for rest, more in (('A plastic biliary stent was placed. No stones were retrieved and a repeat ERCP is '
@@ -391,7 +437,7 @@ class D168LaterSentence(SimpleTestCase):
                            ('A plastic biliary stent was placed. No stones were retrieved.', [stent(), denial()]),
                            ('A plastic biliary stent was placed. No stones were retrieved and a 5 Fr pancreatic stent '
                             'was placed.', [stent(), second_stent])):
-            ready_in_both(self, f'{SWEPT_ONCE} {rest}', more)
+            no_yield_in_both(f'{SWEPT_ONCE} {rest}', more)
             with self.subTest(reader=rest):
                 self.assertIsNone(statement(f'{SWEPT_ONCE} {rest}', **SW, more=more))
 

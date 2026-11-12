@@ -81,21 +81,34 @@ def base_included(members: Sequence[tuple], coding: Mapping) -> tuple:
     doubted PEG placements of the encounter's feeding-tube session too - "A 20 Fr pull-type PEG tube was placed under
     endoscopic guidance without difficulty." under "UPPER ENDOSCOPY WITH PEG PLACEMENT", which Gemini attributes to the
     feeding-tube procedure, left 43235 READY where the installed release reads the PEG as the EGD's act and holds it
-    base_included. The overlay applies the same rule at read time over the same record."""
+    base_included. The overlay applies the same rule at read time over the same record.
+
+    DECISIONS D177 (1) (round 5h, narrowing only; review:eus7 problem 0, D171's recorded stop): the codes the hold NAMES
+    (its ``others``) are only those of the base code's own tract (mapping.eus_tract: an upper endoscopy's EUS code or a
+    lower-tract one; '' for a code of any other family, so no other family's naming moves). A lower-tract EUS code is
+    never asked whether it is reported separately from an upper EUS code, which describes no act of a lower-tract EUS:
+    'Is 45341 reported separately from 43253 for this examination?' on a rectal EUS's fiducials now names the act ('...
+    from fiducial markers ...', as 45341 alone is asked), and an upper code beside a lower one the same. WHETHER the
+    code is held is unchanged: arm (a) still reads every other code, of either tract, so no hold and no question is
+    dropped; and where nothing of its own tract - no code, no act - is left to name, the hold names the other codes as
+    before (the recorded residual: an examination-only code of the other tract beside it and no act; naming nothing
+    would drop the hold - a QUESTION-DROPPED, and a RELEASE where nothing else holds the code)."""
     bases = []
     for index, (code, family, session_id) in enumerate(members):
         session = _session(coding, session_id)
         if not _base(code) or session is None:
             continue
-        others = tuple(other for position, (other, other_family, other_session) in enumerate(members)
+        beside = tuple(other for position, (other, other_family, other_session) in enumerate(members)
                        if position != index and other_family == family
                        and (catalogue.code_profile(other) or catalogue.CodeProfile('')).covers
                        and other_session == session_id)
+        others = tuple(other for other in beside if mapping.eus_tract(other) == mapping.eus_tract(code))  # D177 (1)
         reportable = _acts_beside(family, session, coding, 'reportable')  # D119
         doubted = _acts_beside(family, session, coding, 'doubted')
-        if others or reportable or doubted:
+        if beside or reportable or doubted:
             bases.append((code, others or tuple(sorted({item['label'] for item in reportable}
-                                                       | {item['label'] + ' (stated in doubt)' for item in doubted}))))
+                                                       | {item['label'] + ' (stated in doubt)' for item in doubted}))
+                          or beside))  # D177 (1): the recorded residual, nothing of its own tract to name
     return tuple(bases)
 
 

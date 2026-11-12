@@ -515,14 +515,54 @@ TRANSMURAL_INJECTION_CODES = frozenset({'43253'})
 SUBMUCOSAL_WORDS = ('submucosal', 'submucosa', 'sub mucosal', 'sub mucosa')
 INK_WORDS = ('ink', 'inks')
 INJECTION_OWN_WORDS = ('kind', 'technique', 'target', 'purpose')
+# DECISIONS D177 (2) (round 5h, narrowing only; review:eus7 problem 2, critical, pre-existing): a TATTOO's route is read
+# from the act's kind and its own place, never from a word of its material. A tattoo marks the site it is injected into,
+# so a tattoo placed in the WALL of the tract - a place of the luminal tract (WALL_REGIONS: REGION_OF's regions from the
+# esophagus to the anal canal) or a surgically made place of it (lexicon.ALTERED_LANDMARKS: an anastomosis, a stoma, a
+# pouch) - is a submucosal injection, whatever it is made of. 'A carbon-particle tattoo was placed in the gastric wall 2
+# cm proximal to the lesion for surgical localization.' (kind 'carbon-particle tattoo', technique not stated, target the
+# stomach) met none of D171 (4)'s arms - its tattoo arm reads an ink word - and 43253 was READY. A tattoo-read
+# placement VERIFIED at a structure BESIDE the tract (the pancreas, the biliary tree, the liver, a lymph node: D145's
+# fiducials into the pancreatic head, verify-eus-1's U) keeps D27's reading. Read only for HOLDING 43253, as D171 (4)'s
+# arms are.
+WALL_REGIONS = frozenset({'esophagus', 'stomach', 'duodenum', 'small_bowel', 'colon', 'rectum', 'anus'})
 
 
-def submucosal_act(event: Mapping) -> bool:
+def wall_place(event: Mapping, lesion: Mapping | None = None) -> str:
+    """DECISIONS D177 (2): the landmark of ``event``'s own place when it lies in the wall of the tract (WALL_REGIONS, or
+    a surgically made place: lexicon.ALTERED_LANDMARKS), else ''. A VERIFIED, placed target landmark (verify.usable, not
+    lexicon.UNPLACED_LANDMARKS) is the act's place, alone. Otherwise every place the act may be at is read, in ANY state
+    (fail-closed: read only to hold), and the first in the wall is its place: its target's landmark value - the value
+    Gemini gave, unverified; the site value of ``lesion``, the record of the lesion its target names (the caller reads
+    it: this table module reads no identity rule); and the landmarks its own target words name (lexicon.landmarks_named,
+    the vocabulary every place reader shares - EB1: the act's own words, never a passage). Structure only: no word of a
+    material or a route is read."""
+    target = event.get('target') if isinstance(event.get('target'), Mapping) else {}
+
+    def wall(place: str) -> bool:
+        return bool(place) and place not in lexicon.UNPLACED_LANDMARKS and (region(place) in WALL_REGIONS
+                                                                            or place in lexicon.ALTERED_LANDMARKS)
+
+    own = target.get('value') or ''
+    if own and own not in lexicon.UNPLACED_LANDMARKS and verify.usable(target):
+        return own if wall(own) else ''
+    site = (lesion or {}).get('site')
+    site = (site.get('value') or '') if isinstance(site, Mapping) else ''
+    places = [own, site, *lexicon.landmarks_named(_words_text(target))]
+    return next((place for place in places if wall(place)), '')
+
+
+def submucosal_act(event: Mapping, lesion: Mapping | None = None, place: bool = True) -> bool:
     """DECISIONS D171 (4): whether ``event`` - an injection or a tattoo - is an injection of the WALL, which a transmural
     code (TRANSMURAL_INJECTION_CODES) never stands on: the own words of its kind, technique, target or purpose name the
     submucosa (SUBMUCOSAL_WORDS); or its purpose is a lift for resection (a lift injection is submucosal by definition:
     FINAL 7.7's lift_injection); or it is a tattoo (its catalogue kind, or the kind Gemini gave) whose own words name an
-    ink (INK_WORDS). Any state of the words and the purpose is read (fail-closed: it only ever holds)."""
+    ink (INK_WORDS). Any state of the words and the purpose is read (fail-closed: it only ever holds).
+
+    DECISIONS D177 (2): or it is a tattoo - by the same kind reading - whose route is submucosal: its own place lies in
+    the wall of the tract (wall_place, over ``lesion``, the record of the lesion its target names). By the act's kind
+    and place, never by a word of its material ('A carbon-particle tattoo was placed in the gastric wall ...').
+    ``place`` False reads D171 (4)'s arms alone (the caller's wording says which arm holds)."""
     texts = [_words_text(event.get(name) or {}) for name in INJECTION_OWN_WORDS]
     if any(text and lexicon.holds(text, SUBMUCOSAL_WORDS) for text in texts):
         return True
@@ -531,7 +571,9 @@ def submucosal_act(event: Mapping) -> bool:
         return True
     kind = event.get('kind') if isinstance(event.get('kind'), Mapping) else {}
     tattoo = event.get('catalogue_kind') == 'tattoo' or kind.get('value') == 'tattoo'
-    return tattoo and any(text and lexicon.holds(text, INK_WORDS) for text in texts)
+    if tattoo and any(text and lexicon.holds(text, INK_WORDS) for text in texts):
+        return True
+    return place and tattoo and bool(wall_place(event, lesion))  # D177 (2): the tattoo's kind and its own place
 
 
 # --- the EUS examination class (DECISIONS D28; FINAL 7.2 R6) -------------------------------------------------------------

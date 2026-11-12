@@ -222,18 +222,56 @@ def drainage_step(reading, event: Mapping) -> Optional[Mapping]:
     stands on the aspiration is held (assess._examination_class) - never READY beside 43240 on the same lesion. An FNA of
     ANOTHER lesion ('EUS-guided fine-needle aspiration of the pancreatic tail mass ...' beside the pseudocyst's drainage)
     is no step. Read for that hold only: bundled_reason does not read it, so coverage still lists the aspiration where no
-    counted code reads it (D171's recorded stop: bundling it would drop that listing). Structure only: no words."""
+    counted code reads it (D171's recorded stop: bundling it would drop that listing). Structure only: no words.
+
+    DECISIONS D177 (3) (round 5h, narrowing only; review:eus7 problem 3, critical, pre-existing): a drainage IN DOUBT is
+    a doubt, never an absence (D62, D87). Read as absent, the FNA of its own lesion went READY: X6 (the drainage
+    verified to the FNA's lesion, its status words not binding: no usable status, so no adjunct_whole) and X3 (the
+    drainage's target tied to no lesion and unverified, FRESH's commonest unverified reason: no verified lesion to
+    meet). Where no drainage is the FNA's step as above, the FNA is a POSSIBLE step of a drainage of its session that
+    may have been done today - its status performed, begun or uncertain in ANY state (verify.POSITIVE, 'uncertain'),
+    possibly current (D62), by any performer (as a done drainage is read above) - when its verified part_of names that
+    drainage, or, for an FNA of a verified lesion, when the drainage may be of that lesion: its target verified to that
+    lesion or to one possibly the same (6.3), or not verified to any (identity 'none' or 'unresolved') and not
+    ESTABLISHED apart from it - the lesion its target names is not one the FNA's lesion is distinct from (identity's
+    distinct_from), and no verified place of the drainage is disjoint (lexicon.disjoint, contract 6.3) from every
+    verified place of the FNA (relations' Context.places). A drainage verified to a lesion distinct from the FNA's,
+    stated not performed or planned, or placed on another occasion is no whole of it, as before. The caller (assess's
+    EUS code checks) holds the code that stands on such a step, and its reason says what the document leaves in doubt.
+    Structure only: no words."""
     if event.get('family') != 'gi.eus' or event.get('catalogue_kind') != 'fna':
         return None
     whole_of = _part_of(event)
     lesion = identity.verified_lesion(event)
-    for whole in reading.events.values():
-        if (whole is event or whole.get('family') != 'gi.eus' or whole.get('catalogue_kind') != 'drainage'
-                or not adjunct_whole(whole) or not _same_session(reading, whole, event)):
+    drainages = [whole for whole in reading.events.values()
+                 if whole is not event and whole.get('family') == 'gi.eus' and whole.get('catalogue_kind') == 'drainage'
+                 and _same_session(reading, whole, event)]
+    for whole in drainages:
+        if adjunct_whole(whole) and (whole_of == whole['id'] or (lesion and lesion == identity.verified_lesion(whole))):
+            return whole
+    for whole in drainages:  # D177 (3): a drainage in doubt still makes a same-lesion FNA a possible step
+        if events.value(whole, 'status') not in verify.POSITIVE + ('uncertain',) or not possibly_current(whole):
             continue
-        if whole_of == whole['id'] or (lesion and lesion == identity.verified_lesion(whole)):
+        if whole_of == whole['id'] or (lesion and _possibly_of_lesion(reading, whole, event, lesion)):
             return whole
     return None
+
+
+def _possibly_of_lesion(reading, whole: Mapping, event: Mapping, lesion: str) -> bool:
+    """DECISIONS D177 (3): whether the drainage ``whole`` may be of ``lesion``, the verified lesion of the FNA ``event``
+    (drainage_step's possible step): its target verified to that lesion, or to a lesion possibly the same as it
+    (contract 6.3: never established distinct - identity.same_or_possibly_same); or verified to none, and not
+    established apart from it - neither the lesion its target names is one ``lesion`` is distinct from, nor is every
+    verified place of the drainage disjoint from every verified place of the FNA. A drainage verified to a lesion
+    distinct from it is apart."""
+    other = identity.verified_lesion(whole)
+    if other:  # verified to the FNA's lesion, or to one not established apart from it (6.3: possibly the same)
+        return identity.same_or_possibly_same(reading, lesion, other)
+    named = (whole.get('target') or {}).get('lesion') or ''
+    if named and named != lesion and named in ((reading.lesions.get(lesion) or {}).get('distinct_from') or ()):
+        return False
+    places, own = reading.context.places(whole), reading.context.places(event)
+    return not (places and own and all(lexicon.disjoint(one, two) for one in places for two in own))
 
 
 def bundling_doubt(reading, event: Mapping) -> Optional[dict]:

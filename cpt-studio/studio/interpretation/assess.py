@@ -579,7 +579,22 @@ def _eus_code_hold(selection: _Selection, reading: events.Reading, sessions_: Ma
       c2e53f8e holds it.
     (1) and (4) are not asked where R6 asks the code's 'target' already (the structure examined is not documented): the
     code is held by it, and a second 'target' question would share its member key. None when none applies, or when the
-    rule does not support the code (held or excluded: its outcome is kept)."""
+    rule does not support the code (held or excluded: its outcome is kept).
+
+    DECISIONS D177 (round 5h, narrowing only; review:eus7 problems 2, 3, 4 and 7), each only ever a hold of a code the
+    rule supports, with one question:
+    - D177 (4), D171 (3)'s stations: a station line that omits ANY of the three stations holds the full codes - one
+      named (D171) and now two ('EUS imaging was performed from the stomach and duodenum.'). The two-station hold is
+      read LAST, after every check above (one question per code: read where D171 reads its stations, it asked [extent]
+      in place of the drainage step's [target] that 1b4ca399 asks - a QUESTION-DROPPED), so D171's holds and words are
+      kept wherever they apply; and it is read whether or not R6 asks the code's 'target' (its fact is 'extent', another
+      member key, so nothing is asked twice);
+    - D177 (3), D171 (1)'s step: a drainage IN DOUBT is no absence (coverage.drainage_step): an FNA that may be its step
+      holds the code, and the reason says what the document leaves in doubt (the drainage done, the structure it was
+      done on); D177 (5): it names 'the same structure' only where both targets are verified to one lesion (problem 7);
+    - D177 (2), D171 (4)'s wall: 43253 is held on a tattoo whose own place is in the wall of the tract
+      (mapping.submucosal_act's D177 arm: the act's kind and its place, never a word of its material), its reason saying
+      that the document places it there."""
     evaluation = selection.evaluation
     if selection.family != 'gi.eus' or evaluation is None or not evaluation.supporting:
         return None
@@ -595,6 +610,7 @@ def _eus_code_hold(selection: _Selection, reading: events.Reading, sessions_: Ma
             question = (f'The documented endoscopic ultrasound is placed in the lower tract ({where}). Was '
                         f'{UPPER_TRACT_WORDS} performed on the date of service?')
             return _eus_class_spec(selection, key, reason, question)
+    stations: dict = {}  # D177 (4): the stations named, read again last
     if exam_class == mapping.FULL and landmark:  # D171 (3): the esophagus, the stomach and the duodenum
         exam = _session_examination(family, reading, sessions_)
         stations = _stated_stations(reading, exam) if exam is not None else {}
@@ -615,33 +631,72 @@ def _eus_code_hold(selection: _Selection, reading: events.Reading, sessions_: Ma
             question = (f'The document states that the {region} was not examined ({_whole(line)}). Was '
                         f'{FULL_STATIONS_WORDS} performed on the date of service?')
             return _eus_class_spec(selection, key, reason, question)
-    if 'target' in PROFILES[family].required_facts and not _documented(
-            _inventory_fact('target', family, selection, reading, sessions_)):
-        return None  # R6 asks the code's 'target' already: (1) and (4) would ask it twice, and it is held either way
-    for event in supporting:  # D171 (1): an FNA that is a step of a transmural drainage
+    # R6 asks the code's 'target' already: (1) and (4) would ask it twice, and it is held either way. D177 (4): the
+    # two-station hold below (fact 'extent', another member key) is read whether R6 asks it or not
+    r6_target = 'target' in PROFILES[family].required_facts and not _documented(
+        _inventory_fact('target', family, selection, reading, sessions_))
+    for event in (() if r6_target else supporting):  # D171 (1): an FNA that is a step of a transmural drainage
         whole = coverage.drainage_step(reading, event)
         if whole is not None:
             step, drainage = _own_place(reading, event), _own_place(reading, whole)
-            reason = (f'The document gives this fine-needle aspiration ({wording.quote(step)}) as a step of the '
-                      f'transmural drainage of the same structure ({wording.quote(drainage)}): the needle access and '
-                      'aspiration of a collection that is drained are part of that drainage, which its code '
-                      f'accounts for, not a separate service (internal profile rule). {HELD}')
+            reason = _step_reason(event, whole, step, drainage)
             question = (f'Was the fine-needle aspiration ({_whole(step)}) a separate sampling, or a step '
                         f'of the transmural drainage ({_whole(drainage)})?')
             return _eus_class_spec(selection, key, reason, question, fact='target', check=EUS_ACT_CHECK)
-    if code in mapping.TRANSMURAL_INJECTION_CODES:  # D171 (4): an injection of the wall is no transmural injection
+    # D171 (4): an injection of the wall is no transmural injection
+    if code in mapping.TRANSMURAL_INJECTION_CODES and not r6_target:
         for event in supporting:
-            if mapping.submucosal_act(event):
+            named = (event.get('target') or {}).get('lesion') or ''
+            lesion = reading.lesions.get(named) if named else None  # D177 (2): the lesion its target names, any state
+            if mapping.submucosal_act(event, lesion):
                 act = events.event_label(reading, event)
                 line = _own_place(reading, event)
+                if mapping.submucosal_act(event, place=False):  # D171 (4)'s arms: its words, a lift, an ink
+                    said = f'describes this {act} as an injection of the wall ({wording.quote(line)})'
+                else:  # D177 (2): a tattoo, read by its kind and its own place in the wall of the tract
+                    said = f'places this {act} in the wall of the tract ({wording.quote(line)})'
                 reason = (f'{code} describes an EUS-guided transmural injection (of a diagnostic or therapeutic '
-                          f'substance, or of fiducial markers); the document describes this {act} as an injection of '
-                          f'the wall ({wording.quote(line)}), a submucosal injection rather than a transmural one. '
-                          f'{HELD}')
+                          f'substance, or of fiducial markers); the document {said}, a submucosal injection rather '
+                          f'than a transmural one. {HELD}')
                 question = (f'Was the {act} ({_whole(line)}) an EUS-guided transmural injection or '
                             'fiducial placement, or a submucosal injection of the wall?')
                 return _eus_class_spec(selection, key, reason, question, fact='target', check=EUS_ACT_CHECK)
+    if 1 < len(stations) < len(mapping.UPPER_STATIONS):  # D177 (4): a station line that omits a station, read last
+        # (after R6's 'target' too: never in place of a question the head asks, never skipped because R6 asks one)
+        named = wording.join([f'the {region}' for region in mapping.UPPER_STATIONS if region in stations])
+        missing = wording.join([f'the {region}' for region in mapping.UPPER_STATIONS if region not in stations])
+        line = ' '.join(dict.fromkeys(stations[region] for region in mapping.UPPER_STATIONS if region in stations))
+        reason = (f'The documented endoscopic ultrasound examination names {named}, not {missing} '
+                  f'({wording.quote(line)}); {code} accounts for {FULL_STATIONS_WORDS}, which CPT Studio could not '
+                  f'find in the document. {HELD}')
+        question = (f'The documented endoscopic ultrasound examination ({_whole(line)}) names {named}, not '
+                    f'{missing}. Was {FULL_STATIONS_WORDS} performed on the date of service?')
+        return _eus_class_spec(selection, key, reason, question)
     return None
+
+
+def _step_reason(event: Mapping, whole: Mapping, step: str, drainage: str) -> str:
+    """DECISIONS D171 (1), as D177 (3) and (5) word it (review:eus7 problems 3 and 7): the reason of the hold of a code
+    that stands on the FNA ``event``, a step or a possible step (coverage.drainage_step) of the drainage ``whole``. 'The
+    document gives ... as a step' only where that is established - the drainage done (coverage.adjunct_whole), and the
+    step given by the FNA's verified part_of or by the drainage's own verified lesion - and 'of the same structure' only
+    where both targets are verified to one lesion; otherwise the reason says what the document leaves in doubt."""
+    lesion = identity.verified_lesion(event)
+    same = bool(lesion) and lesion == identity.verified_lesion(whole)
+    part = event.get('part_of')
+    given = (isinstance(part, Mapping) and part.get('state') == 'verified' and not part.get('open')
+             and part.get('value') == whole.get('id'))
+    doubts = ([] if coverage.adjunct_whole(whole) else ['whether that drainage was done']) + (
+        [] if same or given else ['whether it was done on the structure this aspiration sampled'])
+    structure = ' of the same structure' if same else ''
+    part_words = ('the needle access and aspiration of a collection that is drained are part of that drainage, which '
+                  f'its code accounts for, not a separate service (internal profile rule). {HELD}')
+    if not doubts:
+        return (f'The document gives this fine-needle aspiration ({wording.quote(step)}) as a step of the transmural '
+                f'drainage{structure} ({wording.quote(drainage)}): {part_words}')
+    return (f'This fine-needle aspiration ({wording.quote(step)}) may be a step of the transmural drainage{structure} '
+            f'({wording.quote(drainage)}); the document does not establish {" or ".join(doubts)}, and '
+            f'{part_words}')
 
 
 def _procedural(selection: _Selection, ref) -> bool:

@@ -113,6 +113,38 @@ two-act sentence). D147's third release, the following sentence of a performed a
     possible exchange (D105) or as nothing retrieved (D106) keeps its question, and the ERCP question is its SECOND
     clarification (role_second; events.Evaluation.second, D161's mechanism), so neither question is dropped.
 
+- DECISIONS D173, round 5h (narrowing only; refute6 families findings 7 and 8, judges findings 8 and 9, review:ercp7
+  problems 0-2). Each rule only HOLDS a code, or keeps in E* an act whose own sentence states its yield and that D155's
+  reading took out of it for another act's denial:
+  - (1) whose denial, for E*: D168's condition now covers D155's own arm too, but only where the acts of a code still
+    READY are chosen (retrieval_hold; nothing_retrieved with ``whose``). A clause of the sentence D155 drops as another
+    act's, where that sentence holds the own words of a RIVAL (another performed stone extraction supporting the same
+    code) and this act's own sentence states its own yield (_own_sentence_yield), is the rival's denial: "The bile duct
+    was swept with an extraction balloon and two stones were removed. The pancreatic duct was then swept with a balloon;
+    no stones were seen." is READY on both sweeps, as at e5628be56, never on the pancreatic one alone. The hold is still
+    decided by D155's reading as it was: there the condition would release "... and two stones were removed. The
+    pancreatic duct was then swept with an extraction balloon, and no stones were retrieved." (both sweeps deny);
+  - (2) D168's rule (3) reads past a rival's sentence: only a later sentence that itself holds a rival's own words is
+    the rival's, so "... and two stones were removed. The pancreatic duct was then swept with a balloon. No stones were
+    retrieved from the bile duct." holds 43264;
+  - (3), (4) and (6) 43264 never stands on acts that state no yield: when no act of its E* states a stone yield of its
+    own (_states_own_yield: its attribute words, its own sentences or the sentence that continues one) or is done to a
+    finding the inventory lists (its target names a lesion: _done_to_a_finding) with no statement of its own that
+    nothing was retrieved, the code is held - D106's question on the statement of an act E* keeps ("The bile duct was
+    swept with an extraction balloon. The pancreatic duct was then swept with a balloon and no stones were seen.": the
+    denial stays the bile-duct sweep's), else NO_YIELD's ("The bile duct was swept several times with an extraction
+    balloon." after a cholangiogram without filling defects; a basket sweep left alone beside the extraction "Three
+    stones, the largest 9 mm, were extracted ..." / "No stones remained." that D155's reading takes out of E*);
+  - (4) the yield across an appositive (_appositive_yield: "Three stones, the largest 9 mm, were extracted") is read
+    only by (1)'s whose-denial and by (3)'s test of an act E* keeps - never as a clearance of D106's hold;
+  - (5) a READY 43276 whose every exchange is named only apart from the sentence that states it done - no sentence of
+    its kind passages (a 'Procedure:' title) holds its status words outside its kind words (_named_only_apart) - with
+    no stent removal or placement D105 pairs beside it, is held [performed_status] (EXCHANGE_TITLE): "Procedure: ERCP
+    with biliary stent exchange." over a body that states only a placement;
+  - (7) the own-yield readings never count a yield whose clause holds the time words of another event that the time
+    reader places off this date (_other_times: facts.day_of, the event's time earlier_encounter or future in any
+    verification state).
+
 Where they run: D105 and D106 sit inside the per-code rule itself - ``ruled`` is events.evaluate's one call site, its
 first statement - so every reader of the per-code rule (the assessment, its participants and second review, and the
 review overlay's counted codes, overlay.counted_codes: "the evaluation the engine made, made again") reads one
@@ -140,6 +172,7 @@ ERCP = 'gi.ercp'
 
 REMOVAL, PLACEMENT, EXCHANGE = 'stent_removal', 'stent', 'stent_exchange'
 POSSIBLE_EXCHANGE = 'possible_exchange'  # the reason (events.Evaluation.reason) of D105's hold
+EXCHANGE_TITLE = 'exchange_named_apart'  # DECISIONS D173 (5): the reason of the hold of an exchange named only apart
 EXCHANGE_FACT = 'performed_status'
 
 
@@ -217,11 +250,72 @@ def exchange_question(reading, removal: Mapping, placement: Mapping) -> tuple[st
     return question, reason
 
 
+def _named_only_apart(reading, event: Mapping) -> bool:
+    """DECISIONS D173 (5) (refute6 judges finding 8): whether the act is named only apart from the sentence that states
+    it done - no sentence of its kind passages (the passages Gemini cites for its kind) holds its status words outside
+    its kind words. "Procedure: ERCP with biliary stent exchange." as the exchange's kind words, with the status words
+    "was placed" in "A 10 Fr x 9 cm plastic biliary stent was placed into the common bile duct." (a sentence that names
+    no exchange) or with the title's own words as its status words ("stent exchange", inside the kind words): named only
+    apart. "The existing biliary stent was exchanged ..." with the kind words "exchanged" and the status words "was
+    exchanged": stated. An act with no kind or no status words is named only apart. Read in the event's own words and
+    its own cited passages only (EB1), never a scan of the document."""
+    from studio.interpretation import events
+
+    kind, status = events.words_of(event, 'kind'), events.words_of(event, 'status')
+    if kind is None or status is None:
+        return True
+    if kind['start'] <= status['start'] and status['end'] <= kind['end']:
+        return True  # the status words lie inside the kind words: they state nothing the name does not
+    for place in reading.places(events.own_passages(event, ('kind',))):
+        for sentence in _sentences(place):
+            if _holds(sentence, [status]):
+                return False
+    return True
+
+
+def _exchange_named_apart_hold(evaluation, reading):
+    """DECISIONS D173 (5): the hold of a READY 43276 whose every exchange is named only apart (_named_only_apart) and
+    beside which no stent removal or placement pairs (exchange_pairs: no removal stated at this ERCP that the exchange
+    could include) - the performed_status question quoting the words that name the exchange and the sentence that states
+    the act. Never READY, never excluded: 43276 is a stent removed and replaced in the same duct at one session, as the
+    installed release holds it (act_missing)."""
+    from studio.interpretation import events
+
+    link = evaluation.link
+    event = reading.events[evaluation.supporting[0]]
+    named = events.words_of(event, 'kind')
+    named_in = (next((_trimmed(sentence) for place in reading.places(events.own_passages(event, ('kind',)))
+                      for sentence in _sentences(place) if named is not None and _holds(sentence, [named])), None)
+                or (dict(named) if named is not None else None))
+    stated = statement_sentence(reading, event)
+    stated = _trimmed(stated) if stated is not None else None
+    if stated is not None and named_in is not None and _holds(stated, [named_in]):
+        stated = None
+    title = named_in['text'] if named_in is not None else events.statement_text(reading, event)
+    question = (f'Was a stent removed and replaced in the same duct at this ERCP, one stent exchange (43276), where '
+                f'the document names the exchange only in {wording.quote(title, 120)}'
+                + (f' and states the act in {wording.quote(stated["text"], 120)}' if stated is not None else '') + '?')
+    reason = (f'The document names a stent exchange only in {wording.quote(title, 140)}'
+              + (f', apart from the sentence that states the act ({wording.quote(stated["text"], 140)})'
+                 if stated is not None else '')
+              + ', and states no stent removal at this ERCP that the exchange could include. A stent exchange (43276) '
+                'is a stent removed and replaced in the same duct at one session. Held for the reviewer, not excluded.')
+    places = [place for place in (named_in, stated) if isinstance(place, Mapping)]
+    return events.Evaluation(evaluation.code, link.family, link, 'uncertain', EXCHANGE_TITLE, reason,
+                             read=tuple(dict.fromkeys(tuple(evaluation.read) + tuple(evaluation.supporting))),
+                             question=events.Question(EXCHANGE_FACT, question, reason, tuple(evaluation.supporting),
+                                                      _spans(places)))
+
+
 def exchange_hold(evaluation, reading):
     """D105 over one code's evaluation: a READY 43275 or 43274 whose own removal or placement is a side of a possible
     exchange (exchange_pairs), and a READY or not-documented 43276 in a session with one, held with the exchange question
     (the first such pair). Any other evaluation is returned unchanged: a code held for another reason keeps its own
-    question (D89: a question is never displaced), and an exclusion stands."""
+    question (D89: a question is never displaced), and an exclusion stands. DECISIONS D173 (5) (refute6 judges finding
+    8): a READY 43276 in a session with no such pair, whose every supporting act is a stent exchange named only apart
+    from the sentence that states it done (_named_only_apart: "Procedure: ERCP with biliary stent exchange." over a body
+    that states only a placement, the old stent left in place, not removed, migrated, removed at an earlier ERCP or from
+    the other duct), is held [performed_status] (_exchange_named_apart_hold), as the installed release holds it."""
     from studio.interpretation import events
 
     link = evaluation.link
@@ -239,6 +333,10 @@ def exchange_hold(evaluation, reading):
              if EXCHANGE in sides or (REMOVAL in sides and first['id'] in own)
              or (PLACEMENT in sides and second['id'] in own)]
     if not pairs:
+        if (ready and EXCHANGE in sides and evaluation.supporting
+                and all((reading.events[eid].get('catalogue_kind') or '') == EXCHANGE
+                        and _named_only_apart(reading, reading.events[eid]) for eid in evaluation.supporting)):
+            return _exchange_named_apart_hold(evaluation, reading)  # DECISIONS D173 (5)
         return evaluation
     removal, placement = pairs[0]
     question, reason = exchange_question(reading, removal, placement)
@@ -253,6 +351,9 @@ def exchange_hold(evaluation, reading):
 
 STONE_EXTRACTION = 'stone_extraction'
 NOTHING_RETRIEVED = 'nothing_retrieved'  # the reason (events.Evaluation.reason) of D106's hold
+NO_YIELD = 'no_yield'  # DECISIONS D173 (3), (4), (6): the reason of the hold of 43264 on acts that state no yield
+# DECISIONS D173 (7): the time values of another occasion (events.verified_other_time's, read in any verification state)
+OTHER_TIMES = ('earlier_encounter', 'future')
 STONE_WORDS = ('stone', 'stones', 'calculus', 'calculi', 'debris', 'sludge')
 RETRIEVAL_WORDS = ('retrieve', 'retrieved', 'retrieves', 'retrieving', 'retrieval', 'extract', 'extracted', 'extracts',
                    'extracting', 'extraction', 'remove', 'removed', 'removes', 'removing', 'removal', 'deliver',
@@ -498,7 +599,8 @@ def _attribute_words(event: Mapping) -> list:
             if isinstance(event.get(name), Mapping) and isinstance(event[name].get('words'), Mapping)]
 
 
-def _own_yield(event: Mapping, others: Sequence[Mapping] = (), located: Sequence[Mapping] = ()) -> bool:
+def _own_yield(event: Mapping, others: Sequence[Mapping] = (), located: Sequence[Mapping] = (),
+               times: Sequence[Mapping] = ()) -> bool:
     """DECISIONS D140, the structural reading (EB1): whether the act's own attribute words (_attribute_words: kind,
     status, target and technique) state its yield (_states_yield), each clause of those words read in those words alone
     ("Multiple stones were extracted" as the act's kind words) - and none of them another event's words (``others``:
@@ -506,10 +608,11 @@ def _own_yield(event: Mapping, others: Sequence[Mapping] = (), located: Sequence
     located passage (``located``) that holds those words carries a guard word (_guarded) - "It is unclear whether any
     stones were removed when ..." with the kind words "stones were removed" states no yield of the act's - and words no
     located passage holds state none; the yield's verb and subject stand in one simple clause of those words
-    (_simple_yield)."""
+    (_simple_yield). DECISIONS D173 (7): ``times`` (another occasion's time words, _other_times; D155's reading passes
+    none) - a clause of the words, or of a located passage around them, that holds them states no yield."""
     for item in _attribute_words(event):
         around = [clause for place in located for clause in _clauses(place) if _holds(clause, [item])]
-        if not around or any(_guarded(clause['tokens']) for clause in around):
+        if not around or any(_guarded(clause['tokens']) or _holds(clause, times) for clause in around):
             continue
         for piece in _clauses(item):
             if not _holds(piece, others) and not _guarded(piece['tokens']) and _simple_yield(piece):
@@ -543,15 +646,97 @@ def _yields(clauses: Sequence[Mapping], others: Sequence[Mapping] = (),
     return False
 
 
-def _clause_yield(clauses: Sequence[Mapping], others: Sequence[Mapping]) -> bool:
+def _clause_yield(clauses: Sequence[Mapping], others: Sequence[Mapping], times: Sequence[Mapping] = ()) -> bool:
     """DECISIONS D168 (1) (review:ercp6 problem 1): whether the act's OWN sentence (its ``clauses``) states a stone
     yield in a clause that holds no other event's own words (``others``) - a stone word the subject of a past yield
     verb, with D140's guards: no purpose, condition or doubt, or other-time word (_states_yield) - in ANY of its
     clauses: "The bile duct was swept with an extraction balloon and two stones were removed." states the sweep's yield
     here, where D147's simple-clause reading (_yields) does not. Read ONLY where a widened read meets a denial in
     another performed stone extraction's words (nothing_retrieved, _later_statement): it decides that such a denial is
-    the other act's, and is read nowhere else, so it never stops a denial D155 reads."""
-    return any(not _holds(clause, others) and _states_yield(clause['tokens']) for clause in clauses)
+    the other act's, and is read nowhere else, so it never stops a denial D155 reads. DECISIONS D173 (review:ercp7
+    problem 2): (7) a clause that holds another occasion's time words (``times``: _other_times, the time reader's)
+    states no yield of this act ("... and two stones were removed two weeks ago." with that earlier removal filed as its
+    own event, its time words there); and the condition is also read for E* (D173 (1)) and by D173 (3)'s test of an act
+    E* keeps (_own_sentence_yield) - each only ever holding a code or keeping an act in E*."""
+    return any(not _holds(clause, others) and not _holds(clause, times) and _states_yield(clause['tokens'])
+               for clause in clauses)
+
+
+def _nominal(tokens: Sequence[str]) -> bool:
+    """DECISIONS D173 (4): whether one clause's folded words can be a subject's noun phrase or its appositive - no past
+    yield verb, auxiliary, clause opener or negator among them ("Three stones", "the largest 9 mm")."""
+    return not any(token in YIELD_VERBS or token in YIELD_AUXILIARIES or token in CLAUSE_OPENERS or _negator(token)
+                   for token in tokens)
+
+
+def _appositive_yield(clauses: Sequence[Mapping], others: Sequence[Mapping] = (),
+                      times: Sequence[Mapping] = ()) -> bool:
+    """DECISIONS D173 (4) (refute6 families finding 8; FRESH-2 fb13's attested "Three stones, the largest 9 mm, were
+    extracted from the bile duct with an extraction balloon."): whether one sentence (its ``clauses``, cut at
+    CLAUSE_BREAKS) states a stone yield ACROSS an appositive, which D140's subject rule cannot read across the commas -
+    a clause that opens with a past yield verb (YIELD_VERBS, after at most AUXILIARY_REACH auxiliaries) right after a
+    run of nominal clauses (_nominal: the subject's noun phrase and its appositive), the run's FIRST clause ending in
+    the subject, a stone word (YIELD_SUBJECTS, or "fragments" right after one); D140's guards read over the words from
+    that clause through the verb's clause (_guarded); none of those clauses holding another event's own words
+    (``others``) or another occasion's time words (``times``, D173 (7)). "The balloon, used for the stones, was removed"
+    states none (its subject is the device). Read ONLY to decide whose a denial is (nothing_retrieved with ``whose``,
+    for E*) and whether an act E* keeps states a yield (_own_sentence_yield) - never as a clearance of D106's hold, so
+    it never releases one."""
+    for index in range(1, len(clauses)):
+        tokens = clauses[index]['tokens']
+        lead = 0
+        while lead < len(tokens) and lead < AUXILIARY_REACH and tokens[lead] in YIELD_AUXILIARIES:
+            lead += 1
+        if lead >= len(tokens) or tokens[lead] not in YIELD_VERBS:
+            continue
+        first = index
+        while first > 0 and _nominal(clauses[first - 1]['tokens']):
+            first -= 1
+        if first == index:
+            continue
+        head = clauses[first]['tokens']
+        if not (head[-1] in YIELD_SUBJECTS
+                or (head[-1] in FRAGMENT_WORDS and len(head) > 1 and head[-2] in YIELD_SUBJECTS)):
+            continue
+        span = clauses[first:index + 1]
+        if _guarded([token for clause in span for token in clause['tokens']]):
+            continue
+        if any(_holds(clause, others) or _holds(clause, times) for clause in span):
+            continue
+        return True
+    return False
+
+
+def _free_simple_yield(clauses: Sequence[Mapping], others: Sequence[Mapping] = (),
+                       times: Sequence[Mapping] = ()) -> bool:
+    """DECISIONS D173 (3): whether one sentence (its ``clauses``) states a stone yield in a SIMPLE clause
+    (_simple_clause: cut before each of CLAUSE_OPENERS) that holds no other event's own words (``others``) and no other
+    occasion's time words (``times``), its subject and verb in that simple clause (_yield_pairs), D140's guards read
+    over the whole clause as D147 reads them: "The bile duct was swept with an extraction balloon and sludge was
+    retrieved and a plastic stent was placed." (the stent filed) states the sweep's yield in "and sludge was
+    retrieved"."""
+    for clause in clauses:
+        if _guarded(clause['tokens']):
+            continue
+        words = _words(clause)
+        for subject, verb in _yield_pairs([word[0] for word in words]):
+            first, last = _simple_clause(words, verb)
+            span = {'start': words[first][1], 'end': words[last][2]}
+            if first <= subject and not _holds(span, others) and not _holds(span, times):
+                return True
+    return False
+
+
+def _own_sentence_yield(clauses: Sequence[Mapping], others: Sequence[Mapping] = (),
+                        times: Sequence[Mapping] = ()) -> bool:
+    """DECISIONS D173 (1), (3), (4): whether one of the act's own sentences (its ``clauses``) states the act's stone
+    yield - in any clause that holds no other event's own words (_clause_yield, D168's reading), across an appositive
+    (_appositive_yield) or in a simple clause free of other events' words (_free_simple_yield) - each without another
+    occasion's time words (D173 (7)). Read only to decide whose a denial in a rival's sentence is, for E* (D173 (1)),
+    and whether an act E* keeps states a yield (_states_own_yield) - so it only ever holds a code, or keeps an act in E*
+    whose own sentence states that it removed stones; never a clearance of D106's hold."""
+    return (_clause_yield(clauses, others, times) or _appositive_yield(clauses, others, times)
+            or _free_simple_yield(clauses, others, times))
 
 
 def states_nothing_retrieved(text: str) -> bool:
@@ -588,8 +773,39 @@ def _kept(kept: Sequence) -> list:
             if getattr(span, 'exact', True) and span.text]
 
 
+def _rivals(reading, event: Mapping, beside: Sequence[str]) -> list:
+    """DECISIONS D168 (1): the own words (kind, status, target) of the act's RIVALS - each of ``beside`` (the code's
+    supporting acts) that is another performed stone extraction."""
+    from studio.interpretation import events
+
+    return [span for eid in dict.fromkeys(beside) if eid != event.get('id') and eid in reading.events
+            and events.value(reading.events[eid], 'status') == PERFORMED
+            and (reading.events[eid].get('catalogue_kind') or '') == STONE_EXTRACTION
+            for span in _own_words(reading.events[eid])]
+
+
+def _other_times(reading, event: Mapping) -> list:
+    """DECISIONS D173 (7) (review:ercp7 problem 2): another occasion's time words - the located time words of every
+    other event whose time is another encounter's, as the time reader places it: its time value earlier_encounter or
+    future (events.verified_other_time's values, read in any verification state: D87, a doubted other time is a doubt,
+    never this act's yield) and facts.day_of not placing it ON the date of service by its own words. A yield clause that
+    holds them is no yield of this act ("... and two stones were removed two weeks ago." with that earlier removal filed
+    as its own event, its time words "two weeks ago"). Words no event's time gives are never read as a time (no word
+    list)."""
+    from studio.interpretation import events, facts
+
+    out = []
+    for other in reading.events.values():
+        if other.get('id') == event.get('id') or events.value(other, 'time') not in OTHER_TIMES:
+            continue
+        words = events.words_of(other, 'time')
+        if words is not None and facts.day_of(other, None) != facts.ON:
+            out.append(words)
+    return out
+
+
 def _later_statement(places: Sequence[Mapping], anchors: Mapping, others: Sequence[Mapping],
-                     rivals: Sequence[Mapping]) -> Optional[list]:
+                     rivals: Sequence[Mapping], times: Sequence[Mapping] = ()) -> Optional[list]:
     """DECISIONS D168 (1), D159's rule (3) rebuilt (review:ercp5 problem 5): the act's statement in a LATER sentence of
     its own passage (each of ``places``, its own located passages), else None. Within a place, a sentence after an own
     sentence (``anchors``: (the sentence, its clauses, whether it states the act's yield) by its (start, end)) and past
@@ -599,26 +815,29 @@ def _later_statement(places: Sequence[Mapping], anchors: Mapping, others: Sequen
     presence is the act's statement, and that own sentence and the clause are returned ("The bile duct was swept with an
     extraction balloon. A plastic biliary stent was placed. No stones were retrieved." with the stent filed). Never
     another passage (EB1: the act's own words, not a scan of the document) and never a sentence before the act's own.
-    - Whose denial (review:ercp6 problem 1): once a sentence after the own sentence - the later sentence itself
-      included - holds the own words of another performed stone extraction that supports the same code (``rivals``), a
-      later denial is that act's, never this act's, when the own sentence states this act's yield (its D147 reading,
-      or _clause_yield's): "... and two stones were removed. The pancreatic duct was then swept with a basket. No stones
-      remained." is the pancreatic sweep's. Where it states none, the denial stays this act's statement.
+    - Whose denial (review:ercp6 problem 1, as DECISIONS D173 (2) narrows it, review:ercp7 problem 0): a later sentence
+      that ITSELF holds the own words of another performed stone extraction that supports the same code (``rivals``)
+      holds that act's denial, never this act's, when the own sentence states this act's yield (its D147 reading, or
+      _clause_yield's). Where it states none, the denial stays this act's statement. A later sentence AFTER the rival's
+      is read again, as for any act: "The bile duct was swept with an extraction balloon and two stones were removed.
+      The pancreatic duct was then swept with a balloon. No stones were retrieved from the bile duct." is the bile-duct
+      sweep's statement (D168 read every sentence past the rival's as the rival's). D173 (7): the own yield is read
+      without another occasion's time words (``times``).
     - DECISIONS D168 (2) (review:ercp6 problem 3): after an own sentence that states the act's yield (D147's reading)
       only a RETRIEVAL denial is read, as D127 reads one in the own sentence - "... and two stones were removed. A
       plastic biliary stent was placed. No stones were retrieved." holds 43264, while "... No stones remained." there is
       a clearance, as before (D159 read nothing after such a sentence).
     It only turns a None into a statement, and retrieval_hold lets such a statement only hold the code."""
     for place in places:
-        anchor, at, past = None, -1, False
+        anchor, at = None, -1
         for index, item in enumerate(_sentences(place)):
             if (item['start'], item['end']) in anchors:
-                anchor, at, past = anchors[(item['start'], item['end'])], index, False
+                anchor, at = anchors[(item['start'], item['end'])], index
                 continue
             if anchor is None:
                 continue
-            past = past or _holds(item, rivals)  # another supporting stone extraction's words stand after the own one
-            if index == at + 1 or (past and (anchor[2] or _clause_yield(anchor[1], others))):
+            rival = _holds(item, rivals)  # D173 (2): this later sentence itself holds a rival's own words
+            if index == at + 1 or (rival and (anchor[2] or _clause_yield(anchor[1], others, times))):
                 continue
             for clause in _clauses(item):
                 found = '' if _holds(clause, others) else _denial(anchor[1] + [clause])[0]
@@ -628,7 +847,7 @@ def _later_statement(places: Sequence[Mapping], anchors: Mapping, others: Sequen
 
 
 def nothing_retrieved(reading, event: Mapping, kept: Sequence = (), beside: Sequence[str] = (), *,
-                      widened: bool = True) -> Optional[list]:
+                      widened: bool = True, whose: bool = False) -> Optional[list]:
     """D106: the act's statement that nothing was retrieved (its places, [{start, end, text}], in document order), else
     None. The act's own sentences are those of its own located passages (events.own_passages: kind, status, target) that
     hold one of its own words (kind, status or target words); a passage of the act none of whose sentences holds them is
@@ -690,7 +909,20 @@ def nothing_retrieved(reading, event: Mapping, kept: Sequence = (), beside: Sequ
       and no stones were seen." states nothing of the bile-duct sweep's, as at f9013e12e and 05a881a75. Without
       ``beside`` (a direct read of one act) no other act supports the code, and the dropped sentence is read as D159
       read it.
-    retrieval_hold lets a widened statement only hold the code, never take an act out of E* (D168)."""
+    retrieval_hold lets a widened statement only hold the code, never take an act out of E* (D168).
+    DECISIONS D173 (round 5h, narrowing only; refute6 families findings 7 and 8, review:ercp7 problems 0 and 2):
+    - (1) with ``whose`` (retrieval_hold's reading of the acts of a code still READY, with ``widened`` False), D168's
+      whose-denial condition covers D155's own arm too: a sentence dropped as another act's that holds the own words of
+      a RIVAL (another performed stone extraction of ``beside``) holds the rival's denial, never this act's, when the
+      act's own sentence states its own yield (_own_sentence_yield: D168's _clause_yield, across an appositive, or in a
+      free simple clause) - "The bile duct was swept with an extraction balloon and two stones were removed. The
+      pancreatic duct was then swept with a balloon; no stones were seen." no longer takes the bile-duct sweep out of
+      E*. Without ``whose`` (the hold's reading) D155's arm reads as before: there the condition would RELEASE "... and
+      two stones were removed. The pancreatic duct was then swept with an extraction balloon, and no stones were
+      retrieved." (held on 1b4ca399: both sweeps state nothing retrieved);
+    - (2) D159's rule (3) reads a later sentence after a rival's sentence (_later_statement);
+    - (7) D168's own-yield reading never counts a yield in a clause that holds another occasion's time words
+      (_other_times)."""
     from studio.interpretation import events
 
     words = _own_words(event)
@@ -720,6 +952,8 @@ def nothing_retrieved(reading, event: Mapping, kept: Sequence = (), beside: Sequ
                 own.append(sentence)
     candidates = [sentence for place in located + _kept(kept) for sentence in _sentences(place)]
     anchors, pending = {}, []  # DECISIONS D168 (1): the own sentences and the dropped sentences the widened reads read
+    times = _other_times(reading, event)  # DECISIONS D173 (7): another occasion's time words, the time reader's
+    rivals = _rivals(reading, event, beside)  # D168 (1); DECISIONS D173 (1)
     for sentence in sorted(own, key=lambda item: (item['start'], item['end'])):
         clauses = _clauses(sentence)
         yields, (denial, where) = stated or _yields(clauses, others, words), _denial(clauses)
@@ -745,6 +979,8 @@ def nothing_retrieved(reading, event: Mapping, kept: Sequence = (), beside: Sequ
         dropped = list({(item['start'], item['end']): item for item in after if item['start'] == first
                         and _holds(item, others) and not _holds(item, unperformed)}.values())
         for item in dropped:
+            if whose and _holds(item, rivals) and _own_sentence_yield(clauses, others, times):
+                continue  # DECISIONS D173 (1): for E*, a rival's denial, never this act's (refute6 families finding 7)
             for clause in _clauses(item):
                 if not _holds(clause, others) and _denial(clauses + [clause])[0]:
                     return [_trimmed(sentence), _trimmed(clause)]
@@ -754,18 +990,14 @@ def nothing_retrieved(reading, event: Mapping, kept: Sequence = (), beside: Sequ
     # DECISIONS D168 (1), D159's rule (1): a clause of a dropped sentence that holds another event's own words - but
     # not, where the act's own sentence states its yield, one of a sentence that holds another supporting stone
     # extraction's
-    rivals = [span for eid in dict.fromkeys(beside) if eid != event.get('id') and eid in reading.events
-              and events.value(reading.events[eid], 'status') == PERFORMED
-              and (reading.events[eid].get('catalogue_kind') or '') == STONE_EXTRACTION
-              for span in _own_words(reading.events[eid])]
     for sentence, clauses, dropped in pending:
         for item in dropped:
-            if _holds(item, rivals) and _clause_yield(clauses, others):
+            if _holds(item, rivals) and _clause_yield(clauses, others, times):
                 continue  # the denial is the other act's, never this act's (review:ercp6 problem 1)
             for clause in _clauses(item):
                 if _holds(clause, others) and _denial(clauses + [clause])[0]:
                     return [_trimmed(sentence), _trimmed(clause)]
-    return _later_statement(places, anchors, others, rivals)  # D159's rule (3), rebuilt
+    return _later_statement(places, anchors, others, rivals, times)  # D159's rule (3), rebuilt
 
 
 def retrieval_hold(evaluation, reading, kept: Sequence = ()):
@@ -781,7 +1013,24 @@ def retrieval_hold(evaluation, reading, kept: Sequence = ()):
     Where an act would still support it, the acts leave E* only by D155's reading (widened=False), as before: "The bile
     duct was swept with an extraction balloon. Two stones were extracted with a basket and no stones were seen on the
     final cholangiogram." (the basket filed) stays READY on both acts, never on the basket alone - a READY whose acts
-    changed would be a move this round's rule forbids (review:ercp6 problem 1's class)."""
+    changed would be a move this round's rule forbids (review:ercp6 problem 1's class).
+
+    DECISIONS D173 (round 5h, narrowing only):
+    - (1) (refute6 families finding 7) the acts of a code still READY leave E* only by D155's reading with D168's
+      whose-denial condition on D155's own arm (nothing_retrieved with ``whose``): a rival's denial clause no longer
+      takes out of E* an act whose own sentence states its yield - "... and two stones were removed. The pancreatic
+      duct was then swept with a balloon; no stones were seen." is READY on both sweeps (e5628be56's acts), never on
+      the pancreatic one alone. The hold itself is decided by the reading above, unchanged;
+    - (3), (4), (6) (review:ercp7 problem 1; refute6 families finding 8; judges finding 9) 43264 never stands on acts
+      that state no yield: when no act E* keeps carries the code (_carries: it states a stone yield of its own,
+      _states_own_yield, or it is done to a finding the inventory lists, _done_to_a_finding, with no statement of its
+      own that nothing was retrieved), the code is held, the final decision (_no_yield_hold) - with D106's question on
+      the statement of an act E* keeps (review:ercp7's WV4 "The bile duct was swept with an extraction balloon. The
+      pancreatic duct was then swept with a balloon and no stones were seen.": the denial stays the bile-duct sweep's),
+      else with NO_YIELD's naming the acts E* keeps and those D155's reading set apart: a lone sweep that states no
+      yield after "Cholangiogram showed a mildly dilated bile duct without filling defects." (judges finding 9), and a
+      basket sweep left alone beside "Three stones, the largest 9 mm, were extracted ..." / "No stones remained."
+      (families finding 8)."""
     from studio.interpretation import events
 
     link = evaluation.link
@@ -790,25 +1039,38 @@ def retrieval_hold(evaluation, reading, kept: Sequence = ()):
         return evaluation
     if evaluation.state != 'performed' or evaluation.reason != events.SUPPORTED:
         return evaluation
-    stated = []
-    for eid in evaluation.supporting:
-        statement = nothing_retrieved(reading, reading.events[eid], kept, evaluation.supporting)
+    supporting = tuple(evaluation.supporting)
+    stated = {}
+    for eid in supporting:
+        statement = nothing_retrieved(reading, reading.events[eid], kept, supporting)
         if statement is not None:
-            stated.append((eid, statement))
-    if not stated:
+            stated[eid] = statement
+    if stated and not any(eid not in stated for eid in supporting):  # every act states nothing retrieved: D106's hold
+        eid = next(iter(stated))
+        return _nothing_retrieved_hold(evaluation, reading, eid, stated[eid])
+    # DECISIONS D168: an act still supports the code, so only D155's reading takes acts out of E* - D173 (1): never by
+    # a rival's denial clause read for an act whose own sentence states its yield
+    apart = {}
+    for eid in stated:
+        found = nothing_retrieved(reading, reading.events[eid], kept, supporting, widened=False, whose=True)
+        if found is not None:
+            apart[eid] = found
+    left = tuple(eid for eid in supporting if eid not in apart)
+    if left and not any(_carries(reading, reading.events[eid], kept, stated.get(eid)) for eid in left):
+        return _no_yield_hold(evaluation, reading, kept, left, apart, stated)  # DECISIONS D173 (3), (4), (6)
+    if not apart:
         return evaluation
-    apart = {eid for eid, _ in stated}
-    left = tuple(eid for eid in evaluation.supporting if eid not in apart)
-    if left:  # DECISIONS D168: an act still supports the code, so only D155's reading takes acts out of E*
-        apart = {eid for eid in apart
-                 if nothing_retrieved(reading, reading.events[eid], kept, widened=False) is not None}
-        if not apart:
-            return evaluation
-        left = tuple(eid for eid in evaluation.supporting if eid not in apart)
-        labels = [events.event_label(reading, reading.events[eid]) for eid in left[:4]]
-        return replace(evaluation, supporting=left, detail=f'The {events.service_label(link.family)} is documented as '
-                                                           f'performed with {"; ".join(labels)}.')
-    eid, statement = stated[0]
+    labels = [events.event_label(reading, reading.events[eid]) for eid in left[:4]]
+    return replace(evaluation, supporting=left, detail=f'The {events.service_label(link.family)} is documented as '
+                                                       f'performed with {"; ".join(labels)}.')
+
+
+def _nothing_retrieved_hold(evaluation, reading, eid: str, statement: Sequence[Mapping]):
+    """D106's hold of ``evaluation`` (43264) on act ``eid``'s ``statement`` that nothing was retrieved: the
+    performed_status question naming that statement (retrieval_hold's, as before)."""
+    from studio.interpretation import events
+
+    link = evaluation.link
     said = ' '.join(' '.join(place['text'].split()) for place in statement)
     act = events.event_label(reading, reading.events[eid])
     question = f'Was any stone, calculus, debris or sludge removed with the {act} ({wording.quote(said, 120)})?'
@@ -818,6 +1080,123 @@ def retrieval_hold(evaluation, reading, kept: Sequence = ()):
     return events.Evaluation(evaluation.code, link.family, link, 'uncertain', NOTHING_RETRIEVED, reason,
                              read=evaluation.read,
                              question=events.Question('performed_status', question, reason, (eid,), _spans(statement)))
+
+
+def _own_sentences(reading, event: Mapping, kept: Sequence = ()) -> list:
+    """D106's own sentences of the act, as nothing_retrieved reads them (D127): the sentences of its own located
+    passages (events.own_passages: kind, status, target) that hold one of its own words - a passage none of whose
+    sentences holds them read whole - and the sentences of the code's own exact evidence (``kept``) that overlap one of
+    those passages and hold one of its own words; each once, in document order."""
+    from studio.interpretation import events
+
+    words = _own_words(event)
+    places = reading.places(events.own_passages(event))
+    evidence = [place for place in _kept(kept) if any(_holds(place, [mine]) for mine in places)]
+    own, seen = [], set()
+    for place in places:
+        sentences = _sentences(place)
+        for sentence in [item for item in sentences if _holds(item, words)] or sentences:
+            if (sentence['start'], sentence['end']) not in seen:
+                seen.add((sentence['start'], sentence['end']))
+                own.append(sentence)
+    for place in evidence:
+        for sentence in _sentences(place):
+            if _holds(sentence, words) and (sentence['start'], sentence['end']) not in seen:
+                seen.add((sentence['start'], sentence['end']))
+                own.append(sentence)
+    return sorted(own, key=lambda item: (item['start'], item['end']))
+
+
+def _states_own_yield(reading, event: Mapping, kept: Sequence = ()) -> bool:
+    """DECISIONS D173 (3), (4), (6): whether the act states a stone yield of its own - in its own attribute words
+    (D140's structural reading, _own_yield), in one of its own sentences (_own_sentences) by D168's reading, across an
+    appositive or in a free simple clause (_own_sentence_yield), or so in the sentence right after an own sentence (it
+    begins within CONTINUES_WITHIN characters of that sentence's end, in a located passage or the code's own exact
+    evidence, as D127 reads the sentence that continues an act): "The bile duct was swept with an extraction balloon.
+    Two stones were removed."; "... A plastic biliary stent was placed and sludge was retrieved." (the stent filed: its
+    clause "and sludge was retrieved" holds no event's words, as D155 reads such a sentence's free clause for a denial).
+    Never in a clause that holds another event's own words, nor in a sentence after the own one that holds another
+    stone extraction's (that act's statement of what it retrieved), nor in another occasion's time words (D173 (7)).
+    Read only to decide whether an act E* keeps carries 43264 (retrieval_hold), so it only ever decides whether to ADD
+    D173's hold - never a clearance of D106's."""
+    others = [span for other in reading.events.values() if other.get('id') != event.get('id')
+              for span in _own_words(other)]
+    stones = [span for other in reading.events.values() if other.get('id') != event.get('id')
+              and (other.get('catalogue_kind') or '') == STONE_EXTRACTION for span in _own_words(other)]
+    located = [place for record in reading.passages.values() if record.get('state') != 'unlocated'
+               for place in record['spans']]
+    times = _other_times(reading, event)
+    if _own_yield(event, others, located, times):
+        return True
+    candidates = [sentence for place in located + _kept(kept) for sentence in _sentences(place)]
+    for sentence in _own_sentences(reading, event, kept):
+        if _own_sentence_yield(_clauses(sentence), others, times):
+            return True
+        after = [item for item in candidates if sentence['end'] <= item['start'] <= sentence['end'] + CONTINUES_WITHIN]
+        first = min((item['start'] for item in after), default=None)
+        for item in after:
+            if item['start'] == first and not _holds(item, stones) and _own_sentence_yield(_clauses(item), others,
+                                                                                            times):
+                return True
+    return False
+
+
+def _done_to_a_finding(reading, event: Mapping) -> bool:
+    """DECISIONS D173 (6): whether the act is done to a finding the examination states - its target names a lesion the
+    inventory lists, in any verification state (FRESH-2 fb13's extraction is done to 'three filling defects (stones)',
+    the cholangiogram's finding). A sweep of a duct after "Cholangiogram showed a mildly dilated bile duct without
+    filling defects." names none. Read in the event's own target and the inventory's lesions (structure), never a word
+    of the document."""
+    target = event.get('target')
+    lesion = target.get('lesion') if isinstance(target, Mapping) else ''
+    return bool(lesion) and lesion in reading.lesions
+
+
+def _carries(reading, event: Mapping, kept: Sequence, statement) -> bool:
+    """DECISIONS D173 (3), (4), (6): whether an act E* keeps can carry 43264 - it states a stone yield of its own
+    (_states_own_yield), or it is done to a finding the inventory lists (_done_to_a_finding) and the document gives no
+    statement of its own that nothing was retrieved (``statement``: nothing_retrieved's, the hold's reading). An act
+    that states nothing - a sweep with no yield, after a cholangiogram that found nothing - carries nothing."""
+    return _states_own_yield(reading, event, kept) or (statement is None and _done_to_a_finding(reading, event))
+
+
+def _no_yield_hold(evaluation, reading, kept: Sequence, left: Sequence[str], apart: Mapping, stated: Mapping):
+    """DECISIONS D173 (3), (4), (6): the hold of a READY ``evaluation`` (43264) no act of whose E* (``left``) carries it
+    (_carries): with D106's question on the statement of the first act of ``left`` that has one (``stated``: the hold's
+    reading - review:ercp7 problem 1, "the denial stays this act's statement, so the code is held"), else with
+    NO_YIELD's performed_status question naming the acts of ``left`` (their own sentences) and those D155's reading set
+    apart (``apart``, their statements). Never READY, never excluded: CPT 43264 is a removal of calculi or debris, and
+    the document states none removed with these acts. The question's events are the acts it names, and the decision's
+    read events stay the READY evaluation's, so the competition (assess._claims, D163) keeps their claims."""
+    from studio.interpretation import events
+
+    for eid in left:
+        if stated.get(eid) is not None:
+            return _nothing_retrieved_hold(evaluation, reading, eid, stated[eid])
+    link = evaluation.link
+    named, places = [], []
+    for eid in tuple(left)[:3]:
+        event = reading.events[eid]
+        own = list({(place['start'], place['end']): place for place in (
+            _trimmed(sentence) for sentence in _own_sentences(reading, event, kept))}.values())
+        said = ' '.join(' '.join(place['text'].split()) for place in own) or events.statement_text(reading, event)
+        named.append((eid, events.event_label(reading, event), said))
+        places += own
+    for eid in [eid for eid in evaluation.supporting if eid in apart][:max(0, 3 - len(named))]:
+        said = ' '.join(' '.join(place['text'].split()) for place in apart[eid])
+        named.append((eid, events.event_label(reading, reading.events[eid]), said))
+        places += list(apart[eid])
+    acts = ' or '.join(f'the {label} ({wording.quote(said, 120)})' for _, label, said in named)
+    silent = ' or '.join(f'the {label} ({wording.quote(said, 140)})' for eid, label, said in named if eid not in apart)
+    denied = ' and '.join(f'the {label} ({wording.quote(said, 140)})' for eid, label, said in named if eid in apart)
+    question = f'Was any stone, calculus, debris or sludge removed with {acts}?'
+    reason = (f'The document states no stone, calculus, debris or sludge removed with {silent}'
+              + (f', and CPT Studio reads {denied} as having retrieved nothing' if denied else '')
+              + '. CPT Studio does not read a sweep or an extraction that states no yield, done to no finding the '
+                'document lists, as a removal of stones or debris. Held for the reviewer, not excluded.')
+    return events.Evaluation(evaluation.code, link.family, link, 'uncertain', NO_YIELD, reason, read=evaluation.read,
+                             question=events.Question('performed_status', question, reason,
+                                                      tuple(eid for eid, _, _ in named), _spans(places)))
 
 
 def _read_by_a_rule(link) -> bool:

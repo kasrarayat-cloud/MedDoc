@@ -168,7 +168,12 @@ class D127OwnSentence(SimpleTestCase):
         duct's sweep filed as its own stone_extraction (E5), or not filed at all; the bile duct's sweep (E4) or a basket
         extraction is the act's own sentence. 43264 stays READY on E4 alone: E5's own sentence states nothing retrieved,
         so E5 leaves E* and is still read (c2e53f8e: HELD, performed_status, with E5 filed - its reader reads the
-        passage; READY on the basket shape)."""
+        passage; READY on the basket shape). DECISIONS D173 (6) (round 5h; refute6 judges finding 9, this pin's
+        first shape is that finding's gate row) changes the first shape's outcome: the bile duct's sweep left in E*
+        states no yield of its own ("The bile duct was then swept with an extraction balloon.", after "Cholangiogram
+        showed a mildly dilated bile duct without filling defects.") and is done to no finding the inventory lists, so
+        43264 is held no_yield, the question naming that sweep and the pancreatic sweep's statement - as c2e53f8e holds
+        it (readings_disagree). The reader is unchanged; the basket shape states its yield and stays READY."""
         pancreatic = 'The pancreatic duct was swept with a balloon; no stones were retrieved.'
         swept = 'The bile duct was then swept with an extraction balloon.'
         basket = 'Two stones were extracted from the bile duct with a basket.'
@@ -188,7 +193,13 @@ class D127OwnSentence(SimpleTestCase):
             reading = events.Reading.of(inv)
             with self.subTest(shape=name):
                 self.assertIsNone(ercp.nothing_retrieved(reading, reading.events['E4']))
-                ready_on(self, proposal(run(inv, text, [('43264', cited)]), '43264'), acts)
+                held = proposal(run(inv, text, [('43264', cited)]), '43264')
+                if name == 'the other act filed':  # DECISIONS D173 (6): the sweep left states no yield
+                    self.assertEqual((held.status, asked(held), held.support['reason'], held.support['acts'],
+                                      held.support.get('question_events')),
+                                     ('needs_clarification', ['performed_status'], ercp.NO_YIELD, [], ['E4', 'E5']))
+                else:
+                    ready_on(self, held, acts)
                 self.assertEqual(events.evaluate('43264', (), reading).read, read)
                 if 'E5' in reading.events:
                     statement = ercp.nothing_retrieved(reading, reading.events['E5'])
@@ -447,7 +458,12 @@ class D127ExchangeFiled(SimpleTestCase):
         """Controls: the exchange alone - 43276 READY, 43275 and 43274 held not documented, as before; a removal in the
         pancreatic duct (both ducts verified, apart), a removal denied, and a removal verified at an earlier ERCP pair
         with nothing - 43276 READY (43275 READY on the pancreatic removal). Unchanged from 1caaf0609; c2e53f8e holds
-        43276 act_missing in each (its reader finds no exchange act), and READYs 43274 beside the exchange alone."""
+        43276 act_missing in each (its reader finds no exchange act), and READYs 43274 beside the exchange alone.
+        DECISIONS D173 (5) (round 5h; refute6 judges finding 8, which names these controls) changes 43276's outcome in
+        each: the exchange is named only in the 'Procedure:' title (its kind words), apart from the sentence that states
+        it done (the placement's "was placed"), and no stent removal pairs with it, so 43276 is held
+        exchange_named_apart [performed_status], as c2e53f8e holds it (act_missing). The pairs are unchanged (none),
+        43275 and 43274 keep their outcomes, and 43276 is never excluded."""
         inv, text, doc = exchange_document([CANNULATED, exchange_event()])
         self.assertEqual(ercp.exchange_pairs(events.Reading.of(inv)), [])
         result = run(inv, text, [('43275', doc['P3']), ('43274', doc['P5']), ('43276', doc['P1'])])
@@ -455,7 +471,8 @@ class D127ExchangeFiled(SimpleTestCase):
                           for code in ('43275', '43274', '43276')},
                          {'43275': ('needs_clarification', events.NOT_DOCUMENTED),
                           '43274': ('needs_clarification', events.NOT_DOCUMENTED),
-                          '43276': ('ready', events.SUPPORTED)})
+                          '43276': ('needs_clarification', ercp.EXCHANGE_TITLE)})
+        self.assertEqual(asked(proposal(result, '43276')), ['performed_status'])
         apart = {
             'pancreatic removal': ({'P3': 'The existing pancreatic duct stent was removed with a snare.'},
                                    dict(target=tg('', 'pancreatic_duct', 'pancreatic duct', ['P3'])), ('43275', '43276')),
@@ -472,7 +489,12 @@ class D127ExchangeFiled(SimpleTestCase):
                 cited = {'43275': doc['P3'], '43276': doc['P1']}
                 result = run(inv, text, [(code, cited[code]) for code in codes])
                 for code in codes:
-                    self.assertEqual((proposal(result, code).status, asked(proposal(result, code))), ('ready', []))
+                    p = proposal(result, code)
+                    if code == '43276':  # DECISIONS D173 (5)
+                        self.assertEqual((p.status, asked(p), p.support['reason']),
+                                         ('needs_clarification', ['performed_status'], ercp.EXCHANGE_TITLE))
+                    else:
+                        self.assertEqual((p.status, asked(p)), ('ready', []))
 
 
 # --- (4) and (5): D107 and the cannulation conflict -----------------------------------------------------------------
