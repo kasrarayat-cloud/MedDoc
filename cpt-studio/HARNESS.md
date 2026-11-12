@@ -4655,3 +4655,25 @@ builders produced 7 integrable repairs, and every review found new critical para
 - **Baseline harness** (session tools):
   - c2e53f8e runs on the set in 8 seconds;
   - the scorer implements THRESHOLDS' classes, with independent evaluators for the act and topic checks.
+
+**Status, 2026-11-12, step 2 done: design v2 is adopted (DECISIONS D178-D182).**
+- **The design** is `docs/gemini-migration/FINAL-V2.md`. Four refutation lenses attacked it and it was revised; each decision is in
+  `REFUTATIONS-V2.md`. It was written blind to a1 and to every sealed set.
+- **Its shape:**
+  - Two Gemini calls per document. The first builds the source-linked inventory: facts with states, sources and Gemini's doubts.
+  - The second judges CPT Studio's fixed sentences about those facts against the document. For each fact that decides a code, it
+    must also reject a contrary sentence planted beside it.
+  - A deterministic settle step computes each fact's result: supported, negated, contradicted, unknown or unresolved.
+  - A text-free engine applies the coding rules to the results.
+  - 145 v1 reader functions, in 17 modules, are denied on the new path.
+- **Cost and time, modelled before any send:**
+  - about $0.083 per document (median) now, and $0.166 from 2026-12-01: about 1.85 times the single-call v1;
+  - a median of about 53 s, against 28 s.
+- **Owner items, and the step each gates** (D178):
+  - the second call's cost: class d, before the install;
+  - the recording budget against the cap: class d, before the acceptance run;
+  - the legacy context-save loss: class b, before the install;
+  - a separate test key after the switch: class d, before any batch after the switch.
+- **Next:** step 0b, then build wave 1 (six builders).
+  - Each builder works in its own tree, and each file has one owner.
+  - The integration owner applies the patches. The full suite runs after every wave.

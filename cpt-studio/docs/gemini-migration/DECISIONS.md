@@ -13991,3 +13991,128 @@ evidence, and such an argument comes back to the owner of these decisions.
       wrap, a history mention of a dilation, a tattoo's reference point.
     - That is the pattern of word-list repairs (memory: word-list repairs do not converge). Natural-language categories
       read by deterministic word rules keep leaking paraphrases.
+
+## Integration owner's decisions for design v2 (2026-11-12, session 68197eb1, continuing 30a58364)
+
+- **D178 Design v2 is adopted after its refutation (FINAL-V2 8.1, step 0a).**
+  - The design is `docs/gemini-migration/FINAL-V2.md` (sha256
+    `9d650797c41091d3ab9ce2f783c1838e5aa394bb926c5d5b2733c2186d733b21`), committed with this entry and byte-identical to the
+    session's `design-v2/FINAL-V2.md`. The judge's decision on each refutation finding is `docs/gemini-migration/REFUTATIONS-V2.md`
+    (sha256 `59e39a0515c0a47055cba90735a3488be7b680114d2a809dde15d6c32dc7e5ad`). The text before the refutation stays in the
+    session directory as `design-v2/FINAL-V2-pre-refutation.md` (sha256
+    `cc5c288872a1c1a65af241997f12414a3e538b7e49eb6c2d043d3a6c5a796a00`).
+  - How it was made (workflow wf_ea6e3b86-a83, 13 agents):
+    - four surveys: contract, readers, rules, failures;
+    - three competing designs: A extend, B requirements, C two-pass;
+    - a judge's synthesis: C's two passes, B's requirement table, A's section inheritance;
+    - four refutation lenses: self-certification, holds, contract, migration and operations;
+    - 28 findings: 1 critical, 8 high, 15 medium and 4 low. 22 were accepted and 6 accepted in part; none was rejected whole;
+    - the revision was applied by 157 replacements, each asserted to apply exactly once.
+
+    Every agent was blind to acceptance-a1 and to every sealed set.
+  - What the integration owner checked before adopting:
+    - the directive's five required items against section 0's table, and each item against the sections it names;
+    - every deterministic check of 3.1 can only make a fact UNRESOLVED. None sets, changes or removes a value, and none creates
+      support, an exclusion, a contradiction or a READY;
+    - what still touches document text (5.6), and nothing else does:
+      - segmentation by character classes;
+      - quote location;
+      - L1's check of a date Gemini gave against its own words: it only demotes, and it is pinned to v1's eight parsers and their
+        two tables;
+      - revision binding;
+      - R1's evidence integrity;
+      - the participants' locator;
+      - display.
+
+      No vocabulary decides, confirms or vetoes a meaning;
+    - Corti, Astra and Fable, reviewer approval and customer-facing confidentiality are unchanged (4.12), and no model agreement
+      approves a code (3.5, 3.6);
+    - 0a's gate: the a1 v2 hash commit `4b52bad86a539e55c66b3e1bab275d686d76bdff` (2026-11-12T04:41:17Z) exists and is on
+      origin. No prompt byte and no send precedes the frozen acceptance set.
+  - Conditions the integration owner adds:
+    1. **The acceptance run follows THRESHOLDS.md, not 7.6's "x 3 runs".** 7.6 was written blind to the set's composition.
+       - Three runs each: the 48 independent cases and g1's 12 documents.
+       - One run each: the other 167 cases.
+       - That is 347 documents: about $41 at November prices and about $82 from 2026-12-01, at the design's mean. A' is the
+         same.
+    2. **Overlap between development and acceptance is measured, not assumed away.**
+       - The exclusion list catches only exact copies, yet a1's regression cases were rebuilt from the same failure evidence the
+         development set holds.
+       - Step 7 adds a near-copy report: each development document's highest character-shingle similarity to any a1 document,
+         printed as ids and scores only.
+       - No development document is withdrawn for it. A regression case is a known failure the build is meant to fix. Whether a
+         fix generalises is measured by the paraphrase, variant and independent kinds.
+       - The report gives each kind's result beside the overlap.
+    3. **Owner items, each raised before the step it gates** (standing authority):
+       - class d, before the install: the per-document cost of the second call (7.1), stated to the owner on 2026-11-12;
+       - class d, before A: the recording budget against the cap and the month's recorded spend (7.6);
+       - class b, before the install: a legacy approval does not carry across engines, and a context change on a legacy encounter
+         needs an explicit re-check (6.2);
+       - class d, before any batch after the switch: a separate test key or project (7.6);
+       - carried from v1 and re-judged before the install: D37's EGD heading trade, and the re-check offer on two legacy
+         encounters.
+  - This entry reopens nothing from v1's rounds. D1-D177 stay as the record of v1, and the rules forked into `engine/` keep their
+    D-numbers.
+
+- **D179 ADJUDICATION on the v2 path (FINAL-V2 3.5).**
+  - EB1 is kept and narrowed: deterministic checks read offsets, unit boundaries and Gemini's own date words only.
+  - EB2 is retired: there are no frame defaults. Inheritance from a section replaces them; Gemini states it, geometry checks it
+    and the second call appraises it.
+  - EB3 is retired: there is no marker basis of exclusion. An exclusion needs an established explicit negative.
+  - EB4 is kept: a residual is measured, and a false READY is repaired in the prompt, the schema, the claim templates or a coding
+    rule, never with a word list.
+  - ADJUDICATION.md itself is unchanged and still governs v1's records. On the v2 path these four amendments apply.
+
+- **D180 Parity shims dropped and parity choices kept (FINAL-V2 4.13).**
+  - Dropped, because each was a word reader or a word-derived stand-in (the fact that replaces it in brackets):
+    - C-11's dismissal of Gemini's contradictions by "hard" literal rows, with the literal hardness of `time_row`,
+      `procedure_row` and `performer_row`;
+    - D58/D77's place adjacency read as causality (`part_of` and `cause`);
+    - D127's cannulation "conflict" for a failure followed by success (`access_outcome`);
+    - D115, D142, D149 and D157's bleeding words and adjective keys (`purpose` and `cause`);
+    - D31's hold of a whole session on an open question. Each doubt now holds only the facts it names, and K2 touches only the
+      act's own session fact;
+    - the region moves of D114, D141, D148 and D153 (the act's own session fact);
+    - the label and signature grammar of D124-D172 (the section owner);
+    - the frames and markers of D35, D42, D54, D64 and D109-D162 (the date relation).
+  - Kept, as rules over facts:
+    - D157's doubt: a clip or injection whose purpose or cause is not established may be a bleeding control, so its denial never
+      excludes;
+    - D163 and D167: a held code keeps its claims;
+    - D134: an office visit is set apart beside a done procedure session (a listing rule);
+    - C-3 counts any performer's same-day procedure;
+    - an act on the date of service at a separate encounter supports its code (T2).
+
+    The last two are diagnostic against c2e53f8e (owner amendment of 2026-11-09: parity is diagnostic). They change only by a
+    recorded coding rule, never by a reader.
+
+- **D181 Five new question facts (FINAL-V2 4.8).**
+  - Each fact joins `wording.NEW_FACTS` with its MISSING sentence, by the path v1 already uses for its seven new facts:
+    - `event_entry`: "whose entry the act is told in";
+    - `exam_stations`: "which parts of the upper tract were examined";
+    - `act_yield`: "what the extraction retrieved";
+    - `act_cause`: "what caused the bleeding the act treated";
+    - `act_part`: "whether the act was part of another act".
+  - A customer sees only the fixed sentence. Causes stay operator data (MO-2).
+
+- **D182 One item per held code, by a fixed rank (FINAL-V2 4.8).**
+  - Each held code carries exactly one clarification: the item of its highest-ranked unmet requirement on its chosen binding. It
+    is a question when the fact is unresolved, and an explanation when an established fact fails the requirement.
+  - RANK is pinned in `engine/requirements.py`, with 23 ranks. The first four keep v1's h1-h4 order:
+    1. a contradiction;
+    2. a doubt on status;
+    3. a statement's scope;
+    4. a status not established.
+  - The binding, in order:
+    1. kept-span overlap;
+    2. the candidate whose top item ranks highest;
+    3. the fewest unmet requirements;
+    4. at an equal rank, a question before an explanation;
+    5. document order.
+  - Every candidate's unmet facts are kept in `support.held_facts`:
+    - the operator sees them with their causes;
+    - the reviewer sees them only as fixed sentences;
+    - they are never asked as separate questions;
+    - they are re-evaluated after an answer or an addendum.
+  - Member answers are unchanged. The only answers are "Not documented" and "Cannot confirm", and an answer never confirms a fact
+    or releases a hold.
