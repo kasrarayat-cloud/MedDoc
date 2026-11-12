@@ -3253,3 +3253,75 @@ before the install.
 
 (h) **No phrase-by-phrase repair of the old semantic reader.** The replacement is completed and the checklist updated with
 evidence. The report gives the installed revision, the verified results, the remaining limitations and the measured costs.
+
+## Owner amendment, 2026-11-12 — automatic recheck after a save; the mandatory "Check again" is removed
+
+Received 2026-11-12 in session 68197eb1 (continuing 30a58364). The session had asked the owner to accept, before the
+install, the class-b loss in FINAL-V2 6.2: a context change on a legacy encounter would need an explicit "Check again".
+Verbatim:
+
+> Amend my previous acceptance: make Gemini rechecking automatic after a successful save of changes affecting clinical content or coding context. Remove the mandatory “Check again” step from the normal workflow.
+>
+> Requirements:
+> - Queue the recheck in the background after saving. Do not call providers on every keystroke or for cosmetic changes.
+> - Show “Changes saved—updating codes” with truthful progress.
+> - Prevent duplicate submissions. Bind results to the exact saved revision; results from an older revision must never overwrite newer work.
+> - Rerun only stages whose inputs changed. Reuse results only when their inputs and relevant versions still match.
+> - Preserve historical approvals and reports. While updated coding is pending, prevent approval or export of stale codes as current.
+> - When complete, show the updated codes and what changed. Keep final reviewer approval explicit.
+> - Keep a manual Retry button for failures, with a clear explanation. Handle quota and payment failures without repeated requests.
+>
+> Apply this to edited legacy encounters as well as new encounters. Verify rapid successive edits, failures, reload persistence and actual exports. Record this as superseding the earlier mandatory manual-recheck decision, then continue implementation and installation.
+
+### Session interpretation, 2026-11-12 (68197eb1, on receipt) — recorded, not owner-ruled
+
+(a) **What it supersedes.** FINAL-V2 6.2's "Legacy encounters and context saves" rule is superseded: a context save there
+stored the values, queued nothing, and left the explicit "Check again" as the only way the document was read again
+(refutation finding MO-4's resolution). With it go the matching parts of 7.4 and 8.1 step 5b. D178's class-b item is
+closed: the owner's answer is automatic rechecking, not the loss. DECISIONS D184 records it.
+
+(b) **Triggers.** A recheck follows a SUCCESSFUL save that changes clinical content or coding context:
+- a new revision of the document, such as an upload or an addendum;
+- a context save whose effective values differ from the current context's: the date of service, the setting, patient
+  status, billing context or another coding-context field.
+
+These trigger nothing:
+- a save with no changed value;
+- a change to a field no coding rule reads, such as a title;
+- a decision, a member answer and display state, which keep their own existing flows;
+- typing. Saves are explicit.
+
+(c) **What runs.** Only the stages whose inputs changed run, and a stored result is reused only when its inputs and the
+relevant versions match:
+- On a revision with a v2 inventory at the current versions, a context save re-derives over the frozen inventory and
+  re-assesses, and no Gemini call is made. A code-proposing participant is asked again only when its own request changed;
+  its retained answer to the identical request is otherwise reused.
+- On a legacy revision, one without such an inventory, the two Gemini passes run once for the revision. A later save
+  reuses them by their request hash (FINAL-V2 7.4 doors 1 and 2) and re-derives with the newest values.
+
+(d) **Binding and no overwrite.**
+- Each result is bound to the exact revision and context it was computed for.
+- An assessment becomes current only when, under the encounter's row lock, its revision and context are still the
+  encounter's current ones. A result for an older revision or context is kept as history and never displaces newer
+  work.
+- Duplicate submissions are prevented: provider stages are keyed by revision and request, the single-flight lock and the
+  stage doors apply, and a superseded queued stage ends without sending.
+
+(e) **While pending.**
+- The screen says "Changes saved—updating codes", with truthful progress naming the stages that actually run.
+- The earlier codes are shown as earlier and cannot be approved or exported as current.
+- Earlier approvals and downloaded reports stay as records.
+
+(f) **When done.** The screen shows the updated codes and what changed against the codes it replaced. Approval stays a
+reviewer's explicit act, and an approval never carries across engines (D7).
+
+(g) **Failures.** A failed stage offers a manual Retry with a clear explanation of what failed. Quota, authentication and
+payment failures are the installation-wide hold (D39): no repeated requests, a truthful "Paused", an operator's release.
+
+(h) **Scope and proof.** Legacy encounters and new encounters alike. The tests and the installed walk verify:
+- rapid successive edits;
+- failures, with Retry and the hold;
+- persistence across a reload;
+- actual exports, refused while pending and correct after.
+
+The behaviour is designed and refuted as FINAL-V2 amendment 1 before it is built.

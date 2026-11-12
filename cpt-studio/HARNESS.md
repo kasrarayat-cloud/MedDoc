@@ -4701,7 +4701,8 @@ the second Gemini call approved"), and in RULINGS.md; DECISIONS D183 applies it.
 - **Accounting is preserved, not reset:** the cap stop of 2026-11-10 at about $26 (estimated), the 23 sends refused after
   it, the void g1 runs 2 and 3, and every estimate marked as one. The usage ledger is the session's
   `gemini-migration/USAGE-LEDGER.md`, and this file gives its totals at each milestone.
-- **Still open:** the class-b legacy context-save loss (FINAL-V2 6.2). It is asked again before the install.
+- **Still open:** the class-b legacy context-save loss (FINAL-V2 6.2). It is asked again before the install. (Closed
+  the same day by the owner's amendment below: automatic recheck, D184.)
 - **Scope, through to completion:**
   - the implementation;
   - independent testing of wrong READYs and unnecessary holds;
@@ -4709,3 +4710,21 @@ the second Gemini call approved"), and in RULINGS.md; DECISIONS D183 applies it.
   - the pypdf security update and its checks;
   - the installation, with the current site kept available;
   - the actual website walk: upload, review, save, reload and downloads.
+
+**Owner amendment, 2026-11-12: automatic recheck after a save** (verbatim in the rulings file, "Owner amendment,
+2026-11-12 — automatic recheck after a save"; RULINGS.md; DECISIONS D184). It supersedes FINAL-V2 6.2's mandatory "Check
+again" on legacy encounters and closes the class-b item.
+- **The rule:** a successful save that changes clinical content or coding context queues the recheck in the background.
+  - Only the stages whose inputs changed run, and results are reused only when inputs and versions match.
+  - Each result is bound to the exact saved revision and context, and an older result never overwrites newer work.
+  - Duplicate submissions are prevented.
+- **While pending:**
+  - the screen shows "Changes saved—updating codes", with truthful progress;
+  - stale codes cannot be approved or exported as current;
+  - earlier approvals and reports stay as records.
+- **When done:** the screen shows the updated codes and what changed, and approval stays explicit.
+- **Failures** offer Retry with a clear explanation. Quota, authentication and payment failures hold without repeated
+  requests.
+- **Scope:** legacy and new encounters.
+- **Verified by tests and the installed walk:** rapid successive edits, failures, reload persistence and actual exports.
+- **Next:** the behaviour is designed and refuted as FINAL-V2 amendment 1 before it is built (steps 5b and a new UI step).

@@ -14143,3 +14143,30 @@ evidence, and such an argument comes back to the owner of these decisions.
     - Estimated costs are labelled as estimates, and unknown costs stay unknown.
     - Consumed attempts and failures stay listed.
   - Unchanged: D178 condition 1 (the acceptance run follows THRESHOLDS.md) and condition 2 (the near-copy report).
+
+- **D184 Automatic recheck after a save; the mandatory "Check again" is removed (owner amendment, 2026-11-12; supersedes
+  FINAL-V2 6.2's manual re-check, MO-4's resolution, and closes D178's class-b item).**
+  - The owner's words are verbatim in the rulings file ("Owner amendment, 2026-11-12 — automatic recheck after a save")
+    and in RULINGS.md.
+  - **Superseded:** FINAL-V2 6.2 "Legacy encounters and context saves" (store the values, queue nothing, explicit
+    "Check again"), the matching sentence in 7.4, and that part of 8.1 step 5b.
+  - **Closed:** D178 condition 3's class-b item. The owner chose automatic rechecking over the loss.
+  - **The rule,** for legacy and new encounters alike:
+    - a successful save that changes clinical content or coding context queues the recheck in the background;
+    - only the stages whose inputs changed run;
+    - each result is bound to the exact revision and context;
+    - an older result never displaces newer work;
+    - duplicates are prevented;
+    - while it is pending, the earlier codes cannot be approved or exported as current;
+    - when it completes, the updated codes and what changed are shown, and approval stays explicit;
+    - failures offer Retry, and quota, authentication and payment failures hold without repeated requests.
+  - **No provider call** on typing, on a save with no changed value, or on a change no coding rule reads.
+  - **On a v2 revision with an inventory,** a context save sends nothing to Gemini.
+  - **On a legacy revision,** the two passes run once per revision and are reused by request hash.
+  - **The precise behaviour** (triggers, coalescing of rapid successive saves, the current-assessment compare-and-set,
+    progress, the what-changed view, the stale guards on approval and export, Retry and the hold) is FINAL-V2
+    amendment 1. It is designed and refuted before it is built, and it adds its checks to 9.3 and 9.9:
+    - rapid successive edits;
+    - failures;
+    - reload persistence;
+    - actual exports.
