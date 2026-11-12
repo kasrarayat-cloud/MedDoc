@@ -4640,3 +4640,18 @@ builders produced 7 integrable repairs, and every review found new critical para
   The amendment also names the one unclassified cell (expected EXCLUDED, actual HELD = SAFE MISMATCH, reported) and fixes, before
   any measurement, how a disputed label is decided while the builder stays blind.
 - **Step 2 (design v2)** is running, blind to the set.
+
+**Status, 2026-11-12, step 1 done: acceptance set a1 v2 is sealed and committed by hash, before any prompt change.**
+- **Labels re-derived blind** (amendment 1).
+  - Outcome agreement with v1 was 533 of 550 rows. No blind coder gave READY where v1 did not.
+  - 28 rows were adjudicated A/B and 21 labels changed, mostly on the HELD/EXCLUDED boundary.
+  - The adjudicators applied the product's established policy, stated from the code: an act at another encounter is EXCLUDED;
+    base codes, components, competing codes, limited-versus-full and session-caused bleeding are held for the reviewer.
+  - A base-code scan found no READY base code left beside a counted intervention.
+  - One variant was dropped by a pair adjudicator because its edit changes no outcome.
+- **The v2 set:** 215 cases, 546 code rows. It was sealed at 04:39:52Z with all its evidence; see `SHA256SUMS-v2` and
+  README.md. v2 is the set measured.
+- **`DEV-EXCLUSION.sha256`** lists the hashes of every a1 document text, for the builders and a fixture guard.
+- **Baseline harness** (session tools):
+  - c2e53f8e runs on the set in 8 seconds;
+  - the scorer implements THRESHOLDS' classes, with independent evaluators for the act and topic checks.
