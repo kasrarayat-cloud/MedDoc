@@ -3066,3 +3066,98 @@ The migration's planned live checks may send within it: g1 x3 on the test instan
 walk, and the c6/c7 blind walks after the install. Interpretation (h) of the 2026-11-09 directive still governs every send:
 purposeful, bounded batches with concurrency one, each with its own cost cap, and every request's usage recorded and reported.
 A 429 with no QuotaFailure detail is still a hold, never retried in a loop (DECISIONS D39).
+
+## Owner directive, 2026-11-12 — Gemini owns the open-ended clinical interpretation; the phrase-by-phrase repair campaign stops
+
+Received in session 68197eb1 (continuing 30a58364) after the session reported that the migration's narrowing-only repair rounds
+were not converging. Since round 5f (05a881a75), 14 repair builders had produced 7 integrable repairs, and every review found new
+critical wordings, mostly paraphrases of the classes just repaired. The session asked how to proceed. The owner chose "Gemini
+judges, fail closed (Recommended)", then wrote, verbatim:
+
+> Proceed with option 1. This confirms my existing decision: Gemini must own the open-ended clinical interpretation. Stop the phrase-by-phrase semantic repair campaign.
+>
+> Update HARNESS.md and the migration checklist before continuing. Preserve the current work and evidence.
+>
+> Required implementation:
+>
+> - [ ] Move judgments about timing, causality, entry ownership, targets, techniques, examined stations and extent into Gemini’s structured, source-linked event inventory. Represent supported facts, explicit negatives, contradictions and unknowns distinctly.
+> - [ ] Remove remaining keyword-based reinterpretations and semantic vetoes from the new path. Do not reproduce the old reader under a new “verification” name. Keep deterministic schema, source-integrity, revision-binding and applicable coding-rule checks.
+> - [ ] Define verification honestly. A quote existing in the document does not prove that it supports the claimed meaning. Check attachment to the correct event and surrounding qualifications. Gemini must not certify its own answer simply by setting “verified=true”.
+> - [ ] Hold only decisions dependent on unresolved required facts. Give one focused explanation or question. Let unrelated supported codes proceed. Preserve broad denials and genuine contradictions; never treat an unknown target as proof that statements cannot conflict.
+> - [ ] Keep Corti, Astra and Fable as coding participants. Model agreement alone must not approve a code. Preserve reviewer approval and customer-facing provider confidentiality.
+>
+> Before changing the prompt, freeze the acceptance cases and expected outcomes. Include independent documents, previous failures, equivalent paraphrases, meaning-changing variants and repeated runs. Measure both wrong READY results and unnecessary holds. An all-held result cannot pass.
+>
+> Use necessary fresh Gemini recordings in small, bounded batches under my existing testing authority. Preserve prior recordings and distinguish fresh calls from replay.
+>
+> After the new interpretation path passes meaningful checks, complete installation and the actual website workflow: upload, processing, review, save, reload and downloaded reports. Verify the deployed runtime uses Gemini and does not invoke the retired semantic vetoes.
+>
+> Keep the current site available until the replacement is ready to switch. Preserve existing records and rollback capability.
+>
+> Continue through the authorized implementation and verification. Report the installed revision, remaining defects, incorrect approvals, unnecessary holds, usage and actual download results. Do not call the migration complete at the design, recording or offline-test stage.
+
+**Session interpretation.**
+
+(a) **What stops, and what is preserved.**
+- STOPPED: the phrase-by-phrase repair campaign, refutation rounds 5-6 with repair rounds 5-5h, each adding deterministic word
+  readers for the next counterexample.
+- PRESERVED as evidence and as the baseline: the branch `feat/cpt-studio-gemini-interpreter-20261109` at 4726a8ce6, pushed and
+  confirmed on origin; DECISIONS D1-D177 with every integration entry; the session's `gemini-migration/` directory (rounds,
+  reviews, refutation results with their case files, the audited differential gate `gate5/` and its run on 05a881a75, the FRESH
+  recordings and scores); the U32 c4 registry (1,374 entries).
+- Nothing is deleted.
+
+(b) **What Gemini owns.** The structured, source-linked event inventory carries the judgments of timing (including relative to the
+date of service), causality (what an act was part of or caused by), entry ownership (whose entry an act is told in), targets,
+techniques, examined stations and extent.
+- Each is an attribute with its source link and a state that keeps four things apart: supported, explicitly negated, contradicted,
+  and unknown.
+
+(c) **What the deterministic layer keeps, and what leaves the new path.**
+- Keeps: schema validation, source integrity, revision binding, the attachment checks of (d), and the applicable coding-rule checks
+  (reference rows, CPT and NCCI relations, base and modifier rules) over the inventory's facts.
+- Leaves the new path: every reader that re-reads the document's words to reinterpret an attribute Gemini owns, or to veto a code.
+  Examples are the same-day frames, label and signature grammars, yield and denial clause readers, site and route phrase readers,
+  and station word readers.
+- It is not reproduced under another name. The legacy reader stays archived for rollback only.
+
+(d) **Verification, honestly.** A cited quote existing in the revision proves only that the quote exists.
+- The design must check each claimed fact's ATTACHMENT to the right event (the span lies within that event's own cited
+  statement), and the SURROUNDING QUALIFICATIONS of that statement (negation, uncertainty, plan, another occasion or another
+  performer), by means the design states and refutes.
+- The interpreter's own flag never establishes support. No field Gemini sets ("verified", a confidence) certifies its own answer.
+
+(e) **Holds.**
+- Only a decision that depends on an unresolved required fact is held, with one focused explanation or question.
+- Unrelated supported codes proceed.
+- Broad denials and genuine contradictions are preserved.
+- An unknown target never proves that two statements cannot conflict.
+
+(f) **Participants and approval.** Corti, Astra and Fable stay coding participants. Model agreement alone never approves a code.
+Reviewer approval stays required. Provider and model names stay out of customer screens and downloads.
+
+(g) **Acceptance, frozen BEFORE the prompt changes.**
+- The cases and their expected outcomes are committed by hash before any prompt change. They include:
+  - independent documents (g1, sealed; c6 and c7 stay sealed for the post-install walk);
+  - previous failures (the registry, the refutation rounds' confirmed findings, FRESH's recorded failures);
+  - equivalent paraphrases;
+  - meaning-changing variants;
+  - repeated runs.
+- Measured: wrong READY results (wrong code, wrong act or wrong facts), wrong exclusions and dropped genuine questions, AND
+  unnecessary holds.
+- The pass thresholds are fixed before measuring. An all-held result cannot pass.
+
+(h) **Recordings.** Fresh Gemini calls run under the existing testing authority (the cap of about $300, 2026-11-11), in small,
+bounded batches with concurrency one; every request's usage is recorded.
+- Fresh calls are labelled apart from replays.
+- Prior recordings (fresh-frozen, fresh2-frozen, the trial's) are kept unchanged.
+
+(i) **Installation.**
+- Only after the new interpretation path passes the frozen checks, through the established path (PR, CI, `scripts/merge-pr.sh`,
+  a committed declaration, `scripts/run-ruled-mutation.sh`).
+- Then the actual website workflow on the installed site: upload, processing, review, save, reload and downloaded reports.
+- Then verification that the deployed runtime uses Gemini and invokes none of the retired semantic vetoes.
+- The current site (c2e53f8e) stays available until the switch; existing records and the rollback image are kept.
+
+(j) **Report.** The installed revision, the remaining defects, the incorrect approvals, the unnecessary holds, the usage and the
+actual download results. The migration is NOT complete at the design, recording or offline-test stage.

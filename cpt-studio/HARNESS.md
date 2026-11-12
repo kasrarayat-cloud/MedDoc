@@ -4550,3 +4550,78 @@ owner:** session 30a58364. Every agent works under it; no other actor installs.
 
 **Completion** means the INSTALLED application actually uses the replacement successfully. A working adapter or a passed seven-case
 trial is not completion. Clinical-accuracy claims stay separate from functional completion.
+
+### Owner directive, 2026-11-12: Gemini owns the open-ended clinical interpretation; the phrase-by-phrase repair campaign is stopped
+
+Verbatim, with the session's interpretation (a)-(j), in `docs/foundation/rulings/2026-10-23-cpt-studio-gi.md` ("Owner directive,
+2026-11-12"); row in `docs/foundation/RULINGS.md`. It confirms the 2026-11-09 directive and changes the MEANS. The narrowing-only
+repair rounds were adding a deterministic word reader for each counterexample, and they were not converging: since round 5f, 14
+builders produced 7 integrable repairs, and every review found new critical paraphrases. That campaign stops here.
+
+**Preserved work and evidence (nothing deleted).**
+- The branch `feat/cpt-studio-gemini-interpreter-20261109` at 4726a8ce6261bfb874246d8fa3e6f6ceb99cd875, pushed and confirmed on
+  origin. It is the baseline the new design starts from.
+- DECISIONS D1-D177 (`cpt-studio/docs/gemini-migration/DECISIONS.md`), with every round's integration entry, record of repairs not
+  integrated, recorded residuals and accepted costs.
+- The session directory `gemini-migration/` holds:
+  - the rounds' patches, reviews and probes;
+  - refutation rounds 5-6, with their confirmed findings and case files;
+  - the audited differential gate `gate5/` and its run on 05a881a75 (3,165 cases);
+  - the FRESH recordings (fresh-frozen, fresh2-frozen) and scores;
+  - the head-to-head.
+- The U32 c4 four-result registry (1,374 entries), which is a regression corpus.
+
+**The required implementation (the owner's, verbatim; ticked only with linked evidence).**
+
+- [ ] Move judgments about timing, causality, entry ownership, targets, techniques, examined stations and extent into Gemini’s
+  structured, source-linked event inventory. Represent supported facts, explicit negatives, contradictions and unknowns distinctly.
+- [ ] Remove remaining keyword-based reinterpretations and semantic vetoes from the new path. Do not reproduce the old reader under a
+  new “verification” name. Keep deterministic schema, source-integrity, revision-binding and applicable coding-rule checks.
+- [ ] Define verification honestly. A quote existing in the document does not prove that it supports the claimed meaning. Check
+  attachment to the correct event and surrounding qualifications. Gemini must not certify its own answer simply by setting
+  “verified=true”.
+- [ ] Hold only decisions dependent on unresolved required facts. Give one focused explanation or question. Let unrelated supported
+  codes proceed. Preserve broad denials and genuine contradictions; never treat an unknown target as proof that statements cannot
+  conflict.
+- [ ] Keep Corti, Astra and Fable as coding participants. Model agreement alone must not approve a code. Preserve reviewer approval
+  and customer-facing provider confidentiality.
+
+**Acceptance, frozen BEFORE the prompt changes.**
+- Committed by hash, cases and expected outcomes together.
+- Composition:
+  - independent documents (g1, sealed; c6 and c7 stay sealed for the post-install walk);
+  - previous failures (the registry, the refutation rounds' confirmed findings, FRESH's recorded failures);
+  - equivalent paraphrases of each failure;
+  - meaning-changing variants;
+  - repeated runs.
+- Measured, per code: wrong READY (wrong code, wrong act or wrong facts), wrong exclusions and dropped genuine questions, AND
+  unnecessary holds.
+- The pass thresholds are written down before measuring. An all-held result cannot pass.
+
+**Recordings.**
+- Fresh Gemini calls run under the existing testing authority (the cap of about $300, 2026-11-11), in small, bounded batches with
+  concurrency one, each with its own cost cap; every request's usage is recorded.
+- Fresh calls are labelled apart from replays and text-only runs.
+- Prior recordings are kept unchanged.
+
+**Installation and completion.**
+- Install only after the new path passes the frozen checks, through the established path: PR, CI, `scripts/merge-pr.sh`, a
+  declaration committed in `docs/foundation/mutations/`, and `scripts/run-ruled-mutation.sh`.
+- Then run the actual website workflow on the installed site: upload, processing, review, save, reload and downloaded reports.
+- Then verify that the deployed runtime uses Gemini and invokes none of the retired semantic vetoes (operator-side evidence).
+- The current site (c2e53f8e) stays available until the switch; existing records and the rollback image are kept.
+- The report states: the installed revision, the remaining defects, the incorrect approvals, the unnecessary holds, the usage and
+  the actual download results.
+- The migration is NOT complete at the design, recording or offline-test stage.
+
+**Status, 2026-11-12.** Recorded. Next, in order:
+1. Freeze the acceptance cases and expected outcomes. No prompt change happens before this.
+2. Design (the inventory's attributes and states, the attachment and qualification checks, the fail-closed hold policy, the
+   retirement list).
+3. Implement.
+4. Fresh recordings and measurement.
+5. Refutation.
+6. PR, CI and merge.
+7. Install.
+8. The website walk.
+9. The report.
