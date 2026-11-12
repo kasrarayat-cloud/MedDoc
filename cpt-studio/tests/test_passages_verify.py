@@ -164,6 +164,28 @@ class VerifyPassagesTests(SimpleTestCase):
         self.assertEqual(status, 2)
         self.assertIn('pypdf is not available', output)
 
+    def test_a_pdf_past_an_advisory_limit_cannot_be_checked(self):
+        # pypdf 6.21.4 leaves a cross-reference stream past #4269's limit out and reads on: pages it held drop out and
+        # renumber, so a check that fails on 6.21.2's reading could pass (pypdf-r6 L6, L7). It is never read past.
+        from tests.support import pypdf_limits as shapes
+
+        pypdf_log = logging.getLogger('pypdf')  # pypdf logs the section it leaves out
+        self.addCleanup(pypdf_log.setLevel, pypdf_log.level)
+        pypdf_log.setLevel(logging.CRITICAL)
+        for hidden in ('kids', 'annotation', 'encrypt'):
+            with self.subTest(hidden=hidden), self.assertRaises(verify.CannotCheck) as raised:
+                verify.page_texts(shapes.past_the_limit(hidden))
+            self.assertEqual(str(raised.exception), verify.LIMIT_REACHED)
+        past = self.tmp / 'past.pdf'
+        past.write_bytes(shapes.past_the_limit('kids'))
+        named = dict(data_for(self.pdf_bytes), source=dict(data_for(self.pdf_bytes)['source'],
+                                                           sha256=hashlib.sha256(past.read_bytes()).hexdigest()))
+        status, output = self.run_verify((self.write(named, 'past.json'), past))
+        self.assertEqual(status, 2, output)
+        self.assertIn('passages  cannot check: the PDF goes past a limit', output)
+        # control: at the limit every page is read
+        self.assertEqual(len(verify.page_texts(shapes.past_the_limit('annotation', entries=shapes.LIMIT))), 1)
+
     def test_data_and_pdf_must_come_in_pairs(self):
         out = io.StringIO()
         status = verify.main(['--data', 'a.json', '--data', 'b.json', '--pdf', 'a.pdf'], out=out)

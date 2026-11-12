@@ -9,8 +9,9 @@ gunicorn==23.0.0
 whitenoise==6.12.0
 argon2-cffi==25.1.0
 requests==2.34.2
-# 6.21.4 fixes CVE-2026-119203 to CVE-2026-119209 in 6.21.2 (uploads are parsed). The extraction child reads it as
-# 6.21.2 reads except where an advisory fix decides (studio/ingest/pypdf_compat.py, which accepts exactly 6.21.4).
+# 6.21.4 fixes CVE-2026-119203 to CVE-2026-119209 in 6.21.2 (uploads are parsed). Wherever CPT Studio reads a PDF
+# with it (the extraction child, ops/verify_passages.py, the tests) it is read as 6.21.2 reads except where an advisory
+# fix decides (studio/ingest/pypdf_compat.py, which accepts exactly 6.21.4; ops/install.py checks it in the image).
 pypdf==6.21.4
 # pypdf's AES provider: without it every AES-encrypted PDF fails to open.
 cryptography==50.0.1

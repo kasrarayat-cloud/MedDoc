@@ -12,8 +12,9 @@ Each --data file is checked against the --pdf given in the same position:
   quotes    every "quoted" text in the source's license and scope notes occurs in the PDF's text
 
 Exit status: 0 every check passed; 1 at least one check failed; 2 a check could not be performed (an unreadable file,
-invalid JSON, pypdf unavailable) and nothing failed. It reads no network and no database, and needs the PDFs, so it
-never runs in CI; its own tests (tests/test_passages_verify.py) use a small synthetic PDF.
+invalid JSON, pypdf unavailable or not the one proven, a PDF past one of pypdf's advisory limits) and nothing failed.
+It reads no network and no database, and needs the PDFs, so it never runs in CI; its own tests
+(tests/test_passages_verify.py) use a small synthetic PDF.
 
 The data file layout and the passage rules are studio/reference/passages.py's; this script reads the JSON itself so
 that it runs without Django.
@@ -36,6 +37,10 @@ class CannotCheck(Exception):
     """A check could not be performed; it neither passed nor failed."""
 
 
+LIMIT_REACHED = ('the PDF goes past a limit pypdf 6.21.4 applies to the files it reads (#4269 cross-reference stream '
+                 'entries or #4290 page entries); nothing past it was read')
+
+
 def collapse(text: str) -> str:
     return ' '.join(text.split())
 
@@ -46,7 +51,10 @@ def page_texts(data: bytes) -> list[str]:
     except ImportError as exc:
         raise CannotCheck(f'pypdf is not available: {exc}') from exc
     # The passages were proven on pypdf 6.21.2's reading; pypdf 6.21.4 is read the same way, as the extraction child
-    # reads it (studio/ingest/pypdf_compat.py), so a verdict never changes with the library.
+    # reads it (studio/ingest/pypdf_compat.py), except where an advisory fix decides. A file past one of the two
+    # advisory limits the reader names (#4269 cross-reference stream entries, #4290 page entries) cannot be checked:
+    # pypdf 6.21.4 leaves the section out and reads on, and pages it held would drop out and renumber, so a check
+    # that fails on 6.21.2's reading could pass (pypdf-r6 L6, L7). Nothing is read past the limit.
     service = str(Path(__file__).resolve().parents[1])
     if service not in sys.path:
         sys.path.insert(0, service)
@@ -54,10 +62,19 @@ def page_texts(data: bytes) -> list[str]:
     try:
         apply()
     except PypdfCompatError as exc:
-        raise CannotCheck(f'pypdf is not the version this check was proven with: {exc}') from exc
+        raise CannotCheck(f'pypdf is not the one this check was proven with: {exc}') from exc
+    from studio.ingest.pdf import advisory_limit  # noqa: PLC0415 - after apply(): the reader binds pypdf by name
+    reader = PdfReader.__new__(PdfReader)  # bound before its constructor runs, which may raise past the limit
     try:
-        return [page.extract_text() or '' for page in PdfReader(io.BytesIO(data)).pages]
+        reader.__init__(io.BytesIO(data))
+        if advisory_limit(None, reader):
+            raise CannotCheck(LIMIT_REACHED)
+        return [page.extract_text() or '' for page in reader.pages]
+    except CannotCheck:
+        raise
     except Exception as exc:  # noqa: BLE001 - any parse failure means the text could not be read
+        if advisory_limit(exc, reader):
+            raise CannotCheck(LIMIT_REACHED) from exc
         raise CannotCheck(f'the PDF could not be read: {exc}') from exc
 
 

@@ -1,38 +1,63 @@
-"""pypdf 6.21.4 read the way pypdf 6.21.2 reads, for the extraction child (ARCHITECTURE 5.1).
+"""pypdf 6.21.4 read the way pypdf 6.21.2 reads (ARCHITECTURE 5.1).
 
 CPT Studio pins pypdf 6.21.4 for its fixes of seven advisories against 6.21.2 (CVE-2026-119203 to CVE-2026-119209:
 denial of service from a crafted PDF). The reader was built and judged on 6.21.2, and 6.21.4 also changes how some
 documents read in ways that are not part of those fixes. ``apply`` restores 6.21.2's behaviour for each such change
 the reader reaches, by replacing the smallest pypdf function that holds it, and keeps every change that is part of
-an advisory fix, and 6.21.4's MemoryError handling. It changes nothing else:
+an advisory fix, and 6.21.4's MemoryError handling. It changes nothing else.
+
+Where it is applied, which is every place CPT Studio reads a PDF with pypdf: the extraction child, before it imports
+the reader (studio/ingest/_child.py parse); ops/verify_passages.py page_texts; the tests package
+(tests/__init__.py, for the reader tests that run in the test process); and ops/verification/test_generate.py, the
+one suite CI discovers on its own. The web and worker processes import parts of pypdf (its code tables) but never
+build a PdfReader: every upload is read by the child.
 
 - pypdf must be exactly the 6.21.4 the patches were proven against: its version, the sha256 of every one of its
-  source files (_MANIFEST), and the sha256 of each replaced function's source (inspect.getsource), whose loaded
-  code must be what that source compiles to.
+  source files (_MANIFEST), and the sha256 of each replaced function's source, whose loaded code must be what that
+  source compiles to where it stands. The source is read as a line range of the proven file's bytes (the text
+  inspect.getsource gives), never through inspect, tokenize or linecache, which keep a copy of each whole file in the
+  process (pypdf-r6 F3: about 1.1 MiB of the extraction child's address-space limit).
+- the advisory fixes the reader depends on and the layer does not replace (#4269: PdfReader.__init__,
+  _read_xref_tables_and_trailers, _read_pdf15_xref_stream; #4290: PdfDocCommon._flatten, _flatten_leaf_page) are
+  checked the same way, never patched (_CHECKED).
 - each replacement is that source with the listed edits, each found exactly once, and its sha256 is checked. Seven
   replacements are, byte for byte, pypdf 6.21.2's function; two are 6.21.4's with 6.21.2's lines put back and
-  6.21.4's MemoryError lines kept; one is 6.21.4's with the #4265 edit below.
+  6.21.4's MemoryError lines kept; three are 6.21.4's with an edit to an advisory fix's lines, below.
 - every binding of a replaced function is rebound (its module or class attribute, and each module that imported it
   by name, all listed in _BINDINGS); afterwards nothing may still reach the replaced function (it must be
   collected).
-- one edit of an advisory fix's line (#4265 kept, its outcome named): where pypdf 6.21.4 turns a MemoryError inside
-  a dictionary into a read error, DictionaryObject.read_from_stream raises the MemoryError itself, so the reader names
-  it as it names every memory failure; its RecursionError, message and warning changes stay 6.21.4's. It is an edit,
-  never a wrapper: a wrapper adds a Python frame to every nested dictionary, so a dictionary nested a few hundred
-  levels deep, which pypdf 6.21.2 and 6.21.4 both read, would meet the recursion limit (pypdf-r6 reconcile).
+- three edits of an advisory fix's lines, each keeping the fix:
+  * #4265: where pypdf 6.21.4 turns a MemoryError inside a dictionary into a read error,
+    DictionaryObject.read_from_stream raises the MemoryError itself, so the reader names it as it names every memory
+    failure; its RecursionError, message and warning changes stay 6.21.4's. It is an edit, never a wrapper: a wrapper
+    adds a Python frame to every nested dictionary, so a dictionary nested a few hundred levels deep, which pypdf
+    6.21.2 and 6.21.4 both read, would meet the recursion limit (pypdf-r6 reconcile).
+  * #4269 (PdfReader._read_xref): a cross-reference stream (/XRefStm) that one read of the sections has already read,
+    named again by an older trailer (at its offset, or at another one before its object header), is neither read nor
+    counted again. pypdf 6.21.2's second read added no entry, but 6.21.4 counted every read toward its
+    2,000,000-entry limit, so one stream of 1,000,001 entries named twice was refused, and a distinct section after
+    it was dropped (pypdf-r6 L4, L5). Every distinct stream still counts.
+  * #4269 (PdfReader._sanitize_pdf15_xref_stream_index_pairs): a negative /Index count takes part in the clamp's
+    arithmetic as in 6.21.2 (pypdf-r6 F1: 6.21.4's count of 0 changed which entries an update shadows), and is passed
+    on as 0, so it reads no entry and counts no entry toward the limit.
+
+What the checks are for: they catch a pypdf that is not the proven one by accident (another version, a changed,
+missing or extra file, a stale or foreign .pyc for a replaced or checked function, a binding the layer does not know).
+They are not a defence against bytecode forged into site-packages (a module's loaded code is compared only for the
+functions above): whoever can write there can change pypdf's behaviour without the layer noticing, as they could
+without the layer.
 
 Every check of the installed pypdf runs before anything is changed, and the checks after patching (each binding
 holds its replacement; nothing reaches a replaced function) refuse too. Any failure raises PypdfCompatError and the
-refusal sticks for the life of the process: the extraction child then reports that this server cannot read PDFs,
-and never reads with unpatched behaviour. Importable without Django; imports pypdf only when applied.
+refusal sticks for the life of the process: the extraction child then fails the document with a named message and
+records the reason for operators (engine 'pypdf_compat'), and never reads with unpatched behaviour. Importable
+without Django; imports pypdf only when applied.
 """
 from __future__ import annotations
 
 import gc
 import hashlib
 import importlib
-import inspect
-import linecache
 import os
 import pathlib
 import sys
@@ -52,9 +77,19 @@ class PypdfCompatError(Exception):
 class _Patch:
     target: str  # 'module:qualname'
     hunks: tuple  # the hunks of the pypdf 6.21.2 -> 6.21.4 diff it restores (HUNKS.tsv)
-    original_sha256: str  # pypdf 6.21.4's inspect.getsource text
+    lines: tuple  # (first, last): its lines in pypdf 6.21.4's file, decorators included (inspect.getsource's extent)
+    original_sha256: str  # sha256 of those lines: pypdf 6.21.4's inspect.getsource text
     edits: tuple  # (old, new): each old occurs exactly once in that text
     result_sha256: str
+
+
+@dataclass(frozen=True)
+class _Checked:
+    """A function the layer does not replace, whose loaded code must be what its proven source compiles to."""
+    target: str  # 'module:qualname'
+    fix: str  # the advisory fix it holds
+    lines: tuple  # (first, last) in pypdf 6.21.4's file
+    sha256: str
 
 
 @dataclass
@@ -71,7 +106,7 @@ class _Plan:
 
 _PATCHES = (
     _Patch('pypdf._cmap:_parse_encoding', ('_cmap.py @@ -114,7 +114,7 @@', '_cmap.py @@ -139,7 +139,9 @@'),
-           '55fb9322af220378f5f15b327a507f60363cebc4dbbcd7be23bdb32f9b1325da',
+           (70, 150), '55fb9322af220378f5f15b327a507f60363cebc4dbbcd7be23bdb32f9b1325da',
            (
                ('            encoding = charset_encoding[cast(str, enc["/BaseEncoding"])].copy()\n'
                 '        except KeyError:\n',
@@ -84,7 +119,7 @@ _PATCHES = (
            ),
            '58eedaefdeabfb64635561c1ced4c13a871b913fac0d136fff06cf69d202e80c'),
     _Patch('pypdf._cmap:_glyph_name_to_unicode', ('_cmap.py @@ -456,17 +458,20 @@',),
-           '754a54900ba1b9aa563edbc7f8697e3855b9a949e31c790fc0f5f222975e0e46',
+           (463, 476), '754a54900ba1b9aa563edbc7f8697e3855b9a949e31c790fc0f5f222975e0e46',
            (
                ('        if glyph_name.startswith("/uni"):\n'
                 '            code_point = glyph_name[4:]\n'
@@ -99,21 +134,21 @@ _PATCHES = (
            ),
            'd8203db34f5db94e60a7585b4670ca8f088e0bb1293dfda8c422cbdc5233eda0'),
     _Patch('pypdf._text_extraction:get_text_operands', ('_text_extraction/__init__.py @@ -214,7 +214,7 @@',),
-           '493501e21a37f28fdf2fbeaf7aa64dda7d81b3cd8e0b82b5abf7c8ad3a5567f0',
+           (187, 230), '493501e21a37f28fdf2fbeaf7aa64dda7d81b3cd8e0b82b5abf7c8ad3a5567f0',
            (
                ('                    text = tt.decode(font.encoding, "replace")\n',
                 '                    text = tt.decode(font.encoding, "surrogateescape")\n'),
            ),
            '2da6ff077f90d1dd7801abeb386fd564c2ee6d7452a332b0d2fed725be82626b'),
     _Patch('pypdf.generic._font:Font._collect_cid_character_widths', ('generic/_font.py @@ -238,7 +238,7 @@',),
-           '2d1e0d7fd521eee5dca83a9dfbc10593353799e4a93be17e8bf7203b97cfbb89',
+           (205, 279), '2d1e0d7fd521eee5dca83a9dfbc10593353799e4a93be17e8bf7203b97cfbb89',
            (
                ('                        chr(_cidx): _width.get_object()\n',
                 '                        chr(_cidx): _width\n'),
            ),
            '6ddf7c26a2616860e70f65f89078b967fd8c99ae56f83211034e7f4eb1639939'),
     _Patch('pypdf._encryption:Encryption.read', ('_encryption.py @@ -1310,11 +1310,6 @@',),
-           '9b4a70af3e55f39fe5d6a3db59ea59ef0029ca7b4d52541ad6e0259beece6e71',
+           (1241, 1353), '9b4a70af3e55f39fe5d6a3db59ea59ef0029ca7b4d52541ad6e0259beece6e71',
            (
                ('            ) * 8\n'
                 '        encrypt_metadata = ',
@@ -127,7 +162,7 @@ _PATCHES = (
            ),
            '93f9ace9eb4bb1e24d866d483b429f6325751929d4539a39adbd73ed99201aab'),
     _Patch('pypdf.filters:FlateDecode.decode', ('filters.py @@ -198,13 +198,10 @@',),
-           '9682e530f16925337f4ae88f50ebcf66ac6494f54595e61f951bf120654d3558',
+           (179, 243), '9682e530f16925337f4ae88f50ebcf66ac6494f54595e61f951bf120654d3558',
            (
                ('        if isinstance(decode_parms, dict):\n'
                 '            parameters = decode_parms\n'
@@ -143,7 +178,7 @@ _PATCHES = (
            ),
            '376651bf590c153e1a72ec31011556055f0df8efc7c910174b645bd42e7e3be1'),
     _Patch('pypdf.filters:CCITTFaxDecode._get_parameters', ('filters.py @@ -742,26 +739,44 @@',),
-           '832a31754a63b9fde747fbda27ab9b90de81d7c515972d1976abc63e5ee2932f',
+           (737, 789), '832a31754a63b9fde747fbda27ab9b90de81d7c515972d1976abc63e5ee2932f',
            (
                ('        def get_integer(value: Any, key: str) -> int:\n'
                 '            if isinstance(value, PdfObject):\n'
@@ -226,7 +261,7 @@ _PATCHES = (
            ),
            '3c43ef72c137975ca8d6b2fff08cb929b59297b59ab28503da5963b46b11194c'),
     _Patch('pypdf.filters:decode_stream_data', ('filters.py @@ -967,10 +982,17 @@', 'filters.py @@ -988,7 +1010,7 @@'),
-           'da01f1a497f3f18f5f455d440131470c3c2bb96fedfeb835e825411610549e0a',
+           (933, 1034), 'da01f1a497f3f18f5f455d440131470c3c2bb96fedfeb835e825411610549e0a',
            (
                ('        params = params.get_object()\n'
                 '        if is_null_or_none(params):\n'
@@ -248,7 +283,7 @@ _PATCHES = (
            ),
            '581d6148f55f9bb0b664e89ba19194c596a9464f7634d6d6a76d2817c32ce8d0'),
     _Patch('pypdf._page:PageObject._extract_text', ('_page.py @@ -1956,7 +1960,9 @@',),
-           '59d9347ab51d1b401b4036e5eea264d4d83c3bd91be940615b8d039e2cec4c9b',
+           (1871, 2034), '59d9347ab51d1b401b4036e5eea264d4d83c3bd91be940615b8d039e2cec4c9b',
            (
                ('            elif operator == b"TD" and len(operands) >= 2:\n'
                 '                # a non-numeric ty leaves the leading unchanged, like a non-numeric TL\n'
@@ -263,7 +298,7 @@ _PATCHES = (
     # it ("needs more memory") instead of reading a partial dictionary or calling the file damaged.
     _Patch('pypdf.generic._data_structures:DictionaryObject.read_from_stream',
            ('generic/_data_structures.py @@ -675,12 +680,12 @@',),
-           '4867dab3632d970bdc7ca59eeb50d6fa01d5fd1eadf8202d36170f8280b1649a',
+           (625, 711), '4867dab3632d970bdc7ca59eeb50d6fa01d5fd1eadf8202d36170f8280b1649a',
            (
                ('            except (MemoryError, RecursionError) as exc:\n'
                 '                raise PdfReadError("Error reading PDF file.") from exc\n',
@@ -273,6 +308,88 @@ _PATCHES = (
                 '                raise PdfReadError("Error reading PDF file.") from exc\n'),
            ),
            'aa37af7c1452a6b01899feb9e45c47250229c1745e3ac820ffb60c2674a4e389'),
+    # Not a restore: #4269 (CVE-2026-119209) counts the entries of every cross-reference stream it reads toward its
+    # 2,000,000-entry limit, and so did a second read of one stream named by two trailers, which pypdf 6.21.2 made
+    # without adding an entry (each was used_before): a document of 1,000,001 entries was refused, and a distinct
+    # section read after the repeat was left out (pypdf-r6 L4, L5). A stream this read of the sections has read (or
+    # counted, then left out at the limit) is neither read nor counted again, whether an older trailer names it at the
+    # same offset or at another one before its header (whitespace, a comment); a read that failed before it counted
+    # anything is tried again, as 6.21.2 tried it. Two offsets that parse to different headers are two reads, as they
+    # were on 6.21.2. The set is the pass's: a new read() makes a new self.xref.
+    _Patch('pypdf._reader:PdfReader._read_xref', ('_reader.py @@ -1266,6 +1287,8 @@',),
+           (1274, 1301), '2def5dbdfdc44a8cff68b5247e0ff4015e05382612a65224216d58e8f0676ac5',
+           (
+               ('            stream.seek(cast(int, new_trailer["/XRefStm"]) + 1, 0)\n'
+                '            try:\n'
+                '                self._read_pdf15_xref_stream(stream)\n'
+                '            except MemoryError:  # pragma: no cover  # TODO: BLE001\n'
+                '                raise\n'
+                '            except Exception:\n'
+                '                logger_warning(\n',
+                '            stream.seek(cast(int, new_trailer["/XRefStm"]) + 1, 0)\n'
+                '            # pypdf_compat: a cross-reference stream this read of the sections has read is not read or\n'
+                '            # counted again, however an older trailer names it (pypdf 6.21.2 added no entry from it; #4269\n'
+                '            # counts each distinct stream once). A stream is its object header: number, generation and\n'
+                '            # where its dictionary starts, as the read below parses them from this offset.\n'
+                '            read_here = self.__dict__.get("_pypdf_compat_xref_streams")\n'
+                '            if read_here is None or read_here[0] is not self.xref:  # a new read of the sections\n'
+                '                read_here = self._pypdf_compat_xref_streams = (self.xref, set())\n'
+                '            start = stream.tell()\n'
+                '            try:\n'
+                '                stream.seek(-1, 1)\n'
+                '                section = (*self.read_object_header(stream), stream.tell())\n'
+                '            except MemoryError:  # pragma: no cover  # TODO: BLE001\n'
+                '                raise\n'
+                '            except Exception:  # the read below fails the same way, before it counts anything\n'
+                '                section = None\n'
+                '            stream.seek(start, 0)\n'
+                '            counted = self._xref_stream_entry_count\n'
+                '            try:\n'
+                '                if section is None or section not in read_here[1]:\n'
+                '                    self._read_pdf15_xref_stream(stream)\n'
+                '                    if section is not None:\n'
+                '                        read_here[1].add(section)\n'
+                '            except MemoryError:  # pragma: no cover  # TODO: BLE001\n'
+                '                raise\n'
+                '            except Exception:\n'
+                '                if section is not None and self._xref_stream_entry_count != counted:  # counted, left out\n'
+                '                    read_here[1].add(section)\n'
+                '                logger_warning(\n'),
+           ),
+           'c0ae14c66da0179adfb1ab6c6f895d787499d6539f0855355d3a19c3196c8bfd'),
+    # Not a restore: #4269 (CVE-2026-119209) also turned a negative /Index count into 0 before the clamp to the
+    # stream's size, which changes the clamp's running total, so the counts after it, and so which entries an update
+    # shadows: a small update read a superseded definition's text on 6.21.2 and the current one on 6.21.4 (pypdf-r6
+    # F1). The count takes part in the arithmetic as in 6.21.2 and is passed on as 0, so it reads no entry and counts
+    # no entry toward #4269's limit, which still bounds every entry read; its warning and strict refusal stay.
+    _Patch('pypdf._reader:PdfReader._sanitize_pdf15_xref_stream_index_pairs', ('_reader.py @@ -1343,6 +1366,16 @@',),
+           (1344, 1397), '036a6c34089d465e6ddc736d4e477315f6ba85e272f2228f6442cabb885d745f',
+           (
+               ('                        count=pair_value_int,\n'
+                '                    )\n'
+                '                    pair_value_int = 0\n',
+                '                        count=pair_value_int,\n'
+                '                    )\n'),
+               ('                total += pair_value_int\n',
+                '                total += pair_value_int  # pypdf 6.21.2: a negative count lowers the total\n'
+                '                pair_value_int = max(pair_value_int, 0)  # pypdf_compat: no entry read or counted\n'),
+           ),
+           'dc89932b5e9a009b6a4a878aa20ba50e4c0a6efe29c26f962bc401d14dbf4f49'),
+)
+
+# Advisory fixes the reader depends on that no patch replaces: their loaded code is checked against their proven
+# source, as each patch target's is (pypdf-r6 FC-2), and nothing in them is changed.
+_CHECKED = (
+    _Checked('pypdf._reader:PdfReader.__init__', '#4269 (its limit and counter)', (127, 173),
+             '1e90b0f398c8165a98acac19304febd0a51607dc16bd680b21ac92b4bb6f2189'),
+    _Checked('pypdf._reader:PdfReader._read_xref_tables_and_trailers', '#4269 (the counter reset once per read)',
+             (1204, 1257), 'a2891c413587db9347d277f10486af121d23bb2afe5f5adc3935d81544df8505'),
+    _Checked('pypdf._reader:PdfReader._read_pdf15_xref_stream', '#4269 (the entries counted, the limit raised)',
+             (1399, 1451), '4cc029555150139c32bd4cf3798c94985a7dcfd07279eb147c24d56e6cfedf6b'),
+    _Checked('pypdf._doc_common:PdfDocCommon._flatten', '#4290 (the page entries allowed)', (1356, 1434),
+             '7996c058fd2f29018e4387e22557cce1a721385098a2111b34146fe4059f40b2'),
+    _Checked('pypdf._doc_common:PdfDocCommon._flatten_leaf_page', '#4290 (the page entries counted, the limit raised)',
+             (1507, 1545), '598daba37c44b00affe7ff9ce7f82d3f17ebfc8e4afc463afb381084ff673d12'),
 )
 
 # A name a replacement reads that pypdf 6.21.4's module no longer imports (hunk filters.py @@ -66,9 +66,9 @@):
@@ -388,7 +505,9 @@ def _apply() -> tuple:
         raise PypdfCompatError(f'pypdf {pypdf.__version__} is installed; this layer is proven for {PYPDF_VERSION}.')
     root = _check_manifest(pypdf)
     # 1. Check and build everything; nothing is changed yet.
-    plans = [_plan(patch) for patch in _PATCHES]
+    plans = [_plan(root, patch) for patch in _PATCHES]
+    for checked in _CHECKED:
+        _check_function(root, checked)
     restored = [(importlib.import_module(module), name, getattr(importlib.import_module(source), source_name))
                 for module, name, source, source_name in _RESTORED_GLOBALS]
     for module, name, _ in restored:
@@ -449,18 +568,59 @@ def _owner(module, qualname: str):
     return getattr(module, cls), name
 
 
-def _plan(patch: _Patch) -> _Plan:
-    module_name, qualname = patch.target.split(':')
+def _function(target: str):
+    """(module, owner, name, the attribute as held, the function) for 'module:qualname'."""
+    module_name, qualname = target.split(':')
     module = importlib.import_module(module_name)
     owner, name = _owner(module, qualname)
     raw = vars(owner).get(name)
     func = raw.__func__ if isinstance(raw, (staticmethod, classmethod)) else raw
     if not isinstance(func, types.FunctionType):
-        raise PypdfCompatError(f'{patch.target} is not a function.')
-    source = inspect.getsource(func)
-    if hashlib.sha256(source.encode('utf-8')).hexdigest() != patch.original_sha256:
-        raise PypdfCompatError(f'{patch.target}: its source is not the proven text.')
-    if not _same_code(func.__code__, _compile(module, owner, name, source, func, func.__code__.co_filename)):
+        raise PypdfCompatError(f'{target} is not a function.')
+    return module, owner, name, raw, func
+
+
+def _source(root: pathlib.Path, module, target: str, lines: tuple, sha256: str) -> str:
+    """Lines ``lines`` (first, last) of the module's file: the text inspect.getsource gives for the function there,
+    read from the file's bytes, which are hashed again here (the text is the proven file's even if the file changed
+    since _check_manifest). Never through inspect, tokenize or linecache: they keep a copy of each whole file they read
+    for the life of the process, which the extraction child's address-space limit paid for (pypdf-r6 F3)."""
+    path = pathlib.Path(module.__file__)
+    try:
+        relative = path.relative_to(root).as_posix()
+    except ValueError:
+        raise PypdfCompatError(f'{module.__name__} is not loaded from the checked pypdf.') from None
+    data = path.read_bytes()
+    if hashlib.sha256(data).hexdigest() != _MANIFEST.get(relative):
+        raise PypdfCompatError(f'pypdf/{relative} is not the proven file.')
+    first, last = lines
+    if data.count(b'\n') < last or not 0 < first <= last:
+        raise PypdfCompatError(f'{target}: its source is not the proven text.')
+    start = 0
+    for _ in range(first - 1):
+        start = data.index(b'\n', start) + 1
+    end = start
+    for _ in range(last - first + 1):
+        end = data.index(b'\n', end) + 1
+    text = data[start:end].decode('utf-8')
+    if hashlib.sha256(text.encode('utf-8')).hexdigest() != sha256:
+        raise PypdfCompatError(f'{target}: its source is not the proven text.')
+    return text
+
+
+def _check_function(root: pathlib.Path, checked: _Checked) -> None:
+    """A function the layer keeps as it is: its loaded code must be what its proven source compiles to."""
+    module, owner, name, _, func = _function(checked.target)
+    source = _source(root, module, checked.target, checked.lines, checked.sha256)
+    if not _same_code(func.__code__, _compile(module, owner, name, source, checked.lines[0], func)):
+        raise PypdfCompatError(f'{checked.target}: its loaded code is not its source.')
+
+
+def _plan(root: pathlib.Path, patch: _Patch) -> _Plan:
+    module, owner, name, raw, func = _function(patch.target)
+    first = patch.lines[0]
+    source = _source(root, module, patch.target, patch.lines, patch.original_sha256)
+    if not _same_code(func.__code__, _compile(module, owner, name, source, first, func)):
         raise PypdfCompatError(f'{patch.target}: its loaded code is not its source.')
     text = source
     for old, new in patch.edits:
@@ -469,20 +629,19 @@ def _plan(patch: _Patch) -> _Plan:
         text = text.replace(old, new, 1)
     if hashlib.sha256(text.encode('utf-8')).hexdigest() != patch.result_sha256:
         raise PypdfCompatError(f'{patch.target}: the replacement is not the proven text.')
-    filename = f'<pypdf_compat {patch.target}>'
-    lines = ('\n' * (func.__code__.co_firstlineno - 1) + text).splitlines(True)
-    linecache.cache[filename] = (len(text), None, lines, filename)  # tracebacks show the replacement's own text
-    new_func = _define(module, owner, name, text, func, filename)
+    # Its code says where it came from: a traceback names '<pypdf_compat target>' at pypdf's own line numbers (no
+    # linecache entry is kept for it; the edited lines are in _PATCHES).
+    new_func = _define(module, owner, name, text, first, func, f'<pypdf_compat {patch.target}>')
     if new_func.__code__.co_freevars or func.__code__.co_freevars:
         raise PypdfCompatError(f'{patch.target}: a replaced function must not close over variables.')
     replacement = type(raw)(new_func) if isinstance(raw, (staticmethod, classmethod)) else new_func
     return _Plan(patch, owner, name, raw, func, replacement, new_func)
 
 
-def _compile(module, owner, name: str, source: str, original, filename: str) -> types.CodeType:
+def _compile(module, owner, name: str, source: str, first: int, original) -> types.CodeType:
     """The code object ``source`` (one function, as inspect.getsource gives it) compiles to where it stands: at its
-    own first line, inside its class (for name mangling), with the module's own future flags."""
-    code = compile(_placed(module, owner, source, original), filename, 'exec',
+    proven first line ``first``, inside its class (for name mangling), with the module's own future flags."""
+    code = compile(_placed(module, owner, source, first), original.__code__.co_filename, 'exec',
                    flags=original.__code__.co_flags & _FUTURE_ANNOTATIONS, dont_inherit=True)
     found = [const for const in (code.co_consts if owner is module else _class_body(code, owner.__name__).co_consts)
              if isinstance(const, types.CodeType) and const.co_name == name]
@@ -491,11 +650,10 @@ def _compile(module, owner, name: str, source: str, original, filename: str) -> 
     return found[0]
 
 
-def _placed(module, owner, source: str, original) -> str:
-    """``source`` where it stands in its module: at its own first line, inside its class (name mangling), after a
+def _placed(module, owner, source: str, first: int) -> str:
+    """``source`` where it stands in its module: at line ``first``, inside its class (name mangling), after a
     never-run line holding the module's own imports (the compiler emits a different call sequence for an attribute
     of an imported module, so the code compares equal only in that context)."""
-    first = original.__code__.co_firstlineno
     if owner is module:
         return _prelude(module) + '\n' * (first - 2) + source
     return _prelude(module) + '\n' * (first - 3) + f'class {owner.__name__}:\n' + source
@@ -504,8 +662,10 @@ def _placed(module, owner, source: str, original) -> str:
 # The names each touched module binds by import statements at its top level (computed from the proven file).
 _IMPORTED = {
     'pypdf._cmap': ('Any', 'ArrayObject', 'BinasciiError', 'BytesIO', 'Callable', 'DecodedStreamObject', 'DictionaryObject', 'LimitReachedError', 'NullObject', 'StreamObject', 'Union', '_FontFileCharacterMap', 'adobe_glyphs', 'cast', 'charset_encoding', 'logger_error', 'logger_warning', 'partial', 'sha256', 'unhexlify'),
+    'pypdf._doc_common': ('ABC', 'Any', 'ArrayObject', 'BooleanObject', 'ByteStringObject', 'CA', 'CheckboxRadioButtonAttributes', 'Core', 'DI', 'Destination', 'DictionaryObject', 'EmbeddedFile', 'EncodedStreamObject', 'Encryption', 'FA', 'Field', 'Fit', 'FloatObject', 'GoToActionArguments', 'IndirectObject', 'Iterable', 'Iterator', 'LimitReachedError', 'Mapping', 'NameObject', 'NamedTuple', 'NoReturn', 'NullObject', 'Optional', 'OutlineType', 'PG', 'PageObject', 'PagemodeType', 'PagesAttributes', 'PdfObject', 'PdfReadError', 'PyPdfError', 'Sequence', 'TextStringObject', 'TreeObject', 'Union', 'UserAccessPermissions', 'ViewerPreferences', 'XmpInformation', '_TraversalState', '_VirtualList', '_decompress_with_limit', 'abstractmethod', 'cast', 'create_string_object', 'datetime', 'deprecate_no_replacement', 'deprecation_with_replacement', 'get_configuration', 'index2labels', 'is_null_or_none', 'logger_warning', 'parse_iso8824_date', 'struct'),
     'pypdf._encryption': ('Any', 'ArrayObject', 'BooleanObject', 'ByteStringObject', 'CryptAES', 'CryptBase', 'CryptIdentity', 'CryptRC4', 'DictionaryObject', 'Enum', 'IntEnum', 'NameObject', 'NullObject', 'NumberObject', 'Optional', 'PdfObject', 'PdfReadError', 'StreamObject', 'TextStringObject', 'Union', 'aes_cbc_decrypt', 'aes_cbc_encrypt', 'aes_ecb_decrypt', 'aes_ecb_encrypt', 'create_string_object', 'hashlib', 'logger_warning', 'rc4_decrypt', 'rc4_encrypt', 'secrets', 'stringprep', 'struct', 'unicodedata'),
     'pypdf._page': ('Action', 'AnnotationDictionaryAttributes', 'Any', 'ArrayObject', 'BytesIO', 'Callable', 'CompressedTransformationMatrix', 'ContentStream', 'Decimal', 'DictionaryObject', 'EncodedStreamObject', 'FloatObject', 'Font', 'Image', 'ImageAttributes', 'IndirectObject', 'Iterable', 'Iterator', 'Literal', 'NameObject', 'NullObject', 'NumberObject', 'Optional', 'PG', 'PageSizeNotDefinedError', 'PageTrigger', 'Path', 'PdfCommonDocProtocol', 'PdfObject', 'PdfReadError', 'RES', 'RectangleObject', 'Sequence', 'StreamObject', 'TextExtraction', 'TransformationMatrixType', 'Union', '_INLINE_IMAGE_KEY_MAPPING', '_INLINE_IMAGE_VALUE_MAPPING', '_TraversalState', '_human_readable_bytes', '_layout_mode', 'asdict', 'cast', 'dataclass', 'deepcopy', 'deprecate', 'deprecate_no_replacement', 'deprecate_with_replacement', 'get_configuration', 'is_null_or_none', 'logger_warning', 'math', 'matrix_multiply', 'overload'),
+    'pypdf._reader': ('Any', 'ArrayObject', 'ByteStringObject', 'BytesIO', 'Callable', 'Destination', 'DictionaryObject', 'EmptyFileError', 'EncodedStreamObject', 'Encryption', 'FileNotDecryptedError', 'IndirectObject', 'Iterable', 'LimitReachedError', 'NameObject', 'NullObject', 'NumberObject', 'Optional', 'PageObject', 'PasswordType', 'Path', 'PdfDocCommon', 'PdfObject', 'PdfReadError', 'PdfStreamError', 'Self', 'StrByteType', 'StreamObject', 'StreamType', 'TK', 'TYPE_CHECKING', 'TextStringObject', 'TracebackType', 'Union', 'UnsupportedOperation', 'WHITESPACES_AS_BYTES', 'WrongPasswordError', 'XmpInformation', 'apply_legacy_configuration', 'cast', 'convert_to_int', 'get_stream_data', 'get_stream_size', 'is_null_or_none', 'itemgetter', 'logger_warning', 'os', 're', 'read_non_whitespace', 'read_object', 'read_previous_line', 'read_until_whitespace', 'skip_over_comment', 'skip_over_whitespace', 'sys'),
     'pypdf._text_extraction': ('Any', 'Callable', 'DictionaryObject', 'Font', 'Literal', 'Mapping', 'Optional', 'TextStringObject', 'Union', 'encode_pdfdocencoding', 'is_char_neutral', 'is_char_rtl', 'math'),
     'pypdf.filters': ('Any', 'ArrayObject', 'BooleanObject', 'CCITT', 'DependencyError', 'DictionaryObject', 'FT', 'FTA', 'ImageAttributes', 'IndirectObject', 'LZW', 'LimitReachedError', 'NoReturn', 'NumberObject', 'Optional', 'Path', 'PdfObject', 'PdfReadError', 'PdfStreamError', 'StreamAttributes', 'StreamObject', 'TemporaryDirectory', 'Union', 'WHITESPACES_AS_BYTES', '_LzwCodec', 'a85decode', 'binascii', 'cast', 'dataclass', 'deprecate', 'deprecation_with_replacement', 'find_spec', 'get_configuration', 'is_null_or_none', 'logger_warning', 'lru_cache', 'math', 'os', 'shutil', 'struct', 'subprocess', 'zlib'),
     'pypdf.generic._data_structures': ('Any', 'BinaryStreamType', 'BooleanObject', 'ByteStringObject', 'BytesIO', 'Callable', 'CheckboxRadioButtonAttributes', 'FT', 'FieldDictionaryAttributes', 'Fit', 'FloatObject', 'IndirectObject', 'Iterable', 'LimitReachedError', 'NameObject', 'NamedTuple', 'NullObject', 'NumberObject', 'Optional', 'OutlineFontFlag', 'PdfObject', 'PdfReadError', 'PdfReaderProtocol', 'PdfStreamError', 'PdfWriterProtocol', 'STREAM_TRUNCATED_PREMATURELY', 'Self', 'Sequence', 'StreamAttributes', 'StreamParsingBudget', 'StreamType', 'TA', 'TF', 'TextStringObject', 'Union', 'WHITESPACES', 'XmpInformationProtocol', 'cast', 'ceil', 'deprecation_no_replacement', 'extract_inline__ascii85_decode', 'extract_inline__ascii_hex_decode', 'extract_inline__dct_decode', 'extract_inline__run_length_decode', 'extract_inline_default', 'get_configuration', 'is_null_or_none', 'logger_warning', 'logging', 'os', 're', 'read_hex_string_from_stream', 'read_non_whitespace', 'read_string_from_stream', 'read_until_regex', 'read_until_whitespace', 'skip_over_comment', 'skip_over_comments', 'sys'),
@@ -519,11 +679,11 @@ def _prelude(module) -> str:
     return f'if __name__ is None: import {", ".join(_IMPORTED[module.__name__])}\n'
 
 
-def _define(module, owner, name: str, source: str, original, filename: str) -> types.FunctionType:
+def _define(module, owner, name: str, source: str, first: int, original, filename: str) -> types.FunctionType:
     """The function ``source`` defines, executed where it stands (the module's globals; inside its class for name
-    mangling), at its own first line, with the module's own future flags."""
+    mangling), at line ``first``, with the module's own future flags."""
     namespace: dict = {}
-    exec(compile(_placed(module, owner, source, original), filename, 'exec',  # noqa: S102
+    exec(compile(_placed(module, owner, source, first), filename, 'exec',  # noqa: S102
                  flags=original.__code__.co_flags & _FUTURE_ANNOTATIONS, dont_inherit=True), module.__dict__, namespace)
     value = namespace[name] if owner is module else vars(namespace[owner.__name__])[name]
     if type(value) is not type(vars(owner)[name]):

@@ -316,10 +316,17 @@ def _open(data: bytes) -> tuple[pypdf.PdfReader | None, str]:
     if b'startxref' in data[:end] and b'startxref' not in data[data.rfind(b'%%EOF', 0, end) + 1:end]:
         # The last revision has no startxref of its own: a parser would fall back to an earlier one.
         return None, UNANCHORED
-    reader = None
+    # Bound before its constructor runs, so that when the constructor raises after pypdf left a cross-reference
+    # stream out at #4269's limit, the limit is still seen (pypdf-r6 L2: an encryption dictionary held only there).
+    reader = pypdf.PdfReader.__new__(pypdf.PdfReader)
     try:
         # pypdf reads the file as it ends at that revision's marker: the padding carries no PDF data.
-        reader = pypdf.PdfReader(io.BytesIO(data[:end + len(b'%%EOF')]))
+        reader.__init__(io.BytesIO(data[:end + len(b'%%EOF')]))
+        # Before anything else reads an object: past the limit a section was left out, and each object it held
+        # would cost a search of the whole file (pypdf-r6 L1), or an /ID it held would read as a password (L3).
+        # Only read() counts, so the count is final here.
+        if advisory_limit(None, reader):
+            return None, LIMIT_REACHED
         if reader.is_encrypted and reader.decrypt('') == PasswordType.NOT_DECRYPTED:
             return None, PASSWORD
         with contextlib.suppress(IndexError):  # no pages at all: reported by _page_list
@@ -327,15 +334,14 @@ def _open(data: bytes) -> tuple[pypdf.PdfReader | None, str]:
     except (DependencyError, MemoryError):
         raise
     except Exception as exc:  # any parser error on untrusted bytes means the file is unreadable
-        return None, LIMIT_REACHED if _advisory_limit(exc, reader) else DAMAGED
-    if _advisory_limit(None, reader):
-        return None, LIMIT_REACHED
+        return None, LIMIT_REACHED if advisory_limit(exc, reader) else DAMAGED
     return reader, ''
 
 
-def _advisory_limit(exc, reader) -> bool:
+def advisory_limit(exc, reader) -> bool:
     """Whether pypdf stopped at one of ADVISORY_LIMITS: raised (``exc`` or one of its causes), or met while reading
-    a cross-reference stream it then left out (pypdf only logs that the section could not be read)."""
+    a cross-reference stream it then left out (pypdf only logs that the section could not be read). ``reader`` may
+    be one whose constructor raised. ops/verify_passages.py asks the same question."""
     for _ in range(16):
         if exc is None:
             break

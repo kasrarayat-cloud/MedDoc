@@ -1,7 +1,13 @@
-"""pypdf 6.21.4 read as pypdf 6.21.2 reads (studio/ingest/pypdf_compat.py): the layer is in place wherever PDFs are
-read, the extraction child reads each restored shape as 6.21.2 did, a pypdf the layer was not proven against is
-refused before anything is patched, and the two advisory limits the reader can meet are named. Synthetic PDFs only."""
+"""pypdf 6.21.4 read as pypdf 6.21.2 reads (studio/ingest/pypdf_compat.py): the layer is applied where CPT Studio
+reads PDFs with pypdf (the extraction child, ops/verify_passages.py, this test package, ops/verification's suite), the
+extraction child reads each restored shape as 6.21.2 did, a pypdf the layer was not proven against is refused before
+anything is patched and the reason is kept for operators, the advisory fixes the layer keeps are checked as loaded,
+the two advisory limits the reader can meet are named before anything is read past them, and the layer's address
+space is given back to the PDF child. Synthetic PDFs only."""
 import dataclasses
+import io
+import json
+import resource
 import subprocess
 import sys
 import textwrap
@@ -10,11 +16,14 @@ import zlib
 from pathlib import Path
 from unittest import mock
 
+import pypdf
 from pypdf.errors import LimitReachedError, PdfReadError
 
-from studio.ingest import _child, pypdf_compat
+from studio.ingest import _child, extract, pypdf_compat
+from studio.ingest import pdf as reader
 from studio.ingest.extract import Limits, extract_document
-from studio.ingest.pdf import LIMIT_REACHED, _advisory_limit
+from studio.types import to_jsonable
+from tests.support import pypdf_limits as shapes
 from tests.support.pypdf_guards import GUARDS, holds
 
 SERVICE = Path(__file__).resolve().parents[1]
@@ -24,7 +33,12 @@ TARGETS = ('pypdf._cmap:_parse_encoding', 'pypdf._cmap:_glyph_name_to_unicode', 
            'pypdf.generic._font:Font._collect_cid_character_widths', 'pypdf._encryption:Encryption.read',
            'pypdf.filters:FlateDecode.decode', 'pypdf.filters:CCITTFaxDecode._get_parameters',
            'pypdf.filters:decode_stream_data', 'pypdf._page:PageObject._extract_text',
-           'pypdf.generic._data_structures:DictionaryObject.read_from_stream')
+           'pypdf.generic._data_structures:DictionaryObject.read_from_stream', 'pypdf._reader:PdfReader._read_xref',
+           'pypdf._reader:PdfReader._sanitize_pdf15_xref_stream_index_pairs')
+# The advisory fixes the reader depends on that the layer keeps unpatched, and checks as loaded (pypdf-r6 FC-2).
+CHECKED = ('pypdf._reader:PdfReader.__init__', 'pypdf._reader:PdfReader._read_xref_tables_and_trailers',
+           'pypdf._reader:PdfReader._read_pdf15_xref_stream', 'pypdf._doc_common:PdfDocCommon._flatten',
+           'pypdf._doc_common:PdfDocCommon._flatten_leaf_page')
 
 
 def _stream(data: bytes, extra: str = '') -> bytes:
@@ -153,8 +167,8 @@ class EachPatchIsGuardedTests(unittest.TestCase):
 
 
 class RefusalTests(unittest.TestCase):
-    def run_layer(self, change: str) -> str:
-        """Apply the layer with ``change`` made to it, in a fresh interpreter; what it prints."""
+    def run_layer(self, change: str, why: bool = False) -> list:
+        """Apply the layer with ``change`` made to it, in a fresh interpreter; what it prints (and why it refused)."""
         code = textwrap.dedent(f'''
             import dataclasses
             from studio.ingest import pypdf_compat as layer
@@ -162,10 +176,12 @@ class RefusalTests(unittest.TestCase):
             try:
                 layer.apply()
                 print('applied')
-            except layer.PypdfCompatError:
+            except layer.PypdfCompatError as exc:
                 import pypdf._cmap, pypdf.filters
                 patched = pypdf._cmap._parse_encoding.__code__.co_filename.startswith('<pypdf_compat')
                 print('refused', 'patched' if patched or hasattr(pypdf.filters, 'NullObject') else 'unpatched')
+                if {why!r}:
+                    print(exc)
                 try:
                     layer.apply()
                 except layer.PypdfCompatError:
@@ -197,10 +213,42 @@ class RefusalTests(unittest.TestCase):
 
     def test_the_child_names_a_refusal_and_reads_nothing(self):
         with mock.patch.object(pypdf_compat, 'apply', side_effect=pypdf_compat.PypdfCompatError('not proven')), \
-                mock.patch('studio.ingest.pdf.extract_pdf') as reader:
+                mock.patch('studio.ingest.pdf.extract_pdf') as reader_called:
             result = _child.parse(_pdf(_lines(NOTE)), 'pdf', Limits(), None, 0.0, '/nonexistent')
         self.assertEqual((result.status, result.text, result.messages), ('failed', '', (_child.PDF_UNAVAILABLE,)))
-        reader.assert_not_called()
+        reader_called.assert_not_called()
+
+    def test_a_refusal_keeps_its_reason_for_operators_and_names_no_version(self):  # pypdf-r6 FC-3
+        reason = 'pypdf.filters:FlateDecode.decode: its loaded code is not its source.'
+        with mock.patch.object(pypdf_compat, 'apply', side_effect=pypdf_compat.PypdfCompatError(reason + ' ' * 300)):
+            result = _child.parse(_pdf(_lines(NOTE)), 'pdf', Limits(), None, 0.0, '/nonexistent')
+        self.assertEqual(result.engine, {'ingest': 'cpt-studio-ingest@3', 'pypdf_compat': (reason + ' ' * 300)[:200]})
+        self.assertEqual(_child.PDF_UNAVAILABLE, 'The PDF could not be read on this server: its PDF library is not the '
+                                                 'one the PDF reader was checked with.')
+        self.assertNotIn('version', _child.PDF_UNAVAILABLE)  # the cause may be a file, a binding or loaded code
+        # the parent keeps the reason: the child's answer passes its checks with the reason in it
+        answer = json.dumps(to_jsonable(result)).encode()
+        kept = extract._result(extract._ChildRun('exited', 0, answer), 'pdf', 'pdf-text', Limits(), {})
+        self.assertEqual((kept.status, kept.messages, kept.engine['pypdf_compat']),
+                         ('failed', (_child.PDF_UNAVAILABLE,), (reason + ' ' * 300)[:200]))
+        # a successful read records no reason (the identity of every read row is unchanged)
+        read = extract_document(_pdf(_lines(NOTE)), 'synthetic.pdf', 'application/pdf', ocr=None)
+        self.assertEqual((read.status, sorted(read.engine)), ('ok', ['ingest', 'pypdf']))
+
+    def test_the_unpatched_advisory_fixes_are_checked_as_loaded(self):  # pypdf-r6 FC-2
+        for target in CHECKED:
+            with self.subTest(target=target):
+                module, qualname = target.split(':')
+                owner, name = qualname.split('.')
+                # the function's loaded code replaced, as a stale or foreign .pyc would replace it
+                change = (f"import importlib; owner = getattr(importlib.import_module({module!r}), {owner!r}); "
+                          f"owner.{name}.__code__ = (lambda self, *a, **k: None).__code__.replace("
+                          f"co_name={name!r}, co_qualname={qualname!r})")
+                done = self.run_layer(change, why=True)
+                self.assertEqual(done[:2], ['refused', 'unpatched'], done)
+                self.assertIn(f'{target}: its loaded code is not its source.', ' '.join(done))
+        self.assertEqual(tuple(row.target for row in pypdf_compat._CHECKED), CHECKED)
+        self.assertFalse(set(CHECKED) & set(TARGETS))  # checked, never patched
 
 
 class AdvisoryLimitTests(unittest.TestCase):
@@ -214,15 +262,145 @@ class AdvisoryLimitTests(unittest.TestCase):
                     except LimitReachedError as exc:
                         raise PdfReadError(f'Trailer cannot be read: {exc}') from exc
                 except PdfReadError as wrapped:
-                    self.assertTrue(_advisory_limit(wrapped, None))
+                    self.assertTrue(reader.advisory_limit(wrapped, None))
 
     def test_a_limit_pypdf_6_21_2_had_stays_damage(self):
-        self.assertFalse(_advisory_limit(LimitReachedError('Reached maximum array element count.'), None))
-        self.assertFalse(_advisory_limit(PdfReadError('Could not find xref table at specified location'), None))
+        self.assertFalse(reader.advisory_limit(LimitReachedError('Reached maximum array element count.'), None))
+        self.assertFalse(reader.advisory_limit(PdfReadError('Could not find xref table at specified location'), None))
 
     def test_a_cross_reference_stream_left_out_at_the_limit_is_named(self):
-        reader = mock.Mock(_xref_stream_entry_count=2_000_008, _xref_stream_maximum_entries=2_000_000)
-        self.assertTrue(_advisory_limit(None, reader))
-        reader = mock.Mock(_xref_stream_entry_count=2_000_000, _xref_stream_maximum_entries=2_000_000)
-        self.assertFalse(_advisory_limit(None, reader))
-        self.assertTrue(LIMIT_REACHED.startswith('The PDF could not be read'))
+        counted = mock.Mock(_xref_stream_entry_count=2_000_008, _xref_stream_maximum_entries=2_000_000)
+        self.assertTrue(reader.advisory_limit(None, counted))
+        counted = mock.Mock(_xref_stream_entry_count=2_000_000, _xref_stream_maximum_entries=2_000_000)
+        self.assertFalse(reader.advisory_limit(None, counted))
+        self.assertTrue(reader.LIMIT_REACHED.startswith('The PDF could not be read'))
+
+
+def _read(data: bytes):
+    return extract_document(data, 'synthetic.pdf', 'application/pdf', ocr=None)
+
+
+class CrossReferenceStreamReadOnceTests(unittest.TestCase):
+    """#4269 counts the entries of every cross-reference stream pypdf reads; a stream named again by an older trailer
+    is neither read nor counted again (pypdf-r6 L4, L5, F2), as pypdf 6.21.2's second read added no entry."""
+
+    def counted(self, data: bytes, limit: int):
+        found = pypdf.PdfReader(io.BytesIO(data), xref_stream_maximum_entries=limit)
+        return found._xref_stream_entry_count, found
+
+    def test_a_repeated_stream_is_counted_once(self):
+        for alias in (False, True):  # named again at its offset, or one byte early (the line break before its header)
+            with self.subTest(alias=alias):
+                entries, found = self.counted(shapes.repeated(6_000, 3, alias=alias), 10_000)  # 6,000 x 3 trailers
+                self.assertEqual(entries, 6_000)
+                self.assertFalse(reader.advisory_limit(None, found))
+                self.assertEqual(found.get_object(9)['/Contents'], shapes.ANNOTATION)
+
+    def test_a_distinct_stream_after_a_repeat_is_read_and_counted(self):
+        entries, found = self.counted(shapes.repeated_then_distinct(3_000, 4_000), 10_000)  # X X Y
+        self.assertEqual(entries, 7_000)
+        self.assertEqual(found.get_object(9)['/Contents'], shapes.ANNOTATION)  # listed by Y alone
+
+    def test_distinct_streams_past_the_limit_are_still_counted(self):  # #4269 kept
+        with self.assertLogs('pypdf', 'WARNING') as logged:
+            entries, found = self.counted(shapes.repeated_then_distinct(6_000, 5_000, repeat=False), 10_000)
+        self.assertEqual(entries, 11_000)
+        self.assertTrue(reader.advisory_limit(None, found))
+        self.assertIn('can not be read, some object may be missing', ' '.join(logged.output))  # the stream left out
+
+    def test_through_the_child_a_repeat_reads_as_6_21_2(self):
+        for data in (shapes.repeated(1_000_001, 2), shapes.repeated(1_000_001, 2, alias=True),
+                     shapes.repeated_then_distinct(600_000, 700_001)):
+            result = _read(data)
+            self.assertEqual(result.status, 'ok', result.messages)
+            self.assertIn(shapes.ANNOTATION, result.text)
+        past = _read(shapes.repeated_then_distinct(1_000_000, 1_000_001, repeat=False))  # control: 2,000,001 distinct
+        self.assertEqual((past.status, past.messages), ('failed', (reader.LIMIT_REACHED,)))
+
+
+class PastTheLimitTests(unittest.TestCase):
+    """A file past #4269's limit is named before anything else reads it (pypdf-r6 L1-L3); at the limit it reads."""
+
+    def test_named_before_the_password_test_and_when_the_constructor_raises(self):
+        for hidden in ('password', 'encrypt', 'annotation', 'kids'):
+            with self.subTest(hidden=hidden):
+                result = _read(shapes.past_the_limit(hidden))
+                self.assertEqual((result.status, result.messages), ('failed', (reader.LIMIT_REACHED,)))
+        at = _read(shapes.past_the_limit('annotation', entries=shapes.LIMIT))  # control: exactly the limit
+        self.assertEqual(at.status, 'ok', at.messages)
+        self.assertIn(shapes.ANNOTATION, at.text)
+
+    def test_nothing_reads_an_object_once_the_limit_is_seen(self):
+        data = shapes.past_the_limit('kids')
+        with mock.patch.object(pypdf.PdfReader, 'get_page', autospec=True) as get_page, \
+                mock.patch.object(pypdf.PdfReader, 'decrypt', autospec=True) as decrypt, \
+                self.assertLogs('pypdf', 'WARNING'):
+            self.assertEqual(reader._open(data), (None, reader.LIMIT_REACHED))
+        get_page.assert_not_called()  # each missing kid would cost a search of the whole file (pypdf-r6 L1)
+        decrypt.assert_not_called()
+
+
+class NegativeIndexCountTests(unittest.TestCase):
+    """A negative /Index count takes part in the clamp's arithmetic as in pypdf 6.21.2 and reads and counts no entry
+    (pypdf-r6 F1; #4269 kept)."""
+
+    def test_the_arithmetic_is_6_21_2s_and_no_entry_is_counted(self):
+        with self.assertLogs('pypdf', 'WARNING') as logged:
+            found = pypdf.PdfReader(io.BytesIO(shapes.negative_count()))
+            stream = found.get_object(6)
+            pairs = found._sanitize_pdf15_xref_stream_index_pairs([0, -20, 6, 1, 0, 7], [0, 2, 1], stream)
+        self.assertEqual(pairs, [0, 0, 6, 1, 0, 7])  # 6.21.2: [0, -20, 6, 1, 0, 7]; 6.21.4: [0, 0, 6, 1, 0, 1]
+        self.assertEqual(found._xref_stream_entry_count, 8)  # 1 + 7: the negative count counts nothing
+        self.assertIn('Negative XRef count -20, using 0.', ' '.join(logged.output))  # #4269's warning kept
+        with self.assertRaises(PdfReadError) as raised:  # and its refusal in strict mode
+            pypdf.PdfReader(io.BytesIO(shapes.negative_count()), strict=True)
+        self.assertEqual(str(raised.exception.__cause__), 'Negative XRef count -20.')
+
+    def test_through_the_child_the_update_shadows_the_table_as_6_21_2(self):
+        result = _read(shapes.negative_count())
+        self.assertEqual(result.status, 'ok', result.messages)
+        self.assertTrue(result.text.rstrip().endswith(shapes.OLDER), result.text[-80:])
+        control = _read(shapes.negative_count(b'6 1 0 7'))  # no negative count: both versions read the table
+        self.assertTrue(control.text.rstrip().endswith(shapes.CURRENT), control.text[-80:])
+
+
+class AddressSpaceTests(unittest.TestCase):
+    """The layer's address space is given back to the PDF child (pypdf-r6 F3): the limit pypdf 6.21.2's reader had
+    for a document is unchanged."""
+
+    def test_only_the_pdf_child_is_given_the_layers_allowance(self):
+        limits = {kind: dict((which, soft) for which, soft, _ in extract._rlimits(Limits(), kind))
+                  for kind in ('pdf', 'docx', 'txt')}
+        self.assertEqual(limits['pdf'][resource.RLIMIT_AS], extract.AS_LIMIT_BYTES + extract.PDF_LAYER_AS_BYTES)
+        self.assertEqual(limits['docx'][resource.RLIMIT_AS], extract.AS_LIMIT_BYTES)
+        self.assertEqual(limits['txt'][resource.RLIMIT_AS], extract.AS_LIMIT_BYTES)
+        self.assertEqual(extract.PDF_LAYER_AS_BYTES % 4096, 0)
+
+    def test_the_layers_footprint_in_the_real_child_is_within_its_allowance(self):
+        """The smallest address-space limit at which the real child reads a guard PDF, with the layer and with the
+        layer replaced by a stub that applies nothing: the difference is the layer's footprint."""
+        data = GUARDS['a /BaseEncoding array'][1]
+        stub = ("import sys, types; stub = types.ModuleType('studio.ingest.pypdf_compat'); "
+                "stub.PypdfCompatError = type('PypdfCompatError', (Exception,), {}); stub.apply = lambda: (); "
+                "sys.modules['studio.ingest.pypdf_compat'] = stub; ")
+        run = "import runpy; runpy.run_module('studio.ingest._child', run_name='__main__', alter_sys=True)"
+
+        def smallest(prelude: str) -> int:
+            lo, hi = 16 * 1024 // 4, 512 * 1024 // 4  # pages (KiB / 4): fails at lo, reads at hi
+            with mock.patch.object(extract, 'CHILD_ARGV', (sys.executable, '-c', prelude + run)), \
+                    mock.patch.object(extract, '_child_env', lambda: dict(extract.tool_env(), PYTHONHASHSEED='0',
+                                                                          PYTHONDONTWRITEBYTECODE='1',
+                                                                          PYTHONNOUSERSITE='1', PYTHONUTF8='1')), \
+                    mock.patch.object(extract, 'PDF_LAYER_AS_BYTES', 0):
+                def reads(pages):
+                    with mock.patch.object(extract, 'AS_LIMIT_BYTES', pages * 4096):
+                        return _read(data).status == 'ok'
+                self.assertTrue(reads(hi))
+                self.assertFalse(reads(lo))
+                while hi - lo > 1:
+                    mid = (lo + hi) // 2
+                    lo, hi = (lo, mid) if reads(mid) else (mid, hi)
+            return hi * 4096
+
+        footprint = smallest('') - smallest(stub)
+        self.assertLessEqual(footprint, extract.PDF_LAYER_AS_BYTES, f'the layer now costs {footprint} bytes')
