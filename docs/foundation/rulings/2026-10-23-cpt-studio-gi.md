@@ -3161,3 +3161,95 @@ bounded batches with concurrency one; every request's usage is recorded.
 
 (j) **Report.** The installed revision, the remaining defects, the incorrect approvals, the unnecessary holds, the usage and the
 actual download results. The migration is NOT complete at the design, recording or offline-test stage.
+
+## Owner directive, 2026-11-12 — funding authority for the migration; the second Gemini call approved
+
+Received 2026-11-12 in session 68197eb1 (continuing 30a58364). The session had put four owner items:
+- the per-report cost of design v2's second Gemini call (class d);
+- the testing budget against the cap of about $300 (class d);
+- the loss on legacy encounters, where a context change needs an explicit re-check (class b);
+- a separate test key after the switch (class d).
+
+Verbatim:
+
+> I approve the second Gemini call per report. Keep the two-pass interpretation and checking design.
+>
+> You have my full funding support for the necessary Gemini, Corti, Astra, Fable and development-agent usage required to complete this CPT Studio migration. Do not pause for repeated price or testing-budget approvals.
+>
+> For this project’s authorized synthetic development, testing and verification, this instruction supersedes earlier owner-imposed monetary ceilings, including the approximately $300 campaign budget. Do not invent another spending ceiling. Continue using purposeful batches and record actual usage and costs.
+>
+> Record this authority in HARNESS.md and the relevant server execution controls. Preserve historical budgets, reservations, consumed attempts, failures and unknown costs. Do not fabricate credits or reset accounting.
+>
+> Continue through:
+> - Implementation of Gemini as the primary interpreter.
+> - Independent testing of both incorrect code acceptance and unnecessary holds.
+> - Resolution of the critical and materially incomplete findings.
+> - The PDF-library security update and required checks.
+> - Installation while keeping the existing website available.
+> - Actual upload, review, save, reload and downloaded-report verification.
+>
+> Keep Corti, Astra and Fable working on code proposals/review. Preserve reviewer approval, evidence integrity, tenant isolation, synthetic-only operation and customer-facing provider confidentiality.
+>
+> Actual authentication, quota or payment failures still require diagnosis. This approval does not authorize new subscriptions, automatic top-ups, new vendor agreements or real-patient processing.
+>
+> Do not return to endless phrase-by-phrase repairs of the old semantic reader. Complete the replacement, update the checklist with evidence, and report the installed revision, verified results, remaining limitations and measured costs.
+
+### Session interpretation, 2026-11-12 (68197eb1, on receipt) — recorded, not owner-ruled
+
+(a) **The second call is approved** (class d). Design v2's two passes stand: the interpretation, then the appraisal. The
+per-document cost of FINAL-V2 7.1 is accepted.
+
+(b) **Funding.** The usage needed to complete this migration is funded: Gemini, Corti, Astra, Fable and development
+agents.
+- For this project's authorized synthetic development, testing and verification, this supersedes the owner-imposed
+  monetary ceilings. That includes the testing authority of 2026-11-11 (about $300) as a ceiling on the session's sends.
+- The session invents no new ceiling. It no longer stops at a campaign total, and it no longer asks for price or
+  testing-budget approvals.
+- Batches stay purposeful. Each batch has a cost guard sized from its own estimate: the guard stops a runaway loop and is
+  not a ceiling on the work.
+- Actual usage and cost are recorded per request and per batch, and reported.
+
+(c) **What it does not change.** The Gemini project's own monthly spending cap is a setting in the owner's Google account.
+- The session does not change that cap and does not work around it.
+- A provider-side quota, authentication or payment failure is an installation-wide hold (DECISIONS D39). That covers a 429
+  with or without quota detail, a 401 or 403, and a billing error. The hold is diagnosed and reported to the owner, and
+  never retried in a loop.
+- No subscription, automatic top-up, vendor agreement or key is created.
+- No real patient's document is processed: synthetic data only.
+
+(d) **Accounting.** Every historical budget, reservation, consumed attempt, failure and unknown cost stays recorded as it
+was, including:
+- the cap stop of 2026-11-10 13:56Z, at about $26 estimated;
+- the 23 sends refused after it;
+- the void g1 runs 2 and 3;
+- estimates still marked as estimates.
+
+Nothing is credited back or reset. The ledger continues from that history: the session's
+`gemini-migration/USAGE-LEDGER.md`, summarised in `cpt-studio/HARNESS.md`.
+
+(e) **Server execution controls.** Every provider run records `CPT_STUDIO_AUTHORIZATION_REF`, and that reference is this
+file. This section is the authority those runs cite from now on.
+- The live gate refuses a send when no authorization reference is configured; that stays.
+- FINAL-V2 7.6's three budget rules are superseded as DECISIONS D183 records:
+  - the owner receiving the total before the acceptance run;
+  - the project-level stop at the cap less a reserve;
+  - the question of a key after the switch.
+- Per-batch guards remain.
+
+(f) **Scope** continues through:
+- the implementation of Gemini as the primary interpreter;
+- independent testing of incorrect code acceptance (wrong READY) and of unnecessary holds;
+- the resolution of the critical and materially incomplete findings;
+- the PDF-library (pypdf) security update with its required checks;
+- the installation, with the existing website kept available;
+- the actual upload, review, save, reload and downloaded-report verification.
+
+Corti, Astra and Fable stay. Reviewer approval, evidence integrity, tenant isolation, synthetic-only operation and
+customer-facing provider confidentiality are preserved.
+
+(g) **Still open.** This message does not answer the class-b item: a legacy approval does not carry across engines, and a
+context change on a legacy encounter needs an explicit re-check (FINAL-V2 6.2). It gates the install and is asked again
+before the install.
+
+(h) **No phrase-by-phrase repair of the old semantic reader.** The replacement is completed and the checklist updated with
+evidence. The report gives the installed revision, the verified results, the remaining limitations and the measured costs.

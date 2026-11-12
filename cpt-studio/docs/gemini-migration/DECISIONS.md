@@ -14116,3 +14116,30 @@ evidence, and such an argument comes back to the owner of these decisions.
     - they are re-evaluated after an answer or an addendum.
   - Member answers are unchanged. The only answers are "Not documented" and "Cannot confirm", and an answer never confirms a fact
     or releases a hold.
+
+- **D183 The owner's funding authority applied to design v2 (2026-11-12; supersedes FINAL-V2 7.6's three budget rules and
+  part of D178 condition 3).**
+  - The authority is verbatim in the rulings file ("Owner directive, 2026-11-12 — funding authority for the migration; the
+    second Gemini call approved") and in RULINGS.md.
+  - **The second call is approved.** The two passes stand, and 7.1's per-document cost is accepted.
+  - **7.6 rule 1 is superseded.** The owner no longer receives a total before the acceptance run. The run's actual usage and
+    cost are reported with its result.
+  - **7.6 rule 2 is superseded.** There is no project-level stop, and no total or monthly ceiling of the session's own.
+    - Each batch keeps a cost guard of about twice its modelled cost at the prices of the day. The guard stops a runaway
+      loop; it is not a ceiling on the work.
+    - A batch that reaches its guard stops. Its measured cost resizes the next batch, and no approval is sought.
+  - **7.6 rule 3 is closed.** No separate key or project is created; keys are the owner's, and this authority creates none.
+    - After the switch, test batches share the Google project with the installed site.
+    - A provider cap or quota 429 is an installation-wide hold that pauses new uploads. It is diagnosed at once and reported
+      to the owner, never retried in a loop.
+    - Post-switch test batches stay small, and the site's usage stays visible in the operator report.
+  - **D178 condition 3, item by item:**
+    - the second call: approved;
+    - the budget before A: superseded;
+    - the post-switch key: closed, since none is created;
+    - the class-b legacy context-save loss: STILL OPEN, and asked again before the install.
+  - **The ledger.** `gemini-migration/USAGE-LEDGER.md` continues from the recorded history; nothing is credited or reset.
+    - Each batch appends its actual usage (provider-reported tokens) and its cost.
+    - Estimated costs are labelled as estimates, and unknown costs stay unknown.
+    - Consumed attempts and failures stay listed.
+  - Unchanged: D178 condition 1 (the acceptance run follows THRESHOLDS.md) and condition 2 (the near-copy report).

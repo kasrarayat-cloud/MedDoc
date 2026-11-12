@@ -4603,6 +4603,8 @@ builders produced 7 integrable repairs, and every review found new critical para
   concurrency one, each with its own cost cap; every request's usage is recorded.
 - Fresh calls are labelled apart from replays and text-only runs.
 - Prior recordings are kept unchanged.
+- On 2026-11-12 the owner's funding authority (below; D183) superseded the ~$300 cap as a ceiling. The batches, their
+  per-batch guards and the recording of every request's usage stay.
 
 **Installation and completion.**
 - Install only after the new path passes the frozen checks, through the established path: PR, CI, `scripts/merge-pr.sh`, a
@@ -4677,3 +4679,33 @@ builders produced 7 integrable repairs, and every review found new critical para
 - **Next:** step 0b, then build wave 1 (six builders).
   - Each builder works in its own tree, and each file has one owner.
   - The integration owner applies the patches. The full suite runs after every wave.
+
+**Owner authority, 2026-11-12: the second Gemini call approved, and the migration funded.** The authority is verbatim in
+`docs/foundation/rulings/2026-10-23-cpt-studio-gi.md` ("Owner directive, 2026-11-12 — funding authority for the migration;
+the second Gemini call approved"), and in RULINGS.md; DECISIONS D183 applies it.
+- **Approved:** design v2's second call per report. Both passes stand.
+- **Funded:** the Gemini, Corti, Astra, Fable and development-agent usage needed to complete the migration.
+  - For authorized synthetic development, testing and verification, this supersedes the owner-imposed monetary ceilings,
+    including the testing authority of 2026-11-11 (about $300).
+  - No new ceiling is invented, and price or testing-budget approvals are no longer asked.
+- **Batches stay purposeful.** Each has a cost guard of about twice its modelled cost: the guard stops a runaway loop and
+  is not a ceiling on the work. Actual usage and cost are recorded per request and per batch.
+- **Unchanged:**
+  - The Google project's own spending cap is the owner's setting; the session does not change it or work around it.
+  - Authentication, quota and payment failures are holds, diagnosed and reported to the owner, never retried in a loop.
+  - No subscription, top-up, vendor agreement or key is created.
+  - Synthetic data only; no real patient's document is processed.
+- **The server execution control** is the authorization reference every provider run records
+  (`CPT_STUDIO_AUTHORIZATION_REF`). It is the rulings file, which now holds this authority. The live gate still refuses a
+  send without it.
+- **Accounting is preserved, not reset:** the cap stop of 2026-11-10 at about $26 (estimated), the 23 sends refused after
+  it, the void g1 runs 2 and 3, and every estimate marked as one. The usage ledger is the session's
+  `gemini-migration/USAGE-LEDGER.md`, and this file gives its totals at each milestone.
+- **Still open:** the class-b legacy context-save loss (FINAL-V2 6.2). It is asked again before the install.
+- **Scope, through to completion:**
+  - the implementation;
+  - independent testing of wrong READYs and unnecessary holds;
+  - the critical and materially incomplete findings;
+  - the pypdf security update and its checks;
+  - the installation, with the current site kept available;
+  - the actual website walk: upload, review, save, reload and downloads.
