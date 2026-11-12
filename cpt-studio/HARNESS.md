@@ -4625,3 +4625,18 @@ builders produced 7 integrable repairs, and every review found new critical para
 7. Install.
 8. The website walk.
 9. The report.
+
+**Status, 2026-11-12, after step 1's first pass.**
+- **Acceptance set a1 v1 is sealed and recorded by hash** in `docs/gemini-migration/acceptance-a1/` (THRESHOLDS.md, SHA256SUMS-v1,
+  README.md).
+  - It has 216 synthetic reports and 550 code rows.
+  - It was authored, independently checked and adjudicated per family.
+  - Its structural checks found 0 violations.
+  - The builder has read no case.
+- **Before the set is used**, THRESHOLDS.md amendment 1 applies:
+  - every label is re-derived blind, and each disagreement is adjudicated without saying which answer is the label;
+  - v2's hashes are committed before any prompt change.
+
+  The amendment also names the one unclassified cell (expected EXCLUDED, actual HELD = SAFE MISMATCH, reported) and fixes, before
+  any measurement, how a disputed label is decided while the builder stays blind.
+- **Step 2 (design v2)** is running, blind to the set.
