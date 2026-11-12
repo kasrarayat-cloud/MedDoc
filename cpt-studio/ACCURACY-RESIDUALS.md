@@ -1526,3 +1526,742 @@ Remaining after round 4, each read as said (round 3's table above stands where t
 | an embedded CMap that cannot be read (malformed, using a CMap other than a predefined one, or past the document's 4 MiB) whose font has no ToUnicode or one that declares no code space | its text unread, named | only an embedded CMap or its ToUnicode's code space tells its codes apart |
 | /Encoding /Identity with no ToUnicode | its text unread, named | it names no CMap: only a ToUnicode gives its codes text |
 | text shown with no font in effect (a font set inside q/Q) | U+FFFD, named | see above: the owner's call |
+
+## Core repair, refutation round 2 (2026-11-04): false READYs the installed revision gives too
+
+The core repair (branch `feat/cpt-studio-core-ux-20261103`) holds the register's false READYs (R8 D1 to D10, D12, D13,
+D15). Lens L1 of the round-2 refutation (base `41e03656df61`, head `372ec44b0e24`) attacked each class with new
+wordings. For the rows below, its verifier reproduced a READY code on the head that the installed revision ALSO gives:
+the same input, the same result. So these are not regressions of the change. They are new members of classes the
+register named. They are recorded here under this file's rule: wording outside every declared list is measured and
+listed, and a misreading of what the code declares it reads is fixed in code. Rows L1/R05, R06 and R12 read a declared
+form in a variant spelling or layout, so they were fixed in code in the same round (the variant repair,
+`tests/fixtures/gi4/declarations/cux-r2-variants.json`); their rows follow the table below, with what each still leaves.
+
+Each input is the lens's, a synthetic document through the assess stage's own children (`jobs._analyze_child`,
+`_assess_child`) with a synthetic Corti answer. *Ready* means approvable with the whole-document acknowledgement, never
+approved: a reviewer's or the agent's recorded decision still approves, and the result says the service status is not
+verified.
+
+| id | example input (the class) | head and installed | locus | why it is not a rule yet |
+|---|---|---|---|---|
+| L1/R01 | "Attached prior report:" / "Upper endoscopy report (fictional)" / "Date of service: 2025-03-01" / an EGD biopsy sentence, after today's colonoscopy; Corti cites the biopsy sentence for 43239 (also 43235 and 45380 variants) | 43239 ready (the attached report opens a current EGD part) | `services.parts()` at REPORT_TITLE; D10's hold reaches only a code citing the title | another occasion inside one document is read from the title alone; the register's title-cited D10 row is held |
+| L1/R02 | "We tried to remove the polyp with a hot snare, but it slipped off." / "Hot snare polypectomy proved impossible." / "Cold forceps biopsy of the antrum was impossible because of bleeding." / "... was aborted ..." | 45385 / 43239 ready | `cues.FAILED_ACT` (failed, unsuccessful, abandoned) and `UNDONE_ACT` at the own-passage release | failure verbs are open ("tried ... but", "slipped", "impossible", "aborted", "halted") |
+| L1/R03 | "The polyp was not excised." on the procedure line's colonoscopy with hot snare polypectomy | 45385 ready (the procedure line's snare stands) | `engine._denies_an_act_of`: a denial must name an act kind or a listed participle | denial verbs are open ("excised", "resected", "taken off") |
+| L1/R04 | "Hot snare polypectomy was proposed for a later session." / "... at a later date." / "Hot snare removal of the polyp is advised." | 45385 ready | `engine._own_passage_may_stand` (no plan or time gate); the inventory's act predicate | plan and advice wording is open ("proposed", "advised", "at a later date") |
+| L1/R08 | the register's D5 "PATHOLOGY ADDENDUM" heading over a specimen line with a predicate ("... removed by hot snare polypectomy") | 45385 ready (a pathology-role act bound to today's lesion) | `reconcile.match()` collects performed acts of any role | a specimen line restating the act is read as the act; D5/D6's headings without a predicate are held |
+| L1/R09 | "Pathology: hot snare polypectomy of sigmoid polyp" / "Surgical pathology - hot snare polypectomy specimen from the sigmoid colon" as a heading | 45385 ready | `services.ROLE_HEADINGS['pathology']` needs "pathology report/result/results/addendum" | heading wording is open; to be judged with R08 |
+| L1/R11 | "Examination was terminated in the gastric body." / "The duodenum was not reached." / "We were unable to pass the pylorus." in D13's named-EGD construction | 43244 ready with the duodenum as the extent | `detect._P2_UPPER_STOP` (a 'we' or 'the <exam>' subject and a listed stop verb) | stop and reach wording is open |
+
+The three declared-form variants, fixed in code, and what each still leaves:
+
+| id | example input | installed and head | locus | what changed and what is left |
+|---|---|---|---|---|
+| L1/R05 | "Indication: Surveillance after a sigmoid polyp was removed with a hot snare" (R8 D8's line without its full stop) in a titled colonoscopy report, 45385 citing it with the reach sentence; the dash form "Indication: surveillance - sigmoid polyp removed with hot snare" cited alone; the same line ending in a semicolon, a comma or a dash | installed 41e03656d: 45385 ready. Head: held, fixed in code (variant repair, `tests/fixtures/gi4/declarations/cux-r2-variants.json` V05, commit 0b8b1d871a31) | `services._time_parts` (`services._statement_line_end` keeps its full-stop test for history and plan sections) | fixed in code: a variant layout of D8's declared line. The heading line of an indication section is now the indication's whatever it ends with, inside a titled report too, and only that line: after it the section reads as before (today's report inside a titled report, the indication outside one), so an act stated today on a later line stays ready. A history section's heading line was already never read as today's |
+| L1/R06 | "Surveillance of biopsy–proven Barrett esophagus was performed." (U+2013; also U+2010, U+2011, U+2012 and U+2014) with 43239; "Snare–resected: No" beside today's snare | installed: 43239 ready. Head: held, fixed in code (V06, commit 0b8b1d871a31); "The snare–resected sigmoid polyp was not retrieved." beside today's snare is now ready, as its ASCII twin is | `services.COMPOUND_PARTICIPLE_AFTER`, `services._compound_participle`, `services._own_question` (the hyphen's spellings: `cues.HYPHEN`) | fixed in code: a variant spelling of rule 2's compound, read wherever the ASCII hyphen is (the inventory, its doubtful compounds and field labels, the own-passage release). Still ready, as installed, because they are new wording: "biopsy proven" with a space or a spaced dash (an act word, a space and a participle is also how a report states today's act: "Biopsy performed today"), and the noun compounds "The polypectomy scar in the sigmoid colon was healed." and "The polypectomy site ..." (45385 by the own-passage release). The repair's measured cost, hold-only: an em or en dash written as a separator right after an act word ("Biopsies—taken from the antrum and body—were sent for pathology.", "Cold snare polypectomy—completed without bleeding.") now holds a code done today, as the ASCII hyphen there already did (the declaration's false_hold_costs_measured) |
+| L1/R12 | "Patient not seen in-person today." / "Patient wasn't seen in person today." under R8 D12's h4-01 twin, 99204; also "isn't", a U+2019 apostrophe, "The patient wasn't seen.", a Unicode hyphen in "in-person", and two spaces or a line break inside the phrase | installed: 99204 ready. Head: held, fixed in code (V12, commits 0b8b1d871a31 and f5cb22d825c9) | `cues.NOT_IN_PERSON`, `detect._PV1_ATTENDANCE`, `detect._pv1_in_person_today` | fixed in code: variant spellings and layouts of D12's declared phrase, each read on its plain form's path (another time or another service in its clause still clears it), and the phrase's own words no longer clear its hold. Still ready, as installed, because they are new wording: "Patient not evaluated in person today." and "not examined in person" (other verbs). Found by this repair and not changed by it, because they are other declared C4 forms outside R12's phrase (ready on the head, as installed): "Visit was audio‑only." and "Patient was a no‑show today." with U+2011, and "The patient didn’t show up for the visit." with U+2019 |
+
+One measured cost of the R06 repair is recorded rather than narrowed: a dash written as a separator right after an act
+word, with no spaces ("Cold snare polypectomy—completed without bleeding."), now holds a code done today, as the ASCII
+hyphen there already did. It is hold-only, and no battery, regression or corpus text contains such a dash. A spaced dash
+(" — ") is unaffected.
+
+How often each class occurs in real documents is for the accuracy evaluation the owner's directive calls for
+(independently adjudicated cases, withheld from development). No accuracy figure is claimed from these rows.
+
+## Core repair, refutation round 3 (2026-11-04): what the bounded round leaves
+
+Round 3 attacked the round-2 repairs only, against one standard: the head never reads a document worse than the
+installed revision, and keeps the round-2 improvements. Its repairs (`tests/fixtures/gi4/declarations/cux-r3-reader.json`,
+with its integration amendment) meet that standard on every reproduced input but these, which are recorded, not
+repaired:
+
+| id | input | head and installed | why it is left |
+|---|---|---|---|
+| A8 | R8 D8's titled colonoscopy with "Indication - surveillance after a sigmoid polyp was removed with a hot snare" (a dash heading, no colon) above the procedure; 45385 cites it | ready on the head and on installed | routing's layout (`sections.layout`, frozen by the H2 gate, gi-context@4) reads no indication section there; repairing it moves the frozen context reader |
+| A3 (43239) | a combined EGD and colonoscopy narrative, with no section per service, whose gastric biopsy names no site | the head holds 43239 (installed reads it READY); 45380, which the round-2 repair made READY on the gastric biopsy, is held again | rule 4's declared cost (`cux-bind.json`): a combined title binds no family. Reading 43239 READY needs a context rule (the A1/rule-6 class closed by session decision (c)) |
+| R1a-r3 | an examination told only by its name ("The EGD showed ...") between a colon lesion and a labelled act; an instrument named in a denial | does not unbind the label (hold direction) | the guard reads instruments, not service names |
+| L1d-r3 | a header line naming another service, then the running report's findings with no instrument told | held, as installed holds it (for its extent) | no instrument resumes the running part |
+| L1e-r3 | a back-reference to a lesion two lesions back ("the first polyp") in a note | reads the part's last lesion | the reach rule reads the last current lesion |
+| R1b-r3 | a restatement with no size, told after another tract's instrument; sizes compared as written ("8 mm" vs "0.8 cm") | the label stays unresolved (hold direction) | a restatement must not contradict the definition it restates |
+| R1c-r3 | a clause naming a site of another tract than the labelled lesion's | unbinds the label as round 2 did; the denial is read at its site and at the lesion | one statement read both ways keeps both conflicts |
+| R8b-r3 | a post-modified same-day evaluation outside the closed list (opener, article, up to three adjectives, five prepositions, "of" with a possessive) | the absence statement negates the visit | a closed list; wider wording is for the accuracy evaluation |
+
+## Core repair, round 5 (2026-11-04): the binding rule R1a-r5, and what it leaves
+
+> **Superseded the same day.** This section describes R1a-r5's *unbinding* form. Refutation round 5 refuted it
+> (X1, X2 and X4 below, in "Core repair, round 5, the hold-only form"), and the form was reverted. The section is kept
+> as the record of the refuted form; where it disagrees with the next section, the next section describes the code.
+
+Round 5 lands one reader rule, the lead's R1a-r5, verbatim (`tests/fixtures/gi4/declarations/cux-r5-binding.json`,
+declared before code). Where more than one procedure is read performed (the office visit not counted), a lesion's name
+alone never gives a performed act its service. The rule reaches an act that a label or specimen binds, that is not
+denied, whose own clause names no site, whose part names no service, and that is not a clip or a cannulation. Such an
+act is unbound, and it takes no site from another clause of its sentence. The rule detects no telling and lists no
+word.
+
+It holds the four shapes main `20a64b860` read worse than installed `41e03656d`. In R1, R1b and R3 dash, 45380 was READY
+on the upper endoscopy's biopsy, because the biopsy was bound to the colon polyp's label. In R2 dash combined, 45382 was
+READY on a prophylactic clip. Round 3's recorded limit "an examination told only by its name ... does not unbind the
+label (hold direction)" was in fact a false READY (round 4's R-1, the R1b dash shape), and R1a-r5 holds it.
+
+The rows below are what the rule costs and what it leaves. Each input is a synthetic battery row (`ops/gi4/battery.py`,
+prefix `R8 R5 `) or a case of the refutation rounds. Each is read through the assess stage's children with a synthetic
+Corti answer. *Main* is `20a64b860`, *installed* is `41e03656d` and *head* is this branch.
+
+### The declared hold class: a cost of R1a-r5
+
+This is the class. The note is combined: its title or header names more than one procedure, or its narrative tells
+more than one. No section heading names a service over the act. A lesion is defined in one sentence and acted on by its
+name alone in another. The act is then no service's act, and the code it alone supports is held
+[performed_status] (truth: done).
+
+| input | main | installed | head |
+|---|---|---|---|
+| "Procedure(s) performed: EGD and colonoscopy" / the gastroscope and its antral biopsies / "The gastroscope was withdrawn and the colonoscope was advanced to the cecum." / "Polyp A - sigmoid colon: an 8 mm sessile polyp was seen." / "Polyp A was removed with a cold snare." (45385 cites the last; refutation 4b's case `V pp ctrl`, row `R8 R5 hold 1146`) | ready | ready | held |
+| the same with the polyp defined under "Findings:" (row `R8 R5 hold 1277`); an upper lesion, "Lesion 1 - gastric body: ..." then "Lesion 1 was removed with a hot snare." (43251, `R8 R5 hold 1383`); the colonoscope "reinserted to the identified polyp" before the act (`R8 R5 hold 1406`) | ready | ready | held |
+| the R8 R3 A3 control: "COL-1 - sigmoid colon: an 8 mm polyp was seen.", the gastroscope, "The colonoscope was then reinserted.", "COL-1 was removed with a cold snare." | ready | held | held: the colonoscope told again restores nothing |
+| the base probe B2 dash: the label-only snare before the gastroscope in a "Colonoscopy and EGD report" | ready | held | held |
+| "Colonoscopy and EGD report" ... "The EGD was not performed today." (`R8 R5 hold, a combined title whose second service the note denies`) | ready | held | held |
+
+**How often.** The lead measured this on the prototype, and this branch reproduced it exactly. One of 5,980 corpus,
+battery and fixture texts changes its inventory: the A3 control, which is a battery row. No corpus text and no fixture
+changes, Mara and the eight regression documents among them. In the 1,445 adversarial cases of refutation rounds 4 and
+4b (2,861 cells read), 130 cells are held where main and installed read READY with truth done. They come from 130
+cases: 77 from round 4b's H2 passing-mention cases, 31 from its lens H cases, 14 from H3's non-service words and 8
+from H5's restore history word. Those cases were all built around this binding.
+
+**"Read performed" is pass 1's reading.** A family that a combined title names counts as performed even where a later
+sentence denies it. That is why the last row is in the class. Installed holds that row too.
+
+**Why it is left.** The rule holds wherever only a lesion's name would place the act. Deciding which examination a
+name-only act belongs to is the telling and word-list reading that rounds 4 and 4b tried, and that leaked (below). The
+reviewer answers the performed-status question.
+
+### The first fresh walk document's two gaps (recorded since round 4, not repaired)
+
+| gap | input | main, installed and head | locus |
+|---|---|---|---|
+| a | numbered "PROCEDURE 1: ESOPHAGOGASTRODUODENOSCOPY" / "PROCEDURE 2: COLONOSCOPY" headings under the document's indication line, "Indications: Iron-deficiency anemia with intermittent epigastric pain; positive fecal immunochemical test." (row `R8 R5 gap a`); 43239 cites the antral biopsies and 45385 a descending-colon snare | 43239 and 45385 held [extent, performed_status] on all three. Without the indication line (`R8 R5 gap a control`), both are READY on all three. The fresh document itself: 43239 [extent, performed_status], 45380 [extent] and 45385 [conflict:snare, extent] on main and head; installed gives 45385 [extent, performed_status] | `sections.layout` reads the indication line as a section that runs to the end of the note. The numbered headings open no section, so today's acts are read inside the indication. The layout is frozen by the H2 gate (gi-context@4) |
+| b | "Polyp A (transverse colon): a 3 mm sessile polyp was completely removed with cold biopsy forceps and sent as jar 3." / "Polyp B (descending colon): a 12 mm pedunculated polyp ... sent as jar 4." / "Polyp A was not snared, and forceps were not used on Polyp B." (`R8 R5 gap b`) | 45380 READY; 45385 held [conflict:snare] on all three. No label is read, so "Polyp A was not snared" denies a snare at no lesion. Written "Polyp A - transverse colon:" (`R8 R5 gap b control`), both codes are READY on main and head (installed: 45385 [conflict:snare]). Refutation 4b's G1 shape with its label written "Polyp A (sigmoid colon):" (residual `R8 R5 residual gap b, ...`) reads 43239 READY on all three, though no upper biopsy was taken (truth: not done). R1a-r5 unbinds only a bound act, so it never engages, and "the antrum" in the sentence places the impression's restatement | rule 1's label reader reads "Label - site:" only. Round 4's R4b read the parenthesis form and was refuted (below) |
+
+### Two classes R1a-r5 does not touch (recorded, not repaired)
+
+| class | input | main | installed | head | why it is left |
+|---|---|---|---|---|---|
+| a prophylactic hemostatic clip read as control of bleeding in a colonoscopy-only note | "Polyp B - descending colon: a 12 mm pedunculated polyp was removed en bloc with a hot snare." / "A hemostatic clip was placed prophylactically at the Polyp B stalk site."; 45382 cites the clip sentence (residuals `R8 R5 residual R2 dash colonoscopy only`, and the paren and unlabelled forms) | ready | ready | ready | only one procedure is performed, so R1a-r5 does not engage. Reading "prophylactically" as no bleeding control is a word list: round 4b's R4c, refuted by G5, H1 and H4. In a combined note whose part names no service, the clip's act is held (`R8 R5 R2 dash combined`, under its numbered headings, which open no section: gap a). Under a section heading that names the colonoscopy ("UPPER ENDOSCOPY" / "COLONOSCOPY", or "Upper endoscopy:" / "Colonoscopy:", over the same lines), the part gives the act its service, so R1a-r5 does not engage, and 45382 reads READY on main, installed and the head, as in a colonoscopy-only note |
+| rule 1's same-lesion pairing by act kind | "Polyp A - ascending colon: a 15 mm pedunculated polyp was removed en bloc with a hot snare ..." / "Polyp B - sigmoid colon: a 3 mm sessile polyp ... cold biopsy forceps ..." / "Polyp A could not be snared on the first attempt because of its position behind a fold." (`R8 R5 H1 dash first snare attempt`); "Polyp A could not be removed with forceps in one bite; a second bite completed the removal." (`R8 R5 H3 dash one bite`) | H1 dash 45385 held [conflict:snare]; H3 dash 45380 held [conflict:biopsy]; the paren forms READY (no label is read) | ready | as main | rule 1 pairs a lesion's failed attempt with its own act by act kind. A repair would have to read that a later act completed the attempt, and every such word list can release a code (round 4b's item ii) |
+
+### Why the round-4 and 4b repairs were not taken
+
+Both rounds repaired these shapes with lists: a label form, tellings, service names and prophylaxis words. Their
+refutations showed the lists leak both ways. They gave false READYs (round 4: R-1, R-2, R-3; round 4b: G1 to G5) and
+false holds (round 4: H1 to H4; round 4b: H1 to H5). Every finding below was reproduced by its verifier
+(`refute-r4/results.json`, `refute-r4b-results.json`).
+
+**Round 4, R4b** (head `8be50c9a`) read the "Label (site):" form wherever rule 1 reads "Label - site:".
+- **R-1** (blocking): the paren R1 shape and its R1b telling read 45380 READY on the upper biopsy.
+- **R-2** (blocking): in a combined note, the label gave the prophylactic clip a family, so 45382 was READY.
+- **R-3** (blocking): the gastroscope passed "after withdrawal of the colonoscope" read 45380 READY.
+- **R-4** (minor): a label reused after a denial that names it resolved by order of appearance.
+- **H1 to H4** (each graded blocking by its verifier): READY codes moved to held against installed. A first snare
+  attempt, a tattoo beside the resection's denial, one-bite forceps removal, and a snare retrieval each held a supported
+  code through rule 1's act-kind pairing.
+
+**Round 4b, R1a-r4 and R4c** (head `0eb5ac60`). R1a-r4 unbound a label after any telling of another examination: an
+instrument, a bare endoscope or scope its sentence's anatomy places, or a service name. R4c read a prophylaxis
+qualifier as no bleeding control.
+- **G1** (blocking, new in the fix): the unbinding re-placed the act in the other examination, by a site in another
+  clause of its sentence. "Impression: Polyp A was biopsied with cold forceps; the antrum was normal." read 43239
+  READY. R1a-r5 takes no such site: its G1-type rows are held, and the form told by the gastroscope, READY on main, is
+  held too.
+- **G2, G3, G4 and G6** (blocking per their verifiers): variants the telling list did not close. A bare scope was placed
+  only by its own sentence's anatomy. Any plain colonoscope sentence restored the binding. Common tellings fell outside
+  the inclusion list. There was no lower-tract counterpart for a bare scope.
+- **G5** (blocking), and **H1** and **H4** (major, new in the fix): R4c's closed prophylaxis list. A reworded qualifier
+  read as bleeding control again, and purpose words, or a qualifier of another noun, removed genuine bleeding control.
+- **H2, H3 and H5** (major, new in the fix): name-only acts were held where main and installed read READY. The causes
+  were a "Procedures: EGD, colonoscopy" header, "PEG" and "arm" read as tellings, and a restore defeated by a history
+  word. **R1a-r5 holds these shapes too, as its declared cost.** 99 of its 130 adversarial hold cells are H2's, H3's and
+  H5's cases. The difference is that R1a-r5 releases nothing (no cell moves toward READY against main or installed), and
+  its holds are one named, measured class rather than the edge of a list.
+- **H6**: by design (declared).
+
+R1a-r5 has one condition the corpus does not exercise: several procedures read performed. Forcing it true moves none
+of the 5,980 texts. In a titled single-service report, the part already names its service. The condition decides only
+where a part has no family and a second service is documented but not performed. A row pins that case: `R8 R5 control,
+one procedure performed and one planned, acts by label`, where each act keeps its own lesion and the distinct-lesion
+consideration stands.
+
+How often each class occurs in real documents is for the accuracy evaluation the owner's directive calls for
+(independently adjudicated cases, withheld from development). No accuracy figure is claimed from these rows.
+
+## Core repair, round 5, the hold-only form (2026-11-04): what landed, its declared class, and what it leaves
+
+This form replaces the unbinding form of the section above. It is the lead's rule and the lead's patch
+(`verify-r4/apply_z2.py`), applied verbatim to main's `services.py` and `reconcile.py`. It was declared before code in
+`tests/fixtures/gi4/declarations/cux-r5-binding.json`, `amendment_20261104_hold_only`.
+
+**What the form does.** Every act keeps main's binding and placement: no act moves, and none is dropped. One kind of
+act gets a cue (`services.NAME_ONLY_CUE`):
+- more than one procedure is read performed (the office visit not counted);
+- a lesion label or a specimen number binds the act;
+- its own clause names no site, and its part names no service;
+- it is not a clip or a cannulation;
+- it is performed.
+
+`reconcile.match` then holds a code when all of its supporting performed acts carry the cue. The match reason is
+`named_only` and the question is performed_status. The conflict check comes first and is unchanged. No release or
+exclusion path reads `named_only`.
+
+It holds the four shapes main read worse than installed: R1, R1b and R3 dash (45380), and R2 dash combined (45382). In
+each, the act stays documented where main put it.
+
+### Why the unbinding form was not taken (refutation round 5)
+
+Each finding was reproduced by its verifier (`refute-r5-results.json`). *Unbinding* is head `c1c872c2`; *hold-only* is
+this branch. Each input is now a battery row, prefix `R8 R5 X`.
+
+| id | input | unbinding | main | installed | hold-only |
+|---|---|---|---|---|---|
+| X1 (blocking) | "EGD and colonoscopy report", with the EGD named first. The gastroscope and "The colonoscope reached the cecum." are told, then "Polyp A - sigmoid colon: an 8 mm sessile polyp was seen." and "Polyp A was removed with a cold snare." 43251 cites the last line (truth: not done) | 43251 READY. The unbound snare went to the EGD, the one binding family | held [performed_status] | READY | held [performed_status]. The snare stays at the sigmoid polyp in the colonoscopy, with the cue |
+| X2 (blocking) | "Procedure(s) performed: EGD and colonoscopy" ... "Polyp A was removed with a cold snare; the sigmoid colon was otherwise normal." 45378 cites the cecum clause. There is also an upper form (43235) and the R1a-r3 path | base code READY. The unbound act was dropped, so `base_included` found no reportable act, and the polypectomy left the review | held [base_included] | held [base_included] | held [base_included]. The snare stays documented |
+| X4 (blocking) | "Polyp B - descending colon: a 10 mm polyp was removed with a hot snare.", then "Polyp A was removed with a cold snare; ...", then "No snare was used in the sigmoid colon." 45385 cites the Polyp B removal | 45385 READY, with 0 conflicts. The performed snare at Polyp A was dropped, so only its denial was left | held [conflict:snare] | held [conflict:snare] | held [conflict:snare]. The conflict is kept |
+| X3 (blocking, per its verifier) | the base code cited alone, in four notes: the 1146 row text, the denied-title row text, the A3 control text, and a colonoscopy note with "EGD performed today by Dr. Other Endoscopist (fictional), reported separately." | 45378 READY | held [base_included] | READY | held [base_included] |
+
+Y1, Y3, Y4 and Y5 were holds of realistic shapes, outside the class the unbinding form declared. The hold-only form
+still holds them. It names them in its declared class (below) as costs. Y2 was by design. Y6 showed that the unbinding
+form's corpus frequency was vacuous: no corpus text defines a lesion label.
+
+### The declared hold class: a cost of the hold-only form
+
+The class has three conditions:
+- more than one procedure is read performed;
+- every supporting performed act of the code is tied to its service only by a lesion's name;
+- that act is not a clip or a cannulation, and its clause names no site of its own.
+
+The code is held [performed_status] (truth: done). The act stays, and every other rule reads it as main does: a base
+code beside it, a conflict, an unresolved item, an offer.
+
+Its realistic shapes, each a battery row:
+- **Y1**: a "Findings:" or "Interventions:" sub-heading under a COLONOSCOPY heading, or Mara's layout with a polyp's
+  definition and act on two lines. The sub-heading's part names no service.
+- **Y3**: numbered or plain headings the reader does not take as naming a service. "PROCEDURE 2: COLONOSCOPY" (the
+  first fresh walk document's form), "Part 2: Colonoscopy", "2. Colonoscopy", "Lower endoscopy".
+- **Y4**: a colonoscopy note that names a separately reported same-day EGD, or uses a pediatric gastroscope as its
+  instrument. X3's note with another provider's EGD line is the same shape: 45385 READY on main and installed, held
+  here.
+- **Y5**: "It was removed with a cold snare and sent as specimen 2." after the polyp's own sentence. A specimen number
+  binds as a label does.
+
+In the class by definition are Y2 (an EGD beside a pH capsule, a PillCam placement or a gastrostomy tube exchange), the
+R8 R3 A3 control, the B2 dash probe and the `R8 R5 hold` rows. Its measured extent:
+- **The lead's adversarial cases:** 308 of the 4,066 cells of 2,396 cases from refutation rounds 4, 4b and 5 are held
+  where main reads READY with truth done. 208 of them are READY on installed too. Recomputed after code on sealed
+  exports: the outputs are byte-identical to the lead's.
+- **The X lens's cases**, which that collection does not hold: 29 of the 370 cells of its and its verifiers' 228 cases.
+  25 of them are READY on installed.
+- **The battery:** 21 cost cells.
+
+**How often** it occurs in real documents is not claimed. The corpus cannot show it, because no corpus text defines a
+lesion label. Of the 5,980 corpus, battery and fixture texts the lead measured, one carries the cue: the A3 control.
+
+**What a customer sees** for a held code of the class (measured with the test server and the customer API):
+- the code reads "Needs a detail", with the summary "The document does not establish the snare removal as done on the
+  date of service.";
+- the qualification reads "The document does not establish that this was done on the date of service.";
+- there is no quote, because the match names no act;
+- one detail row shows the fixed performed-status prompt, "Was this procedure performed on the date of service, as
+  documented?". It accepts "not documented" or "cannot confirm", or an addendum;
+- the only code action is reject.
+
+The reason id, the cue and the engine's stored question and detail reach none of the 30 customer surfaces read:
+- the session, list and encounter for each role, with their headers;
+- the draft TXT and CSV reports.
+
+### What the hold-only form leaves (recorded, not repaired)
+
+| class | input | main | installed | head | why it is left |
+|---|---|---|---|---|---|
+| refutation 4b's G1 shape, told by the gastroscope (R1a-r3's path) | "Impression: Polyp A was biopsied with cold forceps; the antrum was normal." after "The gastroscope was then passed ..."; 43239 cites it (truth: not done). Residual row `R8 R5 residual G1 ... (R1a-r3 path)`, moved out of the register | ready | ready | ready | R1a-r3 unbinds the restatement, and it takes the antrum of its sentence. The unbinding form held it by clearing that site. That is the same change X1, X2 and X4 refuted |
+| a diagnostic base code cited alone beside a label-only act told after the other examination | the B3 probe with 43235 alone (the X3 verifier's "base alone" case); truth: not done | ready | held | ready | R1a-r3 (round 3) unbinds the label-only biopsy told after the colonoscope. The act is then no service's, so `base_included` finds no reportable act. The unbinding form read it the same way. It is main's reading, worse than installed |
+| the same with 45378 alone | the B1 dash, B1 paren and B2 paren probes with the base code alone; truth: not done | ready | ready | ready | the snare is no service's act on every tree. In B1 dash, R1a-r3 unbinds it (told after the gastroscope). In the paren forms, no label is read (gap b) and the act names no site. So `base_included` finds no reportable act |
+
+The first fresh walk document's two gaps, the prophylactic clip in a colonoscopy-only note, and rule 1's same-lesion
+pairing read as the section above records. The hold-only form moves none of them.
+
+## Core repair, round 5b (2026-11-04): three fixes to the hold-only form, and what they leave
+
+This round lands the lead's patch (`verify-r4/apply_z21.py`, run without `--d`) verbatim on the hold-only head. It was
+declared before code in `tests/fixtures/gi4/declarations/cux-r5-binding.json`, `amendment_20261104_hold_only_r5b`. That
+amendment governs wherever the hold-only amendment disagrees. Refutation round 5b (`refute-r5b-results.json`) found four
+new defects in the hold-only form, and Y-F3 besides. Each finding was reproduced by its verifier, and again by this round
+before code.
+
+**The three fixes.**
+- (a) `engine._second_review` counts a match held for reason `named_only` as a documented act. A code the bounded second
+  review selects for a service left without a proposal is then added as a proposal and held. Before, it was dropped to
+  an informational alternative, and the approved export could leave a documented polypectomy uncoded (X-R5B-1).
+- (b) `services._merge_acts` keeps `NAME_ONLY_CUE` on a merged act only when every merged statement carries it. A
+  restatement that names the act's site or service lifts the hold, and an addendum is such a restatement (Y-F1, Y-F2).
+- (c) `reconcile.match` gives the `named_only` hold the acts it rests on. The rules that read a code's acts, the
+  separate-lesion modifier review among them, read them as before. The code stays held (X-R5B-2).
+
+*Hold-only* is head `bbe4266d`; *round 5b* is this branch.
+
+| id | input | hold-only | main | installed | round 5b |
+|---|---|---|---|---|---|
+| X-R5B-1 (blocking) | the Y3 or 1146 row. The primary selects 43239 only, and the re-check returns 45385 citing "Polyp A was removed with a cold snare." | 45385 is an alternative only, and the colonoscopy stays unresolved. Once 43239 is approved, the approved export lists 43239 alone | 45385 ready. The export waits for its decision | 45385 ready | 45385 is added from the second review as "Needs a detail". The export waits until it is decided |
+| X-R5B-2 (minor) | the Y3 row plus "Polyp B - descending colon: a 4 mm polyp was removed with cold biopsy forceps."; 45380 approved with XS | no modifier review. The approval with XS is refused (409) | both codes offer 59 or XS, and the approval succeeds | no modifier review | both codes offer 59 or XS, and the approval succeeds. 45385 stays held |
+| Y-F1 (major) | a label-only snare, then the impression line "2. 8 mm sigmoid colon polyp removed with a cold snare." | 45385 held | ready | ready | ready |
+| Y-F2 (major) | the Y1 row. From the detail row, the physician posts "Polyp A was removed with a cold snare during the colonoscopy, in the sigmoid colon, on the date of service." | still held. Both answers exclude the code | ready | ready | ready after the addendum, and the approval succeeds |
+| Y-F3 (major) | a clause naming a site the anatomy reader does not know, such as "just above the dentate line" or "at 38 cm from the incisors" | held | ready | ready | still held (recorded below) |
+
+The X-R5B-2, Y-F1 and Y-F2 inputs are battery rows, prefix `R8 R5 Z`. The X-R5B-1 inputs are the Y3 and 1146 rows. The
+second-review merges, the modifier reviews and the customer flows are recorded in the declaration.
+
+**What the fixes move.**
+- **The battery:** against main there are 26 movements, every one READY to held. They are the hold-only form's 4 fixes
+  and 21 costs, and the Z3 row's 45385 (a Y3 shape). There are no new violations. Against the hold-only head, the Z1 and
+  Z2 rows' 45385 move from held to READY.
+- **The lead's adversarial cases** (2,924 cases of rounds 4, 4b, 5 and 5b): 0 cells move toward READY against main, 0
+  violations are new against main, and 113 of main's violations are fixed. 383 cells are held where main reads READY
+  with truth done (the hold-only head: 507); 270 of them are READY on installed too. The 124 cells the fixes release
+  against the hold-only head all have truth done and read READY on main.
+- **No act moves.** Over the 5,980 corpus, battery and fixture texts, no act placement changes.
+
+**What a customer sees now:**
+- after a second review, a code tied to its act only by a lesion's name is a code that "Needs a detail", and reject is
+  its only action. The approved export is refused until the code is decided ("45385 needs a detail.");
+- a held code still shows no quote. Where a partner code accounts for an act on another lesion, both codes now offer the
+  separate-lesion modifier review;
+- an addendum that restates the act with its site or service lifts the hold, and the code reads "Ready for review".
+
+### What round 5b leaves (recorded, not repaired)
+
+| class | input | main | installed | head | why it is left |
+|---|---|---|---|---|---|
+| a site the anatomy reader does not know (Y-F3) | "Polyp A - rectum: ..." then "Polyp A was removed with a cold snare just above the dentate line." Also "at the anastomosis", "at 30 cm", "at 25 cm", "Lesion 1 was biopsied with cold forceps at 38 cm from the incisors." and "... at the incisura."; truth: done | ready | ready | held [performed_status] | The class requires that the act's clause names no site of its own. The code reads that as "the ANATOMY reader reads no site in the clause", so a site it does not know counts as no site. The lead's fixes do not touch this, and its holds are among the 383 cells above |
+| a diagnostic base code cited alone beside a label-only act told after the other examination | the B3 probe with 43235 alone, in dash and paren form; truth: not done | ready | held | ready | Pre-existing on main, and worse than installed in this shape. R1a-r3 (round 3) drops the label-only biopsy told after the colonoscope, so `base_included` finds no reportable act. On the lead's cases these 2 cells are the only violations the head has that installed lacks |
+| an addendum in which the inventory reads no statement of the act | "The cold snare polypectomy was performed on the date of service, as documented.", "Polyp A was located in the sigmoid colon." and "Correction: the snare removal of Polyp A took place in the colonoscopy."; truth: done | ready | ready | held | No statement merges into the act, so its one label-only statement keeps the cue. The detail row's two answers still exclude the code |
+
+**The `--d` variant, and why it was not taken.** The lead also measured `apply_z21.py --d`. With it, R1a-r3 would no
+longer drop or move an act in a document of several performed procedures, and the cue would hold its codes instead. On
+the lead's 2,924 cases it fixes 122 of main's violations. But it moves one cell toward READY against main: round 4's
+"E3-1g control: the same, gastroscope named (dash)", where 45380 would read READY with truth not done. Main and the taken
+form hold that cell. Installed reads it READY too, so the lead's note that installed holds it is not right. A violation
+main lacks is what the standard forbids. The variant would also have held the B3 dash probe's base code; that residual is
+recorded above instead.
+
+## Core repair, round 5c (2026-11-04): a name-only mark lifts only for a statement naming a site
+
+**Refutation round 5c** (bounded: two lenses aimed at the paths the offline reader does not reach, every finding
+reproduced independently; results in the lead's refute-r5c-results.json) found that rule (b) of round 5b lifted the hold
+for the wrong statement.
+
+- **X-R5C-1:** a restatement or addendum named the colonoscope only to say the biopsies were taken after it: "After
+  withdrawal of the colonoscope, biopsies were taken with the same cold forceps used to retrieve Polyp A.", posted from
+  45380's own detail row. It lifted the hold, because the reader's sentence reading of that instrument gives the
+  statement the colonoscopy. 45380 was approved and exported.
+- **X-R5C-2:** the same happened for the prophylactic clip's 45382 ("... placed prophylactically at the Polyp B stalk
+  site during the colonoscopy.").
+
+Both are pre-existing against main, which reads them READY with no addendum, and worse than installed.
+
+**The repair (amendment_20261104_site_only_lift):** a statement merged into a name-only one lifts the mark only when it
+names a site of its own. A service its sentence's instrument or its part gives it no longer lifts the mark.
+
+Measured by the lead before code:
+
+| set | measure | result |
+|---|---|---|
+| round 5c's 371 cases | violations installed lacks | 32 before, 2 now |
+| | cells toward READY against main or round 5b's head | 0 |
+| | main's violations fixed | 23 before, 53 now |
+| the 2,924 earlier cases | cells toward READY | 0 |
+| | held where main reads READY | 383 before, 437 now |
+| the branch's 278 battery rows | movements | 0 |
+
+### What round 5c leaves (recorded, not repaired)
+
+| class | input | main | installed | head | why it is left |
+|---|---|---|---|---|---|
+| the act's own sentence names the colonoscope's withdrawal, and nothing else states the act | "After withdrawal of the colonoscope, biopsies were taken with the same cold forceps used to retrieve Polyp A." as the only statement of the biopsy; truth: the colonoscopy's 45380 not done | ready | held | ready | Main's sentence reading of an instrument places the act in the colonoscopy, so it is no name-only statement. This is round 3's family of instrument-order readings (the R3 shape). Pre-existing on main, worse than installed; the 2 cells left above |
+| a code the bounded re-check added (held), then an addendum (Y-R5C-1) | the re-check adds 45385 held; an addendum from its detail row makes revision 2, where the primary provider again does not select it | ready at revision 1 (no addendum needed) | ready | the code is not carried to revision 2, and a second re-check is refused for the same document and date | Main loses a re-check's code on a new revision the same way. The hold invites the addendum. Carrying re-check codes across revisions is a product change, not a reader repair |
+| an addendum whose act sentence names no site (Y-R5C-2) | "Polyp A was removed with a cold snare. This was done during the colonoscopy." or "... It was located in the sigmoid colon."; truth: done | ready | ready | held | Only a statement of the act that names its site lifts the mark ("Polyp A was removed with a cold snare in the sigmoid colon." does). Each addendum re-runs the primary provider |
+
+**What a customer can do with a held code of the declared class:**
+
+- add an addendum whose own sentence states where the act was done (its site), which lifts the hold;
+- or answer the detail "Not documented" or "Cannot confirm", which excludes the code;
+- or reject it.
+
+No member answer can confirm the binding itself. Whether a reviewer should be able to confirm "this act was part of
+this procedure" is an open product question, recorded for the owner.
+
+## Harness repair, refutation round 1 (2026-11-05): what closed, and what is left
+
+The refutation pass over the participant-admission diff is recorded in HARNESS.md, "Refutation round 1 (2026-11-05)".
+This section records only what it changed about the residuals above, and what it adds. Nothing above is rewritten.
+
+**Closed.**
+- The row "a prophylactic hemostatic clip read as control of bleeding in a colonoscopy-only note" (round 5, the R2
+  rows) is closed. The adjective "hemostatic" no longer states that bleeding was controlled: a bleeding-control act it
+  alone names reads in doubt, so 45382 is held with a question.
+  - It is not round 4b's refuted prophylaxis list (R4c): no purpose word is read.
+  - The three colonoscopy-only residual rows read no violation now, measured in
+    `cux-r5-binding.json` `amendment_20261105_harness_repair`.
+- The r1 missed-9 shape is closed: "Procedure: ... with hot snare polypectomy" beside a body that says no polyp was
+  removed, or that the removal failed or is planned. The listing no longer makes the act READY (HARNESS.md's withheld
+  listing).
+
+**Added (each pre-existing at main 8645fd54; none reads READY where the lens's input reads not done, except the
+first).**
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| a relative-clause denial of the marker | "The lesion was marked with tattoo ink that was unavailable." | 45381 READY, both paths | a predicate on the marker's own noun; the coordinated form ("... and not resected") is repaired |
+| bleeding control told with a predicate the inventory does not read | "Bleeding was stopped with two clips."; "Active bleeding was controlled with two hemostatic clips." | Corti READY (own passage); a participant's an alternative | "stopped" and "controlled" are not act predicates; widening the list reaches far beyond bleeding |
+| a comparison whose object is the lesion's own neighbourhood | "The 8 mm polyp, distinct from the surrounding normal sigmoid mucosa, was removed with a hot snare." | the snare at no lesion, never another polyp's | telling a neighbourhood from another lesion would be a word list |
+| acts a coding ruling must place | an EMR's margins ablated by APC; a hot-forceps partial removal finished with a cold snare on one polyp | each code admitted READY beside the other | whether they are one service is a coding question, not a reading one |
+| a plan at today's lesion inside a future service, beside a removal only the procedure line lists | "Recommend repeat colonoscopy with polypectomy of any residual polyp in 1 year." under "Procedure: Colonoscopy with hot snare polypectomy", the body saying only that the polyp was seen | 45385 held (the listing withheld) | a false hold, on the safe side: the plan is read at today's polyp ("any residual polyp" falls back to it), and telling a deferral ("will be removed at a later colonoscopy") from a surveillance plan would be a word list |
+
+## Harness repair, refutation round 2 (2026-11-05): the rules dropped under the two-cycle rule, and what they leave
+
+Round 2 reached round 1's phrase-level repairs from both sides: near-synonyms escaped them, and widened forms denied
+genuine services. Every rule that did not converge in two cycles was dropped, and its inputs are recorded here.
+`tests/test_h2_refutation_r1.py` `RecordedResidualTests` pins each one under the directive's equivalent standard: a
+participant's code is READY only where Corti's selection of the same passages is READY. So participant admission adds
+no false READY of its own, and what is left is the readers' own reading on Corti's path, the same as at main 8645fd54.
+HARNESS.md, "Refutation round 2 (2026-11-05)".
+
+**Superseded above.** Two rows of round 1's section no longer describe this release:
+- "The 8 mm polyp, distinct from the surrounding normal sigmoid mucosa": its snare is still never moved to another
+  polyp, now by sizes compared as numbers.
+- The plan at today's lesion inside a future service still withholds a listing (a hold, on the safe side). A kindless
+  removal planned for another occurrence of a service no longer does.
+
+| residual | example (a lens's own input) | reads, both paths | why left |
+|---|---|---|---|
+| a lesion named only by a site adjective is not recorded, so its biopsy is never part of its removal | "Cold forceps biopsies were taken from a 10 mm sigmoid polyp, which was then removed with a hot snare." | 45380 READY beside 45385 | `LESION_SITED` bound "the other polyp" to the snared one, recorded observed lesions that moved other acts' bindings, and missed "a 10 mm sigmoid sessile polyp", "an approximately 10 mm sigmoid polyp" and "a sigmoid polyp" |
+| an outcome of nothing obtained, with no other act's denial | "... it was sampled with cold biopsy forceps, which yielded no tissue." | 45380 READY | `NO_YIELD_AFTER` read "which produced no bleeding" and "producing no mucosal tear" as nothing obtained; beside another act's denial the release refuses it (`OWN_CLAUSE_DENIAL`) |
+| a negated infinitive or a negative object, with no other act's denial | "the decision was made not to biopsy it."; "biopsies were obtained from none of the polyps." | 45380 READY | `NOT_TO_BEFORE` read "taking care not to snare the adjacent fold", and `NONE_AS_OBJECT` read "from no fewer than six sites", as denials |
+| an EMR named only on the procedure line, or in another sentence than its snare | "Procedure: Colonoscopy with endoscopic mucosal resection" over "... resected with a hot snare after a saline lift."; "EMR of ... was performed. A hot snare was used." | 45385 READY beside 45390 | the snare is bound to no resection act at its lesion or in its clause; binding across sentences or to a listing would bundle other lesions' snares (round 2, over-4) |
+| a tattoo after a place word the reader does not list, or "tattoo mark/spot" | "A 5 mm polyp at the level of the tattoo was removed with a cold snare."; "The tattoo mark in the ascending colon was biopsied." | 45381 READY | the place prepositions are a closed list; "tattoo mark" can name the mark placed today |
+| a role heading the role reader does not know | "Histopathology report - 2026-10-16", "MAC record", "PACU note" over an act | the act reads as the physician's: READY | the role reader's headings; and a role part can swallow the next section ("Pathology results: pending." then "Impression: ..."), so the other-role rule stays out of `match` and applies only to whole-service admission |
+| a denial of a listed removal the readers leave unread | "The snare could not capture the polyp."; "Polyps removed: none."; "The polyp will be removed by EMR at a later date." under a snare listing | 45385 READY on the listing | no act of the listed kind and no removal statement is read |
+| two dilations told in one sentence | "The distal esophageal stricture was dilated with an 18 mm balloon, and a separate pyloric stricture was dilated with a 15 mm balloon." with 43249 and 43245 | both alternatives, the EGD uncoded (a hold) | both codes' passages show both acts, so they compete; CPT Studio never chooses between them |
+| a decompression in an ERCP, an EUS or an enteroscopy | "The distended stomach was decompressed for a gastric volvulus before withdrawal." in an ERCP | not listed, as at main | listing it read an ERCP stent placed "for biliary decompression" as an act left open |
+
+## Harness repair, refutation round 3 (2026-11-05): what the reversions toward main leave
+
+HARNESS.md, "Refutation round 3 (2026-11-05)". Round 3 reverted three releasing rules toward main. What they leave is
+main's own reading, plus one cost on the motivating encounter:
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| a code's own act beside another act's denial in one passage is held, as main holds it | 88d9db32: "... was sampled with cold biopsy forceps for histology; it was not excised by snare." | Corti's 45380 held (a performed-status question); the member's path is an addendum or a rejection, since this release offers no reviewer confirmation | setting the other act's denial apart believed acts done "at the referring facility", "elsewhere", "historically" or "unsuccessfully" through three rounds |
+| the package's coordinated marking outside its own shape | "marked with 3 mL of India ink and not resected"; "marked distally with tattoo ink and not resected"; "marked with submucosal tattoo for future localization and not resected" alone | 45381 held or excluded, as main reads it | the shape's widenings released forms where no tattoo was placed; a hold is the safe side |
+| a decompression's bare verb outside a failure or attempt frame | "The sigmoid volvulus was detorsed, decompressing the colon." | not read as an act, as at main | reading the bare verb made 45393 and 45337 READY on plans, drugs and tubes |
+
+## Harness repair, refutation round 4 (2026-11-05): a marking dated by an adverb the readers do not know
+
+HARNESS.md, "Refutation round 4 (2026-11-05)". Round 4 repaired the regression its probe found: round 3's restored
+"marked" had released earlier-time forms. What it leaves is main's own reading:
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| an injection or tattoo predicate after an adverb of another time the readers do not list ("already", "originally") reads as done today | "The lesion in the ascending colon was already tattooed and not resected."; "India ink was already injected adjacent to the lesion in the ascending colon."; "Tattoo ink had already been injected into the ascending colon." | 45381 READY on Corti's path, at main, at the live revision and here; a participant's reading is READY exactly there (the equivalent standard, pinned) | not made by this change; a time-adverb rule in the shared act reader reaches every family and was not measured in this round. "Previously", "earlier", "formerly", a year and "at the prior colonoscopy" are held |
+
+### Round 4's lenses (2026-11-05): what the round-4b repairs leave
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| the package's coordinated marking or purpose form in any sentence that is not, whole, the package's own | "Impression and plan: the lesion in the ascending colon was marked with tattoo and not resected."; "The 25 mm lesion in the ascending colon, which was flat, was marked with tattoo and not resected." | as main reads them: held or excluded | fail-closed by design (round 4b); a hold is the safe side |
+| a failed decompression worded outside the readers' failure phrases (L4B-3) | "We tried to decompress the stomach but could not."; "Gastric decompression was attempted and did not work."; "Decompression of the colon failed."; "An attempt to decompress the stomach was unsuccessful." | no decompression act, or none listed, so completeness does not show it; never READY | at main too; a failure-phrase list does not converge, and round 3's attempt frame released a READY (L4B-1) |
+| a bare participle denied by "never", or a bare "not snared" | "Sigmoid polyp never removed with hot snare."; "Sigmoid polyp never biopsied with cold forceps."; "Sigmoid polyp not snared." | READY on Corti's path at main and here; a participant's reading READY exactly there | not made by this change; "not excised" and "never excised" are read (round 4b) because this change made "excised" a bare act participle |
+
+### Round 5 (2026-11-05): what dropping the package's bare "excised" leaves
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| a code cited on a passage that states only another act's denial, where the code's own act is documented elsewhere | "Biopsies were taken from the cecum with cold forceps. The examination was completed; the rectal patch was not excised by snare.", 45380 citing the second sentence | READY, as at main and at the live revision (a biopsy is documented in the report; the citation is weak support) | the package's bare "excised" that held it failed two refutation cycles (L4B-2, L5-2) and is dropped |
+| a heading's context, when the engine ends the heading as a sentence of its own | "Outside report:" on its own line, then the package's own coordinated sentence | as the plain "India ink was injected ..." reads in that position (READY under an unknown heading; held under History and Prior procedures) | cross-sentence context is read by no reader for any plain act sentence; the package sentence is never read better than one |
+
+### Round 6 (2026-11-05): the repair package's two releasing readings, dropped
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| a coordinated "marked with tattoo ... and not resected" | 88d9db32's impression: "Separate transverse-colon lesion marked with submucosal tattoo for future localization and not resected today." | the denial reaches the tattoo; beside an injection stated elsewhere, a tattoo conflict holds 45381 (needs_clarification), as at main and the live revision | the package's release failed six refutation rounds (span form rounds 1 to 4, whole-sentence form rounds 5 and 6): it read tattoos placed at another time or by another provider as today's |
+| "for future localization" after a completed injection | "Tattoo ink was injected into the transverse colon submucosa for future localization." | planned: 45381 excluded, as at main | the purpose rule failed the same rounds ("Ink not yet injected ... for future localization", an indication naming an outside colonoscopy) |
+
+### Round 7 (2026-11-05): the withheld listing's kindless branch, dropped
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| a removal stated not done, failed or planned with no technique named, under a procedure line listing that removal | "Procedure: Colonoscopy with hot snare polypectomy" ... "No polyps were removed." | the listed removal reads as main and the live revision read it: listed on the line; a participant's reading READY exactly where Corti's is | round 1's withheld listing (fa-1) read another lesion's or another date's removal as today's ("Indication: Prior colonoscopy in 2021; no polyps were removed." made 45378 READY and hid the listed polypectomy); it failed two cycles. A same-kind statement ("Hot snare polypectomy failed.", "... will be removed by hot snare at a later date.") still withholds the listing |
+| two lesions named in one sentence at one site, the reader binding both acts to one of them | "A 25 mm lesion in the cecum was removed by EMR, and a 4 mm polyp in the cecum was removed with a cold snare." | the second lesion's snare is its own act (listed, its 45385 read on its own), as at main; an EMR's own snare in its own clause stays part of the EMR | the reader's lesion binding is main's; the bundling now trusts it only at a lesion recorded alone and singular |
+
+### The fresh walk on the installed revision (2026-11-05, e6d451f03d86)
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| a participant's reading with a field the reading schema does not allow | Fable's not_coded[0] with an extra 9-16 character field, on all three walk documents | the whole reading refused: no codes from that participant, reported as partial participation | the schema is deliberately strict; tolerating unknown fields is a clinical-path parser change for its own refutation |
+| a Stop while a participant's run is in flight | h2b: Stop 7 s after upload, during Astra's first reading | after Resume the identical request is not sent again; that participant, and so the peer reviews, take no part in the revision | duplicate prevention: a request sent once is never sent twice |
+| the routing-era family label under an Indication naming another occurrence, or a report title alone | h2b "Referral for removal of a large cecal polyp seen on an outside colonoscopy."; h2c "Upper Endoscopy Report" | historical / uncertain; h2c's 43248 (guide-wire dilation) held for a question, as at main | main's routing reader, unchanged by this release |
+| moderate sedation by the endoscopist | h2b "Moderate sedation ... administered by the endoscopist, with an independent trained observer present; intraservice time 32 minutes." | neither coded (99152, 99153; G0500 for Medicare) nor listed | outside CPT Studio's coded scope (the sealed expectation's note) |
+
+## Completion repair, refutation cycle 2 (2026-11-06): what layout parity, the closed forms and the base readings leave
+
+Cycle 2 of the refutation over the completion repair broke its cycle-1 word readers in both directions, and under the
+owner's two-cycle rule the approach changed (HARNESS.md "Refutation of the integrated diff, cycle 2"). What that leaves,
+measured on the integrated head:
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| a labelled report's misreading that its heading twin has too (layout parity) | an appended outside record under its own heading ("Outside records (2022):", "Indications:", "Colonoscopy: ..."); "Impression: None of the above was performed today."; "Her sister had a colonoscopy in 2022 with these findings."; "The next one was done in 2022." | READY, exactly as the same text with "Procedure: Colonoscopy" over the narrative, which the installed release reads READY | the cycle-1 readers that held these were word lists that over-held ordinary reports ("This is a 58-year-old man referred from an outside hospital.", "ASA class II", "polyps in 2022; now due for surveillance") and still leaked; the engine's reading of the heading form is the installed release's own |
+| an unnamed family's course read as its named twin | "Procedure: The colonoscope was advanced to the cecum." with "Status: Abandoned - inadequate bowel preparation.", "Perhaps the colonoscope ...", or "That was at her examination three years ago." | 45378 READY, as "Procedure: Colonoscopy" over the same narrative reads | the instrument rule reads no more permissively than the named heading (routing's own qualification of it); cycle 1's I12/I13 lists leaked and held "Aspirin was discontinued ..." |
+| a coordinated removal by another person | "An impacted meat bolus was found at 32 cm and was removed by her husband." | 43247 READY, as "The food bolus was removed by her husband." reads on the installed release | the shared subject's closed form reads a done auxiliary; the agent "by her husband" is read by neither the installed release nor this one |
+| a reach statement a later sentence dates | "Cecal intubation was achieved. That was at her examination three years ago." | extent complete (the installed release: incomplete) | a one-sentence closed form cannot see a later back-reference without a list of them |
+| a listed removal the report states no removal of, or states one outside the closed forms | "Procedure: Colonoscopy with cold snare polypectomy" beside "A 6 mm polyp was seen in the sigmoid colon." / "The polyp was not removed until the end of the procedure." / "The polyp was initially not removed ... but was removed after irrigation." | held (the installed release: READY) | the listing supplies a technique, never a performance: the rule that made the left-in-place false READYs robust; an unrecognised removal costs a question, never a READY |
+| a listed removal beside a negated or another time's lesion the reader records no lesion for | "A 6 mm polyp in the ascending colon was not removed." / "No polyp in the ascending colon was removed." under a listed polypectomy | READY, as on the installed release | the documented-service reader records no lesion in such a clause, so the listing rule has nothing to judge (round 7's residual) |
+| the closed forms' holds (the safe side) | X2 "She could not swallow after a steak impaction at dinner. The bolus was removed with a Roth net."; X3 "... the impacted meat bolus was grasped with a Roth net. The bolus was removed ..."; "Cecal intubation was achieved at 10:32."; "Balloon dilation ... was stopped at 15 mm because of resistance."; "The polypectomy was halted briefly to suction blood and then completed."; "Specimen retrieval after the polypectomy failed." beside a done polypectomy; a listed polypectomy beside a polyp only seen and a plan | held (needs_clarification) | each release now fires only on the shape it recognises whole; an unlisted shape costs a question, never a READY |
+| the base readings restored | "Upper endoscopy with duodenal biopsies for suspected celiac disease" (the hedge after "for"); a cited failed attempt beside another polyp plainly removed (E|ANOTHER-failed-attempt); a withdrawn answer while its reassessment is stopped | held; held; the stored assessment read until the reassessment runs, readiness holding meanwhile | each was a cycle-1 or integration release refuted twice: dropped to the installed release's reading |
+| a failed removal beside a lesion the reader records in no clause | "A 20 mm sessile polyp in the sigmoid colon could not be removed endoscopically." then "En bloc hot snare polypectomy failed." | 45385 and 45378 held (179fdff99 excluded 45385 with 45378 READY) | the documented-service reader records no lesion in a negated clause; an exclusion needs the lesion stated not removed or only observed |
+| the installed release's own false READYs seen and not moved | "Hot snare polypectomy of the polyp was tried; it was unsuccessful."; "... was started, but it was abandoned because of bleeding."; Corti's 43249 alone on wire-guided dilators after a balloon failed; Corti's 43248 alone on "a CRE wire-guided balloon dilator" | READY, as on the installed release | outside the mechanisms cycle 2 touched |
+
+## Completion repair, refutation cycle 3 (2026-11-06): what the repair of cycle 2's approach leaves
+
+Cycle 3 refuted cycle 2's change of approach; the repair abandons the releases no required reading rests on, closes the
+required ones whole, gives sub-act failures to one reader, and reads a released label as its heading twin's name
+(HARNESS.md "Refutation of the integrated diff, cycle 3"). What that leaves, measured on the repair:
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| the H2 shape's bolus removal beside a status or consent line the installed engine does not read at that distance | the H2 report with "Status: Cancelled - inadequate bowel preparation." in its head, or "Consent: The patient declined ..." | 43247 READY on the labelled report, as required without the line | the base's heading twin reads the same document's 43239 and 45385 READY whatever the line says (it lies beyond the base's window), and holds 43247 only by the heading form's own false hold (corpus 137, cycle 2's recorded exception) |
+| a labelled report whose twin names both families, read as the installed release reads the report | "Procedure: Upper endoscopy" over "The gastroscope was withdrawn. The colonoscope was then introduced. A 6 mm sessile polyp was removed ..." with "Indications: Dysphagia; surveillance colonoscopy for prior adenomas." | 43251 READY | the installed release reads this input READY itself; its twin naming both families is held |
+| the installed engine's own readings carried by parity (each twin READY on the installed release) | a status or "not performed" line after a report field line; "Previous findings:" or "Pre-procedure diagnosis:" lines before the label; a flexible sigmoidoscopy label taken to the cecum | READY as the twin | 50 of the 180 measured pairs (`completion-c3-parity.json`); unchanged from the installed release |
+| the abandoned releases' false holds (the safe side) | "Removal of the bolus was performed with a Roth net." (no food word); "An impacted meat bolus was found at 32 cm and was removed with a Roth net."; "Clip closure of the polypectomy defect failed." beside a done polypectomy | held | the nominal removal, the shared subject and rule 6b are abandoned under the two-cycle rule (each refuted, nothing required rests on them); the installed release holds each too |
+| a pronoun's failure after a completed sub-act | "Hot snare polypectomy was attempted; it was unsuccessful." | the examination's failure (incomplete, flagged), the base reading | the pronoun rule is abandoned after three refuted cycles |
+| cycle 2's stop words, no longer the services reader's | "The polypectomy was halted because of bleeding." beside a listed polypectomy | READY with the installed incompleteness warning | routing gives no failure to a sub-act the services reader does not read failed, so the examination keeps it - the installed release's reading |
+| a reach statement beside another landmark sentence | "Cecal intubation was achieved. The appendiceal orifice and ileocecal valve were photographed." | the extent as the installed release reads it | the reach statement is believed only as the text's one landmark word; a second sentence naming one, retraction or not, keeps the base reading |
+| a removal's "not performed" exclusion beside any removal word elsewhere | "Plan: Repeat colonoscopy for polypectomy." beside a failed snare and a polyp only seen | held | the exclusion needs no removal word anywhere outside the code's own acts' passages (fail-safe: an unrelated word costs only the exclusion) |
+| a marking inside a condition | "If India ink was injected adjacent to the lesion ... for future localization, surgery is easier." | excluded as planned, not held | the purpose release fires only for a marking statement read whole; the installed release excludes it too (never READY) |
+| answers recorded before the binding, seen on the live data | 14 earlier-form answers on 4 live encounters | each excludes only its own code when its question is asked; none of those encounters carries a decision | measured on the install's read-only dump; a re-assessment never reopens an approval through such an answer |
+| the whole-sentence antecedent's holds (the safe side) | "Findings: An impacted meat bolus was found in the distal esophagus; the mucosa elsewhere was normal." then "The bolus was removed with a Roth net."; "An impacted meat bolus was found at 32 cm, and the bolus was removed with a Roth net." | 43247 held | the antecedent's whole sentence is the plain finding; a sentence with another clause, even a harmless one, binds no anaphor (cycle 3 closed C3-4) |
+| an accessory's failure the services reader reads no act from | "The snare could not be passed around the polyp."; "The stent could not be advanced through the stricture." | the examination's incompleteness (flagged, with the modifier consideration), as the installed release reads it | routing gives a failure to a sub-act only where the services reader reads that act failed; the services reader records no act from these sentences - part of U3 left at the base reading |
+| a marking coordinated with another act in one sentence | "The 15 mm polyp in the sigmoid colon was removed with a hot snare and the site was tattooed for future localization." | 45385 held, 45381 excluded | no marking statement whole: the purpose's future keeps its base reading for the sentence, as the installed release reads it |
+| a marking for a purpose the marking statement does not name | "An EMR tattoo was placed distal to the lesion for future resection." | 45381 held | the closed purpose is localization, identification or reference |
+| the same-act rule's holds the governed form does not reach | "Specimen retrieval after the polypectomy failed."; "The first biopsy pass was unsuccessful, but tissue was obtained on the next pass." | held | recorded since cycle 2; the installed release reads them READY |
+
+## Completion repair, refutation cycle 4 (2026-11-06): what the differential check leaves
+
+Cycle 4 refuted cycle 3's repair; the repair returned every refuted mechanism to the installed reading or to its twin's
+(HARNESS.md "Refutation of the integrated diff, cycle 4"), and a differential scan over every lens case of cycles 1 to 4
+found no READY that is neither a twin's nor cycle 3's measured release. What that leaves, measured on the repair:
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| a marking statement dated, conditioned or taken back in another clause or sentence | "At her outside colonoscopy on 2026-09-02, a 30 mm flat lesion was found ...; India ink was injected adjacent to the lesion for future localization."; "... for future localization; the tattoo was placed at her previous colonoscopy." | 45381 READY, 45378 held (base_included) | the installed base reads the same statement without "for future localization" READY (its clause-local time); the purpose release only stops "future" being read as a plan - its required reading (d44a77b3, 88d9db32) |
+| a reach statement a later correction or limitation qualifies | "Cecal intubation was achieved." then "Correction: the furthest point reached was the hepatic flexure." or "Only the rectum, sigmoid and descending colon were examined." | extent complete, READY, no warning | the installed base reads the twin "The colonoscope was advanced to the cecum." the same way; the reach statement is required (D10b) |
+| a bolus removal another sentence dates | "For comparison, at her EGD on 2026-09-02 the findings were as follows. An impacted meat bolus was found at 32 cm. The bolus was removed with a Roth net." | 43247 READY | this release's clause-local time, as for every act; the installed release never reads a bolus removal READY (its recorded false hold), and 39f0ac49 and d44a77b3 require it |
+| a failed removal beside a lesion only observed | "A 9 mm pedunculated polyp in the sigmoid colon was seen." then "Hot snare polypectomy failed." (also "... was abandoned.", "... is to be performed at a later date.", or the procedure line cited for it) | both codes held (performed_status, base_included), whoever proposed the removal code | the observed-only exclusion is abandoned (refuted in cycles 3 and 4); the installed release holds both when Corti selects the removal code, and a reviewer's rejection of it releases the base code. Where only Astra or Fable proposed it, the installed release listed it as an alternative and read the base code READY; equal eligibility (item 3) reads it as Corti's selection is, so this is a hold the installed release did not have (the ADM C3-2-1 corpus entries, the H4 battery rows R8 D1 N1 and R8 D9 "to be removed tomorrow") - the safe side, never a lost or false code |
+| a sub-act's failure outside the closed attempt form | "Biopsy attempts were unsuccessful."; "Hot snare polypectomy was attempted, but the polypectomy was unsuccessful." (no object of its own); "Stone extraction with a balloon was unsuccessful." | the examination's: READY with the installed incompleteness warning | only "X of a/an ... was attempted, but the X was unsuccessful/failed" is a sub-act's own (every U3 requirement shape); the rest keep the installed reading - a warning, never a hold or a lost code |
+| a done act and a later failure of the same act | "Polypectomy of the 6 mm sigmoid polyp was performed. The cold snare polypectomy of this polyp was aborted because of bleeding." | held (routing's family hold), as installed | not the closed form; routing holds the family on "aborted" as the installed release does |
+| a released labelled paragraph whose scope switch names no scope word | "Colonoscopy: ... The colonoscope was advanced to the cecum. The colon was normal. Next, the PCF-H190 was introduced and a 6 mm sessile polyp was removed with a cold snare." (no scope word after the first sentence) | the label's family binds the act | the binding stops at a sentence taking a scope (any word ending in -scope) to no site or outside the tract; a model name alone is not read - recorded, rare |
+| the retained H2 shape with a depth written "36cm" | d44a77b3's labelled paragraphs with "at 36cm" | all four codes held | the installed release holds the labelled form either way (cost 3, BASE); the release's place signal reads the unspaced depth as another place |
+| answers the review overlay reads | an answer recorded before the binding (14 on 4 live encounters); a base_included, separate_em or competition answer | applied at read time by the overlay, as installed; the engine records each as read by the overlay | the engine reads only fingerprinted answers to questions no decision opens or closes, so no other code's stored checks or decisions depend on an answer's form |
+
+## Completion repair, the differential round over cycle 4 (2026-11-07): what it leaves
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| a statement no tree reads, beside the closed attempt form | "...the polyp was left in place." then "The examination was limited by poor preparation." / "Not performed." / "The procedure was abandoned." | READY with no incompleteness warning | the installed release's warning on these inputs came from the failed attempt alone - without it, no tree reads those statements (the control reads READY with no warning on the installed release too; for a section that does not name the examination, the control is its heading twin without the attempt, measured for each of the 16 such inputs); U3 removes exactly that warning |
+| a cancellation, decline, pending or hedged examination beside the closed attempt form, in a section that does not name it | "Procedure: The scope was advanced to the cecum. Hot snare polypectomy of a 14 mm polyp in the sigmoid colon was attempted, but the polypectomy was unsuccessful because of poor positioning; the polyp was left in place. The colonoscopy was cancelled." (also "Colonoscopy was not performed.", declined, pending, "possibly", unclear, another time) | 45378 READY with the installed incompleteness warning | the installed release reads the heading twin ("Procedure: Colonoscopy" above the same narrative) exactly so: its "incomplete" outranks the cancellation. It holds the unnamed form only through its base_included question on the failed polypectomy, which U3 removes. The instrument course's gate (I8) gives the closed form its installed reading here, and the 22 pairs are pinned with their twins (`completion-c5-cases.json`) |
+| the closed form inside another occasion's section of another examination's report | an EGD report's "Records received:" / "Addendum:" / "Comment:" quoting an outside colonoscopy's failed attempt | the colonoscopy code READY with no warning, as READY on the installed release (with its warning) | the installed release's READY is itself its own false READY; the code is READY alike |
+| a site-less act after any later scope sentence in a labelled paragraph | "Upper endoscopy: ... The scope was repositioned above the bolus. A retrieval net was passed ... and the bolus was removed ..." | 43247 held | past a scope sentence the label binds no act; the heading twin holds it too (its recorded false hold) |
+| an answer to a reinstated code's wait, listed once the reinstatement is revoked | the extent row answered while 45380 was reinstated, then the reinstatement revoked | the 45380 answer listed as "no longer asked" | true (the question is no longer asked); the previous head lists it the same way |
+
+
+## The walk round (2026-11-07): what it leaves
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| a removal hedged in its own sentence whose code cites only another lesion's failure in a form the base already reads as that attempt's own | "Hot snare polypectomy of a 12 mm pedunculated polyp in the sigmoid colon was attempted, but the snare failed; the polyp was left in place." cited alone, beside "A 6 mm polyp ... was removed with a cold snare, but it is unclear whether the polyp was removed or only biopsied." | READY on the base, the installed release and this head alike | the round's selected-passage hold closed it and was dropped after its refutation: read in the act's whole sentence it also held codes over clauses about other acts ("but was not retrieved", "and no clip was placed") that both releases read READY |
+| a doubt of the done act outside its own sentence, or in words neither reader reads, when its passage is cited beside a failure that is set aside | "It is unclear whether the transverse polyp was removed or only biopsied. A 6 mm polyp in the transverse colon was removed with a cold snare." cited with the closed-form failure at another polyp | READY | exactly as the code reads with the done act's passage cited alone, on every tree (the set-aside reads no passage the base does not) |
+| the negated-passive failure cited alone beside a plain done act | the failure alone cited, "A 6 mm polyp ... was removed with a cold snare." elsewhere | held | the installed hold (the declared cost of the abandoned release) for a citation resting on the failure alone |
+| a code listed on the failure alone while participants cite the acts | Corti 45385 twice on the failure; Astra cites two removals | READY with two units, the MUE check failing and the duplicate prompt asking | as two done acts listed twice read on every tree; the units are the group's and never exceed the acts the passages show |
+| a coordinated reach after a relative aside - walk finding 3, OPEN | "The scope was then advanced into the stomach, which was normal on forward view and on retroflexion, and through the pylorus to the second portion of the duodenum, which was also normal." | the first landmark's incomplete extent (codes READY with the incompleteness warning) | both forms of the continuation reader were refuted (a segment named after a later mention, "leaving the colon beyond the transverse colon to the cecum unexamined"; any words as its route, "through the pylorus nearly to") and dropped under the two-cycle rule; the requirement stays open for a changed approach |
+| a removal another sentence dates, cited beside today's failed attempt | "Basket retrieval of a coin ... was attempted, but the basket could not be opened." with "For comparison, at her EGD on 2026-09-02 ... The bolus was removed with a Roth net." | READY | the set-aside reads it exactly as the installed release reads the removal cited alone - the cycle-4 residual "a bolus removal another sentence dates" |
+| a labelled paragraph whose course follows a frame or opening sentence outside the closed allow-lists | "Colonoscopy: The patient was sedated. The colonoscope was ..." | the paragraph refused, its narrative read as installed (the Indications) - codes held | the closed P2 admits only shapes that state no status; anything else refuses, as installed |
+| a continued landmark followed by anything but a closed plain description | "... and through the pylorus to the second portion of the duodenum, where the mucosa was erythematous." | the installed incomplete reading | the trailing description is an allow-list (fail-closed); its refutation showed an open one read "unexamined" and "but this could not be confirmed" as reached |
+| a site-less dilation past the binding's cut in a report of both examinations - walk finding 2, OPEN | "Upper endoscopy: ... A Savary guidewire was passed through the scope into the gastric antrum, and the scope was withdrawn over the wire. Savary-Gilliard dilators of 15, 16 and 17 mm were then passed over the wire ..." beside a colonoscopy paragraph | held (43248: no dilation documented as done in the upper endoscopy), as installed | the binding's exceptions (their wording, then their local form) and the device-tract binding (the device alone is open - Savary bougies dilate anastomotic strictures; then a guide wire's brand name read as a dilation where the stricture was not dilated, a generic "is usually performed", and an 81.8 s assessment on an admitted input) were each refuted twice and dropped under the two-cycle rule; the requirement stays open for a changed approach |
+| a bolus stated "captured and brought out through the mouth" - walk finding 4, OPEN | "A large piece of partly chewed chicken was impacted in the distal esophagus ... The bolus was captured and brought out through the mouth." | held (43247: no foreign-body removal documented as done), as installed | the out-words as done participles (bare, then route-bound) and the route-bound removal as the bolus phrase's own predicate (open, then closed: "taken out ... by the emergency physician", "by Dr. <another physician>" and a bolus that fell back in the next clause still read done) were each refuted twice and dropped under the two-cycle rule, and the round's food-word antecedent with them: services.py is the installed module; the requirement stays open for a changed approach |
+| a site-less act after the scope's withdrawal in a report of two examinations | "Colonoscopy: ... We then withdrew the colonoscope. A 6 mm sessile polyp was removed with a cold snare." beside an upper endoscopy paragraph | held | it belongs to neither examination for certain; the installed release read it READY only where it refused the other paragraph |
+
+## The walk round's install (73dcf8b4) and its blind walk: what they leave (recorded 2026-11-07)
+
+Found after the install by the fourth lens's parity notes (U17) and the blind c3 walk (U18-U20); each verified with
+minimal pairs on the installed tree, and each read the same by 6f306af1 and the base (none is a regression). All are
+holds or false incompleteness warnings except U17, which is a false READY the installed release already had.
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| U17: a guide wire's brand name, or a habitual statement, read as a dilation done - inside a label's binding | "A Savary-Gilliard guide wire was passed through the scope ... the stricture was not dilated"; "Savary dilation is usually performed for such strictures." | 43248 READY on 6f306af1 and 73dcf8b4; the base holds the labelled form and reads the heading twin READY | the services reader's dilation mention excludes only "Savary (guide)wire", and the clause reader reads a habitual present as done; found as parity by the walk round's fourth lens; open for the next round |
+| U18: the labelled release refused on ordinary content | c3a: "biopsies were taken from both" (N1, an unanchored place); the consent sentence before the label, "after a discussion ...", "before each procedure" (N3); a hard-wrapped "(Boston\nscore 8: 2-3-3)" read as a label line (N2); latent: "prior", "in two bites", "the proximal side of a fold" | both paragraphs refused, their narratives read under the Indications: codes held for extent and status | the release's paragraph-level gates fail closed on any of their signals; each walk has met another layer of them |
+| U19: a reach stated by findings, not by a reach verb | "The duodenal bulb and second portion looked normal"; "Duodenum: The bulb and second portion were normal." beside "Stomach: Normal, ..." (an organ-by-organ list); "The stomach and the duodenum to the second portion were normal." | no extent (held), or "incomplete: stomach" with a false incompleteness warning | REACHED_AFTER needs its verb right after the landmark, "second portion" alone is no landmark, and the findings-line form reads only "<organ>: Normal" |
+| U20: numbered procedure headings open no section | c3c: "HISTORY" then "PROCEDURE 1 - EGD" and "PROCEDURE 2 - COLONOSCOPY" | the HISTORY section runs over both narratives; every act reads historical; codes held | the recorded "gap a" (numbered PROCEDURE headings), here with a dash and under HISTORY; sections.py is behind the H2 freeze |
+
+## The recall round (2026-11-07/08): what it leaves
+
+Measured on a development corpus (24 reports, six blind authors) and a held-out corpus (24 more, six new styles, read by no
+designer). Every design was refuted in two cycles; what was dropped is recorded with its requirement in HARNESS.md, "The
+recall round". These are what the SHIPPED findings-stated reach leaves - each read by the installed release the same way when
+the same report states the reach with a verb or a copula (bounded by parity) - and what stays open.
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| a findings statement under a field-line title naming another report | "Prior colonoscopy report: see below." then "Findings:" / "1. Terminal ileum normal." | the terminal ileum read as today's extent; 45385 READY | bounded by parity: the installed release reads "The terminal ileum was normal." in the same place READY |
+| an occasion one sentence away from the statement | "Terminal ileum normal. That was at her colonoscopy two years ago, not today." | today's extent read from it | bounded by parity (the copula twin); the guard reads only the sentence before |
+| a statement answered by a non-bare answer line | "Cecum reached." then "[ ] Yes [x] No (poor preparation)" | cecum read | bounded by parity (the copula twin "The cecum was reached." reads the same) |
+| the sibling codes a read extent exposes | 43202/43198/43220/43214 (esophagoscopy), 44361 (enteroscopy), 44389/44394 (through a stoma), 43246 for a previously placed PEG, 43233 for a balloon under 30 mm, 43245 for an esophageal ring | READY once the extent is read | bounded by parity (each READY on the installed reach-verb twin); the profile dimensions (diameter, examination extent, dilation target) were designed and refuted twice this round |
+| the three installed careless false READYs | 43236 beside 43255 (an injection within hemostasis); 45381 for a tattoo placed at an earlier procedure; 43233 for a 20 mm balloon | READY | the hold-only rules for them were refuted twice and dropped (a millimetre length read as a diameter; competitions consumed); OPEN |
+| U20: numbered procedure headings | "PROCEDURE 1 - EGD" after HISTORY or INDICATIONS | the narratives read as history; codes held | two mechanisms refuted twice each (the numbered part inside the shared layout: a date sent; a same-length reading twin: correct READYs lost where the installed reading already read the part); OPEN |
+| U18: dictated labelled paragraphs | "Upper endoscopy: With the patient in the left lateral decubitus position, the gastroscope was passed ..." | refused by the release gates; codes held | two variants refuted (word-list leaks, quadratic costs); OPEN |
+| template field scope, instrument shorthand and attribution, act abbreviations, "applied", a "?" on a diagnosis, the part boundary, denial dating | "Prior endoscopy: None." swallowing "Extent of exam:"; "Std gastroscope to D2"; "CSP"; "APC applied" | held | designed and refuted with their gain one corpus hold each; abandoned this round, OPEN |
+
+### The recall round: the date half, and the final refutation pass over the integrated diff (2026-11-08)
+
+The owner's date forms read, at worst, exactly as the installed release reads the same document with its date written in an
+installed form (a "Procedure date:" label, or a month-day-year date) - each row below is READY or sent on that twin too.
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| a head "Exam date" that dates another study | "CT findings: Focal sigmoid wall thickening." then "Examination date: 10/02/2026" in the head | sent as the date of service; the doctor's other date held | bounded by parity ("Procedure date: 10/02/2026" there is sent too) |
+| a head label in a note whose head is the whole note, or in a SOAP head | a short consultation or "Subjective: ... / Exam date: 10/28/2026 / Colonoscopy on 10/28/2026: ..." | the reviewed exam's date sent; its recounted acts read performed | bounded by parity |
+| a head "Date of Operation" naming the surgery in a post-operative or surgery-field note | "Surgery: Low anterior resection" then "Date of operation: 03/16/2025"; "Colorectal Surgery Clinic - Postoperative Visit" with "Date of Operation: 10/12/2026" | the operation's date sent | bounded by parity |
+| a head label in a planning office visit, under a title the around-procedure reader does not know, or after two spaces or a tab inside a sentence | "Exam date: 11/20/2026" above "Office visit"; "Document Type: Consent"; "Underwent right hemicolectomy.  Date of operation: 03/15/2025." | the planned or earlier date sent | bounded by parity |
+| the 2026-10-28 known limits in the decided forms | a status field beside or below the label, "Recall:", another discipline's title, with "3 Sep 2026" | another occurrence's date sent | the installed month-day-year twin reads them so (the 2026-10-28 ruling's accepted limits) |
+| a weekday date the installed reader left unread now asks or holds | "Previous date of service: Tuesday, November 10, 2026" beside "Date of service: 11/09/2026"; a closing charge block's weekday date; a weekday-dated label beside the DOB | asked (a correct READY becomes a question) or a member answer held | hold side only; the H2 gate refuses SEND->ASK, so such a text in a freeze corpus fails the gate; recorded |
+| one decided-form release with no text twin | a flexible sigmoidoscopy with biopsy whose weekday date is now read | READY | equal to the installed reading once the member answers the stated date; no false READY shown |
+| the reach statement's doubt guard reads only its family's sentences | "Duodenal bulb normal; second portion not examined." in a report that also mentions a colonoscopy (the denial attributed to no family) | the bulb statement releases | bounded by parity (the copula twin reads the same there) |
+| more sibling codes a read extent exposes | 43236 / 43243 (injection target), the ablation-kind codes | READY once the extent is read | bounded by parity; the act subtype is a fourth profile dimension beside diameter, examination extent and target |
+| one 400 KB shape crosses 10 s | findings statements with both features over 400 KB | about 11 s, where the installed release takes under 10 s | under 3x; the installed release already exceeds 10 s on sibling 400 KB shapes; every stage deadline holds |
+
+**Repaired by the final pass:** the integration had kept a context recorded under gi-context@4 current, on the premise that
+@4 only asks where @5 sends. Three lenses showed it false: a @4 context that asked and then took a member's answer sends
+that answer, which @5 holds when it contradicts the document's newly read head date - and with the findings-stated reach a
+code read READY on it. gi-context@4 is retired (remade before any stage sends or assesses), as @1 to @3 were.
+
+**Then reverted, after the retirement's own refutation (2026-11-08T03:58-04:32Z; two lenses over the repair, a restored
+live copy included).** Retiring gi-context@4 does not close what it was meant to close, and it regresses the encounters @4
+read:
+- the participant and peer stages send on an earlier context without remaking it (a stage queued across an install,
+  resumed after a Stop, or swept), so a @4 context of the class above still sends its participants and peer reviews; the
+  installed release has the same gap for @1 to @3;
+- on the encounters @4 read (31 live), a member's answer was applied to the stored assessment with no re-assessment (on
+  the live copy three encounters read 'reviewed' with an approved export where the current engine reads a code READY), a
+  withdrawal was never applied (a readiness blocker nothing clears), a reconciliation's participant attempt was lost, and
+  two encounters lost their second-review offer.
+
+So gi-context@4 stays current, and the class above is bounded instead:
+- **by measurement:** none of the 31 live contexts @4 recorded reads differently under @5 (facts, and the document date
+  where one is stored). Both controls are detected: a planted value, and a context the installed code made of the class
+  itself. The measurement is repeated on the pre-app dump of each install, and any difference is a stop condition of its
+  declaration;
+- **by structure:** no context is recorded under @4 once @5 is installed.
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| a context @4 recorded whose member date @5 would hold stays current | an upload under 73dcf8b4 with a head "Date of Operation: 11/05/2026" and the member's 11/09 | 11/09 sent; through the findings-stated reach 45385 READY | none on the live copy (measured); none recordable after the install; a stop condition of the install |
+| pre-existing on the installed release: the participant and peer stages send on an earlier context without remaking it | a chain on a context @1 to @3 recorded, queued across an install, resumed after a Stop, or swept | the participants and peer reviews are sent on the old context | reachable only with an in-flight or stopped chain on an earlier context, and the live copy has none; open (U22) |
+| pre-existing on the installed release: a member's answer, withdrawal or reconciliation on an earlier context is applied without a re-assessment | an answer on an encounter whose context @1 to @3 recorded (the live controls a8e50085, fbdd6d27, 30d3f32d and 212ed78d each read 'reassessing': false) | the overlay applies an answer to the stored assessment; a withdrawal leaves a blocker nothing clears; a reconciliation's participant attempt is not made; a Resume of an assess is not counted as the member's request | an unchanged context save or an addendum reads the encounter under the current rules; open (U23) |
+| a rollback reads a @5 document date it cannot honour | a context @5 holds (a member date against a head "Date of Operation"), then a rollback to 73dcf8b4: "Use document date" is offered from the @5 document date | the installed release clears the member value, reads no date and would send a dateless request, then asks the date again | rollback only; declared in the install's rollback limits |
+
+## The structure round (2026-11-08): what it leaves
+
+The blind c4 walk of the recall round's install walked 0 of 3, every failure a hold (U18 c4a, U16 c4b, U14 c4c). This round
+repaired each against a TWIN-PARITY bar: the installed release's own reading of the same document, written in a form that
+release already reads. It also found installed false READYs (U24 to U27). Every design was refuted by fresh lenses under
+the two-cycle rule. What was dropped is recorded with its requirement in HARNESS.md, "The structure round". The rows below
+are what the shipped repairs leave, each bounded by its twin where the row says so, and what stays open.
+
+### U14: the long reach, read through its direct-reach twin
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| a lead the closed form does not read, in the motion's own sentence | "On 10/14 -- unlike today -- the gastroscope was introduced ... to the third portion of the duodenum." (any separator inside the sentence, or none); "After informed consent was obtained, the gastroscope ..."; "Some time back the gastroscope ..."; "The daughter says the gastroscope ..." | no motion read; held where the installed release holds | fail closed by design: the lead before the scope noun is read in a closed form (u14a3, completed by the final refutation pass and its focused second pass) |
+| a denial inside the motion's own trailing aside; a hearsay labelled paragraph; an extent field elsewhere | "... and then through the transverse colon to the cecum, which was not identified."; "Her daughter recalls: The gastroscope was introduced ..."; "Extent: uncertain." or "Cecal intubation: uncertain." beside the reach | the reach read, as the direct-reach twin reads it | bounded by parity (u14a2's two lenses: release MEDIUM 1 and 2, regress LOW) |
+| an installed blind spot: a today word inside a dated lead's aside | "On 10/14 - unlike today - the gastroscope was advanced to the third portion of the duodenum." | D3; 43239 READY on the installed release and on the head | not created by this round: the twin itself reads it; OPEN (checklist) |
+
+### U16: the bolus removal, read as its full twin
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| a later negated removal in a nominal form | "not retrievable", "no removal of" after the corroborated statements | the removal read | bounded by parity: the full twin reads it (u16c2's lenses) |
+| the 43215 / 43194 sibling profiles | an esophagoscopy's bolus removal | as the full twin | bounded by parity |
+| another provider's or the emergency department's removal told in today's narrative | a removal the report gives to another provider or to the emergency department | as the full twin | bounded by parity (u16c2's lenses) |
+
+### U18: the dictated labelled paragraph, released at computed parity
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| a field line without a final period directly above the label | "Indications: Surveillance" then "Colonoscopy: The colonoscope was introduced ..." | withdrawn: the installed hold stands (the twin is READY) | the services reader's indication part runs over the label line, so the guard sees a difference and withdraws (15 of 128 lens candidates) |
+| a reach told as U14's motion inside a corroborated paragraph | "Colonoscopy: The colonoscope was advanced to the splenic flexure, which was normal ..., and then to the cecum." | usually withdrawn (the twin is READY); released where the motion's direct-reach twin's paragraph is released by the installed conditions too, and then read as the composite twin (heading plus direct reach) reads it - with U14's endpoint-aside class below | the guard compares the readings of THIS tree's readers (U14 and U16 included), not the installed release's; fail closed where they differ (10 withdrawn in the regress lens's battery) |
+| blanks before the label's colon | "Colonoscopy : ..." | withdrawn (the twin is READY) | an offset-map artifact of the comparison; fail closed (6) |
+| an installed release beside a corroborated paragraph | an installed EGD paragraph above a corroborable colonoscopy paragraph | withdrawn | its own label class differs from its twin's (68 of 960 battery candidates) |
+| the guard's bounds | a document over 40,000 characters, a paragraph over 6,000, or released paragraphs meeting over 300 sentences and clauses | the installed reading | cost (the regress lens's finding: 15 s per stage without the span bound); each bound only withholds |
+| a page join inside or beside a label | a label at a page break | not computed by the guard | recorded by the design |
+
+### U24: "<n> <units> back", withdrawn
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| the installed false READY itself | "Some months back a 6 mm polyp in the sigmoid colon was removed with a cold snare" (45385) | READY, as installed; its "ago" twin is held in every layout | two hold forms integrated and refuted (HARNESS.md "The structure round": the reading form gained 48 false READYs; the outcome hold gained a rival code's READY through the competition, dropped a correct code to an alternative on the second review, and held 567 code rows its twin releases): WITHDRAWN, OPEN; the next approach is a final hold decided by the installed engine's reading of the whole ago twin |
+
+### U25, U26, U27
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| U25: a report that disowns itself | "... A 6 mm polyp in the sigmoid colon was removed with a cold snare. Entered on the wrong patient; please disregard." | 45385 READY, as installed | two designs refuted (a broad disowning reader; explicit self-reference only, whose lenses read another document's "this report", a hard-wrapped validity banner, a nursing note and a sign-off as disowning today's): DROPPED, OPEN |
+| U26: a removal instrument's transit, then the lesion left in place | "A cold snare was passed through the channel, and the polyp was then left in place because she takes apixaban." (45385) | READY, as installed | three approaches: the inventory (released base codes), the code's evidence reading (false READYs through the resolve order; nominal outcome lines and page joins held), the outcome hold (its seam refuted under U24): OPEN, the directive's item 4 class; the u26d sandbox kept for the next round |
+| U27: a revisit to a prior act's object read as that act | "The stent in the distal esophagus was reached and was in good position." (43266); "The polypectomy site in the ascending colon was reached and was clean." (45385) | READY, as installed | the same three approaches (an exclusion that released the base code beside today's stenting; shorthand procedure lines and summary headings with "today" held): OPEN; the u27d sandbox kept for the next round |
+
+### What the walked c4a still holds
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| an organ-list reach no reader reads | c4a: "The rest of the esophagus, the stomach (including retroflexion) and the duodenum to the second portion were normal." | 43239 held for its extent | its heading twin holds it too; a reach stated by an organ list is not U19's findings statement nor U14's motion: OPEN |
+| a site-less dilation past the binding's cut | c4a: "Savary-Gilliard dilators of 15, 16 and 17 mm were passed over the wire" after "The scope was then withdrawn while the wire was held in place" | 43248 held | U15 (two approaches refuted in the walk round): OPEN |
+| the tattoo beside a polypectomy | c4a: "the site was tattooed: a saline bleb was raised ... ink was injected into it at two points" | 45381 held (service status) | its heading twin holds it too: OPEN |
+
+### The final refutation pass over the integrated diff (2026-11-08): what it leaves
+
+Four lenses in sealed sandboxes at `7b9ed3a80` (false READY, false hold, interactions, labels and stored state). Three
+findings broke a claim and were repaired before merge (HARNESS.md, "The structure round"; tests/test_structure_round_final_pass.py).
+These are what remain, each bounded by its twin unless the row says otherwise.
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| U14: a doubting aside at the reach's endpoint | "... then on through the stomach and the pylorus to the second portion of the duodenum, which was the goal." (also "which was seen only from the bulb", "which was the target"; and an addendum "the scope was in the bulb at the end, not the second portion") | 43239 READY, extent D2 | bounded by parity: the strict direct-reach twin and the natural short form ("... advanced to the second portion of the duodenum, which was the goal.") are READY on the installed release - an installed blind spot of the short reach that U14 extends to long ones (27 of 38 aside shapes) |
+| U14: other-occasion or generic words inside the motion's predicate or gap | "The gastroscope was introduced through the mouth some time back and advanced ...", "... at her first endoscopy and ...", "... in theory and ..." | 43239 READY | bounded by parity: the strict direct-reach twin and the natural short forms are READY on the installed release (12 predicate and 4 gap shapes) |
+| U16: a later event the corroboration does not read | "It slipped from the net in the hypopharynx and was swallowed again."; "... was nudged into the stomach."; "This happened before arrival in the endoscopy suite."; "ADDENDUM: ... the meat was never captured" | 43247 READY | bounded by parity: the full twin ("... The bolus was removed with a Roth net." with the same later sentences) is READY on the installed release |
+| U18: a rider code of the released paragraph | a code citing a sentence of the corroborated paragraph that is not its own act | READY, as the heading twin reads it | bounded by parity (60 of 60) |
+| codes a release or a removal exposes | c4a's 43450 and 43453 (non-endoscopic dilation codes) beside today's EGD dilation; c4b's 43215 (esophagoscopy foreign body) | READY when proposed (held on the installed release) | bounded by parity: the heading twin and the full twin read them READY; the code-selection question is the profile dimensions' (OPEN) |
+| U16 beside U18: a corroborated release beside a U16 full-twin reading | a labelled report with both paragraphs corroborable and a bolus removal its narrative and Impression corroborate | the release withdrawn, the installed reading stands | U16's full twin is a derived text the guard cannot carry, so it fails closed; pinned (BolusBesideTheReleaseTests) |
+| a stored answer asked differently after the install | a member's answer that excluded c4a's 43248 under the installed release | kept as an earlier answer; the code back to needs clarification | the question's own wording changes with the release (inherent to any reading that changes the question) |
+| cost of a guarded document | c4a | 0.34 s against 0.05 s per stage (3.5-7x); at the bound 2.0-2.7 s | the twin's two whole-document readings; every bound only withholds |
+
+### The focused second pass over the final pass's repairs (2026-11-08): what it leaves
+
+Two lenses at `ae58a3623`. The U16 time read the final pass had moved to the original text made a new false READY (a
+page-joined "last night", 58 of 180 page-break variants): it was reverted, and the sweeps then read as before it. The
+closed lead form's clause leads were closed. The rest:
+
+| residual | example | reads | why left |
+|---|---|---|---|
+| U14: a dated, hearsay or generic fragment in the sentence BEFORE the motion | "On 10/14 -- unlike today. The gastroscope was introduced ... to the third portion of the duodenum."; "Two weeks ago:\nThe gastroscope ..."; "Next time. The ..." (152 readings in the lens's batteries; present since U14's integration) | 43239 READY, extent from the motion | bounded by U14's twin: the direct-reach twin keeps the fragment as its own sentence, and the installed release reads that twin READY - an installed blind spot of the short reach, which U14 extends to long reaches (the aside-free twin holds); pinned as parity |
+| U14: the narrowing's cost | 283 of 378 natural correct long reaches, among them "Under MAC the gastroscope ...", "With the patient in the left lateral position the ...", "Next / First / Finally / Afterwards / Again the ...", "After informed consent was obtained the ..." | read as installed (EGD 43239 held for its extent; colonoscopy READY with the incompleteness warning) | the closed lead form fails closed; never worse than the installed release; OPEN for a refuted widening |
+| U14 in the colonoscopy: a dated or hearsay motion | "Two weeks ago. The colonoscope was advanced to the splenic flexure, ..., and then through the transverse colon to the cecum." | 45385 READY as installed, now without the service.incomplete warning | bounded by the strict twin; no colonoscopy code moves from held to READY |
+| U16: a time phrase cut by a hard wrap or a capitalised next page | "... under direct vision last" / "Tuesday. Pooled saliva ..." (every width that breaks between "last" and "Tuesday") | 43247 READY (held unwrapped) | present since u16c3: the full twin reads it READY on the installed release, the natural twin holds it - so u16c3's claim that no READY stands where the natural twin is held is false for this class; OPEN (a time phrase across a line break the clause reader does not attach) |
+

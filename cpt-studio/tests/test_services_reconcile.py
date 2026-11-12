@@ -316,13 +316,16 @@ class DoubtedActTests(SimpleTestCase):
         text = SERVICE_STATEMENT.format(findings=hedge)
         item = proposal(run(text, [sel('45380', span(text, CECUM_STATEMENT), span(text, hedge))]), '45380')
         self.assertEqual((item.bucket, item.status), ('selected', 'needs_clarification'))
-        self.assertIn(f'does not establish the forceps biopsy as done: “{hedge}”', check(item, 'service.status').detail)
+        # completion repair (builder Q1, U9): what CPT Studio could not confirm, with the passage
+        self.assertIn(f'CPT Studio could not confirm the forceps biopsy as done: “{hedge}”',
+                      check(item, 'service.status').detail)
         (asked,) = [c for c in item.clarifications if c.fact == 'performed_status']
         self.assertIn(f'“{hedge}”', asked.question)
-        self.assertNotIn('shows no forceps biopsy', asked.question)
+        self.assertNotIn('could not find a forceps biopsy', asked.question)
 
     def test_control_an_act_the_document_never_names_is_still_asked_as_missing(self):
         text = SERVICE_STATEMENT.format(findings='The colon was normal.')
         item = proposal(run(text, [sel('45380', span(text, CECUM_STATEMENT))]), '45380')
         (asked,) = [c for c in item.clarifications if c.fact == 'performed_status']
-        self.assertIn('shows no forceps biopsy', asked.question)
+        # completion repair (builder Q1, U9): asked as what CPT Studio could not find
+        self.assertIn('CPT Studio could not find a forceps biopsy in the documented colonoscopy', asked.question)

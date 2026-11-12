@@ -12,6 +12,8 @@ from django.conf import settings
 from django.template.loader import render_to_string
 from django.test import RequestFactory, SimpleTestCase, override_settings
 
+from studio.types import canonical_json
+
 ROOT = Path(settings.BASE_DIR)
 STATIC = ROOT / 'studio' / 'static' / 'studio'
 TEMPLATES = ROOT / 'studio' / 'templates' / 'studio'
@@ -24,7 +26,101 @@ UUID = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 DETAIL_KEYS = {'id', 'title', 'state', 'state_label', 'created_at', 'created_by', 'permissions', 'revision', 'context',
                'routing', 'pipeline', 'provider_runs', 'assessment', 'clarifications', 'decisions', 'readiness',
                'reports', 'activity'}
+# The OPERATOR contract (HARNESS.md 7, 12.6; CORE-UX-DESIGN.md 5): encounter detail's harness and permissions, each
+# proposal's harness fields, the provider runs and the trace - the operator serializer's own keys, served at
+# /ops/api/encounters/<id> and /ops/api/encounters/<id>/trace to platform operators and rendered by the operator console
+# (studio/operator/ops.js, tests/operator/ops.test.cjs), which tests.test_harness_api.FrontendContractTests pins against
+# the real /ops/ API (refutation r1 FG-5: these had drifted from it, so a fixture taken from the real API was rejected,
+# and no frontend test could see a key the API serves). The fixtures in tests/fixtures/api are operator payloads. The
+# CUSTOMER contract served at /api/ is CORE-UX-DESIGN.md 7's, pinned key by key by tests.test_customer_surface
+# (assert_contract), with its own fixtures in tests/fixtures/customer (tests.test_customer_fixtures).
+PARTICIPANTS = ['corti', 'astra', 'fable']
+PARTICIPANT_KEYS = {'name', 'label', 'vendor', 'model', 'state', 'detail', 'run_id', 'reused', 'codes',
+                    'unlisted_codes', 'unverified_quotes', 'usage', 'usage_basis', 'estimated_cost_usd',
+                    'returned_model', 'peer', 'references', 'peer_references'}
+PARTICIPANT_STATES = {'not_configured', 'waiting', 'running', 'done', 'refused', 'failed', 'unknown', 'not_sent', 'blocked',
+                      'stopped'}
+HARNESS_KEYS = {'participants', 'phase', 'reference_validation', 'clarification', 'final'}
+PERMISSION_KEYS = {'can_review', 'is_owner', 'can_confirm'}
+REFERENCE_VALIDATION_KEYS = {'state', 'detail', 'codes_checked', 'passages', 'sources', 'not_connected'}
+# 'failed': the assessment's retrieval failed, said with its note as the detail (refutation r1 parity-1)
+# 'not_verified': no installed CMS file applied to the service date (refutation round 2, truth-3), as the harness@2
+# fixtures now serve it - their document's two dates of service disagree, so none is established (refutation round 3,
+# falsegreen-11: the fixtures' rows are the engine's)
+REFERENCE_VALIDATION_STATES = {'waiting', 'done', 'failed', 'not_run', 'not_verified'}
+RETRIEVAL_ITEM_KEYS = {'kind', 'source_key', 'release', 'label', 'value', 'page', 'section', 'text'}
+PROVIDER_RUN_KEYS = {'id', 'provider', 'mode', 'state', 'http_status', 'latency_ms', 'usage', 'usage_basis',
+                     'request_sha256', 'response_sha256', 'reused_from', 'error', 'reconciled', 'created_at', 'purpose',
+                     'scope_items', 'requested_model', 'returned_model'}
+TRACE_KEYS = {'encounter', 'revision', 'participants', 'assessments', 'retrieval', 'reconciliation'}
+TRACE_RUN_KEYS = {'id', 'state', 'sent', 'mode', 'purpose', 'run_identity', 'authorization_ref', 'requested_by',
+                  'adapter_version', 'endpoint', 'requested_model', 'returned_model', 'request_id', 'response_id',
+                  'http_status', 'latency_ms', 'usage', 'usage_basis', 'estimated_cost_usd', 'request_sha256',
+                  'response_sha256', 'response_bytes', 'created_at', 'finished_at', 'error', 'reused_from',
+                  'reconciled', 'reading', 'review', 'exchanges'}
+READING_KEYS = {'refused', 'problems', 'unverified_quotes', 'date_of_service', 'services', 'codes', 'not_coded', 'questions',
+                'extraction_issues', 'references_used'}
+# moved by refutation round 5 (R5-ACCOUNT, the session's D12): a row also serves listed_by, the participants that only
+# listed a participant's alternative's code with no quote found verbatim, never among its proposers
+RECONCILIATION_ROW_KEYS = {'code', 'family', 'bucket', 'status', 'proposed_by', 'listed_by', 'positions',
+                           'reference_check', 'approved'}
+# The harness fixtures (tests/fixtures/api) were written at b4655e634, before these keys existed. What each shape still
+# lacks is stated here rather than accepted silently, until the website package regenerates the fixtures from the
+# serializer's output: a regenerated fixture fails these tests until its entry is emptied (refutation r1 FG-5).
+# Refutation round 2 (FG2-5) found it still open: regenerated, they become harness@2 payloads, and the tests that draw
+# them as payloads served before harness@2 must then build those payloads themselves - left for after the round-2 merge
+# (R2-WORDING's report). The participants row's unlisted_codes (truth-11) is the latest key they lack.
+FIXTURE_LACKS = {
+    'permissions': {'can_confirm'},
+    'harness': {'phase'},
+    'participant': {'peer', 'references', 'peer_references', 'unlisted_codes'},
+    'trace': {'assessments'},
+    'trace_run': {'sent', 'mode', 'run_identity', 'authorization_ref', 'requested_by', 'reconciled', 'review',
+                  'exchanges'},
+    'reading': {'references_used'},
+    'reconciliation_row': {'bucket', 'listed_by'},
+    'reference_validation': {'detail'},
+}
+# The harness@2 additions (HARNESS.md 12.6, as studio/serializers.py serves them) the website renders.
+PEER_KEYS = {'state', 'detail', 'run_id', 'codes_added', 'unverified_quotes'}
+PEER_STATES = {'waiting', 'running', 'stopped', 'done', 'refused', 'failed', 'unknown', 'not_sent', 'blocked',
+               'not_configured'}
+RETRIEVED_KEYS = {'ref', 'kind', 'source_key', 'release', 'effective_start', 'effective_end', 'tool'}
+CANDIDATE_KEYS = {'id', 'clarification_id', 'fact', 'value', 'located_by', 'phase', 'phases', 'runs', 'spans',
+                  'sentences', 'verified', 'why', 'attestation'}
+CONFIRMATION_KEYS = {'id', 'clarification_id', 'scope', 'fact', 'family', 'proposal_key', 'value', 'spans',
+                     'located_by', 'runs', 'confirmed_by', 'confirmed_by_kind', 'attestation', 'created_at',
+                     'revision_number', 'current_effect'}
+EXCHANGE_KEYS = {'turn', 'state', 'http_status', 'latency_ms', 'usage', 'request_sha256', 'response_sha256',
+                 'provider_request_id', 'response_id', 'error', 'tool_calls'}
+TOOL_CALL_KEYS = {'call_id', 'tool', 'arguments', 'refs', 'result_sha256', 'executed_at'}
+REVIEW_KEYS = {'provider', 'adapter_version', 'review_version', 'requested_model', 'returned_model', 'frozen_inputs',
+               'answers', 'positions', 'additional_codes', 'references_used', 'problems', 'refused',
+               'unverified_quotes'}
+# The exact sentence a confirmation carries with the candidate's value (HARNESS.md 11.3, 12.5), written out here.
+ATTESTATION = 'I read this passage in the source document; it documents {value} for this encounter.'
 
+
+# harness@2's website fixtures (tests/test_frontend_harness2.py generates and checks them against the serializer)
+HARNESS2_SCENARIOS = {  # fixture -> (the uuid prefix of its scenario, its title)
+    'encounter-harness2-peer.json': ('e2a00000', 'Colonoscopy while the peer reviews run'),
+    'encounter-harness2-final.json': ('e2b00000', 'Colonoscopy after peer review'),
+    'encounter-harness2-confirmed.json': ('e2c00000', 'Colonoscopy with a confirmed finding'),
+    'encounter-harness2-dormant.json': ('e2d00000', 'Colonoscopy after peer review, confirmation offered'),
+}
+# This release offers no reviewer confirmation (HARNESS.md 12.10, refutation round 3's D7): these two are made with
+# STUDIO_OFFER_CONFIRMATIONS=True, as the dormant confirmation path serves them, for that path's rendering tests.
+HARNESS2_DORMANT = ('encounter-harness2-confirmed.json', 'encounter-harness2-dormant.json')
+HARNESS2_TRACE = 'trace-harness2-final.json'
+
+
+def candidate_id(question_id, candidate):
+    """A candidate's id as studio.candidates computes it: 16 hex of the sha256 of (question id, fact, value, its spans,
+    the participants that located it)."""
+    identity = canonical_json([question_id, candidate['fact'], candidate['value'],
+                               [[span['start'], span['end']] for span in candidate['spans']],
+                               sorted(candidate['located_by'])])
+    return hashlib.sha256(identity).hexdigest()[:16]
 
 class _Audit(HTMLParser):
     """Collects what the CSP (script-src 'self', no inline handlers) cares about."""
@@ -113,7 +209,10 @@ class ShellTemplateTests(SimpleTestCase):
             looked_up.update(re.findall(r'#([A-Za-z][\w-]*)', selector))
         missing = sorted(looked_up - index_ids - rendered_ids)
         self.assertEqual(missing, [])
-        self.assertTrue({'uploadDialog', 'reviewDialog', 'contextDialog', 'addendumDialog', 'exportDialog', 'aboutDialog', 'toast'} <= index_ids)
+        # moved by the customer interface (2026-11-03): the context dialog gave way to the details panel on the page; the
+        # review dialog's modifier choice and the update notice are part of the customer page's contract
+        self.assertTrue({'uploadDialog', 'reviewDialog', 'reviewModifier', 'addendumDialog', 'exportDialog', 'aboutDialog',
+                         'updateNotice', 'toast'} <= index_ids)
 
     def test_login_renders_the_error_escaped_with_csrf_and_the_next_target(self):
         html = render_to_string('studio/login.html', {'error': '<b>Wrong</b> password', 'next': '/#doc/x"y'},
@@ -199,6 +298,209 @@ class FixtureTests(SimpleTestCase):
         for row in rows:
             self.assertEqual(row['state'], details[row['id']]['state'])
 
+    def test_harness_fixtures_carry_the_api_contract(self):
+        # harness@1's payloads, as served before harness@2 (the website renders them as before); harness@2's below
+        harnessed = {name: doc for name, doc in self.detail_fixtures().items()
+                     if 'harness' in doc and 'phase' not in doc['harness']}
+        self.assertTrue({'encounter-harness-ready.json', 'encounter-harness-degraded.json',
+                         'encounter-processing.json'} <= set(harnessed))
+        for name, doc in harnessed.items():
+            with self.subTest(name):
+                self.assertEqual(set(doc['permissions']), PERMISSION_KEYS - FIXTURE_LACKS['permissions'])
+                harness = doc['harness']
+                self.assertEqual(set(harness), HARNESS_KEYS - FIXTURE_LACKS['harness'])
+                self.assertEqual([item['name'] for item in harness['participants']], PARTICIPANTS)
+                for item in harness['participants']:
+                    self.assertEqual(set(item), PARTICIPANT_KEYS - FIXTURE_LACKS['participant'])
+                    self.assertIn(item['state'], PARTICIPANT_STATES)
+                    self.assertTrue(item['run_id'] is None or UUID.match(item['run_id']))
+                reference = harness['reference_validation']
+                self.assertEqual(set(reference), REFERENCE_VALIDATION_KEYS - FIXTURE_LACKS['reference_validation'])
+                self.assertIn(reference['state'], REFERENCE_VALIDATION_STATES)
+                self.assertEqual(harness['clarification'], {'open': doc['open_clarifications']})
+                self.assertEqual(harness['final'], {'state': doc['state'], 'label': doc['state_label']})
+                for proposal in (doc['assessment'] or {}).get('proposals', []):
+                    self.assertTrue(set(proposal['proposed_by']) <= set(PARTICIPANTS))
+                    self.assertIn(proposal['reference_check']['state'], {'passed', 'attention', 'not_verified'})
+                    for participant, position in proposal['participant_positions'].items():
+                        self.assertIn(participant, PARTICIPANTS[1:])
+                        self.assertEqual(set(position), {'position', 'detail', 'quote'})
+                        self.assertIn(position['position'], {'proposed', 'not_proposed', 'advised_not_to_code', 'not_run'})
+                        self.assertIn(position['quote'], doc['revision']['text'])  # a quote is the document's own text
+                    for item in proposal['retrieval']:
+                        self.assertEqual(set(item), RETRIEVAL_ITEM_KEYS)
+                        self.assertIn(item['kind'], {'fact', 'passage'})
+
+    def test_trace_fixture_carries_the_api_contract_and_quotes_the_document_exactly(self):
+        trace, ready = _fixture('trace-harness-ready.json'), _fixture('encounter-harness-ready.json')
+        text = ready['revision']['text']
+        self.assertEqual(set(trace), TRACE_KEYS - FIXTURE_LACKS['trace'])
+        self.assertEqual((trace['encounter']['id'], trace['revision']['id']), (ready['id'], ready['revision']['id']))
+        self.assertEqual([item['name'] for item in trace['participants']], PARTICIPANTS)
+        located = 0
+        for participant in trace['participants']:
+            for run in participant['runs']:
+                self.assertEqual(set(run), TRACE_RUN_KEYS - FIXTURE_LACKS['trace_run'])
+                if run['reading'] is None:
+                    continue
+                self.assertEqual(set(run['reading']), READING_KEYS - FIXTURE_LACKS['reading'])
+                reading = run['reading']
+                items = reading['services'] + reading['codes'] + reading['not_coded'] + reading['questions']
+                quotes = [quote for item in items for quote in item['evidence']]
+                self.assertEqual(sum(1 for quote in quotes if not quote['spans']), reading['unverified_quotes'])
+                for quote in quotes:
+                    for span in quote['spans']:
+                        self.assertEqual(text[span['start']:span['end']], span['text'])
+                        located += 1
+        self.assertGreater(located, 5)
+        for entry in trace['retrieval']:
+            self.assertEqual(set(entry), {'code', 'service_date', 'facts', 'passages', 'lookups', 'notes'})
+            for passage in entry['passages']:
+                self.assertEqual(set(passage), {'source_key', 'release', 'passage_key', 'section', 'page', 'topic',
+                                                'topic_value', 'sha256', 'text'})
+                self.assertEqual(hashlib.sha256(passage['text'].encode('utf-8')).hexdigest(), passage['sha256'])
+                self.assertTrue(passage['text'].startswith('SYNTHETIC FIXTURE TEXT, not CMS text'))
+        self.assertEqual([row['code'] for row in trace['reconciliation']],
+                         [proposal['code'] for proposal in ready['assessment']['proposals']])
+        for row in trace['reconciliation']:
+            self.assertEqual(set(row), RECONCILIATION_ROW_KEYS - FIXTURE_LACKS['reconciliation_row'])
+
+    def test_harness2_fixtures_carry_the_api_contract(self):
+        docs = {name: _fixture(name) for name in HARNESS2_SCENARIOS}
+        self.assertEqual({name: doc['harness']['phase'] for name, doc in docs.items()},
+                         {'encounter-harness2-peer.json': 1, 'encounter-harness2-final.json': 2,
+                          'encounter-harness2-confirmed.json': 2, 'encounter-harness2-dormant.json': 2})
+        for name, doc in docs.items():
+            with self.subTest(name):
+                text = doc['revision']['text']
+                dormant = name in HARNESS2_DORMANT
+                # moved by refutation round 3 (HARNESS.md 12.10): no member may confirm in this release; can_confirm is
+                # can_review only on the dormant confirmation path, where this pin stood for every fixture
+                self.assertEqual(doc['permissions']['can_confirm'], doc['permissions']['can_review'] and dormant)
+                self.assertEqual(set(doc['harness']), {'participants', 'phase', 'reference_validation', 'clarification',
+                                                       'final'})
+                reference = doc['harness']['reference_validation']
+                self.assertEqual(set(reference), REFERENCE_VALIDATION_KEYS)
+                self.assertIn(reference['state'], REFERENCE_VALIDATION_STATES)
+                # moved by refutation round 3 (falsegreen-11): 'not_verified' says why too (truth-3), as these
+                # fixtures now serve it
+                self.assertEqual(reference['detail'] != '', reference['state'] in ('failed', 'not_verified'),
+                                 reference)
+                rows = {row['name']: row for row in doc['harness']['participants']}
+                self.assertEqual(list(rows), PARTICIPANTS)
+                self.assertEqual(rows['corti']['peer'], {})
+                for row in rows.values():
+                    self.assertEqual(set(row), PARTICIPANT_KEYS | {'peer', 'references', 'peer_references'})
+                    self.assertTrue(not row['peer'] or (set(row['peer']) == PEER_KEYS
+                                                        and row['peer']['state'] in PEER_STATES), row['peer'])
+                    for field in ('references', 'peer_references'):
+                        retrieved = {item['ref'] for item in row[field]['retrieved']}
+                        for item in row[field]['retrieved']:
+                            self.assertEqual(set(item), RETRIEVED_KEYS)
+                        for item in row[field]['used']:
+                            # CPT Studio's check against that run's own tool calls: never shown as retrieved otherwise
+                            self.assertEqual(set(item), {'ref', 'use', 'retrieved'})
+                            self.assertEqual(item['retrieved'], item['ref'] in retrieved, item)
+                final = doc['harness']['phase'] == 2
+                for clarification in doc['clarifications']:
+                    self.assertEqual(set(clarification) - {'candidates', 'confirmation'},
+                                     {'id', 'scope', 'proposal_id', 'family', 'fact', 'question', 'reason', 'state'})
+                    self.assertTrue(final or not clarification['candidates'],
+                                    'only the final assessment has candidates')
+                    # moved by refutation round 4 (HARNESS.md 12.10 as amended, the session's D8): this release serves
+                    # no candidate at all, where it served each one unchecked, verified false with one fixed why
+                    self.assertTrue(dormant or clarification['candidates'] == [], clarification['candidates'])
+                    for candidate in clarification['candidates']:
+                        self.assertEqual(set(candidate), CANDIDATE_KEYS)
+                        self.assertEqual(candidate['clarification_id'], clarification['id'])
+                        self.assertEqual(candidate['id'], candidate_id(clarification['id'], candidate))
+                        for span in candidate['spans']:
+                            self.assertEqual(text[span['start']:span['end']], span['text'])
+                        self.assertTrue(set(candidate['located_by']) <= {'astra', 'fable'})
+                        self.assertEqual(set(candidate['phases']), set(candidate['located_by']))
+                        if candidate['verified']:
+                            self.assertEqual((candidate['why'], candidate['attestation']),
+                                             ('', ATTESTATION.format(value=candidate['value'])))
+                        else:
+                            self.assertTrue(candidate['why'] and candidate['attestation'] == '', candidate)
+                for confirmation in doc['confirmations']:
+                    self.assertEqual(set(confirmation), CONFIRMATION_KEYS)
+                    self.assertEqual(confirmation['attestation'], ATTESTATION.format(value=confirmation['value']))
+                    for span in confirmation['spans']:
+                        self.assertEqual(text[span['start']:span['end']], span['text'])
+                for proposal in doc['assessment']['proposals']:
+                    self.assertTrue(set(proposal['phases'].values()) <= {'independent', 'peer_review'})
+                    self.assertTrue(set(proposal['phases']) <= set(proposal['proposed_by']), proposal['phases'])
+                    if proposal['bucket'] != 'alternative' and 'corti' not in proposal['proposed_by']:
+                        self.assertIn('Corti did not propose this code.', proposal['rationale'])  # 11.4
+        # each scenario shows what it is for
+        peer = {row['name']: row['peer'] for row in docs['encounter-harness2-peer.json']['harness']['participants']}
+        self.assertEqual((peer['astra']['state'], peer['fable']['state']), ('running', 'waiting'))
+        final = docs['encounter-harness2-final.json']
+        # moved by refutation round 3 (HARNESS.md 12.10): this release serves every candidate unchecked; the dormant
+        # confirmation path's verified flags, which this pin held for the final fixture, are pinned on its own fixture
+        # and by falsegreen-11: the questions are the engine's - 45385's extent, 45380's status and extent, the date -
+        # where the biopsy the readers leave in doubt has no status candidate that the dormant path verifies
+        # and moved by refutation round 4 (D8): it serves none, where it served them unchecked
+        self.assertEqual([(c['fact'], [x['verified'] for x in c['candidates']]) for c in final['clarifications']],
+                         [('extent', []), ('performed_status', []), ('extent', []), ('service_date', [])])
+        dormant = docs['encounter-harness2-dormant.json']
+        self.assertEqual([(c['fact'], [x['verified'] for x in c['candidates']]) for c in dormant['clarifications']],
+                         [('extent', [True, False]), ('performed_status', [False, False, False]),
+                          ('extent', [True, False]), ('service_date', [True])])
+        # the same located passages either way: what the dormant path claimed about them is all that differs (moved by
+        # refutation round 4, D8: this release serves none of the passages the dormant path offers)
+
+        def passages(doc):
+            return sorted((c['fact'], x['value'], x['located_by'], [span['text'] for span in x['spans']])
+                          for c in doc['clarifications'] for x in c['candidates'])
+        self.assertEqual(passages(final), [])
+        self.assertTrue(passages(dormant))
+        confirmed = docs['encounter-harness2-confirmed.json']
+        [confirmation] = confirmed['confirmations']
+        self.assertEqual((confirmation['fact'], confirmation['value'], confirmation['located_by'],
+                          confirmation['confirmed_by']), ('extent', 'cecum', ['astra', 'fable'], 'Synthetic Reviewer'))
+        snare = next(p for p in confirmed['assessment']['proposals'] if p['code'] == '45385')
+        # moved by refutation round 3 (falsegreen-11): the engine's re-assessment reads the confirmed extent, and 45385
+        # is still held on the encounter's own question, its date of service; a confirmation approves nothing
+        self.assertEqual((snare['confirmed'], snare['status'], snare['decision_state']),
+                         ([confirmation['id']], 'needs_clarification', 'undecided'))
+        self.assertEqual([c['fact'] for c in confirmed['clarifications'] if c['proposal_id'] == snare['id']], [])
+        self.assertIn('service_date', [c['fact'] for c in confirmed['clarifications']])
+
+    def test_harness2_trace_fixture_carries_the_api_contract(self):
+        trace, final = _fixture(HARNESS2_TRACE), _fixture('encounter-harness2-final.json')
+        text = final['revision']['text']
+        self.assertEqual(set(trace), {'encounter', 'revision', 'participants', 'assessments', 'retrieval',
+                                      'reconciliation'})
+        self.assertEqual(trace['encounter']['id'], final['id'])
+        run_keys = TRACE_RUN_KEYS | {'sent', 'mode', 'run_identity', 'authorization_ref', 'requested_by', 'reconciled',
+                                     'review', 'exchanges'}
+        purposes = []
+        for participant in trace['participants']:
+            for run in participant['runs']:
+                purposes.append((participant['name'], run['purpose']))
+                self.assertEqual(set(run), run_keys)
+                self.assertTrue(run['reading'] is None or run['review'] is None, 'a run has a reading or a review')
+                for exchange in run['exchanges']:
+                    self.assertEqual(set(exchange), EXCHANGE_KEYS)
+                    for call in exchange['tool_calls']:
+                        self.assertEqual(set(call), TOOL_CALL_KEYS)
+                if run['review'] is not None:
+                    self.assertEqual(set(run['review']), REVIEW_KEYS)
+                    quotes = [quote for group in ('answers', 'positions', 'additional_codes')
+                              for item in run['review'][group] for quote in item['evidence']]
+                    for quote in quotes:
+                        for span in quote['spans']:
+                            self.assertEqual(text[span['start']:span['end']], span['text'])
+        self.assertEqual(purposes, [('corti', 'primary'), ('astra', 'independent'), ('astra', 'peer_review'),
+                                    ('fable', 'independent'), ('fable', 'peer_review')])
+        self.assertEqual([(a['phase'], a['final'], a['current']) for a in trace['assessments']],
+                         [(1, False, False), (2, True, True)])
+        for assessment in trace['assessments']:
+            self.assertEqual(set(assessment), {'id', 'created_at', 'current', 'phase', 'final', 'frozen'})
+            self.assertEqual(sorted(name for name, _ in assessment['frozen']), ['astra', 'corti', 'fable', 'revision'])
+
     def test_session_fixtures_label_agent_users(self):
         agent, human = _fixture('session-agent.json'), _fixture('session.json')
         self.assertEqual(agent['user']['actor_kind'], 'agent')
@@ -231,8 +533,10 @@ class BrowserLogicTests(SimpleTestCase):
         self.assertEqual(total('fail')[-1:], [0], result.stdout[-2000:])
         self.assertEqual((total('skipped')[-1:], total('todo')[-1:]), ([0], [0]), result.stdout[-2000:])
         self.assertTrue(total('pass') and total('pass')[-1] >= declared, (total('pass'), declared))
-        self.assertRegex(result.stdout, r'(?m)^ok \d+ - an agent reinstatement behind a human decision labels the '
-                                        r'reviewed export as agent review$')
+        # moved by the customer interface (2026-11-03): the customer contract carries one current decision per code, so
+        # the guard is now the agent approval's own label, on its row and in the approved download's wording
+        self.assertRegex(result.stdout, r'(?m)^ok \d+ - an agent approval labels the row and the approved download as '
+                                        r'agent-executed synthetic review$')
 
     def test_scripts_parse(self):
         for path in (STATIC / 'app.js', ROOT / 'ops' / 'dev_preview_server.cjs'):

@@ -3256,3 +3256,263 @@ a paste only to a pasted revision with no stored original whose text has the
 document's lines (only trailing whitespace and line-ending style may differ).
 `ops/verify_downloads.py` checks that PROVIDER USAGE lists a member date hold as
 recorded, with nothing sent, no usage and no hashes, beside every run.
+
+## Core repair and customer interface (2026-11-03): P3 REVIEW
+
+**The effective review view** (`studio/validation/review_view.py`; CORE-UX-DESIGN.md 4; R3 section 7). Assessment and
+Proposal rows are immutable, and the engine computes two combination gates once, over the codes it selected: the
+diagnostic-base rule (`services.base_included` and its `base_included` question) and the CMS PFS endoscopic-family check
+(`pfs.endoscopic_base`). A reviewer's decision changes which codes go on together - a rejection takes one away, a
+reinstatement brings an excluded one back - so `review_view.review_view(stored, decisions, *, services, retrieval,
+reference_sources, service_date, answers)` re-applies the SAME rules at read time over the effective set: selected codes
+not rejected, plus excluded, reinstatable codes with a current reinstatement (or the approval resting on one), minus the
+codes a member answer leaves without a needed detail. One implementation: `engine.base_included`, `engine.base_hold`,
+`engine.endoscopic_rows` and `engine.distinct_lesions` were extracted from `engine._encounter`, `_proposal` and
+`_service_considerations`, which call them (byte-identical engine output: replay EQUAL, battery 0, and the whole
+AssessmentResult's sha256 equal on every battery and replay call), and `checks.endoscopic_check` is the engine's own.
+
+- **Positive control**: with no decision and no answer every view equals its stored proposal - status, every check, every
+  open question - byte for byte (`tests/test_cux_review.OverlayPositiveControlTests`: every battery row, every regression
+  replay state, Mara's retained Corti answer and the D14 shapes). So nothing changes for an encounter nobody has decided.
+- **What moves after a decision**: a base code the base rule now holds gets the `services.base_included` check and the
+  `base_included` question (added), one it no longer holds loses them (released, only by the engine's own rule: a
+  documented, performed, reportable act still holds it after its code is rejected), one held beside other codes is
+  re-worded; every decidable code's `pfs.endoscopic_base` is recomputed from the assessment's own retrieval facts (kept
+  as stored and marked `stale` when the trace lacks a row the engine read); a reinstated code the base rule holds gets
+  its `review.reinstatement` gate recomputed with that question. Nothing else is re-read (a same-day E/M's `separate_em`
+  hold is never released here: a recorded limit).
+- **D14** (R8): reinstating 45385 beside a selected 45378 holds 45378 (`needs_clarification`, approve withheld by
+  `services.base_included`, "Is 45378 reported separately from 45385 for this examination?"); an approval already on
+  45378 becomes a readiness blocker until it is revoked, so the reviewed report waits. A reinstated base beside a
+  selected therapeutic code is held the same way.
+- **Every gate reads it**: `review._actions` / `_allowed` / `allowed_actions` / `approve_withheld_by` /
+  `record_decision`, `readiness` / `_assessment_blockers`, `_decisions_waiting`, `coding_completeness` (the open
+  questions the view leaves, `review.open_questions_of`), `_review_state` / `refresh_state`, the operator API
+  (`serializers._proposal_json`: the values of `status`, `checks`, `allowed_actions` and `approve_withheld_by`; its key
+  set is unchanged), the report snapshot (statuses, checks and open questions; a recomputed check is noted in CHECKS),
+  the customer API (`review.effective_view(assessment) -> {proposal key: View}`) and the approved export
+  (`review.approved_items(assessment)`).
+- **Modifier review** (directive 4): a read-time `modifier_review` on a code whose acts are on documented lesions while
+  another code of the effective set, of the same documented service, accounts for an act on another documented lesion:
+  `{kind: 'distinct_lesion', codes, lesions, options: ['59', 'XS'], text, sources, not_checked}`, dropped as soon as the
+  other code leaves the effective set. It cites the dated CMS claims-manual example (Pub. 100-04 ch. 12, 40.6.C item 13)
+  only for 45380 with 45385 and only when the assessment's retrieval carries that passage, and says that NCCI
+  procedure-to-procedure edits and payer modifier policy are not checked. The stored `modifier_considerations` strings
+  are unchanged (the operator report keeps them).
+- **The reviewer's modifier**: `Decision.modifiers` (migration `0009_cux_review`, additive, database default `'[]'`):
+  on an approval only, none or ONE of `59` and `XS`, only where the view offers a modifier review; never prefilled,
+  never both. It is carried with the decision; an approval whose modifier the current view no longer offers is a
+  readiness blocker until revoked. The operator report prints it under the decision.
+- **Approved-export truth**: `review.approved_items(assessment)` lists approved proposals only - never an unresolved,
+  undecided, rejected or excluded one, nor an approval its view no longer supports - with code, units, the chosen
+  modifier, the approver's label and kind, when the approver decided, the note, the exact passages it rests on (CPT
+  Studio's located passages, then the provider passages that show the act; never one the support records as not showing
+  it) and one sentence of CPT Studio's own reading.
+- **Member answers** (P5's data, P3's rule): `review._member_answers(assessment)` (returns `[]` here; P5 fills it). A
+  code's open question answered `not_documented` or `cannot_confirm` makes its view `excluded` with reason
+  `detail_unavailable` (not reinstatable, no decision required, never approvable) until the answer is revoked;
+  readiness treats it as resolved; removal is monotone (an answered base question is read over the effective set, and a
+  code is never re-admitted within one reading). A documented service's answer closes that question only.
+
+## Core repair and customer interface (2026-11-03): P4 CUSTOMER-API
+
+Owner directive of 2026-11-03, section 2 (CORE-UX-DESIGN.md 5, 7). Two surfaces, split on the server:
+
+- **The customer surface** (`/api/`, `studio/api.py`) serves every payload through `studio/customer_api.py`, an
+  allowlist: each key is written out and every sentence is re-derived from structured fields - statuses, check ids
+  and their states, act kinds, exact spans of the revision text - in CPT Studio's own fixed wording. Stored engine
+  sentences, participant readings, adapter and job errors sit on immutable rows and name vendors, models and rule ids,
+  so they are never passed through, whatever their wording today (R4-api-leak-surface 6.1(1)). A label CPT Studio
+  composed from the document's own words (an act's anatomy, a lesion) is used only when it passes the server-side guard
+  `customer_api.plain`; otherwise the fixed sentence stands in. Refusals raised below the API reach a member only
+  through `customer_api.customer_error`'s fixed vocabulary. Customer reports are their own format
+  (`cpt-studio-customer-report@1`, `reports.generate_customer`), built from the customer contract, stored with
+  `ReportArtifact.audience = 'customer'`; the approved export holds approved items only and its snapshot digest is
+  re-checked at download (409 once the decisions changed).
+- **The operator surface** (`/ops/`, `studio/operator.py`) serves the complete record - `studio/serializers.py`
+  (unchanged, now the operator serializer), the trace, every artifact as stored with its sha256, the original with its
+  sha256, the operator report (`cpt-studio-report@4`) and the reconciliation of an unknown outcome - to platform
+  operators only. Operator access is a user-level grant (`OperatorGrant`/`OperatorRevocation`, append-only, recorded by
+  the `grant_operator`/`revoke_operator` commands with a reason file), never a workspace role: a practice owner is not
+  an operator, and `operator.is_operator` reads no Membership. Every `/ops/` URL answers a non-operator exactly what an
+  unknown URL answers. The console is today's website frozen as `studio/operator/ops.js` and `ops.css` (API base
+  `/ops/api/`), served by a gated view and never from `static/`, which WhiteNoise serves to anyone.
+
+Schema (migration `0009_cux_operator`, additive for the rolling install): the two grant tables and
+`ReportArtifact.audience` with a database default of `'operator'`, so every artifact recorded before it - each names
+the review participants - and every row an older release inserts is an operator artifact without an ORM update.
+Customers download only customer artifacts; legacy bytes stay byte-identical for operators (rollback evidence).
+
+The truth rules of section 2 stand on both surfaces: a customer code shows CPT Studio's own located passages first and
+the provider's exact passages only where the support record says they show the act, never a passage that does not
+support; agent approvals are labelled "Agent-executed synthetic review — not clinical approval"; a recorded test
+response is said to be one ("These results come from a recorded test response, not a live check.").
+
+## Core repair and customer interface (2026-11-03): P5 FLOW
+
+**Member answers are context, never documentation.** `MemberAnswer` (append-only) records that a member says a
+detail is not documented or cannot be confirmed, bound to its revision and to (code, family, fact) - never to a
+clarification row or a proposal key, which every re-assessment makes anew, so an answer stands through a re-assessment
+of the same revision and never reaches a new one. A later answer to the same detail, or the member's withdrawal, adds
+a `MemberAnswerRevocation`; at most one answer per detail stands and a withdrawn one is never resurrected. An answer
+never enters the document text, a provider request or an addendum, and approves nothing: the review overlay reads the
+standing answers (`answers.saved_answers`) and a proposal-scoped "not documented" leaves its proposal excluded, never
+approvable, until withdrawn. A member never supplies a clinical fact: a `confirm` row takes only "Not documented" or
+"Cannot confirm", or the physician's addendum. Context values (date, place of service, new or established, claim
+type) keep the existing path: one `jobs.change_context` per save.
+
+**The document's own date is recorded beside each context.** `EncounterContext.document_date` holds the pre-merge
+service date fact (`context.document_service_date_fact`), computed from the Fact the reader made - the bounded child's
+facts, so the text is never read again in the worker or a web request - and outside the context's sha256. "Use
+document date" is offered only where the document gives one date of its own; a date the reader types as another
+occurrence's or document's, a date of birth or a doubt's other side is never offered.
+
+**Progress is a fold over the rows** (`studio/progress.py`): the current revision's jobs cut into runs (a job queued
+while every earlier one had finished starts a run), four plain steps, one phase, the member date hold read from the
+current context as soon as analyze records it. It is read-only: polling, reloading or opening results can create
+nothing, and no customer sentence comes from a job's or a run's error text.
+
+**Uploads are idempotent per attempt** (`Encounter.client_key`, a unique partial index on (created_by, client_key);
+`intake.find_upload`). **Re-assessment from retained answers** (`jobs.reassess_retained`, `manage.py reassess_retained`)
+queues the assess stage's AGAIN mode, which re-reads the final assessment's runs by id and sends nothing.
+
+Migration `0009_cux_flow` is additive under the installer's gate (two new tables, two nullable columns, one index). An
+older release reading the new schema never reads the answer tables (it asks those questions again) and only ever writes
+NULL in the new columns, which the partial unique index excludes.
+
+## Core repair and customer interface (2026-11-03): P1 READ-BIND
+
+The shared reader (`studio/gi/services.py`, with one E/M pattern in `studio/gi/cues.py` read by routing's E/M base
+reading in `studio/gi/detect.py`, and one gate in `studio/validation/engine.py`) binds each statement to the procedure,
+lesion and scope its document gives it. Declared before code: `tests/fixtures/gi4/declarations/cux-bind.json`; tests:
+`tests/test_cux_bind.py` with the class documents under `tests/fixtures/cux/reader/` and Mara end to end
+(`tests/fixtures/cux/mara/`). The rules, each fail-closed (where its structure is not met the installed reading
+stands):
+
+- An attributive act compound ("the snare-treated lesion", "biopsy-proven Barrett esophagus") is no act statement, and
+  its participle is no act predicate for any other mention; a predicate compound ("was snare-resected") reads as
+  before.
+- A lesion introduced under a label ("COL-1 - ascending colon: ...") keeps it in the reader's own index, but only
+  where the label's definition line (within `LABEL_DEF_CHARS`) describes that one lesion: a line describing two
+  lesions, in one clause or two, resolves the label to nothing. A later exact, case-sensitive mention of the label in
+  an act's clause, or a specimen reference equal to exactly one lesion's specimen in a clause naming no site of its
+  own, binds the act to that lesion, its service and its region first. An ambiguous label, two labels, a clause that
+  names a lesion of its own beside the label ("COL-1 or the 3 mm polyp"), or a site the lesion's tract cannot hold
+  leaves the act to the other rules. The label is not part of the inventory record.
+- A report title naming two or more separate services is a combined title: it binds no single family; its title
+  reading stays with the one service it gave it before (the first it names) and every other named service is read by
+  its own statements, sections and instruments (a title is no statement that a service the body cancels, defers or
+  denies was done); the title is the scope of none; a site-less, label-less prose denial in such a part is set beside
+  every service that documents the act done.
+- A copular negation ("S was not a N of O") negates only N, at O: no act is read in S or in O's modifiers; "not a
+  second/another/repeat N" denies only another occurrence and is never performance evidence. Verbal negation is
+  unchanged.
+- A bare service heading's section is not ended by a field label over its value, a table header cell, or page furniture
+  (page-number lines, a repeated report title, and with the revision's pages a line an earlier page prints at the same
+  edge); every other heading still ends it.
+- An explicit statement that no separate office E/M service is documented (`cues.EM_ABSENCE`) negates the office E/M
+  for both readers; any other E/M statement read as done or held outranks it, and billing wordings read as before.
+- Office E/M documentation questions are not asked when the visit is uncertain only by the procedure-day hold
+  (`detect.EM_WITHOUT_BASIS`) and no E/M code is proposed for a decision; the service still counts as not established.
+
+`services._same_subject` is unchanged: a site-less, lesion-less denial inside one service's part still pairs with every
+act of its kind. Measured on ea4887f89 against c9f20a148 (the declaration's `after_measurement_20261104`): H1 replay
+EQUAL, H4 battery 0 movements, H2 gate holds with nothing moved, H3 no cell moved, the R8 register unchanged, H7 linear
+within the stage limits.
+
+Limits, as measured: a site-less act in a combined report's own part (no section of its service, no site in its
+sentence) is now unattributed, so its code is held where the first named service used to take it, sometimes rightly;
+rule 5's structure test costs about twice the installed inventory time on a document made only of field labels; and
+`engine._states_unread_act` still searches the raw act patterns over a code's own passage, so an attributive compound
+there ("biopsy-proven") can still release the code although the inventory reads no act.
+
+## Core repair and customer interface (2026-11-03): P6 UI
+
+The customer review screen no longer follows section 8's code cards and tabs (those remain the operator page's). Same
+shell, tokens and approved prefix of `styles.css`; results come first. The review column holds one progress panel (four
+stages: Reading your document, Identifying procedures, Checking suggested codes, Preparing your results; the active
+check named; elapsed time; Stop and Resume; "Action needed" for the date hold), the "A few details needed" panel (one
+save for all rows), the checks strip (Document review, Independent checks, Coding validation), the numbered result list
+(code, units, modifier, status, one sentence, "Why this code?"), review and download actions that keep suggested and
+approved apart, "Not separately coded", "Other codes considered (not suggested)" behind a closed disclosure, the
+limitations and the history. Status labels: Ready for review, Needs a detail, Approved, Excluded. The page's client
+contract is in API.md ("Core repair and customer interface (2026-11-03): P6 UI").
+
+## Core repair and customer interface (2026-11-03): P8 VERIFY
+
+The verification tooling for the customer interface (CORE-UX-DESIGN.md sections 5-9). Every tool reads one copy of
+the customer contract (`ops/verification/customer-contract.json`, section 7: every key listed, nothing else) and one
+denylist (`ops/verification/customer-denylist.json`: patterns per surface - DOM, API JSON, response headers,
+downloads, served bundle - forbidden JSON keys, the operator-view paths whose identifiers no customer surface may
+carry, and vectors that the JavaScript and Python readers' tests both run). A string that is a quotation of the
+encounter's own document is never scanned.
+
+- `ops/verify_browser.cjs` walks the customer page as the agent account (agent mode stays the default: every test
+  approval is labelled an agent-executed synthetic review) with a second, platform-operator session beside it
+  (`--operator-credentials FILE`, private JSON with top-level `username` and `password`; required; the walk refuses
+  to start unless `/ops/api/encounters` answers it). Everything a customer may no longer be shown - provider runs,
+  request hashes, models, usage, reuse, jobs, the trace - is read from `/ops/api/encounters/<id>` and its trace,
+  including every "no duplicate paid request" proof (a reload while processing, Stop and Resume, a details save made
+  twice). The customer encounter is held to the contract and to the operator view (the same text; the codes in the
+  contract's order and status mapping; units, decided modifiers and decisions; every "Why this code?" quotation an
+  exact slice on its page and a passage CPT Studio holds as support for the code). The page is read through the DOM
+  contract's hooks only. Negative scans cover every customer API body and header, every DOM text node and wording
+  attribute, toasts, every download and the served page and bundle. Every `/ops/` URL must answer 404 to the
+  customer session (GET, and POST with a body the operator views refuse), the old trace 404 to everyone. Progress:
+  the upload acknowledgement on screen when the page first asks for the encounter, sampled panels equal to what the
+  page was served, elapsed time, no percentage or ETA, nothing animating once failed or stopped, the steps equal to
+  the jobs. One decision and one download are made at 390x844; both viewports are measured and photographed. New
+  manifest keys: `review_plan.details`, `review_plan.modifiers` ("59" or "XS", never both), `review_plan.stop_and_resume`
+  and the document key `expected_no_em_questions`; `review_plan.second_review` is not carried out (the customer contract
+  offers none). Evidence schema `cpt-studio-browser-evidence@2` (customer and operator snapshots apart).
+- `ops/verify_downloads.py` reads `cpt-studio-customer-report@1` in the grammar
+  `ops/verification/samples/make_samples.py` writes down, and holds each customer download to the operator view
+  (`--api-dir` of operator encounter JSON, else the operator snapshot the evidence names; never the customer API the
+  browser read): approved items only, units, decided modifiers, approver, time and agent label, every quotation exact
+  at its offsets and a supporting passage, the fixed CSV columns, no X-Content-SHA256 on the customer download, the
+  bytes equal to the operator's stored bytes, and the negative scan. Operator reports are read as before.
+- `ops/scan_customer.py` (stdlib) signs a customer account in and makes only GET requests: the page and its bundle,
+  the session, the list, each named or listed encounter, its reports, and every `/ops/` URL and the removed trace.
+
+Not walked: the 409 a stale approved export answers once a decision changes (it needs a decision revoked on the walked
+encounter; the server tests hold it), and the operator page's own markup.
+
+## Core repair and customer interface (2026-11-03): integration wiring
+
+The seams between P3 REVIEW, P5 FLOW and P4 CUSTOMER-API, as wired (appended; corrections to the sections above):
+
+- `review._member_answers(assessment)` returns `answers.saved_answers(assessment)` - the revision's standing answers as
+  (code, family, fact, value) - so the overlay applies them wherever it is read (the P3 section's "returns `[]` here").
+  `answers.details_needed` reads the overlay's questions as the View holds them (dicts), asks only of codes in the
+  effective set (a rejected code's question returns with a revocation), keeps the answered rows of a code an answer
+  excluded (so the answer stays visible and withdrawable, also when the overlay asked the question), and asks the date
+  alone while a member's date is held against the document.
+- `studio/customer_api.py` builds no status, question, gate, readiness, date, progress or check of its own: it words
+  `review.effective_view`, `review.approved_items`, `review.readiness`, `answers.*` and `progress.*` for the member.
+- The approved customer export's staleness is a decision marker (`reports.customer_marker`: live assessment, current
+  context, current decisions' ids and sequence, standing answers' ids), stored as the artifact's `snapshot_sha256`
+  (critic C8; the P4 section's "its snapshot digest is re-checked at download").
+- `progress.stage_bound(kind)` is the bound enforced where each stage runs (the extraction child's
+  `EXTRACTION_TIMEOUT_SECONDS`, the routing child's and the assess child's `JOB_DEADLINE_SECONDS` entries, the coding
+  service's `PROVIDER_READ_TIMEOUT_SECONDS + 30`, a participant stage's budget); `JOB_DEADLINE_SECONDS`' extract,
+  predict and review2 entries are read nowhere and are not used (critic C4).
+- Tests: `tests/test_cux_wire.py` (the seams, end to end) and `tests/test_customer_fixtures.py` (every customer
+  fixture from the serializer).
+
+## Core repair and customer interface (2026-11-04): refutation round 2
+
+- Rule 8 (the explicit "no separate office E/M" statement, `cues.EM_ABSENCE`), round-2 repair (`cux-r2-em.json`): the
+  statement is read only when it is the whole of its sentence. An evaluation of the patient, a history, an examination
+  or a visit stated elsewhere (`cues.EM_EVALUATION_STATED`) outranks it, and a member's new or established status
+  closes the visit's status question as a member's setting does. Outside rule 8 the installed generic negation cue
+  still negates "no separate <visit>" whatever follows it; that predates P1 and is unchanged.
+- The reader's release-side rules fail closed on the round's inputs (`cux-r2-bind.json`):
+  - L1's labelled part never opens in a plan or history, at a numbered procedure field or a list of labels, nor
+    takes an act beyond its instrument's reach or another examination's;
+  - a lesion label never moves an act to another service's lesion;
+  - a compound with no noun after it is doubtful, never attributive;
+  - a combined report's dated prose denial is kept.
+- P3's overlay: a code a member answer excluded still counts wherever its presence holds another code (the base rule,
+  competing levels), so a member answer never makes another code approvable. Holds read the counted set, and
+  `View.active` means counted.
+

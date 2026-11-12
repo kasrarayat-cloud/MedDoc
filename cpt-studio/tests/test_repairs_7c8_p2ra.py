@@ -127,7 +127,7 @@ class TheReportsNameTheEnteroscopyTests(Harness):
         self.assertIn(MISSED_ENTEROSCOPY, shown['checks'])
         self.assertNotIn(EVERY_DETECTED, shown['checks'])
         self.decide(encounter_id, '43242', 'approve')
-        reply = self.post(f'/api/encounters/{encounter_id}/reports', {'kind': 'reviewed', 'fmt': 'txt'})
+        reply = self.post(f'/ops/api/encounters/{encounter_id}/reports', {'kind': 'reviewed', 'fmt': 'txt'})
         self.assertEqual(reply.status_code, 201, reply.content)
         reviewed = self.txt(encounter_id, 'reviewed')
         self.assertIn(f'[WARN] services.unproposed — Performed services without a proposal: {MISSED_ENTEROSCOPY}',
@@ -186,7 +186,7 @@ class TheInclusionLineFollowsTheInclusionRuleTests(Harness):
                                  [('S1', 'gi.egd', 'S2'), ('S2', 'gi.eus', '')])
                 for selected in ('43235', code):
                     self.decide(encounter_id, selected, 'approve')
-                reply = self.post(f'/api/encounters/{encounter_id}/reports', {'kind': 'reviewed', 'fmt': 'txt'})
+                reply = self.post(f'/ops/api/encounters/{encounter_id}/reports', {'kind': 'reviewed', 'fmt': 'txt'})
                 self.assertEqual(reply.status_code, 201, reply.content)
                 reviewed = self.txt(encounter_id, 'reviewed')
                 self.assertIn(f'accounted for by: 43235\n      {NOT_INCLUDED_TXT}\n', reviewed)
@@ -389,7 +389,7 @@ class AnUnreadSecondReviewIsNamedNeverHandedOverTests(P2Base):
             self.addCleanup(patcher.stop)
         self.provider.first, self.provider.later = list(primary), list(primary)
         encounter_id = self.create(tag, text=P2_REPORT)
-        self.assertTrue(self.client.get(f'/api/encounters/{encounter_id}').json()['second_review']['available'])
+        self.assertTrue(self.client.get(f'/ops/api/encounters/{encounter_id}').json()['second_review']['available'])
         self.provider.outcomes = [outcome]
         self.assertEqual(self.post(f'/api/encounters/{encounter_id}/second-review').status_code, 201)
         drain()
@@ -397,7 +397,7 @@ class AnUnreadSecondReviewIsNamedNeverHandedOverTests(P2Base):
             run = models.ProviderRun.objects.get(encounter_id=encounter_id, state=models.ProviderRun.UNKNOWN,
                                                  reconciled_at__isnull=True)
             sent = self.sent()
-            reply = self.post(f'/api/encounters/{encounter_id}/reconcile',
+            reply = self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                               {'provider_run_id': str(run.pk), 'note': 'Checked the provider console (synthetic).'})
             self.assertEqual(reply.status_code, 201, reply.content)
             drain()
@@ -445,7 +445,7 @@ class AnUnreadSecondReviewIsNamedNeverHandedOverTests(P2Base):
         # blocker and page would say that no code was proposed
         self.provider.first, self.provider.later = [VISIT], [VISIT, BIOPSY]
         encounter_id = self.create('RN', text=P2_REPORT)
-        self.assertTrue(self.client.get(f'/api/encounters/{encounter_id}').json()['second_review']['available'])
+        self.assertTrue(self.client.get(f'/ops/api/encounters/{encounter_id}').json()['second_review']['available'])
         self.assertEqual(self.post(f'/api/encounters/{encounter_id}/second-review').status_code, 201)
         job = jobs.claim_next()
         self.assertEqual(job.kind, models.Job.REVIEW2)

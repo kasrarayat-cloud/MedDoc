@@ -19,11 +19,16 @@ from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.utils import timezone
 
-from . import audit, review
+from . import audit, candidates, participants, review
+from . import answers as member_answers  # the details flow (P5)
 from .gi.context import charge_date_problem, is_member_conflict
 from .gi.profiles import PROFILES
-from .models import Clarification, Decision, Encounter, Membership, Proposal, ReportArtifact
+from .models import Clarification, Decision, Encounter, Membership, Proposal, ProviderRun, ReportArtifact
+from .participants.peer import code_shaped
+from .serializers import failure_note, peer_code_phases, retrieval_failed, shown_used
 from .types import CONTEXT_FACTS, sha256_json
+from .validation.checks import fact_label
+from .validation.engine import LISTED_NOT_PROPOSED
 
 DRAFT, REVIEWED = ReportArtifact.DRAFT, ReportArtifact.REVIEWED
 KINDS = (DRAFT, REVIEWED)
@@ -58,7 +63,10 @@ CSV_COLUMNS = ('report_kind', 'encounter_id', 'revision_number', 'source_sha256'
                'proposal_id', 'item_list', 'code', 'code_kind', 'family', 'family_label', 'status', 'decision', 'reviewer',
                'reviewer_kind', 'decided_at', 'decision_carried_from', 'decision_carried_at', 'units', 'evidence',
                'checks', 'not_verified', 'modifier_considerations', 'exclusion_reason', 'synthetic',
-               'evidence_support', 'source_passages', 'documented_service', 'proposal_origin')
+               'evidence_support', 'source_passages', 'documented_service', 'proposal_origin',
+               # the harness (HARNESS.md 5, I4): who proposed the code and what the CMS reference checks found - both
+               # apart from 'decision', a member's
+               'proposed_by', 'reference_check')
 # Rows that are not proposals: what the documented-service reconciliation found (format @4).
 ENCOUNTER_LISTS = ('coding_completeness', 'unresolved_service', 'conflict')
 # A line break inside stored text always continues at least this deep: deeper than any structural line of
@@ -157,19 +165,24 @@ def _decision(decision):
     if decision is None:
         return None
     carried = bool(decision.carried_from_id)
-    return {'id': str(decision.pk), 'action': decision.action, 'reviewer': decision.reviewer.label(),
-            'reviewer_kind': decision.reviewer_kind, 'decided_at': _ts(review.decision_root(decision).created_at),
-            'note': decision.note, 'acknowledgement': decision.acknowledgement,
-            'carried_from': str(decision.carried_from_id) if carried else None,
-            'carried_at': _ts(decision.created_at) if carried else None}
+    out = {'id': str(decision.pk), 'action': decision.action, 'reviewer': decision.reviewer.label(),
+           'reviewer_kind': decision.reviewer_kind, 'decided_at': _ts(review.decision_root(decision).created_at),
+           'note': decision.note, 'acknowledgement': decision.acknowledgement,
+           'carried_from': str(decision.carried_from_id) if carried else None,
+           'carried_at': _ts(decision.created_at) if carried else None}
+    if getattr(decision, 'modifiers', None):  # the reviewer's chosen modifier (CORE-UX-DESIGN.md 4), only when chosen
+        out['modifiers'] = [str(m) for m in decision.modifiers]
+    return out
 
 
-def _list_for(proposal, decision, kind):
+def _list_for(proposal, decision, kind, view=None):
     if proposal.bucket == Proposal.ALTERNATIVE:
         return 'alternative'
     action = decision.action if decision else None
     if action == Decision.REJECT:
         return 'rejected'
+    if view is not None and view.reason == review.DETAIL_UNAVAILABLE:
+        return 'excluded'  # a needed detail answered as unavailable: excluded by the review overlay, never approved
     if action == Decision.APPROVE and kind == REVIEWED:
         return 'approved'
     if proposal.bucket == Proposal.EXCLUDED and action in (None, Decision.CONFIRM):
@@ -187,24 +200,39 @@ def _reinstated(proposal, decision):
             and decision.action != Decision.CONFIRM)
 
 
-def _item(proposal, decision, kind, text):
+def _item(proposal, decision, kind, text, view=None):
+    """``view``: the proposal's effective review view (review.effective_view): its status and checks as the current
+    decisions leave them (CORE-UX-DESIGN.md 4); with no decision and no member answer, the stored ones."""
     exact = review.exact_evidence(proposal.evidence, text)
-    return {
-        'id': str(proposal.pk), 'key': proposal.key, 'list': _list_for(proposal, decision, kind),
+    status = view.status if view is not None else proposal.status
+    item = {
+        'id': str(proposal.pk), 'key': proposal.key, 'list': _list_for(proposal, decision, kind, view),
         'bucket': proposal.bucket, 'code': proposal.code, 'code_kind': proposal.code_kind, 'family': proposal.family,
         'family_label': _family_label(proposal.family), 'profile_version': proposal.profile_version,
-        'status': proposal.status, 'status_label': review.status_label(proposal.status),
+        'status': status, 'status_label': review.status_label(status),
         'exclusion_reason': proposal.exclusion_reason, 'reinstatable': proposal.reinstatable,
         'reinstated': _reinstated(proposal, decision),
         'reinstated_by': _decision(review.reinstatement_for(decision)) if _reinstated(proposal, decision) else None,
         'units': proposal.units, 'rationale': proposal.rationale,
         'evidence': [{'start': s['start'], 'end': s['end'], 'text': s['text'], 'page': s.get('page')} for s in exact],
         'unmatched_evidence': len(proposal.evidence or []) - len(exact),
-        'checks': [_check(c) for c in proposal.checks or []],
+        'checks': [_check(c) for c in (view.checks if view is not None else proposal.checks or [])],
         'modifier_considerations': [str(m) for m in proposal.modifier_considerations or []],
         'fingerprint': proposal.fingerprint, 'decision': _decision(decision),
         'support': _support(proposal.support or {}, text),
+        # who proposed it and what the CMS reference checks found, never the decision above (I4)
+        'proposed_by': review.proposed_by(proposal), 'reference_check': review.reference_check(proposal),
     }
+    listed = review.listed_by(proposal)
+    if listed:  # a participant's alternative's listers (refutation round 5, D12); none in a Corti-only snapshot
+        item['listed_by'] = listed
+    if view is not None and view.recomputed:  # checks the review overlay recomputed after the decisions
+        item['recomputed'] = list(view.recomputed)
+    if view is not None and view.stale:  # checks it could not recompute although the decisions moved what they read
+        item['stale'] = list(view.stale)
+    if view is not None and view.reason:
+        item['review_reason'] = view.reason
+    return item
 
 
 def _support(support, text):
@@ -338,18 +366,319 @@ def _reference_sources(assessment):
             'not_connected': standing + list(recorded.values())}
 
 
+def _records(assessment):
+    """The assessment's harness participant entries (Assessment.participants), by participant name."""
+    return {record.get('name'): record for record in assessment.participants or [] if isinstance(record, dict)}
+
+
 def _provider_runs(encounter, assessment):
+    # a harness participant's run is read by this assessment when its Assessment.participants entry names it, and its
+    # response was not used when that entry says refused; harness@2 (HARNESS.md 12.3): so is its peer-review run
+    read = {record.get('run'): record.get('state') for record in _records(assessment).values() if record.get('run')}
+    read.update({record['peer_run']: record.get('peer_state') for record in _records(assessment).values()
+                 if isinstance(record.get('peer_run'), str)})
     return [{
         'id': str(run.pk), 'revision_number': run.revision.number, 'provider': run.provider,
-        'mode': 'replay' if run.provider == 'replay' else 'live', 'state': run.state, 'sent': run.sent,
+        'mode': review.run_mode(run), 'state': run.state, 'sent': run.sent,
         'http_status': run.http_status, 'usage': run.usage or {}, 'usage_basis': run.usage_basis,
         'request_sha256': run.request_sha256, 'response_sha256': run.response_sha256,
         'reused_from': str(run.reused_from_id) if run.reused_from_id else None,
         'reconciled': run.reconciled_at is not None, 'created_at': _ts(run.created_at),
-        'used_by_assessment': run.pk in (assessment.provider_run_id, assessment.second_run_id),
+        'used_by_assessment': run.pk in (assessment.provider_run_id, assessment.second_run_id) or str(run.pk) in read,
         'purpose': run.purpose,
         'held': (run.scope or {}).get('held', ''),
+        'refused': read.get(str(run.pk)) == 'refused',
     } for run in encounter.provider_runs.select_related('revision').order_by('created_at', 'pk')]
+
+
+CORTI_STATES = {ProviderRun.SUCCEEDED: 'answered; its codes were checked', ProviderRun.FAILED: 'the request failed',
+                ProviderRun.UNKNOWN: 'the outcome is unknown: no complete response was recorded',
+                ProviderRun.NOT_SENT: 'nothing was sent', ProviderRun.CANCELLED: 'nothing was sent'}
+
+
+def _participant_entry(name, label, vendor, run, state, reason='', unverified=0, refused=False):
+    usage, cost, continues = review.chain_usage(run)
+    return {'name': name, 'label': label, 'vendor': vendor, 'state': state, 'reason': str(reason or ''),
+            'refused': refused,
+            'run': str(run.pk) if run is not None else None, 'mode': review.run_mode(run) if run is not None else '',
+            'endpoint': run.endpoint if run is not None else '',
+            'requested_model': run.requested_model if run is not None else '',
+            'returned_model': run.returned_model if run is not None else '',
+            'request_id': run.provider_request_id if run is not None else '',
+            'response_id': run.response_id if run is not None else '',
+            'reused': bool(run is not None and run.reused_from_id),
+            'usage': usage, 'continues': continues,
+            'usage_basis': run.usage_basis if run is not None else '',
+            'estimated_cost_usd': cost, 'unverified_quotes': int(unverified or 0)}
+
+
+def _participants(assessment):
+    """The review participants as this assessment read them (HARNESS.md 6): Corti's run, and each harness participant's
+    Assessment.participants entry with the run it names. An assessment recorded before the harness has no entry. Corti's
+    answered state is its row's (serializers.corti_answered), and where its answers returned codes the engine cannot
+    list its entry counts them as the engine does (``unlisted_codes``, only then; ``unlisted_second_review``, the bounded
+    second review's part of them, only when it has one), never naming one (refutation round 3, truth-3; round 4,
+    truth-4)."""
+    from .serializers import (corti_answered, corti_codes, corti_listed_apart,  # local: one implementation, the row's
+                              corti_unlisted_counts)
+
+    records = _records(assessment)
+    runs = {str(run.pk): run for run in ProviderRun.objects.filter(
+        pk__in=[record['run'] for record in records.values() if record.get('run')])}
+    out = []
+    for name, label, vendor, _ in review.HARNESS_PARTICIPANTS:
+        if name == review.CORTI:
+            run = assessment.provider_run
+            if run is None:
+                out.append(_participant_entry(name, label, vendor, None, 'the provider was not run'))
+                continue
+            refused = review._refused_run(assessment) == run
+            held = (run.state == ProviderRun.NOT_SENT
+                    and (run.scope or {}).get('held') == ProviderRun.HELD_MEMBER_DATE_CONFLICT)
+            primary, second = (corti_unlisted_counts(assessment) if run.state == ProviderRun.SUCCEEDED and not refused
+                               else (0, 0))
+            unlisted, codes = primary + second, corti_codes(assessment)
+            apart = bool(unlisted) and not codes and corti_listed_apart(assessment)
+            state = ('answered; the response was not used' if refused else
+                     'nothing was sent: the service date entered as encounter metadata conflicts with the document'
+                     if held else corti_answered(bool(codes), unlisted, apart)
+                     if run.state == ProviderRun.SUCCEEDED else CORTI_STATES.get(run.state, run.state))
+            # a refused response's reason is its own provider check's (provider.status), as the encounter view says it
+            reason = (next((check.get('detail') or '' for check in assessment.encounter_checks or []
+                            if check.get('id') == 'provider.status'), '') if refused else
+                      run.error if run.state in (ProviderRun.FAILED, ProviderRun.NOT_SENT) and not held else '')
+            entry = _participant_entry(name, label, vendor, run, state, reason, refused=refused)
+            if unlisted:
+                entry['unlisted_codes'] = unlisted
+            if second:
+                entry['unlisted_second_review'] = second
+            out.append(entry)
+            continue
+        record = records.get(name)
+        if record is None:
+            out.append(_participant_entry(name, label, vendor, None, 'not recorded: this assessment predates the '
+                                                                     'review participants'))
+            continue
+        state = record.get('state')
+        entry = _participant_entry(
+            name, label, vendor, runs.get(record.get('run')), review.RECORD_WORDS.get(state, str(state)),
+            review.record_reason(record), record.get('unverified_quotes'), refused=state == 'refused')
+        if 'exchanges' in record:  # harness@2 (HARNESS.md 12.3): the run was a tool loop
+            run = runs.get(record.get('run'))
+            entry.update(exchanges=_count(record.get('exchanges')), tool_calls=_count(record.get('tool_calls')),
+                         unpriced_exchanges=[[turn, state] for turn, state in review.unpriced_exchanges(run)])
+            if run is not None and run.reused_from_id:
+                # a reuse sent nothing: the entry counts the exchanges and tool calls of the loop that answered for
+                # it, the retained run's (jobs.loop_run), so they are said to be that run's, and the reuse's own -
+                # none - are its own (refutation round 3, truth-4: "Exchanges: 2 · tool calls: 1" was printed as the
+                # reuse's)
+                from .models import ToolCall  # local import: only this count needs it
+
+                entry.update(retained={'run': str(run.reused_from_id), 'exchanges': entry['exchanges'],
+                                       'tool_calls': entry['tool_calls']},
+                             exchanges=run.exchanges.count(),
+                             tool_calls=ToolCall.objects.filter(exchange__run=run).count())
+        out.append(entry)
+    return out
+
+
+def _count(value):
+    return value if type(value) is int and value >= 0 else 0
+
+
+def _retrieval(assessment):
+    """The reference retrieval traces the assessment recorded (Assessment.retrieval), as stored."""
+    return [entry for entry in assessment.retrieval or [] if isinstance(entry, dict)]
+
+
+# --- harness@2 (HARNESS.md 11-12): peer reviews, confirmed findings, the participants' own references -----------------
+#
+# Only an assessment a model participant took part in (phase 1 or 2) carries these, so a Corti-only report - its
+# snapshot, its digest, the TXT and the CSV - is harness@1's exactly. Nothing here is a participant's own wording: a
+# question is CPT Studio's, a value is stated in CPT Studio's words (studio.candidates), a passage is the revision
+# text's own slice, re-checked, and a code, position or reference is shown only in the shape it may take. None of it
+# decides a status or approves anything (I2-I4), and the participants' references stay apart from the reconciliation's
+# REFERENCE RETRIEVAL.
+
+CONFIRMED_TITLE = 'CONFIRMED FINDINGS'
+PEER_TITLE = 'PEER REVIEW'
+REFERENCES_TITLE = 'PARTICIPANT REFERENCES'
+# CSV rows that are not proposals (format @4's encounter rows, harness@2's): ops/verify_downloads.py reads them as such.
+HARNESS2_LISTS = ('confirmed_finding', 'peer_answer', 'peer_position', 'peer_additional_code', 'participant_reference')
+# A passage key or a 'fact:<source>:<code>:<field>' ref: the shape of CPT Studio's own identifiers, so it is read only
+# of a ref CPT Studio's tool results returned. A ref a participant cites that no tool returned is its own text, shown
+# only as a short id or by its length (serializers.shown_used; refutation round 4, shapes-3: this shape alone printed
+# 'colonoscopy-flexible-with-biopsy-single-or-multiple', a descriptor written with hyphens, as written).
+REF_SHAPE = re.compile(r'[A-Za-z0-9][A-Za-z0-9._:-]{0,199}')
+FACT_TITLES = {candidates.DATE_FACT: 'Service date', candidates.STATUS_FACT: 'Performed at this encounter'}
+PHASE_WORDS = {ProviderRun.INDEPENDENT: 'independent reading', ProviderRun.PEER_REVIEW: 'peer review'}
+NO_PEER_REVIEW = 'It takes no part in peer review: its first reading was not read.'
+
+
+def _fact_title(fact):
+    return FACT_TITLES.get(fact) or fact_label(str(fact)).capitalize()
+
+
+def _located(quotes, text, index):
+    """The located spans of ``quotes`` that are exact slices of the revision text, each once, in text order, with
+    their page."""
+    spans = {}
+    for quote in quotes or ():
+        for span in getattr(quote, 'spans', ()) or ():
+            if _matches({'start': span.start, 'end': span.end, 'text': span.text}, text):
+                spans[(span.start, span.end)] = {'start': span.start, 'end': span.end, 'text': span.text,
+                                                 'page': candidates._page_of(index, span.start)}
+    return [spans[key] for key in sorted(spans)]
+
+
+def _harness2(assessment):
+    phase = review.assessment_phase(assessment)
+    if phase == 0:
+        return {}
+    # CONFIRMED FINDINGS only while confirmations are offered (refutation round 4, d7-4; HARNESS.md 12.10 as amended):
+    # this release offers none, and the section's "no reviewer has confirmed a finding" implied a reviewer could
+    confirmed = {'confirmed_findings': _confirmed_findings(assessment)} if review.confirmations_offered() else {}
+    return {'phase': phase, 'peer_review': _peer_reviews(assessment, phase), **confirmed,
+            'participant_references': _participant_reference_runs(assessment)}
+
+
+def _peer_reviews(assessment, phase):
+    """Each configured model participant's peer review as this assessment read it (12.3): its state, run and mode, the
+    frozen inputs it was shown, and its answers, positions and additional codes with their located passages. Phase 1:
+    none recorded yet - ``owed`` says whether any is to follow, by the pipeline's own rule (review.owed_peer_stages: a
+    participant's first reading was read, and no member date conflict holds the encounter - ``held``)."""
+    records = review.model_records(assessment)
+    owed = any(record.get('state') == 'read' for record in records.values())
+    if phase != 2:
+        # a harness@1 assessment records no frozen phase-1 outputs (12.3): no peer review ever follows it
+        predates = not any('frozen' in record for record in records.values())
+        due = bool(review.owed_peer_stages(assessment))
+        held = owed and not predates and review.peer_review_held(assessment)
+        unowned = owed and not predates and not due and not held  # read, but no participant that read is configured
+        return {'recorded': False, 'owed': due and not predates, 'predates': predates,
+                **({'held': True} if held else {}), **({'unowned': True} if unowned else {}), 'participants': []}
+    revision = assessment.revision
+    text, index = revision.text, candidates._page_index(revision.pages)
+    out = []
+    for name in review.MODEL_PARTICIPANTS:
+        record = records.get(name)
+        if record is None or record.get('state') == 'not_configured':
+            continue
+        state = record.get('peer_state') if record.get('state') == 'read' else 'not_run'
+        entry = {'name': name, 'label': participants.LABELS[name], 'state': str(state or 'not_run'),
+                 'reason': '' if record.get('state') == 'read' else NO_PEER_REVIEW, 'run': None, 'mode': '',
+                 'unverified_quotes': _count(record.get('peer_unverified_quotes')), 'frozen': [], 'answers': [],
+                 'positions': [], 'additional_codes': []}
+        if record.get('state') == 'read' and state != 'read':
+            entry['reason'] = review.record_reason({'state': state, 'reason': record.get('peer_reason')})
+        peer_run = review.record_run(assessment, record, 'peer_run')
+        if peer_run is not None:
+            entry.update(run=str(peer_run.pk), mode=review.run_mode(peer_run))
+        if state == 'read' and peer_run is not None:
+            peer_review = review.recorded_peer_review(assessment, record)  # as assess #2 read it, or None
+            if peer_review is None:
+                problem = review.stored_peer_review(peer_run)[1]
+                entry.update(state='unreadable', reason=problem or 'Its stored answer no longer reads as recorded.')
+            else:
+                entry.update(_peer_items(assessment, peer_review, text, index, name, record))
+        out.append(entry)
+    return {'recorded': True, 'owed': owed, 'participants': out}
+
+
+def _peer_items(assessment, peer_review, text, index, name='', record=None):
+    named = {review._uuid(answer.question_id) for answer in peer_review.answers} - {None}
+    asked = {str(item.pk): item for item in Clarification.objects.select_related('proposal').filter(
+        pk__in=named, encounter_id=assessment.encounter_id, assessment__revision_id=assessment.revision_id)}
+    answers = []
+    for answer in peer_review.answers:
+        question = asked.get(review._uuid(answer.question_id))
+        fact, family = (question.fact, question.family) if question is not None else ('', '')
+        # no value (refutation round 5, the session's D10, as D8 for the page): a participant's value is its own free
+        # text, which only the owner's trace serves, and CPT Studio's reading of it (candidates.canonical_value, an
+        # inference no release-default path makes) printed 'Cannulation of the bile duct was not successful.' as
+        # "successful"; an answer is printed only by whether it is read as settling the question, with the passages
+        # it located
+        answers.append({'question_id': str(answer.question_id) if question is not None else '',
+                        'question': question.question if question is not None else '', 'fact': fact,
+                        'family': family, 'settled': bool(answer.settled),
+                        'evidence': _located(answer.evidence, text, index)})
+    # a code in a code's shape, CPT or HCPCS, as the engine reads a participant's code (participants.peer.code_shaped;
+    # refutation round 5, shapes-1, truth-7: the CPT shape alone printed an HCPCS code the engine read as "a code CPT
+    # Studio does not read"); '' for any other, printed as UNREAD_CODE
+    positions = [{'code': item.code if code_shaped(item.code) else '', 'position': item.position,
+                  'evidence': _located(item.evidence, text, index)} for item in peer_review.positions]
+    # each additional code with the phase its participant first proposed it in (serializers.peer_code_phases;
+    # refutation round 2, truth-8): '' for a code CPT Studio does not read, and for one it proposed in neither phase -
+    # no entry of either located a quote (refutation round 5, the session's D12) - and each entry worded by its own
+    # quotes: one with no passage located is never 'peer_review' (refutation round 6, account-4: a second entry of a
+    # code another entry located, its quote not found, was printed "proposed after peer review, never independent" with
+    # no passage, and the CSV counted it as a second such row)
+    shaped = [item.code if code_shaped(item.code) else '' for item in peer_review.additional_codes]
+    phases = peer_code_phases(peer_review, record)
+    added = []
+    for item, code in zip(peer_review.additional_codes, shaped):
+        evidence = _located(item.evidence, text, index)
+        phase = phases.get(code, '')
+        added.append({'code': code, 'units': item.units if type(item.units) is int else 0, 'evidence': evidence,
+                      'phase': '' if phase == ProviderRun.PEER_REVIEW and not evidence else phase})
+    return {'frozen': [[str(name), str(value)] for name, value in peer_review.frozen_inputs], 'answers': answers,
+            'positions': positions, 'additional_codes': added}
+
+
+def _confirmed_findings(assessment):
+    """Every reviewer-confirmed finding of the revision (FindingConfirmation, 11.3), oldest first: the fact, value and
+    passage, who located it, who confirmed it with which attestation and when, and what became of it - a service date
+    enters through the encounter context; any other fact is read by an assessment (completeness['confirmations']) - in
+    the words of review.confirmation_effect, the one reading the API's confirmations state too (refutation round 2,
+    truth-5)."""
+    text = assessment.revision.text
+    out = []
+    for item in review.revision_confirmations(assessment.revision):
+        spans = [span for span in item.spans or [] if isinstance(span, dict) and _matches(span, text)]
+        effect = review.confirmation_effect(item, assessment)['detail']
+        question = item.clarification
+        out.append({'id': str(item.pk), 'clarification_id': str(item.clarification_id), 'scope': item.scope,
+                    'fact': item.fact, 'family': item.family, 'proposal_key': item.proposal_key,
+                    'code': question.proposal.code if question.proposal_id else '', 'value': item.value,
+                    'spans': [{'start': span['start'], 'end': span['end'], 'text': span['text'],
+                               'page': span.get('page')} for span in spans],
+                    'unmatched': len(item.spans or []) - len(spans),
+                    'located_by': [str(name) for name in item.located_by or []],
+                    'runs': [str(run) for run in item.runs or []], 'confirmed_by': item.confirmed_by.label(),
+                    'confirmed_by_kind': item.confirmed_by.actor_kind, 'attestation': item.attestation,
+                    'created_at': _ts(item.created_at), 'effect': effect})
+    return out
+
+
+def _participant_reference_runs(assessment):
+    """What each configured model participant's runs retrieved and say they used (11.2), by run: its first reading's
+    and its peer review's, never merged with each other or with the reconciliation's retrieval."""
+    records = review.model_records(assessment)
+    out = []
+    for name in review.MODEL_PARTICIPANTS:
+        record = records.get(name)
+        if record is None or record.get('state') == 'not_configured':
+            continue
+        for field, phase in (('run', ProviderRun.INDEPENDENT), ('peer_run', ProviderRun.PEER_REVIEW)):
+            run = review.record_run(assessment, record, field)
+            if run is None:
+                continue
+            references = review.participant_references(run)
+            out.append({'name': name, 'label': participants.LABELS[name], 'phase': phase, 'run': str(run.pk),
+                        'reused_from': references.get('reused_from'), 'retrieved': references['retrieved'],
+                        'used': [{'ref': _used_ref(item), 'retrieved': bool(item['retrieved'])}
+                                 for item in references['used']]})
+    return out
+
+
+def _used_ref(item):
+    """A reference a participant run says it used, as both reports print it: one its own tool results returned as
+    given in the shape of CPT Studio's own identifiers (REF_SHAPE; '' otherwise, printed as UNKEYED_REF), any other
+    only as a short id or by its length (serializers.shown_used), never as the participant wrote it."""
+    if item.get('retrieved') is True:
+        return item['ref'] if REF_SHAPE.fullmatch(str(item['ref'])) else ''
+    ref = shown_used(item)['ref']
+    return ref if isinstance(ref, str) else ''
 
 
 def _history(encounter, assessment):
@@ -387,9 +716,11 @@ def snapshot(encounter, kind):
         raise ReportNotReady(ready['blockers'])
     revision = assessment.revision
     current = review.current_decisions(assessment)
-    questions = list(assessment.clarifications.filter(state=Clarification.OPEN).select_related('proposal')
-                     .order_by('created_at', 'pk'))
-    items = [_item(p, current.get(p.pk), kind, revision.text) for p in assessment.proposals.order_by('position')]
+    # the review overlay (CORE-UX-DESIGN.md 4): statuses, checks and open questions as the current decisions leave them
+    views = review.effective_view(assessment, current)
+    questions = review.open_questions_of(assessment, views)
+    items = [_item(p, current.get(p.pk), kind, revision.text, views.get(p.key))
+             for p in assessment.proposals.order_by('position')]
     if kind == REVIEWED and any(item['list'] == 'undecided' for item in items):
         raise ReportNotReady(['A proposed code has no approve or reject decision'])
     workspace = encounter.workspace
@@ -415,11 +746,18 @@ def snapshot(encounter, kind):
                                 review.reviewed_completeness(assessment, current)),
         'second_review': str(assessment.second_run_id) if assessment.second_run_id else None,
         'proposals': items,
-        'clarifications': [_clarification(q) for q in questions],
+        'clarifications': [{key: question.get(key) for key in ('id', 'scope', 'family', 'fact', 'question', 'reason',
+                                                                'code')} for question in questions],
         'not_verified': _not_verified(items, assessment),
         'provider_runs': _provider_runs(encounter, assessment),
         'reference_sources': _reference_sources(assessment),
         'decision_history': _history(encounter, assessment),
+        'participants': _participants(assessment),
+        'retrieval': _retrieval(assessment),
+        # an assessment recorded before the harness has no participant entry and no retrieval
+        'harness': bool(assessment.participants),
+        # harness@2 (HARNESS.md 11-12), only where a model participant took part: a Corti-only snapshot is harness@1's
+        **_harness2(assessment),
     }
 
 
@@ -466,6 +804,9 @@ def _decision_lines(item, kind):
                  'reviewed report']
     else:
         lines = [f'{pad}Current decision: {_decision_words(decision)}']
+    if decision.get('modifiers'):
+        lines.append(f'{pad}Modifier chosen by the reviewer: {", ".join(decision["modifiers"])} (not validated against '
+                     'NCCI procedure-to-procedure edits or payer modifier policy)')
     if decision['acknowledgement']:
         lines.append(f'{pad}Acknowledgement: {_indent(decision["acknowledgement"], pad + "  ")}')
     if decision['note']:
@@ -503,7 +844,46 @@ def _item_block(number, item, kind):
         lines.append(f'{pad}Rationale: {_indent(item["rationale"], pad + "  ")}')
     if item['modifier_considerations']:
         lines.append(f'{pad}Modifier considerations (none assigned): ' + '; '.join(item['modifier_considerations']))
-    return lines
+    return lines + _harness_lines(item)
+
+
+def _labels(names):
+    labels = {name: label for name, label, _, _ in review.HARNESS_PARTICIPANTS}
+    return [labels.get(name, name) for name in names or []]
+
+
+def _listed_words(item):
+    """'listed by Astra with no quote found verbatim in the document, so not proposed' for the participants that only
+    listed a participant's alternative's code (review.listed_by; refutation round 5, the session's D12); '' for none."""
+    listed = _labels(item.get('listed_by'))
+    return f'listed by {_join_labels(listed)} {LISTED_NOT_PROPOSED}' if listed else ''
+
+
+def _join_labels(labels):
+    return labels[0] if len(labels) == 1 else f'{", ".join(labels[:-1])} and {labels[-1]}'
+
+
+def _proposers(item):
+    """Who proposed the code, by label ('Corti, Astra'), and apart from them the participants that only listed it
+    ('no participant; listed by Astra with no quote found verbatim in the document, so not proposed': refutation round
+    5, the session's D12 - "Astra" was printed as the proposer of a code its reading only listed; "no participant",
+    never "none": Corti may have a row of its own for the code, a selection excluded for scope); 'not recorded' for a
+    proposal that names neither."""
+    named = ', '.join(_labels(item.get('proposed_by')))
+    listed = _listed_words(item)
+    if listed:
+        return (f'{named}; {listed} by {_join_labels(_labels(item.get("listed_by")))}' if named
+                else f'no participant; {listed}')
+    return named or 'not recorded'
+
+
+def _harness_lines(item, pad='     '):
+    """Who proposed the code and what the CMS reference checks found: two statuses kept apart from each other and from
+    the decision lines (I4). The check results are named by label, never by detail, so no other code is quoted here."""
+    check = item.get('reference_check') or {}
+    return [f'{pad}Proposed by: {_proposers(item)}',
+            f'{pad}Reference check: {_human(check.get("state", "not_verified"))} — '
+            f'{_indent(check.get("detail", ""), pad + "  ")}']
 
 
 def _source_section(snap):
@@ -558,7 +938,8 @@ def _rejected_section(snap):
     lines = []
     for item in snap['proposals']:
         if item['list'] == 'rejected':
-            lines.append(f'{_short_line(item)} — {_decision_words(item["decision"])}')
+            # who proposed it closes the item's own line: the list keeps one line per rejection, then origin and note
+            lines.append(f'{_short_line(item)} — {_decision_words(item["decision"])} · proposed by {_proposers(item)}')
             if (item.get('support') or {}).get('origin') == 'second_review':
                 lines.append(f'     {ORIGIN_LINE}')  # as the numbered lists say it (_item_block)
             if item['decision']['note']:
@@ -587,18 +968,37 @@ def _excluded_section(snap):
                          f'{item["exclusion_reason"] or "no reason recorded"}{hint}')
             if decision is not None and decision['note']:
                 lines.append(f'     Note: {_indent(decision["note"], "       ")}')
+            lines.append(f'     Proposed by: {_proposers(item)}')
     return lines or ['  None.']
+
+
+def _alternative_words(item):
+    """How an informational code came to be listed: a code the bounded second review listed, one a harness participant
+    proposed that CPT Studio did not add as a proposal (origin participant) - or one a participant only listed, with no
+    quote found verbatim, which it did not propose (refutation round 5, the session's D12) - or a provider
+    alternative."""
+    origin = (item.get('support') or {}).get('origin')
+    if origin == 'second_review':
+        return 'second-review alternative'
+    if origin == 'participant':
+        named, listed = ', '.join(_labels(item.get('proposed_by'))), _listed_words(item)
+        if listed and not named:
+            return listed
+        said = f'proposed by {named or "not recorded"}, not added as a proposal'
+        return f'{said}; {listed} by {_join_labels(_labels(item.get("listed_by")))}' if listed else said
+    return 'provider alternative'
 
 
 def _alternatives_section(snap):
     """Every informational code, never selectable. A code the bounded second review listed says so: one it SELECTED
     and CPT Studio did not add is worded as selected (its stored reason), never as a candidate the provider did not
-    select (refutation r1, report lens)."""
-    lines = [f'{_short_line(item)} — '
-             + ('second-review alternative' if (item.get('support') or {}).get('origin') == 'second_review'
-                else 'provider alternative') + ', never selectable'
-             + (f': {item["exclusion_reason"]}' if item['exclusion_reason'] else '')
-             for item in snap['proposals'] if item['list'] == 'alternative']
+    select (refutation r1, report lens); so does one a harness participant proposed (HARNESS.md 5)."""
+    lines = []
+    for item in snap['proposals']:
+        if item['list'] == 'alternative':
+            lines.append(f'{_short_line(item)} — {_alternative_words(item)}, never selectable'
+                         + (f': {item["exclusion_reason"]}' if item['exclusion_reason'] else ''))
+            lines.append(f'     Proposed by: {_proposers(item)}')
     return lines or ['  None.']
 
 
@@ -608,6 +1008,12 @@ def _checks_section(snap):
         if item['checks']:
             lines.append(f'  {item["code"]} ({item["list"]})')
             lines += [_check_line(check) for check in item['checks']]
+            if item.get('recomputed'):
+                lines.append(f'    Recomputed over the current review decisions: {", ".join(item["recomputed"])}; the '
+                             'other checks were made when the assessment ran.')
+            if item.get('stale'):
+                lines.append(f'    Not recomputed over the current review decisions (what it reads was not recorded '
+                             f'with the assessment): {", ".join(item["stale"])}; it predates them.')
     encounter_checks = snap['assessment']['encounter_checks']
     if encounter_checks:
         lines.append('  Encounter')
@@ -664,9 +1070,16 @@ def _provider_section(snap):
         mode = 'REPLAY (recorded response, not live output)' if run['mode'] == 'replay' else run['mode']
         status = f' · HTTP {run["http_status"]}' if run['http_status'] else ''
         second = run.get('purpose') == 'second_review'
+        # a harness participant's own review of the revision (HARNESS.md 2), or its peer review (11.1); its
+        # Assessment.participants entry says whether this assessment read it and whether its response was used
+        # (_provider_runs)
+        independent = run.get('purpose') in ('independent', 'peer_review')
+        kind = (' · bounded second review' if second else ' · peer review' if run.get('purpose') == 'peer_review'
+                else ' · independent review' if independent else '')
         used = ''
         if run['used_by_assessment']:
-            refused = ('provider.second_review' if second else 'provider.status') in failed
+            refused = (run.get('refused') if independent else
+                       ('provider.second_review' if second else 'provider.status') in failed)
             # "Used" only of a response this assessment read and did not refuse: a failed request returned none it
             # could use and an unknown outcome none at all (refutation r1, report-7: both read "used by this
             # assessment" beside a failed or unknown provider check).
@@ -681,12 +1094,14 @@ def _provider_section(snap):
             # nothing was requested, so nothing was used and no request time is given (refutation r1, report-7: a held
             # run read "requested ... used"; a run a Stop cancelled before sending read "requested")
             used = (' · nothing was sent: the service date entered as encounter metadata conflicts with the document'
-                    if run.get('held') == 'member_date_conflict' else ' · nothing was sent')
+                    if run.get('held') == 'member_date_conflict' else
+                    ' · nothing was sent: a previous request had an unknown outcome'
+                    if run.get('held') == 'unknown_outcome' else ' · nothing was sent')
             lines.append(f'  - {run["provider"]} · {mode} · {run["state"]} · revision {run["revision_number"]}'
-                         + (' · bounded second review' if second else '') + f' · recorded {run["created_at"]}{used}')
+                         + kind + f' · recorded {run["created_at"]}{used}')
         else:
             lines.append(f'  - {run["provider"]} · {mode} · {run["state"]}{status} · revision {run["revision_number"]}'
-                         + (' · bounded second review' if second else '') + f' · requested {run["created_at"]}{used}')
+                         + kind + f' · requested {run["created_at"]}{used}')
         usage = json.dumps(run['usage'], sort_keys=True, ensure_ascii=False) if run['usage'] else 'none reported'
         lines.append(f'    Usage: {usage}' + (f' ({run["usage_basis"]})' if run['usage_basis'] else ''))
         lines.append(f'    Request sha256: {run["request_sha256"] or "none"} · '
@@ -712,6 +1127,284 @@ def _reference_section(snap):
         lines.append('    None.')
     lines.append('  Not connected:')
     lines += [f'    - {entry}' for entry in snap['reference_sources']['not_connected']]
+    return lines
+
+
+# What an exchange of a tool loop that reported no usage came to, as its record says (ProviderExchange.state).
+EXCHANGE_OUTCOMES = {ProviderRun.SUCCEEDED: 'answered', ProviderRun.FAILED: 'failed',
+                     ProviderRun.UNKNOWN: 'outcome unknown'}
+
+
+def _unpriced_words(items):
+    """Why a tool loop has no estimate when exchanges that may have been billed reported no usage
+    (review.unpriced_exchanges; refutation round 2, truth-12): an estimate of the others is no estimate of the run."""
+    named = [f'{turn} ({EXCHANGE_OUTCOMES.get(state, state)})' for turn, state in items]
+    which = f'exchange {named[0]}' if len(named) == 1 else f'exchanges {", ".join(named[:-1])} and {named[-1]}'
+    return (f'not estimated: {which} reported no usage and may have been billed, so the cost of this run cannot be '
+            'estimated from published rates')
+
+
+def _participants_section(snap):
+    """Each review participant as this assessment read it (HARNESS.md 6-7): vendor, endpoint, the models requested and
+    returned, its state, the vendor's request id and response id, usage, the estimated cost, and why it was not used or
+    not run. A participant's state is never a decision (I4)."""
+    lines = []
+    for entry in snap.get('participants') or []:
+        lines.append(f'  - {entry["label"]} · {entry["vendor"]} · {entry["state"]}')
+        if entry['run'] is None:
+            if entry['reason']:
+                lines.append(f'    Reason: {_indent(entry["reason"], "      ")}')
+            continue
+        replay = ' · REPLAY (recorded response, not live output)' if entry['mode'] == 'replay' else ''
+        lines.append(f'    Run: {entry["run"]}{replay}' + (' · a retained answer reused; no new request was sent'
+                                                         if entry['reused'] else ''))
+        lines.append(f'    Endpoint: {entry["endpoint"] or "not recorded"}')
+        if entry['name'] == review.CORTI:
+            lines.append('    Models: none requested (the Corti API takes no model identifier)')
+        else:
+            lines.append(f'    Models: requested {entry["requested_model"] or "not recorded"} · returned '
+                         f'{entry["returned_model"] or "none"}')
+        lines.append(f'    Request id: {entry["request_id"] or "none"} · response id: {entry["response_id"] or "none"}')
+        usage = json.dumps(entry['usage'], sort_keys=True, ensure_ascii=False) if entry['usage'] else 'none reported'
+        lines.append(f'    Usage: {usage}' + (f' ({entry["usage_basis"]})' if entry['usage_basis'] else ''))
+        if 'exchanges' in entry:  # harness@2: its first reading was a tool loop
+            line = f'    Exchanges: {entry["exchanges"]} · tool calls: {entry["tool_calls"]}'
+            retained = entry.get('retained')
+            if isinstance(retained, dict):  # a reuse: the loop that answered for it is the retained run's
+                made, calls = _count(retained.get('exchanges')), _count(retained.get('tool_calls'))
+                line += (f' (this run reuses the retained answer of run {retained.get("run")}, which made {made} '
+                         f'exchange{"" if made == 1 else "s"} and {calls} tool call{"" if calls == 1 else "s"})')
+            lines.append(line)
+        if entry['name'] == review.CORTI:
+            lines.append('    Estimated cost: not estimated (Corti reports usage in credits, not USD)')
+        elif entry['estimated_cost_usd'] is not None:
+            lines.append(f'    Estimated cost: USD {entry["estimated_cost_usd"]} ({review.COST_BASIS})')
+        elif entry.get('unpriced_exchanges'):
+            lines.append(f'    Estimated cost: {_unpriced_words(entry["unpriced_exchanges"])}')
+        elif entry['usage']:
+            lines.append('    Estimated cost: not estimated (no published rate could be applied to the usage reported)')
+        else:
+            lines.append('    Estimated cost: none (no usage reported for this run)')
+        if entry.get('unlisted_codes'):  # codes Corti returned that cannot be listed: counted, never named (I9)
+            from .serializers import corti_unlisted_words  # local: the row's own sentences, each answer's count apart
+
+            second = entry.get('unlisted_second_review') or 0
+            words = corti_unlisted_words(entry['unlisted_codes'] - second, second)
+            lines.append(f'    Not listed: {_indent(words, "      ")}')
+        if entry['unverified_quotes']:
+            lines.append(f'    Unverified quotes: {entry["unverified_quotes"]} (not found in the document; never used '
+                         'as evidence)')
+        if entry['reason']:
+            label = 'Refusal reason' if entry.get('refused') else 'Reason'
+            lines.append(f'    {label}: {_indent(entry["reason"], "      ")}')
+    if not snap.get('harness'):
+        # what the record shows, never that Corti ran: the Corti line above says what became of its request, which may
+        # have been not run or held with nothing sent (refutation r1 parity-2)
+        lines.append('  This assessment was recorded before the review participants existed: Astra and Fable were not '
+                     'part of it.')
+    return lines
+
+
+POSITION_WORDS = {'supports': 'supports', 'disputes': 'disputes', 'cannot_tell': 'cannot tell'}
+UNREAD_CODE = 'a code CPT Studio does not read'
+UNKEYED_REF = 'a reference that is not a CPT Studio reference key (not shown)'
+
+
+def _confirmed_subject(item):
+    if item['scope'] == 'encounter':
+        return 'the encounter'
+    family = _family_label(item['family']) if item['family'] else 'a service'
+    if item['scope'] == 'proposal':
+        return f'{item["code"] or "a proposal"} ({item["proposal_key"]}) · {family}'
+    return family
+
+
+def _confirmed_section(snap):
+    """Every reviewer-confirmed finding of the revision (HARNESS.md 11.3): a fact a reviewer confirmed from a
+    participant's located passage, with the attestation recorded - never a decision on a code."""
+    labels = dict(participants.LABELS)
+    lines = []
+    for item in snap.get('confirmed_findings') or []:
+        lines.append(f'  - {_fact_title(item["fact"])} = {item["value"]} · {_confirmed_subject(item)} — confirmed by '
+                     f'{_who(item["confirmed_by"], item["confirmed_by_kind"])} at {item["created_at"]}')
+        lines.append(f'    Confirmation: {item["id"]} · question {item["clarification_id"]}')
+        lines += [f'    Passage: {_indent(_evidence_line(span), "        ")}' for span in item['spans']] or [
+            '    Passage: none matches the revision text exactly']
+        if item['unmatched']:
+            lines.append(f'    ({item["unmatched"]} cited passage(s) did not match the revision text exactly and are '
+                         'not shown)')
+        lines.append('    Located by: ' + (', '.join(labels.get(name, name) for name in item['located_by']) or 'none'))
+        lines.append(f'    Attestation: {_indent(item["attestation"], "      ")}')
+        lines.append(f'    Effect: {_indent(item["effect"], "      ")}')
+    return lines or ['  None: no reviewer has confirmed a finding for this revision.']
+
+
+def _peer_state_words(entry):
+    state = entry['state']
+    if state == 'read':
+        return 'answered in peer review; the review was used'
+    if state == 'unreadable':
+        return 'answered in peer review; its stored answer could not be read as recorded'
+    if state == 'not_run' and entry['reason'] == NO_PEER_REVIEW:
+        return 'no peer review'
+    return review.RECORD_WORDS.get(state, str(state)).replace('the reading was not used', 'the review was not used')
+
+
+def _peer_evidence(spans):
+    return [f'      {_indent(_evidence_line(span), "        ")}' for span in spans]
+
+
+def _peer_section(snap):
+    """Each participant's peer review (HARNESS.md 11.1): its answers to CPT Studio's open questions - each only by
+    whether it is read as settling the question, never a value (refutation round 5, the session's D10) - its positions
+    on codes and its additional codes, each worded by its phase (_peer_items), each with its located passages."""
+    data = snap.get('peer_review') or {}
+    if data.get('predates'):
+        return ['  - none: this assessment was recorded before peer review existed']
+    if not data.get('recorded'):
+        if data.get('held'):
+            return ['  - none: the service date entered as encounter metadata conflicts with the document, and no '
+                    'peer review is sent while that question is open']
+        if data.get('unowned'):
+            return ['  - none: no participant whose first reading was read is configured now, so no peer review '
+                    'follows it']
+        return ['  - none recorded for this assessment: its peer reviews follow it (phase 1)' if data.get('owed') else
+                "  - none: no participant's first reading was read, so no peer review was owed"]
+    lines = []
+    for entry in data.get('participants') or []:
+        lines.append(f'  - {entry["label"]} · {_peer_state_words(entry)}')
+        if entry['run']:
+            replay = ' · REPLAY (recorded response, not live output)' if entry['mode'] == 'replay' else ''
+            lines.append(f'    Run: {entry["run"]}{replay}')
+        if entry['frozen']:
+            lines.append('    Frozen inputs shown: ' + ' · '.join(f'{name} {value}' for name, value in entry['frozen']))
+        for answer in entry['answers']:
+            asked = f'"{answer["question"]}"' if answer['question'] else 'a question no longer recorded'
+            fact = f' ({fact_label(answer["fact"])})' if answer['fact'] else ''
+            # its claim, never a value (D10); an answer read as not settled may be one that said it settles the
+            # question and gave no value (participants.peer), so "not settled" is said of its answer, not of the
+            # document and not as the participant's own words
+            said = (f'{entry["label"]} says the document settles it' if answer['settled']
+                    else f"{entry['label']}'s answer is read as not settling it")
+            lines.append(f'    Answer to {_indent(asked, "      ")}{fact}: {said}')
+            lines += _peer_evidence(answer['evidence'])
+        for position in entry['positions']:
+            lines.append(f'    Position on {position["code"] or UNREAD_CODE}: '
+                         f'{POSITION_WORDS.get(position["position"], "no position CPT Studio reads")}')
+            lines += _peer_evidence(position['evidence'])
+        for added in entry['additional_codes']:
+            # by the phase _peer_items gives the entry: the phase its participant first proposed the code in
+            # (serializers.peer_code_phases; refutation round 2, truth-8: a code its first reading proposed is repeated,
+            # never "never independent"), never 'peer_review' for an entry with no passage located (refutation round 6,
+            # account-4); an entry that does not name its phase reads as before
+            phase = added.get('phase', ProviderRun.PEER_REVIEW)
+            said = ('proposed after peer review, never independent' if phase == ProviderRun.PEER_REVIEW else
+                    'repeated in peer review; first proposed in its independent reading'
+                    if phase == ProviderRun.INDEPENDENT else 'listed in peer review')
+            lines.append(f'    Additional code {added["code"] or UNREAD_CODE} · units {added["units"]} — {said}')
+            lines += _peer_evidence(added['evidence'])
+        if entry['unverified_quotes']:
+            lines.append(f'    Unverified quotes: {entry["unverified_quotes"]} (not found in the document; never used '
+                         'as evidence)')
+        if entry['reason']:
+            lines.append(f'    Reason: {_indent(entry["reason"], "      ")}')
+    return lines or ['  - none: no model participant took part']
+
+
+def _window(item):
+    if item.get('effective_start') or item.get('effective_end'):
+        return f', effective {item.get("effective_start") or "?"} to {item.get("effective_end") or "?"}'
+    return ''
+
+
+def _references_section(snap):
+    """What each participant run's own tool calls retrieved and what its answer says it used (HARNESS.md 11.2): kept
+    apart by participant and phase, and from the reconciliation's REFERENCE RETRIEVAL. A run that reused a retained
+    answer made no tool call: its references are the retained run's, and it says so (refutation round 2, truth-13)."""
+    lines = ["  Each participant run's own tool results (retrieved) and the references its answer says it relied on "
+             "(used, checked against that run's own results); the reconciliation's retrieval is REFERENCE RETRIEVAL."]
+    runs = snap.get('participant_references') or []
+    for run in runs:
+        reused = run.get('reused_from')
+        lines.append(f'  - {run["label"]} · {PHASE_WORDS.get(run["phase"], run["phase"])} · run {run["run"]}'
+                     + (f' · reuses the retained answer of run {reused}, whose tool calls these are; this run made none'
+                        if reused else ''))
+        by = 'the retained run it reuses' if reused else 'this run'
+        for item in run['retrieved']:
+            ref = item['ref'] if REF_SHAPE.fullmatch(str(item['ref'])) else UNKEYED_REF
+            lines.append(f'    Retrieved: {ref} ({item["kind"]} · {item["source_key"] or "unknown source"}, release '
+                         f'{item["release"] or "not stated"}{_window(item)})')
+        if not run['retrieved']:
+            lines.append('    Retrieved: none')
+        for item in run['used']:
+            lines.append(f'    Used: {item["ref"] or UNKEYED_REF} — ' + (
+                f'retrieved by {by}' if item['retrieved'] else
+                f'cited, not retrieved by {by}, so never shown as retrieved'))
+        if not run['used']:
+            lines.append('    Used: none')
+    if not runs:
+        lines.append('  - none: no participant run is recorded for this assessment')
+    return lines
+
+
+def _strings(entry, field):
+    """A retrieval entry's lookups or notes: the strings of that list, [] for anything else."""
+    items = entry.get(field)
+    return [item for item in items if isinstance(item, str)] if isinstance(items, list) else []
+
+
+def _source_words(item):
+    return f'{item.get("source_key") or "unknown source"}, release {item.get("release") or "not stated"}'
+
+
+def _fact_line(fact):
+    effective = fact.get('effective')
+    window = (f', effective {effective[0]} to {effective[1]}'
+              if isinstance(effective, list) and len(effective) == 2 else '')
+    value = fact.get('value')
+    shown = (json.dumps(value, sort_keys=True, ensure_ascii=False) if isinstance(value, (dict, list))
+             else '' if value is None else value)
+    return f'    Fact: {fact.get("field") or "value"} = {shown} · {_source_words(fact)}{window}'
+
+
+def _passage_lines(passage):
+    """A retrieved passage: where it is (source, release, section, page), the rule it states, then its verbatim text."""
+    where = [f'section {passage["section"]}' if passage.get('section') else '',
+             f'page {passage["page"]}' if passage.get('page') else '',
+             ' '.join(filter(None, (str(passage.get('topic') or ''), str(passage.get('topic_value') or ''))))]
+    return [' · '.join(filter(None, [f'    Passage: {_source_words(passage)}', *where])) + ':',
+            f'        "{_indent(passage.get("text") or "", "        ")}"']
+
+
+RETRIEVAL_FAILED_WORDS = 'Reference validation failed: '
+
+
+def _failure_line(entry):
+    """A failed retrieval's one line (refutation round 1, parity-1): 'Reference validation failed: ' and the entry's
+    note (serializers.failure_note: CPT Studio's own sentence, which already opens with those words), never a code
+    entry with no code."""
+    note = failure_note(entry)
+    return note if note.startswith(RETRIEVAL_FAILED_WORDS) else RETRIEVAL_FAILED_WORDS + note
+
+
+def _retrieval_section(snap):
+    """The reference retrieval traces (HARNESS.md 5): per code, the CMS facts the checks' lookup read and the verbatim
+    CMS passages retrieved for them, with source key, release and page or section; then what is not connected. A
+    retrieval that failed (serializers.retrieval_failed) is one line saying reference validation failed, with why."""
+    lines = []
+    for entry in snap.get('retrieval') or []:
+        if retrieval_failed(entry):
+            lines.append(f'  - {_indent(_failure_line(entry), CONTINUATION)}')
+            continue
+        lines.append(f'  - {entry.get("code", "")} · service date {entry.get("service_date") or "unknown"}')
+        lines += [_fact_line(fact) for fact in review.retrieved(entry, 'facts')]
+        lines += [line for passage in review.retrieved(entry, 'passages') for line in _passage_lines(passage)]
+        lines += [f'    Lookup: {_indent(lookup, "      ")}' for lookup in _strings(entry, 'lookups')]
+        lines += [f'    Note: {_indent(note, "      ")}' for note in _strings(entry, 'notes')]
+    if not lines:
+        lines.append('  - none retrieved' + ('' if snap.get('harness') else
+                                            ': this assessment was recorded before reference retrieval existed'))
+    lines.append('  Not connected: ' + '; '.join(review.NOT_CONNECTED) + '.')
     return lines
 
 
@@ -921,10 +1614,16 @@ def render_txt(snap) -> bytes:
     sections += [('EXCLUDED CANDIDATES', _excluded_section(snap)),
                  (ALTERNATIVES_TITLE, _alternatives_section(snap)),
                  ('CHECKS', _checks_section(snap)),
-                 ('OPEN CLARIFICATIONS', _clarifications_section(snap)),
-                 ('NOT VERIFIED', _not_verified_section(snap)),
-                 ('PROVIDER USAGE', _provider_section(snap)),
+                 ('OPEN CLARIFICATIONS', _clarifications_section(snap))]
+    if 'confirmed_findings' in snap:  # harness@2, never in a Corti-only report
+        sections.append((CONFIRMED_TITLE, _confirmed_section(snap)))
+    sections += [('NOT VERIFIED', _not_verified_section(snap)),
+                 ('REVIEW PARTICIPANTS', _participants_section(snap))]
+    if 'peer_review' in snap:
+        sections += [(PEER_TITLE, _peer_section(snap)), (REFERENCES_TITLE, _references_section(snap))]
+    sections += [('PROVIDER USAGE', _provider_section(snap)),
                  ('REFERENCE SOURCES', _reference_section(snap)),
+                 ('REFERENCE RETRIEVAL', _retrieval_section(snap)),
                  ('AUDIT — DECISION HISTORY', _audit_section(snap))]
     for title, body in sections:
         lines += ['', title, *body]
@@ -970,7 +1669,9 @@ def _csv_row(snap, item):
            'source_passages': ' | '.join(f'"{s["text"]}" [{s["start"]}-{s["end"]}]'
                                          for s in (item.get('support') or {}).get('source') or []),
            'documented_service': (item.get('support') or {}).get('service', ''),
-           'proposal_origin': (item.get('support') or {}).get('origin', '') or ('primary' if item.get('support') else '')}
+           'proposal_origin': (item.get('support') or {}).get('origin', '') or ('primary' if item.get('support') else ''),
+           'proposed_by': ';'.join(item.get('proposed_by') or []),
+           'reference_check': (item.get('reference_check') or {}).get('state', '')}
     return [row[column] for column in CSV_COLUMNS]
 
 
@@ -995,6 +1696,69 @@ def _encounter_rows(snap):
     return [[row[column] for column in CSV_COLUMNS] for row in rows]
 
 
+def _csv_spans(spans):
+    return ' | '.join(f'"{s["text"]}" [{s["start"]}-{s["end"]}' + (f', p{s["page"]}]' if s.get('page') else ']')
+                      for s in spans)
+
+
+def _harness2_rows(snap):
+    """harness@2's rows (HARNESS.md 12.6), none in a Corti-only report: one per confirmed finding, peer answer, peer
+    position, code proposed after peer review, and reference a participant run retrieved or used. They are not
+    proposals: ``decision`` stays empty on every one (a confirmation is no decision), ``proposed_by`` names the
+    participant (for a confirmed finding, the participants that located its passage) and ``proposal_origin`` its phase.
+    The other columns they fill: a confirmed finding's fact (``status``), value (``exclusion_reason``), passages
+    (``evidence``), reviewer, kind and time (``reviewer``, ``reviewer_kind``, ``decided_at``), attestation
+    (``evidence_support``) and ids (``checks``); a peer answer's settled or not_settled (``status``: whether its answer
+    is read as settling the question; no value is printed, refutation round 5, D10), passages and question (``checks``);
+    a position's code, position and passages; an additional code's code, units and passages; a reference's ref
+    (``exclusion_reason``), retrieved, used or cited_not_retrieved (``status``), source (``documented_service``) and
+    kind, release and window (``evidence_support``)."""
+    base = {**dict.fromkeys(CSV_COLUMNS, ''), **_identity_cells(snap)}
+    rows = []
+    for item in snap.get('confirmed_findings') or []:
+        rows.append({**base, 'item_list': 'confirmed_finding', 'code': item['code'], 'family': item['family'],
+                     'family_label': _family_label(item['family']) if item['family'] else '', 'status': item['fact'],
+                     'exclusion_reason': item['value'], 'evidence': _csv_spans(item['spans']),
+                     'proposed_by': ';'.join(item['located_by']), 'reviewer': item['confirmed_by'],
+                     'reviewer_kind': item['confirmed_by_kind'], 'decided_at': item['created_at'],
+                     'evidence_support': item['attestation'],
+                     'checks': f'confirmation={item["id"]};clarification={item["clarification_id"]};'
+                               f'scope={item["scope"]}'})
+    for entry in (snap.get('peer_review') or {}).get('participants') or []:
+        peer = {**base, 'proposed_by': entry['name'], 'proposal_origin': ProviderRun.PEER_REVIEW}
+        for answer in entry['answers']:
+            rows.append({**peer, 'item_list': 'peer_answer', 'family': answer['family'],
+                         'family_label': _family_label(answer['family']) if answer['family'] else '',
+                         'status': 'settled' if answer['settled'] else 'not_settled',
+                         'evidence': _csv_spans(answer['evidence']),
+                         'checks': f'question={answer["question_id"]};fact={answer["fact"]}'})
+        for position in entry['positions']:
+            rows.append({**peer, 'item_list': 'peer_position', 'code': position['code'],
+                         'status': str(position['position']) if position['position'] in POSITION_WORDS else '',
+                         'evidence': _csv_spans(position['evidence'])})
+        for added in entry['additional_codes']:
+            phase = added.get('phase', ProviderRun.PEER_REVIEW)  # as the TXT words it (truth-8)
+            status = ('proposed_after_peer_review' if phase == ProviderRun.PEER_REVIEW else 'repeated_in_peer_review'
+                      if phase == ProviderRun.INDEPENDENT else 'listed_in_peer_review')
+            rows.append({**peer, 'item_list': 'peer_additional_code', 'code': added['code'], 'units': added['units'],
+                         'status': status, 'evidence': _csv_spans(added['evidence'])})
+    for run in snap.get('participant_references') or []:
+        source = {**base, 'proposed_by': run['name'], 'proposal_origin': run['phase']}
+        # a reuse's references are the tool calls of the retained run it reuses (refutation round 2, truth-13)
+        named = f'run={run["run"]}' + (f';reused_from={run["reused_from"]}' if run.get('reused_from') else '')
+        for item in run['retrieved']:
+            rows.append({**source, 'item_list': 'participant_reference', 'status': 'retrieved',
+                         'exclusion_reason': item['ref'] if REF_SHAPE.fullmatch(str(item['ref'])) else '',
+                         'documented_service': item['source_key'],
+                         'evidence_support': f'{item["kind"]} · release {item["release"] or "not stated"}'
+                                             f'{_window(item)}', 'checks': named})
+        for item in run['used']:
+            rows.append({**source, 'item_list': 'participant_reference',
+                         'status': 'used' if item['retrieved'] else 'cited_not_retrieved',
+                         'exclusion_reason': item['ref'], 'checks': named})
+    return [[row[column] for column in CSV_COLUMNS] for row in rows]
+
+
 def _placeholder_row(snap):
     """A report with no proposals still says, in the file, what it is: its kind, its identity and SYNTHETIC."""
     row = {**dict.fromkeys(CSV_COLUMNS, ''), **_identity_cells(snap), 'item_list': 'none',
@@ -1009,7 +1773,7 @@ def render_csv(snap) -> bytes:
     writer.writerow([neutralise(column) for column in CSV_COLUMNS])
     order = {name: index for index, name in enumerate(LISTS)}
     rows = [_csv_row(snap, item) for item in sorted(snap['proposals'], key=lambda i: order[i['list']])]
-    for row in (rows or [_placeholder_row(snap)]) + _encounter_rows(snap):
+    for row in (rows or [_placeholder_row(snap)]) + _encounter_rows(snap) + _harness2_rows(snap):
         # Control characters are shown escaped here too (round 3, review3:5): a cited passage carrying ESC/CSI,
         # backspace or DEL must not redraw a row when the file is printed in a terminal.
         writer.writerow([neutralise(_visible(cell) if isinstance(cell, str) else cell) for cell in row])
@@ -1026,14 +1790,21 @@ def _filename(snap, fmt):
     return f'CPT-Studio-{snap["kind"]}-{snap["encounter"]["id"][:8]}-r{snap["revision"]["number"]}-{stamp}.{fmt}'
 
 
-def generate(encounter, kind, fmt, user):
-    """Snapshot -> render -> store the bytes once (immutable) with their sha256 and the snapshot digest."""
+def generate(encounter, kind, fmt, user, *, operator=False):
+    """Snapshot -> render -> store the bytes once (immutable) with their sha256 and the snapshot digest. This is the
+    operator's full report (audience 'operator'; CORE-UX-DESIGN.md 5): a member of the workspace may make one through
+    this function, and a platform operator through /ops/ (``operator=True``: a grant, never a membership, is checked).
+    Customers are served generate_customer's report instead."""
     if fmt not in RENDERERS:
         raise ValueError('Choose a TXT or CSV report.')
     if kind not in KINDS:
         raise ValueError('Choose a draft or reviewed report.')
-    if not (user.is_active and Membership.objects.filter(user=user, workspace_id=encounter.workspace_id,
-                                                         active=True).exists()):
+    if operator:
+        from .operator import is_operator  # local import: the operator module's views import this one
+        if not is_operator(user):
+            raise PermissionDenied('Only a platform operator can generate an operator report here.')
+    elif not (user.is_active and Membership.objects.filter(user=user, workspace_id=encounter.workspace_id,
+                                                           active=True).exists()):
         raise PermissionDenied('Only an active member of this workspace can generate its reports.')
     with transaction.atomic():
         locked = Encounter.objects.select_for_update().get(pk=encounter.pk)
@@ -1042,7 +1813,225 @@ def generate(encounter, kind, fmt, user):
         artifact = ReportArtifact.objects.create(
             encounter=locked, assessment_id=snap['assessment']['id'], kind=kind, fmt=fmt,
             filename=_filename(snap, fmt), content=content, sha256=hashlib.sha256(content).hexdigest(),
-            snapshot_sha256=snapshot_digest(snap), generated_by=user)
+            snapshot_sha256=snapshot_digest(snap), generated_by=user, audience=ReportArtifact.OPERATOR)
         audit.record(locked.workspace, 'report.generated', encounter=locked, actor=user, report=str(artifact.pk),
-                     assessment=snap['assessment']['id'], kind=kind, fmt=fmt)
+                     assessment=snap['assessment']['id'], kind=kind, fmt=fmt, audience=ReportArtifact.OPERATOR)
+    return artifact
+
+
+# --- the customer report (CORE-UX-DESIGN.md 5): cpt-studio-customer-report@1 ----------------------------------------
+#
+# Built from the customer contract (studio.customer_api), never from the operator snapshot above: the suggested codes
+# with their status, units, decided modifiers, one sentence of CPT Studio's own reading and the exact quotations (the
+# draft), or the approved items only (the approved export), then the concise limitations, between two SYNTHETIC
+# banners. No participant, model, usage, hash, rule id, run id, engine or profile version, check id or source key
+# appears. A customer artifact stores the digest of its DECISION MARKER in snapshot_sha256 (customer_marker: the
+# assessment, the current decisions and the member's standing answers it was made from), so a download can tell whether
+# an approved export still matches the persisted decisions (customer_artifact_current) - and nothing that is not a
+# decision (a later run, a job, a reference check, new wording) ever makes one stale (critic C8).
+
+CUSTOMER_FORMAT = 'cpt-studio-customer-report@1'
+APPROVED = ReportArtifact.APPROVED
+CUSTOMER_KINDS = (DRAFT, APPROVED)
+CUSTOMER_HEADLINES = {DRAFT: 'CPT STUDIO — SUGGESTED CODES — NOT APPROVED', APPROVED: 'CPT STUDIO — APPROVED CODES'}
+CUSTOMER_TITLES = {DRAFT: 'Suggested codes — not approved', APPROVED: 'Approved codes'}
+# CORE-UX-DESIGN.md 5's columns, and review_label last (refutation round 2, L3-6): the agent-executed synthetic review
+# label on every row of an approval agent review took part in - the approver an agent, or an agent's reinstatement
+# behind it (fidelity:8, as the page labels it: customer_api) - in the draft as in the approved export, so a row read
+# alone in a spreadsheet still says it (truth rule 7; session decisions (h) and (i) of 2026-11-03: "everywhere").
+CUSTOMER_CSV_COLUMNS = ('report_format', 'encounter_title', 'date_of_service', 'number', 'code', 'units', 'modifiers',
+                        'status', 'approved_by', 'approver_kind', 'approved_at', 'summary', 'evidence_text',
+                        'evidence_page', 'evidence_start', 'evidence_end', 'review_label')
+
+
+class CustomerExportNotReady(ValueError):
+    """The approved export was asked for before it is available."""
+
+    def __init__(self, blockers):
+        self.blockers = list(blockers)
+        super().__init__('The approved export is not available yet.')
+
+
+def _customer_quote(quote):
+    return {'text': quote['text'], 'page': quote.get('page'), 'start': quote['start'], 'end': quote['end']}
+
+
+def customer_snapshot(encounter, kind):
+    """Everything a customer report shows, read from persisted rows through the customer contract."""
+    from . import customer_api  # local import: the customer layer reads this module
+
+    if kind not in CUSTOMER_KINDS:
+        raise ValueError('Choose a draft or an approved export.')
+    encounter = Encounter.objects.select_related('workspace').get(pk=encounter.pk)
+    assessment = review.live_assessment(encounter)
+    if assessment is None:
+        raise ValueError('There is no assessment of the current revision to report yet.')
+    revision = assessment.revision
+    current = review.current_decisions(assessment)
+    ready = customer_api.readiness(encounter, assessment, current)
+    if kind == APPROVED and not ready['approved']:
+        raise CustomerExportNotReady(ready['blockers'])
+    views = customer_api.views_of(assessment, current)  # the review overlay: statuses as the decisions leave them
+    snap = {'format_version': CUSTOMER_FORMAT, 'kind': kind,
+            'encounter': {'id': str(encounter.pk), 'title': encounter.title},
+            'revision': {'id': str(revision.pk), 'number': revision.number}, 'assessment': str(assessment.pk),
+            'date_of_service': member_answers.service_date_block(encounter)['value'],
+            'limitations': customer_api.limitations(assessment, revision)}
+    if kind == APPROVED:
+        items = customer_api.approved_export_items(assessment, current, views)
+        snap['items'] = [{'number': number, 'code': item['code'], 'units': item['units'],
+                          'modifiers': list(item['modifiers']), 'status': 'approved', 'approver': item['approver'],
+                          'approver_kind': item['approver_kind'], 'agent': bool(item['agent']),
+                          'decided_at': item['decided_at'], 'decision': item['decision_id'], 'summary': item['summary'],
+                          'quotes': [_customer_quote(q) for q in item['evidence']]}
+                         for number, item in enumerate(items, start=1)]
+        snap['agent_review'] = any(item['agent'] for item in snap['items'])
+    else:
+        rows, _ = customer_api.code_rows(assessment, current, views)
+        # a draft's agent flag is the page's own label (customer_api._status: an approval agent review took part in),
+        # so the draft says it wherever the page does, by the one rule the page applies
+        snap['items'] = [{'number': row['number'], 'code': row['code'], 'units': row['units'],
+                          'modifiers': list(row['modifiers']), 'status': row['status'],
+                          'status_label': row['status_label'], 'sub_label': row['sub_label'],
+                          'agent': row['status'] == 'approved' and row['sub_label'] == customer_api.AGENT_SUB_LABEL,
+                          'summary': row['summary'], 'decision': row['_decision'],
+                          'quotes': [_customer_quote(q) for q in row['why']['quotes']]}
+                         for row in rows]
+        snap['agent_review'] = any(item['agent'] for item in snap['items'])
+    return snap
+
+
+def customer_marker(encounter):
+    """What a customer export was made from, and nothing else: the live assessment, the encounter's current context
+    (the member's saved detail values), the current decisions on that assessment (their ids and sequences, in recording
+    order) and the member's standing answers to its revision (their ids). A decision, a revocation, an invalidation, a
+    saved or withdrawn answer or a new assessment changes it; a later run, a queued job, a reference check, a second
+    review that was not read or a change of wording never does. None while no assessment is live."""
+    assessment = review.live_assessment(encounter)
+    if assessment is None:
+        return None
+    current = review.current_decisions(assessment)
+    return {'assessment': str(assessment.pk), 'context': str(encounter.current_context_id or ''),
+            'decisions': [[str(decision.pk), decision.sequence]
+                          for decision in sorted(current.values(), key=lambda decision: decision.sequence)],
+            'answers': sorted(str(answer.pk) for answer in member_answers.standing_answers(assessment.revision_id))}
+
+
+def customer_marker_digest(encounter):
+    """sha256 of customer_marker(encounter), stored with a customer artifact as its snapshot_sha256; None while no
+    assessment is live."""
+    marker = customer_marker(encounter)
+    return None if marker is None else sha256_json(marker)
+
+
+def customer_artifact_current(report) -> bool:
+    """Whether a customer artifact still matches the persisted decisions it was made from: its stored marker digest
+    equals the encounter's now."""
+    marker = customer_marker_digest(report.encounter)
+    return marker is not None and report.snapshot_sha256 == marker
+
+
+def _customer_header(snap, generated):
+    # the SYNTHETIC banner opens the file as it closes it (CORE-UX-DESIGN.md 5: "SYNTHETIC banner at both ends";
+    # refutation round 2, L3-1), then the headline; the agent line wherever agent review took part in an approval listed
+    lines = [SYNTHETIC_LINE, CUSTOMER_HEADLINES[snap['kind']]]
+    if snap.get('agent_review'):
+        lines.append(AGENT_LINE)
+    return lines + [f'Report format: {snap["format_version"]}', f'Encounter: {snap["encounter"]["title"]}',
+                    f'Date of service: {snap["date_of_service"] or "not established"}',
+                    f'Generated: {generated["at"]} by {generated["by"]}']
+
+
+def _modifier_words(modifiers):
+    return ', '.join(modifiers) if modifiers else 'none'
+
+
+def render_customer_txt(snap, generated) -> bytes:
+    kind = snap['kind']
+    lines = _customer_header(snap, generated) + ['', CUSTOMER_TITLES[kind]]
+    if not snap['items']:
+        lines.append('   No code was suggested for this document.')
+    for item in snap['items']:
+        if kind == APPROVED:
+            lines.append(f'{item["number"]}. {item["code"]} — units {item["units"]} — modifiers: '
+                         f'{_modifier_words(item["modifiers"])}')
+            lines.append(f'   Approved by {item["approver"]} ({item["approver_kind"]}) at {item["decided_at"]}')
+            if item['agent']:
+                lines.append(f'   {AGENT_LINE}')
+        else:
+            lines.append(f'{item["number"]}. {item["code"]} — {item["status_label"]} — units {item["units"]} — '
+                         f'modifiers: {_modifier_words(item["modifiers"])}')
+            if item['sub_label']:
+                lines.append(f'   {item["sub_label"]}')
+        lines.append(f'   {item["summary"]}')
+        for quote in item['quotes']:
+            page = f'page {quote["page"]}' if quote.get('page') else 'page not known'
+            where = f'{page}, characters {quote["start"]}–{quote["end"]}' if kind == APPROVED else page
+            lines.append(f'   Quote: "{quote["text"]}" ({where})')
+    lines += ['', 'Limitations', *[f'- {item}' for item in snap['limitations']]]
+    return (_join(lines) + f'\n\n{SYNTHETIC_LINE}\n').encode('utf-8')
+
+
+def render_customer_csv(snap, generated) -> bytes:
+    """RFC 4180 as the operator CSV: every field quoted, formula-leading cells neutralised, CRLF, UTF-8. A banner row
+    (``report_format`` = the SYNTHETIC line) follows the header and closes the file; every other row is one quotation
+    of one code (a code with none has one row with empty evidence cells), its number repeated. The approval cells
+    (approved_by, approver_kind - the approver's own kind - and approved_at) are the approved export's; review_label
+    carries the agent-executed synthetic review label on each row of an approval agent review took part in, in both
+    kinds."""
+    approved = snap['kind'] == APPROVED
+    base = {'report_format': snap['format_version'], 'encounter_title': snap['encounter']['title'],
+            'date_of_service': snap['date_of_service'] or ''}
+    banner = {column: '' for column in CUSTOMER_CSV_COLUMNS}
+    banner['report_format'] = SYNTHETIC_LINE
+    rows = [banner]
+    for item in snap['items']:
+        cells = {**base, 'number': item['number'], 'code': item['code'], 'units': item['units'],
+                 'modifiers': ';'.join(item['modifiers']), 'status': item['status'],
+                 'approved_by': item['approver'] if approved else '',
+                 'approver_kind': item['approver_kind'] if approved else '',
+                 'approved_at': item['decided_at'] if approved else '', 'summary': item['summary'],
+                 'review_label': AGENT_LINE if item.get('agent') else ''}
+        for quote in item['quotes'] or [None]:
+            rows.append({**cells, 'evidence_text': quote['text'] if quote else '',
+                         'evidence_page': (quote.get('page') or '') if quote else '',
+                         'evidence_start': quote['start'] if quote else '', 'evidence_end': quote['end'] if quote else ''})
+    rows.append(banner)
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, quoting=csv.QUOTE_ALL, lineterminator='\r\n')
+    writer.writerow([neutralise(column) for column in CUSTOMER_CSV_COLUMNS])
+    for row in rows:
+        writer.writerow([neutralise(_visible(cell) if isinstance(cell, str) else cell)
+                         for cell in (row[column] for column in CUSTOMER_CSV_COLUMNS)])
+    return buffer.getvalue().encode('utf-8')
+
+
+CUSTOMER_RENDERERS = {'txt': render_customer_txt, 'csv': render_customer_csv}
+
+
+def generate_customer(encounter, kind, fmt, user):
+    """The customer report: snapshot -> render -> store once with audience 'customer', its sha256 and the digest of
+    its decision marker (customer_marker), read under the same encounter lock as the snapshot. Any active member of the
+    workspace may make one (as before, viewers included)."""
+    if fmt not in CUSTOMER_RENDERERS:
+        raise ValueError('Choose a TXT or CSV export.')
+    if kind not in CUSTOMER_KINDS:
+        raise ValueError('Choose a draft or an approved export.')
+    if not (user.is_active and Membership.objects.filter(user=user, workspace_id=encounter.workspace_id,
+                                                         active=True).exists()):
+        raise PermissionDenied('Only an active member of this workspace can create its exports.')
+    with transaction.atomic():
+        locked = Encounter.objects.select_for_update().get(pk=encounter.pk)
+        snap = customer_snapshot(locked, kind)
+        now = timezone.now()
+        generated = {'at': _ts(now), 'by': user.label()}
+        content = CUSTOMER_RENDERERS[fmt](snap, generated)
+        stamp = now.astimezone(dt_timezone.utc).strftime('%Y%m%dT%H%M%S')
+        artifact = ReportArtifact.objects.create(
+            encounter=locked, assessment_id=snap['assessment'], kind=kind, fmt=fmt,
+            filename=f'CPT-Studio-{kind}-r{snap["revision"]["number"]}-{stamp}.{fmt}', content=content,
+            sha256=hashlib.sha256(content).hexdigest(), snapshot_sha256=customer_marker_digest(locked),
+            generated_by=user, audience=ReportArtifact.CUSTOMER)
+        audit.record(locked.workspace, 'report.generated', encounter=locked, actor=user, report=str(artifact.pk),
+                     assessment=snap['assessment'], kind=kind, fmt=fmt, audience=ReportArtifact.CUSTOMER)
     return artifact

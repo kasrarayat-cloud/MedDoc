@@ -1,0 +1,1011 @@
+{
+ "encounter": {
+  "id": "e2b00000-0000-4000-8000-000000000001",
+  "title": "Colonoscopy after peer review"
+ },
+ "revision": {
+  "id": "e2b00000-0000-4000-8000-000000000007",
+  "number": 1,
+  "text_sha256": "57d9b103213beca06af051eebbf54a96ab4a198fe6d5eba86c2982efb0b1a91f"
+ },
+ "participants": [
+  {
+   "name": "corti",
+   "label": "Corti",
+   "vendor": "Corti",
+   "model": "",
+   "runs": [
+    {
+     "id": "e2b00000-0000-4000-8000-000000000002",
+     "state": "succeeded",
+     "sent": true,
+     "mode": "replay",
+     "purpose": "primary",
+     "run_identity": "e2b00000-0000-4000-8000-000000000010",
+     "authorization_ref": "",
+     "requested_by": null,
+     "adapter_version": "corti-coding-v2@cptstudio-1",
+     "endpoint": "",
+     "requested_model": "",
+     "returned_model": "",
+     "request_id": "",
+     "response_id": "",
+     "http_status": 200,
+     "latency_ms": null,
+     "usage": {
+      "creditsConsumed": 0.0281
+     },
+     "usage_basis": "provider_reported_credits_not_usd",
+     "estimated_cost_usd": null,
+     "request_sha256": "935a870b884eeb1851bbe698a5935ba3c125f1ef01db0535790c7218c8c8a187",
+     "response_sha256": "1f0b2dce498153f87d3fb10a3432af45063b0c4a7fad8e1ceaa78a6757775ad3",
+     "response_bytes": 509,
+     "created_at": "2026-11-01T09:00:16Z",
+     "finished_at": "2026-11-01T09:00:15Z",
+     "error": "",
+     "reused_from": null,
+     "reconciled": false,
+     "reading": null,
+     "review": null,
+     "exchanges": []
+    }
+   ]
+  },
+  {
+   "name": "astra",
+   "label": "Astra",
+   "vendor": "OpenAI",
+   "model": "gpt-6-astra",
+   "runs": [
+    {
+     "id": "e2b00000-0000-4000-8000-000000000003",
+     "state": "succeeded",
+     "sent": true,
+     "mode": "replay",
+     "purpose": "independent",
+     "run_identity": "e2b00000-0000-4000-8000-000000000011",
+     "authorization_ref": "",
+     "requested_by": null,
+     "adapter_version": "openai-responses@cptstudio-harness-2",
+     "endpoint": "https://api.openai.com/v1/responses",
+     "requested_model": "gpt-6-astra",
+     "returned_model": "gpt-6-astra",
+     "request_id": "req_astra_independent",
+     "response_id": "resp_astra_independent",
+     "http_status": 200,
+     "latency_ms": 12.5,
+     "usage": {
+      "input_tokens": 2000,
+      "output_tokens": 200
+     },
+     "usage_basis": "provider_reported_tokens_summed_over_exchanges",
+     "estimated_cost_usd": "0.0300",
+     "request_sha256": "b45465d9b07f7472d5572db97c4721563a379668a5426f096fe09c82abeeb59e",
+     "response_sha256": "32f567395d3151914eff05ba1dd3b1df0a6ca1a95ed262b44658107586da41e2",
+     "response_bytes": 2321,
+     "created_at": "2026-11-01T09:00:18Z",
+     "finished_at": "2026-11-01T09:00:17Z",
+     "error": "",
+     "reused_from": null,
+     "reconciled": false,
+     "reading": {
+      "refused": false,
+      "problems": [],
+      "unverified_quotes": 0,
+      "date_of_service": {
+       "value": "2026-10-21",
+       "evidence": [
+        {
+         "quote": "Date of service: 2026-10-21",
+         "spans": [
+          {
+           "context_index": 0,
+           "start": 106,
+           "end": 133,
+           "text": "Date of service: 2026-10-21",
+           "exact": true,
+           "page": null
+          }
+         ],
+         "reason": ""
+        }
+       ]
+      },
+      "services": [
+       {
+        "id": "s1",
+        "family": "colonoscopy",
+        "status": "performed",
+        "description": "Colonoscopy to the cecum with removal of one polyp and biopsy of another.",
+        "anatomy": "colon",
+        "extent": "cecum",
+        "technique": "cold snare; cold forceps",
+        "lesions": [
+         {
+          "site": "ascending colon",
+          "size": "6 mm",
+          "morphology": "sessile",
+          "action": "removed by cold snare",
+          "specimen": "retrieved for pathology"
+         },
+         {
+          "site": "rectum",
+          "size": "3 mm",
+          "morphology": "",
+          "action": "biopsied with cold forceps",
+          "specimen": ""
+         }
+        ],
+        "provider_role": "",
+        "evidence": [
+         {
+          "quote": "Landmarks photographed: appendiceal orifice and ileocecal valve.",
+          "spans": [
+           {
+            "context_index": 0,
+            "start": 232,
+            "end": 296,
+            "text": "Landmarks photographed: appendiceal orifice and ileocecal valve.",
+            "exact": true,
+            "page": null
+           }
+          ],
+          "reason": ""
+         },
+         {
+          "quote": "A 6 mm sessile polyp in the ascending colon was removed with a cold snare and retrieved for pathology.",
+          "spans": [
+           {
+            "context_index": 0,
+            "start": 335,
+            "end": 437,
+            "text": "A 6 mm sessile polyp in the ascending colon was removed with a cold snare and retrieved for\npathology.",
+            "exact": true,
+            "page": null
+           }
+          ],
+          "reason": ""
+         }
+        ]
+       }
+      ],
+      "codes": [
+       {
+        "code": "45385",
+        "modifiers": [],
+        "units": 1,
+        "service_ids": [
+         "s1"
+        ],
+        "basis": "The report records a polyp removed with a cold snare.",
+        "evidence": [
+         {
+          "quote": "was removed with a cold snare",
+          "spans": [
+           {
+            "context_index": 0,
+            "start": 379,
+            "end": 408,
+            "text": "was removed with a cold snare",
+            "exact": true,
+            "page": null
+           }
+          ],
+          "reason": ""
+         }
+        ],
+        "confidence": "high"
+       },
+       {
+        "code": "45380",
+        "modifiers": [
+         "59"
+        ],
+        "units": 1,
+        "service_ids": [
+         "s1"
+        ],
+        "basis": "The report records a separate polyp biopsied with cold forceps.",
+        "evidence": [
+         {
+          "quote": "A 3 mm polyp in the rectum was possibly biopsied with cold forceps.",
+          "spans": [
+           {
+            "context_index": 0,
+            "start": 438,
+            "end": 505,
+            "text": "A 3 mm polyp in the rectum was possibly biopsied with cold forceps.",
+            "exact": true,
+            "page": null
+           }
+          ],
+          "reason": ""
+         }
+        ],
+        "confidence": "medium"
+       }
+      ],
+      "not_coded": [],
+      "questions": [],
+      "extraction_issues": [],
+      "references_used": [
+       {
+        "ref": "fact:cms-pfs-rvu26d:45385:mult_proc",
+        "use": "The endoscopic base of the snare removal.",
+        "retrieved": true
+       },
+       {
+        "ref": "a value of 17 characters (not shown)",
+        "use": "A rule this run never retrieved.",
+        "retrieved": false
+       }
+      ]
+     },
+     "review": null,
+     "exchanges": [
+      {
+       "turn": 1,
+       "state": "succeeded",
+       "http_status": 200,
+       "latency_ms": 6.0,
+       "usage": {
+        "input_tokens": 1000,
+        "output_tokens": 100
+       },
+       "request_sha256": "b45465d9b07f7472d5572db97c4721563a379668a5426f096fe09c82abeeb59e",
+       "response_sha256": "54f05296d87ae9002112779b5f58493e5f292c84afba2573b534591cfe468c46",
+       "provider_request_id": "req_astra_1",
+       "response_id": "resp_astra_1",
+       "error": "",
+       "tool_calls": [
+        {
+         "call_id": "call_1_1",
+         "tool": "cms_code_facts",
+         "arguments": {
+          "codes": [
+           "45385"
+          ],
+          "date_of_service": ""
+         },
+         "refs": [
+          "fact:cms-pfs-rvu26d:45385:mult_proc"
+         ],
+         "result_sha256": "2e367591914bd41c4d6abed6c12abb7bf050f9f21a61ee0d987eed7fd017897d",
+         "executed_at": "2026-11-01T09:00:17Z"
+        }
+       ]
+      },
+      {
+       "turn": 2,
+       "state": "succeeded",
+       "http_status": 200,
+       "latency_ms": 6.0,
+       "usage": {
+        "input_tokens": 1000,
+        "output_tokens": 100
+       },
+       "request_sha256": "b45465d9b07f7472d5572db97c4721563a379668a5426f096fe09c82abeeb59e",
+       "response_sha256": "32f567395d3151914eff05ba1dd3b1df0a6ca1a95ed262b44658107586da41e2",
+       "provider_request_id": "req_astra_2",
+       "response_id": "resp_astra_2",
+       "error": "",
+       "tool_calls": []
+      }
+     ]
+    },
+    {
+     "id": "e2b00000-0000-4000-8000-000000000004",
+     "state": "succeeded",
+     "sent": true,
+     "mode": "replay",
+     "purpose": "peer_review",
+     "run_identity": "e2b00000-0000-4000-8000-000000000012",
+     "authorization_ref": "",
+     "requested_by": null,
+     "adapter_version": "openai-responses@cptstudio-harness-2",
+     "endpoint": "https://api.openai.com/v1/responses",
+     "requested_model": "gpt-6-astra",
+     "returned_model": "gpt-6-astra",
+     "request_id": "req_astra_peer_review",
+     "response_id": "resp_astra_peer_review",
+     "http_status": 200,
+     "latency_ms": 12.5,
+     "usage": {
+      "input_tokens": 2000,
+      "output_tokens": 200
+     },
+     "usage_basis": "provider_reported_tokens_summed_over_exchanges",
+     "estimated_cost_usd": "0.0300",
+     "request_sha256": "75e2d2e8dbb24f2000351ef7dea81fd065639d3fa716e0087319907468ee92e5",
+     "response_sha256": "8bb9c343fe034aa09618a745637622fd08e8b974374c88a3cbbc34f531f7113c",
+     "response_bytes": 1791,
+     "created_at": "2026-11-01T09:00:28Z",
+     "finished_at": "2026-11-01T09:00:17Z",
+     "error": "",
+     "reused_from": null,
+     "reconciled": false,
+     "reading": null,
+     "review": {
+      "provider": "astra",
+      "adapter_version": "openai-responses@cptstudio-harness-2",
+      "review_version": "harness-peer@1",
+      "requested_model": "gpt-6-astra",
+      "returned_model": "gpt-6-astra",
+      "frozen_inputs": [
+       [
+        "astra",
+        "c46d7e1bcdff6cfc9dd1bfa523593a637f01277e66060f768ba9705cf4309873"
+       ],
+       [
+        "corti",
+        "1f0b2dce498153f87d3fb10a3432af45063b0c4a7fad8e1ceaa78a6757775ad3"
+       ],
+       [
+        "cpt_studio",
+        "34f8acae1d094acf38a224f7fcb3b9dda56e1430bfc7b1719c1ed55d78b4d201"
+       ],
+       [
+        "fable",
+        "6db924e0a10de784a6fc501f54a1909c65dbf05e0d3a2fa6d1913ae4c9cc5514"
+       ],
+       [
+        "revision",
+        "57d9b103213beca06af051eebbf54a96ab4a198fe6d5eba86c2982efb0b1a91f"
+       ]
+      ],
+      "answers": [
+       {
+        "question_id": "e2b00000-0000-4000-8000-000000000013",
+        "settled": true,
+        "value": "cecum",
+        "evidence": [
+         {
+          "quote": "Landmarks photographed: appendiceal orifice and ileocecal valve.",
+          "spans": [
+           {
+            "context_index": 0,
+            "start": 232,
+            "end": 296,
+            "text": "Landmarks photographed: appendiceal orifice and ileocecal valve.",
+            "exact": true,
+            "page": null
+           }
+          ],
+          "reason": ""
+         }
+        ]
+       },
+       {
+        "question_id": "e2b00000-0000-4000-8000-000000000014",
+        "settled": true,
+        "value": "2026-10-21",
+        "evidence": [
+         {
+          "quote": "Date of service: 2026-10-21",
+          "spans": [
+           {
+            "context_index": 0,
+            "start": 106,
+            "end": 133,
+            "text": "Date of service: 2026-10-21",
+            "exact": true,
+            "page": null
+           }
+          ],
+          "reason": ""
+         }
+        ]
+       },
+       {
+        "question_id": "e2b00000-0000-4000-8000-000000000015",
+        "settled": true,
+        "value": "performed",
+        "evidence": [
+         {
+          "quote": "A 3 mm polyp in the rectum was possibly biopsied with cold forceps.",
+          "spans": [
+           {
+            "context_index": 0,
+            "start": 438,
+            "end": 505,
+            "text": "A 3 mm polyp in the rectum was possibly biopsied with cold forceps.",
+            "exact": true,
+            "page": null
+           }
+          ],
+          "reason": ""
+         }
+        ]
+       }
+      ],
+      "positions": [
+       {
+        "code": "45380",
+        "position": "supports",
+        "reason": "Participant wording.",
+        "evidence": [
+         {
+          "quote": "A 3 mm polyp in the rectum was possibly biopsied with cold forceps.",
+          "spans": [
+           {
+            "context_index": 0,
+            "start": 438,
+            "end": 505,
+            "text": "A 3 mm polyp in the rectum was possibly biopsied with cold forceps.",
+            "exact": true,
+            "page": null
+           }
+          ],
+          "reason": ""
+         }
+        ]
+       }
+      ],
+      "additional_codes": [
+       {
+        "code": "45381",
+        "modifiers": [],
+        "units": 1,
+        "service_ids": [
+         "s1"
+        ],
+        "basis": "Participant wording.",
+        "evidence": [
+         {
+          "quote": "A submucosal injection was given.",
+          "spans": [],
+          "reason": "not found"
+         }
+        ],
+        "confidence": "low",
+        "phase": ""
+       }
+      ],
+      "references_used": [
+       {
+        "ref": "ncci-2026-ch6-c-1",
+        "use": "The NCCI endoscopy rule.",
+        "retrieved": true
+       },
+       {
+        "ref": "a value of 35 characters (not shown)",
+        "use": "Retrieved only by its first reading.",
+        "retrieved": false
+       }
+      ],
+      "problems": [],
+      "refused": false,
+      "unverified_quotes": 1
+     },
+     "exchanges": [
+      {
+       "turn": 1,
+       "state": "succeeded",
+       "http_status": 200,
+       "latency_ms": 6.0,
+       "usage": {
+        "input_tokens": 1000,
+        "output_tokens": 100
+       },
+       "request_sha256": "75e2d2e8dbb24f2000351ef7dea81fd065639d3fa716e0087319907468ee92e5",
+       "response_sha256": "54f05296d87ae9002112779b5f58493e5f292c84afba2573b534591cfe468c46",
+       "provider_request_id": "req_astra_1",
+       "response_id": "resp_astra_1",
+       "error": "",
+       "tool_calls": [
+        {
+         "call_id": "call_1_1",
+         "tool": "cms_policy_passages",
+         "arguments": {
+          "codes": [
+           "45385"
+          ],
+          "topic": "ncci_endoscopy_rules"
+         },
+         "refs": [
+          "ncci-2026-ch6-c-1"
+         ],
+         "result_sha256": "ef22715942573ac1c1518637d81b7cf41a57513f61a51be8c0cfb5a55940471b",
+         "executed_at": "2026-11-01T09:00:17Z"
+        }
+       ]
+      },
+      {
+       "turn": 2,
+       "state": "succeeded",
+       "http_status": 200,
+       "latency_ms": 6.0,
+       "usage": {
+        "input_tokens": 1000,
+        "output_tokens": 100
+       },
+       "request_sha256": "75e2d2e8dbb24f2000351ef7dea81fd065639d3fa716e0087319907468ee92e5",
+       "response_sha256": "8bb9c343fe034aa09618a745637622fd08e8b974374c88a3cbbc34f531f7113c",
+       "provider_request_id": "req_astra_2",
+       "response_id": "resp_astra_2",
+       "error": "",
+       "tool_calls": []
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "fable",
+   "label": "Fable",
+   "vendor": "Anthropic",
+   "model": "claude-fable-5-1",
+   "runs": [
+    {
+     "id": "e2b00000-0000-4000-8000-000000000005",
+     "state": "succeeded",
+     "sent": true,
+     "mode": "replay",
+     "purpose": "independent",
+     "run_identity": "e2b00000-0000-4000-8000-000000000016",
+     "authorization_ref": "",
+     "requested_by": null,
+     "adapter_version": "anthropic-messages@cptstudio-harness-3",
+     "endpoint": "https://api.anthropic.com/v1/messages",
+     "requested_model": "claude-fable-5-1",
+     "returned_model": "claude-fable-5-1",
+     "request_id": "req_fable_independent",
+     "response_id": "resp_fable_independent",
+     "http_status": 200,
+     "latency_ms": 12.5,
+     "usage": {
+      "input_tokens": 2000,
+      "output_tokens": 200
+     },
+     "usage_basis": "provider_reported_tokens_summed_over_exchanges",
+     "estimated_cost_usd": null,
+     "request_sha256": "50877d66fea78492b77cae860e5940b845317e6f52f22e5cab12eea18752f42e",
+     "response_sha256": "3d73902525f8cf0ca032076a9db50082848a309271ecbcbe5de9ad5b3af165c9",
+     "response_bytes": 1744,
+     "created_at": "2026-11-01T09:00:19Z",
+     "finished_at": "2026-11-01T09:00:17Z",
+     "error": "",
+     "reused_from": null,
+     "reconciled": false,
+     "reading": {
+      "refused": false,
+      "problems": [],
+      "unverified_quotes": 0,
+      "date_of_service": {
+       "value": "2026-10-21",
+       "evidence": [
+        {
+         "quote": "Date of service: 2026-10-21",
+         "spans": [
+          {
+           "context_index": 0,
+           "start": 106,
+           "end": 133,
+           "text": "Date of service: 2026-10-21",
+           "exact": true,
+           "page": null
+          }
+         ],
+         "reason": ""
+        }
+       ]
+      },
+      "services": [
+       {
+        "id": "s1",
+        "family": "colonoscopy",
+        "status": "performed",
+        "description": "Colonoscopy to the cecum with removal of one polyp and biopsy of another.",
+        "anatomy": "colon",
+        "extent": "cecum",
+        "technique": "cold snare; cold forceps",
+        "lesions": [
+         {
+          "site": "ascending colon",
+          "size": "6 mm",
+          "morphology": "sessile",
+          "action": "removed by cold snare",
+          "specimen": "retrieved for pathology"
+         },
+         {
+          "site": "rectum",
+          "size": "3 mm",
+          "morphology": "",
+          "action": "biopsied with cold forceps",
+          "specimen": ""
+         }
+        ],
+        "provider_role": "",
+        "evidence": [
+         {
+          "quote": "Landmarks photographed: appendiceal orifice and ileocecal valve.",
+          "spans": [
+           {
+            "context_index": 0,
+            "start": 232,
+            "end": 296,
+            "text": "Landmarks photographed: appendiceal orifice and ileocecal valve.",
+            "exact": true,
+            "page": null
+           }
+          ],
+          "reason": ""
+         },
+         {
+          "quote": "A 6 mm sessile polyp in the ascending colon was removed with a cold snare and retrieved for pathology.",
+          "spans": [
+           {
+            "context_index": 0,
+            "start": 335,
+            "end": 437,
+            "text": "A 6 mm sessile polyp in the ascending colon was removed with a cold snare and retrieved for\npathology.",
+            "exact": true,
+            "page": null
+           }
+          ],
+          "reason": ""
+         }
+        ]
+       }
+      ],
+      "codes": [
+       {
+        "code": "45385",
+        "modifiers": [],
+        "units": 1,
+        "service_ids": [
+         "s1"
+        ],
+        "basis": "The report records a polyp removed with a cold snare.",
+        "evidence": [
+         {
+          "quote": "was removed with a cold snare",
+          "spans": [
+           {
+            "context_index": 0,
+            "start": 379,
+            "end": 408,
+            "text": "was removed with a cold snare",
+            "exact": true,
+            "page": null
+           }
+          ],
+          "reason": ""
+         }
+        ],
+        "confidence": "high"
+       }
+      ],
+      "not_coded": [],
+      "questions": [],
+      "extraction_issues": [],
+      "references_used": []
+     },
+     "review": null,
+     "exchanges": [
+      {
+       "turn": 1,
+       "state": "succeeded",
+       "http_status": 200,
+       "latency_ms": 6.0,
+       "usage": {
+        "input_tokens": 1000,
+        "output_tokens": 100
+       },
+       "request_sha256": "50877d66fea78492b77cae860e5940b845317e6f52f22e5cab12eea18752f42e",
+       "response_sha256": "3d73902525f8cf0ca032076a9db50082848a309271ecbcbe5de9ad5b3af165c9",
+       "provider_request_id": "req_fable_1",
+       "response_id": "resp_fable_1",
+       "error": "",
+       "tool_calls": []
+      }
+     ]
+    },
+    {
+     "id": "e2b00000-0000-4000-8000-000000000006",
+     "state": "succeeded",
+     "sent": true,
+     "mode": "replay",
+     "purpose": "peer_review",
+     "run_identity": "e2b00000-0000-4000-8000-000000000017",
+     "authorization_ref": "",
+     "requested_by": null,
+     "adapter_version": "anthropic-messages@cptstudio-harness-3",
+     "endpoint": "https://api.anthropic.com/v1/messages",
+     "requested_model": "claude-fable-5-1",
+     "returned_model": "claude-fable-5-1",
+     "request_id": "req_fable_peer_review",
+     "response_id": "resp_fable_peer_review",
+     "http_status": 200,
+     "latency_ms": 12.5,
+     "usage": {
+      "input_tokens": 2000,
+      "output_tokens": 200
+     },
+     "usage_basis": "provider_reported_tokens_summed_over_exchanges",
+     "estimated_cost_usd": null,
+     "request_sha256": "8b8c8a85aa8f0a6e31208329dd36b0319b6390d2493bc63809fe99774e5509b1",
+     "response_sha256": "d3d0fe604810be56566e9a48d17090bd64a8be7ee8020a5d81a35442ab4d4afc",
+     "response_bytes": 1083,
+     "created_at": "2026-11-01T09:00:29Z",
+     "finished_at": "2026-11-01T09:00:17Z",
+     "error": "",
+     "reused_from": null,
+     "reconciled": false,
+     "reading": null,
+     "review": {
+      "provider": "fable",
+      "adapter_version": "anthropic-messages@cptstudio-harness-3",
+      "review_version": "harness-peer@1",
+      "requested_model": "claude-fable-5-1",
+      "returned_model": "claude-fable-5-1",
+      "frozen_inputs": [
+       [
+        "astra",
+        "c46d7e1bcdff6cfc9dd1bfa523593a637f01277e66060f768ba9705cf4309873"
+       ],
+       [
+        "corti",
+        "1f0b2dce498153f87d3fb10a3432af45063b0c4a7fad8e1ceaa78a6757775ad3"
+       ],
+       [
+        "cpt_studio",
+        "34f8acae1d094acf38a224f7fcb3b9dda56e1430bfc7b1719c1ed55d78b4d201"
+       ],
+       [
+        "fable",
+        "6db924e0a10de784a6fc501f54a1909c65dbf05e0d3a2fa6d1913ae4c9cc5514"
+       ],
+       [
+        "revision",
+        "57d9b103213beca06af051eebbf54a96ab4a198fe6d5eba86c2982efb0b1a91f"
+       ]
+      ],
+      "answers": [
+       {
+        "question_id": "e2b00000-0000-4000-8000-000000000013",
+        "settled": true,
+        "value": "Cecum, appendiceal orifice seen",
+        "evidence": [
+         {
+          "quote": "Landmarks photographed: appendiceal orifice and ileocecal valve.",
+          "spans": [
+           {
+            "context_index": 0,
+            "start": 232,
+            "end": 296,
+            "text": "Landmarks photographed: appendiceal orifice and ileocecal valve.",
+            "exact": true,
+            "page": null
+           }
+          ],
+          "reason": ""
+         }
+        ]
+       }
+      ],
+      "positions": [],
+      "additional_codes": [
+       {
+        "code": "45380",
+        "modifiers": [],
+        "units": 1,
+        "service_ids": [
+         "s1"
+        ],
+        "basis": "The report records a polyp biopsied with cold forceps.",
+        "evidence": [
+         {
+          "quote": "A 3 mm polyp in the rectum was possibly biopsied with cold forceps.",
+          "spans": [
+           {
+            "context_index": 0,
+            "start": 438,
+            "end": 505,
+            "text": "A 3 mm polyp in the rectum was possibly biopsied with cold forceps.",
+            "exact": true,
+            "page": null
+           }
+          ],
+          "reason": ""
+         }
+        ],
+        "confidence": "medium",
+        "phase": "peer_review"
+       }
+      ],
+      "references_used": [],
+      "problems": [],
+      "refused": false,
+      "unverified_quotes": 0
+     },
+     "exchanges": [
+      {
+       "turn": 1,
+       "state": "succeeded",
+       "http_status": 200,
+       "latency_ms": 6.0,
+       "usage": {
+        "input_tokens": 1000,
+        "output_tokens": 100
+       },
+       "request_sha256": "8b8c8a85aa8f0a6e31208329dd36b0319b6390d2493bc63809fe99774e5509b1",
+       "response_sha256": "d3d0fe604810be56566e9a48d17090bd64a8be7ee8020a5d81a35442ab4d4afc",
+       "provider_request_id": "req_fable_1",
+       "response_id": "resp_fable_1",
+       "error": "",
+       "tool_calls": []
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "assessments": [
+  {
+   "id": "e2b00000-0000-4000-8000-000000000018",
+   "created_at": "2026-11-01T09:00:26Z",
+   "current": false,
+   "phase": 1,
+   "final": false,
+   "frozen": [
+    [
+     "corti",
+     "1f0b2dce498153f87d3fb10a3432af45063b0c4a7fad8e1ceaa78a6757775ad3"
+    ],
+    [
+     "astra",
+     "c46d7e1bcdff6cfc9dd1bfa523593a637f01277e66060f768ba9705cf4309873"
+    ],
+    [
+     "fable",
+     "6db924e0a10de784a6fc501f54a1909c65dbf05e0d3a2fa6d1913ae4c9cc5514"
+    ],
+    [
+     "revision",
+     "57d9b103213beca06af051eebbf54a96ab4a198fe6d5eba86c2982efb0b1a91f"
+    ]
+   ]
+  },
+  {
+   "id": "e2b00000-0000-4000-8000-000000000008",
+   "created_at": "2026-11-01T09:00:33Z",
+   "current": true,
+   "phase": 2,
+   "final": true,
+   "frozen": [
+    [
+     "corti",
+     "1f0b2dce498153f87d3fb10a3432af45063b0c4a7fad8e1ceaa78a6757775ad3"
+    ],
+    [
+     "astra",
+     "c46d7e1bcdff6cfc9dd1bfa523593a637f01277e66060f768ba9705cf4309873"
+    ],
+    [
+     "fable",
+     "6db924e0a10de784a6fc501f54a1909c65dbf05e0d3a2fa6d1913ae4c9cc5514"
+    ],
+    [
+     "revision",
+     "57d9b103213beca06af051eebbf54a96ab4a198fe6d5eba86c2982efb0b1a91f"
+    ]
+   ]
+  }
+ ],
+ "retrieval": [
+  {
+   "code": "45380",
+   "facts": [],
+   "notes": [
+    "Service date unknown; dated references cannot be applied.",
+    "Service date unknown; no dated passage applies."
+   ],
+   "lookups": [
+    "reference lookup 45380 on an unknown date: no source applied"
+   ],
+   "passages": [],
+   "service_date": null
+  },
+  {
+   "code": "45385",
+   "facts": [],
+   "notes": [
+    "Service date unknown; dated references cannot be applied.",
+    "Service date unknown; no dated passage applies."
+   ],
+   "lookups": [
+    "reference lookup 45385 on an unknown date: no source applied"
+   ],
+   "passages": [],
+   "service_date": null
+  }
+ ],
+ "reconciliation": [
+  {
+   "code": "45385",
+   "family": "gi.colonoscopy",
+   "bucket": "selected",
+   "status": "needs_clarification",
+   "proposed_by": [
+    "corti",
+    "astra",
+    "fable"
+   ],
+   "listed_by": [],
+   "positions": {
+    "astra": {
+     "position": "proposed",
+     "detail": "Astra proposed this code, quoting the document verbatim.",
+     "quote": "was removed with a cold snare"
+    },
+    "fable": {
+     "position": "proposed",
+     "detail": "Fable proposed this code, quoting the document verbatim.",
+     "quote": "was removed with a cold snare"
+    }
+   },
+   "reference_check": {
+    "state": "not_verified",
+    "detail": "Present in the CMS fee schedule file: not verified; Units within the practitioner MUE: not verified; Endoscopic family combination: not verified. NCCI procedure-to-procedure edits are not connected, so bundling with other codes is not verified."
+   },
+   "approved": false
+  },
+  {
+   "code": "45380",
+   "family": "gi.colonoscopy",
+   "bucket": "selected",
+   "status": "needs_clarification",
+   "proposed_by": [
+    "corti",
+    "astra",
+    "fable"
+   ],
+   "listed_by": [],
+   "positions": {
+    "astra": {
+     "position": "proposed",
+     "detail": "Astra proposed this code, quoting the document verbatim.",
+     "quote": "A 3 mm polyp in the rectum was possibly biopsied with cold forceps."
+    },
+    "fable": {
+     "position": "not_proposed",
+     "detail": "Fable did not propose this code in its first reading. It proposed it after peer review.",
+     "quote": ""
+    }
+   },
+   "reference_check": {
+    "state": "not_verified",
+    "detail": "Present in the CMS fee schedule file: not verified; Units within the practitioner MUE: not verified; Endoscopic family combination: not verified. NCCI procedure-to-procedure edits are not connected, so bundling with other codes is not verified."
+   },
+   "approved": false
+  },
+  {
+   "code": "45381",
+   "family": "gi.colonoscopy",
+   "bucket": "alternative",
+   "status": "informational",
+   "proposed_by": [],
+   "listed_by": [
+    "astra"
+   ],
+   "positions": {
+    "astra": {
+     "position": "not_proposed",
+     "detail": "Astra did not propose this code.",
+     "quote": ""
+    },
+    "fable": {
+     "position": "not_proposed",
+     "detail": "Fable did not propose this code.",
+     "quote": ""
+    }
+   },
+   "reference_check": {
+    "state": "not_verified",
+    "detail": "No CMS reference check ran for this code. NCCI procedure-to-procedure edits are not connected, so bundling with other codes is not verified."
+   },
+   "approved": false
+  }
+ ]
+}

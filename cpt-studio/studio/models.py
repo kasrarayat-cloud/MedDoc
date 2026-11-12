@@ -38,6 +38,19 @@ class ImmutableModel(models.Model):
         raise ValidationError(f'{type(self).__name__} rows are immutable and cannot be deleted.')
 
 
+class UniqueIndex(models.Index):
+    """A UNIQUE index, added by AddIndex (P5 FLOW, 2026-11-03). Django's Index has no unique form and a UniqueConstraint
+    is an AddConstraint, which the installer's migration gate refuses on an existing table (ops/install.py
+    migration_verdict: it can refuse an older revision's rows). Used only as a partial index over a column no older
+    revision writes (its rows hold NULL there, and NULL is outside the index), so no older revision's insert or update is
+    ever refused by it."""
+    UNIQUE_SQL = 'CREATE UNIQUE INDEX %(name)s ON %(table)s (%(columns)s)%(include)s%(condition)s'
+
+    def create_sql(self, model, schema_editor, using='', **kwargs):
+        kwargs['sql'] = self.UNIQUE_SQL
+        return super().create_sql(model, schema_editor, using=using, **kwargs)
+
+
 class User(AbstractUser):
     HUMAN, AGENT = 'human', 'agent'
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -108,9 +121,15 @@ class Encounter(models.Model):
     # Derived list state, recomputed by review.refresh_state(); never authoritative.
     state = models.CharField(max_length=32, default='processing')
     updated_at = models.DateTimeField(auto_now=True)
+    # The upload attempt's key the page generated (P5 FLOW, 2026-11-03): a repeated POST of the same attempt by the same
+    # member answers with this encounter instead of making a second one (intake.find_upload). Null for rows made before
+    # it existed and for uploads that sent none; unique per member where set.
+    client_key = models.UUIDField(null=True, blank=True, editable=False)
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [UniqueIndex(fields=['created_by', 'client_key'], condition=Q(client_key__isnull=False),
+                               name='studio_enc_upload_key_uniq')]
 
 
 class SourceFile(ImmutableModel):
@@ -189,6 +208,10 @@ class EncounterContext(ImmutableModel):
     sha256 = models.CharField(max_length=64)
     created_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.PROTECT, related_name='+')
     created_at = models.DateTimeField(auto_now_add=True)
+    # The document's own service date fact BEFORE a member's value is merged in (gi.context.document_service_date_fact,
+    # P5 FLOW), recorded when the context is made, so a screen can show the document's date beside the one a member
+    # entered without reading the note's prose. Outside ``sha256``. Null for contexts made before it existed.
+    document_date = models.JSONField(null=True, blank=True)
 
 
 class RoutingRun(ImmutableModel):
@@ -238,11 +261,19 @@ class ProviderRun(models.Model):
     # 'primary': the revision's whole text; 'second_review': one bounded second request about documented services that
     # had no supported proposal, sent once per revision and service date (ARCHITECTURE 5.11). ``scope`` records what it
     # was for: the excerpt's offsets in the revision text and the unresolved items.
-    PRIMARY, SECOND_REVIEW = 'primary', 'second_review'
+    # 'independent': a harness participant's (Astra, Fable) own reading of the revision (HARNESS.md 2), never Corti's.
+    # 'peer_review': its phase-2 run, made after every first assessment was frozen (HARNESS.md 11.1)
+    PRIMARY, SECOND_REVIEW, INDEPENDENT, PEER_REVIEW = 'primary', 'second_review', 'independent', 'peer_review'
     # scope['held'] of a run deliberately not sent: the service date is a member-vs-document conflict (jobs.stage_predict)
     HELD_MEMBER_DATE_CONFLICT = 'member_date_conflict'
     purpose = models.CharField(max_length=16, default=PRIMARY)
     scope = models.JSONField(default=dict, blank=True)
+    # What was actually called and what answered (HARNESS.md 6); '' on rows recorded before the harness, and the models
+    # are '' for Corti, whose API names none. response_id is the vendor's own object id (resp_..., msg_...).
+    endpoint = models.CharField(max_length=200, blank=True, default='')
+    requested_model = models.CharField(max_length=100, blank=True, default='')
+    returned_model = models.CharField(max_length=100, blank=True, default='')
+    response_id = models.CharField(max_length=140, blank=True, default='')
     created_at = models.DateTimeField(auto_now_add=True)
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
@@ -270,6 +301,12 @@ class Assessment(ImmutableModel):
     summary = models.JSONField(default=dict)
     services = models.JSONField(default=dict)  # the documented-service inventory (gi/services.py)
     completeness = models.JSONField(default=dict)  # coding completeness, unresolved and bundled items (reconcile.py)
+    # HARNESS.md 6: one entry per harness participant (state, run, models, refusal reason, unverified quotes) and the
+    # reference retrieval traces. Both are recorded beside the engine's result, outside its sha256, so an assessment with
+    # no participant configured is the engine's result exactly (I1). Neither decides whether an identical re-assessment
+    # is the recorded one: _same_assessment reads only the participant runs the entries name (HARNESS.md 9, I1).
+    participants = models.JSONField(default=list)
+    retrieval = models.JSONField(default=list)
     sha256 = models.CharField(max_length=64)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -319,6 +356,35 @@ class Clarification(models.Model):
     reason = models.TextField()
     state = models.CharField(max_length=10, default=OPEN)
     answered_by_revision = models.ForeignKey(SourceRevision, null=True, blank=True, on_delete=models.PROTECT, related_name='+')
+    # Completion repair (2026-11-06, U11): the member's answer this question was closed with (state ANSWERED) - by the
+    # assessment that read the answer (engine._MemberAnswers), and on the assessment whose question the member answered.
+    # Null for any other state, and for a question an addendum answered (answered_by_revision). Nullable, so a row an
+    # older release inserts leaves it NULL (ops/install.py migration_verdict).
+    answer = models.ForeignKey('MemberAnswer', null=True, blank=True, on_delete=models.PROTECT, related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+
+class FindingConfirmation(ImmutableModel):
+    """A reviewer-confirmed answer to an open question (HARNESS.md 11.3): the passage a participant located, accepted by
+    an owner or reviewer with an attestation. Append-only and bound to its revision: a new revision's assessment never
+    reads it. The service date never comes this way (it enters through the context as the member's date)."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    encounter = models.ForeignKey(Encounter, on_delete=models.PROTECT, related_name='finding_confirmations')
+    revision = models.ForeignKey(SourceRevision, on_delete=models.PROTECT, related_name='finding_confirmations')
+    clarification = models.ForeignKey(Clarification, on_delete=models.PROTECT, related_name='confirmations')
+    scope = models.CharField(max_length=12)  # service | proposal
+    fact = models.CharField(max_length=40)
+    family = models.CharField(max_length=40)
+    proposal_key = models.CharField(max_length=40, blank=True)
+    value = models.CharField(max_length=200)
+    spans = models.JSONField()  # [{start, end, text, page}]: exact slices of the revision text
+    located_by = models.JSONField(default=list)  # the participants whose quote it was
+    runs = models.JSONField(default=list)  # their run ids
+    confirmed_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name='+')
+    attestation = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -339,6 +405,10 @@ class Decision(ImmutableModel):
     reviewer = models.ForeignKey(User, on_delete=models.PROTECT, related_name='+')
     reviewer_kind = models.CharField(max_length=8)
     acknowledgement = models.TextField(blank=True)
+    # CORE-UX-DESIGN.md 4 (P3): the reviewer's ONE chosen modifier on an approval ('59' or 'XS'), only where the review
+    # overlay offers a separate-lesion modifier review (review.record_decision); [] otherwise. Never prefilled, never
+    # both, never a free list. Carried with the decision (review._carry_decisions).
+    modifiers = models.JSONField(default=list)
     profile_version = models.CharField(max_length=40)
     proposal_fingerprint = models.CharField(max_length=64)
     carried_from = models.ForeignKey('self', null=True, blank=True, on_delete=models.PROTECT, related_name='carries')
@@ -362,8 +432,56 @@ class DecisionInvalidation(ImmutableModel):
     created_at = models.DateTimeField(auto_now_add=True)
 
 
+class MemberAnswer(ImmutableModel):
+    """A member's answer to a detail CPT Studio asked (directive section 4; P5 FLOW, 2026-11-03): that it is not
+    documented, or that the member cannot confirm it. Bound to its revision and to the question it answered - the code,
+    family and fact it was asked of and that question's fingerprint (``question``; studio.validation.questions) - never to
+    a clarification row or a proposal key, which every re-assessment makes anew. A later assessment applies it only
+    where it asks the same question (completion repair 2026-11-06, U11); otherwise it is kept and shown as an earlier
+    answer. It is what a member said, never clinical documentation: it never enters the document text, a provider request
+    or an addendum, and it approves nothing. Append-only; a MemberAnswerRevocation withdraws it."""
+    NOT_DOCUMENTED, CANNOT_CONFIRM = 'not_documented', 'cannot_confirm'
+    VALUES = [(NOT_DOCUMENTED, 'Not documented'), (CANNOT_CONFIRM, 'Cannot confirm')]
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    encounter = models.ForeignKey(Encounter, on_delete=models.PROTECT, related_name='member_answers')
+    revision = models.ForeignKey(SourceRevision, on_delete=models.PROTECT, related_name='member_answers')
+    # the assessment whose question the member answered (provenance: the answer binds to the question it answered)
+    assessment = models.ForeignKey('Assessment', on_delete=models.PROTECT, related_name='+')
+    fact = models.CharField(max_length=40)
+    family = models.CharField(max_length=40, blank=True)
+    code = models.CharField(max_length=10, blank=True)
+    value = models.CharField(max_length=20, choices=VALUES)
+    # Completion repair (2026-11-06, U11): the fingerprint of the question answered (questions.fingerprint, 64 hex). ''
+    # for an answer recorded before answers carried one - given to the installed release's fixed prompt for its (code,
+    # family, fact), which showed no passage - which binds by that key, as that release bound it (questions.bind;
+    # refutation cycle 2). The database default keeps a row an older release inserts valid (ops/install.py
+    # migration_verdict).
+    question = models.CharField(max_length=64, blank=True, default='', db_default='')
+    answered_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name='+')
+    answered_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['answered_at']
+
+
+class MemberAnswerRevocation(ImmutableModel):
+    """A member's answer withdrawn: by the member ('withdrawn'), or by a later answer to the same detail
+    ('superseded'), so at most one answer to a detail ever stands and a withdrawn one is never resurrected."""
+    WITHDRAWN, SUPERSEDED = 'withdrawn', 'superseded'
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    answer = models.OneToOneField(MemberAnswer, on_delete=models.PROTECT, related_name='revocation')
+    reason = models.CharField(max_length=12, choices=[(WITHDRAWN, 'Withdrawn'), (SUPERSEDED, 'Superseded')])
+    revoked_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name='+')
+    revoked_at = models.DateTimeField(auto_now_add=True)
+
+
 class Job(models.Model):
     EXTRACT, ANALYZE, PREDICT, ASSESS, REVIEW2 = 'extract', 'analyze', 'predict', 'assess', 'review2'
+    ASTRA, FABLE = 'astra', 'fable'  # the harness participants' stages (HARNESS.md 2), run after predict
+    PARTICIPANT_KINDS = (ASTRA, FABLE)
+    # harness@2 (HARNESS.md 11.1): each participant's peer review, after every first assessment is frozen
+    ASTRA_PEER, FABLE_PEER = 'astra_peer', 'fable_peer'
+    PEER_KINDS = (ASTRA_PEER, FABLE_PEER)
     QUEUED, RUNNING, SUCCEEDED, FAILED, UNKNOWN, CANCELLED = 'queued', 'running', 'succeeded', 'failed', 'unknown', 'cancelled'
     TERMINAL = {SUCCEEDED, FAILED, UNKNOWN, CANCELLED}
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -394,6 +512,13 @@ class Job(models.Model):
 
 class ReportArtifact(ImmutableModel):
     DRAFT, REVIEWED = 'draft', 'reviewed'
+    # A customer report's approved export (cpt-studio-customer-report@1): approved items only (CORE-UX-DESIGN.md 5).
+    APPROVED = 'approved'
+    # Who an artifact is for. Every row recorded before this column existed names the review participants, so the
+    # database default makes it an operator artifact without an ORM update (ImmutableModel is never involved), and a row
+    # an older release inserts during a rollback is an operator artifact too (the safe direction). Customers download
+    # only customer artifacts; operators download any, as stored.
+    OPERATOR, CUSTOMER = 'operator', 'customer'
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     encounter = models.ForeignKey(Encounter, on_delete=models.PROTECT, related_name='reports')
     assessment = models.ForeignKey(Assessment, on_delete=models.PROTECT, related_name='reports')
@@ -405,6 +530,30 @@ class ReportArtifact(ImmutableModel):
     snapshot_sha256 = models.CharField(max_length=64)
     generated_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name='+')
     generated_at = models.DateTimeField(auto_now_add=True)
+    audience = models.CharField(max_length=10, default=OPERATOR, db_default=OPERATOR)
+
+
+class OperatorGrant(ImmutableModel):
+    """A platform-operator grant (CORE-UX-DESIGN.md 5): the only thing that opens the operator diagnostics at /ops/. Held
+    by a user, never conferred by a workspace role - a practice owner gains nothing from it. Append-only: recorded by
+    the ``grant_operator`` management command (never over HTTP), ended by an OperatorRevocation row."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.PROTECT, related_name='operator_grants')
+    reason = models.TextField()
+    granted_by = models.CharField(max_length=120)  # the label of whoever ran the command (its own words)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+
+class OperatorRevocation(ImmutableModel):
+    """The end of one OperatorGrant, recorded by the ``revoke_operator`` management command; the grant row stays."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    grant = models.OneToOneField(OperatorGrant, on_delete=models.PROTECT, related_name='revocation')
+    reason = models.TextField()
+    revoked_by = models.CharField(max_length=120)
+    created_at = models.DateTimeField(auto_now_add=True)
 
 
 class AuditEvent(ImmutableModel):
@@ -454,6 +603,93 @@ class ReferenceCodeFact(models.Model):
         indexes = [models.Index(fields=['code'])]
 
 
+class ProviderExchange(models.Model):
+    """One HTTP exchange of a participant run's tool loop (HARNESS.md 11.2): what was sent (stored form; a PDF original
+    is named by sha256, never its bytes), what came back, exactly. A run's own request and response fields hold its first
+    request and its final response; every turn is here."""
+    id = models.BigAutoField(primary_key=True)
+    run = models.ForeignKey(ProviderRun, on_delete=models.PROTECT, related_name='exchanges')
+    turn = models.PositiveSmallIntegerField()  # 1-based
+    request_body = models.JSONField()
+    request_sha256 = models.CharField(max_length=64)
+    state = models.CharField(max_length=10)  # succeeded | failed | unknown | not_sent
+    http_status = models.PositiveIntegerField(null=True, blank=True)
+    response_bytes = models.BinaryField(blank=True, default=bytes)
+    response_sha256 = models.CharField(max_length=64, blank=True)
+    latency_ms = models.FloatField(null=True, blank=True)
+    usage = models.JSONField(default=dict)
+    provider_request_id = models.CharField(max_length=120, blank=True)
+    response_id = models.CharField(max_length=140, blank=True)
+    error = models.TextField(blank=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['run', 'turn']
+        constraints = [models.UniqueConstraint(fields=['run', 'turn'], name='one_exchange_per_run_turn')]
+
+
+class ToolCall(models.Model):
+    """A reference tool call a participant made, as CPT Studio executed it (HARNESS.md 11.2): the tool trace. ``refs``
+    lists every reference the result returned (passage keys and 'fact:<source>:<code>:<field>' refs), each dated by its
+    source in ``result``; a participant's references_used is checked against these."""
+    id = models.BigAutoField(primary_key=True)
+    exchange = models.ForeignKey(ProviderExchange, on_delete=models.PROTECT, related_name='tool_calls')
+    call_id = models.CharField(max_length=120)
+    tool = models.CharField(max_length=40)
+    arguments = models.JSONField()
+    result = models.JSONField()
+    result_sha256 = models.CharField(max_length=64)
+    refs = models.JSONField(default=list)
+    executed_at = models.DateTimeField()
+
+    class Meta:
+        ordering = ['exchange', 'id']
+        constraints = [models.UniqueConstraint(fields=['exchange', 'call_id'], name='one_tool_call_per_exchange_id')]
+
+
+class PassageSource(models.Model):
+    """A CMS document whose verbatim passages the harness retrieves (HARNESS.md 5). Kept apart from ReferenceSource,
+    whose rows every lookup lists, so importing passages never changes an assessment's reference-source entries."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    key = models.CharField(max_length=60, unique=True)
+    kind = models.CharField(max_length=40)  # cms-pfs-documentation | cms-ncci-policy-manual | cms-claims-manual
+    publisher = models.CharField(max_length=120)
+    title = models.CharField(max_length=200)
+    release = models.CharField(max_length=60)
+    url = models.URLField(max_length=400)
+    sha256 = models.CharField(max_length=64)  # of the publisher's file the passages were read from
+    retrieved_at = models.DateTimeField()
+    effective_start = models.DateField()
+    effective_end = models.DateField()
+    license_note = models.TextField()
+    scope_note = models.TextField()
+    passage_count = models.PositiveIntegerField(default=0)
+    loaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.CheckConstraint(condition=Q(effective_start__lte=models.F('effective_end')),
+                                              name='passage_window_ordered')]
+
+
+class ReferencePassage(models.Model):
+    """One verbatim passage of a PassageSource, with where it is (page, section) and the rule it states, keyed by what
+    retrieval matches it on (topic, e.g. 'pfs.mult_proc' with value '3')."""
+    id = models.BigAutoField(primary_key=True)
+    source = models.ForeignKey(PassageSource, on_delete=models.PROTECT, related_name='passages')
+    passage_key = models.CharField(max_length=80)
+    section = models.CharField(max_length=200)
+    page = models.CharField(max_length=20, blank=True)
+    topic = models.CharField(max_length=60)
+    topic_value = models.CharField(max_length=20, blank=True)
+    text = models.TextField()
+    sha256 = models.CharField(max_length=64)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['source', 'passage_key'], name='one_passage_key_per_source')]
+        indexes = [models.Index(fields=['topic', 'topic_value'])]
+
+
 class LoginAttempt(models.Model):
     id = models.BigAutoField(primary_key=True)
     username = models.CharField(max_length=150)
@@ -463,3 +699,15 @@ class LoginAttempt(models.Model):
 
     class Meta:
         indexes = [models.Index(fields=['username', 'client', 'created_at'])]
+
+
+class WorkerBeat(models.Model):
+    """Decision (j) of the core repair (2026-11-03): the worker process's heartbeat - one row per worker name, written
+    every jobs.HEARTBEAT_SECONDS by a thread of the worker process (jobs.start_heartbeat), so it says whether a worker
+    is alive, not whether its loop is between stages. The progress panel reads it (jobs.worker_responding): while a
+    document waits on processing and the newest beat is older than jobs.WORKER_SILENT_SECONDS, it says processing is
+    paused and does not animate. No row at all is never read as a dead worker (nothing is known)."""
+    name = models.CharField(primary_key=True, max_length=20)
+    beat_at = models.DateTimeField()
+    revision = models.CharField(max_length=64, blank=True)
+    pid = models.PositiveIntegerField(null=True, blank=True)

@@ -43,7 +43,7 @@ class TheQueueOffersOnlyAnAskTheServerAcceptsTests(Steps):
     """Each test ends by making the ask itself: the queue's claim is judged against what POST second-review answers."""
 
     def rows(self):
-        return self.client.get('/api/encounters').json()['encounters']
+        return self.client.get('/ops/api/encounters').json()['encounters']
 
     def row(self, encounter_id):
         (row,) = [r for r in self.rows() if r['id'] == encounter_id]

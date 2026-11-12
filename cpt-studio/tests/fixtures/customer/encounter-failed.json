@@ -1,0 +1,166 @@
+{
+ "id": "c6000000-0000-4000-8000-000000000001",
+ "title": "Synthetic office follow-up 6",
+ "created_at": "2026-11-01T09:02:23Z",
+ "updated_at": "2026-11-01T09:02:37Z",
+ "state": "failed",
+ "state_label": "Could not finish",
+ "permissions": {
+  "can_review": true
+ },
+ "document": {
+  "kind": "paste",
+  "name": "",
+  "media_type": "text/plain",
+  "size": 618,
+  "page_count": 1,
+  "revision": 1,
+  "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n\nRiverbend Digestive Health (fictional)\nDate of service: 2026-10-20\nPlace of service: Office, in-person outpatient visit\nPatient status: Established patient, last seen 2026-03-02.\n\nChief complaint\nFollow-up visit number 6.\nFollow-up of chronic constipation.\n\nAssessment and plan\nChronic idiopathic constipation, improved. Continue polyethylene glycol daily.\nA colonoscopy is scheduled for 2026-12-01.\n\nMedical decision making\nLow: one stable chronic illness; prescription drug management.\n\nTime\nTotal time on the date of the encounter was 24 minutes.\n",
+  "pages": [
+   {
+    "page": 1,
+    "start": 0,
+    "end": 618
+   }
+  ],
+  "reading": {
+   "status": "ok",
+   "label": "Text read",
+   "messages": []
+  },
+  "original_url": null
+ },
+ "service_date": {
+  "value": "2026-10-20",
+  "source": "document",
+  "document_value": "2026-10-20",
+  "document_quote": {
+   "end": 134,
+   "text": "Date of service: 2026-10-20",
+   "start": 107
+  },
+  "entered_value": null,
+  "conflict": false,
+  "can_use_document_date": false
+ },
+ "progress": {
+  "phase": "failed",
+  "busy": false,
+  "steps": [
+   {
+    "key": "reading",
+    "label": "Reading your document",
+    "state": "done",
+    "started_at": "2026-11-01T09:02:26Z",
+    "finished_at": "2026-11-01T09:02:28Z"
+   },
+   {
+    "key": "identifying",
+    "label": "Identifying procedures",
+    "state": "done",
+    "started_at": "2026-11-01T09:02:29Z",
+    "finished_at": "2026-11-01T09:02:30Z"
+   },
+   {
+    "key": "checking",
+    "label": "Checking suggested codes",
+    "state": "failed",
+    "started_at": "2026-11-01T09:02:31Z",
+    "finished_at": "2026-11-01T09:02:33Z"
+   },
+   {
+    "key": "preparing",
+    "label": "Preparing your results",
+    "state": "done",
+    "started_at": "2026-11-01T09:02:34Z",
+    "finished_at": "2026-11-01T09:02:36Z"
+   }
+  ],
+  "active_detail": "",
+  "started_at": "2026-11-01T09:02:25Z",
+  "finished_at": "2026-11-01T09:02:36Z",
+  "server_time": "2026-11-01T09:02:38Z",
+  "slow": false,
+  "message": "The coding service could not complete its review of this document, so no codes were suggested. You can upload the document again.",
+  "can_stop": false,
+  "can_resume": false,
+  "can_leave": true,
+  "error": {
+   "text": "The coding service could not complete its review of this document, so no codes were suggested. You can upload the document again.",
+   "action": "new_document"
+  }
+ },
+ "checks": [
+  {
+   "key": "document_review",
+   "label": "Document review",
+   "state": "unavailable"
+  },
+  {
+   "key": "independent_checks",
+   "label": "Independent checks",
+   "state": "done"
+  },
+  {
+   "key": "coding_validation",
+   "label": "Coding validation",
+   "state": "not_run"
+  }
+ ],
+ "codes": [],
+ "other_codes": [],
+ "not_separately_coded": [],
+ "details_needed": [],
+ "earlier_answers": [],
+ "unresolved": [
+  "Office / outpatient evaluation and management: no supported code was found for it."
+ ],
+ "recheck": {
+  "available": false,
+  "can_request": false
+ },
+ "limitations": [
+  "CPT descriptions are not shown: no licensed CPT descriptor is connected.",
+  "CPT code-set membership for the date of service is not verified.",
+  "NCCI procedure-to-procedure edits and payer modifier policies are not checked.",
+  "The documentation checks read stated wording and can miss wording they do not recognise; decide from the whole document."
+ ],
+ "readiness": {
+  "draft": true,
+  "approved": false,
+  "blockers": [
+   "The coding service could not finish for this document."
+  ]
+ },
+ "reports": [],
+ "activity": [
+  {
+   "event": "document_added",
+   "summary": "Document added",
+   "actor": "Reviewer",
+   "actor_kind": "human",
+   "at": "2026-11-01T09:02:24Z"
+  },
+  {
+   "event": "text_read",
+   "summary": "Text read",
+   "actor": "CPT Studio",
+   "actor_kind": "system",
+   "at": "2026-11-01T09:02:27Z"
+  },
+  {
+   "event": "checks_completed",
+   "summary": "Checks completed",
+   "actor": "CPT Studio",
+   "actor_kind": "system",
+   "at": "2026-11-01T09:02:32Z"
+  },
+  {
+   "event": "checks_completed",
+   "summary": "Checks completed",
+   "actor": "CPT Studio",
+   "actor_kind": "system",
+   "at": "2026-11-01T09:02:35Z"
+  }
+ ]
+}

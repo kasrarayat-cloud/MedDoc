@@ -24,8 +24,10 @@ from studio.models import ReferenceCodeFact, ReferenceSource
 from studio.reference.store import MUE, PFS
 
 PUBLISHER = 'Centers for Medicare & Medicaid Services (CMS)'
+# A statement of fact, never a claim of permission (owner, 2026-11-01; HARNESS.md 11.6): no AMA licence is held, and
+# whether CPT Studio's use of CPT content needs one is the owner's open decision (D4), not something this note settles.
 LICENSE_NOTE = ('CPT codes are copyright the American Medical Association; descriptors are not imported or displayed. '
-                'Used for internal synthetic evaluation only; commercial CPT use requires an AMA license.')
+                'CPT Studio holds no AMA licence; whether its use of CPT content needs one is an open owner decision.')
 SCOPE_NOTES = {
     PFS: 'Medicare Physician Fee Schedule indicators (not a CPT edition; not payer-specific)',
     MUE: 'Medicare NCCI practitioner MUE values (units per day; not every payer)',

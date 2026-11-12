@@ -1,0 +1,1881 @@
+{
+ "package": "PO",
+ "summary": "GI round 4, package PO: second-review offers (engine._routing_agrees, plus new _po_ helpers in validation/engine.py). An unresolved item the installed rule does not offer is OFFERED (the flag only: asking stays a member act, once per revision and date, and nothing is sent by any stage) when routing does not contradict the documented-service reading - PO-1: routing reads the item's family only silently (the minimal design's M1); PO-2: routing's not-today reading of the item's own passage comes only from a section that reaches it across a heading-like line the layout does not read - and the document is today's procedure report by its own head (sections.procedure_report_head, and no title of a note written around a procedure: sections.around_procedure_title). Only the offer flag on unresolved items moves, and only False -> True: no request, date, routing, inventory, proposal, question, check or completeness state. H2 expected delta: NONE.",
+ "rule": {
+  "precondition": "an unresolved item (reason no_proposal or not_covered) the installed _routing_agrees does not offer",
+  "document": "sections.procedure_report_head(text) and not sections.around_procedure_title(text)",
+  "family_read": "routing reads the item's family: at least one mention (never a vacuous family reading)",
+  "PO-1": "every routing mention of the family is silent (checks.silent, cues never empty), and routing reads no evidence span of the item as not done today or with a worded doubt (each reads silent, or uncertain with only section labels, a performance statement or the family summary UNESTABLISHED)",
+  "PO-2": "no routing mention of the family contradicts: each reads done today, says nothing (as above), is another occasion's by its own time word (a historical: or planned: cue), or is not today only by its section across an unread heading-like line; every evidence span says nothing or is not today only by its section across an unread heading-like line, and at least one is the latter",
+  "section_only_across_unread_heading": "status historical or planned; every cue a section label or a performance statement, at least one section label; the section's heading line ends within sections.HEADING_REACH_CHARS characters and sections.HEADING_REACH_LINES lines before the position (beyond_heading_reach's fail-closed True is never read as a found line here: in this direction it would release); sections.beyond_heading_reach True; sections.under_another_occurrence False",
+  "not_built": "detect_silent: not needed, checks.silent reads the same silence prefix (the validator's own test)"
+ },
+ "cues_added": [],
+ "movements": {},
+ "battery": [],
+ "replay": {
+  "h4-02": {
+   "rule": "PO-1",
+   "states": [
+    "none",
+    "walk",
+    "far",
+    "minus1",
+    "plus1",
+    "plan"
+   ],
+   "offers": [
+    [
+     "gi.egd",
+     "no_proposal",
+     false,
+     true
+    ],
+    [
+     "gi.flex_sig",
+     "not_covered",
+     false,
+     true
+    ]
+   ]
+  },
+  "h4-05": {
+   "rule": "PO-2",
+   "states": [
+    "none",
+    "doc:2026-10-15",
+    "doc:2025-04-09",
+    "doc:2026-09-22",
+    "doc:2026-11-16",
+    "doc:2026-12-03",
+    "far",
+    "minus1",
+    "plus1"
+   ],
+   "offers": [
+    [
+     "gi.eus",
+     "no_proposal",
+     false,
+     true
+    ]
+   ]
+  },
+  "unchanged": [
+   "h4-01",
+   "h4-03",
+   "h4-04",
+   "h4-06",
+   "h2-08",
+   "h2-10"
+  ],
+  "nothing_else": "in every member state only these offer flags move: the date channel, requests, routing, the inventory, proposals (bucket, status, fingerprint), questions and completeness are unchanged; h2-10's held-state ERCP offers stay True as installed"
+ },
+ "offer_battery": {
+  "about": "the H4 rows read twice through jobs._assess_child: with the row's own answer (\"own\") and with an EMPTY answer (\"empty\": every documented service done today unresolved); [family, act, reason, installed offer, PO offer] per unresolved item, in completeness order",
+  "moving": [
+   [
+    "S3h h4-05 counterfactual, EUS code citing the narrative",
+    "own",
+    "gi.eus",
+    "",
+    "no_proposal",
+    false,
+    true,
+    "PO-2"
+   ],
+   [
+    "S3h h4-05 counterfactual, EUS code citing the narrative",
+    "empty",
+    "gi.eus",
+    "",
+    "no_proposal",
+    false,
+    true,
+    "PO-2"
+   ]
+  ],
+  "rows": {
+   "polyp details history": {
+    "own": [],
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true,
+      true
+     ]
+    ]
+   },
+   "sig report, planned colonoscopy": {
+    "own": [],
+    "empty": [
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true,
+      true
+     ]
+    ]
+   },
+   "report from 2023 (deictic)": {
+    "own": [],
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true,
+      true
+     ]
+    ]
+   },
+   "earlier colonoscopy in EGD indication": {
+    "own": [],
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true,
+      true
+     ]
+    ]
+   },
+   "index examination after prior studies": {
+    "own": [],
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true,
+      true
+     ]
+    ]
+   },
+   "dated history instrument narration": {
+    "own": [],
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true,
+      true
+     ]
+    ]
+   },
+   "colonoscopy never started": {
+    "own": [],
+    "empty": []
+   },
+   "past negation + today denial": {
+    "own": [],
+    "empty": []
+   },
+   "gastroscope to descending colon (sig)": {
+    "own": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true,
+      true
+     ]
+    ],
+    "empty": [
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true,
+      true
+     ],
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true,
+      true
+     ]
+    ]
+   },
+   "duodenoscope (ERCP)": {
+    "own": [],
+    "empty": [
+     [
+      "gi.ercp",
+      "",
+      "no_proposal",
+      true,
+      true
+     ]
+    ]
+   },
+   "gastroscopy in sig indication": {
+    "own": [],
+    "empty": [
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      true,
+      true
+     ]
+    ]
+   },
+   "colonoscope reaches cecum in a plan": {
+    "own": [],
+    "empty": [
+     [
+      "gi.office_em",
+      "",
+      "no_proposal",
+      true,
+      true
+     ]
+    ]
+   },
+   "colonoscope reaches cecum, undated other doc": {
+    "own": [],
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      false,
+      false
+     ]
+    ]
+   },
+   "stricture at 30 cm": {
+    "own": [],
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true,
+      true
+     ]
+    ]
+   },
+   "stricture, cecum named in plan": {
+    "own": [],
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true,
+      true
+     ]
+    ]
+   },
+   "unpassed pylorus (steered)": {
+    "own": [],
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true,
+      true
+     ]
+    ]
+   },
+   "colorectal anastomosis at 15 cm": {
+    "own": [],
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true,
+      true
+     ]
+    ]
+   },
+   "outside endpoint line, routing silent": {
+    "own": [],
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      false,
+      false
+     ]
+    ]
+   },
+   "withheld label + finding of cecum": {
+    "own": [],
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true,
+      true
+     ]
+    ]
+   },
+   "bulb hot snare + planned colonoscopy": {
+    "own": [],
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true,
+      true
+     ]
+    ]
+   },
+   "two services, snare refers back": {
+    "own": [],
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true,
+      true
+     ]
+    ]
+   },
+   "two services, colon polyp then it": {
+    "own": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true,
+      true
+     ]
+    ],
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true,
+      true
+     ]
+    ]
+   },
+   "telephone-only time": {
+    "own": [],
+    "empty": [
+     [
+      "gi.office_em",
+      "",
+      "no_proposal",
+      true,
+      true
+     ]
+    ]
+   },
+   "last visit time": {
+    "own": [],
+    "empty": [
+     [
+      "gi.office_em",
+      "",
+      "no_proposal",
+      true,
+      true
+     ]
+    ]
+   },
+   "future visit time": {
+    "own": [],
+    "empty": [
+     [
+      "gi.office_em",
+      "",
+      "no_proposal",
+      true,
+      true
+     ]
+    ]
+   },
+   "elastography + framed time (S-R1)": {
+    "own": [],
+    "empty": []
+   },
+   "return visit + ultrasound (V3)": {
+    "own": [],
+    "empty": [
+     [
+      "gi.office_em",
+      "",
+      "no_proposal",
+      true,
+      true
+     ]
+    ]
+   },
+   "colonoscopy report physician time": {
+    "own": [],
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true,
+      true
+     ]
+    ]
+   },
+   "J1 records review, unnamed family, long gap": {
+    "own": [],
+    "empty": []
+   },
+   "J2 pasted 2024 report under unknown heading": {
+    "own": [],
+    "empty": []
+   },
+   "J3 teaching handout": {
+    "own": [],
+    "empty": []
+   },
+   "J4 records review, colonoscopy named in plan only": {
+    "own": [],
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      false,
+      false
+     ]
+    ]
+   },
+   "J5 EGD today + appended outside colonoscopy": {
+    "own": [
+     [
+      "gi.egd",
+      "snare",
+      "not_covered",
+      true,
+      true
+     ]
+    ],
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true,
+      true
+     ]
+    ]
+   },
+   "J6 records review, family named in copied block": {
+    "own": [],
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true,
+      true
+     ]
+    ]
+   },
+   "J7 records review, completion rows only": {
+    "own": [],
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      false,
+      false
+     ]
+    ]
+   },
+   "J8 surveillance office note, prior colonoscopy in history": {
+    "own": [],
+    "empty": []
+   },
+   "E1 pre-procedure H&P with framed time": {
+    "own": [],
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true,
+      true
+     ]
+    ]
+   },
+   "E2 phone follow-up, framed time by telephone": {
+    "own": [],
+    "empty": []
+   },
+   "E3 addendum time about a later review": {
+    "own": [],
+    "empty": []
+   },
+   "E4 visit template, time framed, nothing recorded": {
+    "own": [],
+    "empty": []
+   },
+   "S1 titled colonoscopy, past negation, no head fields": {
+    "own": [],
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true,
+      true
+     ]
+    ]
+   },
+   "S2 untitled two-service, past negation, no head fields": {
+    "own": [],
+    "empty": []
+   },
+   "S3 cited the past negation only": {
+    "own": [],
+    "empty": []
+   },
+   "K1 records review, copied banding narrative": {
+    "own": [],
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true,
+      true
+     ]
+    ]
+   },
+   "K2 office note with copied EGD named": {
+    "own": [],
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      false,
+      false
+     ]
+    ]
+   },
+   "K3 copied colonoscopy, completion statement": {
+    "own": [],
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      false,
+      false
+     ]
+    ]
+   },
+   "S3h h4-05 counterfactual, EUS code citing the narrative": {
+    "own": [
+     [
+      "gi.eus",
+      "",
+      "no_proposal",
+      false,
+      true
+     ]
+    ],
+    "empty": [
+     [
+      "gi.eus",
+      "",
+      "no_proposal",
+      false,
+      true
+     ]
+    ]
+   }
+  }
+ },
+ "guard_rows": {
+  "about": "synthetic rows tests/test_gi4_po.py reads (text sha256 pinned here before the code): each guard's killing row, and the positive controls; [family, act, reason, installed offer, PO offer]",
+  "rows": {
+   "G-head clinic note, copied colonoscopy": {
+    "text_sha256": "cb20835cc5b1459249135f8d602cd68118daba2e63ebf2504ed2e8002befb0a0",
+    "codes": [],
+    "offers": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      false,
+      false
+     ]
+    ]
+   },
+   "G-around booking with head fields": {
+    "text_sha256": "0dcb2ca1c73f176ee4bd8f72ef8e265b3ca72a40e89e8366aa93187f957767c5",
+    "codes": [],
+    "offers": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      false,
+      false
+     ]
+    ]
+   },
+   "G-reach h4-05, 210 filler lines": {
+    "text_sha256": "554a1dd598b874de12e93c04917c07b8b0e49a93ff4134ee0fa8fb943ed10ca0",
+    "codes": [],
+    "offers": [
+     [
+      "gi.eus",
+      "",
+      "no_proposal",
+      false,
+      false
+     ]
+    ]
+   },
+   "G-occurrence h4-05, previous summary line": {
+    "text_sha256": "df6acfb92a688b9f5672d64d44af1aceb325bb6edaa913cd013fa3eb840cc5dc",
+    "codes": [],
+    "offers": [
+     [
+      "gi.eus",
+      "",
+      "no_proposal",
+      false,
+      false
+     ]
+    ]
+   },
+   "G-contradiction h4-05, repeat EUS not done": {
+    "text_sha256": "72bb97f32bb9f93366990278bf8146f027a735c41c4713310172a08333c0d147",
+    "codes": [],
+    "offers": [
+     [
+      "gi.eus",
+      "",
+      "no_proposal",
+      false,
+      false
+     ]
+    ]
+   },
+   "G-unread h4-05, directly headed HPI line": {
+    "text_sha256": "2ddd003f2a78df52074ae07dbcd1ba22d0f939a66bdc635baa82be03c21837b4",
+    "codes": [],
+    "offers": [
+     [
+      "gi.eus",
+      "",
+      "no_proposal",
+      false,
+      false
+     ]
+    ]
+   },
+   "G-evidence h4-02, repeat biopsies planned": {
+    "text_sha256": "c872fe50741d12c432ac7c5a2e0284a053199e161c8557883f1eb7c980d0d5c3",
+    "codes": [
+     [
+      "45330",
+      "Flexible sigmoidoscope"
+     ]
+    ],
+    "offers": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      false,
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "biopsy",
+      "not_covered",
+      false,
+      false
+     ]
+    ]
+   },
+   "G-atleast P00160 runaway history, title only": {
+    "text_sha256": "f03fbac4ad1a8c801cf92b204cc0511b39c7581fec5b3e6ad5661f75f7a404b3",
+    "codes": [],
+    "offers": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      false,
+      false
+     ]
+    ]
+   },
+   "P-h4-02": {
+    "text_sha256": "9ac3f7cbf14e1f5763c796692960fd4b7e9eb1068bd69bfebb69abf3f0697466",
+    "codes": [],
+    "offers": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      false,
+      true
+     ],
+     [
+      "gi.flex_sig",
+      "",
+      "no_proposal",
+      false,
+      true
+     ]
+    ]
+   },
+   "P-h4-05": {
+    "text_sha256": "41fcebb20d0154ee79bb7a6de16c9535f61f82bd9f618b9bc72b676d7df51e2b",
+    "codes": [],
+    "offers": [
+     [
+      "gi.eus",
+      "",
+      "no_proposal",
+      false,
+      true
+     ]
+    ]
+   }
+  }
+ },
+ "offer_corpus": {
+  "about": "the H2 corpus (regression texts, generated corpus, seeded families, repository texts) plus the H4 rows, 5,768 distinct texts, each in two member states (none; the truth's own date) x two synthetic answers (empty; the base diagnostic code of every family the inventory reads done today, citing the first line); predicted from the INSTALLED facts with the stated rule before the code",
+  "texts": 5768,
+  "flips_false_to_true": 1044,
+  "by_kind_rule_truth": {
+   "bidirectional/PO-1/truth=performed": 72,
+   "regression/PO-1/truth=-": 10,
+   "regression/PO-2/truth=-": 2,
+   "repo/PO-1/truth=-": 2,
+   "seeded/PO-1/truth=performed": 888,
+   "seeded/PO-2/truth=performed": 70
+  },
+  "flips_on_a_family_the_truth_reads_not_done_today": 0,
+  "true_to_false": 0,
+  "other_movements": 0
+ },
+ "h3": "no movement (routing and inventory readings untouched)",
+ "h4": "no movement (no proposal moves)",
+ "h5": "no movement; a second-review offer stays member-asked (no stage queues one)",
+ "pins": "tests/fixtures/gi4/pins/replay.json moves by exactly the replay offers above; cues.json, freeze.json, battery.json and tables.json unchanged apart from meta.commit (re-pinned in a separate final commit)",
+ "residuals": [
+  "PO-2 needs a section-only reading in the item's OWN evidence: an item whose evidence reads only silent while routing reads the family as another occasion's elsewhere (a dated prior study, a booked repeat), or whose family is historical only by a runaway section it has no evidence in (h4-06's shape), stays unoffered: the offer corpus predicts 2,271 such items (procedure 2,112, seeded 144, bidirectional 12, repository 3), all done today by their provisional truth",
+  "the document guard costs offers on head-less reports: 73 corpus items (bidirectional 72, the \"outside endpoint line, routing silent\" row) done today by their truth stay unoffered; it blocks the 190 notes written around a procedure and the records reviews J7, K2 and K3 that PO-1 alone would offer for copied procedures",
+  "PO-1's evidence condition holds 20 seeded h4-04 items (truth: done today) whose snare passage routing reads under a heading of the other family, with that family's denial",
+  "the comment above SECOND_REVIEW_CHECKED in engine.py and jobs._second_review_items' comment still say an offer needs both readers to read the item as done today; both are outside PO's ownership (the integrator's to amend)"
+ ],
+ "amendment_20261101": {
+  "date": "2026-11-01",
+  "why": "The package's own refutation of the committed rule (sealed export of 0f2512471, synthetic texts only) found second-review offers on items not done today, in four classes. (1) Notes that are not a procedure's report pass the PS head guard - its sedation alternative matches the word anywhere in a head line (\"She tolerated sedation poorly in the past.\") and its performer alternative any \"Attending:\" or \"Endoscopist:\" field - and PO-1 offered the copied outside colonoscopy of a clinic, consult or follow-up note. (2) A procedure report of one family offered another family named only in a copied block: PO-1 an \"EGD at Mercy GI.\" pasted from a referral packet, PO-2 a prior EUS copied under unread headings of a prior-studies section (routing reads the family there as another occasion's or as the runaway section's, and the inventory reads the copied conclusion heading as the service). (3) A statement that the procedure was called off or not done that names no family - \"The procedure was cancelled before sedation\", \"No endoscopic procedure was performed today.\", \"Procedure not performed.\", \"Lower examination deferred to next week.\", \"Status: Cancelled - ...\" - is attached by routing to no family, so routing's silence about the family was no agreement at all, and PO-1 and PO-2 offered. (4) sections.under_another_occurrence reads the nearest heading-like line only within 6 lines and 600 characters, so an unread heading naming an earlier EUS farther up (\"What the Earlier Echoendoscope Showed\") was never read. Each class is closed below by a hold; nothing is released.",
+  "rule_added": {
+   "A1 document": "a field of the document's head (its first sections.PROCEDURE_HEAD_LINES non-empty lines) whose LABEL names sedation or anaesthesia (sedation, sedative, anesthesia, anaesthesia, anesthetic, anaesthetic, anesthesiology): \"Sedation:\", \"Sedation provider:\", \"Sedation and airway:\", \"Anesthetic care:\" - in addition to sections.procedure_report_head and not sections.around_procedure_title",
+   "A2 family": "routing names the family on a title line of the head - one of its first sections.AROUND_PROCEDURE_TITLE_LINES non-empty lines, standing before the head's first field line, of at most sections.AROUND_PROCEDURE_TITLE_CHARS characters with no sentence end and no field value (the PS title test) - and that mention reads done today or says nothing; this replaces 'at least one mention' (a family routing never names has no title mention)",
+   "A3 PO-2 evidence": "an evidence span of the item lies on such a title line and says nothing: the documented-service reader takes the item from the report's own title, not only from the runaway passage",
+   "A4 PO-2 reach": "no heading-like line the layout does not read (beyond_heading_reach's own test of a heading-like line) between the section's heading and the passage names another occurrence's record (sections.ANOTHER_OCCURRENCE_HEAD), wherever it stands within the reach - in addition to sections.under_another_occurrence, which still reads the nearest short line and the passage's own line",
+   "A5 document": "no statement that a procedure was called off or not performed while naming none: routing's own cues.PROCEDURE_CANCELLED and cues.PROCEDURE_NOT_PERFORMED, and the forms they do not read - \"no <one or two words> procedure|endoscopy|exam|examination|study was performed|done\" (never \"no other|further|additional|more|separate|extra|second ...\"), \"<procedure|exam|examination|study|endoscopy> (was) not (been) performed|done|started|begun|undertaken|attempted|carried out\", \"... did not|never|could not happen|occur|take place|start|begin|proceed|be performed|done\", and a status or outcome field answered cancelled, not performed|done|started, postponed, deferred, rescheduled, aborted, called off or no-show; anywhere in the text (a closed list, read only to hold). An incomplete or aborted procedure that was begun is not held (incomplete is a performed reading)",
+   "cost": "the document facts (A1, A5, the PS head readers and the title lines) are read once per text - an lru_cache(maxsize=4) of engine, which jobs.release_routing_caches clears - not once per unresolved item; A4 reads at most sections.HEADING_REACH_LINES lines and sections.HEADING_REACH_CHARS characters"
+  },
+  "expected": {
+   "against_installed": "unchanged from every expectation declared above: the H1 replay's 21 offer flags (h4-02: 2 items x 6 states, PO-1; h4-05: 1 item x 9 states, PO-2) and nothing else; the offer battery (only S3h's EUS, own and empty answers); the original guard rows; H2 delta NONE; H3, H4 and H5 no movement; the offer corpus's 1,044 flips, all False -> True, none on a family the provisional truth reads not done today, no other movement",
+   "against_c8ce6262a": "no movement in the H1 replay (8 documents, 61 member states), the 47 H4 rows (own and empty answers), the original guard rows or the 5,768-text offer corpus (empty and base answers, both member states); only the amendment's guard rows below move: every item the committed rule offers on them goes True -> False except on the two A-positive rows and the done-today items, which stay True; the A-head, A-around and A-occurrence rows are held by both (killing rows for guards whose earlier rows the new holds now also hold)",
+   "measured_before_code": "the stated rule applied by a scratch monkeypatch on the sealed export of 0f2512471 (no worktree changed): offer corpus 1,044 PO offers before and after (the 21 offers lost were all on the scratch probe texts the rows below are drawn from, none on the corpus); H4 rows 0 of 47 differ; H1 61 of 61 states equal; each hold switched off alone releases its killing row"
+  },
+  "guard_rows": {
+   "about": "synthetic rows tests/test_gi4_po.py reads (AMENDED_ROWS; text sha256 pinned here before the code), empty provider answer; [family, act, reason, installed offer, committed PO offer (0f2512471), amended offer]. The killing row of each hold: A1 'A-sedation ... Attending field' and '... sedation named in a sentence' (the label test), A2 'A-title colonoscopy report, copied EGD block' and 'A-title short head ...' (the title before the fields), A3 'A-evtitle ... EUS review named in the title ...', A4 the two 'A-between' rows, A5 the five 'A-notdone' rows; the PS head guard 'A-head ...', the around title 'A-around ...', and under_another_occurrence 'A-occurrence ...' (their earlier killing rows G-head, G-around and G-occurrence are now also held by A1, A2 or A4)",
+   "rows": {
+    "A-around colonoscopy records review with head fields": {
+     "codes": [],
+     "offers": [
+      [
+       "gi.colonoscopy",
+       "",
+       "no_proposal",
+       false,
+       false,
+       false
+      ]
+     ],
+     "text_sha256": "cabd72e2624f8f5a89341903f3d2a0ac9abfe654a47f4425fdcf3e80257f72b2"
+    },
+    "A-between h4-05, an earlier EUS report heading opens the runaway part": {
+     "codes": [],
+     "offers": [
+      [
+       "gi.eus",
+       "",
+       "no_proposal",
+       false,
+       true,
+       false
+      ]
+     ],
+     "text_sha256": "da355ef583cd708a43f072ef19d4ff05c7000a589e387d8bbe7ee65ee28f100f"
+    },
+    "A-between h4-05, an unread heading naming an earlier EUS far above": {
+     "codes": [],
+     "offers": [
+      [
+       "gi.eus",
+       "",
+       "no_proposal",
+       false,
+       true,
+       false
+      ]
+     ],
+     "text_sha256": "484f668fda888db604fdbe7c0769e569096bd7dcb5d5e553547e1c0f4a9fff05"
+    },
+    "A-evtitle colonoscopy report, EUS review named in the title, copied EUS block": {
+     "codes": [],
+     "offers": [
+      [
+       "gi.eus",
+       "",
+       "no_proposal",
+       false,
+       true,
+       false
+      ]
+     ],
+     "text_sha256": "a8e4e336a3c6ad6b6c25489d6e497ed05c6c580eda03482e7189abb5f2220994"
+    },
+    "A-evtitle colonoscopy report, copied prior EUS block": {
+     "codes": [],
+     "offers": [
+      [
+       "gi.colonoscopy",
+       "",
+       "no_proposal",
+       false,
+       true,
+       true
+      ],
+      [
+       "gi.eus",
+       "",
+       "no_proposal",
+       false,
+       true,
+       false
+      ]
+     ],
+     "text_sha256": "bfa986fa93c11329430bc273f66527caaa483693ef214e91ff0885417e5a2486"
+    },
+    "A-head h4-05 without the head words the PS guard reads": {
+     "codes": [],
+     "offers": [
+      [
+       "gi.eus",
+       "",
+       "no_proposal",
+       false,
+       false,
+       false
+      ]
+     ],
+     "text_sha256": "151524b40799f18086129e4e29f28fca7c807635710f2a7512e96071c119896a"
+    },
+    "A-notdone h4-02, a cancelled status line": {
+     "codes": [],
+     "offers": [
+      [
+       "gi.egd",
+       "",
+       "no_proposal",
+       false,
+       true,
+       false
+      ],
+      [
+       "gi.flex_sig",
+       "",
+       "no_proposal",
+       false,
+       true,
+       false
+      ]
+     ],
+     "text_sha256": "ee58e0d1ee388720af5e48c3494cbd32c7da3e8cd32c370977fd09c84198be89"
+    },
+    "A-notdone h4-02, the lower examination deferred": {
+     "codes": [],
+     "offers": [
+      [
+       "gi.egd",
+       "",
+       "no_proposal",
+       false,
+       true,
+       false
+      ],
+      [
+       "gi.flex_sig",
+       "",
+       "no_proposal",
+       false,
+       true,
+       false
+      ]
+     ],
+     "text_sha256": "4fb9b17a148eea7e001c603fcd1955d27b210dcccdc738144a0ec8b64ab40aba"
+    },
+    "A-notdone h4-05, no endoscopic procedure performed today": {
+     "codes": [],
+     "offers": [
+      [
+       "gi.eus",
+       "",
+       "no_proposal",
+       false,
+       true,
+       false
+      ]
+     ],
+     "text_sha256": "96a581d5bf9251c2981f7317223790274d7ba214ef1a8a0a22d5b264cf0e09de"
+    },
+    "A-notdone h4-05, procedure not performed": {
+     "codes": [],
+     "offers": [
+      [
+       "gi.eus",
+       "",
+       "no_proposal",
+       false,
+       true,
+       false
+      ]
+     ],
+     "text_sha256": "0a5cd2d9f7b57f43bf1c5209bc1cf598678714e60370683c5d10f181e6d56a82"
+    },
+    "A-notdone h4-05, the procedure cancelled before sedation": {
+     "codes": [],
+     "offers": [
+      [
+       "gi.eus",
+       "",
+       "no_proposal",
+       false,
+       true,
+       false
+      ]
+     ],
+     "text_sha256": "464fcc16fd916beb29c52a8d364413bd35f83feca9368f627f6d72492e05ee00"
+    },
+    "A-occurrence h4-05, a lowercase outside-records line above the evidence": {
+     "codes": [],
+     "offers": [
+      [
+       "gi.eus",
+       "",
+       "no_proposal",
+       false,
+       false,
+       false
+      ]
+     ],
+     "text_sha256": "819005fbe8a9cfc3b304a687c83a6c23411f6797ebd990168d2c1b545bf3dd6a"
+    },
+    "A-positive h4-02, an earlier procedure cancelled in September": {
+     "codes": [],
+     "offers": [
+      [
+       "gi.egd",
+       "",
+       "no_proposal",
+       false,
+       true,
+       true
+      ],
+      [
+       "gi.flex_sig",
+       "",
+       "no_proposal",
+       false,
+       true,
+       true
+      ]
+     ],
+     "text_sha256": "8ae7b3ecf95bea9f0bf40ae066801d332398c5a30278ff5b563934a791b05445"
+    },
+    "A-positive h4-05, no other procedures were performed": {
+     "codes": [],
+     "offers": [
+      [
+       "gi.eus",
+       "",
+       "no_proposal",
+       false,
+       true,
+       true
+      ]
+     ],
+     "text_sha256": "a35c4e155f4549fdecdd0e52d3f9e7894ac4faba4a8ab0b6154059e4e6f972cd"
+    },
+    "A-sedation clinic note titled with the family, Attending field": {
+     "codes": [],
+     "offers": [
+      [
+       "gi.colonoscopy",
+       "",
+       "no_proposal",
+       false,
+       true,
+       false
+      ]
+     ],
+     "text_sha256": "71381890b61c918e3f74989667677c0eb08d54789bbc00bd7c46aefb5af171b4"
+    },
+    "A-sedation clinic note titled with the family, sedation named in a sentence": {
+     "codes": [],
+     "offers": [
+      [
+       "gi.colonoscopy",
+       "",
+       "no_proposal",
+       false,
+       true,
+       false
+      ]
+     ],
+     "text_sha256": "bbf33c6f4dfc605cdcd2945c73171cb86ee1a540dcd45d7e3aa6c6b31fa4a736"
+    },
+    "A-sedation compact clinic note, copied record at the top": {
+     "codes": [],
+     "offers": [
+      [
+       "gi.colonoscopy",
+       "",
+       "no_proposal",
+       false,
+       true,
+       false
+      ]
+     ],
+     "text_sha256": "c693035c7cbdf4d703c41a96e3042fba78ec6ab0e000628309930646d3038429"
+    },
+    "A-sedation consult note, endoscopist field": {
+     "codes": [],
+     "offers": [
+      [
+       "gi.colonoscopy",
+       "",
+       "no_proposal",
+       false,
+       true,
+       false
+      ]
+     ],
+     "text_sha256": "a0eb1654b36a518419cb130d57763c0b787b06193bd745e9493b17bfc1ac3aab"
+    },
+    "A-title colonoscopy report, copied EGD block": {
+     "codes": [],
+     "offers": [
+      [
+       "gi.colonoscopy",
+       "",
+       "no_proposal",
+       true,
+       true,
+       true
+      ],
+      [
+       "gi.egd",
+       "",
+       "no_proposal",
+       false,
+       true,
+       false
+      ]
+     ],
+     "text_sha256": "c8aa963d232c24b5d01e09b943245e2d67220848d3d58bdfa40a029493f009e8"
+    },
+    "A-title short head, a copied EGD line after the head fields": {
+     "codes": [],
+     "offers": [
+      [
+       "gi.colonoscopy",
+       "",
+       "no_proposal",
+       true,
+       true,
+       true
+      ],
+      [
+       "gi.egd",
+       "",
+       "no_proposal",
+       false,
+       true,
+       false
+      ]
+     ],
+     "text_sha256": "a3bb7985773840dbd3f64c6f3a3dc2040411dc0d7426b6d7964efbf80be38ed2"
+    }
+   }
+  },
+  "mutants": {
+   "added": [
+    "po-document-sedation",
+    "po-sedation-label",
+    "po-document-not-done",
+    "po-not-done-other",
+    "po-family-on-title",
+    "po-title-before-fields",
+    "po2-evidence-on-title",
+    "po-runaway-occurrence-between"
+   ],
+   "replaced": {
+    "po-family-read": "po-family-on-title (A2 subsumes at least one mention)"
+   },
+   "killed_by": {
+    "po-document-head": "A-head h4-05 without the head words the PS guard reads",
+    "po-document-around": "A-around colonoscopy records review with head fields",
+    "po-runaway-occurrence": "A-occurrence h4-05, a lowercase outside-records line above the evidence",
+    "po-document-sedation": "A-sedation clinic note titled with the family, Attending field",
+    "po-sedation-label": "A-sedation clinic note titled with the family, sedation named in a sentence",
+    "po-document-not-done": "the A-notdone rows",
+    "po-not-done-other": "A-positive h4-05, no other procedures were performed",
+    "po-family-on-title": "A-title colonoscopy report, copied EGD block",
+    "po-title-before-fields": "A-title short head, a copied EGD line after the head fields",
+    "po2-evidence-on-title": "A-evtitle colonoscopy report, EUS review named in the title, copied EUS block",
+    "po-runaway-occurrence-between": "the A-between rows"
+   }
+  },
+  "residuals": [
+   "A2 and A3 cost offers where the report names its procedure only in a field (\"Procedure: Colonoscopy\"), below its sixth non-empty line, or after the head's first field line; A1 where the head documents sedation only in a medications field: those items keep the installed behaviour (offered only when routing reads them done today). Measured cost on the offer corpus: none",
+   "A5 holds every item of a document that says a procedure was called off or not done without naming it, also when another of its services was done (fail-closed), and an earlier encounter's cancellation written the same way (\"The procedure was cancelled\" in a history paragraph); one with a time of its own between noun and verb (\"His first procedure in September was cancelled\") does not match and holds nothing",
+   "a note written around a procedure whose title has no around-procedure word (\"Colonoscopy Review\", \"Follow-up Visit\", \"H&P\") is held only by A1 (a sedation-labelled head field) and by the procedure head guard; the PS head guard itself stays as loose as described in 'why' (1) - a finding for package PR, which reads it to release codes (procedure_report_head is PS's, outside PO's ownership)",
+   "a planned reading that runs across an unread heading is read with the history words of sections.ANOTHER_OCCURRENCE_HEAD only: no plan word on an unread heading line holds it"
+  ]
+ },
+ "amendment_20261101_r2": {
+  "date": "2026-11-01",
+  "cycle": "Wave 1 repair, cycle 1 of at most 2 for this releasing family (the round-4 plan, rules for the round)",
+  "base": "b840ae756 (the integrated Wave 1 head); every movement below is against it unless it says installed",
+  "why": "An independent refutation of b840ae756 (finding F4) found PO-1 offering a second review for services not done today: a titled colonoscopy or EUS whose procedure was called off in words A5 does not list (\"After discussion we did not go ahead\", \"the scope was not inserted\", \"nothing further was done today\", \"At the time-out ... we did not go ahead\"), and pre-procedure notes titled outside sections.AROUND_PROCEDURE_WORDS (\"Pre-colonoscopy Assessment\", \"Colonoscopy Pre-assessment\", \"Colonoscopy Admission Checklist\", \"Colonoscopy Readiness Review\"). In each, the documented-service reader reads the service performed only from its report title and routing says nothing; PO-1 took that silence as no contradiction. Reproduced on a sealed export of b840ae756 before this amendment. The binding rule of this cycle: PO-1 needs positive evidence of today's performance beyond silence, or it is dropped.",
+  "rule_added": {
+   "P1 (PO-1 only)": "an act of the item's own service - for an act item, that act - that the documented-service reader reads performed by an act predicate of its own (a cue opening \"performed: an act predicate\": never an act read only from a title or a procedure line, a box or a field), with a passage in the text under no line naming another occurrence's record (sections.under_another_occurrence). Read by _po_done_in_body, given the inventory _routing_agrees already holds. Hold-only: it withholds offers and offers nothing new. PO-2, A1-A5, the head guard and installed's own rule are unchanged",
+   "closed lists": "none added (A5 and AROUND_PROCEDURE_WORDS are not widened: P1 is structural)"
+  },
+  "expected": {
+   "H1": "EQUAL against b840ae756 in every member state (--fixtures and --inputs): h4-02's two PO-1 items keep their offers in all six states (each has an act read performed by an act predicate: the biopsies, \"biopsied.\"), h4-05's PO-2 offer is untouched",
+   "H2": "NONE by construction (engine.py only)",
+   "H3": "no movement",
+   "H4": "no movement; the offer battery (the 50 H4 rows, own and empty answers) does not move",
+   "H5": "no movement (the PO state tests offer h4-02 and h4-05 as before)",
+   "original guard rows": "unchanged (P-h4-02 and G-evidence keep their offers)",
+   "amendment_20261101 rows": {
+    "A-evtitle colonoscopy report, copied prior EUS block": "gi.colonoscopy True -> False: its only act (\"Cold forceps biopsies were taken ...\") is read historical by the runaway Prior Studies section, so nothing is read done today beyond the title - a done-today item loses its offer (a declared cost); the EUS item stays False",
+    "every other row": "unchanged",
+    "moved": {
+     "A-evtitle colonoscopy report, copied prior EUS block": [
+      [
+       "gi.colonoscopy",
+       "",
+       "no_proposal",
+       true,
+       false
+      ],
+      [
+       "gi.eus",
+       "",
+       "no_proposal",
+       false,
+       false
+      ]
+     ]
+    },
+    "moved_about": "[family, act, reason, b840ae756 offer, cycle-1 offer] per unresolved item (empty answer)"
+   },
+   "offer corpus": "5,768 texts (empty and base answers, both member states): 1 offer True -> False - repo svc-28-flexsig-hemorrhoid-banding-nursing-conflict, none/base, gi.flex_sig band_ligation not_covered (its act is read from the procedure line and \"named without an act predicate\" in the body) - and nothing else: 9,743 of the 14,885 unresolved items are offered on b840ae756, 9,742 on the candidate; no proposal, completeness or item moves",
+   "rows": {
+    "about": "synthetic rows tests/test_gi4_po.py reads (R2_ROWS; text sha256 pinned here before the code), the row's own codes or none; [family, act, reason, installed offer, b840ae756 offer, cycle-1 offer] per unresolved item. F4 rows are the refutation's inputs byte for byte",
+    "rows": {
+     "F4 O1 colonoscopy, we did not go ahead": {
+      "text_sha256": "5f4636fc23bcab4a9457ff1b4576a52a4844f25b4cc87daec5ca9e900755c374",
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ]
+     },
+     "F4 O1 colonoscopy, the scope was not inserted": {
+      "text_sha256": "069f0baf6f77346bceab44765916eed924f961d88c3bb3b57d149332e5da947b",
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ]
+     },
+     "F4 O1 colonoscopy, nothing further was done today": {
+      "text_sha256": "9672cb678c79aa9161fb3709533ed20f35405b866d20ac88352b8bdac9baa094",
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ]
+     },
+     "F4 O2 EUS, at the time-out we did not go ahead": {
+      "text_sha256": "057d5183a0e2918685522bfe87e70b769a92bfbabd58012bbe59ebaaf226ee19",
+      "codes": [],
+      "offers": [
+       [
+        "gi.eus",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ]
+     },
+     "F4 control, A5 reads the examination not started": {
+      "text_sha256": "15f4ded14247a058d5ed06bce383e0d854624daa474e42b1414c593999976e3e",
+      "codes": [],
+      "offers": []
+     },
+     "F4 PRE Pre-colonoscopy Assessment": {
+      "text_sha256": "854d15d273bbf906306a5ad0411fcde2537d89b568f92e509c8984266a2a3976",
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ]
+     },
+     "F4 PRE Colonoscopy Pre-assessment": {
+      "text_sha256": "8c3454f065e5c7b639f8836d1c923adb63f049f0a1ee791906960a929f6ca863",
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ]
+     },
+     "F4 PRE Colonoscopy Admission Checklist": {
+      "text_sha256": "e7337022a56778f5f4e0e4f902e1bbab42bd95d26c99373e005181ac1bab0242",
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ]
+     },
+     "F4 PRE Colonoscopy Readiness Review": {
+      "text_sha256": "8fe098c1a8dd7fb108e6b115f568f8e458ceb3c09d8f5e132be8c5032364f03b",
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ]
+     },
+     "P1 an act read only from the title": {
+      "text_sha256": "aed9de8c696295c1b9fc4a1bdc5587de6719b80fbd253a103770a0faa6d50288",
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ]
+     },
+     "P1 an act only under an outside-records line": {
+      "text_sha256": "f6ea08ac0af4f55844da42e49dc89ee4e90256f7e84d5aee0da62b6dd0bdfb53",
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ]
+     },
+     "P1 an act item whose own act is read only from the title": {
+      "text_sha256": "2f0244a4b3bfbbbfdf6e61104bab3ba81f950f8f341bb7c743acedbaae2aabc5",
+      "codes": [
+       [
+        "45385",
+        "A 4 mm polyp in the sigmoid colon was removed with cold snare."
+       ]
+      ],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "tattoo",
+        "not_covered",
+        false,
+        true,
+        false
+       ]
+      ]
+     },
+     "P1 an act stated in the indication": {
+      "text_sha256": "cd466bbaf213c445b2f5bf2b8deea1c2e4b5796aa749584b0dcfa53af3f19554",
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ]
+     },
+     "P1 an act in a history section": {
+      "text_sha256": "d00f23c12db4bcc0031609d38c5691bd20372a326f6a5af193f3dd4002fa7a3b",
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ]
+     },
+     "P1 an act dated another day": {
+      "text_sha256": "2948d951576302d4a1f9e5811500fb31a93c7b7cc141718cbdec40009caf8b21",
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ]
+     },
+     "P1 control, an act done today": {
+      "text_sha256": "0c40b27c93ec2ee1f93c97df59d6e578864b9959b778529ea88c54067686bf2e",
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        true
+       ]
+      ]
+     },
+     "P1 control, biopsies taken in an upper examination": {
+      "text_sha256": "a412f1de1c359352bd149aee81b29fabe61fe8e47b730c9149e56980ec301ac9",
+      "codes": [],
+      "offers": [
+       [
+        "gi.egd",
+        "",
+        "no_proposal",
+        false,
+        true,
+        true
+       ]
+      ]
+     },
+     "P1 control, an act under a runaway indication": {
+      "text_sha256": "c3e4cbf3b5be688b2f7ce34c68b2a0424030cedf198e04a0e38ee731abef5532",
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        true
+       ]
+      ]
+     }
+    }
+   },
+   "measured_before_code": "the code applied to a scratch copy of the sealed git-archive export of b840ae756 (engine.py sha256 bb837b00a47ae759 -> 31d6d5697142fa78; no worktree changed), read with the committed harness: H1 replay (--fixtures and --inputs) EQUAL against b840ae756; H4 battery 0 movements; the rows below on installed 80df1831d168, on b840ae756 and on the candidate; the offer corpus observed on b840ae756 and on the candidate"
+  },
+  "mutants": {
+   "po1-positive-evidence": "unit: the F4 rows",
+   "po1-own-act": "unit: P1 an act item whose own act is read only from the title",
+   "po1-act-performed": "unit: a hand-built act whose status is not performed beside an act-predicate cue",
+   "po1-act-predicate": "unit: P1 an act read only from the title",
+   "po1-act-occurrence": "unit: P1 an act only under an outside-records line",
+   "po1-act-in-text": "unit: a hand-built act whose passage lies outside the text",
+   "po1-no-service": "unit: no inventory, or no service of the item"
+  },
+  "known_limits": [
+   "P1 trusts the documented-service reader's act reading: an untimed act statement it reads as today's (an act predicate under a sub-heading it opens inside an indication) counts as positive evidence in a report whose procedure was called off",
+   "a done-today item whose acts are read only historical or planned by a runaway section, or only from a procedure line, a box or a field, loses its PO-1 offer (A-evtitle, svc-28)",
+   "PO-2 is unchanged: it offers on a passage that is not today only by a runaway section across an unread heading, with its own A3/A4 holds; it does not need P1 (h4-05 has no act read performed)"
+  ]
+ },
+ "amendment_20261101_cycle2": {
+  "date": "2026-11-01",
+  "cycle": "Wave 1 repair, CYCLE 2 of at most 2 for PO-1's releasing family (the round's rule): a third refutation of PO-1 drops it and records it as a known limit",
+  "base": "fbc59ee53 (its cpt-studio equals the integrated cycle-1 head 5fa531d1a); every movement below is against it unless it says installed",
+  "written": "by Wave 1 repair cycle 2, group PD+PO+PA, BEFORE the code; the code was modelled in a scratch copy of the sealed fbc59ee53 export and every number below is that model's (scratch: /home/claude/cpt-studio-gi4-20261031/w1c2/pdpopa)",
+  "why": "refutation PO1-PASTED-ACT-OFFER (procedures-and-offers lens, refuting fbc59ee53): PO-1 still offered a second review for a service called off today - F4's own text - as soon as the document carried one act pasted from another record. P1 (_po_done_in_body) guards the act's passage only with sections.under_another_occurrence, which reads 6 lines and 600 characters back and knows no attachment word, so an act 9 lines under 'Previous Report' or 'Outside Report', right under 'Attached Report', or under no heading at all gave PO-1 its positive evidence; a pre-colonoscopy assessment with the outside report pasted 9 lines down was offered the same way. Reproduced on fbc59ee53 with the finding's inputs byte for byte: every variant offered (True); installed and the control without the pasted act offer nothing",
+  "rule_added": {
+   "C1 (PO-1 only)": "PO-1 offers nothing where the document says that its procedure was called off, cancelled or not done today, whatever a pasted act elsewhere says (engine._po_called_off, read once per text): _PO_CALLED_OFF, a closed list read anywhere in the text and only to hold - 'did not | could not | chose not to | decided not to | unable to go ahead', 'did not | chose not to | decided not to proceed' (alone or 'with the <procedure>', never 'proceed beyond'), 'the scope | colonoscope | ... was not | never inserted | introduced', 'nothing (further | else | more) was done | performed today', '<will be | was | has been ...> rebooked | rescheduled | postponed | called off', 'called off', 'not done | performed | carried out | undertaken | attempted | started | begun today', 'no <procedure> (was done) today', 'sent home without the <procedure>', '<procedure> aborted | abandoned | stopped before insertion | sedation | ...', 'the case was cancelled', 'cancelled today | on arrival | at the time-out | before ...'. A procedure begun and stopped ('could not be advanced beyond', 'unable to proceed beyond') is an incomplete one, a performed reading, and is not read; nor is an earlier encounter's cancellation with its own time",
+   "C2 (PO-1's P1)": "P1's act is no evidence where the nearest heading-like line above its passage - a short line (at most 60 characters) with a letter and no sentence end, as sections.under_another_occurrence reads one, a closing colon allowed - names another occurrence's record (sections.ANOTHER_OCCURRENCE_HEAD: 'Previous Report', 'Outside Report') or an attachment (_PO_RECORD_WORDS: attached, attachment, enclosed, enclosure, scanned, faxed, imported, excerpt, appended, external, received), read back as far as a section's heading may stand (sections.HEADING_REACH_LINES lines, HEADING_REACH_CHARS characters) - engine._po_under_another_record, beside under_another_occurrence, which still reads the act's own line",
+   "hold-only": "each withholds offers and offers nothing new: no offer goes False -> True, and no request, date, routing, inventory, proposal, question, check or completeness state moves",
+   "unchanged": "PO-2, A1-A5, the head guard, P1's other conditions and installed's own rule (an item routing reads done today is offered as before)"
+  },
+  "expected": {
+   "H1": "EQUAL against fbc59ee53 in every offer (--fixtures): h4-02's two PO-1 items keep their offers in all six states, h4-05's PO-2 item in all nine. The branch's only replay movements are PD's drop (h4-03's states, pd.json amendment_20261101_cycle2)",
+   "H2": "NONE by construction (engine.py only)",
+   "H3": "no movement (H3 observes the readers, never the engine)",
+   "H4": "0 movements in the 50 rows (fbc59ee53 -> model); the offer battery (own and empty answers) as declared before",
+   "H5": "no movement (the PO state tests offer h4-02 and h4-05 as before)",
+   "offer corpus": "the 5,768 texts (empty and base answers, both member states): 0 offers move and nothing else moves - 14,735 unresolved items, 9,586 offered on fbc59ee53 and the same 9,586 on the model",
+   "earlier rows": "the guard rows, the amendment_20261101 rows and the amendment_20261101_r2 rows keep their declared offers",
+   "rows": {
+    "about": "synthetic rows tests/test_gi4_po.py reads (C2_ROWS; text sha256 pinned here before the code), an empty provider answer; [family, act, reason, installed offer, fbc59ee53 offer, cycle-2 offer] per unresolved item. The 'PO1 ...' rows are the refutation's inputs byte for byte; 'C1 ...' and 'C2 ...' rows are independent variants, each a killing row of its guard (C1 alone: the 'PO1' rows under no heading or a neutral one and every 'C1' row; C2 alone: the pre-colonoscopy rows); the controls keep their offers; 'C1 cost' is a recorded cost",
+    "rows": {
+     "C1 cost, an act done today and a clinic visit rescheduled": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "076b79eb55e05ba07e2dd99ab3f21f2756cd2c4c84db29e6affa9e5f664d1019"
+     },
+     "C1 nothing further was done today": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "4b00b550ef351c0d5745c2b491aba665aa1ee936889dbc90d52d3c8dd5f7f646"
+     },
+     "C1 sent home without the procedure": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "63050d39b6bae3139071cf9ce44b69e47eae8f0494ebb6449a9605d354a4f0e9"
+     },
+     "C1 the case was called off": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "8b577e114c269490505335044b1b992d73dfb347f08c4cb3ada13203ab3eddda"
+     },
+     "C1 the scope was never introduced": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "05dc1c0ebd7f5b46538be17b9924177bce6c3c91f8890ee5ba88493192fea670"
+     },
+     "C1 we chose not to proceed": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "1c979384722ecbd1bc20be14d11e9eaadc7337e7495ddab038a254e5fbbee685"
+     },
+     "C2 control, an act done today": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        true
+       ]
+      ],
+      "text_sha256": "0c40b27c93ec2ee1f93c97df59d6e578864b9959b778529ea88c54067686bf2e"
+     },
+     "C2 control, an act done today under its own heading below an outside report": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        true
+       ]
+      ],
+      "text_sha256": "c38f1555c575f6f6578682c889d19279c9c1c8182cf4639ed078cca8cd19a081"
+     },
+     "C2 pre-colonoscopy assessment, act 10 lines under a prior-report heading": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "f4278a61fb3ef72e9c7c5dbaa033476d6241d0d448fd87d113bd60c8270ce453"
+     },
+     "C2 pre-colonoscopy assessment, act 9 lines under a scanned-pages heading": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "c3c0e773d684b2939aedff6bab9be19b83f34ddbfa87c242e999937ebf853074"
+     },
+     "C2 pre-colonoscopy assessment, act 9 lines under an enclosed-pages heading": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "04c134296c8846c3c0b23012db378ccdf51b47f3e30a5a798c2575036aa8faf3"
+     },
+     "C2 pre-colonoscopy assessment, act right under an attached-report heading": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "059ff562467e80878d4610e3c30fd199acf7b18ff895c7461d7cdf475b240c85"
+     },
+     "PO1 EUS called off at the time-out, outside FNA": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.eus",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "52b7536509e7e7e8069270262ba11d99c4a488da6b90bfc8068f271a510e85d1"
+     },
+     "PO1 called off, act pasted 9 lines under a neutral heading": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "8a1a0d5504c5ecb0d5b980e1a6a8dc4011690b8fef3e9563511bbbabcea638d2"
+     },
+     "PO1 called off, act pasted 9 lines under a previous-report heading": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "40035d911f877f60f3978da8cc38c44b3dd2cdcf8bc424508f680f2098d55551"
+     },
+     "PO1 called off, act pasted 9 lines under an outside-report heading": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "0f076dea0f5e80876b396b83c48b5aa8242d122c9a7bab044e0c2e3fab6bef42"
+     },
+     "PO1 called off, act pasted under an attached-report heading": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "416916fc2bdc8ba641008e88f64a85f915a3f92ff42bdeb8cfcb13584b87b156"
+     },
+     "PO1 called off, act pasted under no heading": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "48fd34e3d83d6addcab887b59a5c4f4f5c4dd30f7c70a20959bf72c5505fb62c"
+     },
+     "PO1 called off, no act pasted (control)": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        false,
+        false
+       ]
+      ],
+      "text_sha256": "9cc08026e41760e57dd387d780c6c98e92a0df80bba978840dbc081d0e399ef5"
+     },
+     "PO1 called off, outside report signed in 2024": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "00fbe76d100deb94421ae404dffc047c0da4f8749d9d018e32cf5002dbc029bc"
+     },
+     "PO1 pre-colonoscopy assessment, act pasted 9 lines under an outside-report heading": {
+      "codes": [],
+      "offers": [
+       [
+        "gi.colonoscopy",
+        "",
+        "no_proposal",
+        false,
+        true,
+        false
+       ]
+      ],
+      "text_sha256": "0909eae406fd04b0ef48f5d063d90ba9055b963d7e02d906ee2d727c127a7248"
+     }
+    }
+   },
+   "measured_before_code": "the code applied to a scratch copy of the sealed export of fbc59ee53 (engine.py sha256 31d6d5697142fa78 -> the model), read with the committed harness: H1 --fixtures against fbc59ee53 and installed, H4 against both, the rows on installed 80df1831d168, fbc59ee53 and the model, the offer corpus observed on fbc59ee53 and on the model, and each guard switched off alone to find its killing rows"
+  },
+  "mutants": {
+   "po1-called-off": "unit: CycleTwoOfferTests.test_a_procedure_called_off_in_other_words",
+   "po1-act-record-heading": "unit: CycleTwoOfferTests.test_an_act_pasted_under_another_records_heading_further_up",
+   "po1-act-occurrence (unchanged anchor)": "unit: DoneInBodyUnitTests.test_an_act_with_another_occurrence_named_on_its_own_line_is_none - C2 now also reads the line above an act, so the case of an 'Outside records' line right above is held by both guards; the occurrence named on the act's own line is read by under_another_occurrence alone",
+   "census": "PO 28 -> 30"
+  },
+  "known_limits": [
+   "C1 is a closed list read anywhere and only to hold: a procedure called off in words it does not list, with an act pasted under no heading or under one naming no other record ('Additional Pages'), is still offered; and a report of an act done today whose text says something else was rescheduled, postponed or called off ('Her clinic visit will be rescheduled') loses its PO-1 offer (the 'C1 cost' row; installed offers none there either; measured on the offer corpus: no such text)",
+   "C2 reads only the NEAREST heading-like line above the act: a pasted block whose own short lines (a grid row, a short field line) stand between the act and its outside heading reads as today's, and a pre-procedure note under a title outside sections.AROUND_PROCEDURE_WORDS that says nothing called off, with an act pasted into its own section and no heading of another record above it, is still offered",
+   "both guards withhold only offers; the offer is the member's to ask for, once per revision and date, and no stage sends anything for it"
+  ]
+ },
+ "integration_20261101_cycle2": {
+  "date": "2026-11-01",
+  "written": "by the Wave 1 repair cycle 2 integration on fix/cpt-studio-gi4-interpretation-20261101 (merges 4bbac86d7 PD+PO+PA, 96b2a1372 PV1, 5bc13d6d1 PI, 488e8093e the acceptance tool; comments 18ccea7a5; pins 53ccc98c0), BEFORE the label code it declares. Every row was measured offline or on the throwaway database (127.0.0.1:55461) on sealed exports of installed 80df1831d168, b840ae756, fbc59ee53 and the merged head 18ccea7a5, whose readings the label code does not move (scratch: /home/claude/cpt-studio-gi4-20261031/w1c2/integ)",
+  "px_b": {
+   "what": "U1 (PA x PO) and U2 (PV1 C4 x PO): two offer-battery cells the Wave 1 integration (b840ae756) measured moving where no declaration named the movement, pinned since in tests/test_gi4_po.py as UNDECLARED_OFFERS and never declared. Declared here with their rows, re-measured on the merged head; tests/test_gi4_po.py now reads these two cells from this entry, and checks that offer_battery.rows above still says otherwise for each (that expectation is superseded for these two cells only)",
+   "about": "[family, act, reason, offered] per unresolved item, read as tests/test_gi4_po.py offers_of reads it (jobs._analyze_child, the merge, jobs._assess_child with the row's own or an empty synthetic provider answer); proposals [code, bucket, status, fingerprint prefix]",
+   "cells": [
+    {
+     "row": "S3h h4-05 counterfactual, EUS code citing the narrative",
+     "answer": "own",
+     "installed": [
+      [
+       "gi.eus",
+       "",
+       "no_proposal",
+       false
+      ]
+     ],
+     "b840ae756": [],
+     "fbc59ee53": [],
+     "integrated": [],
+     "proposals": {
+      "installed": [
+       [
+        "43259",
+        "excluded",
+        "excluded",
+        "3d4ae4f2"
+       ]
+      ],
+      "integrated": [
+       [
+        "43259",
+        "selected",
+        "needs_clarification",
+        "0c8014ae"
+       ]
+      ]
+     }
+    },
+    {
+     "row": "telephone-only time",
+     "answer": "empty",
+     "installed": [
+      [
+       "gi.office_em",
+       "",
+       "no_proposal",
+       true
+      ]
+     ],
+     "b840ae756": [],
+     "fbc59ee53": [],
+     "integrated": [],
+     "proposals": {
+      "installed": [],
+      "integrated": []
+     }
+    }
+   ],
+   "U1": "S3h with its own answer (43259 citing the narrative): PO declared the EUS item offered (PO-2). PA's declared hold (pa.json: 43259 excluded/excluded -> selected/needs_clarification [performed_status, target]) gives the EUS family a held proposal, so the \"documented, no supported proposal\" item PO-2 would flag does not exist: no unresolved item, nothing offered. Installed lists the item but does not offer it, and excludes today's EUS. Hold direction: nothing promoted, the code is held for the reviewer",
+   "U2": "telephone-only time with an empty answer: PO declared installed's offered office-visit item kept. PV1's C4 (pv1.json, kept in cycle 2: telephone wording holds every E/M reading) reads gi.office_em uncertain, not performed, so there is no unresolved documented service and nothing is offered (installed: performed, the no_proposal item offered). Hold direction: a visit the note may not document in person is not offered for a second review",
+   "measured": "every cell equal on b840ae756, fbc59ee53 and the merged head: the cycle-2 drops do not move them",
+   "engine_label": "the engine's label moves to cpt-studio-validation@5 with this cycle's integration, PO-1 and PO-2 among its new readings (pd.json integration_20261101_cycle2.px_a)"
+  }
+ }
+}

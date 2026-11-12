@@ -132,7 +132,11 @@ class Declared2CheckedNotDoneOptionTests(BoxCase):
 # --- regression:1 -- an untied form-field denial whose label names its item in other words -----------------------------
 
 FIELD_COLO = (HEADER + 'Endoscopy Center - Colonoscopy Report (fillable)\nProcedure: Colonoscopy with polypectomy\n'
-              '{printed}Findings: A 6 mm polyp in the ascending colon.\nThe colonoscope was advanced to the cecum.\n\n'
+              # completion repair, refutation cycle 2: the listing supplies a technique, never a performance (a listed
+              # removal stands only beside a lesion the report states removed), so the findings line states the
+              # removal - without a technique, which the listing still supplies - and the field rules stay what decides
+              '{printed}Findings: A 6 mm polyp in the ascending colon was removed.\nThe colonoscope was advanced to the '
+              'cecum.\n\n'
               '[PDF form fields on page 1]\n{fields}')
 FIELD_EGD = (HEADER + 'Endoscopy Center - EGD Report (fillable)\nProcedure: EGD with biopsy\n{printed}Findings: The '
              'endoscope was advanced to the second part of the duodenum. Mild gastritis in the antrum.\n\n[PDF form fields '

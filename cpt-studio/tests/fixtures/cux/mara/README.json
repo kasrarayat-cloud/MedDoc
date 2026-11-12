@@ -1,0 +1,24 @@
+{
+ "source": "live encounter effe4d0b-b449-4efd-b208-635ca1d09984 (SYNTHETIC test case, attested), read 2026-11-03T22:34Z in a read-only transaction",
+ "revision_text_chars": 7185,
+ "revision_text_sha256": "dea9d353760e42053d627e5523fd930523750157428cdd71f1078ce3f97c2ad7",
+ "corti_run": "4eba15ee",
+ "corti_adapter_version": "corti-coding-v2@cptstudio-1",
+ "corti_service_date": "2026-11-03",
+ "corti_request_sha256": "f93376b0dac38912530ae9721c7c05ef4b0bbefa084f404655c9b8afa40537ce",
+ "corti_response_sha256": "81406f7fbb8b3de67555092acc83efa4c56a46fb7b9316b3abcb01d76a3fa551",
+ "observed_on_41e03656df61": {
+  "selected": {
+   "43239": "needs_clarification [conflict:biopsy]",
+   "45380": "ready",
+   "45385": "needs_clarification [conflict:snare]"
+  },
+  "service_questions": [
+   "gi.office_em setting",
+   "gi.office_em patient_status",
+   "gi.office_em em_basis"
+  ],
+  "clip": "bundled under the upper endoscopy (S1)"
+ },
+ "owner_expected": "the owner directive of 2026-11-03 (second message): COL-2 is a sigmoid-colon lesion; the distinguishing sentence negates no snare; the clip belongs to the colonoscopy; no separate E/M is documented. Codes are author expectations for measurement, never fixtures the code may special-case."
+}

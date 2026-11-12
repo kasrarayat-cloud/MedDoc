@@ -1,0 +1,627 @@
+{
+ "encounter": {
+  "id": "c0000000-0000-4000-8000-000000000009",
+  "title": "Colonoscopy with polypectomy and biopsy"
+ },
+ "revision": {
+  "id": "f0000000-0000-4000-8000-000000000091",
+  "number": 1,
+  "text_sha256": "3fcb202feb0c3d6b23430276240d2783bf46cd7abbae55d0e3729f6205d6d2e4"
+ },
+ "participants": [
+  {
+   "name": "corti",
+   "label": "Corti",
+   "vendor": "Corti",
+   "model": "",
+   "runs": [
+    {
+     "id": "e0000000-0000-4000-8000-000000000101",
+     "state": "succeeded",
+     "purpose": "primary",
+     "adapter_version": "corti-coding-v2@cptstudio-1",
+     "endpoint": "https://api.us.corti.app/v2/tools/coding/",
+     "requested_model": "",
+     "returned_model": "",
+     "request_id": "corti-request-fixture-0101",
+     "response_id": "",
+     "http_status": 200,
+     "latency_ms": 5874.2,
+     "usage": {
+      "creditsConsumed": 0.0312
+     },
+     "usage_basis": "provider_reported_credits_not_usd",
+     "estimated_cost_usd": null,
+     "request_sha256": "22f8a21d10dd6b2db0054ee186a1e21a0d0a7cde87fc94c8440724fb15ad6866",
+     "response_sha256": "8c9eeeb80f7eeb68bdf0fda6782101515a477cef563913352b8c071b2179169a",
+     "response_bytes": 2311,
+     "created_at": "2026-10-30T09:00:20Z",
+     "finished_at": "2026-10-30T09:00:26Z",
+     "error": "",
+     "reused_from": null,
+     "reading": null
+    }
+   ]
+  },
+  {
+   "name": "astra",
+   "label": "Astra",
+   "vendor": "OpenAI",
+   "model": "gpt-6-astra",
+   "runs": [
+    {
+     "id": "e0000000-0000-4000-8000-000000000102",
+     "state": "succeeded",
+     "purpose": "independent",
+     "adapter_version": "astra-openai@harness-1",
+     "endpoint": "https://api.openai.com/v1/responses",
+     "requested_model": "gpt-6-astra",
+     "returned_model": "gpt-6-astra",
+     "request_id": "req_fixture0102",
+     "response_id": "resp_fixture0102",
+     "http_status": 200,
+     "latency_ms": 41250.0,
+     "usage": {
+      "input_tokens": 4120,
+      "input_tokens_details": {
+       "cached_tokens": 0
+      },
+      "output_tokens": 1630,
+      "output_tokens_details": {
+       "reasoning_tokens": 910
+      },
+      "total_tokens": 5750
+     },
+     "usage_basis": "vendor_reported_tokens",
+     "estimated_cost_usd": "0.1227",
+     "request_sha256": "d2d4ed816b494ee17dfc0e5c36b79bf73183a46f929bc4c695a8406900d18c42",
+     "response_sha256": "abb857bf0fa2638200934a46c1e1d5e33a607a89faace902e86625371cd7594e",
+     "response_bytes": 6904,
+     "created_at": "2026-10-30T09:00:31Z",
+     "finished_at": "2026-10-30T09:01:12Z",
+     "error": "",
+     "reused_from": null,
+     "reading": {
+      "refused": false,
+      "problems": [],
+      "unverified_quotes": 1,
+      "date_of_service": "2026-10-28",
+      "services": [
+       {
+        "id": "s1",
+        "family": "colonoscopy",
+        "status": "performed",
+        "description": "Colonoscopy to the cecum, completed",
+        "anatomy": "colon to the cecum",
+        "extent": "cecum",
+        "technique": "cold snare; cold biopsy forceps",
+        "lesions": [
+         {
+          "site": "rectum",
+          "size": "6 mm",
+          "morphology": "sessile polyp",
+          "action": "removed with a cold snare",
+          "specimen": "polyp"
+         },
+         {
+          "site": "transverse colon",
+          "size": "10 mm",
+          "morphology": "flat lesion",
+          "action": "sampled with cold biopsy forceps",
+          "specimen": "biopsy"
+         }
+        ],
+        "provider_role": "performing endoscopist",
+        "evidence": [
+         {
+          "quote": "The colonoscope was advanced to the cecum and the examination was completed.",
+          "spans": [
+           {
+            "context_index": 0,
+            "start": 273,
+            "end": 349,
+            "text": "The colonoscope was advanced to the cecum and the examination was completed.",
+            "exact": true,
+            "page": 1
+           }
+          ],
+          "reason": ""
+         }
+        ]
+       }
+      ],
+      "codes": [
+       {
+        "code": "45385",
+        "modifiers": [],
+        "units": 1,
+        "service_ids": [
+         "s1"
+        ],
+        "basis": "The rectal polyp was removed with a cold snare.",
+        "evidence": [
+         {
+          "quote": "A 6 mm sessile polyp in the rectum was removed with a cold snare.",
+          "spans": [
+           {
+            "context_index": 0,
+            "start": 350,
+            "end": 415,
+            "text": "A 6 mm sessile polyp in the rectum was removed with a cold snare.",
+            "exact": true,
+            "page": 1
+           }
+          ],
+          "reason": ""
+         }
+        ],
+        "confidence": "high"
+       },
+       {
+        "code": "45380",
+        "modifiers": [],
+        "units": 1,
+        "service_ids": [
+         "s1"
+        ],
+        "basis": "The transverse colon lesion was sampled with biopsy forceps.",
+        "evidence": [
+         {
+          "quote": "A 10 mm flat lesion in the transverse colon was sampled with cold biopsy forceps",
+          "spans": [
+           {
+            "context_index": 0,
+            "start": 416,
+            "end": 496,
+            "text": "A 10 mm flat lesion in the transverse colon was sampled with cold biopsy forceps",
+            "exact": true,
+            "page": 1
+           }
+          ],
+          "reason": ""
+         },
+         {
+          "quote": "Two biopsies were taken from the lesion.",
+          "spans": [],
+          "reason": "not found in the document text"
+         }
+        ],
+        "confidence": "medium"
+       }
+      ],
+      "not_coded": [
+       {
+        "service_ids": [
+         "s1"
+        ],
+        "code": "45378",
+        "reason": "included_in_another_code",
+        "evidence": [
+         {
+          "quote": "The colonoscope was advanced to the cecum and the examination was completed.",
+          "spans": [
+           {
+            "context_index": 0,
+            "start": 273,
+            "end": 349,
+            "text": "The colonoscope was advanced to the cecum and the examination was completed.",
+            "exact": true,
+            "page": 1
+           }
+          ],
+          "reason": ""
+         }
+        ]
+       }
+      ],
+      "questions": [],
+      "extraction_issues": []
+     }
+    }
+   ]
+  },
+  {
+   "name": "fable",
+   "label": "Fable",
+   "vendor": "Anthropic",
+   "model": "claude-fable-5-1",
+   "runs": [
+    {
+     "id": "e0000000-0000-4000-8000-000000000103",
+     "state": "succeeded",
+     "purpose": "independent",
+     "adapter_version": "fable-anthropic@harness-1",
+     "endpoint": "https://api.anthropic.com/v1/messages",
+     "requested_model": "claude-fable-5-1",
+     "returned_model": "claude-fable-5-1",
+     "request_id": "req_fixture0103",
+     "response_id": "msg_fixture0103",
+     "http_status": 200,
+     "latency_ms": 38904.5,
+     "usage": {
+      "input_tokens": 4388,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "output_tokens": 1207,
+      "output_tokens_details": {
+       "thinking_tokens": 640
+      },
+      "service_tier": "standard"
+     },
+     "usage_basis": "vendor_reported_tokens",
+     "estimated_cost_usd": "0.1042",
+     "request_sha256": "9f31ebbd5c207361c4491a74d46fc5c300bf720ee38e3bd30acb8128da0f9a1d",
+     "response_sha256": "8fc654d15d3ece747fe4200b11504bcd9602600d7f5b920608e29ce9c2dd96ed",
+     "response_bytes": 5517,
+     "created_at": "2026-10-30T09:01:15Z",
+     "finished_at": "2026-10-30T09:01:54Z",
+     "error": "",
+     "reused_from": null,
+     "reading": {
+      "refused": false,
+      "problems": [],
+      "unverified_quotes": 0,
+      "date_of_service": "2026-10-28",
+      "services": [
+       {
+        "id": "s1",
+        "family": "colonoscopy",
+        "status": "performed",
+        "description": "Colonoscopy to the cecum, completed",
+        "anatomy": "colon to the cecum",
+        "extent": "cecum",
+        "technique": "cold snare; cold biopsy forceps",
+        "lesions": [
+         {
+          "site": "rectum",
+          "size": "6 mm",
+          "morphology": "sessile polyp",
+          "action": "removed with a cold snare",
+          "specimen": "polyp"
+         },
+         {
+          "site": "transverse colon",
+          "size": "10 mm",
+          "morphology": "flat lesion",
+          "action": "sampled with cold biopsy forceps",
+          "specimen": "biopsy"
+         }
+        ],
+        "provider_role": "performing endoscopist",
+        "evidence": [
+         {
+          "quote": "The colonoscope was advanced to the cecum and the examination was completed.",
+          "spans": [
+           {
+            "context_index": 0,
+            "start": 273,
+            "end": 349,
+            "text": "The colonoscope was advanced to the cecum and the examination was completed.",
+            "exact": true,
+            "page": 1
+           }
+          ],
+          "reason": ""
+         }
+        ]
+       }
+      ],
+      "codes": [
+       {
+        "code": "45385",
+        "modifiers": [],
+        "units": 1,
+        "service_ids": [
+         "s1"
+        ],
+        "basis": "Cold snare removal of the rectal polyp.",
+        "evidence": [
+         {
+          "quote": "A 6 mm sessile polyp in the rectum was removed with a cold snare.",
+          "spans": [
+           {
+            "context_index": 0,
+            "start": 350,
+            "end": 415,
+            "text": "A 6 mm sessile polyp in the rectum was removed with a cold snare.",
+            "exact": true,
+            "page": 1
+           }
+          ],
+          "reason": ""
+         }
+        ],
+        "confidence": "high"
+       }
+      ],
+      "not_coded": [
+       {
+        "service_ids": [
+         "s1"
+        ],
+        "code": "45380",
+        "reason": "not_performed_at_this_encounter",
+        "evidence": [
+         {
+          "quote": "Biopsies of the sigmoid colon are planned at the next colonoscopy.",
+          "spans": [
+           {
+            "context_index": 0,
+            "start": 518,
+            "end": 584,
+            "text": "Biopsies of the sigmoid colon are planned at the next colonoscopy.",
+            "exact": true,
+            "page": 1
+           }
+          ],
+          "reason": ""
+         }
+        ]
+       }
+      ],
+      "questions": [
+       {
+        "question": "Was the transverse colon lesion sampled at this encounter, or is that planned too?",
+        "why": "The report mentions both a sampled lesion and planned biopsies.",
+        "service_ids": [
+         "s1"
+        ],
+        "evidence": [
+         {
+          "quote": "Biopsies of the sigmoid colon are planned at the next colonoscopy.",
+          "spans": [
+           {
+            "context_index": 0,
+            "start": 518,
+            "end": 584,
+            "text": "Biopsies of the sigmoid colon are planned at the next colonoscopy.",
+            "exact": true,
+            "page": 1
+           }
+          ],
+          "reason": ""
+         }
+        ]
+       }
+      ],
+      "extraction_issues": []
+     }
+    }
+   ]
+  }
+ ],
+ "retrieval": [
+  {
+   "code": "45385",
+   "service_date": "2026-10-28",
+   "facts": [
+    {
+     "source_key": "cms-pfs-rvu26d",
+     "release": "RVU26D",
+     "effective": [
+      "2026-10-01",
+      "2026-12-31"
+     ],
+     "sha256": "fc21890a90fb688d2f002dbd5d56da6ce862bfcf110feac1b70cf660d6fc61b8",
+     "field": "status",
+     "value": "A"
+    },
+    {
+     "source_key": "cms-pfs-rvu26d",
+     "release": "RVU26D",
+     "effective": [
+      "2026-10-01",
+      "2026-12-31"
+     ],
+     "sha256": "fc21890a90fb688d2f002dbd5d56da6ce862bfcf110feac1b70cf660d6fc61b8",
+     "field": "global_days",
+     "value": "000"
+    },
+    {
+     "source_key": "cms-pfs-rvu26d",
+     "release": "RVU26D",
+     "effective": [
+      "2026-10-01",
+      "2026-12-31"
+     ],
+     "sha256": "fc21890a90fb688d2f002dbd5d56da6ce862bfcf110feac1b70cf660d6fc61b8",
+     "field": "mult_proc",
+     "value": "3"
+    },
+    {
+     "source_key": "cms-pfs-rvu26d",
+     "release": "RVU26D",
+     "effective": [
+      "2026-10-01",
+      "2026-12-31"
+     ],
+     "sha256": "fc21890a90fb688d2f002dbd5d56da6ce862bfcf110feac1b70cf660d6fc61b8",
+     "field": "endo_base",
+     "value": "45378"
+    },
+    {
+     "source_key": "cms-mue-practitioner-2026q4",
+     "release": "2026-Q4",
+     "effective": [
+      "2026-10-01",
+      "2026-12-31"
+     ],
+     "sha256": "5759f840dcfe2e2bd1ab07fc786b5865f82da2873383c1204c84849dcdc10b42",
+     "field": "mue",
+     "value": "1",
+     "mai": "2"
+    }
+   ],
+   "passages": [
+    {
+     "source_key": "cms-pfs-rvu26d-documentation",
+     "release": "RVU26D",
+     "passage_key": "mult-proc-3",
+     "section": "Field 21: multiple procedure",
+     "page": "12",
+     "topic": "pfs.mult_proc",
+     "topic_value": "3",
+     "sha256": "e77e28f719312ed73c4b0d7dd065b1c93b24a814d39186b9ff918d1d0165638b",
+     "text": "SYNTHETIC FIXTURE TEXT, not CMS text: stands in for the RVU26D documentation passage that defines multiple procedure indicator 3, the special rules for multiple endoscopic procedures."
+    },
+    {
+     "source_key": "cms-ncci-policy-manual-2026-ch6",
+     "release": "Revision 1/1/2026",
+     "passage_key": "vi-c-3",
+     "section": "Chapter VI, section C: Endoscopic Services",
+     "page": "VI-14",
+     "topic": "pfs.endo_base",
+     "topic_value": "",
+     "sha256": "33218c9d4debd87f1916f9a00de6b02a1a968d973e060cf86f18d07352a80c45",
+     "text": "SYNTHETIC FIXTURE TEXT, not CMS text: stands in for the NCCI Policy Manual rule that a surgical endoscopy includes the diagnostic endoscopy of the same anatomy."
+    }
+   ],
+   "lookups": [
+    "pfs 45385 2026-10-28",
+    "mue 45385 2026-10-28",
+    "passages pfs.mult_proc=3"
+   ],
+   "notes": [
+    "NCCI procedure-to-procedure edits are not connected, so code pairs are not verified."
+   ]
+  },
+  {
+   "code": "45380",
+   "service_date": "2026-10-28",
+   "facts": [
+    {
+     "source_key": "cms-pfs-rvu26d",
+     "release": "RVU26D",
+     "effective": [
+      "2026-10-01",
+      "2026-12-31"
+     ],
+     "sha256": "fc21890a90fb688d2f002dbd5d56da6ce862bfcf110feac1b70cf660d6fc61b8",
+     "field": "status",
+     "value": "A"
+    },
+    {
+     "source_key": "cms-pfs-rvu26d",
+     "release": "RVU26D",
+     "effective": [
+      "2026-10-01",
+      "2026-12-31"
+     ],
+     "sha256": "fc21890a90fb688d2f002dbd5d56da6ce862bfcf110feac1b70cf660d6fc61b8",
+     "field": "global_days",
+     "value": "000"
+    },
+    {
+     "source_key": "cms-pfs-rvu26d",
+     "release": "RVU26D",
+     "effective": [
+      "2026-10-01",
+      "2026-12-31"
+     ],
+     "sha256": "fc21890a90fb688d2f002dbd5d56da6ce862bfcf110feac1b70cf660d6fc61b8",
+     "field": "mult_proc",
+     "value": "3"
+    },
+    {
+     "source_key": "cms-pfs-rvu26d",
+     "release": "RVU26D",
+     "effective": [
+      "2026-10-01",
+      "2026-12-31"
+     ],
+     "sha256": "fc21890a90fb688d2f002dbd5d56da6ce862bfcf110feac1b70cf660d6fc61b8",
+     "field": "endo_base",
+     "value": "45378"
+    },
+    {
+     "source_key": "cms-mue-practitioner-2026q4",
+     "release": "2026-Q4",
+     "effective": [
+      "2026-10-01",
+      "2026-12-31"
+     ],
+     "sha256": "5759f840dcfe2e2bd1ab07fc786b5865f82da2873383c1204c84849dcdc10b42",
+     "field": "mue",
+     "value": "1",
+     "mai": "2"
+    }
+   ],
+   "passages": [
+    {
+     "source_key": "cms-pfs-rvu26d-documentation",
+     "release": "RVU26D",
+     "passage_key": "mult-proc-3",
+     "section": "Field 21: multiple procedure",
+     "page": "12",
+     "topic": "pfs.mult_proc",
+     "topic_value": "3",
+     "sha256": "e77e28f719312ed73c4b0d7dd065b1c93b24a814d39186b9ff918d1d0165638b",
+     "text": "SYNTHETIC FIXTURE TEXT, not CMS text: stands in for the RVU26D documentation passage that defines multiple procedure indicator 3, the special rules for multiple endoscopic procedures."
+    }
+   ],
+   "lookups": [
+    "pfs 45380 2026-10-28",
+    "mue 45380 2026-10-28",
+    "passages pfs.mult_proc=3"
+   ],
+   "notes": [
+    "NCCI procedure-to-procedure edits are not connected, so code pairs are not verified."
+   ]
+  }
+ ],
+ "reconciliation": [
+  {
+   "code": "45385",
+   "family": "gi.colonoscopy",
+   "status": "ready",
+   "proposed_by": [
+    "corti",
+    "astra",
+    "fable"
+   ],
+   "positions": {
+    "astra": {
+     "position": "proposed",
+     "detail": "",
+     "quote": ""
+    },
+    "fable": {
+     "position": "proposed",
+     "detail": "",
+     "quote": ""
+    }
+   },
+   "reference_check": {
+    "state": "passed",
+    "detail": "Present in the fee schedule for the service date; 1 unit is within the MUE."
+   },
+   "approved": false
+  },
+  {
+   "code": "45380",
+   "family": "gi.colonoscopy",
+   "status": "ready",
+   "proposed_by": [
+    "corti",
+    "astra"
+   ],
+   "positions": {
+    "astra": {
+     "position": "proposed",
+     "detail": "",
+     "quote": ""
+    },
+    "fable": {
+     "position": "advised_not_to_code",
+     "detail": "not performed at this encounter",
+     "quote": "Biopsies of the sigmoid colon are planned at the next colonoscopy."
+    }
+   },
+   "reference_check": {
+    "state": "attention",
+    "detail": "Shares the endoscopic base 45378 with 45385: the special endoscopy payment rules apply."
+   },
+   "approved": false
+  }
+ ]
+}

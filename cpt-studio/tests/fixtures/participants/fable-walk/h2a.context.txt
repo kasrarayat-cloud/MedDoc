@@ -1,0 +1,41 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Endoscopy Procedure Report (fictional)
+Date of service: October 30, 2026
+Endoscopist: Rowan Ellery, MD (fictional)
+Patient: Test Patient Hollis (fictional) | MRN: SYN-48213
+Procedures: Upper endoscopy and colonoscopy.
+Indications: Progressive solid-food dysphagia; iron-deficiency anemia; surveillance after a prior polypectomy in
+2023.
+Sedation: Monitored anesthesia care was provided by the anesthesia service.
+Upper endoscopy
+The gastroscope was advanced through the mouth to the second portion of the duodenum. A short, smooth
+peptic stricture
+was found in the distal esophagus at 36 cm, narrowing the lumen to about 11 mm. A through-the-scope balloon
+was passed
+across the stricture and inflated to 13.5 mm and then 15 mm under direct vision; mild mucosal disruption followed
+and
+there was no deep tear. In the gastric body a 6 mm sessile polyp was removed with a cold snare and retrieved.
+Random
+biopsies of the second portion of the duodenum were taken with cold forceps to evaluate for celiac disease. The
+stomach
+was suctioned and the gastroscope was withdrawn.
+Colonoscopy
+The colonoscope was advanced to the cecum, identified by the appendiceal orifice and the ileocecal valve. The
+bowel
+preparation was adequate. In the transverse colon an 8 mm pedunculated polyp was removed with a hot snare
+and
+retrieved. In the sigmoid colon a separate 4 mm sessile polyp was removed with cold biopsy forceps. In the
+ascending
+colon a 25 mm laterally spreading lesion with a central depression was photographed and not removed; it is
+referred
+for endoscopic resection at a later session. Sterile carbon tattoo ink was injected into the submucosa just distal to
+the ascending colon lesion to mark its site. Small internal hemorrhoids were seen on retroflexion.
+Impression
+Distal esophageal peptic stricture, dilated with a balloon to 15 mm. Gastric body polyp removed by cold snare.
+Duodenal biopsies taken. Transverse colon polyp removed by hot snare. Sigmoid polyp removed by cold forceps.
+Ascending
+colon laterally spreading lesion marked with tattoo and left in place for planned resection.
+Plan
+Advance the diet as tolerated. Await pathology. Schedule endoscopic mucosal resection of the ascending colon
+lesion.
+Electronically signed by Rowan Ellery, MD (fictional), October 30, 2026

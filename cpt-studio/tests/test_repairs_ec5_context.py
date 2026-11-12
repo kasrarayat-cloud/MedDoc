@@ -283,7 +283,10 @@ class MemberDateAgainstDocumentedTextTests(DateAssertions, SimpleTestCase):
     in a form it does not read, a label above its value, a title with its date below it, a qualified first title.
     It is a member conflict unless it agrees with what that text reads."""
 
-    READABLE = ('Date of service: Tuesday, October 20, 2026', 'Date of service:\n10/20/2026',
+    # Owner decision 2026-11-07 (the date forms): "Date of service: Tuesday, October 20, 2026" is read now - the weekday
+    # is the date's own - and documented (test_a_weekday_the_date_falls_on_is_read_now); a weekday naming another day is
+    # the labelled date in a form the reader does not read that this class needs
+    READABLE = ('Date of service: Wednesday, October 20, 2026', 'Date of service:\n10/20/2026',
                 'Date of Service\n10/20/2026', 'Colonoscopy Report\n10/20/2026', 'GI follow-up visit - 10/20/2026')
     UNREAD = ('DOS: 10/20/26', 'Date of service: 10-20-2026', 'Date of service: 2026/10/20',
               'Date of service: 20.10.2026')
@@ -300,6 +303,12 @@ class MemberDateAgainstDocumentedTextTests(DateAssertions, SimpleTestCase):
         for header in self.READABLE:
             with self.subTest(header=header):
                 self.assert_member_date(HEAD + header + '\n' + VISIT_BODY, '2026-10-20')
+
+    def test_a_weekday_the_date_falls_on_is_read_now(self):  # owner decision 2026-11-07 (the date forms)
+        text = HEAD + 'Date of service: Tuesday, October 20, 2026\n' + VISIT_BODY
+        self.assert_document(text, '2026-10-20')
+        self.assert_member_conflict(text, '1998-01-01')
+        self.assert_member_date(text, '2026-10-20')
 
     def test_controls(self):
         text = HEAD + VISIT_BODY

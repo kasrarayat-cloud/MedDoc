@@ -1,0 +1,1147 @@
+{
+ "about": "Completion repair, refutation cycle 3 (2026-11-06): the engine-level inputs of the cycle-3 findings (closed forms, admission, outcome), each as the installed base (b452c6c4), the cycle-1 head (5fa33480) and the cycle-2 head (844fe54c) read it, measured before the repair. HARNESS.md \"Refutation of the integrated diff, cycle 3\".",
+ "cases": [
+  {
+   "label": "closed-1 unclear specimens",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy with biopsy\nThe gastroscope was advanced to the second portion of the duodenum.\nThe duodenal mucosa appeared normal. It is unclear whether biopsy specimens were obtained.\n",
+   "picks": [
+    [
+     "43239",
+     "Upper endoscopy with biopsy"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43239": "HELD"
+   },
+   "cycle_1": {
+    "43239": "HELD"
+   },
+   "cycle_2": {
+    "43239": "READY"
+   }
+  },
+  {
+   "label": "closed-1 unclear specimens (jobs)",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy with biopsy\nThe gastroscope was advanced to the second portion of the duodenum.\nThe duodenal mucosa appeared normal. It is unclear whether biopsy specimens were obtained.\n",
+   "picks": [
+    [
+     "43239",
+     "Upper endoscopy with biopsy"
+    ]
+   ],
+   "astra": [],
+   "day": "2026-10-14",
+   "base": {
+    "43239": "HELD"
+   },
+   "cycle_1": {
+    "43239": "HELD"
+   },
+   "cycle_2": {
+    "43239": "READY"
+   }
+  },
+  {
+   "label": "closed-1 v1",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy with biopsy\nThe gastroscope was advanced to the second portion of the duodenum.\nThe duodenal mucosa appeared normal. Biopsy tissue acquisition failed because of bleeding.\n",
+   "picks": [
+    [
+     "43239",
+     "Upper endoscopy with biopsy"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43239": "HELD"
+   },
+   "cycle_1": {
+    "43239": "HELD"
+   },
+   "cycle_2": {
+    "43239": "READY"
+   }
+  },
+  {
+   "label": "closed-1 v2",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy with biopsy\nThe gastroscope was advanced to the second portion of the duodenum.\nThe duodenal mucosa appeared normal. Biopsy specimen acquisition was abandoned due to bleeding.\n",
+   "picks": [
+    [
+     "43239",
+     "Upper endoscopy with biopsy"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43239": "HELD"
+   },
+   "cycle_1": {
+    "43239": "HELD"
+   },
+   "cycle_2": {
+    "43239": "READY"
+   }
+  },
+  {
+   "label": "closed-1 v3",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy with biopsy\nThe gastroscope was advanced to the second portion of the duodenum.\nThe duodenal mucosa appeared normal. Biopsy tissue collection was attempted.\n",
+   "picks": [
+    [
+     "43239",
+     "Upper endoscopy with biopsy"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43239": "HELD"
+   },
+   "cycle_1": {
+    "43239": "HELD"
+   },
+   "cycle_2": {
+    "43239": "READY"
+   }
+  },
+  {
+   "label": "closed-1 snare capture failed",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy with hot snare polypectomy\nThe colonoscope was advanced to the cecum and the examination was completed.\nPolypectomy tissue capture failed.\n",
+   "picks": [
+    [
+     "45385",
+     "Colonoscopy with hot snare polypectomy"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": "HELD"
+   },
+   "cycle_1": {
+    "45385": "EXCL"
+   },
+   "cycle_2": {
+    "45385": "READY"
+   }
+  },
+  {
+   "label": "closed-2 colonoscopy referral",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology clinic note (fictional)\nDate of service: 2026-10-14\nPlace of service: Office\nAssessment: Iron deficiency anemia.\nHer last colonoscopy was in 2019 and was normal. The terminal ileum was intubated.\nA colonoscopy referral was placed for future evaluation of the anemia.\n",
+   "picks": [
+    [
+     "45378",
+     "A colonoscopy referral was placed for future evaluation of the anemia"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": "HELD"
+   },
+   "cycle_1": {
+    "45378": "HELD"
+   },
+   "cycle_2": {
+    "45378": "READY"
+   }
+  },
+  {
+   "label": "closed-2 referral + reach cite",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology clinic note (fictional)\nDate of service: 2026-10-14\nPlace of service: Office\nAssessment: Iron deficiency anemia.\nHer last colonoscopy was in 2019 and was normal. The terminal ileum was intubated.\nA colonoscopy referral was placed for future evaluation of the anemia.\n",
+   "picks": [
+    [
+     "45378",
+     "The terminal ileum was intubated"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": "EXCL"
+   },
+   "cycle_1": {
+    "45378": "EXCL"
+   },
+   "cycle_2": {
+    "45378": "READY"
+   }
+  },
+  {
+   "label": "closed-2 EGD referral",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nGastroenterology clinic note (fictional)\nDate of service: 2026-10-14\nPlace of service: Office\nAssessment: Dysphagia.\nHer last EGD was in 2022. The gastroscope was advanced to the second portion of the duodenum.\nAn EGD referral was placed for future evaluation of the dysphagia.\n",
+   "picks": [
+    [
+     "43235",
+     "An EGD referral was placed for future evaluation of the dysphagia"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43235": "HELD"
+   },
+   "cycle_1": {
+    "43235": "HELD"
+   },
+   "cycle_2": {
+    "43235": "READY"
+   }
+  },
+  {
+   "label": "closed-3 v0",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 30 mm flat lesion was found in the ascending colon.\nA tattoo referral was placed for future localization.\n",
+   "picks": [
+    [
+     "45381",
+     "A tattoo referral was placed for future localization"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45381": "EXCL"
+   },
+   "cycle_1": {
+    "45381": "HELD"
+   },
+   "cycle_2": {
+    "45381": "READY"
+   }
+  },
+  {
+   "label": "closed-3 v1",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 30 mm flat lesion was found in the ascending colon.\nA tattoo appointment was made for future localization.\n",
+   "picks": [
+    [
+     "45381",
+     "A tattoo appointment was made for future localization"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45381": "EXCL"
+   },
+   "cycle_1": {
+    "45381": "HELD"
+   },
+   "cycle_2": {
+    "45381": "READY"
+   }
+  },
+  {
+   "label": "closed-3 v2",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 30 mm flat lesion was found in the ascending colon.\nThe tattoo needle was inserted into the accessory channel for future localization.\n",
+   "picks": [
+    [
+     "45381",
+     "The tattoo needle was inserted into the accessory channel for future localization"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45381": "EXCL"
+   },
+   "cycle_1": {
+    "45381": "HELD"
+   },
+   "cycle_2": {
+    "45381": "READY"
+   }
+  },
+  {
+   "label": "closed-3 v3",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 30 mm flat lesion was found in the ascending colon.\nA tattoo was placed at her first colonoscopy for future localization.\n",
+   "picks": [
+    [
+     "45381",
+     "A tattoo was placed at her first colonoscopy for future localization"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45381": "EXCL"
+   },
+   "cycle_1": {
+    "45381": "READY"
+   },
+   "cycle_2": {
+    "45381": "READY"
+   }
+  },
+  {
+   "label": "closed-3 control tattooed",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 30 mm flat lesion was found in the ascending colon.\nThe lesion was tattooed with India ink for future localization.\n",
+   "picks": [
+    [
+     "45381",
+     "The lesion was tattooed with India ink for future localization"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45381": "EXCL"
+   },
+   "cycle_1": {
+    "45381": "READY"
+   },
+   "cycle_2": {
+    "45381": "READY"
+   }
+  },
+  {
+   "label": "closed-4 v0",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy\nThe gastroscope was advanced to the second portion of the duodenum.\nFindings: The esophagus, stomach and duodenum were normal. Her prior endoscopy was in 2023; an impacted meat bolus was found at 32 cm. The bolus was removed with a Roth net.\n",
+   "picks": [
+    [
+     "43247",
+     "The bolus was removed with a Roth net"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43247": "HELD"
+   },
+   "cycle_1": {
+    "43247": "HELD"
+   },
+   "cycle_2": {
+    "43247": "READY"
+   }
+  },
+  {
+   "label": "closed-4 v1",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy\nThe gastroscope was advanced to the second portion of the duodenum.\nFindings: The esophagus, stomach and duodenum were normal. Her brother underwent EGD; an impacted meat bolus was found at 32 cm. The bolus was removed with a Roth net.\n",
+   "picks": [
+    [
+     "43247",
+     "The bolus was removed with a Roth net"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43247": "HELD"
+   },
+   "cycle_1": {
+    "43247": "HELD"
+   },
+   "cycle_2": {
+    "43247": "READY"
+   }
+  },
+  {
+   "label": "closed-4 v2",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy\nThe gastroscope was advanced to the second portion of the duodenum.\nFindings: The esophagus, stomach and duodenum were normal. Two years ago she had dysphagia, and an impacted meat bolus was found at 32 cm. The bolus was removed with a Roth net.\n",
+   "picks": [
+    [
+     "43247",
+     "The bolus was removed with a Roth net"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43247": "HELD"
+   },
+   "cycle_1": {
+    "43247": "READY"
+   },
+   "cycle_2": {
+    "43247": "READY"
+   }
+  },
+  {
+   "label": "closed-4 control plain",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy\nThe gastroscope was advanced to the second portion of the duodenum.\nFindings: An impacted meat bolus was found at 32 cm. The bolus was removed with a Roth net.\n",
+   "picks": [
+    [
+     "43247",
+     "The bolus was removed with a Roth net"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43247": "HELD"
+   },
+   "cycle_1": {
+    "43247": "READY"
+   },
+   "cycle_2": {
+    "43247": "READY"
+   }
+  },
+  {
+   "label": "closed-5 possible adenoma",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy with hot snare polypectomy for possible adenoma\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 12 mm polyp in the sigmoid colon was removed.\n",
+   "picks": [
+    [
+     "45385",
+     "Colonoscopy with hot snare polypectomy for possible adenoma"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": "READY"
+   },
+   "cycle_1": {
+    "45385": "READY"
+   },
+   "cycle_2": {
+    "45385": "HELD"
+   }
+  },
+  {
+   "label": "closed-5 suspected EoE",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: EGD with biopsy for suspected eosinophilic esophagitis\nThe gastroscope was advanced to the second portion of the duodenum.\nThe esophageal mucosa showed rings and furrows.\n",
+   "picks": [
+    [
+     "43239",
+     "EGD with biopsy for suspected eosinophilic esophagitis"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43239": "READY"
+   },
+   "cycle_1": {
+    "43239": "READY"
+   },
+   "cycle_2": {
+    "43239": "HELD"
+   }
+  },
+  {
+   "label": "closed-5 suspected microscopic colitis",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy with biopsies for suspected microscopic colitis\nThe colonoscope was advanced to the cecum and the examination was completed.\nThe colonic mucosa appeared normal.\n",
+   "picks": [
+    [
+     "45380",
+     "Colonoscopy with biopsies for suspected microscopic colitis"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45380": "READY"
+   },
+   "cycle_1": {
+    "45380": "READY"
+   },
+   "cycle_2": {
+    "45380": "HELD"
+   }
+  },
+  {
+   "label": "closed-6 v0",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy\nThe gastroscope was advanced to the second portion of the duodenum.\nFindings: An impacted meat bolus was found in the distal esophagus.\nRemoval of the bolus was performed with no success.\n",
+   "picks": [
+    [
+     "43247",
+     "Removal of the bolus was performed with no success"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43247": "HELD"
+   },
+   "cycle_1": {
+    "43247": "READY"
+   },
+   "cycle_2": {
+    "43247": "READY"
+   }
+  },
+  {
+   "label": "closed-6 v1",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy\nThe gastroscope was advanced to the second portion of the duodenum.\nFindings: An impacted meat bolus was found in the distal esophagus.\nRemoval of the bolus was achieved with intravenous glucagon.\n",
+   "picks": [
+    [
+     "43247",
+     "Removal of the bolus was achieved with intravenous glucagon"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43247": "HELD"
+   },
+   "cycle_1": {
+    "43247": "READY"
+   },
+   "cycle_2": {
+    "43247": "READY"
+   }
+  },
+  {
+   "label": "closed-6 v2",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy\nThe gastroscope was advanced to the second portion of the duodenum.\nFindings: An impacted meat bolus was found in the distal esophagus.\nRemoval of the bolus was accomplished with effervescent granules.\n",
+   "picks": [
+    [
+     "43247",
+     "Removal of the bolus was accomplished with effervescent granules"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43247": "HELD"
+   },
+   "cycle_1": {
+    "43247": "READY"
+   },
+   "cycle_2": {
+    "43247": "READY"
+   }
+  },
+  {
+   "label": "closed-6 v3",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy\nThe gastroscope was advanced to the second portion of the duodenum.\nFindings: An impacted meat bolus was found in the distal esophagus.\nRemoval of the bolus was performed with a Roth net.\n",
+   "picks": [
+    [
+     "43247",
+     "Removal of the bolus was performed with a Roth net"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43247": "HELD"
+   },
+   "cycle_1": {
+    "43247": "READY"
+   },
+   "cycle_2": {
+    "43247": "READY"
+   }
+  },
+  {
+   "label": "closed-7 v0",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy\nThe gastroscope was advanced to the second portion of the duodenum.\nFindings: An impacted meat bolus was found at 32 cm and was removed the following day.\n",
+   "picks": [
+    [
+     "43247",
+     "An impacted meat bolus was found at 32 cm and was removed the following day"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43247": "HELD"
+   },
+   "cycle_1": {
+    "43247": "READY"
+   },
+   "cycle_2": {
+    "43247": "READY"
+   }
+  },
+  {
+   "label": "closed-7 v1",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy\nThe gastroscope was advanced to the second portion of the duodenum.\nFindings: An impacted meat bolus was found at 32 cm and was removed at a second endoscopy.\n",
+   "picks": [
+    [
+     "43247",
+     "An impacted meat bolus was found at 32 cm and was removed at a second endoscopy"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43247": "HELD"
+   },
+   "cycle_1": {
+    "43247": "READY"
+   },
+   "cycle_2": {
+    "43247": "READY"
+   }
+  },
+  {
+   "label": "closed-7 v2",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy\nThe gastroscope was advanced to the second portion of the duodenum.\nFindings: An impacted meat bolus was found at 32 cm and was then removed, hopefully.\n",
+   "picks": [
+    [
+     "43247",
+     "An impacted meat bolus was found at 32 cm and was then removed, hopefully"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43247": "HELD"
+   },
+   "cycle_1": {
+    "43247": "READY"
+   },
+   "cycle_2": {
+    "43247": "READY"
+   }
+  },
+  {
+   "label": "closed-7 v3",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy\nThe gastroscope was advanced to the second portion of the duodenum.\nFindings: An impacted meat bolus was found at 32 cm, and was then removed with a Roth net after she is stabilized.\n",
+   "picks": [
+    [
+     "43247",
+     "An impacted meat bolus was found at 32 cm, and was then removed with a Roth net after she is stabilized"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43247": "HELD"
+   },
+   "cycle_1": {
+    "43247": "READY"
+   },
+   "cycle_2": {
+    "43247": "READY"
+   }
+  },
+  {
+   "label": "closed-7 v4",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy\nThe gastroscope was advanced to the second portion of the duodenum.\nFindings: An impacted meat bolus was found at 32 cm and was removed with a Roth net.\n",
+   "picks": [
+    [
+     "43247",
+     "An impacted meat bolus was found at 32 cm and was removed with a Roth net"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43247": "HELD"
+   },
+   "cycle_1": {
+    "43247": "READY"
+   },
+   "cycle_2": {
+    "43247": "READY"
+   }
+  },
+  {
+   "label": "admission-1 corti",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 9 mm polyp was seen in the sigmoid colon and was removed.\nHot snare polypectomy failed.\n",
+   "picks": [
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ],
+    [
+     "45385",
+     "Hot snare polypectomy failed"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": "HELD",
+    "45385": "HELD"
+   },
+   "cycle_1": {
+    "45378": "HELD",
+    "45385": "HELD"
+   },
+   "cycle_2": {
+    "45378": "READY",
+    "45385": "EXCL"
+   }
+  },
+  {
+   "label": "admission-1 astra",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 9 mm polyp was seen in the sigmoid colon and was removed.\nHot snare polypectomy failed.\n",
+   "picks": [
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [
+    [
+     "45385",
+     "Hot snare polypectomy failed"
+    ]
+   ],
+   "day": "",
+   "base": {
+    "45378": "READY"
+   },
+   "cycle_1": {
+    "45378": "HELD",
+    "45385": "HELD"
+   },
+   "cycle_2": {
+    "45378": "READY",
+    "45385": "EXCL"
+   }
+  },
+  {
+   "label": "admission-2 corti",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 6 mm polyp was found in the sigmoid colon.\nThe polyp was removed and retrieved.\nHot snare polypectomy failed.\n",
+   "picks": [
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ],
+    [
+     "45385",
+     "Hot snare polypectomy failed"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": "HELD",
+    "45385": "HELD"
+   },
+   "cycle_1": {
+    "45378": "HELD",
+    "45385": "HELD"
+   },
+   "cycle_2": {
+    "45378": "READY",
+    "45385": "EXCL"
+   }
+  },
+  {
+   "label": "admission-2 astra",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 6 mm polyp was found in the sigmoid colon.\nThe polyp was removed and retrieved.\nHot snare polypectomy failed.\n",
+   "picks": [
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [
+    [
+     "45385",
+     "Hot snare polypectomy failed"
+    ]
+   ],
+   "day": "",
+   "base": {
+    "45378": "READY"
+   },
+   "cycle_1": {
+    "45378": "HELD",
+    "45385": "HELD"
+   },
+   "cycle_2": {
+    "45378": "READY",
+    "45385": "EXCL"
+   }
+  },
+  {
+   "label": "admission-3b corti",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 25 mm sessile polyp was found in the ascending colon.\nIt was removed piecemeal and retrieved.\nEn bloc hot snare polypectomy failed.\n",
+   "picks": [
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ],
+    [
+     "45385",
+     "En bloc hot snare polypectomy failed"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": "HELD",
+    "45385": "HELD"
+   },
+   "cycle_1": {
+    "45378": "HELD",
+    "45385": "HELD"
+   },
+   "cycle_2": {
+    "45378": "READY",
+    "45385": "EXCL"
+   }
+  },
+  {
+   "label": "admission-3b astra",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 25 mm sessile polyp was found in the ascending colon.\nIt was removed piecemeal and retrieved.\nEn bloc hot snare polypectomy failed.\n",
+   "picks": [
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [
+    [
+     "45385",
+     "En bloc hot snare polypectomy failed"
+    ]
+   ],
+   "day": "",
+   "base": {
+    "45378": "READY"
+   },
+   "cycle_1": {
+    "45378": "HELD",
+    "45385": "HELD"
+   },
+   "cycle_2": {
+    "45378": "READY",
+    "45385": "EXCL"
+   }
+  },
+  {
+   "label": "admission-3 corti",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 25 mm sessile polyp in the ascending colon was partially removed piecemeal. The residual polyp was left in place.\nEn bloc hot snare polypectomy failed.\n",
+   "picks": [
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ],
+    [
+     "45385",
+     "En bloc hot snare polypectomy failed"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45378": "HELD",
+    "45385": "HELD"
+   },
+   "cycle_1": {
+    "45378": "HELD",
+    "45385": "HELD"
+   },
+   "cycle_2": {
+    "45378": "READY",
+    "45385": "EXCL"
+   }
+  },
+  {
+   "label": "admission-3 astra",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 25 mm sessile polyp in the ascending colon was partially removed piecemeal. The residual polyp was left in place.\nEn bloc hot snare polypectomy failed.\n",
+   "picks": [
+    [
+     "45378",
+     "The colonoscope was advanced to the cecum and the examination was completed."
+    ]
+   ],
+   "astra": [
+    [
+     "45385",
+     "En bloc hot snare polypectomy failed"
+    ]
+   ],
+   "day": "",
+   "base": {
+    "45378": "READY"
+   },
+   "cycle_1": {
+    "45378": "HELD",
+    "45385": "HELD"
+   },
+   "cycle_2": {
+    "45378": "READY",
+    "45385": "EXCL"
+   }
+  },
+  {
+   "label": "admission-4 two stents",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nERCP report (fictional)\nDate of service: 2026-10-14\nPlace of service: Hospital outpatient department\nProcedure: ERCP\nThe duodenoscope was advanced to the second portion of the duodenum.\nThe common bile duct was deeply cannulated.\nA 10 Fr by 7 cm plastic stent was placed in the common bile duct.\nA 10 Fr by 9 cm plastic stent was placed across the prior sphincterotomy into the left hepatic duct.\n",
+   "picks": [
+    [
+     "43274",
+     "A 10 Fr by 7 cm plastic stent was placed in the common bile duct"
+    ],
+    [
+     "43274",
+     "A 10 Fr by 9 cm plastic stent was placed across the prior sphincterotomy into the left hepatic duct"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43274": "READY"
+   },
+   "cycle_1": {
+    "43274": "READY"
+   },
+   "cycle_2": {
+    "43274": "READY"
+   }
+  },
+  {
+   "label": "admission-4 two stents (jobs)",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nERCP report (fictional)\nDate of service: 2026-10-14\nPlace of service: Hospital outpatient department\nProcedure: ERCP\nThe duodenoscope was advanced to the second portion of the duodenum.\nThe common bile duct was deeply cannulated.\nA 10 Fr by 7 cm plastic stent was placed in the common bile duct.\nA 10 Fr by 9 cm plastic stent was placed across the prior sphincterotomy into the left hepatic duct.\n",
+   "picks": [
+    [
+     "43274",
+     "A 10 Fr by 7 cm plastic stent was placed in the common bile duct"
+    ],
+    [
+     "43274",
+     "A 10 Fr by 9 cm plastic stent was placed across the prior sphincterotomy into the left hepatic duct"
+    ]
+   ],
+   "astra": [],
+   "day": "2026-10-14",
+   "base": {
+    "43274": "READY"
+   },
+   "cycle_1": {
+    "43274": "READY"
+   },
+   "cycle_2": {
+    "43274": "READY"
+   }
+  },
+  {
+   "label": "admission-5 wire then failed balloon",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy with dilation\nThe endoscope was advanced to the second portion of the duodenum.\nA benign-appearing distal esophageal stricture was found.\nThe stricture was dilated with wire-guided dilators to 15 mm.\nBalloon dilation to 18 mm was unsuccessful.\n",
+   "picks": [
+    [
+     "43235",
+     "The endoscope was advanced to the second portion of the duodenum"
+    ],
+    [
+     "43248",
+     "The stricture was dilated with wire-guided dilators to 15 mm"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43235": "HELD",
+    "43248": "READY"
+   },
+   "cycle_1": {
+    "43235": "HELD",
+    "43248": "READY"
+   },
+   "cycle_2": {
+    "43235": "HELD",
+    "43248": "HELD"
+   }
+  },
+  {
+   "label": "outcome-1 failed then achieved; aborted",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nERCP Report\nDate of service: 2026-10-14\nProcedure: ERCP\nThe duodenoscope was advanced to the second portion of the duodenum. Deep biliary cannulation was achieved. Stone extraction failed with a balloon and was achieved with a basket; it was then aborted because of oxygen desaturation.\n",
+   "picks": [
+    [
+     "43264",
+     "Stone extraction failed with a balloon and was achieved with a basket"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43264": "HELD"
+   },
+   "cycle_1": {
+    "43264": "HELD"
+   },
+   "cycle_2": {
+    "43264": "READY"
+   }
+  },
+  {
+   "label": "outcome-1 brushing first pass",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nERCP Report\nDate of service: 2026-10-14\nProcedure: ERCP\nThe duodenoscope was advanced to the second portion of the duodenum. Deep biliary cannulation was achieved. Brushing of the stricture failed on the first pass and succeeded on the second pass; it was then aborted because of oxygen desaturation.\n",
+   "picks": [
+    [
+     "43260",
+     "Deep biliary cannulation was achieved"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43260": "HELD"
+   },
+   "cycle_1": {
+    "43260": "HELD"
+   },
+   "cycle_2": {
+    "43260": "READY"
+   }
+  },
+  {
+   "label": "outcome-2 attempted and successful",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nERCP Report\nDate of service: 2026-10-14\nProcedure: ERCP\nThe duodenoscope was advanced to the second portion of the duodenum. Deep biliary cannulation was achieved. Brushing of the stricture was attempted and was successful; it was then aborted because of oxygen desaturation.\n",
+   "picks": [
+    [
+     "43260",
+     "Deep biliary cannulation was achieved"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43260": "HELD"
+   },
+   "cycle_1": {
+    "43260": "READY"
+   },
+   "cycle_2": {
+    "43260": "READY"
+   }
+  },
+  {
+   "label": "outcome-2 (jobs)",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nERCP Report\nDate of service: 2026-10-14\nProcedure: ERCP\nThe duodenoscope was advanced to the second portion of the duodenum. Deep biliary cannulation was achieved. Brushing of the stricture was attempted and was successful; it was then aborted because of oxygen desaturation.\n",
+   "picks": [
+    [
+     "43260",
+     "Deep biliary cannulation was achieved"
+    ]
+   ],
+   "astra": [],
+   "day": "2026-10-14",
+   "base": {
+    "43260": "HELD"
+   },
+   "cycle_1": {
+    "43260": "READY"
+   },
+   "cycle_2": {
+    "43260": "READY"
+   }
+  },
+  {
+   "label": "outcome-3 stent could not be advanced",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nERCP report (fictional)\nDate of service: 2026-10-14\nPlace of service: Hospital outpatient department\nProcedure: ERCP with biliary stent placement\nThe duodenoscope was advanced to the second portion of the duodenum. Deep biliary cannulation was achieved. A distal common bile duct stricture was seen.\nThe stent could not be advanced through the stricture.\n",
+   "picks": [
+    [
+     "43274",
+     "ERCP with biliary stent placement"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43274": "READY"
+   },
+   "cycle_1": {
+    "43274": "READY"
+   },
+   "cycle_2": {
+    "43274": "READY"
+   }
+  },
+  {
+   "label": "outcome-3 (jobs)",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nERCP report (fictional)\nDate of service: 2026-10-14\nPlace of service: Hospital outpatient department\nProcedure: ERCP with biliary stent placement\nThe duodenoscope was advanced to the second portion of the duodenum. Deep biliary cannulation was achieved. A distal common bile duct stricture was seen.\nThe stent could not be advanced through the stricture.\n",
+   "picks": [
+    [
+     "43274",
+     "ERCP with biliary stent placement"
+    ]
+   ],
+   "astra": [],
+   "day": "2026-10-14",
+   "base": {
+    "43274": "READY"
+   },
+   "cycle_1": {
+    "43274": "READY"
+   },
+   "cycle_2": {
+    "43274": "READY"
+   }
+  },
+  {
+   "label": "outcome-3 balloon could not pass",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nEGD report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Upper endoscopy with balloon dilation\nThe gastroscope was advanced to the second portion of the duodenum.\nThe balloon could not be passed through the stricture.\n",
+   "picks": [
+    [
+     "43249",
+     "Upper endoscopy with balloon dilation"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "43249": "READY"
+   },
+   "cycle_1": {
+    "43249": "READY"
+   },
+   "cycle_2": {
+    "43249": "READY"
+   }
+  },
+  {
+   "label": "outcome-4 v0",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 4 mm polyp in the sigmoid colon was removed with a cold snare and retrieval was precluded by its small size.\n",
+   "picks": [
+    [
+     "45385",
+     "A 4 mm polyp in the sigmoid colon was removed with a cold snare"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": "READY"
+   },
+   "cycle_1": {
+    "45385": "READY"
+   },
+   "cycle_2": {
+    "45385": "HELD"
+   }
+  },
+  {
+   "label": "outcome-4 v1",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 4 mm polyp in the sigmoid colon was removed with a cold snare and the oozing stopped due to pressure.\n",
+   "picks": [
+    [
+     "45385",
+     "A 4 mm polyp in the sigmoid colon was removed with a cold snare"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": "READY"
+   },
+   "cycle_1": {
+    "45385": "READY"
+   },
+   "cycle_2": {
+    "45385": "HELD"
+   }
+  },
+  {
+   "label": "outcome-4 v2",
+   "text": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nColonoscopy report (fictional)\nDate of service: 2026-10-14\nPlace of service: Ambulatory surgery center\nProcedure: Colonoscopy\nThe colonoscope was advanced to the cecum and the examination was completed.\nA 4 mm polyp in the sigmoid colon was removed with a cold snare and the bleeding stopped before withdrawal.\n",
+   "picks": [
+    [
+     "45385",
+     "A 4 mm polyp in the sigmoid colon was removed with a cold snare"
+    ]
+   ],
+   "astra": [],
+   "day": "",
+   "base": {
+    "45385": "READY"
+   },
+   "cycle_1": {
+    "45385": "READY"
+   },
+   "cycle_2": {
+    "45385": "HELD"
+   }
+  }
+ ]
+}

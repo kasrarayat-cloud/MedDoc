@@ -1,0 +1,77 @@
+{
+ "package": "Completion repair (owner directive 2026-11-06), the integrated tree: builders R1, R2, A, Q1 and Q2 merged with the integration's own rules (the dilation technique, one evaluation in competition, one subject reading, the dated history in the indication, another act's doubt). The gates against b452c6c42aa62037716b9e4fe2e3154a4f379f04 (the completion branch's stage-1 base, whose cpt-studio/studio is the installed fd8040d71e44's).",
+ "measured_after_code": true,
+ "provenance": "Not declared before the code: measured by python -m ops.gi4.battery --base b452c6c4 --head <the integrated tree> after the merges and the integration commits (10 movements, 0 new violations, the base's 2 violations unchanged). The ten are exactly the union of builder R1's declared two and builder Q1's declared eight; no integration commit moved a battery row. Each movement's reason is its builder's, read against its row's provisional truth.",
+ "battery": [
+  [
+   "R8 D4 F1 EGD snare line, colonoscopy normal",
+   "43251",
+   "selected/needs_clarification",
+   "selected/ready"
+  ],
+  [
+   "R8 D4 F7N EGD biopsy line, colonoscopy denies",
+   "43239",
+   "selected/needs_clarification",
+   "selected/ready"
+  ],
+  [
+   "R8 D1 N1 hot snare polypectomy failed",
+   "45378",
+   "selected/needs_clarification",
+   "selected/ready"
+  ],
+  [
+   "R8 D1 N1 hot snare polypectomy failed",
+   "45385",
+   "selected/needs_clarification",
+   "excluded/excluded"
+  ],
+  [
+   "R8 D1 N4 ERCP stent placement failed",
+   "43260",
+   "selected/needs_clarification",
+   "selected/ready"
+  ],
+  [
+   "R8 D1 N4 ERCP stent placement failed",
+   "43274",
+   "selected/needs_clarification",
+   "excluded/excluded"
+  ],
+  [
+   "R8 D2 N10 antral biopsy failed",
+   "43235",
+   "selected/needs_clarification",
+   "selected/ready"
+  ],
+  [
+   "R8 D2 N10 antral biopsy failed",
+   "43239",
+   "selected/needs_clarification",
+   "excluded/excluded"
+  ],
+  [
+   "R8 D9 release-1 to be removed tomorrow",
+   "45378",
+   "selected/needs_clarification",
+   "selected/ready"
+  ],
+  [
+   "R8 D9 release-1 to be removed tomorrow",
+   "45385",
+   "selected/needs_clarification",
+   "excluded/excluded"
+  ]
+ ],
+ "why": {
+  "R8 D4 F1 EGD snare line, colonoscopy normal": "Truth done. The report's \"EGD:\" labelled paragraph (the gastroscope's own course, under \"Procedures: EGD and colonoscopy\") is released, so its \"The polyp was removed with a hot snare.\" is the EGD part's act and 43251 is READY on it; the declared fail-closed cost of P2 READ-HOLD's D4 (the act bound to no family, so the correct code was held too) no longer applies. The same sentence's 45385 (truth not_done) stays held.",
+  "R8 D4 F7N EGD biopsy line, colonoscopy denies": "Truth done. The \"EGD:\" labelled paragraph runs to the \"Colonoscopy:\" label line, so \"Biopsies were taken with cold forceps.\" is the EGD part's biopsy and 43239 is READY; the same sentence's 45380 (truth not_done: the colonoscopy says no biopsies were taken) stays held.",
+  "R8 D1 N1": "\"Hot snare polypectomy failed.\": 45385 is excluded with that passage (truth not_done); 45378 is READY, no longer held as included in a polypectomy the document states failed (truth done)",
+  "R8 D1 N4": "\"Biliary stent placement failed.\": 43274 is excluded with that passage; 43260 is READY",
+  "R8 D2 N10": "\"Cold forceps biopsy of the antrum failed.\": 43239 is excluded with that passage; 43235 is READY",
+  "R8 D9": "\"The polyp is to be removed by hot snare tomorrow.\": an infinitive predicate, still to be done; 45385 is excluded with that passage; 45378 is READY"
+ },
+ "freeze": "python -m ops.gi4.freeze --base b452c6c4 --head <the integrated tree> (the full corpus): (a) cue patterns read by context.py and sections.py: base 324, head 324, changed 0, removed 0, added 0; sections.layout over 5,723 texts identical; (b) the date channel over 44,014 text and member states: NEW-SEND 0, NEW-TAKE 0, NEW-HELD 0, SEND->ASK 0; (c) 19,780 primary and dated requests unchanged; (d) mention counts over 5,723 texts unchanged. GATE HOLDS.",
+ "replay": "python -m ops.gi4.replay --fixtures --base b452c6c4 --head <the integrated tree>: base -> head differs by the three version labels alone (/versions/engine cpt-studio-validation@8 -> @9, /versions/inventory gi-services@5 -> @6, /versions/routing gi-routing@7 -> @9); every regression encounter reads identically otherwise."
+}

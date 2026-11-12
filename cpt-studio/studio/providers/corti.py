@@ -5,6 +5,22 @@ no redirects, no environment proxies or .netrc. The token response is never
 stored or returned. An outcome is 'not_sent' only while the coding request
 provably has not left; once it may have reached Corti, a missing or incomplete
 response is 'unknown' (sent), never a failure that invites a resend.
+
+Every read is bounded by the time the send has left (HTTP-TRICKLE; refutation round
+1 found it in the participants' sends, R2 repaired it there in
+studio/participants/http.py, and this adapter had the same defect). A read timeout
+bounds each wait for a byte, never the whole read, and the deadline was checked only
+between 64 KiB chunks, so a response trickling in a byte at a time - its status
+line, a header or its body - held the token or the coding exchange past the
+deadline and the stale-stage sweep. The default session's connections are watched
+with the participants' own watch, by import (http._WatchedAdapter, http._Watch):
+each POST holds one, and at the deadline its socket is shut down, so whatever read
+is blocked on it returns at once. A coding read the deadline cuts is 'unknown' and
+its partial body is never taken for the answer; a token read it cuts sends no coding
+request ('not_sent'); a coding request whose connection took the time that was left
+is never written ('not_sent'). Each POST connects afresh: the token and coding hosts
+differ, and every send opens its own session. The request, its bytes and every
+recorded field of an answer that arrives in time are unchanged (I1).
 """
 from __future__ import annotations
 
@@ -18,9 +34,9 @@ from time import monotonic
 from typing import Callable, Optional
 
 import requests
-from requests.adapters import HTTPAdapter
 from urllib3.exceptions import MaxRetryError, NewConnectionError
 
+from studio.participants import http as watched_http  # the participants' watched reads (HTTP-TRICKLE), never a copy
 from studio.types import EvidenceSpan, NormalizedResponse, ProviderCode, ProviderRequest, RawExchange
 
 from .base import ProviderUnavailable, canonical_body, not_sent, valid_deadline, verified_body
@@ -74,7 +90,10 @@ def default_session() -> requests.Session:
     session = requests.Session()
     session.trust_env = False  # no environment proxies, CA overrides or .netrc credentials
     session.max_redirects = 0
-    session.mount('https://', HTTPAdapter(max_retries=0))
+    # every read bounded by the time left: the watched adapter hands each connection's socket to the POST's watch.
+    # Corti is https; every send keeps one discipline.
+    for prefix in ('https://', 'http://'):
+        session.mount(prefix, watched_http._WatchedAdapter(max_retries=0))
     return session
 
 
@@ -145,21 +164,28 @@ class CortiProvider:
         url = TOKEN_URL.format(environment=credentials.environment, tenant=credentials.tenant)
         form = {'client_id': credentials.client_id, 'client_secret': credentials.client_secret,
                 'grant_type': 'client_credentials', 'scope': 'openid'}
-        try:
-            response = session.post(url, data=form, headers={'Accept': 'application/json'}, timeout=timeouts,
-                                    allow_redirects=False, stream=True)
-        except Exception as exc:
-            raise _NotSent(f'Corti authentication failed ({type(exc).__name__}); '
-                           'no coding request was sent.') from None
-        try:
-            status = response.status_code
-            raw = _read_capped(response, MAX_TOKEN_RESPONSE_BYTES, deadline)
-        except Exception as exc:
-            raise _NotSent(f'The Corti authentication response could not be read ({_describe(exc)}); '
-                           'no coding request was sent.') from None
-        finally:
-            with suppress(Exception):
-                response.close()
+        with watched_http._Watch(deadline) as watch:  # every read of the token exchange bounded by the time left
+            try:
+                response = session.post(url, data=form, headers={'Accept': 'application/json'}, timeout=timeouts,
+                                        allow_redirects=False, stream=True)
+            except Exception as exc:
+                if watch.disarm() and watch.unsent:
+                    raise _NotSent('The deadline passed before Corti authentication; nothing was sent.') from None
+                reason = DEADLINE_READING if watch.fired else type(exc).__name__
+                raise _NotSent(f'Corti authentication failed ({reason}); no coding request was sent.') from None
+            try:
+                status = response.status_code
+                raw = _read_capped(response, MAX_TOKEN_RESPONSE_BYTES, deadline)
+                if watch.disarm():  # the deadline cut the read: what was read is not the whole answer
+                    raise _BodyError(DEADLINE_READING)
+            except Exception as exc:
+                if watch.disarm():
+                    exc = _BodyError(DEADLINE_READING)
+                raise _NotSent(f'The Corti authentication response could not be read ({_describe(exc)}); '
+                               'no coding request was sent.') from None
+            finally:
+                with suppress(Exception):
+                    response.close()
         if status != 200:
             raise _NotSent(f'Corti authentication was refused (HTTP {status}); no coding request was sent.')
         token = _access_token(raw)
@@ -171,29 +197,41 @@ class CortiProvider:
                  deadline: float) -> RawExchange:
         timeouts = self._timeouts(deadline, self.read_timeout)
         if timeouts is None:
-            raise _NotSent('The deadline passed before the coding request was sent; nothing was sent.')
+            raise _NotSent(NOT_SENT_AT_DEADLINE)
         headers = {'Authorization': f'Bearer {token}', 'Tenant-Name': credentials.tenant,
                    'Content-Type': 'application/json', 'Accept': 'application/json'}
+        # The URL actually called, environment included (HARNESS.md 6), is recorded on every outcome that may have
+        # reached it; a request that provably never left records none.
+        url = CODING_URL.format(environment=credentials.environment)
         started = monotonic()
-        try:
-            response = session.post(CODING_URL.format(environment=credentials.environment), data=body,
-                                    headers=headers, timeout=timeouts, allow_redirects=False, stream=True)
-        except Exception as exc:
-            if _never_connected(exc):
-                raise _NotSent(f'The Corti coding service could not be reached ({type(exc).__name__}); '
-                               'nothing was sent.') from None
-            return _unknown(exc, started)
-        status, request_id = None, ''
-        try:
-            status = response.status_code
-            request_id = _request_id(response.headers)
-            raw = _read_capped(response, self.max_response_bytes, deadline)
-        except Exception as exc:
-            return _unknown(exc, started, status, request_id)
-        finally:
-            with suppress(Exception):
-                response.close()
-        latency = _elapsed_ms(started)
+        with watched_http._Watch(deadline) as watch:  # every read of the coding exchange bounded by the time left
+            try:
+                response = session.post(url, data=body, headers=headers, timeout=timeouts, allow_redirects=False,
+                                        stream=True)
+            except Exception as exc:
+                if watch.disarm() and watch.unsent:  # connecting took the time that was left: nothing was written
+                    raise _NotSent(NOT_SENT_AT_DEADLINE) from None
+                if watch.fired:
+                    return _unknown(_BodyError(DEADLINE_READING), started, endpoint=url)
+                if _never_connected(exc):
+                    raise _NotSent(f'The Corti coding service could not be reached ({type(exc).__name__}); '
+                                   'nothing was sent.') from None
+                return _unknown(exc, started, endpoint=url)
+            status, request_id = None, ''
+            try:
+                status = response.status_code
+                request_id = _request_id(response.headers)
+                raw = _read_capped(response, self.max_response_bytes, deadline)
+                if watch.disarm():  # the deadline cut the read: what was read is not the whole answer
+                    raise _BodyError(DEADLINE_READING)
+            except Exception as exc:
+                if watch.disarm():
+                    exc = _BodyError(DEADLINE_READING)
+                return _unknown(exc, started, status, request_id, endpoint=url)
+            finally:
+                with suppress(Exception):
+                    response.close()
+            latency = _elapsed_ms(started)
         usage = _usage(raw)
         error = ''
         if status != 200:
@@ -202,7 +240,10 @@ class CortiProvider:
         return RawExchange(outcome='succeeded' if status == 200 else 'failed', sent=True, http_status=status,
                            response_bytes=raw, response_sha256=hashlib.sha256(raw).hexdigest(),
                            latency_ms=latency, usage=usage, usage_basis=USAGE_BASIS if usage else '',
-                           provider_request_id=request_id, error=error)
+                           provider_request_id=request_id, error=error, endpoint=url)
+
+
+NOT_SENT_AT_DEADLINE = 'The deadline passed before the coding request was sent; nothing was sent.'
 
 
 class _NotSent(Exception):
@@ -223,9 +264,10 @@ def _never_connected(exc: Exception) -> bool:
     return isinstance(cause, MaxRetryError) and isinstance(cause.reason, NewConnectionError)
 
 
-def _unknown(exc: Exception, started: float, status: Optional[int] = None, request_id: str = '') -> RawExchange:
+def _unknown(exc: Exception, started: float, status: Optional[int] = None, request_id: str = '',
+             endpoint: str = '') -> RawExchange:
     return RawExchange(outcome='unknown', sent=True, http_status=status, latency_ms=_elapsed_ms(started),
-                       provider_request_id=request_id,
+                       provider_request_id=request_id, endpoint=endpoint,
                        error=f'The coding request may have reached Corti, but no complete response was read '
                              f'({_describe(exc)}). The outcome is unknown; reconcile it before any new attempt.')
 
@@ -234,14 +276,19 @@ def _describe(exc: Exception) -> str:
     return str(exc) if isinstance(exc, _BodyError) else type(exc).__name__
 
 
+DEADLINE_READING = 'the deadline passed while the response was being read'
+
+
 def _read_capped(response, cap: int, deadline: float) -> bytes:
+    """The whole body, refused over ``cap``. The deadline is checked after each chunk as well: a session that is not
+    the watched default one (an injected one) is bounded only by that check."""
     chunks, size = [], 0
     for chunk in response.iter_content(CHUNK_BYTES):
         size += len(chunk)
         if size > cap:
             raise _BodyError(f'the response exceeded {cap:,} bytes')
         if monotonic() > deadline:
-            raise _BodyError('the deadline passed while the response was being read')
+            raise _BodyError(DEADLINE_READING)
         chunks.append(chunk)
     return b''.join(chunks)
 

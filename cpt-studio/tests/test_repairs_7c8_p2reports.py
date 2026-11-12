@@ -25,7 +25,7 @@ from tests.test_repairs_7c8_p1reports import (ASKED, COLONOSCOPY, EM_AND_COLONOS
 from tests.test_services_reconcile import run, sel, span
 from tests.test_services_second_review import TwoPassProvider, ask
 
-APP = Path(settings.BASE_DIR) / 'studio' / 'static' / 'studio' / 'app.js'
+APP = Path(settings.BASE_DIR) / 'studio' / 'operator' / 'ops.js'
 SYNTHETIC = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n'
 NONE_PROPOSED = 'No CPT codes were proposed for this document.'
 
@@ -267,7 +267,7 @@ class PanelStatesTheShownAssessmentsSecondReviewTests(Harness):
         drain()
         run_ = models.ProviderRun.objects.get(encounter_id=encounter_id, purpose='second_review')
         self.assertEqual(run_.state, 'unknown')
-        reply = self.post(f'/api/encounters/{encounter_id}/reconcile',
+        reply = self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                           {'provider_run_id': str(run_.pk), 'note': 'Checked the provider console: nothing recorded.'})
         self.assertIn(reply.status_code, (200, 201), reply.content)
         drain()
@@ -292,7 +292,7 @@ NO_CODES_LABEL = 'No CPT codes proposed'
 
 
 def list_row(client, encounter_id):
-    (row,) = [r for r in client.get('/api/encounters').json()['encounters'] if r['id'] == encounter_id]
+    (row,) = [r for r in client.get('/ops/api/encounters').json()['encounters'] if r['id'] == encounter_id]
     return row
 
 
@@ -311,7 +311,7 @@ class StateLabelStatesTheSecondReviewOutcomeTests(Harness):
         drain()
         run_ = models.ProviderRun.objects.get(encounter_id=encounter_id, purpose='second_review')
         if reconcile:
-            reply = self.post(f'/api/encounters/{encounter_id}/reconcile',
+            reply = self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                               {'provider_run_id': str(run_.pk), 'note': 'Checked the provider console.'})
             self.assertIn(reply.status_code, (200, 201), reply.content)
             drain()
@@ -509,8 +509,11 @@ Transverse colon: a separate 10 mm flat lesion was sampled with cold biopsy forc
 # The colonoscopy named only in the title: its performance is not established, so a support is not checked
 # (not_applicable) and its source passages are the documented service's, marked as not checked (refutation 7c8,
 # reports-4) - the verifier's second trigger.
-HELD_NOTE = MARKS_NOTE.replace('Date of service: 2026-10-14\nProcedure: Colonoscopy with cold snare polypectomy.',
-                               'Date of procedure: 2026-10-14\nColonoscopy with cold snare polypectomy.')
+# harness repair 3 (F-SECTIONS T): "Colonoscopy report (fictional)" is a report title now, which establishes the
+# colonoscopy; the held note keeps its service unestablished (support 'not_applicable') with no title at all
+HELD_NOTE = MARKS_NOTE.replace('Colonoscopy report (fictional)\n', '').replace(
+    'Date of service: 2026-10-14\nProcedure: Colonoscopy with cold snare polypectomy.',
+    'Date of procedure: 2026-10-14\nColonoscopy with cold snare polypectomy.')
 SNARE_SENTENCE = 'Sigmoid colon: a 6 mm sessile polyp was removed completely with a cold snare and retrieved.'
 CECUM_CLAUSE = 'The colonoscope was advanced to the cecum.'
 FLAT_BIOPSY = 'Transverse colon: a separate 10 mm flat lesion was sampled with cold biopsy forceps for histology.'
@@ -716,7 +719,7 @@ class TheReportsNeverAccountForAnEgdBesideARectalEusTests(Harness):
     def test_the_reviewed_report_names_the_egd(self):
         encounter_id = self.stored(EGD_AND_RECTAL_EUS, ('45342', RECTAL_FNA))
         self.decide(encounter_id, '45342', 'approve')
-        reply = self.post(f'/api/encounters/{encounter_id}/reports', {'kind': 'reviewed', 'fmt': 'txt'})
+        reply = self.post(f'/ops/api/encounters/{encounter_id}/reports', {'kind': 'reviewed', 'fmt': 'txt'})
         self.assertEqual(reply.status_code, 201, reply.content)
         check = self.encounter_check(encounter_id, 'services.unproposed')
         self.assertEqual((check['status'], check['detail']), ('warn', MISSED_EGD))

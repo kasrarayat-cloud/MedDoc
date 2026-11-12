@@ -11,11 +11,12 @@ from django.utils import timezone
 
 from studio import jobs, models
 from tests.test_pipeline_api import drain
+from tests.support.operator import OperatorReads
 from tests.test_repairs_pipeline import FIRST_DATE, LIVE, NO_DATE_NOTE, ApiHarness
 
 
 @override_settings(**LIVE)
-class ResumeOnlyTheLatestCancelledStageTests(ApiHarness, TestCase):
+class ResumeOnlyTheLatestCancelledStageTests(OperatorReads, ApiHarness, TestCase):
     """pipeline:0 — a stale Resume never re-runs an older stage."""
 
     def test_a_second_resume_after_the_resumed_send_failed_is_refused(self):
@@ -56,7 +57,7 @@ class ResumeOnlyTheLatestCancelledStageTests(ApiHarness, TestCase):
 
 
 @override_settings(**LIVE)
-class MetadataChangesNeverResendTests(ApiHarness, TestCase):
+class MetadataChangesNeverResendTests(OperatorReads, ApiHarness, TestCase):
     """Round 3, pipeline3:0 — ARCHITECTURE 5.4: a setting or billing change leaves the request unchanged, so it
     re-checks with the run in use and sends nothing, whatever that run's outcome.
 
@@ -98,7 +99,7 @@ class MetadataChangesNeverResendTests(ApiHarness, TestCase):
         self.provider.outcomes = ['unknown', 'failed', 'failed', 'failed']
         encounter_id = self.create()
         drain()
-        response = self.post(f'/api/encounters/{encounter_id}/reconcile',
+        response = self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                              {'provider_run_id': self.unknown_run_id(encounter_id),
                               'note': 'Checked the synthetic provider console: no result exists.'})
         self.assertEqual(response.status_code, 201, response.content)
@@ -119,7 +120,7 @@ class MetadataChangesNeverResendTests(ApiHarness, TestCase):
 
 
 @override_settings(**LIVE)
-class LegacyRunServiceDateTests(ApiHarness, TestCase):
+class LegacyRunServiceDateTests(OperatorReads, ApiHarness, TestCase):
     """pipeline:2 — a run recorded before ProviderRun.service_date existed keeps the date its request carried."""
 
     def legacy_run(self, encounter_id):
@@ -155,7 +156,7 @@ class LegacyRunServiceDateTests(ApiHarness, TestCase):
 
 
 @override_settings(**LIVE)
-class SettledStagesStayResumableTests(ApiHarness, TestCase):
+class SettledStagesStayResumableTests(OperatorReads, ApiHarness, TestCase):
     """pipeline:3 — a stage the sweep settles, or that expires in the queue, can be resumed; it never strands
     the encounter as an extraction failure."""
 
@@ -194,7 +195,7 @@ class SettledStagesStayResumableTests(ApiHarness, TestCase):
 
 
 @override_settings(**LIVE)
-class RoutingSummaryTests(ApiHarness, TestCase):
+class RoutingSummaryTests(OperatorReads, ApiHarness, TestCase):
     """pipeline:4 — the detail's routing is the routing the current assessment used."""
 
     def test_routing_follows_the_assessment_across_date_changes(self):
@@ -206,7 +207,7 @@ class RoutingSummaryTests(ApiHarness, TestCase):
             self.assertEqual(self.post(f'/api/encounters/{encounter_id}/context', {'service_date': value}).status_code,
                              201)
             drain()
-            detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+            detail = self.client.get(f'/ops/api/encounters/{encounter_id}').json()
             used = models.Encounter.objects.get(pk=encounter_id).current_assessment.routing.result
             # Mention statuses tell the dated and undated routings apart (the 2021 mention reads historical
             # only against a service date); family statuses alone do not.
@@ -216,7 +217,7 @@ class RoutingSummaryTests(ApiHarness, TestCase):
 
 
 @override_settings(**LIVE)
-class DeepJsonTests(ApiHarness, TestCase):
+class DeepJsonTests(OperatorReads, ApiHarness, TestCase):
     """pipeline:5 — nesting deeper than the parser allows answers a JSON 400, never an HTML 500."""
 
     def test_deeply_nested_json_is_a_400(self):
@@ -225,7 +226,9 @@ class DeepJsonTests(ApiHarness, TestCase):
         body = b'[' * 10000 + b']' * 10000
         for path in ('decisions', 'addenda', 'context', 'reconcile', 'reports'):
             with self.subTest(path=path):
-                response = self.client.post(f'/api/encounters/{encounter_id}/{path}', data=body,
+                # moved by the customer interface change (CORE-UX-DESIGN.md 5): the reconciliation is operator work, under /ops/
+                prefix = '/ops/api' if path == 'reconcile' else '/api'
+                response = self.client.post(f'{prefix}/encounters/{encounter_id}/{path}', data=body,
                                             content_type='application/json')
                 self.assertEqual(response.status_code, 400)
                 self.assertEqual(response.json()['error'], 'The request body is not valid JSON.')

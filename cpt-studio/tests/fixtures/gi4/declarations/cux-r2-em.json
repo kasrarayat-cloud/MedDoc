@@ -1,0 +1,212 @@
+{
+ "package": "ROUND-2 REPAIR reader-em (cux-r2-em): the refutation's round-2 findings on the office E/M reading - L2/F07 and L2/F08 (P1 rule 8, the explicit statement that no separate office E/M service is documented) and L7/L7-06 (a member's new or established status ignored by the office E/M service's uncertainty)",
+ "summary": "Hold-only for rule 8, declared BEFORE any code. F07: cues.EM_ABSENCE reads a sentence as an E/M absence statement only when the sentence is that statement and nothing else - a negator governing the visit noun through visit qualifiers only, 'no record/documentation/evidence/mention/note of' the visit noun, or the visit noun (no definite article) 'was/is not (separately) documented|provided|performed|rendered|furnished|done' - with only an optional 'There is/was' opener, the arm's own predicate and day adjuncts (today, on/for this date, on the date of service, for/at/during this encounter, a numeric date, separately) before the sentence ends. Anything else in the sentence - a location hedge ('here', 'in this report', 'elsewhere', 'see the clinic note'), another clause, a condition, a question, a possessive or another head noun the negator governs ('No medication changes at today's office visit were documented') - leaves it no absence statement, and the visit reads exactly as installed 41e03656df61 reads it (it asks). F08: where an absence statement negates a visit mention, routing (detect._route) also holds it when the note states an evaluation of the patient, a history, an examination or a visit in any wording routing reads as no E/M mention (new cues.EM_EVALUATION_STATED, read only to hold), as the existing rule holds it beside another E/M statement read performed or open. L7-06: services._em_service's uncertainty reads new or established status from the encounter context as it already reads the setting (the document's value or a member's; a conflict has none), so a member's answer closes the service-scope question after the one re-assessment instead of asking it again. F09 ('No office evaluation and management service was billed separately.') was judged BY_DESIGN and keeps its head reading (negated).",
+ "base": "c47d71a34d23d4b2f17a8705a7b63260590423a9",
+ "installed": "41e03656df617d5fab4a551ba7a0d7aea5ca3380",
+ "declared_before_code": true,
+ "declared_at": "2026-11-04T06:20Z",
+ "standard": "Round-4 (ruling 2026-11-03 (g); R8 section 4): a releasing rule keeps every must-stay-held input held; closed lists only add holds. Rule 8 is the only releasing rule touched, and it is narrowed (F07) and given one more hold (F08): no input may move toward READY, toward excluded, or toward fewer questions, except the declared L7-06 state (a member's answered status). L7-06 moves no status and no code: it removes one question a member has already answered with a routine context value (directive section 4: 'Ask each material question once and preserve the saved answer'; session decisions (e) and (f): new or established status is member-provided context answered with choices).",
+ "findings": {
+  "L2/F07": "major, REGRESSION: 'The office visit is not documented here; it is documented in the clinic note of today.' and 'No medication changes at today's office visit were documented.' read as E/M absence: no E/M question, the visit code EXCLUDED. Repaired by R8b-1.",
+  "L2/F08": "major, REGRESSION: a same-day evaluation stated in any wording other than an EM_VISIT phrase never contradicted the absence statement (J1 'She was also evaluated today for new-onset jaundice, a separate problem, with a history and examination.' and J2 'Separately, she was seen and examined today ...' beside Mara's sentence: negated, 99213 EXCLUDED). Repaired by R8b-2.",
+  "L7/L7-06": "major: a member's saved patient_status was ignored by the office E/M uncertainty (services.py near 4481): asked again after the re-assessment, or moved to a new service row. Repaired by E7.",
+  "L2/F09": "minor, BY_DESIGN (verifier): 'No office evaluation and management service was billed separately.' reads negated through arm 1 as the design says, and on the installed release its twins without 'office' already read negated. Not changed; pinned as it is."
+ },
+ "rules": {
+  "R8b-1": "cues.EM_ABSENCE (one pattern, read by detect._em_absent and by services' em_absent sentences as before) matches only from a sentence start - a line start, or a full stop, question or exclamation mark and at most three spaces or tabs - to the sentence's end (a full stop or exclamation mark, a line end, or the end of the window read), and the sentence holds nothing but: an optional 'There is|was|were|has been|had been' opener; then (A) 'no|without|neither' + only visit qualifiers + the visit noun (coordinated visit nouns allowed) + optionally 'is|was|were|are|has been|have been|had been (separately) documented|provided|performed|rendered|furnished|reported|billed|done' (two coordinated verbs allowed) or 'occurred|took place|happened'; or (B) 'no record|documentation|evidence|mention|note(s) of' + qualifiers + the visit noun(s) + optionally '... documented|provided|present|available|found|recorded|included' or 'exist(s)'; or (C) only qualifiers (never 'the' or 'this') + the visit noun(s) + 'was|is|were|are|has been|have been|had been not' or 'wasn't|isn't|weren't|aren't' + '(separately) documented|provided|performed|rendered|furnished|done'; then only day adjuncts: 'today', 'this date', 'on this|the date|day (of service|of the procedure|of the encounter)', 'for this|the date|day|encounter (of service)', 'for today', 'during|at this|the encounter', 'on|for|dated' + a numeric date, 'separately'. The visit qualifiers and nouns are P1's, unchanged. detect._em_absent keeps its date test (every date in the sentence is the service date) and its rule that the visit mention lies inside the statement. Every arm only narrows what P1's pattern matched: no sentence matches now that did not match at c47d71a3.",
+  "R8b-2": "detect._route: when a visit mention reads negated by an absence statement (EM_ABSENT_CUE) and no other E/M reading is performed or open (the existing EM_ABSENT_CONTRADICTED rule, unchanged), the absence statement is still held - uncertain, a doubt, cue EM_ABSENT_EVALUATION with the evaluation words quoted - when cues.EM_EVALUATION_STATED matches anywhere in the text outside every absence statement: the patient as the one seen/evaluated/examined/assessed/interviewed (she, he, the patient, pt, a titled name; or a capitalised name with evaluated/examined/interviewed) with was|were|is|are|has been|have been|had been|got and at most three adverbs between; an evaluation stated today ('... was seen today'); the clinician as the one evaluating ('I examined', 'we evaluated', 'saw her', 'examined the patient'); seen/evaluated/examined/assessed (today) in (the) clinic|office, never after 'be' (a future visit is no evaluation today); a history, history and physical, history and examination, H&P, evaluation, assessment, consultation or consult performed|obtained|taken|done|completed|conducted|carried out|elicited|held|provided|undertaken|documented; 'physical exam(ination)'; HPI, history of present illness, review of systems, ROS; a clinic/office/visit/consult(ation)/E/M/H&P note. No tense, section, cue or date exempts a match except the future form named (fail closed). The inventory follows routing (services._em_service applies its absence cue only where routing reads the visit negated by that statement), so the two readers agree.",
+  "E7": "services._em_service: the office E/M service's uncertainty leaves out patient_status when the encounter context gives it a value (origin document or user; a conflict or a missing fact has none), exactly as it already leaves out setting (_setting(context_facts)). em_basis is never context (a member never supplies a clinical fact) and is unchanged."
+ },
+ "cues_added": [
+  "cues.EM_EVALUATION_STATED (new name, read only by detect._route to hold an absence statement)"
+ ],
+ "cues_changed": [
+  "cues.EM_ABSENCE (P1's pattern, narrowed: read only by detect._em_absent and services._build's em_absent; context.py and sections.py read neither, so H2 (a) cannot move)"
+ ],
+ "detect_added": [
+  "detect.EM_ABSENT_EVALUATION (the hold's cue)",
+  "detect._em_evaluation_stated (one pass of each pattern over the text, memoised; read only where an absence statement negates a visit mention)"
+ ],
+ "battery_rows_added": [],
+ "battery_rows_proposed_to_lead": "ops/gi4/battery.py is the reader-bind owner's: the class rows (F07, F08, F09 kept, Mara's sentence, the planned-visit control) are given to the lead as text in this package's report (needs_from_lead), with their truths; this package runs the battery with --only on existing rows and its own probe.",
+ "battery": [],
+ "battery_note": "H4: NO movement in the existing rows and no new violation. Base scan (scratch probes/scan_absence.py over the full corpus, the battery and the cux fixtures: 5,829 distinct texts): cues.EM_ABSENCE matches in 4 texts only, all under tests/fixtures/cux (Mara rev1, r8-em-absent-positive, r8-em-absent-post, r8-twin-contradiction), none a battery row; no battery row carries a member patient status (R8_USER is date-only).",
+ "replay": "EQUAL predicted for the 8 regression documents (h2-08, h2-10, h4-01..h4-06) in every member state: none carries an EM_ABSENCE match (the scan above), and every member state is a date (regression.member_states), so E7 reads nothing new there. Any movement is a finding, measured and amended (dated, after code) before it is accepted.",
+ "h2": "No movement of any class (NEW-SEND 0, NEW-TAKE 0, NEW-HELD 0, SEND->ASK 0, LAYOUT, FACT, REQUEST, MENTIONS 0): context.py and sections.py read neither EM_ABSENCE nor EM_EVALUATION_STATED; cues.EM_VISIT, cues.TODAY and every name they reference are unchanged; services.mention_count and detect.service_mention_count read no changed pattern. GATE HOLDS.",
+ "h3": "No differential movement: no corpus text carries an EM_ABSENCE match (the scan above).",
+ "register": "R8 register (r8_cases.py, 53 inputs): every row UNCHANGED - no register text carries an absence statement or a member patient status.",
+ "mara": "tests/fixtures/cux/mara: unchanged - 43239, 45380 and 45385 READY, 0 proposal questions, 0 E/M questions, the clip under the colonoscopy (tests.test_cux_bind.MaraEndToEndTests). Mara's sentence is the whole of its sentence (R8b-1 arm A with 'is documented on this date'), and the revision states no evaluation words of R8b-2: 'The history and examination were reviewed, informed consent was obtained, ...' (a review, not a performed history or examination), 'today's examination' and 'After digital rectal examination' (the endoscopy), and hemorrhoids 'seen on rectal retroflexion' (a finding) are none of its forms.",
+ "movements_on_new_inputs": {
+  "F07": "head c47d71a3 -> repair: 'The office visit is not documented here; it is documented in the clinic note of today.', 'No medication changes at today's office visit were documented.', 'No complications at today's office visit were documented.', 'The office visit is not documented here.', 'No charge for an office visit was billed.', 'No fee for the office evaluation and management service was billed separately.' and the hedged variants of the class sentences: routing and inventory gi.office_em negated -> the installed reading (uncertain, EM_WITHOUT_BASIS beside the procedure), the E/M questions asked again, a proposed E/M code excluded -> needs_clarification. 43239 stays READY.",
+  "F08": "head -> repair: J1, J2, 'She was also seen in clinic today for new-onset jaundice, a separate problem.', 'A separate problem-focused history and examination was performed today for new-onset jaundice.' and the other R8b-2 forms, beside Mara's sentence, in either order: routing and inventory gi.office_em negated -> uncertain (EM_ABSENT_EVALUATION), the E/M questions asked, a proposed 99213 excluded -> needs_clarification (never ready). 43239 stays READY.",
+  "E7": "head -> repair: an office note with no documented status where a member saved patient_status new or established: the service-scope patient_status question (and the row the customer sees) is gone after the one re-assessment; with 99213 proposed the question no longer moves to a service row. A member value that conflicts with a documented one is still asked as that conflict (tests.test_repairs_ec5_reportfacts)."
+ },
+ "must_hold": [
+  "every F07 and F08 input above stays held: the E/M questions are asked and no E/M code is excluded on the absence statement",
+  "an affirmative E/M statement beside the absence statement still asks (r8-twin-contradiction: EM_ABSENT_CONTRADICTED, {patient_status, em_basis})",
+  "'not billed separately' / 'not separately billable' / 'not separately reported' read as installed (r8-twin-billing)",
+  "a sentence carrying another date reads as before (tests.test_cux_bind.EmAbsenceTests.test_another_date_in_the_sentence_reads_as_before)",
+  "a stated visit with no basis still asks (EmQuestionsStayForAStatedVisitTests)",
+  "a member status that conflicts with the document's is asked as that conflict, never closed by E7"
+ ],
+ "must_release": [
+  "Mara end to end (MaraEndToEndTests): 0 E/M questions",
+  "r8-em-absent-positive and r8-em-absent-post: negated for both readers, 0 E/M questions, 43239 READY",
+  "F09's sentence (BY_DESIGN): negated, as at c47d71a3",
+  "an absence statement beside a future visit ('She will be seen in clinic in two weeks to review the pathology.'): negated, as at c47d71a3"
+ ],
+ "unit_pins": "No existing test is expected to move: test_cux_bind.EmAbsenceTests' shared-pattern lines keep their outcomes (its negative list gains the F07 sentences); no pin under tests/fixtures/gi4/pins and no parity digest is expected to move (no parity case carries an absence statement or a member patient status). Any movement is a finding.",
+ "cost": "H7: linear. EM_ABSENCE starts only at a sentence start (fixed-width lookbehinds) and its arms are bounded; EM_EVALUATION_STATED is read in one pass over the text, only where an absence statement negates a visit mention, with one bisection per match against the absence statements. Measured with probes after code.",
+ "not_changed": [
+  "cues.EM_VISIT and every cue context.py or sections.py reads",
+  "studio/gi/sections.py",
+  "studio/gi/context.py",
+  "services.EM_ROUTINE, services.EM_EVALUATED, services._build (its em_absent collection reads cues.EM_ABSENCE as before)",
+  "detect._em_base_reading's order (a cue reading first; the absence only where no cue decides)",
+  "studio/validation/engine.py, reconcile.py, answers.py",
+  "the reader labels (gi-routing@6, gi-services@3: already moved for this release by the lead)",
+  "ops/gi4/battery.py",
+  "the request side"
+ ],
+ "after_code_20261104": {
+  "provenance": "Written on 2026-11-04 AFTER code and measurement, as a record (after code): it changes no declaration above it. Every key above this one is unchanged: each value is identical, and the only byte added before this key is the comma that separates it. Declaration commit bb2f181666a0 (declared_before_code, 06:20:07Z); code commits 777ab8eb0a29 (R8b-1, R8b-2, E7; first committed as 828df7ae7744 at 07:12Z, message amended, tree ab695a25a3f4 unchanged) and 7dcafcaf02b3 (two more R8b-2 forms). Each harness tool ran on sealed git-archive exports of c47d71a34d23 (base) and 7dcafcaf02b3 (head), offline, with this tree's harness; the R8 register through a scratch copy of probes/R8-history-defects defects_probe.py.",
+  "H1": "replay --fixtures, base c47d71a34d23 -> head 7dcafcaf02b3: EQUAL in every member state of the 8 regression documents (h4-03's four date.sends-only-the-truth HARD failures are on base and head alike). As declared.",
+  "H4": "battery --declare cux-r2-em.json: base {'rows': 95, 'codes': 135, 'violations': 2, 'judged': 132, 'ready': 22, 'excluded': 7, 'held': 106}; head identical; 0 movements, 0 undeclared, 0 new violations. As declared (battery []).",
+  "H2": [
+   "(a) cue patterns read by context.py and sections.py: base 324, head 324; changed 0, removed 0, added 0",
+   "sections.layout over 5723 texts: identical",
+   "(b) date channel over 44014 text x member states: NEW-SEND 0, NEW-TAKE 0, NEW-HELD 0, SEND->ASK 0",
+   "(c) requests over 19780 primary and dated requests: changed 0",
+   "(d) mention counts over 5723 texts: changed 0",
+   "== GATE HOLDS (full freeze, --declare cux-r2-em.json). As declared."
+  ],
+  "H3": "corpus judge --workers 4, base c47d71a34d23 -> head 7dcafcaf02b3: base 5664 documents, 0 reader errors; head 5664 documents, 0 reader errors; differential: no movement. As declared.",
+  "register": "R8 register, 53 inputs: output identical on base and head (text output byte-identical; JSON equal except timings and tree path). As declared.",
+  "mara": "tests.test_cux_bind.MaraEndToEndTests passes on the head: 43239, 45380 and 45385 READY, 0 proposal questions, 0 E/M questions, the clip under the colonoscopy. Mara's revision states none of EM_EVALUATION_STATED's words (searched over the whole text). As declared.",
+  "differential": "Scratch probes/differential.py: 12,317 generated sentences (openers, negators, qualifiers, visit nouns, predicates, trailers, ends; and the denied form with determiners and qualifiers), each read alone after the r8 body and beside J1, on c47d71a34d23 and on the head: 0 sentences move toward negated in routing or the inventory (no new release); alone, 3,343 move negated -> uncertain: all but 941 carry a hedge, another clause, an opener the statement may not take, a question mark or no full stop; of those 941, 936 are definite \"The/This ...\" denials (a declared hold) and 5 are not statements of absence (\"No separate office charge for an office visit was provided separately.\", \"Today, No charge for an office visit was documented or billed.\" and three like them); beside J1, 5,298 move negated -> uncertain and no rule-8 negation survives. The 743 negations left beside J1 are the installed generic negation cue (\"negated: No separate ...\", NEGATED_PRE / NEGATED_SPAN), the identical set on both trees (see limits).",
+  "cost": "H7: scratch probes/em_cost.py, ten E/M absence shapes from 25,000 to 400,000 characters read cold (context, routing, inventory), on c47d71a34d23 and on the head 7dcafcaf02b3: linear, every routing and inventory doubling ratio at most 2.28 (the harness gate is 2.3), the head within the shared host's noise of the base at 400,000 characters (for example routing on absence statements on lines 2.43 s vs 2.13 s, on negator-led sentences 4.02 s vs 4.07 s; best of three on 777ab8eb0a29, the two widest shapes: 2.19 s vs 2.07 s and 2.62 s vs 2.49 s). The two patterns alone on runs of adjuncts, qualifiers, adverbs and capitalised words ending in a mismatch (probes/backtrack.py, backtrack2.py) grow linearly to 576,000 characters: no backtracking blow-up.",
+  "suite": "On the throwaway server (127.0.0.1:55461, suffixes r2b*): the required modules tests.test_cux_bind, test_cux_r2_em, test_cux_flow, test_cux_hold, test_gi4_state, test_harness_engine_parity: 149 tests OK (no parity digest moved); the 41 other modules that read the office E/M or patient status plus test_gi4_freeze: 1471 tests OK. No pin under tests/fixtures/gi4/pins moved and no customer fixture moved (test_customer_fixtures OK). As declared (unit_pins).",
+  "mutants": "15 of 15 killed and 15 of 15 restored (sha256 before == after), on exactly the head's readers: M1 P1's pattern back, M2 no sentence end, M3 no sentence start, M4 the record form takes any noun phrase, M5 \"the\" accepted by the denied form, M11 no leading day, M12 \"outpatient office visit\" accepted, M13 no day before the predicate, M14 no named patient \"seen for\", M15 no \"underwent an evaluation\", M6 no evaluation hold, M7 no denying opener, M8 no absence-span exclusion, M9 a future clinic visit holds, M10 the member status ignored again (with the end-to-end API flow).",
+  "deviations": [
+   "R8b-1 form (B), narrower than declared: its predicate is required and its verbs are P1's second form's (documented|provided|performed|rendered|furnished|reported|billed, occurred, took place) after P1's own copulas; the declared optional predicate with present|available|found|recorded|included and exist(s) would have matched sentences P1 never matched (\"There is no documentation of a separate office visit on this date.\"), against the declaration's own \"no sentence matches now that did not match at c47d71a3\".",
+   "R8b-1 form (C), narrower than declared: the negated copula is P1's third form's (was|is|has been not, wasn't, isn't), not the declared were|are|have been|had been and weren't|aren't; no coordinated visit nouns; and \"in-person\" or \"outpatient\" stands as a qualifier only where no \"office\" or \"clinic\" follows it (EM_VISIT reads \"outpatient office visit\" as one mention that starts before the noun P1's form denied, so P1 never covered it).",
+   "R8b-1, not declared, measured: a leading day adjunct (\"Today,\", \"On this date,\", \"On the date of service,\", \"For this date/encounter,\") may open the sentence, and one day adjunct may stand before form (A)'s predicate (\"No separate office ... encounter on this date is documented.\"). Each restores c47d71a3's reading of a clean statement that P1's first form matched; the differential shows 0 new releases.",
+   "R8b-2, not declared, measured: (i) words whose own sentence opens by denying them - a negator, then at most four words and no punctuation or conjunction (\"No separate evaluation was performed today.\", \"No physical examination was documented.\", \"There was no HPI.\") - state no evaluation and do not hold the statement; (ii) the clinic/office form never follows \"not\" as well as \"be\"; (iii) two more forms hold it (a capitalised name seen or assessed for something; the patient who underwent, had or received an evaluation, assessment, consultation, history and physical, H&P or physical examination). (i) and (ii) release relative to the declared R8b-2 text (\"No tense, section, cue or date exempts a match except the future form named\") and only hold relative to c47d71a3; tests test_controls_an_evaluation_the_sentence_denies_still_releases, test_the_finding_s_inputs_ask_in_either_order; mutants M7, M9, M14, M15.",
+   "cues_added names prose, not a freeze inventory name: read as the inventory's names it adds none (EM_EVALUATION_STATED is read by neither context.py nor sections.py), as the full freeze measured (added 0)."
+  ],
+  "limits": [
+   "Outside rule 8, unchanged and recorded: the installed generic negation cue (NEGATED_PRE \"no\" with fillers before the visit mention, NEGATED_SPAN \"No ... was performed\") reads \"No separate office visit is documented elsewhere.\", \"No separate office visit was provided by the endoscopist.\" and the like as negated whatever follows, and is not held beside a stated evaluation; c47d71a3 and installed 41e03656df61 read them the same way. Holding them would move installed readings beyond rule 8 (not this repair).",
+   "Fail-closed costs (the installed reading: the E/M questions are asked): an absence statement beside routine peri-procedure wording that names an evaluation (\"The patient was assessed for sedation.\", \"A history and physical was performed before the procedure.\", \"Physical examination: ...\"), beside a capitalised noun that was \"evaluated\"/\"examined\" or \"seen for\" (\"Biopsies were examined ...\", \"Polyps were seen for the first time.\"), and an absence statement carrying a label, a provider, a parenthesis, more than three spaces of indentation, a worded date or a definite article (\"The office visit was not documented.\").",
+   "R8b-2 is a closed list: an evaluation stated in a wording outside its forms (for example an untitled name with \"seen\" and no \"for\", \"today\" or clinic) still reads as at the core repair.",
+   "E7 changes no status and no code: the E/M code's own question already read the context; only the service question an answered member status re-raised is gone."
+  ]
+ },
+ "amendment_20261104_integration_rows": {
+  "note": "Added by the lead at integration (2026-11-04), after code: the seven rows the reader-em owner proposed in its report (battery_rows_proposed_to_lead; ops/gi4/battery.py was the reader-bind owner's file), with the owner's truths. The owner measured them before the merge on c47d71a3 and on its own head: on c47d71a3 the four F07/F08 rows exclude the visit code (4 violations); on the head they ask (0 violations); the F09 row and the two controls do not move. The four movements below are those measurements, recorded here after code - not a before-code declaration.",
+  "battery": [
+   [
+    "R8 R2 EM F07 hedged absence, documented in the clinic note",
+    "99203",
+    "excluded/excluded",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R2 EM F07 negator of another noun",
+    "99203",
+    "excluded/excluded",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R2 EM F08 J1 evaluation beside the absence statement",
+    "99213",
+    "excluded/excluded",
+    "selected/needs_clarification"
+   ],
+   [
+    "R8 R2 EM F08 J2 evaluation beside the absence statement",
+    "99213",
+    "excluded/excluded",
+    "selected/needs_clarification"
+   ]
+  ],
+  "offer_battery": {
+   "R8 R2 EM F07 hedged absence, documented in the clinic note": {
+    "own": [],
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R2 EM F07 negator of another noun": {
+    "own": [],
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R2 EM F08 J1 evaluation beside the absence statement": {
+    "own": [],
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R2 EM F08 J2 evaluation beside the absence statement": {
+    "own": [],
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R2 EM F09 billed separately, by design": {
+    "own": [],
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R2 EM rule 8 control, the absence statement alone": {
+    "own": [],
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   },
+   "R8 R2 EM rule 8 control, a future clinic visit": {
+    "own": [],
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ]
+   }
+  }
+ }
+}

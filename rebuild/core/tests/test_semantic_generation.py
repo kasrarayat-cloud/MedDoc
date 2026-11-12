@@ -2433,7 +2433,9 @@ class NumericSourceReferenceGuideTests(SimpleTestCase):
         from core import jobs
         fields, definitions, _, _ = alex_case()
         notes = ' '.join(['3']*(semantic.MAX_NUMERIC_SOURCE_REFERENCES+1))
-        encounter = SimpleNamespace(template_version=SimpleNamespace(fields=fields),
+        # A Word form, as every form with semantic definitions is: since P1 round 4 the worker reads the form
+        # before the provider path (core.template_source.provider_refusal), and a real version has one.
+        encounter = SimpleNamespace(template_version=SimpleNamespace(fields=fields, template=SimpleNamespace(format='docx')),
                                     template_version_id='version', notes=notes, department=None)
         def new_job():
             return SimpleNamespace(pk=uuid4(), request_key=str(uuid4()), encounter=encounter, user=None,

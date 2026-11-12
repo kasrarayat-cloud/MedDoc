@@ -1,0 +1,25 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Variceal Banding Session
+Kittredge Memorial Hospital (fictional), Digestive Procedures Unit
+Encounter class: hospital outpatient, place of service 22
+Exam date: 10/06/2026
+Case reference: EVL-K-7731 (synthetic)
+Patient of record: Radomir Ezenwa-Lindahl (fictional), 58-year-old man
+Proceduralist: Pilar Gutowski-Nnamdi, MD (fictional), hepatology and endoscopy
+Anesthesia care: monitored anesthesia care by Bram Oyinlola-Hesse, MD (fictional), of Kittredge Anesthesia Partners (fictional), with a separate record and claim
+Clinical Basis for Banding
+Alcohol-associated cirrhosis, abstinent for 14 months, Child-Pugh class B. An earlier screening endoscopy at another center showed large esophageal varices. Carvedilol was stopped because of lightheadedness with systolic pressures in the 80s, so band ligation was chosen as primary prophylaxis. He has never bled from varices.
+Banding Narrative
+The consent discussion was reviewed and a safety pause completed. The gastroscope went in through a bite block and was passed down the esophagus, through the stomach and pylorus, into the descending duodenum. Four columns of large (F3) varices filled the distal third of the esophagus, two of them with red wale marks. Retroflexion showed no gastric varices. A mild mosaic pattern of portal hypertensive gastropathy covered the fundus and body. The duodenal bulb and descending duodenum were normal.
+The gastroscope was withdrawn, fitted with a multiband ligation device and passed again. Six bands were placed, starting just above the gastroesophageal junction and working upward in a spiral, each band capturing one varix. There was no bleeding during or after ligation.
+Conclusions
+1. Large esophageal varices with red wale marks; six bands placed for primary prophylaxis.
+2. Mild portal hypertensive gastropathy. No gastric varices.
+Management Going Forward
+Clear liquids for the rest of the day, then a soft diet for 48 hours. Sucralfate suspension 1 g four times daily for five days. Next ligation session in about three weeks, then every two to four weeks until the varices are eradicated. Call the unit for blood in vomit, black stools or chest pain on swallowing.
+Case Room Ledger
+Case reference: EVL-K-7731 (synthetic)
+Service date logged for this case: 10/08/2026
+Room 4; gastroscope reprocessing cycle R-4471
+Entered by Fenna Ruwende-Holm, RN (fictional), charge nurse, and countersigned at case close by Pilar Gutowski-Nnamdi, MD (fictional)
+Signed electronically: Pilar Gutowski-Nnamdi, MD (fictional), 10/09/2026 07:48

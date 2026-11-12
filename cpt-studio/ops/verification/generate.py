@@ -36,7 +36,10 @@ from reportlab.pdfgen import canvas
 GENERATOR_VERSION = 'cpt-studio-verification-generate@1'
 BANNER = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE'
 AUTHOR = 'CPT Studio synthetic verification (fictional)'
-FORMATS = {'txt': '.txt', 'paste': '.paste.txt', 'pdf': '.pdf', 'scanned-pdf': '.pdf', 'docx': '.docx'}
+FORMATS = {'txt': '.txt', 'paste': '.paste.txt', 'pdf': '.pdf', 'scanned-pdf': '.pdf', 'docx': '.docx', 'non-utf8-txt': '.txt'}
+# A text file CPT Studio must refuse to read (ingest.text.extract_txt: "The text file is not valid UTF-8."): the ASCII
+# source and, on a last line of its own, one byte that is not UTF-8 - a document that fails before anything is sent.
+NOT_UTF8 = b'\xe9\n'
 FIXED_TIME = datetime(2026, 10, 23, 0, 0, 0)
 ZIP_TIME = (2026, 10, 23, 0, 0, 0)
 HERE = Path(__file__).resolve().parent
@@ -256,6 +259,7 @@ def normalize_zip(data: bytes) -> bytes:
 
 RENDERERS = {
     'txt': lambda data, text, title: data,
+    'non-utf8-txt': lambda data, text, title: data + NOT_UTF8,
     'paste': lambda data, text, title: data,
     'pdf': lambda data, text, title: render_pdf(text, title),
     'scanned-pdf': lambda data, text, title: render_scanned_pdf(text, title),

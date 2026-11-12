@@ -1,0 +1,42 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+New Patient Evaluation
+Clinic: Wexmoor Digestive Specialists (fictional), Suite 210
+Encounter location: office suite, place of service 11
+Date seen: 10/26/2026
+Name: Ottilie Brannigan-Sefa (fictional), 37-year-old woman
+Relationship to practice: new patient; no clinician in this group has seen her before today
+Referral: self-referred; a copy of this note goes to her primary care clinician, Bronagh Esquivel-Tate, NP (fictional)
+Seen by: Ines Marchbanks-Tiwari, MD (fictional)
+
+Presenting Concern
+Loose stools, bloating and tiredness for about four months.
+
+Course of Symptoms
+Since early summer she has passed three or four soft to watery stools a day, worse after bread or pasta, with bloating and crampy lower abdominal discomfort that eases once she has emptied her bowels. She does not wake at night to open her bowels and has seen no blood. No fever. About 2 kg of weight has gone without dieting, and she has felt drained for months. Her sister was found to have celiac disease two years ago. She has not cut gluten out of her diet.
+
+Other Conditions and Habits
+Hypothyroidism, on levothyroxine 75 mcg daily. No endoscopy of any kind in the past and no abdominal operations. Does not smoke; one or two glasses of wine a week.
+
+Outside Records
+Blood results sent from her primary care office, collected 10/14/2026 and reviewed today: hemoglobin 11.2 g/dL, MCV 76 fL, ferritin 7 ng/mL, TSH 2.1 mIU/L. The primary care visit note of the same day was read as well.
+
+Vital Signs and Exam
+Weight 61.4 kg, blood pressure 112/70, pulse 78. Conjunctival pallor. Abdomen soft and mildly distended, slightly tender in the left lower quadrant without guarding; no mass and no enlargement of the liver or spleen. No rash.
+
+Working Diagnosis
+1. Chronic diarrhea with bloating and iron deficiency anemia. Celiac disease is the leading concern given her sister's diagnosis; microscopic colitis and other causes remain possible.
+2. Hypothyroidism, controlled on replacement.
+
+Orders and Next Dates
+- Blood work is ordered but was not drawn in the office today: tissue transglutaminase IgA, total IgA, CBC, iron panel and comprehensive metabolic panel. She will go to Pellmont Reference Laboratory (fictional) on 11/02/2026 for the draw and will hand in the fecal calprotectin kit, which she took home today, at that same appointment.
+- Upper endoscopy with duodenal biopsies is booked for 11/23/2026 at Wexmoor Endoscopy Pavilion (fictional). She is to keep eating gluten until then.
+- If the calprotectin comes back raised, a colonoscopy will be added at the same session.
+- Start ferrous sulfate 325 mg by mouth every other day.
+- Return visit in this office on 12/14/2026 to go over the blood and biopsy results.
+
+Documentation of Time and Complexity
+Total time I spent on her care on the date of this visit: 52 minutes, covering her history, review of the outside results and note, the examination, counseling about the celiac work-up and keeping gluten in her diet, the orders, and documentation.
+Complexity of decision making: moderate. One new problem with an uncertain diagnosis; outside results and an outside note reviewed; tests ordered.
+
+Electronically authenticated by Ines Marchbanks-Tiwari, MD (fictional), 10/26/2026 18:22

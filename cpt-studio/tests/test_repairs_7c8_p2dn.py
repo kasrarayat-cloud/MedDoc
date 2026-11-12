@@ -438,9 +438,12 @@ class LabelSOwnFieldTests(DateAssertions, SimpleTestCase):
                 value = '2026-10-14'
                 self.assert_document(HEAD + 'Colonoscopy report\n' + line + '\n' + COLO_BODY, value)
         # P2DN's fix round, rule N7: alone in its field too, but written in a form the installed revision does not read
-        # (a label naming the time, a day-first date) - asked, the date answering the question (this pin had them
-        # documented)
-        for line in ('Date/Time of Service: 10/14/2026 at 9:15 AM', 'Service date 14 October 2026  |  Endoscopist A. Synthetic'):
+        # (a label naming the time) - asked, the date answering the question (this pin had them documented). Owner
+        # decision 2026-11-07 (the date forms): the day-first date is read and sent as the other forms are, so 'Service
+        # date 14 October 2026  |  Endoscopist A. Synthetic' is documented again, as this pin had it before rule N7
+        self.assert_document(HEAD + 'Colonoscopy report\nService date 14 October 2026  |  Endoscopist A. Synthetic\n'
+                             + COLO_BODY, '2026-10-14')
+        for line in ('Date/Time of Service: 10/14/2026 at 9:15 AM',):
             with self.subTest(line=line):
                 text = HEAD + 'Colonoscopy report\n' + line + '\n' + COLO_BODY
                 self.assert_question(text, '2026-10-14')

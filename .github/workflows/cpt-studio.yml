@@ -27,7 +27,10 @@ jobs:
   verify:
     name: CPT Studio checks and tests
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The Django suite alone took 29 minutes of the 30 on GitHub's runner by refutation round 9 (5,243 tests), and the
+    # job was cut off before the browser-verifier tests and the dependency audit ran (run 41633767311): 45 minutes keeps
+    # every step's evidence.
+    timeout-minutes: 45
     services:
       postgres:
         image: postgres:17

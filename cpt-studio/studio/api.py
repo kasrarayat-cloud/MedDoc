@@ -2,10 +2,16 @@
 
 Every handler resolves the caller's ACTIVE membership first and scopes every
 row through it, so another workspace's records answer 404.
+
+This is the CUSTOMER surface (CORE-UX-DESIGN.md 5, 7): every payload is built by studio.customer_api's allowlist, and
+every refusal raised below this module reaches the member only through customer_api.customer_error (a fixed
+vocabulary; no stored or exception text). The full record - providers, models, usage, runs, hashes, the trace, every
+stored artifact - is a platform operator's, served under /ops/ by studio.operator.
 """
 import functools
 import json
 import re
+import uuid
 from datetime import date
 
 from django.conf import settings
@@ -15,7 +21,7 @@ from django.http import Http404, HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
-from . import audit, intake, jobs, models, reports, review, serializers
+from . import answers, audit, client_contract, customer_api, intake, jobs, models, reports, review
 from .access import active_membership, scoped_encounter
 from .ingest import canonicalize
 from .storage import read_original
@@ -25,6 +31,7 @@ BILLING_CHOICES = {'professional', 'facility'}
 MAX_NOTE_CHARS = 2000
 # PostgreSQL text cannot hold NUL, and a lone surrogate cannot be encoded at all.
 UNSTORABLE = re.compile('[\x00\ud800-\udfff]')
+CANDIDATE_ID = re.compile(r'[0-9a-f]{16}')  # studio.candidates: 16 hex of a sha256
 
 
 def _storable(value, label):
@@ -67,11 +74,19 @@ class ApiError(Exception):
         self.status, self.message, self.details = status, message, details
 
 
-def api_view(view):
+def api_view(view=None, *, contract=True):
+    """A customer API view: JSON errors, sign-in required, and - unless ``contract`` is False (a download, which is a
+    browser navigation and sends no header of the page's) - the page build the client contract names
+    (studio.client_contract, decision (l)): any other answers 409 client_outdated before the view runs."""
+    if view is None:
+        return functools.partial(api_view, contract=contract)
+
     @functools.wraps(view)
     def wrapper(request, *args, **kwargs):
         if not request.user.is_authenticated:
             return JsonResponse({'error': 'Sign in to continue.'}, status=401)
+        if contract and not client_contract.current(request):
+            return JsonResponse(client_contract.OUTDATED, status=409)
         try:
             return view(request, *args, **kwargs)
         except ApiError as exc:
@@ -79,11 +94,12 @@ def api_view(view):
         except Http404:
             return JsonResponse({'error': 'Not found.'}, status=404)
         except PermissionDenied as exc:
-            return JsonResponse({'error': str(exc) or 'Your role cannot do that.'}, status=403)
+            return JsonResponse({'error': customer_api.customer_error(str(exc)) if str(exc)
+                                 else 'Your role cannot do that.'}, status=403)
         except review.AttestationRefused as exc:
-            return JsonResponse({'error': ' '.join(exc.messages)}, status=400)
+            return JsonResponse({'error': customer_api.customer_error(' '.join(exc.messages))}, status=400)
         except ValidationError as exc:
-            return JsonResponse({'error': ' '.join(exc.messages)}, status=409)
+            return JsonResponse({'error': customer_api.customer_error(' '.join(exc.messages))}, status=409)
         except RecursionError:  # a backstop: a nested value that reached code recursing per level
             return JsonResponse({'error': 'The request is nested too deeply.'}, status=400)
     return wrapper
@@ -138,6 +154,18 @@ def _PIPE_choice(data, name, choices, message):
     return value
 
 
+# P5 FLOW: the upload attempt's key, a UUID the page generates per attempt (8-4-4-4-12 hex digits).
+_CLIENT_KEY = re.compile(r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}')
+
+
+def _client_key(value):
+    if value is None or value == '':
+        return None
+    if not isinstance(value, str) or not _CLIENT_KEY.fullmatch(value):
+        raise ApiError(400, 'The upload key must be a UUID.')
+    return uuid.UUID(value)
+
+
 def _clean_title(raw, fallback):
     title = re.sub(r'\s+', ' ', UNSTORABLE.sub(' ', str(raw or ''))).strip()[:160]
     return title or fallback
@@ -147,7 +175,7 @@ def _clean_title(raw, fallback):
 @api_view
 def session(request):
     membership = active_membership(request.user)
-    return JsonResponse(serializers.session_json(request.user, membership))
+    return JsonResponse(customer_api.session_json(request.user, membership))
 
 
 @api_view
@@ -156,7 +184,7 @@ def encounters(request):
     if request.method == 'GET':
         rows = membership.workspace.encounters.select_related(
             'current_revision', 'current_context', 'current_assessment').order_by('-created_at')
-        return JsonResponse({'encounters': [serializers.encounter_summary(e) for e in rows]})
+        return JsonResponse({'encounters': [customer_api.list_row(e) for e in rows]})
     if request.method != 'POST':
         raise ApiError(405, 'Method not allowed.')
     _require_reviewer(membership)
@@ -176,12 +204,23 @@ def encounters(request):
         data, filename = None, ''
         fallback_title = f'Pasted note {timezone.now():%Y-%m-%d %H:%M}'
     title = _clean_title(request.POST.get('title'), fallback_title)
+    # P5 FLOW: a repeated POST of the same upload attempt (its client_key, by the same member, within 24 h, of the same
+    # document) answers with the encounter the first made - 201 with the same id - and creates nothing
+    client_key = _client_key(request.POST.get('client_key'))
+    pasted = '' if upload is not None else text
     try:
-        encounter = intake.create_encounter(
-            membership=membership, user=request.user, title=title, service_date=service_date, data=data,
-            filename=filename, text='' if upload is not None else text)
+        encounter = intake.find_upload(user=request.user, workspace=membership.workspace, client_key=client_key,
+                                       data=data, text=pasted)
+        if encounter is None:
+            encounter = intake.create_encounter(
+                membership=membership, user=request.user, title=title, service_date=service_date, data=data,
+                filename=filename, text=pasted, client_key=client_key)
+    except intake.DuplicateUpload as exc:
+        encounter = exc.encounter
+    except intake.UploadKeyRefused as exc:
+        raise ApiError(409, str(exc))
     except ValidationError as exc:
-        raise ApiError(400, ' '.join(exc.messages))
+        raise ApiError(400, customer_api.customer_error(' '.join(exc.messages)))
     return JsonResponse({'id': str(encounter.pk)}, status=201)
 
 
@@ -189,7 +228,7 @@ def encounters(request):
 @api_view
 def encounter_detail(request, encounter_id):
     encounter, membership = scoped_encounter(request.user, encounter_id)
-    return JsonResponse(serializers.encounter_detail(encounter, membership))
+    return JsonResponse(customer_api.encounter_json(encounter, membership))
 
 
 @require_POST
@@ -208,11 +247,60 @@ def decisions(request, encounter_id):
         action = data.get('action')
         if not isinstance(action, str) or action not in review.ACTION_LABELS:
             raise ApiError(400, 'Unknown review action.')  # round 7 bypass:3: invalid input, never a state conflict
-        decision = review.record_decision(
-            encounter=encounter, proposal=proposal, action=action, user=request.user,
-            membership=membership, note=_text_field(data, 'note', 'The note'),
-            acknowledgement=_text_field(data, 'acknowledgement', 'The acknowledgement'))
-    return JsonResponse(serializers._decision_json(decision), status=201)
+        # CORE-UX-DESIGN.md 4: the reviewer's ONE chosen modifier on an approval, "modifiers": [] | ["59"] | ["XS"];
+        # a malformed choice is invalid input (400), one the code's modifier review does not offer is a conflict (409)
+        try:
+            modifiers = review._chosen_modifiers(data.get('modifiers'))
+            decision = review.record_decision(
+                encounter=encounter, proposal=proposal, action=action, user=request.user,
+                membership=membership, note=_text_field(data, 'note', 'The note'),
+                acknowledgement=_text_field(data, 'acknowledgement', 'The acknowledgement'), modifiers=modifiers)
+        except review.ModifierRefused as exc:
+            raise ApiError(400, ' '.join(exc.messages))
+    # the customer decision shape (customer_api.decision_response: the contract's decision, modifiers included)
+    return JsonResponse(customer_api.decision_response(decision), status=201)
+
+
+@require_POST
+@api_view
+def confirm_finding(request, encounter_id, clarification_id):
+    """A reviewer's confirmation of one verified candidate answer to an open question (HARNESS.md 11.3, 12.5):
+    ``{"candidate_id", "attestation"}``. An owner or reviewer only (403); the question must be open on the current
+    final assessment, unconfirmed, and the candidate one of its verified candidates, recomputed server-side (409 with
+    why); the attestation exactly the candidate's (400). A service date then enters as the member's date through the
+    context path; any other fact is read by a re-assessment. Nothing is approved.
+
+    Refutation round 3 (HARNESS.md 12.10, D7): this release offers no reviewer confirmation. After the session and the
+    encounter's workspace scoping (401, 404 as before), every request is refused (409) with
+    review.CONFIRMATIONS_NOT_OFFERED before its body, the member's role, the question or the candidate is read; nothing
+    is recorded."""
+    encounter, membership = scoped_encounter(request.user, encounter_id)
+    if not review.confirmations_offered():
+        raise ApiError(409, customer_api.customer_error(review.CONFIRMATIONS_NOT_OFFERED))
+    data = _payload(request)
+    _require_reviewer(membership)
+    if not encounter.clarifications.filter(pk=clarification_id).exists():
+        raise ApiError(404, 'That question is not part of this document.')
+    candidate_id = data.get('candidate_id')
+    if not isinstance(candidate_id, str) or not CANDIDATE_ID.fullmatch(candidate_id):
+        raise ApiError(400, "Choose one of the question's candidates (candidate_id).")
+    attestation = _storable(_text_value(data, 'attestation', 'The attestation'), 'The attestation')
+    if len(attestation) > MAX_NOTE_CHARS:
+        raise ApiError(400, f'The attestation can be at most {MAX_NOTE_CHARS} characters.')
+    try:
+        confirmation, effect = review.confirm_finding(
+            encounter=encounter, clarification_id=clarification_id, candidate_id=candidate_id,
+            attestation=attestation, user=request.user, membership=membership)
+    except jobs.Refused as exc:
+        raise ApiError(409, customer_api.customer_error(str(exc)))
+    # never who located the passage or which runs did (participant names, run ids): those are an operator's (/ops/)
+    return JsonResponse({'id': str(confirmation.pk), 'clarification_id': str(confirmation.clarification_id),
+                         'fact': confirmation.fact, 'value': confirmation.value,
+                         'confirmed_by': confirmation.confirmed_by.label(),
+                         'confirmed_by_kind': confirmation.confirmed_by.actor_kind,
+                         'attestation': confirmation.attestation,
+                         'created_at': confirmation.created_at.isoformat(),
+                         'current_effect': customer_api.confirmation_effect(confirmation), 'effect': effect}, status=201)
 
 
 @require_POST
@@ -241,11 +329,18 @@ def addenda(request, encounter_id):
         clarification = None
         answered = data.get('clarification_id')
         if answered is not None and answered != '':  # only no value means no clarification: 0, false, [] are refused
-            try:
-                clarification = encounter.clarifications.get(pk=_identifier(answered),
-                                                            state=models.Clarification.OPEN)
-            except (models.Clarification.DoesNotExist, ValueError, ValidationError):
-                raise ApiError(404, 'That clarification is not open on this document.')
+            if answers.is_detail_id(answered):
+                # the customer page sends its details row's id (API.md: the customer contract): the open confirmation
+                # row it names, answering the stored clarification that row shows, if any
+                found, clarification = answers.addendum_detail(encounter, answered)
+                if not found:
+                    raise ApiError(404, 'That detail is not open on this document.')
+            else:
+                try:
+                    clarification = encounter.clarifications.get(pk=_identifier(answered),
+                                                                state=models.Clarification.OPEN)
+                except (models.Clarification.DoesNotExist, ValueError, ValidationError):
+                    raise ApiError(404, 'That clarification is not open on this document.')
         revision = models.SourceRevision.objects.create(
             encounter=encounter, number=number, kind=models.SourceRevision.ADDENDUM,
             parent=parent, addendum_text=text, answers_clarification=clarification,
@@ -262,7 +357,9 @@ def addenda(request, encounter_id):
         # Queued in the same transaction, so the encounter is never seen idle between the
         # new revision and its pipeline (a context change or reconcile would slip in there).
         jobs.start_pipeline(revision, request.user)
-    return JsonResponse({'revision_id': str(revision.pk)}, status=201)
+    # The walk round (2026-11-07, finding 7): the revision's number, never its internal id - a customer surface carries
+    # no identifier the operator view holds (ops/verification/customer-contract.json's deny values; API.md)
+    return JsonResponse({'revision': revision.number}, status=201)
 
 
 @require_POST
@@ -284,8 +381,44 @@ def context(request, encounter_id):
     try:
         ctx = jobs.change_context(encounter, request.user, values)
     except jobs.Refused as exc:
-        raise ApiError(409, str(exc))
+        raise ApiError(409, customer_api.customer_error(str(exc)))
     return JsonResponse({'context_id': str(ctx.pk)}, status=201)
+
+
+@require_POST
+@api_view
+def details(request, encounter_id):
+    """P5 FLOW: one save for the "A few details needed" rows, ``{"answers": [{"id", "fact", "value"}]}``
+    (answers.save_details): context values through one context change and its re-assessment, "not documented" or
+    "cannot confirm" stored as the member's answers. An owner or reviewer only; 400 for an answer a detail does not
+    allow, 409 while processing runs or for a detail no longer asked. 201 when something was saved, 200 when the save
+    changed nothing."""
+    data = _payload(request)
+    encounter, membership = scoped_encounter(request.user, encounter_id)
+    _require_reviewer(membership)
+    try:
+        saved = answers.save_details(encounter, request.user, data.get('answers'))
+    except answers.InvalidAnswer as exc:  # answers.py's own fixed customer sentences
+        raise ApiError(400, str(exc))
+    except jobs.Refused as exc:
+        raise ApiError(409, customer_api.customer_error(str(exc)))
+    return JsonResponse(saved, status=201 if saved['saved'] else 200)
+
+
+@require_POST
+@api_view
+def revoke_detail(request, encounter_id, answer_id):
+    """P5 FLOW: withdraw one saved answer (answers.revoke_answer); the detail is asked again. 404 for an answer that is
+    not this document's, 409 while processing runs or for an answer already withdrawn."""
+    encounter, membership = scoped_encounter(request.user, encounter_id)
+    _require_reviewer(membership)
+    try:
+        revocation = answers.revoke_answer(encounter, request.user, answer_id)
+    except models.MemberAnswer.DoesNotExist:
+        raise Http404()
+    except jobs.Refused as exc:
+        raise ApiError(409, customer_api.customer_error(str(exc)))
+    return JsonResponse({'revoked': str(revocation.answer_id)}, status=201)
 
 
 @require_POST
@@ -304,10 +437,10 @@ def resume(request, encounter_id):
     try:
         job = jobs.resume(encounter, request.user)
     except jobs.Refused as exc:
-        raise ApiError(409, str(exc))
+        raise ApiError(409, customer_api.customer_error(str(exc)))
     if job is None:
         raise ApiError(409, 'There is no stopped stage to resume.')
-    return JsonResponse({'resumed': job.kind}, status=201)
+    return JsonResponse({'resumed': True}, status=201)  # never the stage's kind: kinds name the participants
 
 
 @require_POST
@@ -320,71 +453,61 @@ def second_review(request, encounter_id):
     try:
         jobs.request_second_review(encounter, request.user)
     except jobs.Refused as exc:
-        raise ApiError(409, str(exc))
+        raise ApiError(409, customer_api.customer_error(str(exc)))
     return JsonResponse({'second_review': 'queued'}, status=201)
 
 
 @require_POST
 @api_view
-def reconcile(request, encounter_id):
-    data = _payload(request)
-    encounter, membership = scoped_encounter(request.user, encounter_id)
-    _require_reviewer(membership)
-    note = _text_field(data, 'note', 'The reconciliation note').strip()
-    if len(note) < 12:
-        raise ApiError(400, 'Describe how the unknown outcome was reconciled (at least 12 characters).')
-    try:
-        run = encounter.provider_runs.get(pk=_identifier(data.get('provider_run_id')))
-    except (models.ProviderRun.DoesNotExist, ValueError, ValidationError):
-        raise ApiError(404, 'That provider request is not part of this document.')
-    try:
-        recorded = jobs.reconcile(encounter, run, request.user, note)
-    except jobs.Refused as exc:
-        raise ApiError(409, str(exc))
-    if recorded is None:
-        raise ApiError(409, 'Only an unreconciled unknown outcome can be reconciled.')
-    return JsonResponse({'reconciled': str(run.pk)}, status=201)
-
-
-@require_POST
-@api_view
 def create_report(request, encounter_id):
+    """A customer report (cpt-studio-customer-report@1): ``{"kind": "draft"|"approved", "fmt": "txt"|"csv"}`` - the
+    suggested codes, or the approved items only. 'reviewed', the name the page used before, is read as 'approved'.
+    The operator's full report is made at /ops/ (studio.operator)."""
     data = _payload(request)
     encounter, membership = scoped_encounter(request.user, encounter_id)
     kind, fmt = str(data.get('kind', '')), str(data.get('fmt', ''))
-    if kind not in {models.ReportArtifact.DRAFT, models.ReportArtifact.REVIEWED} or fmt not in {'txt', 'csv'}:
-        raise ApiError(400, 'Choose a draft or reviewed report as TXT or CSV.')
+    kind = reports.APPROVED if kind == models.ReportArtifact.REVIEWED else kind
+    if kind not in reports.CUSTOMER_KINDS or fmt not in {'txt', 'csv'}:
+        raise ApiError(400, 'Choose a draft or an approved export as TXT or CSV.')
     if encounter.current_assessment_id is None:
-        raise ApiError(409, 'There is nothing to report yet.')
-    if kind == models.ReportArtifact.REVIEWED:
-        ready = review.readiness(encounter)
-        if not ready['reviewed']:
-            raise ApiError(409, 'The reviewed report is not available yet.', blockers=ready['blockers'])
+        raise ApiError(409, 'There is nothing to export yet.')
+    if kind == reports.APPROVED:
+        ready = customer_api.readiness(encounter)
+        if not ready['approved']:
+            raise ApiError(409, 'The approved export is not available yet.', blockers=ready['blockers'])
     try:
-        report = reports.generate(encounter, kind, fmt, request.user)
+        report = reports.generate_customer(encounter, kind, fmt, request.user)
+    except reports.CustomerExportNotReady as exc:  # its blockers are customer_api.readiness's, already worded
+        raise ApiError(409, 'The approved export is not available yet.', blockers=exc.blockers)
     except ValueError as exc:
-        raise ApiError(409, str(exc))
-    return JsonResponse(serializers._report_json(report), status=201)
+        raise ApiError(409, customer_api.customer_error(str(exc)))
+    return JsonResponse(customer_api.report_json(report), status=201)
 
 
 @require_GET
-@api_view
+@api_view(contract=False)
 def download_report(request, report_id):
+    """A customer artifact of the caller's workspace, as stored (no sha256 header). Any other artifact - an operator's,
+    or one recorded before the audience existed, which names the review participants - answers 404; an approved export
+    that no longer matches the persisted decisions answers 409."""
     try:
         report = models.ReportArtifact.objects.select_related('encounter').get(pk=report_id)
     except (models.ReportArtifact.DoesNotExist, ValueError, ValidationError):
         raise Http404()
     active_membership(request.user, report.encounter.workspace_id)
+    if report.audience != models.ReportArtifact.CUSTOMER:
+        raise Http404()
+    if report.kind == reports.APPROVED and not reports.customer_artifact_current(report):
+        raise ApiError(409, customer_api.STALE_EXPORT)
     content = bytes(report.content)
     content_type = 'text/csv; charset=utf-8' if report.fmt == 'csv' else 'text/plain; charset=utf-8'
     response = HttpResponse(content, content_type=content_type)
     response['Content-Disposition'] = f'attachment; filename="{report.filename}"'
-    response['X-Content-SHA256'] = report.sha256
     return response
 
 
 @require_GET
-@api_view
+@api_view(contract=False)
 def original(request, encounter_id):
     encounter, _ = scoped_encounter(request.user, encounter_id)
     source = encounter.files.order_by('uploaded_at').first()
@@ -394,5 +517,4 @@ def original(request, encounter_id):
     response = HttpResponse(data, content_type=source.media_type)
     safe_name = re.sub(r'[^A-Za-z0-9._-]+', '_', source.original_name)[:120] or 'original'
     response['Content-Disposition'] = f'attachment; filename="{safe_name}"'
-    response['X-Content-SHA256'] = source.sha256
-    return response
+    return response  # no sha256 header for a customer (an operator's /ops/ download carries it)

@@ -36,7 +36,10 @@ class UnusableLabelledDateWordingTests(SimpleTestCase):
     service was worded "No date of service is documented" in the check and the question's reason."""
 
     def test_a_kept_labelled_date_is_quoted_never_called_undocumented(self):
-        for line in ('Date of service: Tuesday, October 20, 2026', 'Referring visit date: 09/30/2026.',
+        # Owner decision 2026-11-07 (the date forms): "Tuesday, October 20, 2026" is read now (the weekday is the date's
+        # own) - documented, test_control_a_weekday_before_the_date_is_documented below - so a weekday naming another
+        # day stands for the kept, unusable labelled date this test needs
+        for line in ('Date of service: Wednesday, October 20, 2026', 'Referring visit date: 09/30/2026.',
                      'Date of service: 2026-02-30'):
             with self.subTest(line=line):
                 state, status, detail = date_wording(NOTE.format(line=line))
@@ -52,6 +55,11 @@ class UnusableLabelledDateWordingTests(SimpleTestCase):
 
     def test_control_a_readable_date_is_documented(self):
         _, status, detail = date_wording(NOTE.format(line='Date of service: 2026-10-20'))
+        self.assertEqual(status, 'pass')
+        self.assertIn('2026-10-20 is documented', detail)
+
+    def test_control_a_weekday_before_the_date_is_documented(self):  # owner decision 2026-11-07 (the date forms)
+        _, status, detail = date_wording(NOTE.format(line='Date of service: Tuesday, October 20, 2026'))
         self.assertEqual(status, 'pass')
         self.assertIn('2026-10-20 is documented', detail)
 

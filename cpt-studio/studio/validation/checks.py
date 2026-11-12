@@ -306,8 +306,11 @@ _B2_COORDINATED_CUE = 'uncertain: the procedure is named together with a visit'
 # other services, not the visit. Never silent and never an exclusion: the E/M is held, and a reviewer decides.
 _VAL_OTHER_SERVICE_CUE = 'uncertain: its negative reading is about another service it names, not about this visit'
 # Words that name a service other than the visit, beside routing's own procedure form (_PROCEDURE_WORD) and its named
-# services: used only to hold an E/M's negative reading, never to release or exclude anything.
-_VAL_SERVICE_NOUNS = re.compile(r'\b(?:procedures?|tests?|testing|imaging|laborator(?:y|ies)|labs?)\b', re.A | re.I)
+# services: used only to hold an E/M's negative reading, never to release or exclude anything. GI round 4 (V3): an
+# imaging study or a laboratory panel by name ("Surveillance ultrasound in six months.").
+_VAL_SERVICE_NOUNS = re.compile(r'\b(?:procedures?|tests?|testing|imaging|laborator(?:y|ies)|labs?|ultrasounds?|sonograms?|'
+                                r'sonography|elastography|CT|MRI|MRCP|x-?rays?|scans?|blood\s+work|bloodwork|panels?)\b',
+                                re.A | re.I)
 
 
 def _VAL_names_other_service(text: str, start: int, end: int, service_date: Optional[date] = None) -> bool:
@@ -573,7 +576,9 @@ def uncertain_reason(outcome: StatusOutcome, name: str) -> str:
         if outcome.contrary:
             reason += f' Routing reads it as {outcome.contrary.status} elsewhere: {cite(outcome.contrary)}.'
         return reason
-    reason = f'No documentation establishes that {name} was performed on the date of service.'
+    # completion repair (owner directive 2026-11-06, item 5; builder Q1): said of what CPT Studio read, never as a fact
+    # about the document - no reader rule matching is no proof the service was not performed (U9)
+    reason = f'CPT Studio could not confirm that {name} was performed on the date of service.'
     if outcome.reason == 'unnamed' and outcome.decisive:
         reason += (f' The linked passage reads as {outcome.decisive.status} ({cite(outcome.decisive)}), but the '
                    f'document never names {name}.')
@@ -643,6 +648,16 @@ class FactState:
     name: str
     fact: Optional[Fact]
     problem: str  # '' | missing | conflict
+    # HARNESS.md 11.3: set where a reviewer-confirmed finding answers a fact the readers left missing or in conflict -
+    # "confirmed from Fable's located passage by <reviewer> (“<passage>”)" - so that it is never worded as documented
+    confirmed: str = ''
+
+
+# Completion repair (2026-11-06, builder R2; directive item 5): a required extent no reader found a statement of is the
+# readers' finding, never a document fact - "Not documented: extent reached." said it from absence. The one extent the
+# readers read is routing's (which the documented-service reader takes as its own, and which reads the completion
+# reader's reach statements: detect._completion_states_reach), read here by required_fact_states.
+EXTENT_NOT_FOUND = 'CPT Studio could not find how far the examination reached'
 
 
 def is_documented(fact: Optional[Fact]) -> bool:
@@ -673,6 +688,8 @@ def required_fact_states(profile: ServiceProfile, finding: Optional[FamilyFindin
 
 
 MEMBER_ENTERED = 'Entered by a workspace member as encounter metadata (not clinical documentation)'
+# HARNESS.md 11.3: a fact a reviewer confirmed from a participant's located passage, never one CPT Studio's readers read
+CONFIRMED_HEADING = "Reviewer-confirmed, not read by CPT Studio's own readers"
 
 
 def is_member_entered(fact: Optional[Fact]) -> bool:
@@ -685,15 +702,19 @@ def required_facts_check(profile: ServiceProfile, states: Sequence[FactState]) -
     if not states:
         return None
     documented = [f'{fact_label(s.name)} = {excerpt(str(s.fact.value))}' for s in states
-                  if not s.problem and not is_member_entered(s.fact)]
+                  if not s.problem and not is_member_entered(s.fact) and not s.confirmed]
     supplied = [f'{fact_label(s.name)} = {excerpt(str(s.fact.value))}' for s in states
                 if not s.problem and is_member_entered(s.fact)]
-    missing = [fact_label(s.name) for s in states if s.problem == 'missing']
+    confirmed = [f'{fact_label(s.name)} = {excerpt(str(s.fact.value))}, {s.confirmed}' for s in states if s.confirmed]
+    missing = [fact_label(s.name) for s in states if s.problem == 'missing' and s.name != 'extent']
+    unfound = [s for s in states if s.problem == 'missing' and s.name == 'extent']
     conflicting = [fact_label(s.name) for s in states if s.problem == 'conflict' and not is_member_conflict(s.fact)]
     entered = [fact_label(s.name) for s in states if s.problem == 'conflict' and is_member_conflict(s.fact)]
     parts = []
     if missing:
         parts.append(f'Not documented: {"; ".join(missing)}.')
+    if unfound:
+        parts.append(f'{EXTENT_NOT_FOUND}.')
     if conflicting:
         parts.append(f'Conflicting values documented: {"; ".join(conflicting)}.')
     if entered:
@@ -703,7 +724,9 @@ def required_facts_check(profile: ServiceProfile, states: Sequence[FactState]) -
         parts.append(f'Documented: {"; ".join(documented)}.')
     if supplied:
         parts.append(f'{MEMBER_ENTERED}: {"; ".join(supplied)}.')
-    status = 'warn' if missing or conflicting or entered else 'pass'
+    if confirmed:
+        parts.append(f'{CONFIRMED_HEADING}: {"; ".join(confirmed)}.')
+    status = 'warn' if missing or unfound or conflicting or entered else 'pass'
     return Check('facts.required', 'Required documentation (CPT Studio profile)', status, ' '.join(parts),
                  f'cpt-studio:{profile.version}')
 
@@ -728,6 +751,8 @@ def fact_clarifications(states: Sequence[FactState], profile: ServiceProfile, fa
         elif state.problem == 'conflict':
             reason = (f'The document gives conflicting values for the {fact_label(state.name)}: '
                       f'{conflict_values(state.fact)}.')
+        elif state.name == 'extent':
+            reason = f'{EXTENT_NOT_FOUND}; the {profile.label} profile requires it.'
         else:
             reason = f'The {fact_label(state.name)} is not documented; the {profile.label} profile requires it.'
         out.append(ClarificationSpec(scope='proposal', fact=state.name, question=question, reason=reason,
@@ -949,6 +974,33 @@ def pctc_consideration(code: str, pfs: Optional[dict], release: str, billing: st
         return ''
     return (f'CMS PFS {release} carries separate professional-component (26) and technical-component (TC) rows for '
             f'{code}; which one applies depends on the billing context ({billing}). No modifier is assigned.')
+
+
+# --- the reviewer's modifier review (CORE-UX-DESIGN.md 4): separate lesions, a reviewer's choice, never an assignment --
+
+DISTINCT_LESION_OPTIONS = ('59', 'XS')  # the reviewer chooses none or ONE of them per approval, never both
+DISTINCT_LESION_NOT_CHECKED = ('NCCI procedure-to-procedure edits', 'payer modifier policy')
+# The pair the example of CMS's claims manual bills together for lesions in different parts of the colon (Pub. 100-04,
+# chapter 12, section 40.6.C, item 13, example), and the retrieved passage that states it: cited for this pair only.
+CLAIMS_EXAMPLE_CODES = frozenset({'45380', '45385'})
+CLAIMS_EXAMPLE_PASSAGE = 'item-13-example'
+CLAIMS_EXAMPLE_TOPIC = 'claims.multiple_endoscopy'
+
+
+def distinct_lesion_review_text(code: str, here: Sequence[str], partners: Sequence[tuple[str, Sequence[str]]],
+                                release: str = '') -> str:
+    """The modifier review of ``code``, in plain words: ``here``, its own acts on their documented lesions;
+    ``partners``, (another code of the review, its acts on other documented lesions); ``release``, the release of the
+    claims-manual example the assessment retrieved for this pair ('' when none applies). It never says a modifier
+    applies or is assigned, and says what is not checked."""
+    there = '; '.join(f'{other} is for the {_join(list(words))}' for other, words in partners)
+    text = f'Separate lesions are documented: {code} is for the {_join(list(here))}; {there}.'
+    if release:
+        text += (" In an example in CMS's claims manual (Pub. 100-04, chapter 12, section 40.6.C, item 13; "
+                 f'{release}), a biopsy of a lesion (45380) and a polyp removed from a different part of the colon '
+                 '(45385) are billed together.')
+    return text + (' Whether an NCCI procedure-to-procedure edit pairs these codes, and which modifier your payer '
+                   'accepts (59 or XS), is not checked here. No modifier is added unless the reviewer chooses one.')
 
 
 NOT_CONNECTED_CHECKS = (
@@ -2506,3 +2558,207 @@ def names_procedure(text: str, start: int, end: int, code: str, service_date: Op
         first += 1  # that sentence ends before the passage starts
     at = bisect.bisect_left(found, first)
     return first <= last and at < len(found) and found[at] <= last
+
+
+# --- independent participants (HARNESS.md 5) ------------------------------------------------------------------------
+# What the engine's merge of Astra's and Fable's readings (engine._Harness) says, worded from data the engine verified:
+# participants' labels, codes, CPT Studio's own family labels and passages of the document found verbatim. No sentence a
+# participant wrote (a basis, a description, a question) is ever quoted.
+
+PARTICIPANTS_SOURCE = 'cpt-studio:harness@1'
+# Since the session's D14 (refutation round 6, R6-MEANING) a code only a participant gave is never a proposal and no
+# reader reads it, so the sentence that every code a participant proposes "is judged by CPT Studio's own readers, with
+# exact evidence, by the same rules as the proposal provider's" was false of it (found at the integration of
+# R6-MEANING): it says what the engine does (HARNESS.md I3, as amended for D14). Refutation round 7 (d14-3,
+# display-3) found that sentence still false twice: of a code the provider proposed and CPT Studio excluded for scope or
+# evidence, which engine._Harness.merge lists as the participant's alternative (it carries only a decidable proposal's
+# code), and of a code in no code's shape, which is counted and never listed. Each clause is now the engine's own rule.
+# Refutation round 8 (wording-4) found "that the proposal provider also proposed" still wider than merge's rule: a code
+# the provider only listed as a candidate, or that its bounded second review selected and CPT Studio did not add (alt2),
+# carries no decidable proposal, so merge lists the participant's code as an alternative of its own. The sentence now
+# names the two kinds of proposal merge records a participant's code on (``have``: a selection with an evaluation).
+# Refutation round 9 (wording-4): a selection in a provider response that was refused whole, never read, is no
+# selection merge sees, so the clause names a response CPT Studio used, and such a code is among the alternatives.
+# HARNESS.md P-ADMIT (owner directive 2026-11-05, replacing D14): the sentence names the rule engine._Harness.merge now
+# applies, clause by clause - a code a decidable proposal carries is recorded on it; a first-reading proposal is read by
+# the provider's own path and added only as the second review's selections are, and never where another participant's
+# different code accounts for the same act; everything else is listed. The sentence D14's releases gave is kept above it.
+PARTICIPANTS_NEVER_DECIDE_D14 = ("A participant never decides a status and agreement never promotes a code: a participant's "
+                                 'code that the proposal provider selected, in scope and with an exact passage, in a '
+                                 'response CPT Studio used, or that its bounded second review added as a proposal, is '
+                                 "recorded on that proposal, which CPT Studio's own readers judge on the provider's "
+                                 "passages alone; any other code a participant gives in a CPT or HCPCS code's shape, "
+                                 'including one the provider only listed, one its second review listed without adding and '
+                                 'one in a provider response CPT Studio did not use, is listed as an alternative and never '
+                                 "added as a proposal, and one in neither shape is counted and never listed; and a "
+                                 "participant's questions are notes that never block.")
+PARTICIPANTS_NEVER_DECIDE = ("A participant never decides a status and agreement never promotes a code: a participant's "
+                             'code that the proposal provider selected, in scope and with an exact passage, in a response '
+                             'CPT Studio used, or that its bounded second review added as a proposal, is recorded on '
+                             "that proposal, which CPT Studio's own readers judge on the provider's passages alone; a "
+                             "code a participant's independent first reading proposes, quoting the document verbatim, is "
+                             "read by those same readers from that reading's exact passages, whatever any other proposer "
+                             'did with it, and added as a proposal of its own where they read it as accounting for a '
+                             'documented service or act done on the date of service; codes of different proposers for '
+                             'the same act each reach review, held by one question naming the others, and none is '
+                             'preferred; it is then held or ready by those readers alone, and only a reviewer approves '
+                             "it; any other code a participant gives in a CPT or HCPCS code's shape, including one it "
+                             'gives only in peer review, is listed as an alternative, and one in neither shape is counted '
+                             "and never listed; and a participant's questions are notes that never block.")
+
+
+def participants_summary_check(sentences: Sequence[str]) -> Check:
+    """Each configured participant's state, in its own sentences: which read the document, the codes it proposed and how
+    many it quoted verbatim, and which did not and why (I10: a participant that did not run blocks only itself).
+    Informational, whatever the states: no participant's reading decides anything."""
+    return Check('participants.summary', 'Independent participants', 'info',
+                 f'{" ".join(sentences)} {PARTICIPANTS_NEVER_DECIDE}', PARTICIPANTS_SOURCE)
+
+
+def _quoted_by(items: Sequence[tuple[str, str]]) -> str:
+    return (f'“{excerpt(items[0][1])}”' if len(items) == 1
+            else '; '.join(f'{label}: “{excerpt(quote)}”' for label, quote in items))
+
+
+def participants_disagree_check(code: str, items: Sequence[tuple[str, str]],
+                                disputes: Sequence[tuple[str, str]] = ()) -> Check:
+    """``items``: (participant label, its quote) for each participant that advises not to code ``code`` because the
+    service was not performed at this encounter, quoting the document verbatim; ``disputes``: (participant label, its
+    quote) for each that disputes ``code`` in peer review (HARNESS.md 11.1), quoting the document verbatim. Each
+    sentence names its phase where both are present. The contradiction is kept for the reviewer, never voted on: the
+    proposal's status stays the one CPT Studio's own readers decide."""
+    sentences = []
+    if items:
+        one = len(items) == 1
+        phase = (' in its independent reading' if one else ' in their independent readings') if disputes else ''
+        sentences.append(f'{_join([label for label, _ in items])} {"advises" if one else "advise"} not to code {code}'
+                         f'{phase}: {"it reads" if one else "they read"} its service as not performed at this '
+                         f'encounter ({_quoted_by(items)}).')
+    if disputes:
+        one = len(disputes) == 1
+        sentences.append(f'{_join([label for label, _ in disputes])} {"disputes" if one else "dispute"} {code} in peer '
+                         f'review, after seeing the other reviewers\' frozen conclusions ({_quoted_by(disputes)}).')
+    return Check('participants.disagree', 'An independent participant advises not to code it', 'warn',
+                 f'{" ".join(sentences)} Kept for the reviewer, never voted on: the status is decided by the document '
+                 'through CPT Studio\'s own readers.', PARTICIPANTS_SOURCE)
+
+
+def participants_services_check(items: Sequence[tuple[str, ...]]) -> Check:
+    """``items``: (participant label, service label, its quote[, its status[, how the documented-service reading reads
+    a service of that kind as not done[, what it reads as done in the quoted words, of another family]]]) for each
+    service a participant reads as performed - or as started and not completed ('attempted_incomplete') - quoting the
+    document verbatim, of a kind of which the documented-service reading reads no performed service. Coding
+    completeness is incomplete beside each (engine._Harness.complete), and stays so in the reviewed report
+    (engine.reviewed_completeness keeps it), so the check says it is, never "until a reviewer checks the document". The
+    reading of a service of that kind as not done - 'the upper endoscopy as negated' - is named where there is one
+    (refutation round 6, R6-MEANING, negation-5), and else a service of another family read as done in the quoted
+    words - 'a performed service under Upper GI endoscopy (EGD, esophagoscopy, POEM)' - so a quoted service the reading
+    reads as performed is never left beside "reads no performed service of that kind" alone (refutation round 11,
+    wording-1)."""
+    kinds = 'that kind' if len(items) == 1 else 'those kinds'
+    said = '; '.join(f'{item[0]} reads '
+                     f'{"an attempted, incomplete" if item[3:4] == ("attempted_incomplete",) else "a performed"} '
+                     f'{item[1]} (“{excerpt(item[2])}”)'
+                     + (f', where the documented-service reading reads {item[4]}' if item[4:5] and item[4] else '')
+                     + (f', where the documented-service reading reads in the quoted words {item[5]}'
+                        if item[5:6] and item[5] else '')
+                     for item in items)
+    return Check('participants.services', 'Performed services only an independent participant reads', 'warn',
+                 f'{said}. The documented-service reading reads no performed service of {kinds}, so coding '
+                 'completeness is incomplete.', PARTICIPANTS_SOURCE)
+
+
+def provider_status_beside_participants(provider_status: str, normalized: Optional[NormalizedResponse],
+                                        proposers: Sequence[str]) -> Optional[Check]:
+    """The provider.status check (provider_checks) when the proposal provider proposed nothing and an independent
+    participant's code is a proposal (``proposers``: the labels of the participants whose codes are): its own state as
+    provider_checks words it, never "so there are no CPT proposals" beside a proposal. None where provider_checks says
+    nothing false (a response read, with or without a selected code)."""
+    label = 'Proposal provider'
+    rest = (f'The proposals listed come only from the independent participants ({_join(proposers)}), each judged by '
+            'CPT Studio\'s own readers by the same rules.')
+    if provider_status == 'not_run':
+        return Check('provider.status', label, 'not_verified',
+                     f'The proposal provider was not run for this revision, so it proposed no codes. {rest}',
+                     PROVIDER_SOURCE)
+    if provider_status == 'failed':
+        return Check('provider.status', label, 'fail',
+                     'The proposal provider did not return a usable result (it failed, was not sent or was cancelled), '
+                     f'so it proposed no codes. {rest}', PROVIDER_SOURCE)
+    if provider_status == 'unknown':
+        return Check('provider.status', label, 'warn',
+                     'The proposal provider request was sent but its outcome is unknown, so it proposed no codes; a '
+                     f'workspace member must reconcile it before any new attempt. {rest}', PROVIDER_SOURCE)
+    if normalized is not None and normalized.refused:
+        return Check('provider.status', label, 'fail',
+                     f'The response from {normalized.provider} ({normalized.adapter_version}) was not used, so it '
+                     f'proposed no codes. {rest}', PROVIDER_SOURCE)
+    return None
+
+
+# --- reviewer-confirmed findings (HARNESS.md 11.3) ------------------------------------------------------------------
+# A participant's located passage, accepted by an owner or reviewer with an attestation as the answer to an open
+# question (engine._Confirmations). Everything that uses one says so: "confirmed from <participant>'s located passage by
+# <reviewer>", with the passage quoted; it is never worded as a reading of CPT Studio's own.
+
+CONFIRMATION_SOURCE = 'cpt-studio:confirmation@1'
+CONFIRMED_CUE = 'confirmed: '  # the cue of a status reading a reviewer confirmed
+QUOTED_PASSAGES = 3  # passages a confirmation's wording quotes; the rest are counted
+
+
+def quoted_passages(texts: Sequence[str]) -> str:
+    """'“<passage>”', '“<a>”; “<b>”', past QUOTED_PASSAGES '... and N more'."""
+    more = len(texts) - QUOTED_PASSAGES
+    return '; '.join(f'“{excerpt(text)}”' for text in texts[:QUOTED_PASSAGES]) + (f' and {more} more' if more > 0
+                                                                                   else '')
+
+
+def confirmed_status_detail(performed: bool, status: str, words: str, quoted: str) -> str:
+    """A status decided by a reviewer-confirmed passage: performed, or not performed with what the passage documents."""
+    if performed:
+        return f'Performed on the date of service: {words} ({quoted}).'
+    return f'Not performed on the date of service (documented as {status}): {words} ({quoted}).'
+
+
+def confirmed_status_check(performed: bool, status: str, words: str, quoted: str, held: str) -> Check:
+    """The service.status check of a code whose status a reviewer-confirmed finding decided: its passage, who located
+    and who confirmed it, and the readers' own words for the hold it answered (``held``), kept beside it."""
+    return Check('service.status', 'Service performed on this encounter', 'pass' if performed else 'fail',
+                 f'{confirmed_status_detail(performed, status, words, quoted)} CPT Studio\'s own readers held it: '
+                 f'{held}', CONFIRMATION_SOURCE)
+
+
+def confirmed_exclusion(status: str, words: str, quoted: str) -> str:
+    return f'{confirmed_status_detail(False, status, words, quoted)} Reinstate if this code is supported.'
+
+
+def confirmed_incomplete_check(fact: str, value: str, words: str, quoted: str, shortfall: str) -> Check:
+    """The service.incomplete check of a code whose reviewer-confirmed fact CPT Studio's readers read as an incomplete
+    procedure (``shortfall``: an extent short of the depth the procedure calls for, or a failed cannulation), as
+    incomplete_check words the readers' own reading - said to be confirmed, never documented by the readers."""
+    return Check('service.incomplete', 'Incomplete procedure documented', 'warn',
+                 f'{CONFIRMED_HEADING}: {fact_label(fact)} = {excerpt(value)}, {words} ({quoted}) - {shortfall}, '
+                 "which CPT Studio's readers read as an incomplete procedure. Kept for review: not treated as "
+                 'completed and not excluded.', CONFIRMATION_SOURCE)
+
+
+def confirmed_incomplete_note(fact: str, value: str, words: str) -> str:
+    """What a service.status check adds when a reviewer-confirmed fact makes its procedure incomplete."""
+    return (f'With the reviewer-confirmed {fact_label(fact)} ({excerpt(value)}, {words}), it is read as incomplete '
+            '(performed in part).')
+
+
+def confirmations_applied_check(items: Sequence[str]) -> Check:
+    """``items``: each question a reviewer-confirmed finding answers, worded with its passage (engine._Answer.item)."""
+    return Check('confirmations.applied', 'Reviewer-confirmed findings', 'info',
+                 f'{plural(len(items), "reviewer-confirmed finding")} read: {"; ".join(items)}. Each answers only the '
+                 'question it was made for and is shown as the reviewer\'s confirmation, never as a reading of CPT '
+                 'Studio\'s own. A confirmation never approves a code: approval stays a separate decision.',
+                 CONFIRMATION_SOURCE)
+
+
+def confirmations_ignored_check(items: Sequence[str]) -> Check:
+    """``items``: each confirmation not read, with why (engine._Confirmations)."""
+    return Check('confirmations.ignored', 'Reviewer-confirmed findings not read', 'warn',
+                 f'{plural(len(items), "confirmation")} not read: {"; ".join(items)}. A confirmation that is not read '
+                 'answers nothing: its question stays as CPT Studio\'s readers leave it.', CONFIRMATION_SOURCE)

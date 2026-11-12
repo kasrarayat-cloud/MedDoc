@@ -385,6 +385,7 @@ class Status13HedgedOwnPassageTests(RealCase):
         self.assertIn(positive, status.detail)
         self.assertIn(hedge, status.detail)
         self.assertFalse(status.detail.startswith('No documentation establishes'), status.detail)
+        self.assertFalse(status.detail.startswith('CPT Studio could not confirm'), status.detail)  # builder Q1's words
         (asked,) = [c for c in item.clarifications if c.fact == 'performed_status']
         self.assertIn(hedge, asked.reason)
         self.assertIn(positive, asked.reason)
@@ -741,5 +742,12 @@ class Status1GuardTests(EngineCase):
 
 class EngineVersionTests(SimpleTestCase):
     def test_the_engine_version_is_bumped_once(self):
-        # @4: the documented-service inventory decides the codes it matches (ARCHITECTURE 5.9-5.11)
-        self.assertEqual(ENGINE_VERSION, 'cpt-studio-validation@4')
+        # @4: the documented-service inventory decides the codes it matches (ARCHITECTURE 5.9-5.11); @5: GI round 4's
+        # engine reads differently from installed 80df1831d168's @4 (PA's one-cause holds, PO's second-review offers,
+        # V3's nouns; pd.json integration_20261101_cycle2); @6: the core repair (2026-11-03) reads differently from
+        # installed 41e03656df61's @5 (P2's holds, the D15 base rule, the lead's L3; cux-hold.json, cux-lead.json); @7: the
+        # harness repair (2026-11-05) reads differently from installed b0dc3446c64c's @6 (the negation release, P-ADMIT,
+        # the act-included and unsupported-act reconciliation rules, a refused response as no available answer)
+        # @9: the completion repair (2026-11-06); @10: the walk round (2026-11-07) reads differently from installed
+        # 6f306af1b030's @9 (a cited failed attempt set aside beside the code's own act; the selected passage's hold)
+        self.assertEqual(ENGINE_VERSION, 'cpt-studio-validation@10')

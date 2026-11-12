@@ -17,11 +17,12 @@ from django.test import Client, SimpleTestCase, TestCase, override_settings
 from studio import models, reports
 from studio.types import RawExchange
 from tests.support import factories as f
+from tests.support.operator import OperatorReads
 from tests.test_pipeline_api import drain
 from tests.test_services_second_review import TwoPassProvider, ask
 
 LIVE = dict(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
-APP = Path(settings.BASE_DIR) / 'studio' / 'static' / 'studio' / 'app.js'
+APP = Path(settings.BASE_DIR) / 'studio' / 'operator' / 'ops.js'
 SYNTHETIC = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n'
 
 COLONOSCOPY = SYNTHETIC + """Colonoscopy report (fictional)
@@ -76,7 +77,7 @@ def section(text, title):
 
 
 @override_settings(**LIVE)
-class Harness(TestCase):
+class Harness(OperatorReads, TestCase):
     def setUp(self):
         self.fresh()
 
@@ -106,7 +107,7 @@ class Harness(TestCase):
             return self.client.post(path, data=json.dumps(data or {}), content_type='application/json')
 
     def detail(self, encounter_id):
-        reply = self.client.get(f'/api/encounters/{encounter_id}')
+        reply = self.client.get(f'/ops/api/encounters/{encounter_id}')
         self.assertEqual(reply.status_code, 200, reply.content)
         return reply.json()
 
@@ -203,7 +204,7 @@ class SecondReviewSelectionIsNeverDroppedTests(Harness):
                 # the reviewer decides it like any proposal; the reviewed report follows
                 self.decide(encounter_id, '45385', 'approve')
                 self.decide(encounter_id, '45380', 'approve')
-                reviewed = self.post(f'/api/encounters/{encounter_id}/reports', {'kind': 'reviewed', 'fmt': 'txt'})
+                reviewed = self.post(f'/ops/api/encounters/{encounter_id}/reports', {'kind': 'reviewed', 'fmt': 'txt'})
                 self.assertEqual(reviewed.status_code, 201, reviewed.content)
 
     def test_a_code_a_primary_proposal_already_carries_is_listed_with_why(self):
@@ -345,7 +346,7 @@ class DocumentedVisitWithoutAProposalTests(Harness):
                 self.assertIn('"incomplete"', row)
                 self.assertNotIn(EVERY_SERVICE, row)
                 self.assertIn('Coding for this encounter is incomplete', page(detail)['codes'])
-                self.assertEqual(self.post(f'/api/encounters/{encounter_id}/reports',
+                self.assertEqual(self.post(f'/ops/api/encounters/{encounter_id}/reports',
                                            {'kind': 'reviewed', 'fmt': 'csv'}).status_code, 201)
 
     def test_control_a_visit_with_its_own_proposal_and_a_procedure_alone_stay_as_they_were(self):
@@ -578,7 +579,7 @@ class NothingIsSaidOfAResponseNeverReadTests(Harness):
         self.assertNotIn(NONE_PROPOSED, html)
         self.assertIn(check['detail'], html)
         # reconciled, then the one new attempt stopped before it sent: the assessment still read no response
-        reply = self.post(f'/api/encounters/{encounter_id}/reconcile',
+        reply = self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                           {'provider_run_id': str(run.pk), 'note': 'Checked the provider console: nothing recorded.'})
         self.assertIn(reply.status_code, (200, 201), reply.content)
         self.assertEqual(self.post(f'/api/encounters/{encounter_id}/stop').status_code, 200)
@@ -872,7 +873,7 @@ class SecondReviewOutcomeIsStatedTests(Harness):
         self.fresh('Synthetic workspace reconciled')
         encounter_id = self.asked('unknown')
         run = models.ProviderRun.objects.get(encounter_id=encounter_id, purpose='second_review')
-        reply = self.post(f'/api/encounters/{encounter_id}/reconcile',
+        reply = self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                           {'provider_run_id': str(run.pk), 'note': 'Checked the provider console: nothing recorded.'})
         self.assertIn(reply.status_code, (200, 201), reply.content)
         drain()
@@ -920,7 +921,7 @@ OFFICE_TIME = ('99213', 'Total time on the date of the encounter was 24 minutes.
 
 def list_row(html_client, encounter_id):
     """The encounter's row in GET /api/encounters, and the documents-list row app.js renders from it."""
-    (row,) = [r for r in html_client.get('/api/encounters').json()['encounters'] if r['id'] == encounter_id]
+    (row,) = [r for r in html_client.get('/ops/api/encounters').json()['encounters'] if r['id'] == encounter_id]
     done = subprocess.run([shutil.which('node'), '-e', ROW_NODE, str(APP)], input=json.dumps(row), capture_output=True,
                           text=True, timeout=60, check=False)
     if done.returncode:

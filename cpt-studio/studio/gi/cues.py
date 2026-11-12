@@ -264,9 +264,28 @@ HISTORICAL_CLAUSE = (
                             r'|\breview\s+of\s+(?:the\s+)?(?:outside|prior|previous|old)\s+(?:reports?|records?)\b')),
 )
 
+# --- one failure vocabulary (refutation cycle 2, outcome O6) ---------------------------------------------------------
+# The words that say an act was stopped, cut short or kept from being done. Routing's subject-tested failure cues read
+# them to tell a sub-act's own failure from the examination's (ABORTED; INCOMPLETE_CLAUSE 'terminated', 'stopped' and
+# 'precluded'; detect._SUBJECT_TESTED), and the documented-service reader reads the same words as that act's own
+# failure (FAILED_ACT after its mention, FAILED_ACT_BEFORE as its attribute; services.ATTEMPT_OR_FAILURE_CUES names the
+# readings they make). Every one of those patterns is built from these names, each reader keeping its own anchoring, so
+# a failure routing gives to a sub-act is never an act the services reader reads done, and the two cannot drift apart
+# again: cycle 1 had added "aborted", "terminated" and "discontinued" to the services reader by hand, and "halted",
+# "stopped because" and "precluded", which routing read as a polypectomy's own failure, still let the procedure line
+# make the listed polypectomy done ("The polypectomy was halted because of bleeding.": 45385 READY).
+ACT_ABORTED = 'aborted'
+ACT_STOPPED = ('terminated', 'discontinued', 'halted')  # routing's 'terminated' cue (undenied)
+ACT_STOPPED_HOW = ('at', 'short', 'due', 'because', 'before')  # routing's 'stopped' cue: "stopped" and one of these
+ACT_PRECLUDED = 'precluded'
+ACT_FAILED = ('failed', 'unsuccessful', 'abandoned')  # the services reader's own failure words
+# Every failure word of an act, one per reading the services reader makes of it ("uncertain: halted"); "stopped" is
+# read only with one of ACT_STOPPED_HOW after it.
+ACT_FAILURE_WORDS = ACT_FAILED + (ACT_ABORTED,) + ACT_STOPPED + (ACT_PRECLUDED, 'stopped')
+
 # --- cancellation: the service was called off before it happened ---------------
 
-ABORTED = rx(r'\baborted\b')
+ABORTED = rx(r'\b' + ACT_ABORTED + r'\b')
 CANCELLED_CLAUSE = (
     ('cancelled', rx(r'\bcancel(?:l?ed|lation|s)?\b')),
     ('aborted', ABORTED),
@@ -461,9 +480,10 @@ INCOMPLETE_CLAUSE = (
                         r'|\bfailed\s+to\s+(?:reach|advance|pass|intubate|enter|traverse)\b|\bwithout\s+reaching\b')),
     ('prevented', rx(r'\bprevent(?:ed|s|ing)\s+(?:\w+\s+){0,2}?(?:passage|advancement|intubation|entry|traversal|'
                      r'examination|evaluation|insertion)\b|\bimpassable\b|\bnon-?traversable\b')),
-    ('terminated', _Undenied(r'\b(?:terminated|discontinued|halted)\b')),
-    ('stopped', rx(r'\bstopped\s+(?:at|short|due|because|before)\b')),
-    ('precluded', rx(r'\bprecluded\b')),
+    # the one failure vocabulary (ACT_*, above): the services reader's FAILED_ACT reads these same words
+    ('terminated', _Undenied(r'\b(?:' + '|'.join(ACT_STOPPED) + r')\b')),
+    ('stopped', rx(r'\bstopped\s+(?:' + '|'.join(ACT_STOPPED_HOW) + r')\b')),
+    ('precluded', rx(r'\b' + ACT_PRECLUDED + r'\b')),
     ('failed cannulation', rx(r'\b(?:failed|unsuccessful)\s+(?:attempts?\s+at\s+)?(?:deep\s+|selective\s+|biliary\s+|'
                               r'bile\s+duct\s+|pancreatic\s+)?cannulation\b|\bcannulation\s+(?:\w+\s+){0,5}?'
                               r'(?:was\s+|were\s+)?(?:unsuccessful|not\s+achieved|not\s+possible|failed)\b'
@@ -733,12 +753,192 @@ EM_VISIT = rx(r'\b(?:(?:in-person\s+|outpatient\s+|ambulatory\s+)?(?:office|clin
               r'virtual|audio-video)\s+(?:visit|encounter|consultation)|new[- ]patient\s+(?:visit|evaluation|'
               r'consultation|consult|encounter)|established[- ]patient\s+(?:visit|encounter)|follow[- ]?up\s+'
               r'(?:office\s+|clinic\s+)?visit|progress\s+note|evaluation\s+and\s+management)\b')
+# Core repair 2026-11-03 (P1, rule 8; R2-routing-status 1.4): an explicit statement that no separate office E/M service,
+# office visit or office-visit time is documented, performed, provided, rendered or occurred today - "No separate office
+# evaluation and management encounter or office-visit time is documented on this date.", "No separately identifiable
+# E/M service was performed.", "Evaluation and management was not provided." One pattern, read by routing's E/M base
+# reading (detect._em_base_reading: a visit mention it covers reads negated) and by the documented-service reader's E/M
+# branch (services._em_service), so the two readers agree. Its forms: a negator governing the visit mention with only
+# visit qualifiers between them; the mention inside "no <noun phrase> is/was documented|provided|performed|rendered|
+# furnished|reported|billed" or "no <noun phrase> occurred / took place" (no other predicate, comma or coordination in
+# the phrase); and, after the mention, "was/is not (separately) documented|provided|performed|rendered|furnished|done".
+# Billing wordings that state a visit happened ("Office visit not billed separately.", "The office visit was not
+# separately billable.") are none of these and read as before (an owner question, R2 Q-1).
+_EM_ABSENT_QUALIFIER = _words('a', 'an', 'any', 'separate', 'separately', 'identifiable', 'significant', 'distinct',
+                              'additional', 'face-to-face', 'in-person', 'office', 'clinic', 'outpatient',
+                              'problem-oriented', 'E/M', 'same-day', 'and', 'or')
+_EM_ABSENT_NOUN = (r'(?:evaluation\s+and\s+management|E/M|(?:office|clinic|outpatient)[- ](?:visit|encounter|'
+                   r'consultation|consult))(?:[- ](?:services?|encounters?|visits?|time))?')
+_EM_ABSENT_NP = r'(?:(?!\b(?:was|were|is|are|has|have|had|and|but|which|that)\b)[^.;:!?,\n])'
+_EM_ABSENT_QUALIFIED = r'(?:[\s,]{1,3}(?:' + _EM_ABSENT_QUALIFIER + r')){0,6}[\s,]{1,3}' + _EM_ABSENT_NOUN + r'\b'
+# Round-2 repair 2026-11-04 (reader-em, R8b-1; refutation L2/F07; tests/fixtures/gi4/declarations/cux-r2-em.json): the
+# statement is the WHOLE of its sentence. P1's three forms read a part of a sentence, so a location hedge after the
+# denial ("The office visit is not documented here; it is documented in the clinic note of today.") and a negator
+# governing another noun ("No medication changes at today's office visit were documented.") both read as the denial,
+# and the visit's questions vanished. Each form now runs from the sentence's start - a line start, or a full stop,
+# question or exclamation mark and at most three spaces - to its end (a full stop or exclamation mark, a line end, or the
+# end of the text read), and holds nothing else but an optional "There is/was" opener, the form's own predicate and the
+# day adjuncts below; anything else in the sentence (a hedge, another clause, a condition, a question, a possessive, a
+# provider, another noun the negator governs) leaves it no absence statement, so the visit reads as installed (it asks).
+# Each form keeps P1's own reach, so it matches only where P1's pattern matched and covers no visit mention P1's did not:
+# (A) P1's first form ("No separate office visit or outpatient E/M service"), then optionally its predicate; (B) P1's
+# second form narrowed to a record noun governing the visit ("No record of a separate office visit is documented."),
+# P1's own 40-character reach to the noun asserted, its predicate right after the noun; (C) P1's third form ("Evaluation
+# and management was not provided.") after qualifiers that never begin a longer visit mention (EM_VISIT's "in-person" and
+# "outpatient" only where no "office" or "clinic" follows them), never after "the" or "this" (a definite visit is
+# presupposed, not denied). A day adjunct may also open the sentence ("Today, no separate office visit was provided.").
+_EM_ABSENT_START = r'(?:(?<![^\n])|(?<=[.!?\n][ \t])|(?<=[.!?\n][ \t]{2})|(?<=[.!?\n][ \t]{3})|(?<=[.!?]))[ \t]*'
+_EM_ABSENT_LEAD = (r'(?:(?:today|on\s+this\s+date|on\s+the\s+date\s+of\s+service|for\s+this\s+(?:date|encounter)),?'
+                   r'\s+)?')
+_EM_ABSENT_THERE = r'(?:there\s+(?:is|was|were|has\s+been|had\s+been)\s+)?'
+_EM_ABSENT_VERB = r'(?:documented|provided|performed|rendered|furnished|reported|billed)'  # P1's second form's verbs
+_EM_ABSENT_DONE = r'(?:documented|provided|performed|rendered|furnished|done)'  # P1's third form's verbs
+_EM_ABSENT_PREDICATE = (r'(?:\s+(?:is|was|were|are|has\s+been|have\s+been|had\s+been)\s+(?:separately\s+)?'
+                        r'(?:' + _EM_ABSENT_VERB + r'|done)(?:\s+(?:or|and|nor)\s+(?:' + _EM_ABSENT_VERB + r'|done)){0,2}'
+                        r'|\s+(?:occurred|took\s+place|happened))?\b')
+_EM_ABSENT_RECORD_QUALIFIER = _words('a', 'an', 'any', 'separate', 'separately', 'identifiable', 'significant',
+                                     'distinct', 'additional', 'face-to-face', 'in-person', 'office', 'clinic',
+                                     'outpatient', 'problem-oriented', 'E/M', 'same-day', 'or')  # no "and": P1's reach
+_EM_ABSENT_RECORD = (r'no(?=' + _EM_ABSENT_NP + r'{0,40}?\b' + _EM_ABSENT_NOUN + r'\b)'
+                     r'\s+(?:record|documentation|evidence|mention|note)s?\s+of(?:\s+(?:' + _EM_ABSENT_RECORD_QUALIFIER
+                     + r')){0,6}\s+' + _EM_ABSENT_NOUN + r'\b\s+(?:(?:is|was|were|are|has\s+been|have\s+been)\s+'
+                     r'(?:separately\s+)?' + _EM_ABSENT_VERB + r'|occurred|took\s+place)\b')
+_EM_ABSENT_DENIED_QUALIFIER = _words('a', 'an', 'any', 'separate', 'separately', 'identifiable', 'significant',
+                                     'distinct', 'additional', 'face-to-face', 'office', 'clinic', 'problem-oriented',
+                                     'E/M', 'same-day', 'and', 'or')
+_EM_ABSENT_DENIED = (r'(?:(?:' + _EM_ABSENT_DENIED_QUALIFIER + r'|(?:in-person|outpatient)(?![\s,]+(?:office|clinic)\b))'
+                     r'[\s,]{1,3}){0,6}' + _EM_ABSENT_NOUN
+                     + r"\s+(?:(?:was|is|has\s+been)\s+not|(?:was|is)n['’]t)\s+(?:separately\s+)?" + _EM_ABSENT_DONE
+                     + r'\b(?:\s+(?:or|and|nor)\s+' + _EM_ABSENT_DONE + r'\b){0,2}')
+_EM_ABSENT_DATE = r'(?:\d{4}-\d{1,2}-\d{1,2}|\d{1,2}/\d{1,2}/\d{2,4})'  # detect._em_absent checks it is the service date
+_EM_ABSENT_ON_DAY = (r'(?:today|this\s+date|separately|on\s+(?:this|the)\s+(?:date|day)(?:\s+of\s+(?:service|the\s+'
+                     r'procedure|the\s+encounter))?|for\s+(?:this|the)\s+(?:date|day|encounter)(?:\s+of\s+service)?|'
+                     r'for\s+today|(?:during|at)\s+(?:this|the)\s+encounter|(?:on|for|dated)\s+' + _EM_ABSENT_DATE + r')\b')
+_EM_ABSENT_DAY = r'(?:[\s,]+' + _EM_ABSENT_ON_DAY + r')*'
+EM_ABSENCE = rx(_EM_ABSENT_START + _EM_ABSENT_LEAD + r'(?:' + _EM_ABSENT_THERE + r'(?:no|without|neither)'
+                + _EM_ABSENT_QUALIFIED
+                # the visit nouns it coordinates ("no separate office visit or outpatient E/M service")
+                + r'(?:[\s,]{1,3}(?:or|and|nor)' + _EM_ABSENT_QUALIFIED + r'){0,3}'
+                # one day adjunct may stand before the predicate ("No separate office visit on this date was provided.");
+                # one, never a run, so the two adjunct places cannot trade a run between them
+                + r'(?:[\s,]+' + _EM_ABSENT_ON_DAY + r')?' + _EM_ABSENT_PREDICATE
+                + r'|' + _EM_ABSENT_THERE + _EM_ABSENT_RECORD + r'|' + _EM_ABSENT_DENIED + r')'
+                + _EM_ABSENT_DAY + r'(?=[ \t]*(?:[.!]|\n|\Z))')
+# Round-2 repair 2026-11-04 (reader-em, R8b-2; refutation L2/F08): words that state an evaluation of the patient, a
+# history, an examination or a visit in a wording routing reads as no E/M mention (EM_VISIT, an E/M heading, time and
+# decision making are routing's own): the patient as the one seen, evaluated, examined, assessed or interviewed ("She
+# was also evaluated today", "Separately, she was seen and examined today"); an evaluation stated today; the clinician
+# as the one evaluating ("I examined her"); a named patient seen or assessed for something ("Mara was seen for
+# jaundice"); the patient who underwent or had an evaluation, assessment, consultation, H&P or physical examination;
+# an evaluation in a clinic or office, never a future one ("will be seen in
+# clinic" is none); a history, history and physical, H&P, evaluation, assessment or consultation done ("A separate
+# problem-focused history and examination was performed today"); a physical examination; the note elements of an
+# evaluation (HPI, history of present illness, review of systems, ROS); and a visit's own note ("documented in the
+# clinic note of today"). Read ONLY by detect._em_evaluation_stated, ONLY to hold an absence statement (EM_ABSENCE) as a
+# contradiction: never to read a visit performed. A closed list that only adds holds: a wording it misses reads as at
+# the core repair.
+_EM_EVAL_ADVERBS = (r'(?:(?:' + _words('also', 'separately', 'additionally', 'then', 'first', 'initially', 'subsequently',
+                                       'today', 'again', 'briefly', 'personally', 'independently', 'formally', 'fully',
+                                       'being', 'previously', 'recently', 'later', 'clinically', 'promptly', 'both')
+                    + r')[\s,]+){0,3}')
+_EM_EVAL_VERB = r'(?:seen|evaluated|re-?evaluated|examined|re-?examined|assessed|re-?assessed|interviewed)'
+# Round 3 (R8b-r3): the adjectives an evaluation noun heading its sentence may carry before a postmodifier (a closed
+# list: "A focused history and physical for ...", "A GI consultation for ..."), at most three
+_EM_EVAL_HEAD_ADJECTIVES = (r'(?:(?:separate|problem[- ](?:focused|oriented)|focused|brief|full|complete|detailed|'
+                            r'comprehensive|clinical|medical|formal|initial|additional|GI|gastroenterology|hepatology|'
+                            r'office|clinic|outpatient|same[- ]day)[ \t]+){0,3}')
+_EM_EVAL_BE = r'(?:was|were|is|are|has\s+been|have\s+been|had\s+been)'
+EM_EVALUATION_STATED = rx(
+    r"\b(?:she|he|patient|pt|(?-i:(?:Mr|Mrs|Ms|Miss|Mx|Dr)\.?\s+[A-Z][\w'-]*))\s+(?:" + _EM_EVAL_BE + r'|got)\s+'
+    + _EM_EVAL_ADVERBS + _EM_EVAL_VERB + r'\b'
+    r'|(?-i:\b[A-Z][a-z]{1,20})\s+' + _EM_EVAL_BE + r'\s+' + _EM_EVAL_ADVERBS
+    + r'(?:evaluated|re-?evaluated|examined|re-?examined|interviewed)\b'
+    r'|(?-i:\b[A-Z][a-z]{1,20})\s+' + _EM_EVAL_BE + r'\s+' + _EM_EVAL_ADVERBS + r'(?:seen|assessed|re-?assessed)\s+for\b'
+    r"|\b(?:she|he|patient|pt|(?-i:(?:Mr|Mrs|Ms|Miss|Mx|Dr)\.?\s+[A-Z][\w'-]*))\s+" + _EM_EVAL_ADVERBS
+    + r'(?:underwent|had|received)\s+(?:(?:a|an|the)\s+)?(?:(?:separate|problem[- ](?:focused|oriented)|focused|'
+    r'brief|full|complete|detailed|comprehensive|clinical|medical)\s+){0,2}(?:evaluation|assessment|consultation|'
+    r'consult|history\s+and\s+physical|H\s*&\s*P|physical\s+exam(?:ination)?)\b'
+    r'|\b' + _EM_EVAL_BE + r'\s+' + _EM_EVAL_ADVERBS + _EM_EVAL_VERB + r'(?:\s+and\s+' + _EM_EVAL_VERB + r')?\s+today\b'
+    r'|\b(?:I|we)\s+' + _EM_EVAL_ADVERBS + r'(?:saw|evaluated|re-?evaluated|examined|re-?examined|assessed|'
+    r're-?assessed|interviewed|met\s+with)\b'
+    r'|\b(?:saw|evaluated|examined|assessed|interviewed)\s+(?:her|him|them|the\s+patient|this\s+patient)\b'
+    r'|(?<!\bbe\s)(?<!\bnot\s)\b' + _EM_EVAL_VERB + r'\s+(?:today\s+)?in\s+(?:the\s+)?(?:clinic|office)\b'
+    r'|\b(?:history(?:\s+and\s+(?:physical|exam(?:ination)?))?|H\s*&\s*P|evaluation|assessment|consultation|consult)\s+'
+    + _EM_EVAL_BE + r'\s+' + _EM_EVAL_ADVERBS + r'(?:performed|obtained|taken|done|completed|conducted|carried\s+out|'
+    r'elicited|held|provided|undertaken|documented)\b'
+    r'|\bphysical\s+exam(?:ination)?\b'
+    r'|\b(?:HPI|history\s+of\s+(?:the\s+)?present\s+illness|review\s+of\s+systems|(?-i:ROS))\b'
+    r'|\b(?:clinic|office|visit|consult(?:ation)?|E/M|H\s*&\s*P)\s+notes?\b'
+    # reader repair, round 3 (cux-r3-reader.json R8b-r3; refutation A5): the declared form above with a postmodifier
+    # between its noun and its verb, where the noun heads its sentence ("An evaluation for new-onset jaundice was
+    # performed today.", "An assessment of her new-onset jaundice, a separate problem, was documented today.")
+    r'|' + r'(?:(?<![^\n])|(?<=[.!?][ \t])|(?<=[.!?][ \t]{2}))[ \t]*(?:[-*\u2022][ \t]+)?'
+    r'(?:(?:today|separately|also|additionally),?[ \t]+)?(?:(?:a|an)[ \t]+)?' + _EM_EVAL_HEAD_ADJECTIVES
+    + r'(?:history(?:\s+and\s+(?:physical|exam(?:ination)?))?|H\s*&\s*P|evaluation|assessment|consultation|consult)'
+    r'\s+(?:(?:for|regarding|concerning|about|addressing)\s+|of\s+(?:her|his|their|(?:the|this)\s+patient[\'\u2019]s)\b)'
+    r'[^.;:!?\n]{0,80}?,?\s+' + _EM_EVAL_BE + r'\s+' + _EM_EVAL_ADVERBS + r'(?:performed|obtained|taken|done|completed|'
+    r'conducted|carried\s+out|elicited|held|provided|undertaken|documented)\b')
 EM_TIME = rx(r'\b(?:total\s+(?:\w+\s+){0,2}?time|time\s+spent|(?:i|we)\s+spent|spent\s+a\s+total\s+of)\b[^.;\n]{0,140}?'
              r'\b(?P<minutes>\d{1,3})\s*(?:minutes|mins?)\b')
 EM_TIME_LINE = rx(r'^[ \t]*(?:total\s+)?time(?:\s+spent)?[ \t]*[:\-][ \t]*(?P<minutes>\d{1,3})\s*(?:minutes|mins?)\b')
 # Times that belong to a procedure, never to an E/M visit.
 NOT_EM_TIME = rx(r'\b(?:withdrawal|sedation|procedure\s+time|procedural|intra-?service|fluoroscop\w*|insertion|'
                  r'cecal|anesthesia|recovery|monitoring)\b')
+# GI round 4: the word that opens the list of what an E/M time statement's minutes covered, written right after the
+# minutes ("52 minutes, covering her history, ..., the orders, and documentation"; matched at the statement's end). Read
+# only by C4-time's EMR-7 reading (detect._pv1_activity_word, _pv1_reviewed): a list item that is today's work on an
+# earlier event names no other occasion of the minutes. Wave 1 repair cycle 2 DROPPED C1 (pv1.json
+# amendment_20261101_cycle2), so no cue after this word is skipped any more: "the orders" re-times the statement, as
+# installed.
+EM_TIME_ACTIVITIES = rx(r'[ \t]*,?[ \t]*(?:covering|including|included|spent\s+(?:on|in)|devoted\s+to|comprising|'
+                        r'consisting\s+of|which\s+(?:covered|included))\b')
+# Variant repair, round 2 (tests/fixtures/gi4/declarations/cux-r2-variants.json, V06 and V12): the hyphen of a declared
+# compound or phrase in its ASCII spelling and its Unicode ones - U+2010 hyphen, U+2011 non-breaking hyphen, U+2012
+# figure dash, U+2013 en dash, U+2014 em dash ("biopsy\u2013proven", "in\u2011person"). A character class; read by
+# services' attributive compounds (COMPOUND_PARTICIPLE_AFTER), NOT_IN_PERSON and detect._PV1_ATTENDANCE only.
+HYPHEN = r'[\-\u2010-\u2014]'
+# GI round 4 (C4): words saying the encounter was no in-person visit - the patient not seen in person, no in-person
+# contact, a telephone or phone contact, an audio-only one, a no-show, a patient who did not arrive. Read only to HOLD an
+# E/M reading (detect._not_in_person). Video, telehealth and virtual visits are not among them: installed reads those as
+# visits (EM_VISIT), and holding them is a policy this round does not make. Variant repair, round 2 (refutation L1/R12;
+# cux-r2-variants.json V12): the declared phrase "not seen in person" (in the office, in clinic) is also read hyphenated
+# ("not seen in-person", the hyphen in HYPHEN's spellings) and with its negation contracted ("wasn't seen in person",
+# "isn't", an ASCII or a U+2019 apostrophe), "(patient|pt|she|he) (was|is) not seen" as "... wasn't seen", and "no
+# in-person" with HYPHEN's spellings; "not evaluated in person" is another verb and is not read.
+NOT_IN_PERSON = rx(r"(?:\bnot|(?<=[A-Za-z])n['\u2019]t)\s+seen\s+in(?:\s+(?:the\s+)?|" + HYPHEN
+                   + r')(?:office|clinic|person)\b|\bno\s+in(?: |' + HYPHEN + r')person\b'
+                   # (V12: session 2's "The patient was not seen." below, contracted; its own line is left as it was)
+                   r"|\b(?:patient|pt|she|he)\s+(?:was|is)n['\u2019]t\s+seen\b"
+                   # repair cycle 1 (EMR-8): "on phone", "over phone" and a parenthesised "(telephone)" too
+                   r'|\b(?:by|via|over(?:\s+the)?|on(?:\s+the)?)\s+(?:tele)?phone\b|\((?:by\s+|via\s+)?(?:tele)?phone\)'
+                   r'|,[ \t]*(?:tele)?phone(?=[ \t]*(?:[.;]|$))'  # "Total time: 12 minutes, telephone."
+                   r'|\b(?:tele)?phone\s+(?:calls?|encounters?|visits?|consultations?|consults?|follow-?ups?|f/u\b|'
+                   r'check-?ins?|contacts?|conversations?|interviews?|appointments?|notes?|discussions?|messages?|'
+                   r'triage)\b'
+                   r'|\btelephonic(?:ally)?\b|\baudio[- ]only\b'
+                   r"|\bno[- ]?show(?:s|ed)?\b|\b(?:did\s+not|didn't|failed\s+to)\s+(?:arrive|attend|show\s+up)\b"
+                   # session 2: "The patient was not seen.", a visit-type field naming the telephone ("Visit type:
+                   # Telephone", "Type of encounter: phone"), "missed her appointment", "left without being seen"
+                   r'|\b(?:patient|pt|she|he)\s+(?:was|is)\s+not\s+seen\b|\b(?:(?:visit|encounter|appointment|contact|'
+                   r'consult(?:ation)?)\s+(?:type|mode|modality|method)|(?:type|mode|modality|method)\s+of\s+(?:visit|'
+                   r'encounter|appointment|contact|consult(?:ation)?))[ \t]*[:\-][ \t]*(?:tele)?phone\b'
+                   r"|\bmissed\s+(?:her|his|their|the|this|today'?s)\s+(?:scheduled\s+)?(?:appointment|visit)\b"
+                   r'|\bleft\s+without\s+being\s+seen\b|\bLWBS\b'
+                   # repair cycle 1 (EMR-8): the field "Encounter: Telephone"; a patient who did not show or come in, who
+                   # did not keep or who cancelled the appointment - the patient as subject, at the clause's end or
+                   # before "for the visit" ("The CT did not show a mass." is no missed visit)
+                   r'|^[ \t]*(?:encounter|visit|appointment)[ \t]*:[ \t]*(?:tele)?phone\b'
+                   r"|\b(?:patient|pt|she|he|they)\s+(?:did\s+not|didn't|failed\s+to)\s+(?:show|come\s+in)(?:\s+(?:up|"
+                   r"today))?(?=[ \t]*(?:[.;,!]|$|for\s+(?:the|her|his|their|this|today'?s)\s+(?:scheduled\s+)?"
+                   r'(?:visit|appointment)))'
+                   r"|\b(?:did\s+not|didn't|failed\s+to)\s+keep\s+(?:her|his|their|the|this|today'?s)\s+(?:scheduled\s+)?"
+                   r'appointment\b'
+                   r"|\b(?:patient|pt|she|he|they)\s+cancell?ed\s+(?:her|his|their|the|this|today'?s)\s+(?:scheduled\s+)?"
+                   r'(?:appointment|visit)\b', FLAGS | re.M)
+# ... and a title line of the note's head naming a telephone or audio-only encounter ("Telephone encounter", "Phone
+# visit"), read whatever section the head falls in (a note may open on a heading such as "Follow-up").
+NOT_IN_PERSON_TITLE = rx(r'^[ \t]*+(?:[\w-]++[ \t]++){0,3}?(?:telephone|phone|audio[- ]only)[ \t]++(?:encounter|call|'
+                         r'visit|consultation|follow-?up|f/u|note|triage)\b[^\n]{0,40}$', FLAGS | re.M)
 _LEVEL = r'straightforward|low|moderate|high'
 _LEVEL_END = r'(?=[ \t]*(?:[- ]complexity\b|level\b|[:,.;(]|\n|$))'
 MDM_LEVEL = rx(r'\b(?:medical\s+decision[- ]making|MDM)\b[^.;\n]{0,60}?\b(?P<level>' + _LEVEL + r')' + _LEVEL_END
@@ -795,6 +995,30 @@ NOT_REACHED_BEFORE = rx(r'\b(?:unable\s+to|could\s+not|cannot|failed\s+to|did\s+
 NOT_REACHED_AFTER = rx(r'^[\s,]*(?:was|were|could)\s+not\s+(?:be\s+)?(?:reached|intubated|entered|examined|visualized|'
                        r'seen|evaluated|inspected)\b')
 REACHED_BEYOND = rx(r'\b(?:beyond|past)\s+(?:the\s+)?(?:[\w-]+\s+){0,2}$')
+# GI round 4, package PE (synthesis E2): routing's own reach vocabulary - REACHED_BEFORE with two more reach verbs,
+# "steered" and "navigated", and nothing else changed. h4-04: "The gastroscope was introduced by mouth under visual
+# guidance and steered through the stomach and pylorus into the second part of the duodenum" stood 76 characters from
+# "introduced" to "into", past REACHED_BEFORE's 60, so the EGD read "incomplete: stomach". Read by detect._landmarks
+# only, where a reach that only these two verbs read counts only under its guards (detect._pe_routing_reach: the
+# family's endpoint or beyond, no denial, no accessory). REACHED_BEFORE itself stays as it is: sections reads it to hold
+# a part, and the request side never moves.
+REACHED_BEFORE_ROUTING = rx(r'\b(?:advanced|passed|inserted|introduced|intubated|examined|inspected|traversed|reached|'
+                            r'visualized|steered|navigated)\b[^.;]{0,60}?\b(?:to|into|through|as\s+far\s+as|up\s+to|'
+                            r'to\s+the\s+level\s+of|beyond|past|at)\s+(?:the\s+)?(?:[\w-]+\s+){0,3}$'
+                            r'|\b(?:reached|intubated|entered)\s+(?:the\s+)?$')
+# Completion design, reach group (2026-11-07), U19: the parts of the duodenum named without their organ - "Duodenum: The
+# bulb and the second portion were normal.", "The duodenal bulb and second portion looked normal.", "the bulb and the
+# second portion of the duodenum" - with the labels and depths of UPPER_LANDMARKS, whose own spellings need "duodenal
+# bulb" and "... of the duodenum". Read by detect's findings-stated reach only (detect._stated_items), and only where
+# the statement itself names the duodenum: the part is coordinated with a landmark of UPPER_LANDMARKS, its line opens
+# with a "Duodenum:" label, or "of (the) duodenum" follows it, or "duodenum," precedes it. Never a landmark of the
+# table: the request side and every other reader keep UPPER_LANDMARKS as it is.
+DUODENAL_PARTS = (
+    ('duodenal bulb', 3, rx(r'\bbulb\b')),
+    ('second part of duodenum', 5, rx(r'\b(?:second|2nd)[ \t\n]+(?:part|portion)\b')),
+    ('third part of duodenum', 6, rx(r'\b(?:third|3rd)[ \t\n]+(?:part|portion)\b')),
+    ('fourth part of duodenum', 7, rx(r'\b(?:fourth|4th)[ \t\n]+(?:part|portion)\b')),
+)
 # A reach whose object is a depth, then the landmark that depth lies in (session 7c8d38da, GI round 2, extent: ho-03's
 # "The pediatric colonoscope was advanced to 28 cm from the anal verge in the sigmoid colon"): the landmark is where the
 # instrument got to, so it is reached, exactly as "advanced to the sigmoid colon" is. Only straight after the reach verb
@@ -1032,3 +1256,52 @@ UPPER_LOCATIONS = (
 # a deliberate choice (pancreatitis precaution), not a failed ERCP.
 PANCREATIC_SUBJECT = rx(r'\b(?:pancreatic\s+duct|main\s+pancreatic|PD|pancreatic)\b')
 BILIARY_SUBJECT = rx(r'\b(?:common\s+bile\s+duct|bile\s+duct|biliary|CBD|choledoch\w*)\b')
+
+# --- package P2 READ-HOLD (2026-11-03, R8 section 1.3): an act stated as not done, read only to HOLD ------------------
+# A passage that states its act failed, was unsuccessful, abandoned or only attempted, or yielded nothing ("could not be
+# removed", "no tissue was obtained"): it never stands for that act where the documented-service reader reads none
+# (engine._second_opinion's own-passage release, R8 D1 candidate_rb). Hold-only; HEDGE_WORDS (shared with other
+# readers) is not widened.
+UNDONE_ACT = rx(r"\b(?:fail(?:s|ed|ure|ing)?|unsuccessful(?:ly)?|abandon(?:s|ed|ing)?|attempt(?:s|ed|ing)?|"
+                r"could\s+not|couldn['\u2019]t|cannot|can\s+not|unable|without\s+success|no\s+tissue|yield(?:s|ed)?\s+no|"
+                r"not\s+(?:be\s+|been\s+)?(?:obtained|removed|retrieved|placed|achieved|successful|deployed|completed))\b")
+# A failure word of the act's own predicate (services.read_clause, R8 D2): after the mention in its clause ("Cold forceps
+# biopsy of the antrum failed.") or right before it as its attribute ("an unsuccessful polypectomy"). It reads the act
+# uncertain - held, as "attempted" already is - never performed and never denied.
+# Refutation cycle 1 (acts F1) added "aborted", "terminated" and "discontinued" here by hand. Refutation cycle 2 (outcome
+# O6): both patterns are built from the one failure vocabulary (ACT_*, above), so every word routing's subject-tested
+# cues give a sub-act as its own failure fails that act here too ("The polypectomy was halted because of bleeding.",
+# "... was stopped because of bleeding.", "... was precluded by its position."). "stopped" is read only with one of
+# the words routing reads after it, and the match is that one word, as the reading names it ("uncertain: stopped").
+# Refutation cycle 3 (outcome C3-4, cost C3-4): cycle 2's additions ("halted", "precluded", "stopped" with one of
+# ACT_STOPPED_HOW) are withdrawn from the services reader's own words - read off another subject's coordinated stop
+# ("... removed with a cold snare and retrieval was precluded", "... and the oozing stopped due to pressure") they held
+# plainly done acts. The guarantee they were added for - a failure routing gives to a sub-act is never an act the
+# services reader reads done - is routing's own now: it gives a failure to a sub-act only where this reader reads that
+# act failed by the same word (detect._consumed_by_the_services_reader). The cycle-1 words stay ("aborted", "terminated",
+# "discontinued"). An attribute (FAILED_ACT_BEFORE) never reaches across a word of time order: "The procedure was
+# aborted after the biopsies" is the examination's abort after done biopsies, not the biopsies' failure.
+# Refutation cycle 4 (outcome 1 and 5; HARNESS.md "Refutation of the integrated diff, cycle 4"): both patterns are the
+# installed release's again - its three words (ACT_FAILED), and an attribute read across any three words. The cycle-1
+# words were added because routing had stopped holding the family on "aborted" (R2's sub-act consumption); routing holds
+# it again (detect._attempted_then_failed: only "X of a ... was attempted, but the X was unsuccessful" is a sub-act's
+# own failure), so the reader needs none of them. Kept, they held plainly done acts on a medication's or another
+# session's aside ("biopsies ..., with aspirin discontinued for five days, were obtained"); and the time-order
+# exclusion read "abandoned before biopsies were obtained" and "failed during polypectomy" as done acts.
+FAILED_ACT = rx(r'\b(?:' + '|'.join(ACT_FAILED) + r'|unsuccessfully)\b')
+FAILED_ACT_BEFORE = rx(r'\b(?P<w>' + '|'.join(ACT_FAILED) + r')[ \t]+(?:[\w-]+[ \t]+){0,3}$')
+# Denials the clause reader had read as acts done (services.read_clause, R8 D3), each read right before the act's
+# mention in its clause: "none (of ...) was/were" ("Of the three polyps, none was snared.", "None of the polyps were
+# removed with a snare."); "at no point/time/stage was/were/did/had" ("At no point was the polyp snared."); and the purpose
+# phrase between an act and its own negated predicate ("Biopsies to determine whether this represents malignancy were
+# not obtained").
+NONE_WAS_BEFORE = rx(r'\bnone\b(?:[ \t]+of\b[^,;:.()\n]{0,60}?)?[ \t,]*\b(?:was|were)[ \t]+(?:[\w-]+ly[ \t]+)?'
+                     r'(?:(?:[a-z]+ed|taken|done)[ \t]+(?:with|by|using)[ \t]+(?:(?:an?|the)[ \t]+)?)?$')
+AT_NO_POINT = rx(r'\b(?:at[ \t]+no[ \t]+(?:point|time|stage)|on[ \t]+no[ \t]+occasion)[ \t]+(?:was|were|did|had)\b')
+PURPOSE_WHETHER = rx(r'[ \t]+to[ \t]+(?:determine|assess|evaluate|establish|exclude|rule[ \t]+out|confirm|check|see|test)'
+                     r'[ \t]+(?:whether|if)\b[^,;:()\n]{0,120}$')
+# An act's own verb denied before it, with no act kind named ("We did not remove the polyp."): the routing-era reader's
+# doubt of such a passage is a status of its own (engine._status_signal, R8 D3), as a denied participle is.
+DENIED_ACT_VERB = rx(r"\b(?:did|do|does|could|would|was|were)(?:\s+not|n['\u2019]t|\s+never)\s+(?:\w+\s+)?"
+                     r"(?:remove|resect|snare|biopsy|take|obtain|sample|perform|excise|retrieve|treat|cauterize|ligate|band|"
+                     r"dilate|inject|ablate|clip|tattoo|place|cannulate|extract)\b")

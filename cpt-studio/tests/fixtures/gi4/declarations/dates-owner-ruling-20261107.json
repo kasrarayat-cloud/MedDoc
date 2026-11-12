@@ -1,0 +1,3582 @@
+{
+ "package": "Dates, repaired after cycle 1 (design group of the 2026-11-06 completion round): the date reader reads the owner-approved date forms of a stated date of service, and the H2 freeze accepts exactly that ruled movement - text by text, never by a count.",
+ "summary": "Owner decision 2026-11-07 (docs/foundation/rulings/2026-10-23-cpt-studio-gi.md, \"Owner decision, 2026-11-07\", interpretation (a)-(d) and (b') after the first refutation). (1) Under the installed date-of-service labels the reader reads a day-first date with a month name and a four-digit year (\"16-Nov-2026\", \"9 November 2026\") and a weekday before a date it reads when the weekday is the date's own (\"Monday, November 9, 2026\"), exactly as their month-day-year twin, its 2026-10-28 known limits included. (2) The labels \"Date of Operation\", \"Exam date\" and \"Examination date\" are read ONLY in the document's head (before the installed _head_end), only where the label stands as a label (it opens its line or a field of its own), never under a title of a note written around a procedure, and only to SEND: where the installed reading sends no date and the fact read with them is the document's one date (context._ruled_head_date). A blank, unreadable or absent value is no candidate; anywhere else they read exactly as installed (\"Exam date\" a wide label of the head, \"Date of Operation\" nothing). \"Operation date\", \"Date/Time of Operation\" and \"Date of exam\" are not these labels. (3) The occurrence noun \"operation\" of the first design is dropped. (4) Three notes that would now say something false are reworded (note_rewordings). A two-digit year, an all-numeric date with hyphens or dots, \"Date:\" alone and every other label stay unread.",
+ "base": "design/base-cpt-studio = cpt-studio of main b285e5f0 = installed 73dcf8b4",
+ "cues_added": [
+  "context.HEAD_SERVICE_DATE",
+  "context._HEAD_DATE_LABEL",
+  "context._HEAD_LABEL_BREAK",
+  "context._HEAD_LABEL_LEAD",
+  "context._LABEL_WEEKDAY",
+  "context._WEEKDAYS"
+ ],
+ "movements": {},
+ "owner_ruling": {
+  "id": "2026-11-07 date forms",
+  "ruling_ref": "docs/foundation/rulings/2026-10-23-cpt-studio-gi.md#owner-decision-2026-11-07",
+  "changed_cues": {
+   "context.FORM_DATE_NOTE": "23d29ab1be33b53aafc2502cfd20025b3de331b7c0c51addd297c7c8301d1624",
+   "context.SERVICE_DATE": "c4fa42d3e5377ee212a97c1eed149ddc079c109480819f019563b05882e4ef7c",
+   "context.WIDE_DATE_NOTE": "a8a868ba5347565574c9d879322f9851ec132a46d9c6b35a9a9d6fcdde27c592",
+   "context.WIDE_DATE_QUOTE_NOTE": "b0ce4d2a759e948e75ad46bbf7ce24cf451632ea88ea4192b2c16f0699b63330"
+  },
+  "changed_cues_note": "Each constant the ruling changes, pinned to its new sha256 (ops.gi4.freeze.cue_inventory): SERVICE_DATE reads a weekday before the date (_LABEL_WEEKDAY, added; date_from_match reads no date when the weekday names another day); FORM_DATE_NOTE, WIDE_DATE_NOTE and WIDE_DATE_QUOTE_NOTE are reworded (note_rewordings). Added: _WEEKDAYS, _LABEL_WEEKDAY, and the head labels - _HEAD_DATE_LABEL, HEAD_SERVICE_DATE, _HEAD_LABEL_LEAD, _HEAD_LABEL_BREAK. _DATE_LABEL, DATE_LABEL, _WIDE_DATE_LABEL, WIDE_SERVICE_DATE, _OCCURRENCE_NOUN and every pattern built on _DATE_LABEL are byte-identical to installed. Nothing in sections.py, cues.py or symbols.py changes.",
+  "new_send_forms": true,
+  "new_held_forms": true,
+  "new_take_forms": true,
+  "new_send_why": "A text whose head fact is the document's one date, sent where the base sent no date (its primary state DATELESS), quoted by the fact's evidence in a decided form stating that date - the gate's own patterns (freeze.ruled_forms), a label the ruling added only within the document's first 12 non-empty lines.",
+  "new_held_why": "Only where the held member answer CONTRADICTS that newly sent date (another day), as a member's answer contradicting any date the installed reading sends is held.",
+  "new_take_why": "Only where the taken member answer EQUALS that newly sent date, as a member's answer equal to any date the installed reading sends is taken.",
+  "note_rewordings": [
+   [
+    "A labelled date of service is written in a form this release reads but does not send by itself (a day-first date such as \"14 Oct 2026\", a label naming the time, or a table row), so it is asked; a member's answer with that date is taken.",
+    "A labelled date of service is written in a form this release reads but does not send by itself (a label naming the time, or a table row), so it is asked; a member's answer with that date is taken."
+   ],
+   [
+    "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date.",
+    "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+   ],
+   [
+    "No date of service is read: the document states a date with words this service does not take as the date of service by itself (a label such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\", or a date-of-service label with other words before its date). It may be this encounter's date or another occurrence's (a planned or an earlier one), so it is quoted and limits no answer: a member's date is taken.",
+    "No date of service is read: the document states a date with words this service does not take as the date of service by itself (a label such as \"Date seen\", \"Case date\", \"Date performed\" or \"Day of procedure\", or a date-of-service label with other words before its date). It may be this encounter's date or another occurrence's (a planned or an earlier one), so it is quoted and limits no answer: a member's date is taken."
+   ]
+  ],
+  "note_rewordings_note": "FORM_DATE_NOTE named the day-first date (\"14 Oct 2026\") as a form not sent by itself, and WIDE_DATE_NOTE / WIDE_DATE_QUOTE_NOTE named \"Exam date\" as a label never sent or taken by itself; both are sent now. Each pair is [installed text, head text]: a FACT-CHANGED whose note moves by these rewordings alone is accepted (freeze._reworded); tests/test_gi4_freeze.py checks every installed text against the installed cue pin and every head text against context.py.",
+  "ci_base_records": {
+   "A03480": {
+    "layout": "a29aa11deeebe50d39cdd2645d9cd445cc57cf1bdf445e6028af06395a018096",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       134,
+       162
+      ]
+     ],
+     "No date of service is read: the document states a date with words this service does not take as the date of service by itself (a label such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\", or a date-of-service label with other words before its date). It may be this encounter's date or another occurrence's (a planned or an earlier one), so it is quoted and limits no answer: a member's date is taken."
+    ],
+    "mentions": [
+     0,
+     0
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "33ea428e3e2cbaa1bd88d358d00c6f53f9c2ed689c5990fe7f87a5fe9ad4acd3"
+     },
+     "answer:D": {
+      "answer": "2026-10-05",
+      "sends": "2026-10-05",
+      "held": false,
+      "taken": true,
+      "request": "5a59c94f0e19857b3abb7992349a19936e1b94ca32df13d465957bbf602ad298"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "1998-01-01",
+      "held": false,
+      "taken": true,
+      "request": "f963a0516cbac17c878fb1b95ae67a5f0741ecc22566c1dcf6a2ce9528da0117"
+     },
+     "answer:N": {
+      "answer": "2026-12-13",
+      "sends": "2026-12-13",
+      "held": false,
+      "taken": true,
+      "request": "ccff81ac07a3183ba7d5feacb4caf8eae1e60471030fb024982f4379e50ddd01"
+     },
+     "answer:P": {
+      "answer": "2021-10-05",
+      "sends": "2021-10-05",
+      "held": false,
+      "taken": true,
+      "request": "c155bf5ad8e1871853eb31d9b857a45ef09e23289ec8e5d6eee2bf8784024164"
+     },
+     "minus1": {
+      "answer": "2026-10-04",
+      "sends": "2026-10-04",
+      "held": false,
+      "taken": true,
+      "request": "a4b80f944e2a3d04488ee1f44d40cf39b32606e7238930772f52f39091a18b58"
+     },
+     "plus1": {
+      "answer": "2026-10-06",
+      "sends": "2026-10-06",
+      "held": false,
+      "taken": true,
+      "request": "dcf4afc401c80a53ea8fe579267cd14def79e6db28751d8cbc862f56857588be"
+     }
+    }
+   },
+   "A03520": {
+    "layout": "f527fdcdf299498633a78b32c2cc10c439e3b57db91f9d41f3b85ce295846d94",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       134,
+       155
+      ]
+     ],
+     "No date of service is read: the document states a date with words this service does not take as the date of service by itself (a label such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\", or a date-of-service label with other words before its date). It may be this encounter's date or another occurrence's (a planned or an earlier one), so it is quoted and limits no answer: a member's date is taken."
+    ],
+    "mentions": [
+     0,
+     0
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "3079e31e98a1efdd8bbacd15cd73707aac4723f53b7a8287491b659e9c812565"
+     },
+     "answer:D": {
+      "answer": "2026-10-08",
+      "sends": "2026-10-08",
+      "held": false,
+      "taken": true,
+      "request": "08de570dc9a3e4c8ad879a5513e5ee48261f431c5a363c819fd5af75690394b3"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "1998-01-01",
+      "held": false,
+      "taken": true,
+      "request": "e68ef259057658efe577158b6e339c630b58966f69581897a8feec435c2d9e13"
+     },
+     "answer:N": {
+      "answer": "2026-11-07",
+      "sends": "2026-11-07",
+      "held": false,
+      "taken": true,
+      "request": "9703a850d097bc11a5394623e1a542f46bb9ddd2185b1525830543f96a6813af"
+     },
+     "answer:P": {
+      "answer": "2021-10-08",
+      "sends": "2021-10-08",
+      "held": false,
+      "taken": true,
+      "request": "da010d76cdaf5f67025f74473bdc458df7429cffb91911e33bff54f75566d075"
+     },
+     "minus1": {
+      "answer": "2026-10-07",
+      "sends": "2026-10-07",
+      "held": false,
+      "taken": true,
+      "request": "022ea3c2c87a95f4baf69d7b2f4b45d387425db16950ec05a2d4694794c83183"
+     },
+     "plus1": {
+      "answer": "2026-10-09",
+      "sends": "2026-10-09",
+      "held": false,
+      "taken": true,
+      "request": "3af6a51997e9ed357e3de8a2fa8ec478ea3b1d41051ebd0ffa4583e40d87e16f"
+     }
+    }
+   },
+   "A03640": {
+    "layout": "dd8dae5b293fdab166d5d406701188bea09fc136f9798f68085e6c778820b507",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       123,
+       157
+      ]
+     ],
+     "No date of service is read: the document states a date with words this service does not take as the date of service by itself (a label such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\", or a date-of-service label with other words before its date). It may be this encounter's date or another occurrence's (a planned or an earlier one), so it is quoted and limits no answer: a member's date is taken."
+    ],
+    "mentions": [
+     1,
+     1
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "81f14e8a5a031414a5befc13c9366824b994664a9d80e6948c715ea20d6a6d36"
+     },
+     "answer:D": {
+      "answer": "2026-10-10",
+      "sends": "2026-10-10",
+      "held": false,
+      "taken": true,
+      "request": "2c28c907010d9f599b312bd5d822ff17859b1e27af83ca03edbdb8fffbb8ab85"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "1998-01-01",
+      "held": false,
+      "taken": true,
+      "request": "fb1e9e198a8dd1ff49c2c4aeaeb9e9e1c2fb1b4eaee656749e38059900fbaab7"
+     },
+     "answer:N": {
+      "answer": "2026-11-01",
+      "sends": "2026-11-01",
+      "held": false,
+      "taken": true,
+      "request": "7fea62305a84a900753be28ab74630f6ccba2b350d4819e5a72d1bcb7e027270"
+     },
+     "answer:P": {
+      "answer": "2024-10-10",
+      "sends": "2024-10-10",
+      "held": false,
+      "taken": true,
+      "request": "6916a43d2246870447925e8d5aa15b6834306917c83aca0d28fe858c0e810277"
+     },
+     "minus1": {
+      "answer": "2026-10-09",
+      "sends": "2026-10-09",
+      "held": false,
+      "taken": true,
+      "request": "5de987c276f749c591dacb36fdc38129cd8fa60914ba74ac9fa05489dba1e139"
+     },
+     "plus1": {
+      "answer": "2026-10-11",
+      "sends": "2026-10-11",
+      "held": false,
+      "taken": true,
+      "request": "365c3427aa00369c0d85a9a19bbd2615188b694c895785a6a1b8f065f7da0633"
+     }
+    }
+   },
+   "A03680": {
+    "layout": "60841f298d5f6f5117ebd0e22c7cbdc89bb790266bca589d86a5230cc711ad8f",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       123,
+       144
+      ]
+     ],
+     "No date of service is read: the document states a date with words this service does not take as the date of service by itself (a label such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\", or a date-of-service label with other words before its date). It may be this encounter's date or another occurrence's (a planned or an earlier one), so it is quoted and limits no answer: a member's date is taken."
+    ],
+    "mentions": [
+     1,
+     1
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "cecbd837c0353a392d0e567c953f40c6f316268c525c86dd0010f57c03fc5ed8"
+     },
+     "answer:D": {
+      "answer": "2026-10-27",
+      "sends": "2026-10-27",
+      "held": false,
+      "taken": true,
+      "request": "bf677e2c4f3090ef3c65890b487a68de3fb8916a54606f24fef3da1547ee2a94"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "1998-01-01",
+      "held": false,
+      "taken": true,
+      "request": "fb14743c88d5d860d060b5ca110aa31522a050270544efe6ccbdce10cc03a234"
+     },
+     "answer:N": {
+      "answer": "2026-12-23",
+      "sends": "2026-12-23",
+      "held": false,
+      "taken": true,
+      "request": "f749cddb6dffe2be50b29a28ab238e414c90d74f777c69072ffbbf1b835965eb"
+     },
+     "answer:P": {
+      "answer": "2025-10-27",
+      "sends": "2025-10-27",
+      "held": false,
+      "taken": true,
+      "request": "a5b0e791679da09f06d9240310e759a967fd861f2988265cfb9d8220fec183ab"
+     },
+     "minus1": {
+      "answer": "2026-10-26",
+      "sends": "2026-10-26",
+      "held": false,
+      "taken": true,
+      "request": "21b219bb6478a5bced4bbc853113b0710283057db9f13da0ee909fc84f0d0537"
+     },
+     "plus1": {
+      "answer": "2026-10-28",
+      "sends": "2026-10-28",
+      "held": false,
+      "taken": true,
+      "request": "8216ffd1e0941b75a7a4079094f1f12c9c44d2d1372fcceb9f82491939a2d2a2"
+     }
+    }
+   },
+   "A03800": {
+    "layout": "c72d8e7b0f69f898ee565e2d333de8074d2ab7a99fc4bae00e5db0fbad53dd40",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       142,
+       177
+      ]
+     ],
+     "No date of service is read: the document states a date with words this service does not take as the date of service by itself (a label such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\", or a date-of-service label with other words before its date). It may be this encounter's date or another occurrence's (a planned or an earlier one), so it is quoted and limits no answer: a member's date is taken."
+    ],
+    "mentions": [
+     1,
+     1
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "d1741e6a79097dcfe65e27cac3a2b065adf0c63070530c9a20b4820bae000880"
+     },
+     "answer:D": {
+      "answer": "2026-10-20",
+      "sends": "2026-10-20",
+      "held": false,
+      "taken": true,
+      "request": "c46bb8b141de26aa008c86e0edde4b7faf64ba0a2f2c70eb22cb423cb57688d0"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "1998-01-01",
+      "held": false,
+      "taken": true,
+      "request": "fc9e317a8afb18b81110c0cce9cff33f016683b13abf42aa79146df66fae9a47"
+     },
+     "answer:N": {
+      "answer": "2026-12-16",
+      "sends": "2026-12-16",
+      "held": false,
+      "taken": true,
+      "request": "e3c7f78aaa918314dacc4d78f0ba62c9cf9fd2a78848bac03d42a25a20b19716"
+     },
+     "answer:P": {
+      "answer": "2025-10-20",
+      "sends": "2025-10-20",
+      "held": false,
+      "taken": true,
+      "request": "c14ed1f506ad199e0aa5e385badc244e889f30f7cd6c8f84dcbc2faf730f7476"
+     },
+     "minus1": {
+      "answer": "2026-10-19",
+      "sends": "2026-10-19",
+      "held": false,
+      "taken": true,
+      "request": "93126aa35fed188c0f8b41066e648dba24182182f06cefdbbddd4261bc86a74e"
+     },
+     "plus1": {
+      "answer": "2026-10-21",
+      "sends": "2026-10-21",
+      "held": false,
+      "taken": true,
+      "request": "3924113e64570af4d1153a88309f49ee2cb1f37263de63aed1ba0d19b8a2d4fc"
+     }
+    }
+   },
+   "A03840": {
+    "layout": "97eb90ce48054a92e4fb4028f2c0d42fa1d28bdc5d1d3e3d069a10ced34c88cf",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       142,
+       170
+      ]
+     ],
+     "No date of service is read: the document states a date with words this service does not take as the date of service by itself (a label such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\", or a date-of-service label with other words before its date). It may be this encounter's date or another occurrence's (a planned or an earlier one), so it is quoted and limits no answer: a member's date is taken."
+    ],
+    "mentions": [
+     1,
+     1
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "b13c03727034d109626d528a8c37d454666070c7383df2d9eef7bc3b3c735c53"
+     },
+     "answer:D": {
+      "answer": "2026-10-21",
+      "sends": "2026-10-21",
+      "held": false,
+      "taken": true,
+      "request": "4f6db92ab158f26374dcc8f1dbdb5acb6ea1ec469de40171588ccf92919eb946"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "1998-01-01",
+      "held": false,
+      "taken": true,
+      "request": "185550245c3b5e026c2143f034c35ba2d660b4195d17962a119cac0ecc4e8210"
+     },
+     "answer:N": {
+      "answer": "2026-12-18",
+      "sends": "2026-12-18",
+      "held": false,
+      "taken": true,
+      "request": "e5dcc3f54b89d49fc434cf000bbd286e63b2c6f8a14075faff2a096af204002c"
+     },
+     "answer:P": {
+      "answer": "2021-10-21",
+      "sends": "2021-10-21",
+      "held": false,
+      "taken": true,
+      "request": "1337a301ab8d2f674fbf19eef578ecb9abb28db93c5a8a181463f508e30fb48e"
+     },
+     "minus1": {
+      "answer": "2026-10-20",
+      "sends": "2026-10-20",
+      "held": false,
+      "taken": true,
+      "request": "fe33e8e381809f47e35b66336299bd97bfa0c6ef0f8c094a3ae2a9248bbdbc15"
+     },
+     "plus1": {
+      "answer": "2026-10-22",
+      "sends": "2026-10-22",
+      "held": false,
+      "taken": true,
+      "request": "7edca8572cce92d30ece0f52857d131d4e81c442d457eeffc175cde8f820aaa9"
+     }
+    }
+   },
+   "P00240": {
+    "layout": "adc079855ba688fed0880eb249d7ec3f527551e72cdbc705fdee2491cfded74f",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       176,
+       197
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     2,
+     5
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "0665119141fa1e7fd9c83218c01965a68892444f391972b8a1861745d1bd5dc1"
+     },
+     "answer:D": {
+      "answer": "2026-10-02",
+      "sends": "2026-10-02",
+      "held": false,
+      "taken": true,
+      "request": "729e641c09f95af146dca22741233f827c9dc608ccb86dbb5c88cff9b8ce5ba0"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:L": {
+      "answer": "2026-10-04",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:N": {
+      "answer": "2026-11-21",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:P": {
+      "answer": "2024-10-02",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-03",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "P00280": {
+    "layout": "29422703421e782bda3f3fd834e891840b22234ede55c63fb51e44630b33cde8",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       183,
+       204
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     3,
+     6
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "dec00059ab8b17b56fe0e23ad6e2d1c07f94d2cedb6249309395287013931716"
+     },
+     "answer:D": {
+      "answer": "2026-10-16",
+      "sends": "2026-10-16",
+      "held": false,
+      "taken": true,
+      "request": "1fcb0e58cc40149a6e0047c094fffb7993319ad700cf0fd3e00e9659c74b4146"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:L": {
+      "answer": "2026-10-18",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:N": {
+      "answer": "2026-11-26",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:P": {
+      "answer": "2021-10-16",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-15",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-17",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "P00320": {
+    "layout": "1ee7ee25a596cf6089676ed0b3ef879a93701a2c59d9dedb429f6272364f9042",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       189,
+       216
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     3,
+     3
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "8beb0fe94c364aacd123bef50f17805dbeb9383c4f2fff7fd069b80272f692b1"
+     },
+     "answer:D": {
+      "answer": "2026-10-14",
+      "sends": "2026-10-14",
+      "held": false,
+      "taken": true,
+      "request": "ea0f5e214d9dd6ee5ae9cacea59aa033b32a6fb59681ad19520ede3f99fa0c2d"
+     },
+     "answer:DOB": {
+      "answer": "1959-06-02",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:L": {
+      "answer": "2026-10-16",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:N": {
+      "answer": "2026-12-16",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:P": {
+      "answer": "2024-10-14",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-13",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-15",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "P00360": {
+    "layout": "c688e4e481d080dce3e9881ab8c04e3ae5f614861d311294d036239230c83f17",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       180,
+       201
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     3,
+     4
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "7eb0138698f39f0560d58224fb174a3c5723d61ea332a6c914d48b81e9124e49"
+     },
+     "answer:D": {
+      "answer": "2026-10-17",
+      "sends": "2026-10-17",
+      "held": false,
+      "taken": true,
+      "request": "cfa1782333b8c1d4a14280692e66471ff395ee9edd434ac5da6709b936f447dc"
+     },
+     "answer:DOB": {
+      "answer": "1959-06-02",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:L": {
+      "answer": "2026-10-19",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:N": {
+      "answer": "2026-12-17",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:P": {
+      "answer": "2024-10-17",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-16",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-18",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "P00400": {
+    "layout": "6b54c880a7193abe311bb5c083ef3856cd8e9cc9d5dd8068232b8e876cc39c83",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       189,
+       215
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     3,
+     4
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "a42957f66939fcca23fc0f51510cbf7d8081ec571ae5b49b245fb7be8688c61e"
+     },
+     "answer:D": {
+      "answer": "2026-10-09",
+      "sends": "2026-10-09",
+      "held": false,
+      "taken": true,
+      "request": "f3fd1da841fa97e58e0650ccdc963cf7c3ed4d72bfa5c18ac51f3a08ec7a919a"
+     },
+     "answer:DOB": {
+      "answer": "1959-06-02",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:L": {
+      "answer": "2026-10-11",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:N": {
+      "answer": "2026-11-09",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:P": {
+      "answer": "2021-10-09",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-08",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-10",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "P00440": {
+    "layout": "8d9dd1fb10e783862e7201232df5314a40148967590700da5a93cc3f1d168bb7",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       176,
+       197
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     3,
+     6
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "fbf6ab3552e1e959e6ca8becfc5fee6958cfcfab805cae178c83009ff8c9501d"
+     },
+     "answer:D": {
+      "answer": "2026-10-09",
+      "sends": "2026-10-09",
+      "held": false,
+      "taken": true,
+      "request": "8960d568a95bce7fd8358e4e289b31758ed32c8bfbbc91495955d50d77c5bd03"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:L": {
+      "answer": "2026-10-11",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:N": {
+      "answer": "2026-11-26",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:P": {
+      "answer": "2024-10-09",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-08",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-10",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "P00960": {
+    "layout": "f8b373bca584c4172ed0dfb71c3bd5f13d94d8dde71759a60154d9657947b8cc",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       179,
+       200
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     2,
+     2
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "79ebee209d16c72ca11a283f7220572c908ca65f3444b73fff1d6b76c9e5c7f4"
+     },
+     "answer:D": {
+      "answer": "2026-10-25",
+      "sends": "2026-10-25",
+      "held": false,
+      "taken": true,
+      "request": "02a61b2721d32bf01c136f05a323b3942721acf9a30ad53488a3fadb0e63fa2e"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:L": {
+      "answer": "2026-10-27",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:N": {
+      "answer": "2026-12-17",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:P": {
+      "answer": "2021-10-25",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-24",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-26",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "P01000": {
+    "layout": "0a836b53504a303d9dd3937290fbb33fe473b2d2cd148419278534f94239c69c",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       197,
+       218
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     3,
+     3
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "18a44a49d503c99506dfe73e39a221237c379370e4a8be1ca5c6f1e87f3cb11f"
+     },
+     "answer:D": {
+      "answer": "2026-10-01",
+      "sends": "2026-10-01",
+      "held": false,
+      "taken": true,
+      "request": "a53bb8f4fc969fd746407f7b7136504f300683996283838daa87d7f9389cf5dc"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:L": {
+      "answer": "2026-10-03",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:N": {
+      "answer": "2026-11-04",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:P": {
+      "answer": "2024-10-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-09-30",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-02",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "P01040": {
+    "layout": "e198297fee4c5d09e6669550aa8fd48b3bb4b76448394f99fbd4980917590f45",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       202,
+       228
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     3,
+     7
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "5590c9df249f68875ade71b36a9ce33d538efcff1eb6477f5361d67da364a6be"
+     },
+     "answer:D": {
+      "answer": "2026-10-25",
+      "sends": "2026-10-25",
+      "held": false,
+      "taken": true,
+      "request": "b6fb402192a00d576d7ea8041941ff1184e785af8a537fc40a5deffb8957fdd0"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:L": {
+      "answer": "2026-10-27",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:N": {
+      "answer": "2026-11-25",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:P": {
+      "answer": "2021-10-25",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-24",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-26",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "P01080": {
+    "layout": "a17435528bd7de22107cff504358ad34531357a81a3f587014625cd70644b663",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       191,
+       219
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     3,
+     4
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "1ffa72c54f29c82a84ee39e66478b44ed1ed058140084e9c81ae8ade058f4578"
+     },
+     "answer:D": {
+      "answer": "2026-10-16",
+      "sends": "2026-10-16",
+      "held": false,
+      "taken": true,
+      "request": "5429eefef04b3ede74afd250d8012582a5a689df8394b8ed3a61b88cee9cba20"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:L": {
+      "answer": "2026-10-18",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:N": {
+      "answer": "2026-11-29",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:P": {
+      "answer": "2024-10-16",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-15",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-17",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "P01120": {
+    "layout": "c68cf06a9027ebfc5fce0f1f7be6a7a7dfac37b754f19990a017cc6b00716f08",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       202,
+       228
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     3,
+     3
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "e1ec9e132b9b4bae53db6835b5231ffd1c76ba4f1d16eba810015f5a5e1c59e9"
+     },
+     "answer:D": {
+      "answer": "2026-10-18",
+      "sends": "2026-10-18",
+      "held": false,
+      "taken": true,
+      "request": "4adaff36b06e15aedf26703b61ee8e46389994608d8568f02e3f14f2bab3b147"
+     },
+     "answer:DOB": {
+      "answer": "1959-06-02",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:L": {
+      "answer": "2026-10-20",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:N": {
+      "answer": "2026-11-22",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:P": {
+      "answer": "2025-10-18",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-17",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-19",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "P01640": {
+    "layout": "5709f21ef17683ec1c8e1705c96c4303559386950ed2af50979d2c6f20039013",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       213,
+       241
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     2,
+     2
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "a2416f16be8f59f8e65b6c668555ae34550b05b73201bafc932809a445b31652"
+     },
+     "answer:D": {
+      "answer": "2026-10-07",
+      "sends": "2026-10-07",
+      "held": false,
+      "taken": true,
+      "request": "203a19f5fb3fbbc0c945be9b7c11520d5b586f78164d06331f322a3b957f9b1b"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:L": {
+      "answer": "2026-10-09",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:N": {
+      "answer": "2026-11-28",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:P": {
+      "answer": "2021-10-07",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-06",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-08",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "P01680": {
+    "layout": "5048086974a9aa9db2c5b46c600796147d3db62f051c8b68a3038dd571178b93",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       209,
+       230
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     3,
+     3
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "ac4ed6bed8d20c303fd22b0b75b2be54551142231b7a0a2b06dac7dcfc099848"
+     },
+     "answer:D": {
+      "answer": "2026-10-20",
+      "sends": "2026-10-20",
+      "held": false,
+      "taken": true,
+      "request": "ed5c5f1dc8914dd8fecbb56b9cc3d1eac0c2120c33e38ff83acc1e60d9b255d0"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:L": {
+      "answer": "2026-10-22",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:N": {
+      "answer": "2026-12-05",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:P": {
+      "answer": "2021-10-20",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-19",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-21",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "P01720": {
+    "layout": "cc4a5b9c72f2da906b5162f66a6af97d500d3c70071aeca3523ebe9e744fba6e",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       194,
+       215
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     3,
+     4
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "36d735f3c626d26892c8711a9d77b56ea453c6cbc51a3ba5645bd8b9f95c4efb"
+     },
+     "answer:D": {
+      "answer": "2026-10-26",
+      "sends": "2026-10-26",
+      "held": false,
+      "taken": true,
+      "request": "2b09e82cc590b4587675f92001ab2d7c4cf5d8459efb9de521459d4d5aaf0d56"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:L": {
+      "answer": "2026-10-28",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:N": {
+      "answer": "2027-01-02",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:P": {
+      "answer": "2021-10-26",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-25",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-27",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "P01760": {
+    "layout": "d09a4a0b5189f135ac74d2b1485953bf2eddc3824948d6efc88e732bfdeb0151",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       194,
+       222
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     3,
+     4
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "3023d3766d5d0164cdfc5c08f69db35bbdc782019a43447050d99ff20cc319cf"
+     },
+     "answer:D": {
+      "answer": "2026-10-06",
+      "sends": "2026-10-06",
+      "held": false,
+      "taken": true,
+      "request": "90055fa71974ee6692fc3ee131d88ab4a501833015a00ce398be0b98ea6607c9"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:L": {
+      "answer": "2026-10-08",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:N": {
+      "answer": "2026-11-28",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:P": {
+      "answer": "2021-10-06",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-05",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-07",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "P01800": {
+    "layout": "a27ad6af205b5352cb73948770c56548dc10c3ce5427117201e0625dee8fc6f4",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       200,
+       221
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     3,
+     7
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "cda5f5026517638412a71c99a9acbeb6bbf6d954c64b0de3d66670c2a94d3680"
+     },
+     "answer:D": {
+      "answer": "2026-10-19",
+      "sends": "2026-10-19",
+      "held": false,
+      "taken": true,
+      "request": "8357e496bce9f11a29d861897de89e8e3609f7bdeb360156c8f5a2112123d3d0"
+     },
+     "answer:DOB": {
+      "answer": "1959-06-02",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:L": {
+      "answer": "2026-10-21",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:N": {
+      "answer": "2026-11-22",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:P": {
+      "answer": "2024-10-19",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-18",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-20",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "P01840": {
+    "layout": "b6879836f1f0b224e1512ab214a65e1d9a4de1a950135662437bbb466412aea1",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       209,
+       230
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     3,
+     6
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "5fa7d8786fd1b1290da6d748d3ab2d37b416d8d59c5a7c38c7eb541d3b5ff3d6"
+     },
+     "answer:D": {
+      "answer": "2026-10-18",
+      "sends": "2026-10-18",
+      "held": false,
+      "taken": true,
+      "request": "c0f17719a905ad2afae0c1e3372a7f45c7da509716a54ad50bb639bbac562f1b"
+     },
+     "answer:DOB": {
+      "answer": "1959-06-02",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:L": {
+      "answer": "2026-10-20",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:N": {
+      "answer": "2026-12-06",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:P": {
+      "answer": "2021-10-18",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-17",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-19",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "S-h4-01-020": {
+    "layout": "27500b5cb05f7928d745dcca0e6de41934adfd22717cb67a8b19fdeee4d9e3e5",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       208,
+       229
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     2,
+     4
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "f4e7dd2c35672184072d53ee61cd3bd8846bdf88b08406edde08b5003b395359"
+     },
+     "answer:D": {
+      "answer": "2026-10-26",
+      "sends": "2026-10-26",
+      "held": false,
+      "taken": true,
+      "request": "83e61aa53d09b1e25f5b747265b7729f029e811c9483c9066c7e167d41b50821"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:egd": {
+      "answer": "2026-11-23",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:lab": {
+      "answer": "2026-11-02",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:outside": {
+      "answer": "2026-10-14",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:return": {
+      "answer": "2026-12-14",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-25",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-27",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "S-h4-01-040": {
+    "layout": "adc3139595bcecaaebb45d028398dc4983c0d3e92d3cc24bed0b9c67965e4b0b",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       197,
+       218
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     2,
+     4
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "1f50f9f9a011b818320c7c1f49797a218cdd422be9e9a52260f7f7ffc7bb5c2a"
+     },
+     "answer:D": {
+      "answer": "2026-10-26",
+      "sends": "2026-10-26",
+      "held": false,
+      "taken": true,
+      "request": "7c2b8f020bdc18c84e0174bf45b12a788cce51052ae85076658c46f23b9e7880"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:egd": {
+      "answer": "2026-11-23",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:lab": {
+      "answer": "2026-11-02",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:outside": {
+      "answer": "2026-10-14",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:return": {
+      "answer": "2026-12-14",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-25",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-27",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "S-h4-02-004": {
+    "layout": "a6a7d9c5a6cc8283f0ef2e27a29d28c3acd71c74886a48f2b7c98a35d3fe4aa1",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       237,
+       258
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     4,
+     8
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "0c02d6deae408b30169c247354e1f1a6fd97902e1141512fa21b8f3396d34bec"
+     },
+     "answer:D": {
+      "answer": "2026-10-21",
+      "sends": "2026-10-21",
+      "held": false,
+      "taken": true,
+      "request": "38d78ab7ac0398b0d29ab88f8f3e6149187abb627ef2bdce82cc47baafd0b730"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-20",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-22",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "S-h4-02-024": {
+    "layout": "773264763b109aee29b71775624b5232a815267f865d39069839f95e5248baad",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       234,
+       255
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     5,
+     9
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "96e86b7abaa7ed7823a5c5dda61cf7531d0f1705a83815c10870e1e0b7d14303"
+     },
+     "answer:D": {
+      "answer": "2026-10-21",
+      "sends": "2026-10-21",
+      "held": false,
+      "taken": true,
+      "request": "c4c349b9494e1c926ef09d18d7fe6f95556520370f6da48249f70a86e650648c"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-20",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-22",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "S-h4-02-044": {
+    "layout": "f711f030257c4d58a11f986384a8358becbb4c6854f924c404df369322dc2a4b",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       214,
+       235
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     6,
+     10
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "de7adb6c928b53ad2b5ac9fa2ce67ae21584272d9fcdb165dcb96302a1280a86"
+     },
+     "answer:D": {
+      "answer": "2026-10-21",
+      "sends": "2026-10-21",
+      "held": false,
+      "taken": true,
+      "request": "eccb4c6aa750e7515641b2f6ff233729e658b55651cdd547e09a39c7b64d96fc"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-20",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-22",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "S-h4-02-164": {
+    "layout": "e1b6a24a1bb15e43567c0a14fad7a285805ca56c50b9fb83d2faef70f0e65ba1",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       237,
+       263
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     5,
+     9
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "fd866161d8a98b8415af8315d9434688c708a9948d35050a510eed8bc183a723"
+     },
+     "answer:D": {
+      "answer": "2026-10-21",
+      "sends": "2026-10-21",
+      "held": false,
+      "taken": true,
+      "request": "62364a83c8191fd83b6c0fa69b0c355e80285b42e0deab00a8fdc442ef9c9024"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-20",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-22",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "S-h4-02-184": {
+    "layout": "c1b31ac16b4dcfd57406e31bb5d1ed3dafa98971fb2368039031bb22d8a4d470",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       234,
+       260
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     4,
+     8
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "6e91096c4fc63f6eeb6bdcc51058e5cb005c6d0efa7f86a65eabcfafb4fef39b"
+     },
+     "answer:D": {
+      "answer": "2026-10-21",
+      "sends": "2026-10-21",
+      "held": false,
+      "taken": true,
+      "request": "5ebf773deb3d1003016bbbe216e256880e533cb4b16de26e2916bc22bd33897c"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-20",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-22",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "S-h4-02-204": {
+    "layout": "21cbfa8e4ec98de6446f22696e8376ef1006701f8d4ba032fcaff5314593ecdd",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       214,
+       240
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     5,
+     9
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "6402e4dd24bd6420e058b9bc3a501991abac5a57454d0e9836d7cad735d7fe54"
+     },
+     "answer:D": {
+      "answer": "2026-10-21",
+      "sends": "2026-10-21",
+      "held": false,
+      "taken": true,
+      "request": "8e9a5bcfd55ae413d94f9ac166414594a131ccc7f44c9e14f97e2f2795ab79a9"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-20",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-22",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "S-h4-03-008": {
+    "layout": "2c11aed0c1cb863bd3f59e230d1f8e3b2d5d0ebd372974d09e6ca18dbf24ca73",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       217,
+       238
+      ],
+      [
+       2286,
+       2331
+      ]
+     ],
+     "No date of service is read: the document states a date with words this service does not take as the date of service by itself (a label such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\", or a date-of-service label with other words before its date). It may be this encounter's date or another occurrence's (a planned or an earlier one), so it is quoted and limits no answer: a member's date is taken."
+    ],
+    "mentions": [
+     0,
+     3
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "5826770842bb16037767fe27e5b6a39d3c3c3507e7f8c06abdd2f6033db5d2f9"
+     },
+     "answer:D": {
+      "answer": "2026-10-06",
+      "sends": "2026-10-06",
+      "held": false,
+      "taken": true,
+      "request": "fa337c18a0d335dc3f5fa3593e03867005933e1a7e6da09c382172b95bab6d40"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "1998-01-01",
+      "held": false,
+      "taken": true,
+      "request": "0da411ad040ed9cc07f8b2aae93d8bd56209dd45180091a114160d376acfd915"
+     },
+     "answer:L": {
+      "answer": "2026-10-08",
+      "sends": "2026-10-08",
+      "held": false,
+      "taken": true,
+      "request": "80613b6b183a1c5776eccdd97791d5cdb68020c75d90450b27e33faba076ae95"
+     },
+     "answer:sign": {
+      "answer": "2026-10-09",
+      "sends": "2026-10-09",
+      "held": false,
+      "taken": true,
+      "request": "f410f0f70f8b65a02c96872ec6f2e63204f6e985339475b5277a2b95a427b93d"
+     },
+     "minus1": {
+      "answer": "2026-10-05",
+      "sends": "2026-10-05",
+      "held": false,
+      "taken": true,
+      "request": "94c3372160e60a459dd1aa779718ebbe9fdf02b34ed9bf1a262ccce5ed6f578b"
+     },
+     "plus1": {
+      "answer": "2026-10-07",
+      "sends": "2026-10-07",
+      "held": false,
+      "taken": true,
+      "request": "0c52fa47167aabba0756e3a8bd13b2f323d9de93d739e7aedb0bba9948d8341d"
+     }
+    }
+   },
+   "S-h4-03-048": {
+    "layout": "bda7e2b889467a138eb1de97c77716cc974b7f5b157923c57998f48215811a07",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       217,
+       238
+      ],
+      [
+       2286,
+       2334
+      ]
+     ],
+     "No date of service is read: the document states a date with words this service does not take as the date of service by itself (a label such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\", or a date-of-service label with other words before its date). It may be this encounter's date or another occurrence's (a planned or an earlier one), so it is quoted and limits no answer: a member's date is taken."
+    ],
+    "mentions": [
+     0,
+     3
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "203fb771d7571f9882b5f0be8d607bbe0aa774344b69606fa786e579f39fface"
+     },
+     "answer:D": {
+      "answer": "2026-10-06",
+      "sends": "2026-10-06",
+      "held": false,
+      "taken": true,
+      "request": "c782c10ce09816624e65b015da692c5df91ec1737d19e9bf7555abc658644261"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "1998-01-01",
+      "held": false,
+      "taken": true,
+      "request": "3ca4758634294d7fee4fd1a17c8768dda6a35647c23b0fd0047fc2dd475faf9a"
+     },
+     "answer:L": {
+      "answer": "2026-10-08",
+      "sends": "2026-10-08",
+      "held": false,
+      "taken": true,
+      "request": "a8b6e04f09ef9f30892525d6b5ddf7ffa4e85c00b1704950af443a2c742cc850"
+     },
+     "answer:sign": {
+      "answer": "2026-10-09",
+      "sends": "2026-10-09",
+      "held": false,
+      "taken": true,
+      "request": "8e1c8a9f2878bf26a347225d904a33418a66d69f183eeb7755980e8ff369d806"
+     },
+     "minus1": {
+      "answer": "2026-10-05",
+      "sends": "2026-10-05",
+      "held": false,
+      "taken": true,
+      "request": "6bc251298c2a530860eb8a31ea313c8e65ea92950e636ef3114ddf1e0a31937e"
+     },
+     "plus1": {
+      "answer": "2026-10-07",
+      "sends": "2026-10-07",
+      "held": false,
+      "taken": true,
+      "request": "7cf43c2862ebbda9203a702985ad42af6d35d260e67713942e260a6f9d24af7b"
+     }
+    }
+   },
+   "S-h4-04-006": {
+    "layout": "1f6e495b8e8d97e7d3d636e756ce15530018c3bfabb96bbc094ca9d9921f0a68",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       208,
+       240
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     4,
+     9
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "85eabb83dba52d74aafb28a895a7db72cb25141be17e6f95b11b1d9bd137ff27"
+     },
+     "answer:D": {
+      "answer": "2026-10-19",
+      "sends": "2026-10-19",
+      "held": false,
+      "taken": true,
+      "request": "c6bccf0bdf6e1a21a26ab823d84538a4e899b41e976e9321618214c05e42ccf7"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:ct": {
+      "answer": "2026-09-28",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-18",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-20",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "S-h4-04-026": {
+    "layout": "f68dd3d2cc83488ab66adf93e8ec3b66048f29d13c6ceee0b44cd91848da3e9d",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       208,
+       240
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     6,
+     11
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "7e77fe6bb8512b3fb5650a6f56f13b42f154f493956eb00c134580f5208dff22"
+     },
+     "answer:D": {
+      "answer": "2026-10-19",
+      "sends": "2026-10-19",
+      "held": false,
+      "taken": true,
+      "request": "60fe24f238f417d9e9877c1c4aa42b946e9f5850cd1d900205ef9dbd0564413d"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:ct": {
+      "answer": "2026-09-28",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-18",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-20",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "S-h4-04-046": {
+    "layout": "639f5e8df8b3a3a72ba7789d0d3e3cbe35031d6342516e3cf8a96af27e2a4521",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       208,
+       240
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     4,
+     9
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "78914e6de0e3f048b8329c5eab19e26a4e5d8ab4172134be1be2ef3481104c0c"
+     },
+     "answer:D": {
+      "answer": "2026-10-19",
+      "sends": "2026-10-19",
+      "held": false,
+      "taken": true,
+      "request": "d11960565d53f52d0cae5f95bb60812aa60ecdd5d17d3bba38bb0a4b240c9518"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:ct": {
+      "answer": "2026-09-28",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-18",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-20",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "S-h4-04-126": {
+    "layout": "bc0c084f875626864479ac59641aae3e7b43d77160d857755722960f51a0ac63",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       208,
+       235
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     5,
+     10
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "7348bae79af8401c3e52a013b116c550cf8df8bd2c49e3acdbbac9278779ac64"
+     },
+     "answer:D": {
+      "answer": "2026-10-19",
+      "sends": "2026-10-19",
+      "held": false,
+      "taken": true,
+      "request": "fbb8631deb9351c20c485e69caf05dd91087ab48050289ea774a20ad5920a5a3"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:ct": {
+      "answer": "2026-09-28",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-18",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-20",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "S-h4-04-146": {
+    "layout": "abf1ea77c1e60bb8e98ab32d22b5b8db3cafc2a2843d108f3779d9593c97cb8e",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       208,
+       235
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     6,
+     11
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "7ea7d6c2d17ae4cd59497a5ff3c072286dbb07d58fce2313db8f2bb15fb6b316"
+     },
+     "answer:D": {
+      "answer": "2026-10-19",
+      "sends": "2026-10-19",
+      "held": false,
+      "taken": true,
+      "request": "148475723cfef057e5e2dd7e84b3f96c6825ad9b34c290602edc1064a8fc280e"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:ct": {
+      "answer": "2026-09-28",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-18",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-20",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "S-h4-06-008": {
+    "layout": "65caaca9cdef41c931d0c3c291cbc576b2403a5a7da25ba8b8540c76fddc8308",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       200,
+       230
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     2,
+     4
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "c8f208d932d538a73ec43e9c4c019f968825adeff4e22c822d74cd44f8c0060a"
+     },
+     "answer:D": {
+      "answer": "2026-10-27",
+      "sends": "2026-10-27",
+      "held": false,
+      "taken": true,
+      "request": "c6dc4013a483257c6c271864ed2eb54a6c7b79bbaff18faa41332ba8ebfbc8ed"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:surgery": {
+      "answer": "2025-09-30",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-26",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-28",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "S-h4-06-028": {
+    "layout": "a60d0f79b2944e790d59a2542c079d10f9be421af4ba82af7a82a7d7df337612",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       200,
+       230
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     2,
+     4
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "5ee6ebaa0d9f385919a654d8d8c4d07b46ef4158d30c1a168cc4d0937da07e62"
+     },
+     "answer:D": {
+      "answer": "2026-10-27",
+      "sends": "2026-10-27",
+      "held": false,
+      "taken": true,
+      "request": "7a2ed891447392993ebed4f4be6e29c3434f582105da126553cdda29673d0761"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:surgery": {
+      "answer": "2025-09-30",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-26",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-28",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "S-h4-06-048": {
+    "layout": "5cc072ec41a0b88410e311234239d8ffa50ee84fb1987d5128cea715b11bf3fc",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       200,
+       230
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     2,
+     4
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "be670d2c2e85df06aee43aa8e5c9fa6b884719cfa7681a06e6e7ec9ad9f9d967"
+     },
+     "answer:D": {
+      "answer": "2026-10-27",
+      "sends": "2026-10-27",
+      "held": false,
+      "taken": true,
+      "request": "94292a4099f85d666437230e6a31f800168da8f6a176b0077dfa82ba8a931653"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:surgery": {
+      "answer": "2025-09-30",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-26",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-28",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "S-h4-06-168": {
+    "layout": "ff1cabee16880afe66fee332168f21fc6158e750b111367b12548497d5e05799",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       200,
+       228
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     2,
+     4
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "8577e03d853fccd911374224071a5c12296ac661df887cf5647d016489e7b0ff"
+     },
+     "answer:D": {
+      "answer": "2026-10-27",
+      "sends": "2026-10-27",
+      "held": false,
+      "taken": true,
+      "request": "37aba2c64e18b934729da95cbeba491f98eae5afd8a9a38eb747bdecb96d6c93"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:surgery": {
+      "answer": "2025-09-30",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-26",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-28",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "S-h4-06-188": {
+    "layout": "5bd9d8ec07bc2943d5b5515164276cb67c15edc4838c8f8f2a3dd2525652cd89",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       200,
+       228
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     2,
+     4
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "5bdd981b10c6d841d201c7a96a1b33da7251b766c77916f7d850a9c90c494619"
+     },
+     "answer:D": {
+      "answer": "2026-10-27",
+      "sends": "2026-10-27",
+      "held": false,
+      "taken": true,
+      "request": "51e6c452c79c8b79df3b248cffa417f8e30cc85bd2403e8dc13b7d0f0af5a4df"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:surgery": {
+      "answer": "2025-09-30",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-26",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-28",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "S-h4-06-208": {
+    "layout": "34162643c338d098383e1987dd16e76bfde0ee2f9a6ab329e7f824c9c6c7f038",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       200,
+       228
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     2,
+     4
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "baa9255f3c70bae0258974dae0b63af6b57fb6cecd33967ab3a96a2c56b7ccd0"
+     },
+     "answer:D": {
+      "answer": "2026-10-27",
+      "sends": "2026-10-27",
+      "held": false,
+      "taken": true,
+      "request": "dded9052a0bd5a3c35b62e3a6bde8b36ca79ee4f2543f082485a4320e82befaa"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:surgery": {
+      "answer": "2025-09-30",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-26",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-28",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "reg:h4-01": {
+    "layout": "8ed55d753bea0d4889ac5cc17fd220cd9963a3866e1dc2b992e383ca948cfa66",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       206,
+       227
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     2,
+     4
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "d47c77566f33b9d056bacab1986bc5d7489f4631d174905d750c68d958f1b0f3"
+     },
+     "answer:D": {
+      "answer": "2026-10-26",
+      "sends": "2026-10-26",
+      "held": false,
+      "taken": true,
+      "request": "37eaacde4edd21497d3993a0803c62d2a671da10ba1309821eb33f0ba7c88e07"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:egd": {
+      "answer": "2026-11-23",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:lab": {
+      "answer": "2026-11-02",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:outside": {
+      "answer": "2026-10-14",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:return": {
+      "answer": "2026-12-14",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-25",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-27",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "reg:h4-02": {
+    "layout": "d50ee7bf4ded451c6568daf4968e1b8290b4ff4d17339fe01a7a0c96c904778b",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       237,
+       258
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     4,
+     8
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "f02f70f6f2ee5b0130d0624f75bf5b4608c678350d172f6b44cf49ace2c67aa0"
+     },
+     "answer:D": {
+      "answer": "2026-10-21",
+      "sends": "2026-10-21",
+      "held": false,
+      "taken": true,
+      "request": "16c1b10b970e22e6bdaed99e3731aa6976ab9d11c4beccdb00828a93e86ddb8e"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-20",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-22",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "reg:h4-03": {
+    "layout": "28c841af9545857cf04104ae62ee2fa39f0fd5acec321c3f9949c67edf87d527",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       217,
+       238
+      ],
+      [
+       2291,
+       2336
+      ]
+     ],
+     "No date of service is read: the document states a date with words this service does not take as the date of service by itself (a label such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\", or a date-of-service label with other words before its date). It may be this encounter's date or another occurrence's (a planned or an earlier one), so it is quoted and limits no answer: a member's date is taken."
+    ],
+    "mentions": [
+     0,
+     3
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "8eaed7a5243b64329604387cc6caf8e2c385a4708bd286fbbe2fc1d1b43b5f0e"
+     },
+     "answer:D": {
+      "answer": "2026-10-06",
+      "sends": "2026-10-06",
+      "held": false,
+      "taken": true,
+      "request": "acdebca2d1af097e4b709337f6007a13baf164ce5025992039c5ccb03a892ce6"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "1998-01-01",
+      "held": false,
+      "taken": true,
+      "request": "b95e363e8cd1c3abe130f85e563f1b3e68558000e88b27d80b6dc4f40d7b3e74"
+     },
+     "answer:sign": {
+      "answer": "2026-10-09",
+      "sends": "2026-10-09",
+      "held": false,
+      "taken": true,
+      "request": "e36f1d3c3d4c3b80cccde307ec5f92b6465eadd3f2186ed2350b423f2c20627d"
+     },
+     "doc:2026-10-08": {
+      "answer": "2026-10-08",
+      "sends": "2026-10-08",
+      "held": false,
+      "taken": true,
+      "request": "2b828dd3ad5a9e65ce1e97d61c08a4d763d0bef592d842bfe1cce76b78d5c2ac"
+     },
+     "minus1": {
+      "answer": "2026-10-05",
+      "sends": "2026-10-05",
+      "held": false,
+      "taken": true,
+      "request": "263a866bf34dfde4d69641db97fc708a61792b7b8d9d807f1446cad47e3a27cb"
+     },
+     "plus1": {
+      "answer": "2026-10-07",
+      "sends": "2026-10-07",
+      "held": false,
+      "taken": true,
+      "request": "aa47a7b913650de38f5690e04c5f876b07c87d773a5db7677323fe4554e3987b"
+     }
+    }
+   },
+   "reg:h4-04": {
+    "layout": "3b1b03290a14040ae453b72db25f235f40c226e4596a44afd315d255afe1bbd2",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       208,
+       240
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     4,
+     9
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "07851e22bdad4cecae609eeab3dfef68935b76e5fb3c97a0a27c4d36efc35226"
+     },
+     "answer:D": {
+      "answer": "2026-10-19",
+      "sends": "2026-10-19",
+      "held": false,
+      "taken": true,
+      "request": "e89468e05934376e59acbd91126d35641453799cd597489105450461ba78965d"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:ct": {
+      "answer": "2026-09-28",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-18",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-20",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "reg:h4-06": {
+    "layout": "ac86267368df9e1f3a980f6f45843eb8c96b7aaecb3d7cc4298e8e44d1e3aaef",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       200,
+       230
+      ]
+     ],
+     "A date is labelled with words this service does not send as the date of service by itself (such as \"Date seen\", \"Exam date\", \"Case date\", \"Date performed\" or \"Day of procedure\"), and the signature closing the note states the same day, so the date is asked; a member's answer is taken only when it is that date."
+    ],
+    "mentions": [
+     2,
+     4
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "b38da8856c4be2351b596026b1e424466c2be92188bb9e002c64a26aae0122b9"
+     },
+     "answer:D": {
+      "answer": "2026-10-27",
+      "sends": "2026-10-27",
+      "held": false,
+      "taken": true,
+      "request": "83712b2fcd3713a53dc101f3d6705c7441140fd235c9e47b5c61997a300cabaf"
+     },
+     "answer:F": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "answer:surgery": {
+      "answer": "2025-09-30",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-26",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-28",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "repo:tests/corpus/services/documents/svc-18-colo-snare-plus-separate-biopsy-table.txt": {
+    "layout": "61075c925051e20f95c7105ea6586eddd243a1e546db0412f4707d573e2e44f7",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       206,
+       234
+      ]
+     ],
+     "A labelled date of service is written in a form this release reads but does not send by itself (a day-first date such as \"14 Oct 2026\", a label naming the time, or a table row), so it is asked; a member's answer with that date is taken."
+    ],
+    "mentions": [
+     3,
+     12
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "4f8513cd28b599f77914ddf163d2b4d9506400b87c78ed2273f3c314e5704b81"
+     },
+     "doc:2026-10-05": {
+      "answer": "2026-10-05",
+      "sends": "2026-10-05",
+      "held": false,
+      "taken": true,
+      "request": "b6c0df32c281ed6e095345b3577f24ac40b95e653059bf81a083a1c05cab28a0"
+     },
+     "doc:2021-08-17": {
+      "answer": "2021-08-17",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "far": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-04",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-06",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   },
+   "repo:tests/corpus/services/documents/svc-36-balloon-enteroscopy-apc-biopsy-table.txt": {
+    "layout": "0f260bdaa45665ffa630e10761b1832a5a4d55be22a24788656788c1a2650f09",
+    "fact": [
+     "missing",
+     null,
+     [
+      [
+       256,
+       284
+      ]
+     ],
+     "A labelled date of service is written in a form this release reads but does not send by itself (a day-first date such as \"14 Oct 2026\", a label naming the time, or a table row), so it is asked; a member's answer with that date is taken."
+    ],
+    "mentions": [
+     1,
+     12
+    ],
+    "states": {
+     "none": {
+      "answer": null,
+      "sends": "DATELESS",
+      "held": false,
+      "taken": false,
+      "request": "522b18f3162e4dcbbf8cddf00a731415ebf9b3c37b151f4dfc38c2a5c70e2a95"
+     },
+     "doc:2026-10-19": {
+      "answer": "2026-10-19",
+      "sends": "2026-10-19",
+      "held": false,
+      "taken": true,
+      "request": "57453a7c7f2b875b40af81fd934e18609626aab36fd0aa78017efe4bc79c2525"
+     },
+     "far": {
+      "answer": "1998-01-01",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "minus1": {
+      "answer": "2026-10-18",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     },
+     "plus1": {
+      "answer": "2026-10-20",
+      "sends": "HELD",
+      "held": true,
+      "taken": false,
+      "request": null
+     }
+    }
+   }
+  },
+  "ci_base_records_note": "The installed reading's freeze record (ops.gi4.observe.text_record) of every CI-corpus text whose digest moves (tests/test_gi4_freeze.py): the test checks each record's sha256 against the pinned digest (tests/fixtures/gi4/pins/freeze.json) before it classifies the head's movement against it, so a record here cannot stand in for another."
+ },
+ "measured_after_code": true,
+ "provenance": "Not declared before the code: measured after it, offline, against design/base-cpt-studio (the cpt-studio of main b285e5f0 = installed 73dcf8b4) and the b452c6c4 export the gates read; each movement read before it was written here.",
+ "freeze": {
+  "corpus": "5,723 texts, 44,014 text x member states, vs the b452c6c4 export. Without this declaration the gate FAILS as it must: NEW-SEND 176, NEW-TAKE 0, NEW-HELD 117, SEND->ASK 0, FACT-CHANGED 1,350, 4 constants changed and 6 added. With it the gate HOLDS: NEW-SEND 176 and NEW-HELD 117 are accepted text by text, every one quoting a head \"Exam date\" (the label form: no day-first, weekday or \"Date of Operation\" date of service is in this corpus) - each NEW-HELD an answer contradicting the newly sent date; FACT-CHANGED 1,350 = 176 beside those sends + 1,174 by the note rewordings alone. sections.layout identical, requests changed 0, mention counts changed 0.",
+  "ci_corpus": "248 texts: 51 move - 45 by the note rewordings alone, 6 by a head \"Exam date\" newly sent (NEW-SEND 6, their FACT-CHANGED quoting the label); every movement accepted, no NEW-TAKE, NEW-HELD or SEND->ASK.",
+  "extra_corpus": "design/dates2/scratch/r2/mkextra2.py: 9,108 constructed texts - the decided forms and the forms outside the decision under every label in 20 head positions, the head labels in the body, under titles of notes written around a procedure, inside another field's sentence, in a closing charge block and beside a date of service, other-day forms in plan, history and charge-block positions, and every cycle-1 lens input (1,096). Accepted: NEW-SEND 2,080, NEW-TAKE 100, NEW-HELD 1,174, FACT-CHANGED 3,801. Refused, so the gate FAILS there, and never declared: SEND->ASK 9 - a closing charge block stating another day in a weekday form (\"Date of service: Tuesday, November 10, 2026\") beside the header's 11/09, which its month-day-year twin asks on the installed release (the charge-block rule) - their FACT-CHANGED 9; and NEW-HELD 12 - a weekday form equal to the date of birth (\"DOB: 9 November 2026\" over \"Date of service: Monday, November 9, 2026\"), whose member answer equal to that birth date is held as its twin's is (the BIRTH doubt). Both are the parity of decision (1), hold side, with no newly sent date to accept them by."
+ },
+ "replay_note": "H1 vs b452c6c4: 13 differences - the three version labels and ten note paths: the fact notes of h4-01, h4-02, h4-03, h4-04 and h4-06 (fact and states.none.fact) reworded by note_rewordings; no state, request, routing, proposal, question or offer moves, and tests/test_gi4_replay.py (which compacts notes away) passes against its pin unchanged.",
+ "battery_note": "H4 vs b452c6c4: the six declared movements of completion-integration.json, 0 new violations."
+}

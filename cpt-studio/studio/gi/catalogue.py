@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-CATALOGUE_VERSION = 'gi-catalogue@1'
+CATALOGUE_VERSION = 'gi-catalogue@2'  # @2: the completion repair (one-technique dilation codes: CodeProfile.technique)
 
 SUPPORTED, RECOGNISED, UNSUPPORTED = 'supported', 'recognised', 'unsupported'
 
@@ -34,6 +34,12 @@ class CodeProfile:
     # the documented service kinds of ANOTHER family whose examination the code includes: an EGD-with-EUS code includes
     # the upper endoscopy that is the EUS's endoscopic portion (services._included); none for any other code
     includes: tuple[str, ...] = ()
+    # the dilation technique the code accounts for, where the code is one technique's (completion repair, integration):
+    # 'balloon' (a transendoscopic balloon dilation, any diameter class) or 'wire_bougie' (dilators passed over a guide
+    # wire); '' for a code of any technique. Read against each documented dilation's own technique by
+    # reconcile.technique_fits, so a balloon code never accounts for a Savary dilation, nor a guide-wire code for a
+    # balloon dilation; a dilation whose technique the document does not name keeps the earlier reading
+    technique: str = ''
 
 
 @dataclass(frozen=True)
@@ -52,8 +58,12 @@ class FamilyEntry:
     notes: tuple[str, ...] = ()
 
 
-def _c(family, covers=(), *, base=False, exam='', addon=False, includes=()):
-    return CodeProfile(family=family, covers=tuple(covers), base=base, exam=exam, addon=addon, includes=tuple(includes))
+def _c(family, covers=(), *, base=False, exam='', addon=False, includes=(), technique=''):
+    return CodeProfile(family=family, covers=tuple(covers), base=base, exam=exam, addon=addon, includes=tuple(includes),
+                       technique=technique)
+
+
+BALLOON, WIRE_BOUGIE = 'balloon', 'wire_bougie'
 
 
 C, EGD, ESO, ENT, SIG, EUS, ERCP = ('gi.colonoscopy', 'gi.egd', 'gi.egd', 'gi.enteroscopy', 'gi.flex_sig', 'gi.eus',
@@ -69,16 +79,18 @@ CODES: dict[str, CodeProfile] = {
     '43235': _c(EGD, base=True), '43236': _c(EGD, ('injection',)), '43239': _c(EGD, ('biopsy',)),
     '43241': _c(EGD, ('tube_placement',)), '43243': _c(EGD, ('injection',)), '43244': _c(EGD, ('band_ligation',)),
     '43245': _c(EGD, ('dilation',)), '43246': _c(EGD, ('peg',)), '43247': _c(EGD, ('foreign_body',)),
-    '43248': _c(EGD, ('dilation',)), '43249': _c(EGD, ('dilation',)), '43233': _c(EGD, ('dilation',)),
+    '43248': _c(EGD, ('dilation',), technique=WIRE_BOUGIE), '43249': _c(EGD, ('dilation',), technique=BALLOON),
+    '43233': _c(EGD, ('dilation',), technique=BALLOON),
     '43250': _c(EGD, ('hot_biopsy',)), '43251': _c(EGD, ('snare',)), '43254': _c(EGD, ('emr',)),
     '43255': _c(EGD, ('bleeding_control',)), '43257': _c(EGD, ('ablation',)), '43266': _c(EGD, ('stent',)),
     '43270': _c(EGD, ('ablation',)), '43210': _c(EGD, ('fundoplication',)), '43497': _c(EGD, ('myotomy',)),
     # Esophagoscopy (flexible transoral and transnasal), in the upper GI family
     '43200': _c(ESO, base=True), '43201': _c(ESO, ('injection',)), '43202': _c(ESO, ('biopsy',)),
     '43204': _c(ESO, ('injection',)), '43205': _c(ESO, ('band_ligation',)), '43211': _c(ESO, ('emr',)),
-    '43212': _c(ESO, ('stent',)), '43213': _c(ESO, ('dilation',)), '43214': _c(ESO, ('dilation',)),
+    '43212': _c(ESO, ('stent',)), '43213': _c(ESO, ('dilation',)), '43214': _c(ESO, ('dilation',), technique=BALLOON),
     '43215': _c(ESO, ('foreign_body',)), '43216': _c(ESO, ('hot_biopsy',)), '43217': _c(ESO, ('snare',)),
-    '43220': _c(ESO, ('dilation',)), '43226': _c(ESO, ('dilation',)), '43227': _c(ESO, ('bleeding_control',)),
+    '43220': _c(ESO, ('dilation',), technique=BALLOON), '43226': _c(ESO, ('dilation',), technique=WIRE_BOUGIE),
+    '43227': _c(ESO, ('bleeding_control',)),
     '43229': _c(ESO, ('ablation',)), '43197': _c(ESO, base=True), '43198': _c(ESO, ('biopsy',)),
     # Small-bowel enteroscopy, ileoscopy and pouchoscopy through a stoma
     '44360': _c(ENT, base=True), '44361': _c(ENT, ('biopsy',)), '44363': _c(ENT, ('foreign_body',)),
@@ -86,22 +98,23 @@ CODES: dict[str, CodeProfile] = {
     '44369': _c(ENT, ('ablation',)), '44370': _c(ENT, ('stent',)), '44372': _c(ENT, ('tube_placement', 'peg')),
     '44373': _c(ENT, ('tube_replacement',)), '44376': _c(ENT, base=True), '44377': _c(ENT, ('biopsy',)),
     '44378': _c(ENT, ('bleeding_control',)), '44379': _c(ENT, ('stent',)), '44380': _c(ENT, base=True),
-    '44381': _c(ENT, ('dilation',)), '44382': _c(ENT, ('biopsy',)), '44384': _c(ENT, ('stent',)),
+    '44381': _c(ENT, ('dilation',), technique=BALLOON), '44382': _c(ENT, ('biopsy',)), '44384': _c(ENT, ('stent',)),
     '44385': _c(ENT, base=True), '44386': _c(ENT, ('biopsy',)),
     # Colonoscopy (and through a stoma)
     '45378': _c(C, base=True), '45379': _c(C, ('foreign_body',)), '45380': _c(C, ('biopsy',)),
     '45381': _c(C, ('injection', 'tattoo')), '45382': _c(C, ('bleeding_control',)), '45384': _c(C, ('hot_biopsy',)),
-    '45385': _c(C, ('snare',)), '45386': _c(C, ('dilation',)), '45388': _c(C, ('ablation',)),
+    '45385': _c(C, ('snare',)), '45386': _c(C, ('dilation',), technique=BALLOON), '45388': _c(C, ('ablation',)),
     '45389': _c(C, ('stent',)), '45390': _c(C, ('emr',)), '45393': _c(C, ('decompression',)),
     '45398': _c(C, ('band_ligation',)),
     '44388': _c(C, base=True), '44389': _c(C, ('biopsy',)), '44390': _c(C, ('foreign_body',)),
     '44391': _c(C, ('bleeding_control',)), '44392': _c(C, ('hot_biopsy',)), '44394': _c(C, ('snare',)),
     '44401': _c(C, ('ablation',)), '44402': _c(C, ('stent',)), '44403': _c(C, ('emr',)),
-    '44404': _c(C, ('injection', 'tattoo')), '44405': _c(C, ('dilation',)), '44408': _c(C, ('decompression',)),
+    '44404': _c(C, ('injection', 'tattoo')), '44405': _c(C, ('dilation',), technique=BALLOON),
+    '44408': _c(C, ('decompression',)),
     # Flexible sigmoidoscopy
     '45330': _c(SIG, base=True), '45331': _c(SIG, ('biopsy',)), '45332': _c(SIG, ('foreign_body',)),
     '45333': _c(SIG, ('hot_biopsy',)), '45334': _c(SIG, ('bleeding_control',)), '45335': _c(SIG, ('injection', 'tattoo')),
-    '45337': _c(SIG, ('decompression',)), '45338': _c(SIG, ('snare',)), '45340': _c(SIG, ('dilation',)),
+    '45337': _c(SIG, ('decompression',)), '45338': _c(SIG, ('snare',)), '45340': _c(SIG, ('dilation',), technique=BALLOON),
     '45346': _c(SIG, ('ablation',)), '45347': _c(SIG, ('stent',)), '45349': _c(SIG, ('emr',)),
     '45350': _c(SIG, ('band_ligation',)),
     # Endoscopic ultrasound. Only the codes of an EGD with EUS include an upper endoscopy's examination (includes); an
@@ -121,7 +134,8 @@ CODES: dict[str, CodeProfile] = {
     '43263': _c(ERCP, ('pressure_measurement',)), '43264': _c(ERCP, ('stone_extraction',)),
     '43265': _c(ERCP, ('lithotripsy', 'stone_extraction')), '43273': _c(ERCP, ('cholangioscopy',), addon=True),
     '43274': _c(ERCP, ('stent',)), '43275': _c(ERCP, ('stent_removal', 'foreign_body')),
-    '43276': _c(ERCP, ('stent_exchange',)), '43277': _c(ERCP, ('dilation',)), '43278': _c(ERCP, ('ablation',)),
+    '43276': _c(ERCP, ('stent_exchange',)), '43277': _c(ERCP, ('dilation',), technique=BALLOON),
+    '43278': _c(ERCP, ('ablation',)),
     # Capsule endoscopy
     '91110': _c('gi.capsule', ('capsule_study',)), '91111': _c('gi.capsule', ('capsule_study',)),
     '91113': _c('gi.capsule', ('capsule_study',)),
@@ -154,6 +168,10 @@ COMMON_BUNDLED = (
                                  'EMR) is part of the removal (internal profile rule, NCCI policy principle; NCCI is '
                                  'not connected).'),
     ('lift_injection', 'A submucosal injection made to lift a lesion for its resection is part of the resection.'),
+    # Harness repair 2026-11-05, refutation multi-1: an endoscopic mucosal resection is a snare-based resection
+    ('resection_technique', 'A snare or hot-forceps removal of the lesion an endoscopic mucosal resection or submucosal '
+                            'dissection removes is the technique of that resection, not a separate service (internal '
+                            'profile rule).'),
 )
 ENDOSCOPIC_QUESTIONS = (
     ('extent', 'How far was the instrument advanced (the landmark reached)?'),
@@ -346,6 +364,19 @@ UNSUPPORTED_ACTS = frozenset(('esd',))
 
 def code_profile(code: str):
     return CODES.get(code)
+
+
+def family_codes_act(family: str, kind: str) -> bool:
+    """Whether a code of ``family`` in this catalogue accounts for an act of ``kind`` (a tattoo and an injection are
+    one act for coding, as the reconciliation reads them). Harness repair 2026-11-05 (stage 6): the shared
+    ENDOSCOPIC_ACTS list gives every endoscopic family a decompression act, and only colonoscopy and sigmoidoscopy codes
+    account for one (45393, 44408, 45337); an upper endoscopy's decompression is therefore an act no code of its service
+    can account for, which the reconciliation lists as such (reconcile.reconcile, 'unsupported'). Refutation round 1's compl-2
+    (an ERCP's, EUS's or enteroscopy's decompression dropped unlisted, as those families list their own acts) is not
+    repaired here: listing it read an ERCP stent placed "for biliary decompression" as an act left open (round 2,
+    over-11), so it is recorded (ACCURACY-RESIDUALS)."""
+    covers = {k for profile in CODES.values() if profile.family == family for k in profile.covers}
+    return kind in covers or (kind in ('tattoo', 'injection') and bool(covers & {'tattoo', 'injection'}))
 
 
 # The documented act a code of a family this catalogue does not reconcile accounts for (gi.other is recognised and

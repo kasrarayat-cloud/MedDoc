@@ -1,0 +1,1354 @@
+{
+ "id": "h4-04",
+ "manifest": {
+  "author_codes": [
+   "43251",
+   "45378"
+  ],
+  "class": "6-act-binds-to-its-own-service",
+  "expected_clarifications": [],
+  "expected_context": {
+   "service_date": {
+    "origin_in": [
+     "document"
+    ],
+    "value_in": [
+     "2026-10-19"
+    ]
+   },
+   "setting": {
+    "origin_in": [
+     "document"
+    ],
+    "value_in": [
+     "asc"
+    ]
+   }
+  },
+  "expected_routing": {
+   "families": {
+    "gi.colonoscopy": {
+     "facts": {
+      "extent": {
+       "value_contains_any": [
+        "cecum",
+        "cecal"
+       ]
+      }
+     },
+     "informational": {
+      "facts": {
+       "intent": {
+        "value_contains_any": [
+         "diagnostic"
+        ]
+       }
+      }
+     },
+     "presence": "required",
+     "status_in": [
+      "performed"
+     ]
+    },
+    "gi.egd": {
+     "facts": {
+      "extent": {
+       "value_contains_any": [
+        "duoden"
+       ]
+      }
+     },
+     "presence": "required",
+     "status_in": [
+      "performed"
+     ]
+    }
+   },
+   "not_performed": [
+    "gi.office_em",
+    "gi.flex_sig",
+    "gi.eus",
+    "gi.ercp"
+   ]
+  },
+  "incomplete_services": [],
+  "must_not_code": [
+   {
+    "family": "gi.office_em",
+    "reason": "No separately identifiable E/M."
+   }
+  ],
+  "review_plan": {
+   "approve_codes": [
+    "43251",
+    "45378"
+   ],
+   "context_edit": {
+    "service_date": "2026-10-19"
+   },
+   "reject": null
+  },
+  "source_sha256": "60cbc74d21e939422d6e781a5222273a17fb969b0acd62842168212d59b3d4b3"
+ },
+ "reference_sources": [
+  {
+   "effective_end": "2026-12-31",
+   "effective_start": "2026-10-01",
+   "key": "cms-mue-practitioner-2026q4",
+   "kind": "cms-mue-practitioner",
+   "license_note": "CPT codes are copyright the American Medical Association; descriptors are not imported or displayed. Used for internal synthetic evaluation only; commercial CPT use requires an AMA license.",
+   "publisher": "Centers for Medicare & Medicaid Services (CMS)",
+   "release": "2026-Q4",
+   "scope_note": "Medicare NCCI practitioner MUE values (units per day; not every payer)",
+   "sha256": "4574336755ba4e49b7c8ec07de5b74d3f0b8593e3e6192013631724981180d00",
+   "title": "Medicare NCCI practitioner services MUE table (MCR_MUE_PractitionerServices_Eff_10-01-2026.csv)",
+   "url": "https://www.cms.gov/files/zip/medicare-ncci-2026-q4-practitioner-services-mue-table.zip"
+  },
+  {
+   "effective_end": "2026-12-31",
+   "effective_start": "2026-10-01",
+   "key": "cms-pfs-rvu26d",
+   "kind": "cms-pfs",
+   "license_note": "CPT codes are copyright the American Medical Association; descriptors are not imported or displayed. Used for internal synthetic evaluation only; commercial CPT use requires an AMA license.",
+   "publisher": "Centers for Medicare & Medicaid Services (CMS)",
+   "release": "RVU26D",
+   "scope_note": "Medicare Physician Fee Schedule indicators (not a CPT edition; not payer-specific)",
+   "sha256": "521ff0f4ecbf13b5d99dc1dc04d9f82e5361e55c6b4b6b3033043598bf8406e6",
+   "title": "Medicare Physician Fee Schedule relative value file (PPRRVU2026_Oct_nonQPP.csv)",
+   "url": "https://www.cms.gov/files/zip/rvu26d-updated-08-26-2026.zip"
+  }
+ ],
+ "runs": [
+  {
+   "purpose": "primary",
+   "request_sha256": "07851e22bdad4cecae609eeab3dfef68935b76e5fb3c97a0a27c4d36efc35226",
+   "response": {
+    "candidates": [
+     {
+      "alternatives": [],
+      "code": "43239",
+      "display": "Egd transoral biopsy single/multiple",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1030,
+        "start": 986,
+        "text": "Esophageal mucosa looked healthy throughout."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1055,
+        "start": 1031,
+        "text": "On the greater curvature"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1363,
+        "start": 1307,
+        "text": "The stalk base was clean and dry, so no clip was needed."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1387,
+        "start": 1364,
+        "text": "The rest of the stomach"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1458,
+        "start": 1420,
+        "text": "No other upper tract tissue was taken."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "1036F",
+      "display": "PR CURRENT TOBACCO NON-USER",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 315,
+        "start": 241,
+        "text": "Person examined: Petronella Szymanski-Abara (fictional), 64-year-old woman"
+       },
+       {
+        "contextIndex": 0,
+        "end": 474,
+        "start": 372,
+        "text": "Sedation and airway: propofol given by Wynona Tarkington-Ezeh, CRNA (fictional), of Hensley Anesthesia"
+       },
+       {
+        "contextIndex": 0,
+        "end": 2499,
+        "start": 2423,
+        "text": "If the weight loss continues despite benign results, CT of the chest will be"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G9903",
+      "display": "PR PT SCRN TBCO ID AS NON USER",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 240,
+        "start": 208,
+        "text": "Date performed: October 19, 2026"
+       },
+       {
+        "contextIndex": 0,
+        "end": 474,
+        "start": 372,
+        "text": "Sedation and airway: propofol given by Wynona Tarkington-Ezeh, CRNA (fictional), of Hensley Anesthesia"
+       },
+       {
+        "contextIndex": 0,
+        "end": 2499,
+        "start": 2423,
+        "text": "If the weight loss continues despite benign results, CT of the chest will be"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G8420",
+      "display": "PR CALC BMI NORM PARAMETERS",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 474,
+        "start": 372,
+        "text": "Sedation and airway: propofol given by Wynona Tarkington-Ezeh, CRNA (fictional), of Hensley Anesthesia"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1458,
+        "start": 1420,
+        "text": "No other upper tract tissue was taken."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2499,
+        "start": 2423,
+        "text": "If the weight loss continues despite benign results, CT of the chest will be"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G8754",
+      "display": "PR DIAS BP LESS 90",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 474,
+        "start": 372,
+        "text": "Sedation and airway: propofol given by Wynona Tarkington-Ezeh, CRNA (fictional), of Hensley Anesthesia"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1458,
+        "start": 1420,
+        "text": "No other upper tract tissue was taken."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2499,
+        "start": 2423,
+        "text": "If the weight loss continues despite benign results, CT of the chest will be"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "99214",
+      "display": "+PR OFFICE/OUTPATIENT ESTABLISHED MOD MDM 30 MIN",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 474,
+        "start": 372,
+        "text": "Sedation and airway: propofol given by Wynona Tarkington-Ezeh, CRNA (fictional), of Hensley Anesthesia"
+       },
+       {
+        "contextIndex": 0,
+        "end": 758,
+        "start": 739,
+        "text": "She has never had a"
+       },
+       {
+        "contextIndex": 0,
+        "end": 2371,
+        "start": 2279,
+        "text": "The antral polyp goes to Corbridge Pathology Group (fictional), which reports it separately."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "45385",
+      "display": "COLSC FLX W/RMVL OF TUMOR POLYP LESION SNARE TQ",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 2120,
+        "start": 2039,
+        "text": "14 mm pedunculated antral polyp, removed with a hot snare and sent for histology."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2202,
+        "start": 2124,
+        "text": "Two diminutive hyperplastic-appearing rectal polyps, deliberately not removed."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G8417",
+      "display": "PR CALC BMI ABV UP PARAM F/U",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 947,
+        "start": 842,
+        "text": "The gastroscope was introduced by mouth under visual guidance and steered through the stomach and pylorus"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1458,
+        "start": 1420,
+        "text": "No other upper tract tissue was taken."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1973,
+        "start": 1943,
+        "text": "Scattered sigmoid diverticula."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2643,
+        "start": 2562,
+        "text": "Report authenticated: Lazare Sobczak-Muir, DO (fictional), October 19, 2026 11:52"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G8752",
+      "display": "PR SYS BP LESS 140",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 474,
+        "start": 372,
+        "text": "Sedation and airway: propofol given by Wynona Tarkington-Ezeh, CRNA (fictional), of Hensley Anesthesia"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1458,
+        "start": 1420,
+        "text": "No other upper tract tissue was taken."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1973,
+        "start": 1943,
+        "text": "Scattered sigmoid diverticula."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "45381",
+      "display": "COLSC FLX WITH DIRECTED SUBMUCOSAL NJX ANY SBST",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 2120,
+        "start": 2039,
+        "text": "14 mm pedunculated antral polyp, removed with a hot snare and sent for histology."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2202,
+        "start": 2124,
+        "text": "Two diminutive hyperplastic-appearing rectal polyps, deliberately not removed."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "99204",
+      "display": "PR OFFICE/OUTPATIENT NEW MODERATE MDM 45 MINUTES",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 474,
+        "start": 372,
+        "text": "Sedation and airway: propofol given by Wynona Tarkington-Ezeh, CRNA (fictional), of Hensley Anesthesia"
+       },
+       {
+        "contextIndex": 0,
+        "end": 758,
+        "start": 739,
+        "text": "She has never had a"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1458,
+        "start": 1420,
+        "text": "No other upper tract tissue was taken."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1973,
+        "start": 1943,
+        "text": "Scattered sigmoid diverticula."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G8753",
+      "display": "PR SYS BP > OR = 140",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 474,
+        "start": 372,
+        "text": "Sedation and airway: propofol given by Wynona Tarkington-Ezeh, CRNA (fictional), of Hensley Anesthesia"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1458,
+        "start": 1420,
+        "text": "No other upper tract tissue was taken."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2499,
+        "start": 2423,
+        "text": "If the weight loss continues despite benign results, CT of the chest will be"
+       }
+      ],
+      "system": "cpt"
+     }
+    ],
+    "codes": [
+     {
+      "alternatives": [
+       {
+        "code": "E88.A",
+        "display": "Wasting disease (syndrome) due to underlying condition"
+       },
+       {
+        "code": "R64",
+        "display": "Cachexia"
+       }
+      ],
+      "code": "R63.4",
+      "display": "Abnormal weight loss",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 618,
+        "start": 541,
+        "text": "Six kilograms of unintended weight loss over five months, with early satiety."
+       },
+       {
+        "contextIndex": 0,
+        "end": 820,
+        "start": 772,
+        "text": "Both examinations were done to look for a cause."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2267,
+        "start": 2206,
+        "text": "Sigmoid diverticulosis; no colonic cause for the weight loss."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2511,
+        "start": 2423,
+        "text": "If the weight loss continues despite benign results, CT of the chest will be\nconsidered."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [
+       {
+        "code": "P92.4",
+        "display": "Overfeeding of newborn"
+       },
+       {
+        "code": "R63.2",
+        "display": "Polyphagia"
+       }
+      ],
+      "code": "R68.81",
+      "display": "Early satiety",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 618,
+        "start": 541,
+        "text": "Six kilograms of unintended weight loss over five months, with early satiety."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [
+       {
+        "code": "C16.3",
+        "display": "Malignant neoplasm of pyloric antrum"
+       },
+       {
+        "code": "C78.89",
+        "display": "Secondary malignant neoplasm of other digestive organs"
+       },
+       {
+        "code": "D00.2",
+        "display": "Carcinoma in situ of stomach"
+       },
+       {
+        "code": "D13.1",
+        "display": "Benign neoplasm of stomach"
+       }
+      ],
+      "code": "K31.7",
+      "display": "Polyp of stomach and duodenum",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 738,
+        "start": 619,
+        "text": "CT of the abdomen at Ostley Imaging\n(fictional) on September 28, 2026 suggested a filling defect in the gastric antrum."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1160,
+        "start": 1031,
+        "text": "On the greater curvature\nof the antrum sat a 14 mm pedunculated polyp with a lobulated head on a short, thick stalk (Paris 0-Ip)."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2120,
+        "start": 2036,
+        "text": "1. 14 mm pedunculated antral polyp, removed with a hot snare and sent for histology."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [
+       {
+        "code": "K62.89",
+        "display": "Other specified diseases of anus and rectum"
+       },
+       {
+        "code": "K63.5",
+        "display": "Polyp of colon"
+       }
+      ],
+      "code": "K62.1",
+      "display": "Rectal polyp",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1785,
+        "start": 1664,
+        "text": "In the rectum, 4 and 6\ncm from the anal verge, there were two 3 mm pale, flat polyps with a hyperplastic surface pattern."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2202,
+        "start": 2121,
+        "text": "2. Two diminutive hyperplastic-appearing rectal polyps, deliberately not removed."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [],
+      "code": "K57.30",
+      "display": "Diverticulosis of large intestine without perforation or abscess without bleeding",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1973,
+        "start": 1943,
+        "text": "Scattered sigmoid diverticula."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2267,
+        "start": 2203,
+        "text": "3. Sigmoid diverticulosis; no colonic cause for the weight loss."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [],
+      "code": "43251",
+      "display": "EGD REMOVAL TUMOR POLYP/OTHER LESION SNARE TECH",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1160,
+        "start": 1056,
+        "text": "of the antrum sat a 14 mm pedunculated polyp with a lobulated head on a short, thick stalk (Paris 0-Ip)."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1274,
+        "start": 1167,
+        "text": "snare was closed around the stalk 5 mm below the head; with blended current the polyp was transected at the"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1363,
+        "start": 1307,
+        "text": "The stalk base was clean and dry, so no clip was needed."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "45378",
+      "display": "COLONOSCOPY FLX DX W/COLLJ SPEC WHEN PFRMD",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1573,
+        "start": 1514,
+        "text": "The colonoscope reached the cecum, where its landmarks, the"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1686,
+        "start": 1664,
+        "text": "In the rectum, 4 and 6"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1785,
+        "start": 1687,
+        "text": "cm from the anal verge, there were two 3 mm pale, flat polyps with a hyperplastic surface pattern."
+       }
+      ],
+      "system": "cpt"
+     }
+    ],
+    "usageInfo": {
+     "creditsConsumed": 0.045748
+    }
+   },
+   "run": "2fcc37bf",
+   "sent": true,
+   "service_date": null,
+   "state": "succeeded"
+  },
+  {
+   "purpose": "primary",
+   "request_sha256": "e89468e05934376e59acbd91126d35641453799cd597489105450461ba78965d",
+   "response": {
+    "candidates": [
+     {
+      "alternatives": [],
+      "code": "43239",
+      "display": "Egd transoral biopsy single/multiple",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1030,
+        "start": 986,
+        "text": "Esophageal mucosa looked healthy throughout."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1055,
+        "start": 1031,
+        "text": "On the greater curvature"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1363,
+        "start": 1307,
+        "text": "The stalk base was clean and dry, so no clip was needed."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1387,
+        "start": 1364,
+        "text": "The rest of the stomach"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1458,
+        "start": 1420,
+        "text": "No other upper tract tissue was taken."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "1036F",
+      "display": "PR CURRENT TOBACCO NON-USER",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 240,
+        "start": 208,
+        "text": "Date performed: October 19, 2026"
+       },
+       {
+        "contextIndex": 0,
+        "end": 315,
+        "start": 241,
+        "text": "Person examined: Petronella Szymanski-Abara (fictional), 64-year-old woman"
+       },
+       {
+        "contextIndex": 0,
+        "end": 474,
+        "start": 372,
+        "text": "Sedation and airway: propofol given by Wynona Tarkington-Ezeh, CRNA (fictional), of Hensley Anesthesia"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G9903",
+      "display": "PR PT SCRN TBCO ID AS NON USER",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 240,
+        "start": 208,
+        "text": "Date performed: October 19, 2026"
+       },
+       {
+        "contextIndex": 0,
+        "end": 474,
+        "start": 372,
+        "text": "Sedation and airway: propofol given by Wynona Tarkington-Ezeh, CRNA (fictional), of Hensley Anesthesia"
+       },
+       {
+        "contextIndex": 0,
+        "end": 2499,
+        "start": 2423,
+        "text": "If the weight loss continues despite benign results, CT of the chest will be"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G8420",
+      "display": "PR CALC BMI NORM PARAMETERS",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 474,
+        "start": 372,
+        "text": "Sedation and airway: propofol given by Wynona Tarkington-Ezeh, CRNA (fictional), of Hensley Anesthesia"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1458,
+        "start": 1420,
+        "text": "No other upper tract tissue was taken."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2499,
+        "start": 2423,
+        "text": "If the weight loss continues despite benign results, CT of the chest will be"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G8754",
+      "display": "PR DIAS BP LESS 90",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1458,
+        "start": 1420,
+        "text": "No other upper tract tissue was taken."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2499,
+        "start": 2423,
+        "text": "If the weight loss continues despite benign results, CT of the chest will be"
+       },
+       {
+        "contextIndex": 0,
+        "end": 2643,
+        "start": 2562,
+        "text": "Report authenticated: Lazare Sobczak-Muir, DO (fictional), October 19, 2026 11:52"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "45385",
+      "display": "COLSC FLX W/RMVL OF TUMOR POLYP LESION SNARE TQ",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 2120,
+        "start": 2039,
+        "text": "14 mm pedunculated antral polyp, removed with a hot snare and sent for histology."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2202,
+        "start": 2124,
+        "text": "Two diminutive hyperplastic-appearing rectal polyps, deliberately not removed."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G8752",
+      "display": "PR SYS BP LESS 140",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 474,
+        "start": 372,
+        "text": "Sedation and airway: propofol given by Wynona Tarkington-Ezeh, CRNA (fictional), of Hensley Anesthesia"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1458,
+        "start": 1420,
+        "text": "No other upper tract tissue was taken."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2499,
+        "start": 2423,
+        "text": "If the weight loss continues despite benign results, CT of the chest will be"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G8417",
+      "display": "PR CALC BMI ABV UP PARAM F/U",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1458,
+        "start": 1420,
+        "text": "No other upper tract tissue was taken."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2499,
+        "start": 2423,
+        "text": "If the weight loss continues despite benign results, CT of the chest will be"
+       },
+       {
+        "contextIndex": 0,
+        "end": 2643,
+        "start": 2562,
+        "text": "Report authenticated: Lazare Sobczak-Muir, DO (fictional), October 19, 2026 11:52"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G8753",
+      "display": "PR SYS BP > OR = 140",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 474,
+        "start": 372,
+        "text": "Sedation and airway: propofol given by Wynona Tarkington-Ezeh, CRNA (fictional), of Hensley Anesthesia"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1458,
+        "start": 1420,
+        "text": "No other upper tract tissue was taken."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2499,
+        "start": 2423,
+        "text": "If the weight loss continues despite benign results, CT of the chest will be"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "45381",
+      "display": "COLSC FLX WITH DIRECTED SUBMUCOSAL NJX ANY SBST",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 2120,
+        "start": 2039,
+        "text": "14 mm pedunculated antral polyp, removed with a hot snare and sent for histology."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2202,
+        "start": 2124,
+        "text": "Two diminutive hyperplastic-appearing rectal polyps, deliberately not removed."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "99204",
+      "display": "PR OFFICE/OUTPATIENT NEW MODERATE MDM 45 MINUTES",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 2643,
+        "start": 2562,
+        "text": "Report authenticated: Lazare Sobczak-Muir, DO (fictional), October 19, 2026 11:52"
+       },
+       {
+        "contextIndex": 1,
+        "end": 27,
+        "start": 0,
+        "text": "Date of service: 2026-10-19"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "99213",
+      "display": "+PR OFFICE OUTPATIENT VISIT 15 MINUTES",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 474,
+        "start": 372,
+        "text": "Sedation and airway: propofol given by Wynona Tarkington-Ezeh, CRNA (fictional), of Hensley Anesthesia"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1973,
+        "start": 1943,
+        "text": "Scattered sigmoid diverticula."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2499,
+        "start": 2423,
+        "text": "If the weight loss continues despite benign results, CT of the chest will be"
+       }
+      ],
+      "system": "cpt"
+     }
+    ],
+    "codes": [
+     {
+      "alternatives": [
+       {
+        "code": "E88.A",
+        "display": "Wasting disease (syndrome) due to underlying condition"
+       },
+       {
+        "code": "R63.6",
+        "display": "Underweight"
+       },
+       {
+        "code": "R64",
+        "display": "Cachexia"
+       }
+      ],
+      "code": "R63.4",
+      "display": "Abnormal weight loss",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 618,
+        "start": 541,
+        "text": "Six kilograms of unintended weight loss over five months, with early satiety."
+       },
+       {
+        "contextIndex": 0,
+        "end": 820,
+        "start": 772,
+        "text": "Both examinations were done to look for a cause."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2267,
+        "start": 2203,
+        "text": "3. Sigmoid diverticulosis; no colonic cause for the weight loss."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [
+       {
+        "code": "P92.4",
+        "display": "Overfeeding of newborn"
+       },
+       {
+        "code": "R63.2",
+        "display": "Polyphagia"
+       }
+      ],
+      "code": "R68.81",
+      "display": "Early satiety",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 618,
+        "start": 541,
+        "text": "Six kilograms of unintended weight loss over five months, with early satiety."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [
+       {
+        "code": "C16.3",
+        "display": "Malignant neoplasm of pyloric antrum"
+       },
+       {
+        "code": "C78.89",
+        "display": "Secondary malignant neoplasm of other digestive organs"
+       },
+       {
+        "code": "D00.2",
+        "display": "Carcinoma in situ of stomach"
+       },
+       {
+        "code": "D13.1",
+        "display": "Benign neoplasm of stomach"
+       }
+      ],
+      "code": "K31.7",
+      "display": "Polyp of stomach and duodenum",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 738,
+        "start": 619,
+        "text": "CT of the abdomen at Ostley Imaging\n(fictional) on September 28, 2026 suggested a filling defect in the gastric antrum."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1160,
+        "start": 1031,
+        "text": "On the greater curvature\nof the antrum sat a 14 mm pedunculated polyp with a lobulated head on a short, thick stalk (Paris 0-Ip)."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2120,
+        "start": 2036,
+        "text": "1. 14 mm pedunculated antral polyp, removed with a hot snare and sent for histology."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [
+       {
+        "code": "K62.89",
+        "display": "Other specified diseases of anus and rectum"
+       },
+       {
+        "code": "K63.5",
+        "display": "Polyp of colon"
+       }
+      ],
+      "code": "K62.1",
+      "display": "Rectal polyp",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1785,
+        "start": 1664,
+        "text": "In the rectum, 4 and 6\ncm from the anal verge, there were two 3 mm pale, flat polyps with a hyperplastic surface pattern."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2202,
+        "start": 2121,
+        "text": "2. Two diminutive hyperplastic-appearing rectal polyps, deliberately not removed."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [],
+      "code": "K57.30",
+      "display": "Diverticulosis of large intestine without perforation or abscess without bleeding",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1973,
+        "start": 1943,
+        "text": "Scattered sigmoid diverticula."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2267,
+        "start": 2203,
+        "text": "3. Sigmoid diverticulosis; no colonic cause for the weight loss."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [
+       {
+        "code": "K59.3",
+        "display": "Megacolon, not elsewhere classified"
+       },
+       {
+        "code": "K59.39",
+        "display": "Other megacolon"
+       },
+       {
+        "code": "K59.9",
+        "display": "Functional intestinal disorder, unspecified"
+       },
+       {
+        "code": "R19.15",
+        "display": "Other abnormal bowel sounds"
+       }
+      ],
+      "code": "Z12.11",
+      "display": "Encounter for screening for malignant neoplasm of colon",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 771,
+        "start": 739,
+        "text": "She has never had a\ncolonoscopy."
+       },
+       {
+        "contextIndex": 0,
+        "end": 820,
+        "start": 772,
+        "text": "Both examinations were done to look for a cause."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [],
+      "code": "43251",
+      "display": "EGD REMOVAL TUMOR POLYP/OTHER LESION SNARE TECH",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1160,
+        "start": 1056,
+        "text": "of the antrum sat a 14 mm pedunculated polyp with a lobulated head on a short, thick stalk (Paris 0-Ip)."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1274,
+        "start": 1167,
+        "text": "snare was closed around the stalk 5 mm below the head; with blended current the polyp was transected at the"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1363,
+        "start": 1307,
+        "text": "The stalk base was clean and dry, so no clip was needed."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "45378",
+      "display": "COLONOSCOPY FLX DX W/COLLJ SPEC WHEN PFRMD",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1573,
+        "start": 1514,
+        "text": "The colonoscope reached the cecum, where its landmarks, the"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1686,
+        "start": 1664,
+        "text": "In the rectum, 4 and 6"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1785,
+        "start": 1687,
+        "text": "cm from the anal verge, there were two 3 mm pale, flat polyps with a hyperplastic surface pattern."
+       }
+      ],
+      "system": "cpt"
+     }
+    ],
+    "usageInfo": {
+     "creditsConsumed": 0.061392
+    }
+   },
+   "run": "442e8f3e",
+   "sent": true,
+   "service_date": "2026-10-19",
+   "state": "succeeded"
+  }
+ ],
+ "stored": {
+  "contexts": [
+   [
+    "gi-context@3",
+    "missing",
+    null
+   ],
+   [
+    "gi-context@3",
+    "user",
+    "2026-10-19"
+   ],
+   [
+    "gi-context@3",
+    "user",
+    "2026-10-19"
+   ]
+  ],
+  "decisions": [
+   [
+    "approve",
+    "43251",
+    "92e16310"
+   ]
+  ],
+  "open_clarifications": [],
+  "proposals": [
+   [
+    "1036F",
+    "alternative",
+    "informational",
+    "ed6c29e0"
+   ],
+   [
+    "43239",
+    "alternative",
+    "informational",
+    "0ea37d50"
+   ],
+   [
+    "43251",
+    "selected",
+    "ready",
+    "92e16310"
+   ],
+   [
+    "45378",
+    "excluded",
+    "excluded",
+    "c7c0df28"
+   ],
+   [
+    "45381",
+    "alternative",
+    "informational",
+    "f9fed667"
+   ],
+   [
+    "45385",
+    "alternative",
+    "informational",
+    "0cfed122"
+   ],
+   [
+    "99204",
+    "alternative",
+    "informational",
+    "2e29e58b"
+   ],
+   [
+    "99213",
+    "alternative",
+    "informational",
+    "993d7f7f"
+   ],
+   [
+    "G8417",
+    "alternative",
+    "informational",
+    "c4b0b0de"
+   ],
+   [
+    "G8420",
+    "alternative",
+    "informational",
+    "7f2156df"
+   ],
+   [
+    "G8752",
+    "alternative",
+    "informational",
+    "f1263f6c"
+   ],
+   [
+    "G8753",
+    "alternative",
+    "informational",
+    "fd74b417"
+   ],
+   [
+    "G8754",
+    "alternative",
+    "informational",
+    "528059a3"
+   ],
+   [
+    "G9903",
+    "alternative",
+    "informational",
+    "08d5c220"
+   ]
+  ],
+  "state": "ready_for_review"
+ },
+ "text_sha256": "0c91ea8a0260ea47abbe471deefbd84631f0d34dbcb29133ecc1e4a8d7865e5d",
+ "walk_answer": "2026-10-19"
+}

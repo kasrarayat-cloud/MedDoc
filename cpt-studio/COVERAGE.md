@@ -1,6 +1,6 @@
 # CPT Studio — GI coverage catalogue
 
-Generated from `studio/gi/catalogue.py` (gi-catalogue@1); do not edit by hand. One GI workspace, one upload flow and one combined results screen: these families are internal profiles, never navigation.
+Generated from `studio/gi/catalogue.py` (gi-catalogue@2); do not edit by hand. One GI workspace, one upload flow and one combined results screen: these families are internal profiles, never navigation.
 
 Support levels: **supported** — the documented-service reader reads the family's services and acts, and the catalogue reconciles them with provider-selected codes, with regression documents; **recognised** — listed for review, not reconciled; **unsupported** — named so a result can say so.
 
@@ -72,6 +72,7 @@ The code lists are internal reconciliation profiles (which documented act a code
 - `cannulation`: Instrument passage and cannulation are part of the examination itself.
 - `biopsy_of_removed_lesion`: A biopsy of a lesion that is then removed at the same session (snare, hot forceps, EMR) is part of the removal (internal profile rule, NCCI policy principle; NCCI is not connected).
 - `lift_injection`: A submucosal injection made to lift a lesion for its resection is part of the resection.
+- `resection_technique`: A snare or hot-forceps removal of the lesion an endoscopic mucosal resection or submucosal dissection removes is the technique of that resection, not a separate service (internal profile rule).
 **Unsupported within the family:**
 - `esd`: Endoscopic submucosal dissection has no code profile here; a coder decides how it is reported.
 
@@ -97,6 +98,7 @@ The code lists are internal reconciliation profiles (which documented act a code
 - `cannulation`: Instrument passage and cannulation are part of the examination itself.
 - `biopsy_of_removed_lesion`: A biopsy of a lesion that is then removed at the same session (snare, hot forceps, EMR) is part of the removal (internal profile rule, NCCI policy principle; NCCI is not connected).
 - `lift_injection`: A submucosal injection made to lift a lesion for its resection is part of the resection.
+- `resection_technique`: A snare or hot-forceps removal of the lesion an endoscopic mucosal resection or submucosal dissection removes is the technique of that resection, not a separate service (internal profile rule).
 
 ## Colonoscopy — supported
 
@@ -123,6 +125,7 @@ The code lists are internal reconciliation profiles (which documented act a code
 - `cannulation`: Instrument passage and cannulation are part of the examination itself.
 - `biopsy_of_removed_lesion`: A biopsy of a lesion that is then removed at the same session (snare, hot forceps, EMR) is part of the removal (internal profile rule, NCCI policy principle; NCCI is not connected).
 - `lift_injection`: A submucosal injection made to lift a lesion for its resection is part of the resection.
+- `resection_technique`: A snare or hot-forceps removal of the lesion an endoscopic mucosal resection or submucosal dissection removes is the technique of that resection, not a separate service (internal profile rule).
 **Unsupported within the family:**
 - `esd`: Endoscopic submucosal dissection has no code profile here; a coder decides how it is reported.
 
@@ -149,6 +152,7 @@ The code lists are internal reconciliation profiles (which documented act a code
 - `cannulation`: Instrument passage and cannulation are part of the examination itself.
 - `biopsy_of_removed_lesion`: A biopsy of a lesion that is then removed at the same session (snare, hot forceps, EMR) is part of the removal (internal profile rule, NCCI policy principle; NCCI is not connected).
 - `lift_injection`: A submucosal injection made to lift a lesion for its resection is part of the resection.
+- `resection_technique`: A snare or hot-forceps removal of the lesion an endoscopic mucosal resection or submucosal dissection removes is the technique of that resection, not a separate service (internal profile rule).
 
 ## Endoscopic ultrasound — supported
 

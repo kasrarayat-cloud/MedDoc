@@ -1,0 +1,31 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Gastroscopy and Sigmoidoscopy for Suspected Gut GVHD
+Ardenvale University Hospital (fictional), Endoscopy, Floor 3
+Registration: hospital outpatient, place of service 22
+Case date: 2026-10-21
+Pt. name: Lorcan Ibekwe-Sandoval (fictional), 52-year-old man
+Operator: Torvald Ekwueme-Lisle, MD (fictional)
+Sedation provider: Hallie Brandvold-Ikeda, CRNA (fictional), of Ardenvale Anesthesia Services (fictional), which documents and bills its own care
+Requested by: the stem cell transplant service, Saoirse Delahunt-Oyo, MD (fictional)
+Clinical Question
+Day 68 after a matched unrelated donor allogeneic stem cell transplant for acute myeloid leukemia. For two weeks he has had watery diarrhea of 1.5 to 2 liters a day, with nausea and poor appetite. Clostridioides difficile testing and a stool pathogen panel were negative, and blood CMV PCR is undetectable. Tissue is needed to look for graft-versus-host disease and cytomegalovirus.
+Patient Readiness
+Consent was signed after a discussion of bleeding, perforation, infection and sedation risks; platelets were 64,000 per microliter that morning. A universal protocol pause was held before the first insertion. Two tap-water enemas were given for the lower examination.
+Upper Tract Observations
+The esophageal lining was normal, without plaques or ulcers. The antral and body mucosa of the stomach showed patchy erythema and edema with a few small erosions, without bleeding. The small bowel segment examined looked mildly edematous with blunted folds. Cold forceps samples were taken for graft-versus-host disease and cytomegalovirus and are labelled by jar in the grid below.
+Lower Tract Observations
+The rectal and sigmoid mucosa showed loss of the vascular pattern, edema and patchy erythema without ulcers, and the most proximal segment reached looked the same. Cold forceps samples were taken and are labelled by jar in the grid below. Retroflexion in the rectum added nothing.
+Grid by Exam
+Element | Upper endoscopy | Flexible sigmoidoscopy
+Instrument | Standard gastroscope | Flexible sigmoidoscope
+Limit of insertion | Second part of the duodenum | Descending colon, 50 cm from the anal verge
+Jars and sites | Jar 1 second part of the duodenum; jar 2 gastric antrum and body | Jar 3 rectum; jar 4 sigmoid colon
+Pieces per jar | 4 and 4 | 4 and 4
+Bleeding after sampling | Minimal, stopped on its own | Minimal, stopped on its own
+Complications | None | None
+Diagnoses After Both Exams
+1. Gastric erythema, edema and erosions with edematous small bowel folds, consistent with but not specific for upper gut graft-versus-host disease; biopsied.
+2. Rectosigmoid inflammation of the same pattern; biopsied.
+Disposition
+Specimens go to the Ardenvale Department of Pathology (fictional), which issues its own report. Results go to the transplant service, which manages his immunosuppression and will decide on treatment. He returns to the transplant day unit after recovery.
+Report finalized by Torvald Ekwueme-Lisle, MD (fictional), 2026-10-21 16:05

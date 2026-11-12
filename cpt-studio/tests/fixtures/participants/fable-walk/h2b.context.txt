@@ -1,0 +1,22 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Colonoscopy Report (fictional)
+Date of service: October 29, 2026
+Endoscopist: Marisol Quenby, MD (fictional)
+Patient: Test Patient Arden (fictional) | MRN: SYN-55902
+Indication: Referral for removal of a large cecal polyp seen on an outside colonoscopy.
+Sedation: Moderate sedation with midazolam and fentanyl was administered by the endoscopist, with an independent
+trained observer present; intraservice time 32 minutes.
+Procedure
+The colonoscope was advanced to the cecum and the terminal ileum was briefly intubated. In the cecum a 22 mm sessile
+lesion was found. A submucosal injection of saline with methylene blue was made to lift the lesion, and the lesion was
+removed en bloc by snare endoscopic mucosal resection. Two clips were placed prophylactically to close the resection
+defect; there was no bleeding. Biopsy of the cecal lesion before resection was not performed.
+In the descending colon a 10 mm sessile polyp was found. Removal with a cold snare was attempted, but the polyp could
+not be captured and the snare removal was abandoned; the polyp was instead sampled with cold biopsy forceps.
+No other lesions were seen. The examination was completed.
+Impression
+Cecal lesion removed by EMR with prophylactic clip closure. Descending colon polyp: snare removal unsuccessful;
+biopsied.
+Plan
+Repeat colonoscopy in 3 months to inspect the EMR site and to remove the descending colon polyp.
+Electronically signed by Marisol Quenby, MD (fictional), October 29, 2026

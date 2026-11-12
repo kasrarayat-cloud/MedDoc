@@ -1,0 +1,22 @@
+{
+ "package": "PS",
+ "summary": "GI round 4, package PS: new shared helpers in studio/gi/sections.py only (head_lines_end, procedure_report_head, around_procedure_title, under_another_occurrence, beyond_heading_reach). Nothing calls them yet. Expected delta: NONE. The only change H2(a) may show is these new module constants of sections.py; every pattern context.py or sections.py already read is byte-identical, every layout identical, and no date, request, mention count, replay or battery outcome moves.",
+ "cues_added": [
+  "sections.ANOTHER_OCCURRENCE_HEAD",
+  "sections.AROUND_PROCEDURE_TITLE_CHARS",
+  "sections.AROUND_PROCEDURE_TITLE_LINES",
+  "sections.AROUND_PROCEDURE_WORDS",
+  "sections.HEADING_REACH_CHARS",
+  "sections.HEADING_REACH_LINES",
+  "sections.OCCURRENCE_HEAD_LINES",
+  "sections.OCCURRENCE_HEAD_REACH",
+  "sections.PROCEDURE_HEAD",
+  "sections.PROCEDURE_HEAD_LINES",
+  "sections._HEADING_WORD",
+  "sections._NON_BLANK",
+  "sections._TITLE_FIELD"
+ ],
+ "movements": {},
+ "battery": [],
+ "replay": "EQUAL"
+}

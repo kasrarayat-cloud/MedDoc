@@ -1,0 +1,126 @@
+"""Harness repair 3 (owner directive 2026-11-05, second message): refutation cycle 3 over cycle 2's rebuilt and repaired
+rules, pinned (HARNESS.md "Harness repair 3, refutation cycle 3").
+
+Four lenses ran at b32222c8f: C3-1 F-ACTS as rebuilt and the fronted frame, C3-2 the provider-neutral admission, C3-3
+competition by act identity, C3-4 the holding rules as cycle 2 repaired them. They reported 25 findings. Every
+engine-level input is in tests/fixtures/gi4/refutation/h3-c3-cases.json, verbatim, with what the base 406843018, the
+stage commit 1974c8cb1, the round-1 tree 8b186df05 and the cycle-2 tree b32222c8f read, measured before anything was
+decided. The release criteria pinned here:
+- no input is READY on either path where the base is not, except the two releases judged correct below;
+- no two codes for one documented act are both READY;
+- a participant's code for an act read in doubt itself, or stated not done, is listed, and Corti's own proposals and the
+  coding completeness read as with no participant.
+Synthetic documents only; nothing is sent."""
+import json
+from pathlib import Path
+
+from django.test import SimpleTestCase
+
+from studio.validation import engine
+from tests.test_h3_refutation_c2 import SHORT, dated_both
+from tests.test_harness_engine import code, corti, read, run, span
+
+CASES = json.loads((Path(__file__).parent / 'fixtures' / 'gi4' / 'refutation' / 'h3-c3-cases.json')
+                   .read_text(encoding='utf-8'))
+# READY where the base is not, read against the document: biopsies taken "prior to dilation" - a point inside today's
+# procedure (L3-9). (F-ACTS' meat-bolus release, judged correct in cycle 3, went with F-ACTS in cycle 4.)
+# Completion repair (2026-11-06, U1; builder A): the meat-bolus removals are READY again, by a different mechanism - a
+# bolus whose documented antecedent is a food, as the structural subject of its removal (services._removal_subject,
+# _bolus_index), and a site-less act bound by its antecedent's site - and they are the corpus's required READYs
+# (tests/fixtures/gi4/completion/corpus.json, group C). Each row's "completion A" column records the reading.
+JUDGED_RELEASES = {'C3-4-9:ctl': 'biopsies before the dilation of the same procedure are done today',
+                   # completion repair (2026-11-06, U2; studio.gi.structure, builder R1): the coin removed with a Roth
+                   # net inside the report's own labelled COLONOSCOPY part is the colonoscopy's act today
+                   # (45379); the base held it because the part opened no family. Builder A reads the same
+                   # act through its antecedent's site. Its F1b and F1d siblings (an upper GI code for the
+                   # colon's foreign body) stay as pinned: not READY
+                   'C3-1:c31-1:F1a': "the coin seen in the transverse colon is the colonoscopy's foreign body, "
+                                     "removed today in the report's own labelled COLONOSCOPY part (45379)",
+                   'C3-1:c31-2:B6c': 'the meat bolus found at 34 cm is the bolus the Roth net removed today',
+                   'C3-1:c31-6:B6c': 'the meat bolus found at 34 cm is the bolus the Roth net removed today',
+                   'C3-1:c31-6:X1': 'the meat bolus impacted at 34 cm is the bolus the Roth net removed today'}
+# Completion refutation cycle 2 (2026-11-06; HARNESS.md "Refutation of the integrated diff, cycle 2"): the bolus anaphor
+# resolves only to an antecedent recognized whole as a plain finding of today (a closed form). X2's "steak impaction" and
+# X3's "impacted meat bolus grasped with the net" are not, so both keep the base reading (held), the closed form's
+# recorded safe-side false holds (ACCURACY-RESIDUALS.md, cycle 2); their rows are pinned HELD/HELD in the table.
+# one documented act in each: a restatement or a doubted second statement of it
+ONE_ACT = ('C3-3:f1_two_ready:', 'C3-3:f4_doubted_ready:')
+
+
+def short(result, value):
+    return [SHORT.get((p.bucket, p.status), f'{p.bucket}/{p.status}') for p in result.proposals if p.code == value]
+
+
+class CycleThreeSingleTests(SimpleTestCase):
+    """C3-1's and C3-4's inputs, one code on both paths through the pipeline's own date."""
+
+    def test_every_input_reads_as_pinned(self):
+        for case in CASES['single']:
+            with self.subTest(case['id']):
+                self.assertEqual(dated_both(case['text'], case['code'], case['quote'],
+                                            tuple(map(tuple, case['primary']))),
+                                 (case['corti'], case['participant'], case['day']), case['read'])
+
+    def test_no_input_is_ready_where_the_base_is_not_but_the_judged_releases(self):
+        released = set()
+        for case in CASES['single']:
+            base_corti, base_participant = case['read']['base'].split('/')
+            if ('READY' in case['corti'] and 'READY' not in base_corti) or (
+                    'READY' in case['participant'] and 'READY' not in base_participant):
+                released.add(case['id'])
+        self.assertEqual(released, set(JUDGED_RELEASES))
+
+
+class CycleThreeCompetitionTests(SimpleTestCase):
+    """C3-3's inputs: Corti's and the participants' codes together. A restatement (a procedure line's listing, a Diagnosis
+    or findings line, an Impression) and a doubted second statement of one act compete with the act's code; two acts
+    at two sites, or on two lesion records, never do."""
+
+    def outcome(self, case):
+        by = {}
+        for provider, value, quote in case['participants']:
+            by.setdefault(provider, []).append(code(case['text'], value, quote))
+        result = run(case['text'], corti(*[(c, span(case['text'], q)) for c, q in case['primary']]),
+                     [read(p, cs) for p, cs in by.items()])
+        return {value: [[SHORT.get((p.bucket, p.status), p.bucket), any(c.id == engine.COMPETING_CHECK for c in p.checks)]
+                        for p in result.proposals if p.code == value] for value in case['outcome']}
+
+    def test_every_input_reads_as_pinned(self):
+        for case in CASES['multi']:
+            with self.subTest(case['id']):
+                self.assertEqual(self.outcome(case), case['outcome'], case['read'])
+
+    def test_one_act_never_has_two_ready_codes(self):
+        for case in CASES['multi']:
+            if not case['id'].startswith(ONE_ACT):
+                continue
+            with self.subTest(case['id']):
+                ready = [value for value, items in case['outcome'].items() if any(o[0] == 'READY' for o in items)]
+                self.assertLessEqual(len(ready), 1, ready)
+
+
+class CycleThreeAdmissionTests(SimpleTestCase):
+    """C3-2's inputs: a participant's code for an act read in doubt itself (a listed act withheld by its failure or plan,
+    a consent's act, a question's act). Cycle 3 listed it and read Corti's base code as with Corti alone. The completion
+    repair (owner directive 2026-11-06, item 3: one evaluation whoever proposed; builder Q1) supersedes that narrowing:
+    the participant's code is a proposal read exactly as Corti's selection of the same passage reads it - excluded with
+    the passage where the act is stated not done, held where it is in doubt, never READY on these inputs - and its
+    cross-code effects (the base code, the completeness) are the same as Corti's selection's."""
+
+    def test_every_row_reads_as_pinned_and_as_corti_selecting_it(self):
+        for case in CASES['admission']:
+            text = case['text']
+            sel = (case['base'], span(text, case['base_quote']))
+            alone = run(text, corti(sel))
+            self.assertEqual([short(alone, case['base']), alone.completeness.get('state')], case['alone'])
+            for row in case['rows']:
+                who, quote = row[0], row[1]
+                with self.subTest(f"{case['id']} {who} {quote[:40]}"):
+                    result = run(text, corti(sel), [read(who, [code(text, case['act'], quote)])])
+                    got = [who, quote, short(result, case['act']), short(result, case['base']),
+                           result.completeness.get('state')]
+                    self.assertEqual(got, row, case['read'])
+                    theirs = run(text, corti(sel, (case['act'], span(text, quote))))
+                    self.assertEqual(got[2:], [short(theirs, case['act']), short(theirs, case['base']),
+                                               theirs.completeness.get('state')])
+                    self.assertNotIn('READY', got[2])

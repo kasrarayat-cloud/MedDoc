@@ -1,0 +1,9 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+Lower Endoscopy Report
+Date of service: 2026-10-27
+Endoscopist: Synthetic Endoscopist, MD (fictional)
+Sedation: propofol by a CRNA (fictional)
+Procedure: Colonoscopy
+The colonoscope was advanced to the cecum and the appendiceal orifice was photographed.
+Cold forceps biopsies were taken from the cecum.
+There was not a biopsy taken from the cecum.

@@ -363,5 +363,35 @@ class GeneratedOutputTests(unittest.TestCase):
             self.assertEqual(archive.infolist()[0].filename, '[Content_Types].xml')
 
 
+
+class NotUtf8DeliveryTests(unittest.TestCase):
+    """The delivery the 2026-11-05 walk uses for the failure state: a .txt CPT Studio must refuse to read."""
+
+    def test_the_source_and_one_byte_that_is_not_utf8(self):
+        source = (generate.BANNER + '\nColonoscopy report (fictional).\n').encode('ascii')
+        rendered = generate.RENDERERS['non-utf8-txt'](source, source.decode('ascii'), 'x (synthetic)')
+        self.assertEqual(rendered, source + generate.NOT_UTF8)
+        self.assertTrue(rendered.startswith(generate.BANNER.encode('ascii')))
+        with self.assertRaises(UnicodeDecodeError):
+            rendered.decode('utf-8')
+        self.assertEqual(generate.FORMATS['non-utf8-txt'], '.txt')
+
+    def test_cpt_studio_refuses_to_read_it(self):
+        # the product's own text reader (studio.ingest.text.extract_txt), loaded on its own: no Django needed
+        root = HERE.parent.parent
+        sys.path.insert(0, str(root))
+        try:
+            from studio.ingest import text as ingest_text
+            from studio.ingest.extract import Limits
+        except Exception as exc:  # pragma: no cover - the product package is not importable here
+            self.skipTest(f'studio.ingest is not importable: {exc}')
+        finally:
+            sys.path.remove(str(root))
+        source = (generate.BANNER + '\nColonoscopy report (fictional).\n').encode('ascii')
+        result = ingest_text.extract_txt(generate.RENDERERS['non-utf8-txt'](source, '', ''), Limits())
+        self.assertEqual((result.status, result.text, result.messages), ('failed', '', ('The text file is not valid UTF-8.',)))
+        self.assertEqual(ingest_text.extract_txt(source, Limits()).status, 'ok', 'the same source without the byte reads')
+
+
 if __name__ == '__main__':
     unittest.main()

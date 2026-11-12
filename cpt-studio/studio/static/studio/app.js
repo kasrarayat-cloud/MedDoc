@@ -1,62 +1,107 @@
 'use strict';
-// CPT Studio frontend over the JSON API in API.md. Rendering builds markup
-// strings in the approved design's shape; every server value passes through
-// escapeHtml. Helpers above the DOM section are pure and unit-tested under node.
+// CPT Studio customer page, drawn from the customer encounter contract (API.md, "Core repair and customer
+// interface"). Rendering builds markup strings; every value that comes from the server passes through escapeHtml.
+// Everything above "browser wiring" is pure and unit-tested under node (tests/frontend/app.test.cjs).
 
 const POLL_BASE_MS = 2500;
 const POLL_MAX_MS = 15000;
 const POLL_MAX_ERROR_MS = 30000;
+const TICK_MS = 1000;
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
 const MAX_PASTE_CHARS = 400000;
 const MAX_ADDENDUM_CHARS = 20000;
-const MIN_RECONCILE_CHARS = 12;
 const UPLOAD_NAME = /\.(pdf|docx|txt)$/i;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const REPORT_URL = /^\/api\/reports\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/download$/i;
+const ORIGINAL_URL = /^\/api\/encounters\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/original$/i;
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const PARAGRAPH_BREAK = /\n(?:[^\S\n]*\n)+/g;
-// States that wait on a member: a clarification, a review decision, or a reconciliation. The queue of a list row served
-// without queue_reasons (inQueue).
-const QUEUE_STATES = new Set(['needs_clarification', 'ready_for_review', 'provider_unknown']);
-// What a queued row waits on a member for (queue_reasons, served from the rows), as its meta line says it. 'question' is
-// already the row's open-question count, and 'state' its badge.
-const QUEUE_REASON_LABELS = { decision: 'Decision needed', reconciliation: 'Provider outcome to reconcile', incomplete: 'Coding incomplete', second_review: 'Second review available' };
-const EXCERPT_POINTS = 80;
+// The page tells the server which build of this page is asking. A server that no longer serves this build refuses the
+// call with a conflict status and {"error_code": "client_outdated"}, and the page asks the member to reload.
+const CLIENT_HEADER = 'X-CPT-Studio-Client';
+const CLIENT_VERSION = 'customer-2026-11-03';
+const OUTDATED_TEXT = 'CPT Studio was updated — reload the page to continue.';
+const OFFLINE_TEXT = 'The server could not be reached. Check the connection and try again.';
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const NUMBER_WORDS = ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten'];
 const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#x27;', '`': '&#x60;' };
 
-const SETTING_LABELS = { office: 'Office', hospital_outpatient: 'Hospital outpatient department', asc: 'Ambulatory surgery center', inpatient: 'Inpatient', emergency: 'Emergency department', telehealth: 'Telehealth' };
-const BILLING_LABELS = { professional: 'Professional', facility: 'Facility' };
-const PATIENT_LABELS = { new: 'New patient', established: 'Established patient' };
-const SOURCE_KINDS = { pdf: 'PDF', docx: 'DOCX', txt: 'TXT', paste: 'Pasted text', addendum: 'Addendum' };
-const METHOD_LABELS = { txt: 'Text file', docx: 'Word document', 'pdf-text': 'PDF text layer', 'pdf-ocr': 'PDF read with OCR', 'pdf-mixed': 'PDF text layer and OCR', paste: 'Pasted text', addendum: 'Text with addendum' };
-const STATE_TONES = { ready_for_review: 'green', reviewed: 'green', needs_clarification: 'amber', provider_unknown: 'amber', provider_failed: 'amber', extraction_failed: 'amber' };
-const STAGES = [['extract', 'Read the original document'], ['analyze', 'Identify documented services and context'], ['predict', 'Request CPT proposals from the provider'], ['assess', 'Check proposals against references and rules']];
-const SECOND_REVIEW_STAGE = ['review2', 'Second provider review (asked for by a reviewer)'];
-const STAGE_STATES = { queued: 'Waiting', running: 'In progress', succeeded: 'Done', failed: 'Failed', unknown: 'Outcome unknown', cancelled: 'Stopped' };
-const STAGE_LOOKS = { queued: ['muted', 'clock'], running: ['pending running', 'clock'], succeeded: ['', 'circle-check'], failed: ['pending', 'close'], unknown: ['pending', 'info'], cancelled: ['muted', 'stop'] };
-const CHECK_LABELS = { pass: 'Pass', warn: 'Warning', fail: 'Fail', not_verified: 'Not verified', not_applicable: 'Not applicable', info: 'Information' };
-const CHECK_LOOKS = { pass: ['', 'circle-check'], info: ['muted', 'info'], not_applicable: ['muted', 'info'], warn: ['pending', 'info'], fail: ['pending', 'close'], not_verified: ['pending', 'clock'] };
-const RUN_STATES = { reserved: 'Reserved', sending: 'Sending', succeeded: 'Succeeded', failed: 'Failed', unknown: 'Outcome unknown', not_sent: 'Not sent', cancelled: 'Cancelled' };
-const DECISION_TITLES = { approve: 'Approved', reject: 'Rejected', reinstate: 'Reinstated for review', confirm: 'Exclusion confirmed', revoke: 'Revoked the decision on' };
-const ACTION_BUTTONS = [['approve', 'primary', 'Approve', 'check'], ['reject', 'secondary', 'Reject', ''], ['reinstate', 'secondary', 'Reinstate for review', ''], ['confirm', 'secondary', 'Confirm exclusion', ''], ['revoke', 'secondary', 'Undo decision', '']];
-const TABS = [['codes', 'Suggestions'], ['checks', 'Checks'], ['timeline', 'Activity']];
-const ROUTE_TITLES = { workspace: 'Overview', documents: 'Documents', queue: 'Review queue', 'how-it-works': 'How it works', doc: 'Document review' };
+const AGENT_REVIEW = 'Agent-executed synthetic review — not clinical approval';
+const STATE_LABELS = {
+  processing: 'Processing', action_needed: 'Action needed', awaiting_detail: 'A few details needed', ready: 'Ready for review',
+  reviewed: 'Reviewed', no_codes: 'No codes suggested', stopped: 'Stopped', failed: 'Could not finish', being_confirmed: 'Being confirmed',
+};
+const STATE_TONES = { ready: 'green', reviewed: 'green', action_needed: 'amber', awaiting_detail: 'amber', being_confirmed: 'amber', failed: 'amber' };
+// The customer states that wait on a member (a date to choose, a detail to answer, codes to review). The review queue
+// lists the rows the server marks in_queue - these and what the review queue's rule holds waiting - and the badge counts
+// the same rows (customer_api.in_queue).
+const QUEUE_STATES = new Set(['action_needed', 'awaiting_detail', 'ready']);
+const QUEUED_AFTER_DONE_TITLE = 'Waiting for the next step';
+const RECHECK_LABEL = 'Check what is still open again';
+const RECHECK_NOTE = 'The document review is asked once more about what is still open. This can be asked for once for this result.';
+// status -> [label, badge tone, badge icon]
+const CODE_STATUSES = {
+  ready: ['Ready for review', 'green', ''],
+  needs_detail: ['Needs a detail', 'amber', 'info'],
+  approved: ['Approved', 'green', 'check'],
+  excluded: ['Excluded', 'gray', ''],
+};
+const STEP_KEYS = ['reading', 'identifying', 'checking', 'preparing'];
+const STEP_LABELS = { reading: 'Reading your document', identifying: 'Identifying procedures', checking: 'Checking suggested codes', preparing: 'Preparing your results' };
+const STEP_STATES = { done: 'Done', active: 'In progress', waiting: 'Waiting to start', not_started: 'Not started', failed: 'Did not finish', stopped: 'Stopped', skipped: 'Not needed' };
+const STEP_ICONS = { done: 'check', active: 'clock', failed: 'close', stopped: 'stop' };
+const CHECK_KEYS = ['document_review', 'independent_checks', 'coding_validation'];
+const CHECK_LABELS = { document_review: 'Document review', independent_checks: 'Independent checks', coding_validation: 'Coding validation' };
+const CHECK_STATES = { done: 'Done', running: 'In progress', waiting: 'Waiting', unavailable: 'Unavailable', not_run: 'Not run' };
+const CHECK_ICONS = { done: 'circle-check', running: 'clock', waiting: 'clock', unavailable: 'info', not_run: 'info' };
+const PHASES = ['uploading', 'queued', 'processing', 'action_needed', 'awaiting_detail', 'completed', 'partial', 'failed', 'stopped', 'being_confirmed', 'paused'];
+const PHASE_TITLES = {
+  uploading: 'Uploading your document', queued: 'Waiting to start', processing: 'Processing your document', action_needed: 'Action needed',
+  awaiting_detail: 'Results ready', completed: 'Results ready', partial: 'Results ready, with a limitation', failed: 'Processing could not finish',
+  stopped: 'Processing stopped', being_confirmed: 'An earlier check is being confirmed', paused: 'Processing paused',
+};
+// Only these phases draw an animated step, and only while the server says the document is busy.
+const ANIMATED_PHASES = new Set(['uploading', 'queued', 'processing']);
+// These phases draw the whole progress panel; the others (results are ready) draw one compact line.
+const PANEL_PHASES = new Set(['uploading', 'queued', 'processing', 'action_needed', 'failed', 'stopped', 'being_confirmed', 'paused']);
+// The page polls the document while it is busy (a paused document is busy, so its panel moves on by itself once the
+// processing service answers again: decision (j)), and while an earlier check is being confirmed.
+const POLL_PHASES = new Set(['queued', 'processing', 'being_confirmed']);
+const STATE_PHASES = { processing: 'processing', action_needed: 'action_needed', awaiting_detail: 'awaiting_detail', failed: 'failed', stopped: 'stopped', being_confirmed: 'being_confirmed' };
+const LEAVE_NOTES = {
+  uploading: 'Keep this page open until the upload finishes.',
+  queued: 'You can leave this page — processing continues, and the document stays in Documents.',
+  processing: 'You can leave this page — processing continues, and the document stays in Documents.',
+  action_needed: 'You can leave this page — the document waits in the Review queue until you choose.',
+  being_confirmed: 'You can leave this page — the document stays in Documents while this is settled.',
+  paused: 'You can leave this page — your document is saved.',
+  // the server serves can_leave for every state (progress.encounter_progress); a stopped or failed document is kept
+  // too, so its panel says so (the 2026-11-05 acceptance walk: the stopped panel told nobody they could leave). Nothing
+  // more is promised: saving a detail on a stopped document restarts its processing without Resume
+  // (jobs.change_context clears the stop), so "nothing runs until it is resumed" would not be true.
+  stopped: 'You can leave this page — the document stays in Documents.',
+  failed: 'You can leave this page — the document stays in Documents.',
+};
+const DETAIL_ANSWERS = { not_documented: 'Not documented', cannot_confirm: 'Cannot confirm' };
+const USE_DOCUMENT = 'use_document';
+// Removing the member's entered date of service (the server's own clear path), where the document gives no single date.
+const CLEAR_DATE = 'clear';
+const KIND_LABELS = { upload: 'Uploaded file', paste: 'Pasted text', addendum: 'Document with addendum' };
+const ERROR_ACTIONS = { resume: ['resume', 'Resume processing'], new_document: ['upload', 'Upload a new document'] };
 const ACKNOWLEDGEMENTS = {
   human: 'I read the whole source document, not only the cited passages, and it supports this code as a service performed at this encounter. The documentation checks can miss wording they do not recognise. This synthetic review is not clinical approval or billing advice.',
   agent: 'I am an automated agent. I read the whole source document, not only the cited passages, and it supports this code as a service performed at this encounter. The documentation checks can miss wording they do not recognise. This agent-executed synthetic review is not clinical approval or billing advice.',
 };
-// The attestation the server accepts is the one /api/session serves (round 5, bypass:4); the built-in copy above
-// only covers a page drawn before the session loads, and tests hold the two equal.
-function attestationText(session) {
-  return session?.acknowledgement || (session?.user?.actor_kind === 'agent' ? ACKNOWLEDGEMENTS.agent : ACKNOWLEDGEMENTS.human);
-}
+const ACTION_BUTTONS = [['approve', 'primary', 'Approve', 'check'], ['reject', 'secondary', 'Reject', ''], ['reinstate', 'secondary', 'Reinstate for review', ''], ['confirm', 'secondary', 'Confirm exclusion', ''], ['revoke', 'secondary', 'Undo decision', '']];
+const DECISION_TITLES = { approve: 'Approved', reject: 'Rejected', reinstate: 'Reinstated for review', confirm: 'Exclusion confirmed' };
 const REVIEW_COPY = {
   approve: { eyebrow: 'APPROVE', title: 'Make the decision visible.', button: 'Approve code' },
   reject: { eyebrow: 'REJECT', title: 'Leave a clear record.', button: 'Reject code' },
   reinstate: { eyebrow: 'REINSTATE', title: 'Bring it back for review.', button: 'Reinstate for review' },
-  confirm: { eyebrow: 'CONFIRM EXCLUSION', title: 'Agree with the check, on the record.', button: 'Confirm exclusion' },
+  confirm: { eyebrow: 'CONFIRM EXCLUSION', title: 'Agree with the exclusion, on the record.', button: 'Confirm exclusion' },
 };
+const MODIFIER_CHOICES = ['59', 'XS'];
+const ROUTE_TITLES = { workspace: 'Overview', documents: 'Documents', queue: 'Review queue', 'how-it-works': 'How it works', doc: 'Document review' };
+const LIST_HEADER = '<div class="list-header"><span>DOCUMENT</span><span>STATUS</span><span class="date-header">SERVICE DATE</span><span></span></div>';
 
 // --- pure helpers ----------------------------------------------------------------
 
@@ -66,6 +111,22 @@ function escapeHtml(value) {
 
 function lookup(map, key, fallback) {
   return typeof key === 'string' && Object.hasOwn(map, key) ? map[key] : fallback;
+}
+
+function text(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function list(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function strings(value) {
+  return list(value).map(text).filter(Boolean);
+}
+
+function objects(value) {
+  return list(value).filter(item => item && typeof item === 'object' && !Array.isArray(item));
 }
 
 function icon(name, className = '') {
@@ -108,8 +169,8 @@ function plural(count, one, many) {
   return `${count} ${count === 1 ? one : many}`;
 }
 
-function passagesLabel(count) {
-  return `${NUMBER_WORDS[count] || count} ${count === 1 ? 'passage' : 'passages'} linked to this suggestion`;
+function joinWords(items) {
+  return items.length <= 2 ? items.join(' and ') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 }
 
 function readCookie(cookies, name) {
@@ -129,6 +190,10 @@ function safeDownloadUrl(url) {
   return typeof url === 'string' && REPORT_URL.test(url) ? url : '';
 }
 
+function safeOriginalUrl(url) {
+  return typeof url === 'string' && ORIGINAL_URL.test(url) ? url : '';
+}
+
 function pollDelay(count, errors) {
   if (errors > 0) return Math.min(POLL_MAX_ERROR_MS, POLL_BASE_MS * 2 ** errors);
   return Math.min(POLL_MAX_MS, Math.round(POLL_BASE_MS * 1.25 ** count));
@@ -140,27 +205,76 @@ function parseRoute(hash) {
   return { name: lookup(ROUTE_TITLES, path, null) && path !== 'doc' ? path : 'workspace' };
 }
 
-function codePoints(text) {
-  return [...String(text)].length;
+// A conflict status with {"error_code": "client_outdated"}: this build of the page is no longer served.
+function isClientOutdated(status, data) {
+  return status === 409 && Boolean(data) && typeof data === 'object' && data.error_code === 'client_outdated';
+}
+
+// The sentence a failed call shows: the server's own customer sentence when it sends one, else a plain one for the
+// status. Never the status code or a technical payload.
+function errorText(status, data) {
+  const served = typeof data?.error === 'string' ? data.error.trim() : '';
+  if (served) return served;
+  if (status === 400) return 'This could not be saved. Check the form and try again.';
+  if (status === 403) return 'This action is not allowed for your account, or the page is out of date. Reload the page and try again.';
+  if (status === 404) return 'Not found, or not in your workspace.';
+  if (status === 409) return 'This action is not available right now. Reload the page to see the latest state.';
+  if (status === 413) return 'The file is too large. Choose a file up to 15 MB.';
+  if (status === 429) return 'Too many attempts in a short time. Wait a moment and try again.';
+  return 'Something went wrong on our side. Nothing was changed by this attempt; try again in a moment.';
+}
+
+// A version-4 UUID from 16 random bytes: the key one upload attempt carries, so a retried attempt whose answer was
+// lost reaches the same document instead of creating a second one.
+function newClientKey(randomBytes) {
+  const bytes = randomBytes(16);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map(byte => byte.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+// '45 s', '4 min 05 s', '1 h 02 min'. A negative or unreadable span reads as 0 s. Never a percentage or a forecast.
+function durationText(ms) {
+  const total = Number.isFinite(ms) && ms > 0 ? Math.floor(ms / 1000) : 0;
+  if (total < 60) return `${total} s`;
+  const minutes = Math.floor(total / 60);
+  if (minutes < 60) return `${minutes} min ${pad(total % 60)} s`;
+  return `${Math.floor(minutes / 60)} h ${pad(minutes % 60)} min`;
+}
+
+// The server clock minus this browser's, measured when a document arrived, so elapsed time is the server's.
+function clockOffset(serverIso, receivedMs) {
+  const server = typeof serverIso === 'string' ? Date.parse(serverIso) : NaN;
+  return Number.isFinite(server) && Number.isFinite(receivedMs) ? server - receivedMs : 0;
+}
+
+function elapsedText(sinceIso, nowMs) {
+  const since = typeof sinceIso === 'string' ? Date.parse(sinceIso) : NaN;
+  return durationText(Number.isFinite(since) ? nowMs - since : 0);
+}
+
+function codePoints(value) {
+  return [...String(value)].length;
 }
 
 // API offsets are Python code points; JavaScript strings index UTF-16 units.
 // Returns null when the two coincide (no surrogates), else point -> unit offsets.
-function codeUnitOffsets(text) {
-  if (!/[\uD800-\uDFFF]/.test(text)) return null;
+function codeUnitOffsets(source) {
+  if (!/[\uD800-\uDFFF]/.test(source)) return null;
   const offsets = [0];
   let unit = 0;
-  for (const ch of text) {
+  for (const ch of source) {
     unit += ch.length;
     offsets.push(unit);
   }
   return offsets;
 }
 
-function isExactSpan(text, span, length, unit) {
+function isExactSpan(source, span, length, unit) {
   return Boolean(span) && span.exact !== false && Number.isInteger(span.start) && Number.isInteger(span.end)
     && span.start >= 0 && span.start < span.end && span.end <= length && typeof span.text === 'string'
-    && text.slice(unit(span.start), unit(span.end)) === span.text;
+    && source.slice(unit(span.start), unit(span.end)) === span.text;
 }
 
 // Overlapping spans become one mark carrying every key; touching spans stay separate.
@@ -193,911 +307,768 @@ function pageRanges(pages, length, unit, unitLength) {
   }));
 }
 
-function paragraphRanges(text, start, end) {
-  const source = text.slice(start, end);
+function paragraphRanges(source, start, end) {
+  const part = source.slice(start, end);
   const ranges = [];
   const add = (from, to) => {
-    while (from < to && source[from] === '\n') from += 1;
-    while (to > from && source[to - 1] === '\n') to -= 1;
-    if (source.slice(from, to).trim()) ranges.push([start + from, start + to]);
+    while (from < to && part[from] === '\n') from += 1;
+    while (to > from && part[to - 1] === '\n') to -= 1;
+    if (part.slice(from, to).trim()) ranges.push([start + from, start + to]);
   };
   let cursor = 0;
-  for (const match of source.matchAll(PARAGRAPH_BREAK)) {
+  for (const match of part.matchAll(PARAGRAPH_BREAK)) {
     add(cursor, match.index);
     cursor = match.index + match[0].length;
   }
-  add(cursor, source.length);
+  add(cursor, part.length);
   return ranges;
 }
 
-function paragraphPieces(text, start, end, marks) {
+function paragraphPieces(source, start, end, marks) {
   const pieces = [];
   let cursor = start;
   for (const mark of marks) {
     if (mark.end <= start || mark.start >= end) continue;
     const from = Math.max(mark.start, start);
     const to = Math.min(mark.end, end);
-    if (from > cursor) pieces.push({ text: text.slice(cursor, from), keys: null });
-    pieces.push({ text: text.slice(from, to), keys: mark.keys });
+    if (from > cursor) pieces.push({ text: source.slice(cursor, from), keys: null });
+    pieces.push({ text: source.slice(from, to), keys: mark.keys });
     cursor = to;
   }
-  if (cursor < end) pieces.push({ text: text.slice(cursor, end), keys: null });
+  if (cursor < end) pieces.push({ text: source.slice(cursor, end), keys: null });
   return pieces;
 }
 
 // spans: [{key, start, end, text, exact}] in code points. A span is marked only when
 // text[start:end] equals its text; anything else is reported as unlocated.
-function layoutDocument(text, pages, spans) {
-  const source = String(text || '');
-  const offsets = codeUnitOffsets(source);
-  const length = offsets ? offsets.length - 1 : source.length;
+function layoutDocument(source, pages, spans) {
+  const body = String(source || '');
+  const offsets = codeUnitOffsets(body);
+  const length = offsets ? offsets.length - 1 : body.length;
   const unit = point => (offsets ? offsets[point] : point);
   const located = [];
   const unlocated = [];
   for (const span of spans) {
-    if (isExactSpan(source, span, length, unit)) located.push({ key: span.key, start: unit(span.start), end: unit(span.end) });
+    if (isExactSpan(body, span, length, unit)) located.push({ key: span.key, start: unit(span.start), end: unit(span.end) });
     else unlocated.push(span.key);
   }
   const marks = mergeSpans(located);
   return {
-    pages: pageRanges(pages, length, unit, source.length).map(page => ({
+    pages: pageRanges(pages, length, unit, body.length).map(page => ({
       page: page.page,
-      paragraphs: paragraphRanges(source, page.start, page.end).map(([from, to]) => paragraphPieces(source, from, to, marks)),
+      paragraphs: paragraphRanges(body, page.start, page.end).map(([from, to]) => paragraphPieces(body, from, to, marks)),
     })),
     unlocated,
   };
 }
 
-// A member's value unlike the document's is that conflict (member_conflict, from context.is_member_conflict), never
-// conflicting documentation; any conflict is shown as one, never as not documented (refutation r1, context-5). The
-// question a closing charge block asks (date_asked, from context.charge_date_problem) is no conflict in the document.
-function factValue(fact, labels, isDate = false) {
-  if (!fact) return 'Not documented';
-  if (fact.date_asked === true) return 'Date asked';
-  if (fact.origin === 'conflict') return fact.member_conflict === true ? 'Member entry differs from the document' : 'Conflicting values documented';
-  if (fact.origin === 'missing' || fact.value == null || fact.value === '' || fact.value === 'not_documented') return 'Not documented';
-  const value = isDate ? (formatDate(fact.value, true) || String(fact.value)) : lookup(labels, fact.value, String(fact.value));
-  return fact.origin === 'user' ? `${value} (entered)` : value;
-}
-
-function metaFact(fact, labels, name, isDate = false) {
-  if (fact?.date_asked === true) return `${name} asked`;
-  if (fact?.origin === 'conflict') return fact.member_conflict === true ? `${name}: member entry differs from the document` : `${name} conflict`;
-  if (!fact || fact.origin === 'missing' || fact.value == null || fact.value === '') return `${name} not documented`;
-  const value = isDate ? (formatDate(fact.value) || String(fact.value)) : lookup(labels, fact.value, String(fact.value));
-  return fact.origin === 'user' ? `${value} (entered)` : value;
-}
-
-// Whitespace folded and cut to a length a chip can hold, with an ellipsis, as the checks quote a passage (checks.excerpt).
-function excerpt(text, limit = EXCERPT_POINTS) {
-  const flat = String(text ?? '').split(/\s+/).filter(Boolean).join(' ');
+function excerpt(value, limit = 80) {
+  const flat = String(value ?? '').split(/\s+/).filter(Boolean).join(' ');
   const points = [...flat];
   return points.length <= limit ? flat : `${points.slice(0, limit - 1).join('').trimEnd()}…`;
 }
 
-// The documented text the reader kept as the evidence of a service date it could not use (an unread date form, another
-// occurrence's date, a dated title or "Date:" line): documented text, quoted, never called "not documented" - as the
-// service date check and its question quote it (checks._date_problem; refutation gi2, occurrence RC5: the chip said "Not
-// documented" beside the check quoting it). '' wherever factValue states something else: a value, a conflict.
-function keptDateEvidence(fact) {
-  if (!fact || fact.origin === 'conflict') return '';
-  if (!(fact.origin === 'missing' || fact.value == null || fact.value === '' || fact.value === 'not_documented')) return '';
-  const span = (Array.isArray(fact.evidence) ? fact.evidence : []).find(item => typeof item?.text === 'string' && item.text.trim());
-  return span ? excerpt(span.text) : '';
+// --- the customer contract, read defensively ---------------------------------------
+
+function codesOf(doc) {
+  return objects(doc?.codes);
 }
 
-// Whether the assessment shown asks the date: its encounter question on the service date is open.
-function serviceDateAsked(doc) {
-  return openClarifications(doc).some(item => item.scope === 'encounter' && item.fact === 'service_date');
+function detailsOf(doc) {
+  return objects(doc?.details_needed);
 }
 
-// The SERVICE DATE chip of the source paper, and the service date of the review header.
-function serviceDateChip(doc) {
-  const fact = doc?.context?.facts?.service_date;
-  const kept = keptDateEvidence(fact);
-  if (!kept) return factValue(fact, null, true);
-  return `${serviceDateAsked(doc) ? 'Asked — ' : ''}“${kept}” is not read as the date of service`;
+function canReview(doc) {
+  return doc?.permissions?.can_review === true;
 }
 
-function serviceDateMeta(doc) {
-  const fact = doc?.context?.facts?.service_date;
-  const kept = keptDateEvidence(fact);
-  if (!kept) return metaFact(fact, null, 'Service date', true);
-  return `${serviceDateAsked(doc) ? 'Service date asked — ' : 'Service date: '}“${kept}” is not read as the date of service`;
+function stateLabel(stateName, label) {
+  return lookup(STATE_LABELS, stateName, text(label) || 'Unknown');
 }
 
-function proposalsIn(assessment, bucket) {
-  return (assessment?.proposals || []).filter(proposal => proposal.bucket === bucket);
+// The phase the progress panel shows: the upload in flight (client only), else the server's, else read from the state.
+function progressPhase(doc, ui = {}) {
+  if (ui.uploading) return 'uploading';
+  const phase = doc?.progress?.phase;
+  if (PHASES.includes(phase)) return phase;
+  return lookup(STATE_PHASES, doc?.state, 'completed');
 }
 
-function openClarifications(doc) {
-  return (doc.clarifications || []).filter(item => item.state === 'open');
+function shouldPoll(doc) {
+  const progress = doc?.progress;
+  return Boolean(progress) && (progress.busy === true || POLL_PHASES.has(progress.phase));
 }
 
-// Encounter-scoped questions concern every service, so they stay a card of their own.
-function clarificationsFor(proposal, doc) {
-  const ids = proposal.clarification_ids || [];
-  return openClarifications(doc).filter(item => item.scope !== 'encounter' && (item.proposal_id === proposal.id || ids.includes(item.id)));
+// One code's status as the list shows it: the contract's four statuses, each with its own fixed label.
+function codeStatus(code) {
+  const key = typeof code?.status === 'string' ? code.status : '';
+  const known = lookup(CODE_STATUSES, key, null);
+  if (known) return { key, label: known[0], tone: known[1], icon: known[2] };
+  return { key: key || 'unknown', label: text(code?.status_label) || 'Not reviewable', tone: 'gray', icon: '' };
 }
 
-function familyLabel(doc, family) {
-  const known = [...(doc.routing?.families || []), ...(doc.assessment?.proposals || [])].find(item => item.family === family);
-  return known?.family_label || known?.label || family;
+function isAgentDecision(code) {
+  return code?.decision?.by_kind === 'agent';
 }
 
-// The same rule as the reviewed report: an agent's decision or an agent's reinstatement, in any bucket.
+// The line under a code: an agent approval always says it is an agent-executed synthetic review, whatever else the
+// server sends; a rejection says so when the server sends nothing.
+function rowSubLabel(code) {
+  if (codeStatus(code).key === 'approved' && isAgentDecision(code)) return AGENT_REVIEW;
+  const served = text(code?.sub_label);
+  if (served) return served;
+  return code?.decision?.action === 'reject' ? 'Rejected in review' : '';
+}
+
+function unitsLabel(units) {
+  return Number.isInteger(units) && units > 0 ? plural(units, 'unit', 'units') : '';
+}
+
+function modifierLabel(code) {
+  const chosen = strings(code?.modifiers);
+  if (chosen.length) return `Modifier ${chosen.join(', ')}`;
+  if (!code?.modifier_review) return '';
+  return codeStatus(code).key === 'approved' ? 'No modifier' : 'Modifier review';
+}
+
+// The modifier choices of one approval: none, 59 or XS - never both, never prefilled, never a free list.
+function reviewModifierOptions(code) {
+  const review = code?.modifier_review;
+  if (!review || typeof review !== 'object') return [];
+  const offered = MODIFIER_CHOICES.filter(choice => list(review.options).includes(choice));
+  return offered.length ? [['', 'No modifier'], ...offered.map(choice => [choice, choice])] : [];
+}
+
 function hasAgentDecision(doc) {
-  return (doc.assessment?.proposals || []).some(p => (p.decision && p.decision_state !== 'undecided' && p.decision.reviewer_kind === 'agent')
-    || p.reinstated_by?.reviewer_kind === 'agent');
+  return codesOf(doc).some(code => code.decision && isAgentDecision(code));
 }
 
-// Context and addenda are refused by the API while a stage runs (409), so they are offered only when idle.
-function canEdit(doc) {
-  return Boolean(doc.permissions?.can_review) && !doc.pipeline?.busy;
+function attestationText(session) {
+  return session?.acknowledgement || (session?.user?.actor_kind === 'agent' ? ACKNOWLEDGEMENTS.agent : ACKNOWLEDGEMENTS.human);
+}
+
+function tallyText(doc) {
+  const counts = { approved: 0, ready: 0, needs_detail: 0, excluded: 0 };
+  for (const code of codesOf(doc)) {
+    const key = codeStatus(code).key;
+    if (Object.hasOwn(counts, key)) counts[key] += 1;
+  }
+  const parts = [
+    counts.approved ? `${counts.approved} approved` : '',
+    counts.ready ? `${counts.ready} ready for review` : '',
+    counts.needs_detail ? `${plural(counts.needs_detail, 'needs', 'need')} a detail` : '',
+    counts.excluded ? `${counts.excluded} excluded` : '',
+  ].filter(Boolean);
+  return parts.length ? parts.join(' · ') : 'No codes yet';
 }
 
 function exportStatusText(doc) {
-  const readiness = doc.readiness || {};
-  const blockers = (readiness.blockers || []).filter(Boolean);
-  if (readiness.reviewed === true) {
-    return `Reviewed — every selected code has a current decision.${hasAgentDecision(doc) ? ' Includes agent-executed synthetic review — not clinical approval.' : ''}`;
+  const readiness = doc?.readiness || {};
+  const blockers = strings(readiness.blockers);
+  if (readiness.approved === true) {
+    return `Every suggested code has a decision. The approved download lists only approved codes.${hasAgentDecision(doc) ? ` Includes ${AGENT_REVIEW.charAt(0).toLowerCase()}${AGENT_REVIEW.slice(1)}.` : ''}`;
   }
-  const head = readiness.draft === true ? 'Draft — not reviewed.' : 'No report can be generated yet.';
-  return blockers.length ? `${head} Still needed: ${blockers.join('; ')}.` : head;
+  const head = readiness.draft === true ? 'Draft only: the codes are suggestions, not approvals.' : 'Nothing can be downloaded yet.';
+  return blockers.length ? `${head} Before the approved download: ${blockers.join(' ')}` : head;
+}
+
+function serviceDateText(date, long = true) {
+  const value = date || {};
+  if (value.conflict === true || value.source === 'conflict') {
+    const documented = formatDate(value.document_value, long);
+    const entered = formatDate(value.entered_value, long);
+    return documented && entered ? `Two dates: the document says ${documented}, you entered ${entered}` : 'Two different dates';
+  }
+  const shown = formatDate(value.value, long);
+  if (!shown) return 'Not documented';
+  return value.source === 'member' ? `${shown} (entered)` : shown;
 }
 
 // --- rendering (pure string builders) ----------------------------------------------
 
 const state = {
-  session: null, route: null, routeToken: 0, doc: null, docKey: '', layout: null,
-  currentTab: 'codes', selectedEvidence: [], poll: { timer: 0, count: 0, errors: 0 },
-  upload: { file: null, paste: false, busy: false }, review: null, addendum: null,
-  pending: new Set(), toastTimer: 0, leaving: false,
+  session: null, route: null, routeSerial: 0, doc: null, docKey: '', layout: null, selectedEvidence: [],
+  poll: { timer: 0, count: 0, errors: 0 }, tickTimer: 0, clock: 0, reconnecting: false, outdated: false,
+  upload: { file: null, paste: false, busy: false, key: '' }, ack: null, review: null, addendum: null,
+  open: new Set(), answers: new Map(), pending: new Set(), toastTimer: 0, leaving: false,
 };
 
-function categoryName() {
-  return state.session?.workspace?.category?.name || 'Gastroenterology';
+function uiState(overrides = {}) {
+  return { open: state.open, answers: state.answers, ack: state.ack, reconnecting: state.reconnecting, nowMs: Date.now(), clock: state.clock, entrance: false, ...overrides };
 }
 
-function badge(tone, label, iconName = '') {
-  return `<span class="status ${tone}">${iconName ? icon(iconName) : ''}${escapeHtml(label)}</span>`;
+function badge(tone, label, iconName = '', attributes = '') {
+  return `<span class="status ${tone}"${attributes}>${iconName ? icon(iconName) : ''}${escapeHtml(label)}</span>`;
 }
 
 function stateBadge(stateName, label) {
   const iconName = stateName === 'reviewed' ? 'check' : stateName === 'processing' ? 'clock' : '';
-  return badge(lookup(STATE_TONES, stateName, 'gray'), label || String(stateName || 'Unknown').replace(/_/g, ' '), iconName);
+  return badge(lookup(STATE_TONES, stateName, 'gray'), stateLabel(stateName, label), iconName);
 }
 
-function proposalBadge(proposal) {
-  if (proposal.decision_state === 'approved') return badge('green', proposal.decision?.reviewer_kind === 'agent' ? 'Approved · agent' : 'Approved', 'check');
-  if (proposal.decision_state === 'rejected') return badge('gray', 'Rejected');
-  if (proposal.decision_state === 'reinstated') return badge('green', 'Reinstated for review');
-  if (proposal.decision_state === 'exclusion_confirmed') return badge('gray', 'Exclusion confirmed');
-  if (proposal.status === 'excluded') return badge('gray', 'Excluded');
-  if (proposal.status === 'needs_clarification') return badge('amber', 'Needs clarification');
-  if (proposal.status === 'ready') return badge('green', proposal.status_label || 'Ready for review');
-  return badge('gray', proposal.status_label || 'Not reviewable');
+function rowDate(row) {
+  return formatDate(row?.service_date) || (row?.date_conflict === true ? 'Date to choose' : 'Not documented');
 }
 
-const LIST_HEADER = '<div class="list-header"><span>DOCUMENT</span><span>REVIEW STATUS</span><span class="date-header">SERVICE DATE</span><span></span></div>';
-
-// A reviewed encounter whose coding is incomplete (coding_state: the encounter view's coding completeness) - "Reviewed"
-// alone reads as done (refutation gi2, demo R10: ho-09 was "Reviewed" with its flexible sigmoidoscopy unresolved).
-function reviewedIncomplete(encounter) {
-  return encounter?.state === 'reviewed' && encounter.coding_state === 'incomplete';
+function documentRow(row) {
+  const tone = lookup(STATE_TONES, row.state, 'gray');
+  const open = Number.isInteger(row.open_details) && row.open_details > 0 ? plural(row.open_details, 'detail needed', 'details needed') : '';
+  const meta = [lookup(KIND_LABELS, row.kind, ''), open].filter(Boolean).join(' · ');
+  return `<a class="document-row" href="#doc/${escapeHtml(encodeURIComponent(row.id))}"><span class="doc-row-main"><span class="doc-file-icon${tone === 'amber' ? ' amber' : ''}">${icon('file')}</span><span><strong>${escapeHtml(row.title || 'Untitled document')}</strong><small>${escapeHtml(meta)}</small></span></span><span>${stateBadge(row.state, row.state_label)}</span><span class="doc-row-date">${escapeHtml(rowDate(row))}</span>${icon('chevron', 'row-arrow')}</a>`;
 }
 
-function rowStateLabel(encounter) {
-  return reviewedIncomplete(encounter) ? `${encounter.state_label || 'Reviewed'} · coding incomplete` : encounter.state_label;
+function inQueue(row) {
+  return row?.in_queue === true;
 }
 
-// The review queue lists what the API says waits on a member (queue_reasons: an open question, a code to decide, a request
-// to reconcile, coding left incomplete, a second review that can be asked for) - every such row, whatever its state
-// (refutation gi2, demo RC6: ho-06 and ho-09 were off a queue of three states). A row served without the field keeps
-// those three states.
-function inQueue(encounter) {
-  return Array.isArray(encounter?.queue_reasons) ? encounter.queue_reasons.length > 0 : QUEUE_STATES.has(encounter?.state);
+function listRows(name, rows) {
+  if (name === 'queue') return rows.filter(inQueue);
+  return name === 'workspace' ? rows.slice(0, 5) : rows;
 }
 
-// The served reasons a queued row's meta line names; what its open-question count or its badge already says is not repeated.
-function queueReasonLabels(encounter) {
-  const reasons = Array.isArray(encounter.queue_reasons) ? encounter.queue_reasons : [];
-  const said = reasons.filter(reason => !(reason === 'incomplete' && reviewedIncomplete(encounter))).map(reason => lookup(QUEUE_REASON_LABELS, reason, ''));
-  return [...new Set(said.filter(Boolean))];
+function listBody(name, rows) {
+  const shown = listRows(name, rows);
+  const empty = { workspace: 'No documents yet. Start with a synthetic GI document.', documents: 'No documents yet. Use New document to upload a synthetic GI document or paste its text.', queue: 'Nothing is waiting for you.' }[name];
+  return LIST_HEADER + (shown.length ? shown.map(row => documentRow(row)).join('') : `<p class="empty-state">${escapeHtml(empty)}</p>`);
 }
 
-// A list row's service date the reader kept as evidence but could not use (encounter_summary's service_date_evidence):
-// quoted, never "not documented", as the review page's chip quotes it (gi2 integration, occurrence RC5). '' when none.
-function listedDateEvidence(encounter, prefix) {
-  const text = typeof encounter?.service_date_evidence === 'string' ? encounter.service_date_evidence.trim() : '';
-  return text ? `${prefix}“${excerpt(text, 32)}”` : '';
-}
-
-function documentRow(encounter, queued = false) {
-  const tone = reviewedIncomplete(encounter) ? 'amber' : lookup(STATE_TONES, encounter.state, 'gray');
-  const families = Array.isArray(encounter.families) && encounter.families.length ? encounter.families.join(' · ') : categoryName();
-  const kind = lookup(SOURCE_KINDS, encounter.source_kind, encounter.source_kind ? String(encounter.source_kind).toUpperCase() : '');
-  const open = Number.isInteger(encounter.open_clarifications) && encounter.open_clarifications > 0 ? plural(encounter.open_clarifications, 'open question', 'open questions') : '';
-  const meta = [kind, families, open, ...(queued ? queueReasonLabels(encounter) : [])].filter(Boolean).join(' · ');
-  const status = reviewedIncomplete(encounter) ? badge('amber', rowStateLabel(encounter)) : stateBadge(encounter.state, encounter.state_label);
-  return `<a class="document-row" href="#doc/${escapeHtml(encodeURIComponent(encounter.id))}"><span class="doc-row-main"><span class="doc-file-icon${tone === 'amber' ? ' amber' : ''}">${icon('file')}</span><span><strong>${escapeHtml(encounter.title || 'Untitled document')}</strong><small>${escapeHtml(meta)}</small></span></span><span>${status}</span><span class="doc-row-date">${escapeHtml(formatDate(encounter.service_date) || (encounter.service_date_asked === true ? 'Date asked' : encounter.service_date_conflict === true ? 'In conflict' : listedDateEvidence(encounter, 'Not read: ') || 'Not documented'))}</span>${icon('chevron', 'row-arrow')}</a>`;
-}
-
-function listRows(name, encounters) {
-  if (name === 'queue') return encounters.filter(inQueue);
-  return name === 'workspace' ? encounters.slice(0, 5) : encounters;
-}
-
-function listBody(name, encounters) {
-  const rows = listRows(name, encounters);
-  const empty = { workspace: 'No documents yet. Start with a synthetic GI document.', documents: 'No documents yet. Use New document to upload a synthetic GI document or paste its text.', queue: 'Nothing is waiting for review.' }[name];
-  return LIST_HEADER + (rows.length ? rows.map(row => documentRow(row, name === 'queue')).join('') : `<p class="empty-state">${escapeHtml(empty)}</p>`);
-}
-
-function listDescription(name, encounters) {
+function listDescription(name, rows) {
   if (name === 'queue') {
-    const count = listRows('queue', encounters).length;
-    return count ? `${count === 1 ? 'One document waits' : `${count} documents wait`} on a workspace member: a clarification, a review decision, a reconciliation, a second review that can be asked for, or coding left incomplete.` : 'No document waits on a workspace member for a clarification, a review decision, a reconciliation, a second review or incomplete coding.';
+    const count = listRows('queue', rows).length;
+    return count ? `${count === 1 ? 'One document waits' : `${count} documents wait`} on you: a date to choose, a detail to answer, codes to review, or something still open.` : 'No document waits on you for a date, a detail, a review decision or something still open.';
   }
-  return `${plural(encounters.length, 'synthetic document', 'synthetic documents')} in this workspace.`;
+  return `${plural(rows.length, 'synthetic document', 'synthetic documents')} in this workspace.`;
 }
 
-function inviteMarkup(encounters) {
-  const recent = encounters?.[0];
-  if (encounters === null) return `<span class="sample-icon">${icon('file')}</span><span class="sample-text"><strong>Loading recent documents…</strong><p>One moment.</p></span>`;
-  if (!recent) return `<span class="sample-icon">${icon('file')}</span><span class="sample-text"><strong>No documents yet</strong><p>Upload a synthetic GI document to see proposals beside the source.</p></span><button type="button" class="button secondary" data-action="upload">New document ${icon('plus')}</button>`;
-  const detail = ['Most recent', rowStateLabel(recent), formatDate(recent.service_date) || (recent.service_date_asked === true ? 'service date asked' : recent.service_date_conflict === true ? 'service date in conflict' : listedDateEvidence(recent, 'service date not read: ') || 'service date not documented')].filter(Boolean).join(' · ');
+function inviteMarkup(rows) {
+  const recent = rows?.[0];
+  if (rows === null) return `<span class="sample-icon">${icon('file')}</span><span class="sample-text"><strong>Loading recent documents…</strong><p>One moment.</p></span>`;
+  if (!recent) return `<span class="sample-icon">${icon('file')}</span><span class="sample-text"><strong>No documents yet</strong><p>Upload a synthetic GI document to see suggested codes beside the source.</p></span><button type="button" class="button secondary" data-action="upload">New document ${icon('plus')}</button>`;
+  const detail = ['Most recent', stateLabel(recent.state, recent.state_label), formatDate(recent.service_date) || (recent.date_conflict === true ? 'date to choose' : 'service date not documented')].join(' · ');
   return `<span class="sample-icon">${icon('file')}</span><span class="sample-text"><strong>${escapeHtml(recent.title || 'Untitled document')}</strong><p>${escapeHtml(detail)}</p></span><button type="button" class="button secondary" data-open="${escapeHtml(recent.id)}">Open review ${icon('arrow')}</button>`;
 }
 
 function overviewView() {
   return `<section class="view-entrance"><div class="heading-row home-heading"><div><span class="eyebrow">A CLEARER VIEW OF EVERY CODE</span><h1>Precision starts<br>with the <em>evidence.</em></h1><p>A focused workspace to turn clinical documentation into evidence-backed CPT suggestions.</p></div><div class="heading-actions"><span class="only-tag">CPT ONLY</span><button type="button" class="button primary" data-action="upload" aria-label="New document">${icon('plus')}<span class="desktop-label">New document</span></button></div></div>
   <div class="home-grid"><section class="upload-panel"><div class="panel-heading">${icon('file')}<h2>Start a coding review</h2><span class="small-badge">One encounter at a time</span></div><button type="button" class="drop-zone" id="overviewDrop" data-action="upload"><span class="upload-icon">${icon('upload')}</span><strong>Bring the original document.</strong><span>Choose a file, drop it here or paste the text</span><span>PDF, DOCX or TXT</span></button><div class="upload-footnote">${icon('info')}<span>Synthetic documents only. Do not upload real patient information.</span></div><div class="sample-invite" id="recentInvite">${inviteMarkup(null)}</div></section>
-  <aside class="story-panel"><span class="eyebrow">BUILT AROUND THE CLINICAL STORY</span><h2>A clearer path.<br>From note to code.</h2><ol class="workflow-list"><li><span class="workflow-number">01</span><span><strong>Read the whole note</strong><p>Begin with the original documentation and encounter context.</p></span></li><li><span class="workflow-number">02</span><span><strong>Connect every suggestion</strong><p>See the source passages that support the proposed code.</p></span></li><li><span class="workflow-number">03</span><span><strong>Make a clear decision</strong><p>Review the evidence and resolve gaps before approval.</p></span></li></ol><div class="story-bottom">${icon('link')}Evidence beside the decision. Always.</div></aside></div>
+  <aside class="story-panel"><span class="eyebrow">BUILT AROUND THE CLINICAL STORY</span><h2>A clearer path.<br>From note to code.</h2><ol class="workflow-list"><li><span class="workflow-number">01</span><span><strong>Read the whole note</strong><p>Begin with the original documentation and encounter context.</p></span></li><li><span class="workflow-number">02</span><span><strong>See why each code is there</strong><p>Every suggested code links to the passages of the document that support it.</p></span></li><li><span class="workflow-number">03</span><span><strong>Make a clear decision</strong><p>Answer the few details that are missing, then approve or exclude each code.</p></span></li></ol><div class="story-bottom">${icon('link')}Evidence beside the decision. Always.</div></aside></div>
   <div class="section-heading"><h2>Recent documents</h2><a href="#documents">View all ${icon('arrow')}</a></div><div class="document-list" id="documentsTable">${LIST_HEADER}<p class="empty-state">Loading documents…</p></div></section>`;
 }
 
 function documentsView(name) {
   const queue = name === 'queue';
-  return `<section class="view-entrance"><div class="heading-row documents-heading"><div><span class="eyebrow">${queue ? 'A PLACE FOR THE OPEN QUESTIONS' : 'THE ORIGINAL, ALWAYS IN VIEW'}</span><h1>${queue ? 'Review queue.' : 'Your documents.'}</h1><p>${queue ? 'Keep missing information visible, so uncertainty becomes a clear next step.' : 'Keep source notes, supporting evidence and coding decisions together.'}</p></div><div class="heading-actions"><button type="button" class="button primary" data-action="upload">${icon('plus')}New document</button></div></div><p class="section-description" id="listDescription">Loading…</p>${queue ? '' : `<label class="search-field">${icon('search')}<input id="documentSearch" aria-label="Search documents" placeholder="Search documents…" autocomplete="off"></label><div style="height:18px"></div>`}<div class="document-list" id="documentsTable">${LIST_HEADER}<p class="empty-state">Loading documents…</p></div><p class="checks-disclaimer">${queue ? 'Documents waiting on a workspace member: a clarification, a review decision, a provider reconciliation, a second review that can be asked for, or coding left incomplete. A document being processed waits on its stages instead.' : 'Synthetic documents only. Each review decision is tied to the revision it was made on.'}</p></section>`;
+  return `<section class="view-entrance"><div class="heading-row documents-heading"><div><span class="eyebrow">${queue ? 'WHAT WAITS ON YOU' : 'THE ORIGINAL, ALWAYS IN VIEW'}</span><h1>${queue ? 'Review queue.' : 'Your documents.'}</h1><p>${queue ? 'A date to choose, a detail to answer, codes to review, or something still open: each document shows its next step.' : 'Keep source notes, supporting evidence and coding decisions together.'}</p></div><div class="heading-actions"><button type="button" class="button primary" data-action="upload">${icon('plus')}New document</button></div></div><p class="section-description" id="listDescription">Loading…</p>${queue ? '' : `<label class="search-field list-search">${icon('search')}<input id="documentSearch" aria-label="Search documents" placeholder="Search documents…" autocomplete="off"></label>`}<div class="document-list" id="documentsTable">${LIST_HEADER}<p class="empty-state">Loading documents…</p></div><p class="checks-disclaimer">${queue ? 'A document that is still being processed is not listed here; it appears once it needs you.' : 'Synthetic documents only. Each review decision is tied to the revision it was made on.'}</p></section>`;
 }
 
 function howItWorksView() {
-  const mode = lookup({ live: 'Provider mode in this deployment: live requests to the configured provider.', replay: 'Provider mode in this deployment: REPLAY — recorded responses, not live output.', disabled: 'Provider mode in this deployment: disabled — no proposals are requested.' }, state.session?.provider_mode, '');
-  return `<section class="view-entrance"><div class="heading-row how-heading"><div><span class="eyebrow">A FOCUSED PRODUCT, BY DESIGN</span><h1>A reason behind<br><em>every suggestion.</em></h1><p>A standalone CPT workspace that keeps the original clinical story and the coding review connected.</p></div><button type="button" class="button primary" data-action="upload">Start a coding review ${icon('arrow')}</button></div><div class="flow-overview"><article class="flow-card"><span class="step">01</span><h2>The source<br>comes first.</h2><p>Upload the original PDF or Word document, or paste the note. The text is extracted as written; scanned pages are read with OCR where it is available, and anything that could not be read is listed.</p></article><article class="flow-card"><span class="step">02</span><h2>Suggestions<br>need support.</h2><p>A coding provider proposes CPT codes. A code is kept only with exact source passages, then checked separately against the connected reference files for the service date. Whatever cannot be checked is labelled not verified.</p></article><article class="flow-card"><span class="step">03</span><h2>Review makes<br>the difference.</h2><p>Answer focused clarifications, approve or reject each code, confirm or reinstate each code a documentation check excluded, and download a draft or reviewed report. A changed source invalidates earlier decisions.</p></article></div><div class="how-note"><strong>This is a synthetic demonstration.</strong><br>Licensed CPT descriptors and NCCI procedure-to-procedure edits are not connected in this release, so descriptors are withheld and code-set validity and PTP edits stay not verified. The documentation checks read declared wording, layouts and check boxes, and they can miss wording they do not recognise, so every code needs a reviewer who reads the whole document. Accuracy has not been independently evaluated; no accuracy percentage or payment guarantee is claimed.${mode ? `<br>${escapeHtml(mode)}` : ''}</div><button type="button" class="button secondary" data-action="about">${icon('info')}About CPT Studio</button></section>`;
+  return `<section class="view-entrance"><div class="heading-row how-heading"><div><span class="eyebrow">A FOCUSED PRODUCT, BY DESIGN</span><h1>A reason behind<br><em>every suggestion.</em></h1><p>A standalone CPT workspace that keeps the original clinical story and the coding review connected.</p></div><button type="button" class="button primary" data-action="upload">Start a coding review ${icon('arrow')}</button></div><div class="flow-overview"><article class="flow-card"><span class="step">01</span><h2>The source<br>comes first.</h2><p>Upload the original PDF or Word document, or paste the note. The text is kept exactly as read, and anything that could not be read is listed.</p></article><article class="flow-card"><span class="step">02</span><h2>Four plain<br>stages.</h2><p>Reading your document, identifying procedures, checking suggested codes and preparing your results. The checks are a document review, independent checks and coding validation. A code is kept only with passages quoted exactly from the document.</p></article><article class="flow-card"><span class="step">03</span><h2>Review makes<br>the difference.</h2><p>Answer the few details that are missing, approve or exclude each code, and download the suggested codes as a draft or the approved codes alone. A changed document invalidates earlier decisions.</p></article></div><div class="how-note"><strong>This is a synthetic demonstration.</strong><br>Licensed CPT descriptors and NCCI procedure-to-procedure edits are not connected in this release, so descriptors are not shown and those edits are not checked. The checks read the wording of the document and can miss wording they do not recognise, so every code needs a reviewer who reads the whole document. Accuracy has not been independently evaluated; no accuracy percentage or payment guarantee is claimed.</div><button type="button" class="button secondary" data-action="about">${icon('info')}About CPT Studio</button></section>`;
 }
 
 function messageView(title, detail, retry = false) {
   return `<section class="view-entrance"><a class="back-link" href="#documents">${icon('arrow')}All documents</a><div class="check-list-card"><p class="empty-state"><strong>${escapeHtml(title)}</strong><br>${escapeHtml(detail)}</p>${retry ? '<p class="empty-state"><button type="button" class="button secondary" data-action="retry">Try again</button></p>' : ''}</div></section>`;
 }
 
-// A support that was not checked (status not_applicable: the documented service or act is not established as performed)
-// says nothing either way about its passages (refutation 7c8, reports-4).
-function supportChecked(proposal) {
-  return proposal?.support?.status !== 'not_applicable';
+// The upload is acknowledged from the server's 201, before the document is first read back; once the reading stage is
+// past, the stages below it say what is happening and the acknowledgement says only that the upload arrived.
+function uploadAck(ack, extra = '', reading = true) {
+  if (!ack) return '';
+  const at = formatTimestamp(new Date(ack.at).toISOString());
+  return `<div class="upload-ack" role="status">${icon('circle-check')}<div><strong>${reading ? 'Uploaded. Reading your document…' : 'Uploaded.'}</strong><p>${escapeHtml(`Received ${at}.`)}${extra ? ` ${escapeHtml(extra)}` : ''}</p></div></div>`;
 }
 
+function ackView(ack) {
+  return `<section class="view-entrance review-view"><a class="back-link" href="#documents">${icon('arrow')}All documents</a><div class="review-column ack-column">${uploadAck(ack, 'You can leave this page; the document stays in Documents.')}</div></section>`;
+}
+
+// Every key that marks a passage in the source: each code's quotes ('<code id>:q<n>') and the document's date.
 function documentLayout(doc) {
   const spans = [];
   const codes = new Map();
-  const unchecked = new Set();
-  for (const proposal of proposalsIn(doc.assessment, 'selected')) {
-    (proposal.evidence || []).forEach((evidence, index) => {
-      const key = `${proposal.id}:${index}`;
-      spans.push({ ...evidence, key });
-      codes.set(key, proposal.code);
-    });
-    // Source passages CPT Studio selected because the provider's passages do not show the coded act - or, for a support
-    // that was not checked, the documented service's passages, which are never marked as evidence for the code.
-    (proposal.support?.source || []).forEach((evidence, index) => {
-      const key = `${proposal.id}:s${index}`;
-      spans.push({ ...evidence, key });
-      codes.set(key, proposal.code);
-      if (!supportChecked(proposal)) unchecked.add(key);
+  for (const code of codesOf(doc)) {
+    objects(code.why?.quotes).forEach((quote, index) => {
+      const key = `${code.id}:q${index}`;
+      spans.push({ ...quote, key });
+      codes.set(key, String(code.code ?? ''));
     });
   }
-  const layout = layoutDocument(doc.revision?.text || '', doc.revision?.pages, spans);
-  return { pages: layout.pages, unlocated: new Set(layout.unlocated), codes, unchecked };
+  const dateQuote = doc?.service_date?.document_quote;
+  if (dateQuote && typeof dateQuote === 'object') spans.push({ ...dateQuote, exact: true, key: 'date:document' });
+  const documentPart = doc?.document || {};
+  const layout = layoutDocument(documentPart.text || '', documentPart.pages, spans);
+  return { pages: layout.pages, unlocated: new Set(layout.unlocated), codes };
 }
 
 function renderPieces(pieces, layout) {
   return pieces.map(piece => {
     if (!piece.keys) return escapeHtml(piece.text);
-    const unchecked = layout.unchecked || new Set();
-    const codesOf = keys => [...new Set(keys.map(key => layout.codes.get(key)))].join(', ');
-    const evidence = piece.keys.filter(key => !unchecked.has(key));
-    const service = piece.keys.filter(key => unchecked.has(key));
-    const title = [evidence.length ? `Evidence for ${codesOf(evidence)}` : '', service.length ? `Passage of the documented service for ${codesOf(service)}, not checked against the coded act` : ''].filter(Boolean).join('; ');
+    const cited = [...new Set(piece.keys.map(key => layout.codes.get(key)).filter(Boolean))];
+    const title = [cited.length ? `Cited for ${joinWords(cited)}` : '', piece.keys.includes('date:document') ? 'Date of service in the document' : ''].filter(Boolean).join('; ');
     return `<button type="button" class="evidence-mark" data-evidence="${escapeHtml(piece.keys[0])}" data-keys="${escapeHtml(piece.keys.join(' '))}" title="${escapeHtml(title)}">${escapeHtml(piece.text)}</button>`;
   }).join('');
 }
 
-function sourceName(revision) {
-  return revision.source_file?.name || lookup({ paste: 'Pasted clinical text', addendum: 'Document with addendum' }, revision.kind, 'Original document');
+function sourceName(documentPart) {
+  return text(documentPart.name) || lookup({ paste: 'Pasted clinical text', addendum: 'Document with addendum' }, documentPart.kind, 'Original document');
 }
 
 function sourcePanel(doc, layout) {
-  const revision = doc.revision || {};
-  const extraction = revision.extraction || {};
-  const facts = doc.context?.facts || {};
-  const hasText = Boolean(revision.text);
-  const total = Math.max(Number.isInteger(extraction.page_count) ? extraction.page_count : 0, layout.pages.length);
-  const ocr = Array.isArray(extraction.ocr_pages) && extraction.ocr_pages.length ? `OCR on ${extraction.ocr_pages.length === 1 ? 'page' : 'pages'} ${extraction.ocr_pages.join(', ')}` : '';
-  const subtitle = [categoryName(), lookup(METHOD_LABELS, extraction.method, ''), revision.number ? `Revision ${revision.number}` : '', ocr].filter(Boolean).join(' · ');
-  const notes = [];
-  if (revision.kind === 'addendum') notes.push(`Revision ${revision.number} appends an addendum to the earlier text; decisions made on earlier revisions no longer apply.`);
-  if (extraction.status === 'pending') notes.push('The text is still being extracted.');
-  for (const message of extraction.messages || []) notes.push(message);
-  const metadata = [['SERVICE DATE', serviceDateChip(doc)], ['SETTING', factValue(facts.setting, SETTING_LABELS)], ['PATIENT STATUS', factValue(facts.patient_status, PATIENT_LABELS)], ['BILLING CONTEXT', factValue(facts.billing_context, BILLING_LABELS)]]
+  const documentPart = doc.document || {};
+  const reading = documentPart.reading || {};
+  const hasText = Boolean(documentPart.text);
+  const total = Math.max(Number.isInteger(documentPart.page_count) ? documentPart.page_count : 0, layout.pages.length);
+  const subtitle = ['Gastroenterology', text(reading.label), Number.isInteger(documentPart.revision) ? `Revision ${documentPart.revision}` : ''].filter(Boolean).join(' · ');
+  const notes = strings(reading.messages);
+  if (documentPart.kind === 'addendum') notes.unshift('This revision adds an addendum to the earlier text; decisions made on earlier revisions no longer apply.');
+  if (reading.status === 'pending') notes.push('The text appears here once the document has been read.');
+  const metadata = [['SERVICE DATE', serviceDateText(doc.service_date)], ['DOCUMENT', [lookup(KIND_LABELS, documentPart.kind, ''), Number.isInteger(documentPart.size) && documentPart.kind !== 'paste' ? formatSize(documentPart.size) : ''].filter(Boolean).join(' · ') || 'Not recorded'], ['PAGES', total ? String(total) : 'Not recorded']]
     .map(([label, value]) => `<span><b>${label}</b>${escapeHtml(value)}</span>`).join('');
-  const header = `<span class="paper-eyebrow">${escapeHtml(`${state.session?.workspace?.name || 'CPT Studio'} · synthetic document`.toUpperCase())}</span><h3>${escapeHtml(sourceName(revision))}</h3><p class="paper-subtitle">${escapeHtml(subtitle)}</p><div class="paper-metadata">${metadata}</div>`;
-  const emptyText = extraction.status === 'failed' ? 'No text could be extracted from this document.' : 'The document text will appear here once extraction finishes.';
+  const header = `<span class="paper-eyebrow">${escapeHtml(`${state.session?.workspace?.name || 'CPT Studio'} · synthetic document`.toUpperCase())}</span><h3>${escapeHtml(sourceName(documentPart))}</h3><p class="paper-subtitle">${escapeHtml(subtitle)}</p><div class="paper-metadata">${metadata}</div>`;
+  const emptyText = reading.status === 'failed' ? 'No text could be read from this document.' : 'The document text appears here once it has been read.';
   const papers = layout.pages.map((page, index) => {
     const body = page.paragraphs.map(pieces => `<p class="source-text">${renderPieces(pieces, layout)}</p>`).join('');
     return `<article class="source-paper" data-page="${escapeHtml(page.page)}" aria-label="${escapeHtml(`Page ${page.page}`)}">${index === 0 ? header : ''}${body || (index === 0 && !hasText ? `<p class="card-empty">${emptyText}</p>` : '')}<div class="paper-footer"><span>SYNTHETIC DOCUMENT · NOT FOR BILLING</span><span>${hasText ? escapeHtml(`${pad(page.page)} / ${pad(total)}`) : ''}</span></div></article>`;
   }).join('');
-  const pageLabel = hasText ? `Page ${layout.pages[0].page} of ${total}` : 'No text extracted';
-  const original = revision.source_file ? `<a href="/api/encounters/${escapeHtml(encodeURIComponent(doc.id))}/original" download>${icon('download')}Download original</a>` : '';
-  return `<section class="source-panel" aria-label="Source document"><div class="source-toolbar">${icon('file')}<h2>Original document</h2><span class="page-number" id="pageNumber" data-total="${escapeHtml(total)}">${escapeHtml(pageLabel)}</span></div><div class="source-paper-wrap" id="sourceScroll">${notes.map(note => `<div class="reference-note">${icon('info')}<span>${escapeHtml(note)}</span></div>`).join('')}${papers}</div><div class="source-bottom"><span></span>Original text as extracted${original}</div></section>`;
+  const pageLabel = hasText ? `Page ${layout.pages[0].page} of ${total}` : 'No text yet';
+  const originalUrl = safeOriginalUrl(documentPart.original_url);
+  const original = originalUrl ? `<a href="${escapeHtml(originalUrl)}" download>${icon('download')}Download original</a>` : '';
+  return `<section class="source-panel" aria-label="Source document"><div class="source-toolbar">${icon('file')}<h2>Original document</h2><span class="page-number" id="pageNumber" data-total="${escapeHtml(total)}">${escapeHtml(pageLabel)}</span></div><div class="source-paper-wrap" id="sourceScroll">${notes.map(note => `<div class="reference-note">${icon('info')}<span>${escapeHtml(note)}</span></div>`).join('')}${papers}</div><div class="source-bottom"><span></span>Original text as read${original}</div></section>`;
 }
 
 function reviewMeta(doc) {
-  const facts = doc.context?.facts || {};
-  const items = [serviceDateMeta(doc), metaFact(facts.setting, SETTING_LABELS, 'Setting'), categoryName(), doc.revision?.number ? `Revision ${doc.revision.number}` : ''];
-  const extracted = ['ok', 'partial'].includes(doc.revision?.extraction?.status);
-  const edit = canEdit(doc) && extracted ? '<span><button type="button" class="meta-link" data-action="edit-context">Edit context</button></span>' : '';
-  return items.filter(Boolean).map(item => `<span>${escapeHtml(item)}</span>`).join('') + edit;
+  const date = doc.service_date || {};
+  const dateItem = date.conflict === true ? 'Service date: two dates to choose from' : formatDate(date.value) ? `Service date ${formatDate(date.value)}` : 'Service date not documented';
+  const revision = Number.isInteger(doc.document?.revision) ? `Revision ${doc.document.revision}` : '';
+  return [`<span>${stateBadge(doc.state, doc.state_label)}</span>`, ...[dateItem, revision].filter(Boolean).map(item => `<span>${escapeHtml(item)}</span>`)].join('');
 }
 
-function checkItem(tone, iconName, title, detail, extra = '') {
-  return `<div class="check-item${tone ? ` ${tone}` : ''}">${icon(iconName)}<div><strong>${escapeHtml(title)}</strong>${detail ? `<p>${escapeHtml(detail)}</p>` : ''}${extra}</div></div>`;
-}
+// --- the progress panel ---
 
-function groupLabel(text) {
-  return `<div class="evidence-label">${escapeHtml(text)}</div>`;
-}
-
-function sectionHeading(title, count) {
-  return `<div class="section-heading"><h2>${escapeHtml(title)}</h2><span class="small-badge">${escapeHtml(count)}</span></div>`;
-}
-
-function decisionButton(action, proposal) {
-  const [, kind, label, iconName] = ACTION_BUTTONS.find(([name]) => name === action);
-  return `<button type="button" class="button ${kind}" data-decision="${action}" data-proposal="${escapeHtml(proposal.id)}">${label}${iconName ? ` ${icon(iconName)}` : ''}</button>`;
-}
-
-function cardActions(proposal) {
-  const allowed = Array.isArray(proposal.allowed_actions) ? proposal.allowed_actions : [];
-  const buttons = ACTION_BUTTONS.filter(([name]) => allowed.includes(name)).map(([name]) => decisionButton(name, proposal));
-  return buttons.length ? `<div class="code-card-actions">${buttons.join('')}</div>` : '';
-}
-
-function decisionLine(proposal) {
-  const decision = proposal.decision;
-  if (!decision || proposal.decision_state === 'undecided') return '';
-  const title = `${lookup(DECISION_TITLES, decision.action, 'Decision recorded')} by ${decision.reviewer || 'a reviewer whose name was not recorded'}`;
-  // decided_at is when the reviewer decided; a carried decision also shows when it was carried.
-  const carried = decision.carried_from && decision.carried_at ? `carried to this assessment ${formatTimestamp(decision.carried_at)}` : '';
-  const detail = [formatTimestamp(decision.decided_at || decision.created_at), carried, decision.revision_number ? `revision ${decision.revision_number}` : '', decision.reviewer_kind === 'agent' ? 'agent-executed synthetic review — not clinical approval' : 'synthetic review — not clinical approval'].filter(Boolean).join(' · ');
-  return `<div class="review-insight">${icon('shield')}<div><strong>${escapeHtml(title)}</strong><p>${escapeHtml(detail)}</p>${decision.note ? `<p>${escapeHtml(`Note: ${decision.note}`)}</p>` : ''}</div></div>`;
-}
-
-function referenceNote(proposal) {
-  const checks = Array.isArray(proposal.checks) ? proposal.checks : [];
-  const lines = [];
-  if (proposal.status === 'excluded' && proposal.exclusion_reason) lines.push(`Excluded: ${proposal.exclusion_reason}`);
-  if (proposal.supported === false) lines.push(`${proposal.family_label || 'This service'} is not covered by a profiled GI service family in this release — review required.`);
-  for (const check of checks) if (check.status === 'fail' || check.status === 'warn') lines.push(`${lookup(CHECK_LABELS, check.status, '')} · ${check.label}: ${check.detail}`);
-  const notVerified = checks.filter(check => check.status === 'not_verified').map(check => check.label);
-  if (notVerified.length) lines.push(`Not verified: ${notVerified.join('; ')}.`);
-  return lines.length ? `<div class="reference-note">${icon('info')}<span>${lines.map(escapeHtml).join('<br>')}</span></div>` : '';
-}
-
-function modifierNote(proposal) {
-  const items = Array.isArray(proposal.modifier_considerations) ? proposal.modifier_considerations : [];
-  return items.length ? `<div class="reference-note">${icon('info')}<span>${escapeHtml(`Modifier considerations, never assigned automatically: ${items.join(' ')}`)}</span></div>` : '';
-}
-
-function evidenceChips(proposal, layout) {
-  // A support that was not checked gives no check result for the provider's passages either (refutation 7c8, reports-4).
-  const checked = supportChecked(proposal);
-  const unrelated = new Set(checked && Array.isArray(proposal.support?.unrelated) ? proposal.support.unrelated : []);
-  const provider = (proposal.evidence || []).map((evidence, index) => {
-    const key = `${proposal.id}:${index}`;
-    if (layout.unlocated.has(key)) return `<span class="evidence-chip unlocated">${icon('info')}<span>${escapeHtml(`“${evidence?.text ?? ''}” — not found at this position in the current revision, so it is not highlighted.`)}</span></span>`;
-    const note = unrelated.has(index) ? ' — cited by the provider; does not show the coded act' : '';
-    return `<button type="button" class="evidence-chip" data-evidence="${escapeHtml(key)}">${icon('link')}<span>${escapeHtml(`“${evidence.text}”${note}`)}</span></button>`;
+function normalizedSteps(progress) {
+  const served = new Map(objects(progress?.steps).map(step => [step.key, step]));
+  return STEP_KEYS.map(key => {
+    const step = served.get(key) || {};
+    return { key, label: STEP_LABELS[key], state: lookup(STEP_STATES, step.state, null) ? step.state : 'not_started', started_at: step.started_at, finished_at: step.finished_at };
   });
-  const source = (proposal.support?.source || []).map((evidence, index) => {
-    const key = `${proposal.id}:s${index}`;
-    if (layout.unlocated.has(key)) return '';
-    return `<button type="button" class="evidence-chip" data-evidence="${escapeHtml(key)}">${icon('link')}<span>${escapeHtml(`“${evidence.text}” — selected from the source by CPT Studio${checked ? '' : '; not checked against the coded act'}`)}</span></button>`;
-  });
-  const sourceLabel = source.some(Boolean) ? groupLabel(checked ? 'Source passages that show the coded act' : 'Passages of the documented service (not checked against the coded act)') : '';
-  return provider.join('') + sourceLabel + source.join('');
 }
 
-// A question leads in its own words; the engine's reason - the technical record of why it asks (cue strings, the names of
-// its readings) - is kept whole behind a "Details" disclosure (refutation gi2, demo RC8). The reports print both. A
-// question recorded without words leads with its reason, never with nothing.
-function clarificationParts(clarification) {
-  const question = typeof clarification.question === 'string' && clarification.question.trim() ? clarification.question : '';
-  const reason = typeof clarification.reason === 'string' && clarification.reason.trim() ? clarification.reason : '';
-  const details = question && reason ? `<details class="clarification-details"><summary>Details</summary><span class="clarification-reason">${escapeHtml(reason)}</span></details>` : '';
-  return { lead: question || reason, details };
+function isoTime(value) {
+  return typeof value === 'string' && !Number.isNaN(Date.parse(value)) ? value : '';
 }
 
-function clarificationQuestion(clarification, doc) {
-  const { lead, details } = clarificationParts(clarification);
-  const answer = canEdit(doc) ? `${details ? '' : '<br>'}<button type="button" class="button secondary" data-action="addendum" data-clarification="${escapeHtml(clarification.id)}">Answer with an addendum</button>` : '';
-  return `<div class="clarification-question"><strong>Clarification needed</strong><br>${escapeHtml(lead)}${details}${answer}</div>`;
-}
-
-function codeCard(proposal, doc, layout) {
-  const count = (proposal.evidence || []).length;
-  const units = Number.isInteger(proposal.units) && proposal.units > 1 ? `Units: ${proposal.units} · ` : '';
-  const second = proposal.support?.origin === 'second_review' ? `<span class="small-badge">Second review</span>` : '';
-  return `<article class="code-card" id="card-${escapeHtml(proposal.id)}" tabindex="-1"><div class="code-card-main"><div class="code-card-top"><span class="code-category">${escapeHtml(proposal.eyebrow || proposal.family_label || '')}</span>${second}${proposalBadge(proposal)}</div><strong class="code-number">${escapeHtml(proposal.code)}</strong><h3>Description withheld</h3><span class="code-short-note">${escapeHtml(units + (proposal.descriptor?.label || 'No licensed CPT descriptor is connected.'))}</span>${proposal.rationale ? `<p class="code-rationale">${escapeHtml(proposal.rationale)}</p>` : ''}${clarificationsFor(proposal, doc).map(item => clarificationQuestion(item, doc)).join('')}</div><div class="evidence-section"><div class="evidence-label">${icon('link')}${escapeHtml(passagesLabel(count))}</div>${evidenceChips(proposal, layout)}${referenceNote(proposal)}${modifierNote(proposal)}</div>${decisionLine(proposal)}${cardActions(proposal)}</article>`;
-}
-
-function clarificationCard(clarification, doc) {
-  const family = clarification.family ? familyLabel(doc, clarification.family) : '';
-  const answer = canEdit(doc) ? `<button type="button" class="button primary" data-action="addendum" data-clarification="${escapeHtml(clarification.id)}">Answer with an addendum ${icon('arrow')}</button>` : '';
-  const { lead, details } = clarificationParts(clarification);
-  return `<div class="clarification-card"><span class="clarification-icon">${icon('help')}</span><span class="clarification-eyebrow">${escapeHtml(family ? `Clarification needed · ${family}` : 'Clarification needed')}</span><h3 class="clarification-lead">${escapeHtml(lead)}</h3>${details}${answer}</div>`;
-}
-
-// What a reviewer did with an excluded candidate, or that a documentation check's exclusion still needs a decision.
-function candidateDecision(proposal) {
-  const who = proposal.decision?.reviewer || 'a reviewer whose name was not recorded';
-  if (proposal.decision_state === 'exclusion_confirmed') return `Exclusion confirmed by ${who}.`;
-  if (proposal.decision_state === 'reinstated') {
-    // The code's own gate, which the server reads the same for every member, says whether it can be approved; the
-    // member's action list only says what this member may do (round 6, bypass:3). A withheld code names the gate
-    // (round 5, bypass:6).
-    const withheld = typeof proposal.approve_withheld_by === 'string' ? proposal.approve_withheld_by : '';
-    if (!withheld) {
-      const allowed = Array.isArray(proposal.allowed_actions) ? proposal.allowed_actions : [];
-      return allowed.includes('approve') ? `Reinstated for review by ${who}; approve or reject it.` : `Reinstated for review by ${who}; a reviewer approves or rejects it.`;
-    }
-    const checks = Array.isArray(proposal.checks) ? proposal.checks : [];
-    const gate = checks.find(check => check.id === withheld);
-    return [`Reinstated for review by ${who}. It cannot be approved yet: it can be rejected, the reinstatement undone, or the missing documentation added as an addendum.`, gate?.detail || ''].filter(Boolean).join(' ');
+// [label, markup] of the time the panel states: elapsed, ticking, while busy; the total once finished; else null.
+function progressTime(progress, phase, ui) {
+  const started = isoTime(progress?.started_at);
+  if (!started) return null;
+  if (progress.busy === true && ANIMATED_PHASES.has(phase)) {
+    const now = (ui.nowMs ?? Date.now()) + (ui.clock || 0);
+    return ['Elapsed', `<span data-elapsed data-since="${escapeHtml(started)}">${escapeHtml(elapsedText(started, now))}</span>`];
   }
-  if (proposal.decision_state === 'approved' || proposal.decision_state === 'rejected') return `${lookup(DECISION_TITLES, proposal.decision?.action, 'Decided')} by ${who} after reinstatement.`;
-  if (proposal.bucket === 'excluded' && proposal.reinstatable) return 'Needs your decision: confirm the exclusion or reinstate the code.';
-  return '';
+  const finished = isoTime(progress.finished_at);
+  if (!finished) return null;
+  return [phase === 'failed' || phase === 'stopped' ? 'Ran for' : 'Finished in', `<span data-elapsed data-since="${escapeHtml(started)}" data-until="${escapeHtml(finished)}">${escapeHtml(durationText(Date.parse(finished) - Date.parse(started)))}</span>`];
 }
 
-function candidateItem(proposal, fallback, doc, extra = '') {
-  const allowed = Array.isArray(proposal.allowed_actions) ? proposal.allowed_actions : [];
-  // Every action the server allows, in the card order: a reinstated code is approved or rejected here too.
-  const decisions = ACTION_BUTTONS.filter(([name]) => allowed.includes(name)).map(([name]) => decisionButton(name, proposal));
-  // A reinstated code whose gate withholds approve is told to add the missing documentation, so the row offers the
-  // addendum itself; POST /addenda needs no clarification (round 6, bypass:1).
-  const withheld = proposal.decision_state === 'reinstated' && typeof proposal.approve_withheld_by === 'string' && proposal.approve_withheld_by;
-  const addendum = withheld && doc && canEdit(doc) ? ['<button type="button" class="button secondary" data-action="addendum">Add the missing documentation (addendum)</button>'] : [];
-  const actions = decisions.concat(addendum).join(' ');
-  // A code the bounded second review listed says so here, as the code card's badge, the TXT ("second-review
-  // alternative") and the CSV (proposal_origin) do (eus2 F4: its alternatives were drawn like the primary's).
-  const origin = proposal.support?.origin === 'second_review' ? ' · from the second review' : '';
-  return checkItem('muted', 'info', `${proposal.code} · ${proposal.family_label || proposal.family || ''}${origin}`, [proposal.exclusion_reason || fallback, candidateDecision(proposal)].filter(Boolean).join(' '), actions + extra);
+function progressStep(step, active, animate, detail) {
+  const stateText = lookup(STEP_STATES, step.state, 'Not started');
+  const iconName = lookup(STEP_ICONS, step.state, '');
+  const showDetail = active && detail;
+  return `<li class="progress-step${active && animate ? ' is-animated' : ''}" data-step="${step.key}" data-state="${step.state}"><span class="step-mark" aria-hidden="true">${iconName ? icon(iconName) : ''}</span><span class="step-text"><strong>${escapeHtml(step.label)}</strong><small>${escapeHtml(stateText)}${showDetail ? ` · ${escapeHtml(detail)}` : ''}</small></span></li>`;
 }
 
-function candidateSection(title, proposals, fallback, doc) {
-  if (!proposals.length) return '';
-  return `${sectionHeading(title, proposals.length)}<div class="check-list-card">${proposals.map(proposal => candidateItem(proposal, fallback, doc)).join('')}</div>`;
+// The error's action is offered only to a member who may take it, and Resume only once (the panel's own Resume button
+// may already offer it).
+function progressError(error, { canAct = false, resumeShown = false } = {}) {
+  if (!error || typeof error !== 'object' || !text(error.text)) return '';
+  const offered = lookup(ERROR_ACTIONS, error.action, null);
+  const action = canAct && offered && !(offered[0] === 'resume' && resumeShown) ? offered : null;
+  return `<div class="progress-error" role="alert">${icon('info')}<div><p>${escapeHtml(error.text)}</p>${action ? `<button type="button" class="button secondary" data-action="${action[0]}">${escapeHtml(action[1])}</button>` : ''}</div></div>`;
 }
 
-// Informational candidates (the alternative bucket) by the served rows alone (refutation gi2, demo RC7: every provider
-// candidate was one flat list, a CABG code beside the colonoscopy's own alternatives): those of the GI family of a service
-// the document documents (assessment.services, whatever its status) whose code is in CPT scope (its scope.cpt check did not
-// fail), and the rest - outside the documented services, or not a CPT code. Every candidate is in exactly one group. null
-// when the assessment recorded no documented-service reading (made before it existed): the list is drawn ungrouped.
-function candidateGroups(assessment) {
-  const services = assessment?.services?.services;
-  if (!Array.isArray(services)) return null;
-  const families = new Set(services.map(service => service?.family).filter(family => typeof family === 'string' && family));
-  const inScope = proposal => !(Array.isArray(proposal.checks) ? proposal.checks : []).some(check => check?.id === 'scope.cpt' && check.status === 'fail');
-  const same = [];
-  const other = [];
-  for (const proposal of proposalsIn(assessment, 'alternative')) (families.has(proposal.family) && inScope(proposal) ? same : other).push(proposal);
-  return { same, other };
-}
-
-// Whether a passage is at its position in the revision text (code points, as the API counts them).
-function exactIn(text) {
-  const source = String(text || '');
-  const offsets = codeUnitOffsets(source);
-  const length = offsets ? offsets.length - 1 : source.length;
-  const unit = point => (offsets ? offsets[point] : point);
-  return span => isExactSpan(source, span, length, unit);
-}
-
-// The passages a candidate cites, quoted on expand; one not at its position in the current revision is flagged as an
-// evidence chip flags it, never passed off as found. They are not marked in the source: a candidate is never evidence.
-// The engine keeps only a candidate's exact passages, so none kept is not "none cited".
-function candidatePassages(proposal, exact) {
-  const spans = Array.isArray(proposal.evidence) ? proposal.evidence : [];
-  if (!spans.length) return '<small class="check-source">No exact source passage is linked to this candidate.</small>';
-  const quotes = spans.map(span => `<p>${escapeHtml(`“${span?.text ?? ''}”${exact(span) ? '' : ' — not found at this position in the current revision'}`)}</p>`).join('');
-  return `<details class="candidate-passages"><summary>${spans.length === 1 ? 'Cited passage' : `Cited passages (${spans.length})`}</summary>${quotes}</details>`;
-}
-
-const ALTERNATIVE_NOTE = 'Offered by the provider as an alternative and not selected. Alternatives cannot be approved.';
-
-// The alternatives, never selectable: the candidates of a documented service's family first, the rest collapsed with
-// their count. Nothing is dropped or hidden beyond a disclosure, and no candidate gains an action the server does not
-// allow (none for an alternative). The reports list every candidate as before.
-function alternativesSection(doc) {
-  const alternatives = proposalsIn(doc.assessment, 'alternative');
-  if (!alternatives.length) return '';
-  const exact = exactIn(doc.revision?.text);
-  const items = list => list.map(proposal => candidateItem(proposal, ALTERNATIVE_NOTE, doc, candidatePassages(proposal, exact))).join('');
-  const heading = sectionHeading('Alternatives (never selectable)', alternatives.length);
-  const groups = candidateGroups(doc.assessment);
-  if (!groups) return `${heading}<div class="check-list-card">${items(alternatives)}</div>`;
-  const same = groups.same.length ? `<div class="check-list-card">${groupLabel(`Same GI family as a documented service · ${groups.same.length}`)}${items(groups.same)}</div>` : '';
-  const other = groups.other.length ? `<details class="check-list-card candidate-group"><summary>${escapeHtml(`Outside the documented services or not a CPT code · ${groups.other.length}`)}</summary>${items(groups.other)}</details>` : '';
-  return `${heading}<div class="card-stack">${same}${other}</div>`;
-}
-
-const SERVICE_STATUS_LABELS = { performed: 'performed', incomplete: 'performed, incomplete', planned: 'planned', historical: 'historical', cancelled: 'cancelled', negated: 'documented as not performed', uncertain: 'not established' };
-const CODING_TONES = { incomplete: 'pending', pending_review: '', reviewed: '', not_established: 'muted' };
-
-// The encounter's coding completeness, kept apart from whether a proposal is ready for review.
-function codingBanner(doc) {
-  const coding = doc.coding;
-  if (!coding || !coding.statement) return '';
-  // pending_review is also a decided set waiting on a context change or processing: its title never says a proposal
-  // is left to review, and the statement says what is missing (refutation 7c8, reports-3).
-  const title = lookup({ incomplete: 'Coding for this encounter is incomplete', pending_review: 'Every documented service has a proposal; the review is not complete', reviewed: 'Every documented service has a reviewed decision', not_established: 'Coding completeness not established' }, coding.state, 'Coding completeness');
-  return `<div class="check-list-card">${checkItem(lookup(CODING_TONES, coding.state, 'pending'), coding.state === 'incomplete' ? 'info' : 'shield', title, coding.statement)}</div>`;
-}
-
-function serviceTitle(service, doc) {
-  const parts = [familyLabel(doc, service.family) || service.kind, lookup(SERVICE_STATUS_LABELS, service.status, service.status)];
-  if (service.completion && service.completion !== 'unknown' && ['performed', 'incomplete'].includes(service.status)) parts.push(`${service.completion} examination${service.extent ? ` (${service.extent})` : ''}`);
-  if (service.intent) parts.push(service.intent);
-  return parts.filter(Boolean).join(' · ');
-}
-
-function documentedServices(doc) {
-  const assessment = doc.assessment || {};
-  const inventory = assessment.services || {};
-  const services = Array.isArray(inventory.services) ? inventory.services : [];
-  if (!services.length) return '';
-  const completeness = assessment.completeness || {};
-  const unresolved = Array.isArray(completeness.unresolved_items) ? completeness.unresolved_items : [];
-  const bundled = Array.isArray(completeness.bundled) ? completeness.bundled : [];
-  const covered = completeness.covered || {};
-  // A code the reviewer rejected accounts for nothing in the review: shown as rejected (refutation r1, report-6).
-  const rejected = new Set((assessment.proposals || []).filter(proposal => proposal.bucket !== 'alternative' && proposal.decision_state === 'rejected').map(proposal => proposal.code));
-  const conflicts = Array.isArray(inventory.conflicts) ? inventory.conflicts : [];
-  const items = services.map(service => {
-    const lines = [];
-    const done = ['performed', 'incomplete'].includes(service.status);
-    const acts = (service.acts || []).filter(act => act.status === 'performed' && ['physician', 'unknown'].includes(act.role));
-    if (done && acts.length) lines.push(`Acts documented as done: ${[...new Set(acts.map(act => act.kind.replace(/_/g, ' ') + (act.anatomy?.length ? ` (${act.anatomy.join(', ')})` : '')))].join('; ')}.`);
-    const codes = done && Array.isArray(covered[service.id]) ? covered[service.id] : [];
-    const kept = codes.filter(code => !rejected.has(code));
-    const dropped = codes.filter(code => rejected.has(code));
-    if (kept.length) lines.push(`Accounted for by: ${kept.join(', ')}.`);
-    if (dropped.length) lines.push(`Rejected by the reviewer: ${dropped.join(', ')}${kept.length ? '' : '; no other selected code accounts for this service'}.`);
-    // Worded from the inclusion rule as the assessment recorded it (included_by: the selected codes of that service that
-    // include this examination), never from whether the service is listed: an EGD with a code of its own beside an EUS
-    // code that includes none was said to be included by it (refutation P2RA, EUS lens 1; refutation p2, reports2:0).
-    // Nothing recorded (an earlier assessment, a reading that decided nothing): the reading alone is stated.
-    // A code the reviewer rejected includes nothing in the review either (refutation P2FR, EUS-SECOND).
-    const includedBy = completeness.included_by && typeof completeness.included_by === 'object' && Array.isArray(completeness.included_by[service.id]) ? completeness.included_by[service.id].filter(code => !rejected.has(code)) : null;
-    if (done && service.included_in) lines.push(includedBy === null
-      ? `Read as part of ${service.included_in}.`
-      : includedBy.length
-        ? `Included in ${service.included_in}: that service's code includes this examination, so no code of its own is asked.`
-        : `Read as part of ${service.included_in}, but no selected code of that service includes this examination.`);
-    for (const item of unresolved.filter(entry => entry.service === service.id)) lines.push(`Unresolved: ${item.label}. No code is added for it and no alternative is promoted.`);
-    for (const item of bundled.filter(entry => entry.service === service.id)) lines.push(`Not separately reported: ${item.label} — ${item.why}`);
-    for (const conflict of conflicts.filter(entry => entry.service === service.id)) {
-      const sides = (conflict.sides || []).map(side => `${side.role} entry: ${side.status}${side.evidence?.[0]?.text ? ` (“${side.evidence[0].text.replace(/\s+/g, ' ').slice(0, 120)}”)` : ''}`).join('; ');
-      lines.push(`Conflict on ${conflict.subject.replace(/_/g, ' ')}: ${sides}. Both are kept; neither is chosen.`);
-    }
-    const tone = !done ? 'muted' : unresolved.some(entry => entry.service === service.id) || conflicts.some(entry => entry.service === service.id) ? 'pending' : '';
-    return checkItem(tone, done ? 'circle-check' : 'info', serviceTitle(service, doc), lines.join(' '));
-  });
-  const attributions = (inventory.attributions || []).map(item => item.role);
-  if (attributions.length) items.push(checkItem('muted', 'info', 'Another provider\'s services', `The document attributes ${attributions.join(', ')} services to their own providers; they are never coded for the performing physician.`));
-  // The API serves the reconciliation as the review leaves it: a code the reviewer reinstated counts as a selected one
-  // (refutation P2FR, EUS-SECOND), and that is said.
-  const reinstated = reinstatedCounted(doc);
-  if (reinstated.length) items.push(checkItem('muted', 'info', 'Counted with the reviewer\'s reinstatement', `The documented services are reconciled with ${reinstated.join(', ')}, which the reviewer reinstated, counted as selected.`));
-  return `${sectionHeading('Documented services', services.length)}<div class="check-list-card">${items.join('')}${secondReviewItem(doc)}</div>`;
-}
-
-// The codes a reviewer reinstated that the served reconciliation counts (completeness.reinstated).
-function reinstatedCounted(doc) {
-  const reinstated = doc?.assessment?.completeness?.reinstated;
-  return Array.isArray(reinstated) ? reinstated.filter(code => typeof code === 'string') : [];
-}
-
-// The second review a reviewer asked for whose own outcome is not recorded yet: the current revision's latest review2
-// stage, when no assessment came after it (one that ran is read by the assessment it queues) and it is waiting, running,
-// stopped or failed. The encounter view's reason is worked out as if none had been asked for, so it read "wait ... before
-// asking" while the request waited, and "available" once its request was used (refutation r1 re-check, ec5).
-function askedSecondReview(doc) {
-  const stages = Array.isArray(doc.pipeline?.stages) ? doc.pipeline.stages : [];
-  const kinds = stages.map(stage => stage?.kind);
-  const index = kinds.lastIndexOf('review2');
-  if (index < 0 || index < kinds.lastIndexOf('assess')) return null;
-  return ['queued', 'running', 'cancelled', 'failed'].includes(stages[index].state) ? stages[index] : null;
-}
-
-function sentence(text) {
-  const plain = String(text || '').trim();
-  return plain && !/[.!?]$/.test(plain) ? `${plain}.` : plain;
-}
-
-// The bounded second review is asked for by a reviewer, never queued by an assessment (owner decision 2026-10-27).
-function secondReviewItem(doc) {
-  const second = doc.second_review;
-  const items = Array.isArray(second?.items) ? second.items : [];
-  if (!items.length) return '';
-  const what = items.join('; ');
-  const asked = askedSecondReview(doc);
-  if (asked) {
-    const [title, said] = {
-      queued: ['Second provider review requested', 'A reviewer asked for it; it is waiting to run, and nothing has been sent yet.'],
-      running: ['Second provider review requested', 'A reviewer asked for it; it is running now.'],
-      // Resume re-runs the latest stage only, so it runs this one only when nothing came after it
-      cancelled: ['Second provider review stopped', `It was stopped before anything was sent${asked.error ? `: ${sentence(asked.error)}` : '.'}${doc.pipeline?.can_resume && doc.pipeline.stages.at(-1) === asked ? ' Resume processing runs it once.' : ''}`],
-      failed: ['Second provider review did not complete', `It did not complete${asked.error ? `: ${sentence(asked.error)}` : '.'}`],
-    }[asked.state];
-    return checkItem(asked.state === 'failed' ? 'pending' : 'muted', 'info', title, `${said} Unresolved: ${what}.`);
+function progressPanel(doc, ui = {}) {
+  const progress = doc?.progress || {};
+  const phase = progressPhase(doc, ui);
+  const busy = progress.busy === true || phase === 'uploading';
+  const message = text(progress.message);
+  const time = progressTime(progress, phase, ui);
+  if (!PANEL_PHASES.has(phase)) {
+    const took = time ? ` · ${time[0].toLowerCase()} ${time[1]}` : '';
+    return `<section class="progress-panel progress-done" data-phase="${phase}" aria-label="Processing">${icon(phase === 'partial' ? 'info' : 'circle-check')}<div><p class="progress-summary"><strong>${escapeHtml(PHASE_TITLES[phase])}</strong>${took}</p>${(phase === 'partial' || phase === 'awaiting_detail') && message ? `<p class="progress-message">${escapeHtml(message)}</p>` : ''}</div></section>`;
   }
-  if (!second.available) return checkItem('muted', 'info', 'Second provider review', `${second.reason || 'Not available now.'} Unresolved: ${what}.`);
-  const body = `One more provider request, sent with only the text that documents ${items.length === 1 ? 'this item' : 'these items'}: ${what}. It is made once for this document and date; its codes fill only these items and each still needs a reviewer's decision.`;
-  const button = doc.permissions?.can_review && second.can_request ? `<div class="progress-actions"><button type="button" class="button secondary" data-action="second-review">Ask the provider once more</button></div>` : '';
-  return checkItem('pending', 'info', 'Second provider review available', body, button);
-}
-
-function unsupportedSection(assessment) {
-  const items = Array.isArray(assessment.unsupported) ? assessment.unsupported : [];
-  if (!items.length) return '';
-  return `${sectionHeading('Services outside the GI profiles', items.length)}<div class="check-list-card">${items.map(item => checkItem('pending', 'info', [item.label || item.family, item.status].filter(Boolean).join(' · '), item.detail)).join('')}</div>`;
-}
-
-// The outcome of the second review made for the answer the current assessment reads (the API names it:
-// second_review.run), when its response was not read or not used; '' when none was made, or its response was read and
-// used. Worded from its run row, or from its own failed check when its response was refused whole (skeptic of
-// refutation 7c8 reports-5: an unknown, failed or refused second review left "No CPT codes were proposed").
-function secondReviewUnread(doc) {
-  const id = doc?.second_review?.run;
-  const run = id ? (Array.isArray(doc.provider_runs) ? doc.provider_runs : []).find(item => item?.id === id) : undefined;
-  if (!run) return '';
-  const items = Array.isArray(run.scope_items) && run.scope_items.length ? run.scope_items.join('; ') : 'the unresolved documented services';
-  const asked = `A second review was requested for: ${items}.`;
-  const none = 'This is not a finding that no codes apply.';
-  if (run.state === 'succeeded') {
-    if (doc.assessment?.second_run !== run.id) return `${asked} Its response has not been read by this assessment. ${none}`;
-    const check = (Array.isArray(doc.assessment.encounter_checks) ? doc.assessment.encounter_checks : []).find(item => item && item.id === 'provider.second_review');
-    return check && check.status === 'fail' && typeof check.detail === 'string' && check.detail ? check.detail : '';
-  }
-  if (run.state === 'unknown') return `${asked} It was sent, but its outcome is unknown: no response was recorded, so nothing from it was read.${run.reconciled ? ' A member reconciled it.' : ''} ${none}`;
-  if (run.state === 'failed') return `${asked} It failed${run.error ? `: ${sentence(run.error)}` : '.'} Nothing from it was used. ${none}`;
-  if (run.state === 'not_sent' || run.state === 'cancelled') return `${asked} Nothing was sent for it${run.error ? `: ${sentence(run.error)}` : '.'} ${none}`;
-  return `${asked} It has not finished, so nothing from it was read. ${none}`;
-}
-
-function emptySelectionCopy(assessment, doc) {
-  // A second review whose response was not read or not used is stated after whatever the panel says, so no wording
-  // here reads as covering every response for this document (skeptic of refutation 7c8 reports-5).
-  const second = secondReviewUnread(doc);
-  const and = text => (second ? `${text} ${second}` : text);
-  // Codes a documentation check excluded still need a reviewer decision, so the panel never says nothing was
-  // proposed while they wait below (round 5, bypass:6). Only the codes still waiting are counted, as readiness
-  // counts them, so a decided set is never told it needs a decision (round 6, bypass:4).
-  const excluded = proposalsIn(assessment, 'excluded');
-  const reinstatable = excluded.filter(proposal => proposal.reinstatable);
-  const waiting = reinstatable.filter(proposal => proposal.decision_state === 'undecided' || proposal.decision_state === 'reinstated').length;
-  if (waiting === 1) return and('One code that a documentation check excluded needs a reviewer\'s decision under Excluded candidates below.');
-  if (waiting) return and(`${waiting} codes that a documentation check excluded need a reviewer's decision under Excluded candidates below.`);
-  if (reinstatable.length) return and('Every code that a documentation check excluded has a decision; see Excluded candidates below.');
-  if (excluded.length || proposalsIn(assessment, 'alternative').length) return and('No code is selected for approval. The provider proposed only codes that were excluded or offered as alternatives; they are listed below.');
-  // A provider check that failed (a response refused whole, or no usable result) says why there are no proposals;
-  // "none were proposed" would misstate a response that was never read (round 7, bypass:1). So does the check of an
-  // assessment that read no response at all - its provider outcome unknown, failed, or the provider not run - whatever
-  // the check's status (refutation 7c8, reports-5: an unknown outcome is a 'warn').
-  const provider = (Array.isArray(assessment.encounter_checks) ? assessment.encounter_checks : []).find(check => check && check.id === 'provider.status');
-  const read = assessment.summary?.provider_status;
-  const unread = typeof read === 'string' && read !== 'succeeded';
-  if (provider && (provider.status === 'fail' || unread) && typeof provider.detail === 'string' && provider.detail) return and(provider.detail);
-  if (unread) return and('No provider response was read for this revision, so there are no CPT proposals.');
-  // The primary response was read and selected nothing, but the second review's was not read or not used: the primary
-  // check's own wording, then that review's outcome - never "none were proposed".
-  if (second) return provider && typeof provider.detail === 'string' && provider.detail ? and(provider.detail) : second;
-  return 'No CPT codes were proposed for this document.';
-}
-
-function suggestionsPanel(doc, layout) {
-  const assessment = doc.assessment;
-  const selected = proposalsIn(assessment, 'selected');
-  const inline = new Set(selected.flatMap(proposal => clarificationsFor(proposal, doc).map(item => item.id)));
-  const general = openClarifications(doc).filter(item => !inline.has(item.id)).map(item => clarificationCard(item, doc));
-  const cards = selected.length ? selected.map(proposal => codeCard(proposal, doc, layout)) : [`<div class="check-list-card"><p class="card-empty">${escapeHtml(emptySelectionCopy(assessment, doc))}</p></div>`];
-  return `<div class="card-stack">${codingBanner(doc)}${general.join('')}${cards.join('')}</div>${documentedServices(doc)}${unsupportedSection(assessment)}${alternativesSection(doc)}${candidateSection('Excluded candidates', proposalsIn(assessment, 'excluded'), 'Excluded from CPT-only results.', doc)}<div class="review-insight">${icon('shield')}<div><strong>The source remains the starting point</strong><p>The checks hold or exclude planned, historical, cancelled and uncertain services when they recognise the wording, and they can miss wording they do not recognise. Read the document before deciding; agreement between sources is not treated as verification.</p></div></div>`;
-}
-
-function checkItems(checks) {
-  if (!Array.isArray(checks) || !checks.length) return '<p class="card-empty">No checks recorded.</p>';
-  return checks.map(check => {
-    const [tone, iconName] = lookup(CHECK_LOOKS, check.status, ['pending', 'info']);
-    const detail = `${lookup(CHECK_LABELS, check.status, 'Unknown status')}${check.detail ? ` — ${check.detail}` : ''}`;
-    return checkItem(tone, iconName, check.label || check.id || 'Check', detail, check.source ? `<small class="check-source">${escapeHtml(`Source: ${check.source}`)}</small>` : '');
-  }).join('');
-}
-
-function referenceItems(sources) {
-  if (!Array.isArray(sources) || !sources.length) return checkItem('pending', 'clock', 'No reference source is connected', 'Every check that needs a reference stays not verified.');
-  return sources.map(source => {
-    const applies = source.applies === true ? 'Applies to this service date' : source.applies === false ? 'Does not apply to this service date' : 'Applicability not established';
-    const window = source.effective_start && source.effective_end ? `effective ${formatDate(source.effective_start) || source.effective_start} – ${formatDate(source.effective_end) || source.effective_end}` : '';
-    const notes = [source.scope_note, source.license_note].filter(Boolean).map(note => `<small class="check-source">${escapeHtml(note)}</small>`).join('');
-    return checkItem(source.applies === true ? '' : 'pending', source.applies === true ? 'circle-check' : 'clock', `${source.title || source.key}${source.release ? ` (${source.release})` : ''}`, [applies, window].filter(Boolean).join(' · '), notes);
-  }).join('');
+  const animate = busy && ANIMATED_PHASES.has(phase);
+  const steps = normalizedSteps(progress);
+  const activeIndex = steps.findIndex(step => step.state === 'active');
+  const detail = text(progress.active_detail);
+  const showAck = ui.ack && ui.ack.id === doc?.id && ANIMATED_PHASES.has(phase);
+  const canAct = canReview(doc);
+  const stop = canAct && progress.can_stop === true && busy ? `<button type="button" class="button secondary" data-action="stop">${icon('stop')}Stop processing</button>` : '';
+  const resume = canAct && progress.can_resume === true && !busy ? `<button type="button" class="button primary" data-action="resume">Resume processing ${icon('arrow')}</button>` : '';
+  const leave = progress.can_leave !== false ? lookup(LEAVE_NOTES, phase, '') : '';
+  const slow = progress.slow === true && busy;
+  const headIcon = phase === 'action_needed' || phase === 'paused' ? 'info' : phase === 'failed' ? 'close' : phase === 'stopped' ? 'stop' : 'clock';
+  // a step that waits its turn after one the panel shows done - this run's, or one kept from an earlier run - is not
+  // "Waiting to start": the server's own rule over the same served steps (progress.next_step_queued), by which its
+  // message says the same (progress.NEXT_STEP_QUEUED)
+  const title = phase === 'queued' && steps.some(step => step.state === 'done') ? QUEUED_AFTER_DONE_TITLE : PHASE_TITLES[phase];
+  // the error says its own sentence below; the head does not repeat it
+  const said = message && !(progress.error && typeof progress.error === 'object' && text(progress.error.text) === message) ? message : '';
+  return `<section class="progress-panel${busy ? ' progress-card' : ''}" data-phase="${phase}" aria-labelledby="progressTitle">`
+    + `<div class="progress-head"><span class="progress-icon${animate ? ' is-animated' : ''}">${icon(headIcon)}</span><div class="progress-status" aria-live="polite"><h2 id="progressTitle">${escapeHtml(title)}</h2>${said ? `<p class="progress-message${slow ? ' slow' : ''}">${escapeHtml(said)}</p>` : ''}</div></div>`
+    + (showAck ? uploadAck(ui.ack, '', ['waiting', 'active', 'not_started'].includes(steps[0].state)) : '')
+    + `<ol class="progress-steps">${steps.map((step, index) => progressStep(step, index === activeIndex, animate, detail)).join('')}</ol>`
+    + (time ? `<p class="progress-time">${time[0]} ${time[1]}</p>` : '')
+    + `<p class="progress-reconnecting" role="status"${ui.reconnecting && shouldPoll(doc) ? '' : ' hidden'}>Reconnecting…</p>`
+    + progressError(progress.error, { canAct, resumeShown: Boolean(resume) })
+    + (leave ? `<p class="leave-note">${escapeHtml(leave)}</p>` : '')
+    + (stop || resume ? `<div class="progress-actions">${stop}${resume}</div>` : '')
+    + '</section>';
 }
 
 function checksPanel(doc) {
-  const assessment = doc.assessment;
-  const perCode = proposalsIn(assessment, 'selected').map(proposal => `<div class="check-list-card">${groupLabel(`${proposal.code} · ${proposal.eyebrow || proposal.family_label || ''}`)}${checkItems(proposal.checks)}</div>`).join('');
-  // The encounter's checks are the assessment's: they predate a reinstatement the documented services count
-  // (refutation P2FR, EUS-SECOND).
-  const reinstated = reinstatedCounted(doc);
-  const documentedChecks = (Array.isArray(assessment.encounter_checks) ? assessment.encounter_checks : []).some(check => String(check?.id || '').startsWith('services.'));
-  const predates = reinstated.length && documentedChecks ? checkItem('muted', 'info', 'Made before the reviewer\'s reinstatement', `The documented-service checks were made when the assessment ran, before the reviewer reinstated ${reinstated.join(', ')}, and do not count ${reinstated.length === 1 ? 'it' : 'them'}; the documented services and coding completeness do.`) : '';
-  return `<div class="card-stack"><div class="check-list-card">${groupLabel('Encounter')}${checkItems(assessment.encounter_checks)}${predates}</div>${perCode}<div class="check-list-card">${groupLabel('Reference sources')}${referenceItems(assessment.reference_sources)}</div></div><p class="checks-disclaimer">Checks come from the connected reference files and this service's own documentation rules. Anything they do not cover is shown as not verified, and agreement between sources is not treated as verification.</p>`;
-}
-
-function timelineEntry(title, lines, struck = false) {
-  return `<div class="timeline-entry"><span class="timeline-dot"></span><div><strong>${struck ? `<s>${escapeHtml(title)}</s>` : escapeHtml(title)}</strong>${lines.filter(Boolean).map(line => `<p>${escapeHtml(line)}</p>`).join('')}</div></div>`;
-}
-
-function usageText(run) {
-  const credits = run.usage?.creditsConsumed;
-  if (typeof credits !== 'number') return 'Usage not reported';
-  return run.usage_basis === 'provider_reported_credits_not_usd' ? `${credits} provider-reported credits (not USD)` : `${credits} credits (basis: ${run.usage_basis || 'not recorded'})`;
-}
-
-function activityPanel(doc) {
-  const history = doc.decisions?.history || [];
-  const runs = doc.provider_runs || [];
-  const events = doc.activity || [];
-  const decisions = history.map(decision => {
-    const invalid = decision.invalidated ? (typeof decision.invalidated === 'string' ? decision.invalidated : decision.invalidated.reason || 'No reason recorded') : '';
-    const who = [decision.reviewer, decision.reviewer_kind === 'agent' ? 'agent-executed synthetic review — not clinical approval' : 'human reviewer', formatTimestamp(decision.created_at), decision.revision_number ? `revision ${decision.revision_number}` : ''];
-    return timelineEntry(`${lookup(DECISION_TITLES, decision.action, 'Decision on')} ${decision.code || ''}`.trim(), [who.filter(Boolean).join(' · '), decision.carried_from ? 'Carried forward from an earlier assessment of the same revision.' : '', decision.note ? `Note: ${decision.note}` : '', invalid ? `Invalidated: ${invalid}` : ''], Boolean(invalid));
+  const served = new Map(objects(doc?.checks).map(check => [check.key, check]));
+  if (!served.size) return '';
+  const items = CHECK_KEYS.filter(key => served.has(key)).map(key => {
+    const check = served.get(key);
+    const checkState = lookup(CHECK_STATES, check.state, null) ? check.state : 'not_run';
+    return `<li class="check-step" data-check="${key}" data-state="${checkState}">${icon(CHECK_ICONS[checkState])}<span><strong>${escapeHtml(CHECK_LABELS[key])}</strong><small>${escapeHtml(CHECK_STATES[checkState])}</small></span></li>`;
   });
-  // A second review is named on its row, with what it asked about, as both reports name it (refutation r1, report-10:
-  // the primary request and the second review read as two identical rows).
-  const runEntries = runs.map(run => timelineEntry(
-    [lookup({ corti: 'Corti', replay: 'Replay' }, run.provider, run.provider || 'Provider'), lookup({ live: 'live', replay: 'REPLAY — recorded response, not live output' }, run.mode, run.mode || 'mode not recorded'), run.purpose === 'second_review' ? 'Second review' : '', lookup(RUN_STATES, run.state, run.state || 'state not recorded')].filter(Boolean).join(' · '),
-    [[run.http_status ? `HTTP ${run.http_status}` : 'No HTTP response recorded', typeof run.latency_ms === 'number' ? `${(run.latency_ms / 1000).toFixed(1)} s` : '', usageText(run)].filter(Boolean).join(' · '),
-      run.purpose === 'second_review' && Array.isArray(run.scope_items) && run.scope_items.length ? `Asked about: ${run.scope_items.join('; ')}.` : '',
-      run.reused_from ? 'Reused the stored response of an identical earlier request; no new provider call was made.' : '',
-      run.reconciled ? 'Unknown outcome reconciled by a member.' : '', run.error ? `Error: ${run.error}` : '', formatTimestamp(run.created_at)]));
-  const eventEntries = events.map(event => timelineEntry(event.summary || event.event || 'Event', [[event.actor || 'System', formatTimestamp(event.created_at)].filter(Boolean).join(' · ')]));
-  const card = (label, entries, empty) => `<div class="timeline-card">${groupLabel(label)}${entries.length ? entries.join('') : `<p class="card-empty">${empty}</p>`}</div>`;
-  return `<div class="card-stack">${card('Decisions', decisions, 'No decisions recorded yet.')}${card('Provider runs', runEntries, 'No provider request has been made for this document.')}${card('Activity', eventEntries, 'No activity recorded.')}</div>`;
+  return `<ul class="checks-panel" aria-label="Checks">${items.join('')}</ul>`;
 }
 
-// Each row shows the LATEST job of its stage (a context change, a resume or a second review runs a stage again: the
-// first one's "Done" was shown while the new one waited), and the second review's row appears once one was asked for.
-function progressCard(doc) {
-  const stages = Array.isArray(doc.pipeline?.stages) ? doc.pipeline.stages : [];
-  const rows = stages.some(item => item?.kind === 'review2') ? [...STAGES, SECOND_REVIEW_STAGE] : STAGES;
-  const items = rows.map(([kind, label]) => {
-    const stage = [...stages].reverse().find(item => item?.kind === kind);
-    if (!stage) return checkItem('muted', 'clock', label, 'Not started');
-    const [tone, iconName] = lookup(STAGE_LOOKS, stage.state, ['pending', 'info']);
-    return checkItem(tone, iconName, label, `${lookup(STAGE_STATES, stage.state, stage.state || 'Unknown')}${stage.error ? ` — ${stage.error}` : ''}`);
+// --- the "A few details needed" panel ---
+
+function detailAnswer(row, ui) {
+  const answer = ui.answers?.get?.(row.id);
+  return answer && typeof answer.value === 'string' ? answer.value : '';
+}
+
+function answerButton(row, value, label, pending, action = '') {
+  const pressed = pending === value;
+  const hook = action ? `data-action="${action}"` : `data-detail-choice="${value}"`;
+  return `<button type="button" class="button secondary detail-choice" id="detail-${escapeHtml(row.id)}-${value}" ${hook} data-detail="${escapeHtml(row.id)}" aria-pressed="${pressed}">${escapeHtml(label)}</button>`;
+}
+
+function allowedAnswers(row, pending) {
+  return Object.keys(DETAIL_ANSWERS).filter(value => list(row.allow).includes(value)).map(value => answerButton(row, value, DETAIL_ANSWERS[value], pending)).join('');
+}
+
+function quoteLine(quote) {
+  return quote && typeof quote.text === 'string' && quote.text ? `<q class="detail-quote">${escapeHtml(excerpt(quote.text, 120))}</q>` : '';
+}
+
+function offers(row, value) {
+  return objects(row.choices).some(choice => choice.value === value);
+}
+
+// The dates the date row offers as the document's own (the server's choices whose value is a calendar date).
+function documentedDates(row) {
+  return row?.control === 'date' ? objects(row.choices).filter(choice => typeof choice.value === 'string' && Boolean(parseIsoDate(choice.value))) : [];
+}
+
+function addendumButton(row) {
+  return row.addendum_allowed === true ? `<button type="button" class="button subtle detail-addendum" data-action="addendum" data-detail="${escapeHtml(row.id)}">Add to the documentation (physician)</button>` : '';
+}
+
+// The date row: the document's side beside the member's - its one date with the quote, each date it states, or its
+// own wording where it gives no date the page may show - then only the ways the server offers: "Use document date",
+// one of the document's dates, another date, removing the entered date, the physician's addendum. Never prefilled: the
+// date field holds only what the member typed on this page.
+function dateControl(row, ui) {
+  const pending = detailAnswer(row, ui);
+  const documented = formatDate(row.document_value, true);
+  const entered = formatDate(row.entered_value, true);
+  const stated = documentedDates(row);
+  const side = documented ? `<strong>${escapeHtml(documented)}</strong>${quoteLine(row.quote)}`
+    : stated.length ? `<strong>${escapeHtml(joinWords(stated.map(choice => formatDate(choice.value, true))))}</strong>`
+      : row.quote && typeof row.quote.text === 'string' && row.quote.text ? `<strong><q>${escapeHtml(excerpt(row.quote.text, 120))}</q></strong>` : '<strong>Not stated</strong>';
+  // offered exactly where the server offers it (a choice of the row: the document states one date, and the member's
+  // entry contradicts it), so the save the button makes is one the server accepts; never for a date only asked
+  const useDocument = documented && offers(row, USE_DOCUMENT) ? answerButton(row, USE_DOCUMENT, 'Use document date', pending, 'use-document-date') : '';
+  const remove = offers(row, CLEAR_DATE) ? answerButton(row, CLEAR_DATE, 'Remove the entered date', pending, 'clear-date') : '';
+  const radios = stated.map(choice => `<label class="detail-radio"><input type="radio" name="detail-${escapeHtml(row.id)}" id="detail-${escapeHtml(row.id)}-${escapeHtml(choice.value)}" value="${escapeHtml(choice.value)}" data-detail="${escapeHtml(row.id)}"${pending === choice.value ? ' checked' : ''}><span>${escapeHtml(text(choice.label) || formatDate(choice.value, true))}</span></label>`).join('');
+  const typed = parseIsoDate(pending) && !stated.some(choice => choice.value === pending) ? pending : '';
+  return `<div class="detail-dates"><div class="detail-document-date"><span class="detail-date-label">Document</span>${side}</div><div class="detail-entered-date"><span class="detail-date-label">You entered</span><strong>${escapeHtml(entered || 'Nothing entered')}</strong></div></div>`
+    + `<div class="detail-controls">${radios}${useDocument}<label class="detail-date-input">${stated.length || row.saved ? 'Or enter another date' : 'Or enter the date of service'}<input type="date" id="detail-${escapeHtml(row.id)}-date" data-detail-input data-detail="${escapeHtml(row.id)}"${typed ? ` value="${escapeHtml(typed)}"` : ''}></label>${remove}${allowedAnswers(row, pending)}${addendumButton(row)}</div>`;
+}
+
+function choiceControl(row, ui) {
+  const pending = detailAnswer(row, ui);
+  const radios = objects(row.choices).filter(choice => typeof choice.value === 'string' && choice.value).map(choice => {
+    const checked = pending === choice.value;
+    return `<label class="detail-radio"><input type="radio" name="detail-${escapeHtml(row.id)}" id="detail-${escapeHtml(row.id)}-${escapeHtml(choice.value)}" value="${escapeHtml(choice.value)}" data-detail="${escapeHtml(row.id)}"${checked ? ' checked' : ''}><span>${escapeHtml(choice.label || choice.value)}</span></label>`;
   }).join('');
-  const stop = doc.pipeline?.can_stop && doc.permissions?.can_review ? `<div class="progress-actions"><button type="button" class="button secondary" data-action="stop">${icon('stop')}Stop</button><p>Stop cancels queued stages and prevents an unsent provider request.</p></div>` : '';
-  return `<div class="check-list-card progress-card" aria-live="polite"><div class="panel-heading">${icon('clock')}<h2>Processing this document</h2><span class="small-badge">Updates automatically</span></div>${items}${stop}</div>`;
+  return `<div class="detail-controls">${radios}${allowedAnswers(row, pending)}</div>`;
 }
 
-function infoCard(titleHtml, lines, actions = '') {
-  return `<div class="clarification-card"><span class="clarification-icon">${icon('info')}</span><h3>${titleHtml}</h3>${lines.filter(Boolean).map(line => `<p>${escapeHtml(line)}</p>`).join('')}${actions}</div>`;
+function confirmControl(row, ui) {
+  const pending = detailAnswer(row, ui);
+  return `<div class="detail-controls">${allowedAnswers(row, pending)}${addendumButton(row)}</div>`;
 }
 
-function reconcileCard(doc) {
-  const run = (doc.provider_runs || []).filter(item => item.state === 'unknown' && !item.reconciled).pop();
-  const canReview = doc.permissions?.can_review;
-  const detail = run ? `<div class="clarification-question"><strong>Unreconciled request</strong><br>${escapeHtml([run.purpose === 'second_review' ? 'Second review' : '', formatTimestamp(run.created_at), run.error].filter(Boolean).join(' · ') || 'No further detail was recorded.')}</div>` : '';
-  const form = run && canReview ? `<form id="reconcileForm" data-run="${escapeHtml(run.id)}" novalidate><label class="field-label">Reconciliation note<textarea id="reconcileNote" rows="3" maxlength="2000" placeholder="What is known about this request…"></textarea></label><p class="form-error" id="reconcileError" role="alert" hidden></p><button type="submit" class="button primary">Record reconciliation ${icon('check')}</button></form>` : '';
-  const viewer = run && !canReview ? '<p class="checks-disclaimer">Only owners and reviewers can record a reconciliation.</p>' : '';
-  return `<div class="clarification-card"><span class="clarification-icon">${icon('help')}</span><h3>The provider outcome<br>is unknown.</h3><p>A request was sent but no response was recorded. Nothing is resent automatically: record what is known before one new attempt is allowed.</p>${detail}${form}${viewer}</div>`;
+// Completion repair (2026-11-06, U10): a clinical question says what CPT Studio could not confirm (the server's fixed
+// sentence, never that the document leaves it out) and shows the passages it concerns - exact slices of the document,
+// with their page - so the member answers with them in view. Every sentence is the server's fixed wording.
+function questionPassages(row) {
+  const passages = objects(row.passages).filter(item => typeof item.text === 'string' && item.text);
+  const statement = text(row.statement);
+  if (!statement && !passages.length) return '';
+  const label = passages.length === 1 ? 'The passage this question concerns' : 'The passages this question concerns';
+  const items = passages.map(item => `<li><q class="detail-quote">${escapeHtml(excerpt(item.text, 240))}</q>${Number.isInteger(item.page) ? `<span class="detail-page">Page ${item.page}</span>` : ''}</li>`).join('');
+  return `<div class="detail-question">${statement ? `<p class="detail-statement">${escapeHtml(statement)}</p>` : ''}${passages.length ? `<p class="detail-passages-label">${label}</p><ul class="detail-passages">${items}</ul>` : ''}</div>`;
 }
 
-function stateCards(doc) {
-  const cards = [];
-  if (doc.pipeline?.busy) cards.push(progressCard(doc));
-  const runs = doc.provider_runs || [];
-  const stages = doc.pipeline?.stages || [];
-  // Any unreconciled unknown outcome, the second review's included: nothing is sent again until it is reconciled.
-  if (doc.state === 'provider_unknown' || runs.some(run => run.state === 'unknown' && !run.reconciled)) cards.push(reconcileCard(doc));
-  if (doc.state === 'extraction_failed') {
-    cards.push(infoCard('The text could not<br>be read.', ['No CPT proposals were requested because no text could be extracted; the reasons are listed above the document. Upload another copy, or paste the text instead.'], `<button type="button" class="button primary" data-action="upload">${icon('plus')}New document</button>`));
+// Answers saved for a question no longer asked, or now asked differently: kept, never applied (completion repair
+// 2026-11-06, U11), each with why - the server's fixed sentence - and a way to withdraw it.
+function earlierAnswers(doc) {
+  const items = objects(doc?.earlier_answers).filter(item => typeof item.answer_id === 'string' && item.answer_id);
+  if (!items.length) return '';
+  const editable = canReview(doc) && doc?.progress?.busy !== true;
+  const rows = items.map(item => {
+    const affects = strings(item.affects);
+    const by = [text(item.by), formatTimestamp(item.at)].filter(Boolean).join(', ');
+    const withdraw = editable ? `<button type="button" class="meta-link" data-action="revoke-detail" data-answer="${escapeHtml(item.answer_id)}" id="earlier-${escapeHtml(item.answer_id)}-revoke">Withdraw this answer</button>` : '';
+    return `<li class="earlier-answer" data-answer="${escapeHtml(item.answer_id)}"><span class="detail-family">${escapeHtml(text(item.family_label) || 'Detail')}</span><span class="detail-prompt">${escapeHtml(text(item.prompt))}</span><span class="earlier-value">Saved: <strong>${escapeHtml(text(item.label) || lookup(DETAIL_ANSWERS, item.value, ''))}</strong>${affects.length ? ` for ${escapeHtml(joinWords(affects))}` : ''}${by ? ` — ${escapeHtml(by)}` : ''}</span><span class="earlier-why">${escapeHtml(text(item.why_text))}</span>${withdraw}</li>`;
+  }).join('');
+  return `<div class="earlier-answers"><h3>Earlier answers, not applied</h3><ul>${rows}</ul></div>`;
+}
+
+// A date of service the member entered, saved: it has no answer to withdraw, so the row itself corrects or removes it.
+function changeableDate(row) {
+  return row?.control === 'date' && Boolean(row.saved) && typeof row.saved === 'object' && !text(row.saved.answer_id);
+}
+
+// Whether a row takes an answer in the one save: an open row, or a saved date the member entered.
+function answerable(row) {
+  return Boolean(row) && (!row.saved || changeableDate(row));
+}
+
+function savedAnswer(row, editable, ui = {}) {
+  const saved = row.saved;
+  const value = text(saved.label) || lookup(DETAIL_ANSWERS, saved.value, saved.value === USE_DOCUMENT ? 'Use document date' : formatDate(saved.value, true) || text(saved.value));
+  const by = [text(saved.by), formatTimestamp(saved.at)].filter(Boolean).join(', ');
+  const change = editable && typeof saved.answer_id === 'string' && saved.answer_id ? `<button type="button" class="meta-link" data-action="revoke-detail" data-answer="${escapeHtml(saved.answer_id)}" id="detail-${escapeHtml(row.id)}-revoke">Change this answer</button>` : '';
+  const line = `<p class="detail-saved">${icon('check')}<span>Saved: <strong>${escapeHtml(value)}</strong>${by ? ` — ${escapeHtml(by)}` : ''}</span>${change}</p>`;
+  return line + (editable && changeableDate(row) ? dateControl(row, ui) : '');
+}
+
+function detailRow(row, doc, ui) {
+  const editable = canReview(doc) && doc?.progress?.busy !== true;
+  const affects = strings(row.affects);
+  const control = row.saved ? savedAnswer(row, editable, ui)
+    : !editable ? '<p class="detail-wait">Answers can be saved once processing has finished.</p>'
+      : row.control === 'date' ? dateControl(row, ui) : row.control === 'choice' ? choiceControl(row, ui) : confirmControl(row, ui);
+  // radios are a group, named by its legend; the legend comes first, holding the family and the prompt
+  const radios = row.control === 'choice' || documentedDates(row).length > 0;
+  const tag = radios && editable && answerable(row) ? 'fieldset' : 'div';
+  const lead = tag === 'fieldset' ? 'legend' : 'div';
+  return `<${tag} class="detail-row${row.saved ? ' is-saved' : ''}" data-detail="${escapeHtml(row.id)}" data-fact="${escapeHtml(row.fact)}"><${lead} class="detail-lead"><span class="detail-family">${escapeHtml(text(row.family_label) || 'Detail')}</span><span class="detail-prompt">${escapeHtml(row.prompt)}</span></${lead}>${affects.length ? `<p class="detail-affects">Affects ${escapeHtml(joinWords(affects))}</p>` : ''}${questionPassages(row)}${control}</${tag}>`;
+}
+
+function detailsPanel(doc, ui = {}) {
+  const rows = detailsOf(doc);
+  const earlier = earlierAnswers(doc);
+  if (!rows.length && !earlier) return '';
+  const open = rows.filter(row => !row.saved).length;
+  const editable = canReview(doc) && doc?.progress?.busy !== true;
+  // "nothing is checked" only while the member's date holds the document (Action needed): a date asked after the
+  // checks ran, or one to confirm, leaves the codes that do not depend on it reviewable
+  const held = doc?.state === 'action_needed' || doc?.progress?.phase === 'action_needed';
+  const dateOnly = open && rows.filter(row => !row.saved).every(row => row.control === 'date');
+  const lead = !rows.length ? 'No detail is needed now.'
+    : !open ? 'Every detail has an answer. You can change an answer below.'
+      : dateOnly && held ? 'Choose the date of service. Nothing is checked until you do.'
+        : `${plural(open, 'detail is', 'details are')} needed. Answer what you can; codes that do not depend on them stay reviewable.`;
+  const save = editable && rows.some(answerable) ? `<div class="details-actions"><button type="button" class="button primary" data-action="save-details" id="saveDetails">Save answers ${icon('check')}</button><p>One save records every answer above. Nothing here changes the document itself.</p></div>` : '';
+  // refutation cycle 1 (answers F7): with only earlier answers left, the panel never says details are needed
+  const title = rows.length ? 'A few details needed' : 'Earlier answers';
+  return `<section class="details-panel" aria-labelledby="detailsTitle"><div class="details-head">${icon('info')}<div><h2 id="detailsTitle">${title}</h2><p>${escapeHtml(lead)}</p></div></div>${rows.map(row => detailRow(row, doc, ui)).join('')}<p class="form-error" id="detailsError" role="alert" hidden></p>${save}${earlier}</section>`;
+}
+
+// --- the codes-first result list ---
+
+function decisionButton(action, code) {
+  const [, kind, label, iconName] = ACTION_BUTTONS.find(([name]) => name === action);
+  return `<button type="button" class="button ${kind}" id="act-${escapeHtml(code.id)}-${action}" data-decision="${action}" data-proposal="${escapeHtml(code.id)}">${label}${iconName ? ` ${icon(iconName)}` : ''}</button>`;
+}
+
+function rowActions(code) {
+  const allowed = list(code.allowed_actions);
+  const buttons = ACTION_BUTTONS.filter(([name]) => allowed.includes(name)).map(([name]) => decisionButton(name, code));
+  return buttons.length ? `<div class="result-actions">${buttons.join('')}</div>` : '';
+}
+
+// The agent label is stated once per row: here, unless the row's own line under the code already says it.
+function decisionLine(code) {
+  const decision = code.decision;
+  if (!decision || typeof decision !== 'object') return '';
+  const labelled = rowSubLabel(code) === AGENT_REVIEW;
+  const title = `${lookup(DECISION_TITLES, decision.action, 'Decision recorded')} by ${text(decision.by) || 'a reviewer whose name was not recorded'}`;
+  const modifiers = strings(decision.modifiers);
+  const kind = decision.by_kind === 'agent' ? (labelled ? '' : 'agent-executed synthetic review — not clinical approval') : 'synthetic review — not clinical approval';
+  const detail = [formatTimestamp(decision.at), modifiers.length ? `modifier ${modifiers.join(', ')}` : '', kind].filter(Boolean).join(' · ');
+  const note = text(decision.note);
+  return `<div class="result-decision">${icon('shield')}<div><strong>${escapeHtml(title)}</strong><p>${escapeHtml(detail)}</p>${note ? `<p>${escapeHtml(`Note: ${note}`)}</p>` : ''}</div></div>`;
+}
+
+function whyQuote(code, quote, index, layout) {
+  const key = `${code.id}:q${index}`;
+  const attributes = `data-start="${escapeHtml(quote.start)}" data-end="${escapeHtml(quote.end)}" data-page="${escapeHtml(quote.page)}"`;
+  if (layout.unlocated.has(key)) {
+    return `<li><span class="why-quote unlocated" ${attributes}>${escapeHtml(quote.text)}</span><small class="why-unlocated">Not found at this place in the document.</small></li>`;
   }
-  if (doc.state === 'provider_failed') {
-    // The run this state reads, as the API names it (state_run): never one picked by recency - an earlier failed request
-    // for another date (ec5 re-check), nor a newer one a Stop or the sweep settled before sending (ec5 skeptic).
-    const failed = doc.state_run ? runs.find(run => run?.id === doc.state_run) : undefined;
-    if (failed?.state === 'succeeded') {
-      // A response refused whole (the state reads that run): read and not used, never a failed request nor one that
-      // returned no proposals; its own failed check says why (round 7 bypass:1; skeptic of refutation 7c8 reports-5).
-      const checks = Array.isArray(doc.assessment?.encounter_checks) ? doc.assessment.encounter_checks : [];
-      const own = failed.purpose === 'second_review' ? ['provider.second_review'] : ['provider.status', 'provider.problems'];
-      const said = own.map(id => checks.find(check => check && check.id === id)?.detail).filter(text => typeof text === 'string' && text);
-      cards.push(infoCard('The provider response<br>was not used.', [...(said.length ? said : ['The response was refused whole, so there are no CPT proposals from it.']), 'Nothing was resent automatically, and any recorded usage is kept.']));
-    } else {
-      cards.push(infoCard('The provider request<br>failed.', [failed?.error ? `Error: ${failed.error}` : 'The provider did not return proposals.', 'Nothing was resent automatically, and any recorded usage is kept.']));
-    }
+  return `<li><button type="button" class="why-quote" data-evidence="${escapeHtml(key)}" ${attributes} title="Show this passage in the document">${escapeHtml(quote.text)}</button></li>`;
+}
+
+function modifierReview(code) {
+  const review = code.modifier_review;
+  if (!review || typeof review !== 'object') return '';
+  const sources = strings(review.sources);
+  return `<div class="why-modifier"><strong>Modifier review</strong>${text(review.text) ? `<p>${escapeHtml(review.text)}</p>` : ''}${sources.length ? `<p class="why-sources">${escapeHtml(`Source: ${sources.join('; ')}`)}</p>` : ''}<p class="why-sources">No modifier is added automatically; the reviewer may choose one when approving.</p></div>`;
+}
+
+function whyThisCode(code, layout, ui = {}) {
+  const quotes = objects(code.why?.quotes).filter(quote => typeof quote.text === 'string' && quote.text);
+  const qualifications = strings(code.why?.qualifications);
+  const key = `why:${code.id}`;
+  const body = [
+    quotes.length ? `<p class="why-label">From the document</p><ul class="why-quotes">${objects(code.why?.quotes).map((quote, index) => (typeof quote.text === 'string' && quote.text ? whyQuote(code, quote, index, layout) : '')).join('')}</ul>` : '<p class="why-label">No passage of the document is quoted for this code.</p>',
+    qualifications.length ? `<ul class="why-qualifications">${qualifications.map(item => `<li class="why-qualification">${escapeHtml(item)}</li>`).join('')}</ul>` : '',
+    modifierReview(code),
+  ].join('');
+  return `<details class="why-code" data-key="${escapeHtml(key)}"${ui.open?.has?.(key) ? ' open' : ''}><summary>Why this code?</summary><div class="why-body">${body}</div></details>`;
+}
+
+function resultRow(code, index, doc, layout, ui = {}) {
+  const status = codeStatus(code);
+  const number = Number.isInteger(code.number) && code.number > 0 ? code.number : index + 1;
+  const modifiers = strings(code.modifiers);
+  const units = unitsLabel(code.units);
+  return `<li class="result-row" id="card-${escapeHtml(code.id)}" tabindex="-1" data-proposal="${escapeHtml(code.id)}" data-code="${escapeHtml(code.code)}" data-status="${escapeHtml(status.key)}" data-units="${escapeHtml(Number.isInteger(code.units) ? code.units : '')}" data-modifiers="${escapeHtml(modifiers.join(' '))}">`
+    + `<div class="result-head"><span class="result-number">${escapeHtml(number)}</span><span class="result-code">${escapeHtml(code.code)}</span><span class="result-units">${escapeHtml(units)}</span><span class="result-modifiers">${escapeHtml(modifierLabel(code))}</span>${badge(status.tone, status.label, status.icon, ` data-status="${escapeHtml(status.key)}"`)}</div>`
+    + `<p class="result-sub">${escapeHtml(rowSubLabel(code))}</p>`
+    + `<p class="result-summary">${escapeHtml(text(code.summary) || 'No explanation was recorded for this code.')}</p>`
+    + decisionLine(code)
+    + `<div class="result-foot">${whyThisCode(code, layout, ui)}${rowActions(code)}</div>`
+    + '</li>';
+}
+
+function emptyResults(doc, ui) {
+  const phase = progressPhase(doc, ui);
+  return lookup({
+    uploading: 'Suggested codes appear here when processing finishes.', queued: 'Suggested codes appear here when processing finishes.', processing: 'Suggested codes appear here when processing finishes.',
+    action_needed: 'Nothing has been checked yet. Choose the date of service to continue.', failed: 'No codes were suggested.', stopped: 'Processing stopped before codes were suggested.',
+    being_confirmed: 'Suggested codes appear here once the earlier check is confirmed.',
+  }, phase, 'No CPT codes were suggested for this document.');
+}
+
+function reviewBar(doc) {
+  const readiness = doc.readiness || {};
+  const line = readiness.approved === true ? 'Every code has a decision. The approved download is available.' : readiness.draft === true ? 'You can download the suggested codes as a draft. The approved download waits for every decision.' : 'Downloads become available when results are ready.';
+  return `<div class="review-bar"><div><p class="review-tally">${escapeHtml(tallyText(doc))}</p><p class="review-readiness">${escapeHtml(line)}</p></div><button type="button" class="button secondary" data-action="export">${icon('download')}Review and download</button></div>`;
+}
+
+function resultList(doc, layout, ui = {}) {
+  const codes = codesOf(doc);
+  if (!codes.length) return `<p class="results-empty">${escapeHtml(emptyResults(doc, ui))}</p>`;
+  return `<ol class="result-list" aria-label="Suggested CPT codes">${codes.map((code, index) => resultRow(code, index, doc, layout, ui)).join('')}</ol>`;
+}
+
+function resultsSection(doc, layout, ui = {}) {
+  const codes = codesOf(doc);
+  const bar = codes.length || objects(doc.reports).length ? reviewBar(doc) : '';
+  return `<section class="results-section" aria-labelledby="resultsTitle"><div class="results-topline"><h2 id="resultsTitle">Suggested codes</h2>${codes.length ? `<span class="small-badge">${escapeHtml(codes.length)}</span>` : ''}</div>${checksPanel(doc)}${resultList(doc, layout, ui)}${bar}</section>`;
+}
+
+function notSeparatelyCoded(doc) {
+  const items = objects(doc.not_separately_coded).filter(item => text(item.label));
+  if (!items.length) return '';
+  return `<section class="result-notes not-coded"><h3>Not separately coded</h3><ul>${items.map(item => `<li><strong>${escapeHtml(item.label)}</strong>${text(item.reason) ? `<span>${escapeHtml(item.reason)}</span>` : ''}</li>`).join('')}</ul></section>`;
+}
+
+function otherCodes(doc, ui = {}) {
+  const items = objects(doc.other_codes).filter(item => text(item.code));
+  if (!items.length) return '';
+  const key = 'other-codes';
+  return `<details class="other-codes" data-key="${key}"${ui.open?.has?.(key) ? ' open' : ''}><summary>Other codes considered (not suggested)</summary><ul>${items.map(item => `<li><span class="other-code">${escapeHtml(item.code)}</span><span>${escapeHtml(text(item.reason) || 'Not supported by the document.')}</span></li>`).join('')}</ul></details>`;
+}
+
+// The re-check of what is still open (customer_api.recheck_block): offered only when the server says this member can
+// ask for it now; it is asked for once per result and never runs by itself.
+function recheckOffer(doc) {
+  if (doc?.recheck?.can_request !== true) return '';
+  return `<div class="recheck-offer"><button type="button" class="button secondary" data-action="recheck">${escapeHtml(RECHECK_LABEL)}</button><p class="recheck-note">${escapeHtml(RECHECK_NOTE)}</p></div>`;
+}
+
+function notesSection(doc) {
+  const unresolved = strings(doc.unresolved);
+  const limitations = strings(doc.limitations);
+  const recheck = recheckOffer(doc);
+  if (!unresolved.length && !limitations.length && !recheck) return '';
+  return `<section class="result-notes limitations">${unresolved.length || recheck ? `<h3>Still open</h3>${unresolved.length ? `<ul class="unresolved-list">${unresolved.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : ''}${recheck}` : ''}${limitations.length ? `<h3>Limitations</h3><ul class="limitation-list">${limitations.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : ''}</section>`;
+}
+
+function activityLog(doc, ui = {}) {
+  const items = objects(doc.activity).filter(item => text(item.summary));
+  if (!items.length) return '';
+  const key = 'activity';
+  return `<details class="activity-log" data-key="${key}"${ui.open?.has?.(key) ? ' open' : ''}><summary>History</summary><ol>${items.map(item => {
+    const actor = text(item.actor);
+    const by = [actor ? `${actor}${item.actor_kind === 'agent' && !/automated agent/i.test(actor) ? ' (automated agent)' : ''}` : '', formatTimestamp(item.at)].filter(Boolean).join(' · ');
+    return `<li><strong>${escapeHtml(item.summary)}</strong>${by ? `<small>${escapeHtml(by)}</small>` : ''}</li>`;
+  }).join('')}</ol></details>`;
+}
+
+function reviewView(doc, layout, ui = {}) {
+  const codes = codesOf(doc);
+  const download = codes.length || objects(doc.reports).length ? `<button type="button" class="button secondary" data-action="export">${icon('download')}<span>Download</span></button>` : '';
+  return `<section class="${ui.entrance ? 'view-entrance ' : ''}review-view"><a class="back-link" href="#documents">${icon('arrow')}All documents</a>`
+    + `<div class="heading-row review-heading"><div><span class="eyebrow">CODING REVIEW · GASTROENTEROLOGY</span><h1>${escapeHtml(doc.title || 'Untitled document')}</h1><div class="review-meta">${reviewMeta(doc)}</div></div><div class="heading-actions"><button type="button" class="button secondary" data-action="upload">${icon('plus')}<span>New document</span></button>${download}</div></div>`
+    + `<div class="review-layout"><div class="review-column">${progressPanel(doc, ui)}${detailsPanel(doc, ui)}${resultsSection(doc, layout, ui)}${notSeparatelyCoded(doc)}${otherCodes(doc, ui)}${notesSection(doc)}${activityLog(doc, ui)}</div>${sourcePanel(doc, layout)}</div></section>`;
+}
+
+// --- the export dialog ---
+
+function exportOption(kind, fmt, enabled, title, detail) {
+  return `<button type="button" class="export-option" data-export-kind="${kind}" data-export-fmt="${fmt}"${enabled ? '' : ' disabled'}><span class="export-format">${fmt.toUpperCase()}</span><span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(detail)}</small></span>${icon('download')}</button>`;
+}
+
+function reportItem(report) {
+  const url = safeDownloadUrl(report.download_url);
+  const name = text(report.filename) || 'Download';
+  const kind = report.kind === 'approved' ? 'Approved codes' : 'Suggested codes (draft)';
+  const meta = [kind, formatTimestamp(report.generated_at), text(report.generated_by)].filter(Boolean).join(' · ');
+  if (report.current !== true) {
+    return `<li class="report-item stale"><span>${escapeHtml(name)}</span><small>${escapeHtml(`${meta} · No longer matches the saved decisions; create a new download.`)}</small></li>`;
   }
-  if (doc.state === 'provider_not_run') {
-    // the latest predict is the one that did not run: an earlier one that ran says nothing about it
-    const predict = [...stages].reverse().find(stage => stage?.kind === 'predict');
-    cards.push(infoCard('No proposals were<br>requested.', [predict?.error || (state.session?.provider_mode === 'disabled' ? 'Provider requests are disabled in this deployment.' : 'The provider step did not run for this revision.')]));
-  }
-  if (doc.state === 'stopped') {
-    const resume = doc.pipeline?.can_resume ? `<button type="button" class="button primary" data-action="resume">${icon('arrow')}Resume processing</button>` : '';
-    // A stage the system cancelled (it expired in the queue, or a worker stopped mid-stage) is not a member's Stop:
-    // say what was recorded instead of telling the member they stopped it.
-    const cause = [...stages].reverse().find(stage => stage.state === 'cancelled' && stage.error);
-    if (doc.pipeline?.stopped_by_member === false && cause) {
-      const label = lookup(Object.fromEntries(STAGES), cause.kind, 'A processing stage');
-      cards.push(infoCard('Processing did<br>not finish.', [`${label}: ${cause.error}`, 'Nothing was resent automatically.'], resume));
-    } else {
-      cards.push(infoCard('Processing was<br>stopped.', ['Queued stages were cancelled, and no unsent provider request is made unless processing is resumed.'], resume));
-    }
-  }
-  return cards.join('');
+  return `<li class="report-item">${url ? `<a href="${escapeHtml(url)}" download>${escapeHtml(name)}</a>` : `<span>${escapeHtml(name)}</span>`}<small>${escapeHtml(meta)}</small></li>`;
 }
 
-function tabContent(doc, tab, layout) {
-  if (tab === 'checks') return checksPanel(doc);
-  if (tab === 'timeline') return activityPanel(doc);
-  return suggestionsPanel(doc, layout);
-}
-
-function reviewView(doc, layout, tab, entrance) {
-  const selected = proposalsIn(doc.assessment, 'selected');
-  const tabs = doc.assessment ? `<div class="result-tabs" role="tablist" aria-label="Review details">${TABS.map(([id, label]) => `<button type="button" role="tab" id="tab-${id}" data-tab="${id}" aria-controls="resultContent" aria-selected="${tab === id}" tabindex="${tab === id ? 0 : -1}">${label}${id === 'codes' ? ` <span class="tab-count">${selected.length}</span>` : ''}</button>`).join('')}</div><div id="resultContent" role="tabpanel" tabindex="0" aria-labelledby="tab-${tab}">${tabContent(doc, tab, layout)}</div>` : '';
-  const exportButton = doc.assessment ? `<button type="button" class="button primary" data-action="export">${icon('download')}Export</button>` : '';
-  return `<section${entrance ? ' class="view-entrance"' : ''}><a class="back-link" href="#documents">${icon('arrow')}All documents</a><div class="heading-row review-heading"><div><span class="eyebrow">CPT REVIEW · SYNTHETIC</span><h1>${escapeHtml(doc.title || 'Untitled document')}</h1><div class="review-meta">${reviewMeta(doc)}</div></div><div class="heading-actions"><button type="button" class="button secondary" data-action="upload">${icon('plus')}New document</button>${exportButton}</div></div><div class="review-layout">${sourcePanel(doc, layout)}<section class="review-column" aria-label="Coding review"><div class="results-topline"><h2>Coding review</h2><span class="small-badge">CPT only</span></div>${stateCards(doc)}${tabs}</section></div><div class="sample-strip"><span>SYNTHETIC DEMONSTRATION · Not clinical approval, coding advice or billing.</span><a href="#how-it-works">About the workflow ${icon('arrow')}</a></div></section>`;
-}
-
-function exportOption(kind, fmt, title, detail) {
-  return `<button type="button" class="export-option" data-export-kind="${kind}" data-export-fmt="${fmt}"><span class="export-format">${fmt.toUpperCase()}</span><span><strong>${title}</strong><small>${detail}</small></span>${icon('download')}</button>`;
-}
-
-function exportOptions(readiness) {
-  const draft = readiness.draft === true ? `<div class="export-group">${groupLabel('Draft — not reviewed')}${exportOption('draft', 'txt', 'Coding report (TXT)', 'Codes, evidence, checks and open questions')}${exportOption('draft', 'csv', 'Structured CSV', 'One row per code with its review state')}</div>` : '';
-  const reviewed = readiness.reviewed === true ? `<div class="export-group">${groupLabel('Reviewed')}${exportOption('reviewed', 'txt', 'Coding report (TXT)', 'Approved selections, rejections and reviewers')}${exportOption('reviewed', 'csv', 'Structured CSV', 'One row per item, with decisions')}</div>` : '';
-  return draft + reviewed;
+function exportOptions(doc) {
+  const readiness = doc?.readiness || {};
+  const draft = readiness.draft === true;
+  const approved = readiness.approved === true;
+  const blockers = strings(readiness.blockers);
+  const reports = objects(doc?.reports);
+  const draftDetail = 'Every suggested code with its status. Nothing in it is approved.';
+  const approvedDetail = 'Only approved codes, with who approved them and when.';
+  return `<div class="export-group"><div class="evidence-label">Suggested codes — not approved</div>${exportOption('draft', 'txt', draft, 'Suggested codes as text', draftDetail)}${exportOption('draft', 'csv', draft, 'Suggested codes as a spreadsheet (CSV)', draftDetail)}</div>`
+    + `<div class="export-group"><div class="evidence-label">Approved codes</div>${exportOption('approved', 'txt', approved, 'Approved codes as text', approvedDetail)}${exportOption('approved', 'csv', approved, 'Approved codes as a spreadsheet (CSV)', approvedDetail)}${!approved && blockers.length ? `<div class="export-blockers"><p>Not available yet:</p><ul>${blockers.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div>` : ''}</div>`
+    + (reports.length ? `<div class="export-group"><div class="evidence-label">Earlier downloads</div><ul class="report-list">${reports.map(reportItem).join('')}</ul></div>` : '');
 }
 
 // --- browser wiring ------------------------------------------------------------------
 
 class ApiError extends Error {
-  constructor(message, status = 0, details = null) {
+  constructor(message, status = 0, data = null) {
     super(message);
     this.status = status;
-    this.details = details;
+    this.details = data && typeof data === 'object' && data.details && typeof data.details === 'object' ? data.details : null;
   }
 }
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
-function csrfToken() {
+function csrfValue() {
   return readCookie(document.cookie, 'cptstudio_csrf') || $('input[name="csrfmiddlewaretoken"]')?.value || '';
 }
 
@@ -1107,10 +1078,17 @@ function goToLogin() {
   location.assign(`/login/?next=${encodeURIComponent(`/${location.hash}`)}`);
 }
 
+function showUpdateNotice() {
+  state.outdated = true;
+  stopPolling();
+  const notice = $('#updateNotice');
+  if (notice) notice.hidden = false;
+}
+
 async function api(path, { method = 'GET', json, form } = {}) {
-  const headers = { Accept: 'application/json' };
+  const headers = { Accept: 'application/json', [CLIENT_HEADER]: CLIENT_VERSION };
   let body;
-  if (method !== 'GET') headers['X-CSRFToken'] = csrfToken();
+  if (method !== 'GET') headers['X-CSRFToken'] = csrfValue();
   if (json !== undefined) {
     headers['Content-Type'] = 'application/json';
     body = JSON.stringify(json);
@@ -1121,7 +1099,7 @@ async function api(path, { method = 'GET', json, form } = {}) {
   try {
     response = await fetch(path, { method, headers, body, credentials: 'same-origin', cache: 'no-store' });
   } catch {
-    throw new ApiError('The server could not be reached. Check the connection and try again.');
+    throw new ApiError(OFFLINE_TEXT);
   }
   if (response.status === 401 || (response.redirected && new URL(response.url).pathname.startsWith('/login'))) {
     goToLogin();
@@ -1129,11 +1107,12 @@ async function api(path, { method = 'GET', json, form } = {}) {
   }
   const isJson = (response.headers.get('Content-Type') || '').includes('application/json');
   const data = isJson ? await response.json().catch(() => null) : null;
-  if (!response.ok) {
-    const fallback = response.status === 403 ? 'The request was refused. Reload the page and try again.' : response.status === 404 ? 'Not found, or not in your workspace.' : `The request failed (HTTP ${response.status}).`;
-    throw new ApiError(typeof data?.error === 'string' && data.error ? data.error : fallback, response.status, data?.details || null);
+  if (isClientOutdated(response.status, data)) {
+    showUpdateNotice();
+    throw new ApiError(OUTDATED_TEXT, 409, data);
   }
-  if (!data || typeof data !== 'object') throw new ApiError('The server returned an unexpected response.', response.status);
+  if (!response.ok) throw new ApiError(errorText(response.status, data), response.status, data);
+  if (!data || typeof data !== 'object') throw new ApiError('The server answered in a way this page cannot read. Reload the page and try again.', response.status);
   return data;
 }
 
@@ -1198,20 +1177,18 @@ function setCount(selector, value) {
 }
 
 function renderSession(session) {
-  const name = session.workspace?.name || 'Workspace';
+  const name = text(session.workspace?.name) || 'Workspace';
   $('#workspaceName').textContent = name;
-  $('#workspaceSubtitle').textContent = session.workspace?.subtitle || 'Synthetic demonstration workspace';
-  $('#workspaceAvatar').textContent = ([...name.trim()][0] || '').toUpperCase();
-  const label = session.user?.label || session.user?.username || 'Signed in';
-  const initials = session.user?.initials || label.split(/\s+/).filter(Boolean).slice(0, 2).map(word => [...word][0]).join('').toUpperCase();
+  $('#workspaceSubtitle').textContent = 'Synthetic demonstration workspace';
+  $('#workspaceAvatar').textContent = ([...name][0] || '').toUpperCase();
+  const label = text(session.user?.label) || 'Signed in';
+  const initials = text(session.user?.initials) || label.split(/\s+/).filter(Boolean).slice(0, 2).map(word => [...word][0]).join('').toUpperCase();
   $('#profileAvatar').textContent = initials;
   $('#topAvatar').textContent = initials;
   $('#profileName').textContent = label;
   $('#profileRole').textContent = lookup({ owner: 'Owner', reviewer: 'Reviewer', viewer: 'Viewer' }, session.role, 'Member');
-  $('#aboutRelease').textContent = session.release ? `Release ${session.release}.` : '';
   setCount('#documentsCount', session.counts?.documents);
   setCount('#queueCount', session.counts?.queue);
-  $('#specialty').options[0].textContent = categoryName();
 }
 
 async function loadSession() {
@@ -1238,47 +1215,55 @@ function stopPolling() {
   state.poll = { timer: 0, count: 0, errors: 0 };
 }
 
+function stopTicker() {
+  clearTimeout(state.tickTimer);
+  state.tickTimer = 0;
+}
+
 function route() {
   const next = parseRoute(location.hash);
-  const token = ++state.routeToken;
+  const serial = ++state.routeSerial;
   stopPolling();
+  stopTicker();
   if (next.name !== 'doc' || next.id !== state.doc?.id) {
     state.doc = null;
     state.docKey = '';
     state.layout = null;
-    state.currentTab = 'codes';
     state.selectedEvidence = [];
+    state.open = new Set();
+    state.answers = new Map();
+    state.reconnecting = false;
   }
   state.route = next;
   $('#breadcrumbCurrent').textContent = ROUTE_TITLES[next.name];
   setActiveNav(next.name);
   closeNavigation();
   window.scrollTo({ top: 0, behavior: 'instant' });
-  if (next.name === 'doc') return showDocument(next.id, token);
+  if (next.name === 'doc') return showDocument(next.id, serial);
   if (next.name === 'how-it-works') {
     $('#main').innerHTML = howItWorksView();
     return undefined;
   }
-  return showList(next.name, token);
+  return showList(next.name, serial);
 }
 
-async function showList(name, token) {
+async function showList(name, serial) {
   $('#main').innerHTML = name === 'workspace' ? overviewView() : documentsView(name);
-  let encounters;
+  let rows;
   try {
-    ({ encounters } = await api('/api/encounters'));
-    if (!Array.isArray(encounters)) throw new ApiError('The server returned an unexpected document list.');
+    ({ encounters: rows } = await api('/api/encounters'));
+    if (!Array.isArray(rows)) throw new ApiError('The server answered with a document list this page cannot read.');
   } catch (error) {
-    if (token !== state.routeToken) return;
+    if (serial !== state.routeSerial) return;
     $('#documentsTable').innerHTML = `${LIST_HEADER}<p class="empty-state">${escapeHtml(`Documents could not be loaded. ${error.message}`)}</p>`;
     if ($('#listDescription')) $('#listDescription').textContent = 'Documents could not be loaded.';
     if ($('#recentInvite')) $('#recentInvite').innerHTML = '';
     return;
   }
-  if (token !== state.routeToken) return;
-  $('#documentsTable').innerHTML = listBody(name, encounters);
-  if ($('#listDescription')) $('#listDescription').textContent = listDescription(name, encounters);
-  if ($('#recentInvite')) $('#recentInvite').innerHTML = inviteMarkup(encounters);
+  if (serial !== state.routeSerial) return;
+  $('#documentsTable').innerHTML = listBody(name, rows);
+  if ($('#listDescription')) $('#listDescription').textContent = listDescription(name, rows);
+  if ($('#recentInvite')) $('#recentInvite').innerHTML = inviteMarkup(rows);
   applySearch();
 }
 
@@ -1302,26 +1287,33 @@ function applySearch() {
   }
 }
 
-function showDocument(id, token) {
+function showDocument(id, serial) {
   if (!UUID.test(id)) {
     $('#main').innerHTML = messageView('This document is not available.', 'The address does not name a document in this workspace.');
     return undefined;
   }
-  $('#main').innerHTML = '<section class="view-entrance"><p class="empty-state">Loading the review…</p></section>';
-  return loadDocument(id, token, false);
+  $('#main').innerHTML = state.ack?.id === id ? ackView(state.ack) : '<section class="view-entrance"><p class="empty-state">Loading the review…</p></section>';
+  return loadDocument(id, serial, false);
 }
 
-async function loadDocument(id, token, silent) {
+function setReconnecting(on) {
+  state.reconnecting = on;
+  const line = $('.progress-reconnecting');
+  if (line) line.hidden = !(on && shouldPoll(state.doc));
+}
+
+async function loadDocument(id, serial, silent) {
   clearTimeout(state.poll.timer);
   let doc;
   try {
     doc = await api(`/api/encounters/${encodeURIComponent(id)}`);
   } catch (error) {
-    if (token !== state.routeToken) return;
+    if (serial !== state.routeSerial || state.outdated) return;
     if (silent && state.doc) {
-      if (state.doc.pipeline?.busy) {
+      if (shouldPoll(state.doc)) {
         state.poll.errors += 1;
-        schedulePoll(token);
+        setReconnecting(true);
+        schedulePoll(serial);
       } else {
         toast(`The review could not be refreshed. ${error.message}`);
       }
@@ -1332,61 +1324,60 @@ async function loadDocument(id, token, silent) {
       : messageView('The review could not be loaded.', error.message, true);
     return;
   }
-  if (token !== state.routeToken) return;
+  if (serial !== state.routeSerial) return;
   state.poll.errors = 0;
+  state.reconnecting = false;
+  state.clock = clockOffset(doc.progress?.server_time, Date.now());
+  if (state.ack?.id === doc.id && !(doc.progress?.busy === true)) state.ack = null;
   renderDocument(doc, !silent);
-  schedulePoll(token);
+  schedulePoll(serial);
 }
 
-function schedulePoll(token) {
+function schedulePoll(serial) {
   clearTimeout(state.poll.timer);
-  if (!state.doc?.pipeline?.busy) {
+  if (!shouldPoll(state.doc) || state.outdated) {
     state.poll.count = 0;
     return;
   }
   const delay = pollDelay(state.poll.count, state.poll.errors);
   state.poll.count += 1;
   const id = state.doc.id;
-  state.poll.timer = setTimeout(() => loadDocument(id, token, true), delay);
+  state.poll.timer = setTimeout(() => loadDocument(id, serial, true), delay);
 }
 
 async function refreshDocument() {
   if (state.route?.name !== 'doc') return;
   state.poll.count = 0;
   state.poll.errors = 0;
-  await loadDocument(state.route.id, state.routeToken, true);
+  await loadDocument(state.route.id, state.routeSerial, true);
+}
+
+function refreshIfWaiting() {
+  if (state.route?.name === 'doc' && shouldPoll(state.doc) && !document.hidden) refreshDocument();
 }
 
 function focusTarget() {
   const element = document.activeElement;
   if (!element || !$('#main').contains(element)) return null;
+  if (element.id) return { id: element.id };
   if (element.dataset.proposal) return { proposal: element.dataset.proposal };
-  if (element.dataset.tab) return { tab: element.dataset.tab };
-  return element.id ? { id: element.id } : null;
+  return null;
 }
 
 function restoreFocus(target) {
   if (!target) return;
-  if (target.proposal) {
-    const buttons = $$('[data-proposal]').filter(element => element.dataset.proposal === target.proposal);
-    const card = $$('.code-card').find(element => element.id === `card-${target.proposal}`);
-    (buttons[0] || card)?.focus({ preventScroll: true });
-  } else if (target.tab) {
-    $(`#tab-${target.tab}`)?.focus({ preventScroll: true });
-  } else {
-    document.getElementById(target.id)?.focus({ preventScroll: true });
-  }
+  const element = target.id ? document.getElementById(target.id) : document.getElementById(`card-${target.proposal}`);
+  element?.focus({ preventScroll: true });
 }
 
-function renderDocument(doc, fresh) {
+function renderDocument(doc, fresh, force = false) {
   const key = JSON.stringify(doc);
-  if (!fresh && key === state.docKey) return;
+  if (!fresh && !force && key === state.docKey) return;
   const keep = fresh ? null : { source: $('#sourceScroll')?.scrollTop || 0, window: window.scrollY, focus: focusTarget() };
   state.doc = doc;
   state.docKey = key;
   state.layout = documentLayout(doc);
-  if (!doc.assessment) state.currentTab = 'codes';
-  $('#main').innerHTML = reviewView(doc, state.layout, state.currentTab, fresh);
+  $('#main').innerHTML = reviewView(doc, state.layout, uiState({ entrance: fresh }));
   if (keep) {
     if ($('#sourceScroll')) $('#sourceScroll').scrollTop = keep.source;
     window.scrollTo({ top: keep.window, behavior: 'instant' });
@@ -1394,29 +1385,22 @@ function renderDocument(doc, fresh) {
   }
   if (state.selectedEvidence.length) applyHighlight(state.selectedEvidence);
   updatePageNumber();
+  tick();
 }
 
-function selectTab(tab, focus = false) {
-  if (!TABS.some(([id]) => id === tab) || !state.doc?.assessment || !$('#resultContent')) return;
-  state.currentTab = tab;
-  $$('[role="tab"]').forEach(button => {
-    const selected = button.dataset.tab === tab;
-    button.setAttribute('aria-selected', String(selected));
-    button.tabIndex = selected ? 0 : -1;
-  });
-  const panel = $('#resultContent');
-  panel.setAttribute('aria-labelledby', `tab-${tab}`);
-  panel.innerHTML = tabContent(state.doc, tab, state.layout);
-  if (tab === 'codes') markChips(new Set(state.selectedEvidence));
-  if (focus) $(`#tab-${tab}`).focus({ preventScroll: true });
+// Elapsed time on the page: one timer that rewrites only the [data-elapsed] text, while the document is busy.
+function tick() {
+  stopTicker();
+  if (state.route?.name !== 'doc' || state.doc?.progress?.busy !== true) return;
+  const nodes = $$('[data-elapsed][data-since]:not([data-until])');
+  if (!nodes.length) return;
+  const now = Date.now() + state.clock;
+  for (const node of nodes) node.textContent = elapsedText(node.dataset.since, now);
+  state.tickTimer = setTimeout(tick, TICK_MS);
 }
 
 function evidenceKeys(element) {
   return (element.dataset.keys || element.dataset.evidence || '').split(' ').filter(Boolean);
-}
-
-function markChips(wanted) {
-  $$('.evidence-chip[data-evidence]').forEach(chip => chip.classList.toggle('selected', wanted.has(chip.dataset.evidence)));
 }
 
 function applyHighlight(keys) {
@@ -1427,13 +1411,12 @@ function applyHighlight(keys) {
     mark.classList.toggle('selected', selected);
     if (selected && !first) first = mark;
   });
-  markChips(wanted);
+  $$('.why-quote[data-evidence]').forEach(quote => quote.classList.toggle('selected', wanted.has(quote.dataset.evidence)));
   return first;
 }
 
 function highlightEvidence(keys, scroll = true) {
   state.selectedEvidence = keys;
-  if (state.currentTab !== 'codes') selectTab('codes');
   const first = applyHighlight(keys);
   if (!scroll || !first) return;
   first.scrollIntoView({ behavior: reducedMotion() ? 'instant' : 'smooth', block: 'center' });
@@ -1452,39 +1435,55 @@ function updatePageNumber() {
   label.textContent = `Page ${current.dataset.page} of ${label.dataset.total}`;
 }
 
-function findProposal(id) {
-  return (state.doc?.assessment?.proposals || []).find(proposal => proposal.id === id) || null;
+function findCode(id) {
+  return codesOf(state.doc).find(code => code.id === id) || null;
+}
+
+function setModifierField(code, action) {
+  const options = action === 'approve' ? reviewModifierOptions(code) : [];
+  const field = $('#reviewModifierField');
+  const select = $('#reviewModifier');
+  select.replaceChildren(...options.map(([value, label]) => {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = label;
+    return option;
+  }));
+  select.value = '';
+  field.hidden = !options.length;
+  const review = code?.modifier_review;
+  $('#reviewModifierHelp').textContent = options.length ? [text(review?.text), strings(review?.sources).length ? `Source: ${strings(review.sources).join('; ')}.` : ''].filter(Boolean).join(' ') : '';
 }
 
 async function openReview(proposalId, action) {
-  const proposal = findProposal(proposalId);
-  if (!proposal || !REVIEW_COPY[action]) return;
+  const code = findCode(proposalId);
+  if (!code || !REVIEW_COPY[action]) return;
   if (!state.session && !(await loadSession())) {
     toast('Your identity could not be confirmed, so no decision can be recorded. Reload the page and try again.');
     return;
   }
   const agent = isAgent();
   const copy = REVIEW_COPY[action];
-  const revision = state.doc.revision?.number;
-  const text = {
-    approve: agent ? `This approval is recorded as an agent-executed synthetic review, with the agent's identity and the time, against revision ${revision} of this document. A changed source invalidates it.` : `Your approval is recorded with your identity and the time, against revision ${revision} of this document. A changed source invalidates it.`,
-    reject: 'A rejected code is excluded from approved results. Add a note so the next reviewer knows why.',
-    reinstate: 'This code was excluded by a documentation check. Reinstating records your judgement and makes it reviewable; it does not approve it.',
-    confirm: 'A documentation check read this service as not performed on the date of service. Confirming records your judgement that the exclusion is right. The reviewed report waits until each such code is confirmed or reinstated.',
+  const revision = Number.isInteger(state.doc.document?.revision) ? state.doc.document.revision : 1;
+  const body = {
+    approve: agent ? `This approval is recorded as an agent-executed synthetic review, with the agent's identity and the time, against revision ${revision} of this document. A changed document invalidates it.` : `Your approval is recorded with your identity and the time, against revision ${revision} of this document. A changed document invalidates it.`,
+    reject: 'A rejected code is excluded from the approved download. Add a note so the next reviewer knows why.',
+    reinstate: 'This code was excluded when the document was checked. Reinstating records your judgement and makes it reviewable; it does not approve it.',
+    confirm: 'This code was excluded when the document was checked. Confirming records your judgement that the exclusion is right.',
   }[action];
-  const notVerified = (proposal.checks || []).filter(check => check.status === 'not_verified').map(check => check.label);
   state.review = { proposalId, action };
   $('#reviewEyebrow').textContent = copy.eyebrow;
   $('#reviewTitle').textContent = copy.title;
-  $('#reviewCopy').textContent = text;
-  $('#reviewCode').textContent = proposal.code;
-  $('#reviewFamily').textContent = proposal.family_label || proposal.family || '';
-  $('#reviewDescriptor').textContent = proposal.descriptor?.label || 'Description withheld.';
+  $('#reviewCopy').textContent = body;
+  $('#reviewCode').textContent = code.code;
+  $('#reviewStatus').textContent = codeStatus(code).label;
+  $('#reviewSummary').textContent = text(code.summary);
   $('#reviewAckLabel').hidden = action !== 'approve';
   $('#reviewAcknowledgement').checked = false;
   $('#reviewAckText').textContent = attestationText(state.session);
+  setModifierField(code, action);
   $('#reviewNote').value = '';
-  $('#reviewNotice').textContent = notVerified.length ? `Still not verified for this code: ${notVerified.join('; ')}.` : 'A review decision records a judgement; it is not billing advice.';
+  $('#reviewNotice').textContent = 'A review decision records a judgement; it is not billing advice.';
   $('#saveReviewLabel').textContent = copy.button;
   $('#saveReview').disabled = action === 'approve';
   hideError('reviewError');
@@ -1516,16 +1515,21 @@ function submitReview(event) {
   const review = state.review;
   if (!review || !state.doc) return undefined;
   if (review.action === 'approve' && !$('#reviewAcknowledgement').checked) {
-    showError('reviewError', 'Confirm that you reviewed the source evidence for this code.');
+    showError('reviewError', 'Confirm that you reviewed the document for this code.');
     return undefined;
   }
   return guarded('review', async () => {
     const button = $('#saveReview');
     setBusy(button, true);
     hideError('reviewError');
+    const body = { proposal_id: review.proposalId, action: review.action, note: $('#reviewNote').value.trim(), acknowledgement: review.action === 'approve' ? $('#reviewAckText').textContent : '' };
+    if (review.action === 'approve' && !$('#reviewModifierField').hidden) {
+      const chosen = $('#reviewModifier').value;
+      body.modifiers = MODIFIER_CHOICES.includes(chosen) ? [chosen] : [];
+    }
     try {
-      await postDecision({ proposal_id: review.proposalId, action: review.action, note: $('#reviewNote').value.trim(), acknowledgement: review.action === 'approve' ? $('#reviewAckText').textContent : '' });
-      const code = findProposal(review.proposalId)?.code || 'the code';
+      await postDecision(body);
+      const code = findCode(review.proposalId)?.code || 'the code';
       closeDialog('reviewDialog');
       await afterChange({ approve: `Approval recorded for ${code}.`, reject: `Rejection recorded for ${code}.`, reinstate: `${code} reinstated for review.`, confirm: `Exclusion of ${code} confirmed.` }[review.action]);
     } catch (error) {
@@ -1541,7 +1545,7 @@ function revokeDecision(proposalId, button) {
     setBusy(button, true);
     try {
       await postDecision({ proposal_id: proposalId, action: 'revoke', note: '', acknowledgement: '' });
-      await afterChange(`Decision undone for ${findProposal(proposalId)?.code || 'the code'}.`);
+      await afterChange(`Decision undone for ${findCode(proposalId)?.code || 'the code'}.`);
     } catch (error) {
       toast(error.message);
       setBusy(button, false);
@@ -1554,13 +1558,149 @@ function handleDecision(action, proposalId, button) {
   return openReview(proposalId, action);
 }
 
+// --- details: every answer is a selection until the one save sends them all ---
+
+function findDetail(id) {
+  return detailsOf(state.doc).find(row => row.id === id) || null;
+}
+
+function syncDetailRow(id) {
+  const row = $$('.detail-row').find(element => element.dataset.detail === id);
+  if (!row) return;
+  const value = state.answers.get(id)?.value || '';
+  $$('[data-detail-choice], [data-action="use-document-date"], [data-action="clear-date"]', row).forEach(button => {
+    const own = button.dataset.detailChoice || (button.dataset.action === 'clear-date' ? CLEAR_DATE : USE_DOCUMENT);
+    button.setAttribute('aria-pressed', String(own === value));
+  });
+  $$('input[type="radio"]', row).forEach(input => { input.checked = input.value === value; });
+  // the date field keeps only a date typed as the answer: choosing anything else empties it
+  const date = $('input[data-detail-input]', row);
+  if (date && date.value && date.value !== value) date.value = '';
+}
+
+function chooseDetail(id, value) {
+  const row = findDetail(id);
+  if (!answerable(row)) return;
+  if (state.answers.get(id)?.value === value) state.answers.delete(id);
+  else state.answers.set(id, { fact: row.fact, value });
+  hideError('detailsError');
+  syncDetailRow(id);
+}
+
+function enterDetailDate(input) {
+  const row = findDetail(input.dataset.detail);
+  if (!answerable(row)) return;
+  if (parseIsoDate(input.value)) state.answers.set(row.id, { fact: row.fact, value: input.value });
+  else if (parseIsoDate(state.answers.get(row.id)?.value || '')) state.answers.delete(row.id);
+  hideError('detailsError');
+  syncDetailRow(row.id);
+}
+
+function detailAnswers(doc) {
+  return detailsOf(doc).filter(row => answerable(row) && state.answers.has(row.id)).map(row => ({ id: row.id, fact: row.fact, value: state.answers.get(row.id).value }));
+}
+
+function saveDetails(button) {
+  if (!state.doc) return undefined;
+  const answers = detailAnswers(state.doc);
+  if (!answers.length) {
+    showError('detailsError', 'Choose an answer for at least one detail, then save.');
+    return undefined;
+  }
+  return guarded('details', async () => {
+    setBusy(button, true);
+    hideError('detailsError');
+    try {
+      const saved = await api(`/api/encounters/${encodeURIComponent(state.doc.id)}/details`, { method: 'POST', json: { answers } });
+      for (const answer of answers) state.answers.delete(answer.id);
+      // an answer recomputes the results (completion repair 2026-11-06, U11): the page shows the progress, then them
+      const done = answers.length === 1 ? 'Answer saved.' : `${answers.length} answers saved.`;
+      await afterChange(saved?.reassessing === true ? `${done} The results are being updated.` : done);
+    } catch (error) {
+      showError('detailsError', error.message);
+      setBusy(button, false);
+    }
+  });
+}
+
+function revokeDetail(button) {
+  if (!state.doc) return undefined;
+  const answerId = button.dataset.answer;
+  return guarded(`revoke-detail:${answerId}`, async () => {
+    setBusy(button, true);
+    try {
+      await api(`/api/encounters/${encodeURIComponent(state.doc.id)}/details/${encodeURIComponent(answerId)}/revoke`, { method: 'POST', json: {} });
+      await afterChange('The answer was withdrawn. You can answer again.');
+    } catch (error) {
+      toast(error.message);
+      setBusy(button, false);
+    }
+  });
+}
+
+// --- addendum: the physician's own documentation, as a new revision ---
+
+function openAddendum(detailId) {
+  const row = findDetail(detailId);
+  state.addendum = { detailId: row?.id || null };
+  $('#addendumQuestion').textContent = row ? text(row.prompt) : '';
+  $('#addendumQuestion').hidden = !row;
+  $('#addendumText').value = '';
+  $('#addendumAttestation').checked = false;
+  hideError('addendumError');
+  openDialog('addendumDialog');
+}
+
+function submitAddendum(event) {
+  event.preventDefault();
+  if (!state.doc || !state.addendum) return undefined;
+  const body = $('#addendumText').value;
+  if (!body.trim()) {
+    showError('addendumError', 'Write the addendum text.');
+    return undefined;
+  }
+  if (codePoints(body.trim()) > MAX_ADDENDUM_CHARS) {
+    showError('addendumError', 'An addendum can be at most 20,000 characters.');
+    return undefined;
+  }
+  if (!$('#addendumAttestation').checked) {
+    showError('addendumError', 'Confirm that the addendum is synthetic and contains no real patient information.');
+    return undefined;
+  }
+  return guarded('addendum', async () => {
+    const button = $('#saveAddendum');
+    setBusy(button, true);
+    hideError('addendumError');
+    try {
+      await api(`/api/encounters/${encodeURIComponent(state.doc.id)}/addenda`, { method: 'POST', json: { text: body, clarification_id: state.addendum.detailId, synthetic_attestation: 'yes' } });
+      closeDialog('addendumDialog');
+      await afterChange('Addendum added as a new revision. Processing has started.');
+    } catch (error) {
+      showError('addendumError', error.message);
+    } finally {
+      setBusy(button, false);
+    }
+  });
+}
+
+// --- upload ---
+
+function randomBytes(count) {
+  return crypto.getRandomValues(new Uint8Array(count));
+}
+
+// Any change to what is being uploaded makes it a new attempt with a new key; a retry of the same attempt keeps it.
+function forgetAttemptKey() {
+  state.upload.key = '';
+}
+
 function resetUpload() {
-  state.upload = { file: null, paste: false, busy: false };
+  state.upload = { file: null, paste: false, busy: false, key: '' };
   $('#uploadForm').reset();
   setUploadFile(null);
   setPasteMode(false);
   hideError('uploadError');
-  $('#specialty').options[0].textContent = categoryName();
+  setUploadStatus('');
 }
 
 function openUpload(file) {
@@ -1570,8 +1710,15 @@ function openUpload(file) {
   return openDialog('uploadDialog');
 }
 
+function setUploadStatus(message) {
+  const element = $('#uploadStatus');
+  element.textContent = message;
+  element.hidden = !message;
+}
+
 function setUploadFile(file) {
   hideError('uploadError');
+  forgetAttemptKey();
   let accepted = file || null;
   if (accepted && !UPLOAD_NAME.test(accepted.name)) {
     showError('uploadError', 'Choose a PDF, DOCX or TXT file.');
@@ -1591,6 +1738,7 @@ function setUploadFile(file) {
 
 function setPasteMode(paste) {
   state.upload.paste = paste;
+  forgetAttemptKey();
   $('#fileFields').hidden = paste;
   $('#pasteField').hidden = !paste;
   $('#pasteToggle').textContent = paste ? 'Upload a file instead' : 'Paste text instead';
@@ -1598,29 +1746,30 @@ function setPasteMode(paste) {
   hideError('uploadError');
 }
 
-function uploadForm() {
+// The multipart body of one upload attempt, or the sentence that says what is missing.
+function uploadForm(fields, key) {
   const form = new FormData();
-  if (state.upload.paste) {
-    const text = $('#pasteText').value;
-    if (!text.trim()) return 'Paste the clinical text, or switch back to uploading a file.';
-    if (codePoints(text) > MAX_PASTE_CHARS) return 'The pasted text is longer than 400,000 characters. Upload it as a file instead.';
-    form.append('text', text);
+  if (fields.paste) {
+    if (!fields.text.trim()) return 'Paste the clinical text, or switch back to uploading a file.';
+    if (codePoints(fields.text) > MAX_PASTE_CHARS) return 'The pasted text is longer than 400,000 characters. Upload it as a file instead.';
+    form.append('text', fields.text);
   } else {
-    if (!state.upload.file) return 'Choose a PDF, DOCX or TXT document, or paste the text instead.';
-    form.append('file', state.upload.file, state.upload.file.name);
+    if (!fields.file) return 'Choose a PDF, DOCX or TXT document, or paste the text instead.';
+    form.append('file', fields.file, fields.file.name);
   }
-  const serviceDate = $('#serviceDate').value;
-  if (serviceDate && !parseIsoDate(serviceDate)) return 'Enter the service date as a valid date, or leave it blank.';
-  if (!$('#syntheticAttestation').checked) return 'Confirm that the document is synthetic and contains no real patient information.';
-  if (serviceDate) form.append('service_date', serviceDate);
+  if (fields.serviceDate && !parseIsoDate(fields.serviceDate)) return 'Enter the service date as a valid date, or leave it blank.';
+  if (!fields.attested) return 'Confirm that the document is synthetic and contains no real patient information.';
+  if (fields.serviceDate) form.append('service_date', fields.serviceDate);
   form.append('synthetic_attestation', 'yes');
+  form.append('client_key', key);
   return form;
 }
 
 async function submitUpload(event) {
   event.preventDefault();
   if (state.upload.busy) return;
-  const form = uploadForm();
+  if (!state.upload.key) state.upload.key = newClientKey(randomBytes);
+  const form = uploadForm({ paste: state.upload.paste, text: $('#pasteText').value, file: state.upload.file, serviceDate: $('#serviceDate').value, attested: $('#syntheticAttestation').checked }, state.upload.key);
   if (typeof form === 'string') {
     showError('uploadError', form);
     return;
@@ -1629,15 +1778,18 @@ async function submitUpload(event) {
   state.upload.busy = true;
   setBusy(button, true);
   hideError('uploadError');
+  setUploadStatus('Uploading your document… Keep this page open until the upload finishes.');
   try {
     const created = await api('/api/encounters', { method: 'POST', form });
-    if (!UUID.test(String(created.id || ''))) throw new ApiError('The server did not return a document identifier.');
+    if (!UUID.test(String(created.id || ''))) throw new ApiError('The server did not confirm the upload. Try again; the same upload is never added twice.');
     state.upload.busy = false;
+    state.ack = { id: created.id, at: Date.now() };
     closeDialog('uploadDialog');
-    toast('Document received. Processing has started.');
     loadSession();
-    location.hash = `doc/${created.id}`;
+    if (location.hash === `#doc/${created.id}`) route();
+    else location.hash = `doc/${created.id}`;
   } catch (error) {
+    setUploadStatus('');
     showError('uploadError', error.message);
   } finally {
     state.upload.busy = false;
@@ -1645,88 +1797,7 @@ async function submitUpload(event) {
   }
 }
 
-function openContext() {
-  if (!state.doc) return;
-  const values = state.doc.context?.user_values || {};
-  $('#contextServiceDate').value = parseIsoDate(values.service_date) ? values.service_date : '';
-  $('#contextSetting').value = lookup(SETTING_LABELS, values.setting, null) ? values.setting : '';
-  $('#contextBilling').value = lookup(BILLING_LABELS, values.billing_context, null) ? values.billing_context : '';
-  hideError('contextError');
-  openDialog('contextDialog');
-}
-
-function submitContext(event) {
-  event.preventDefault();
-  if (!state.doc) return undefined;
-  const body = { service_date: $('#contextServiceDate').value, setting: $('#contextSetting').value, billing_context: $('#contextBilling').value };
-  if (body.service_date && !parseIsoDate(body.service_date)) {
-    showError('contextError', 'Enter the service date as a valid date, or leave it blank.');
-    return undefined;
-  }
-  const current = state.doc.context?.user_values || {};
-  if (Object.keys(body).every(name => body[name] === (current[name] || ''))) {
-    closeDialog('contextDialog');
-    toast('No context change to save.');
-    return undefined;
-  }
-  return guarded('context', async () => {
-    const button = $('#saveContext');
-    setBusy(button, true);
-    hideError('contextError');
-    try {
-      await api(`/api/encounters/${encodeURIComponent(state.doc.id)}/context`, { method: 'POST', json: body });
-      closeDialog('contextDialog');
-      await afterChange('Context saved. The codes are being re-checked.');
-    } catch (error) {
-      showError('contextError', error.message);
-    } finally {
-      setBusy(button, false);
-    }
-  });
-}
-
-function openAddendum(clarificationId) {
-  const clarification = (state.doc?.clarifications || []).find(item => item.id === clarificationId) || null;
-  state.addendum = { clarificationId: clarification?.id || null };
-  $('#addendumQuestion').textContent = clarification?.question || '';
-  $('#addendumQuestion').hidden = !clarification;
-  $('#addendumText').value = '';
-  $('#addendumAttestation').checked = false;
-  hideError('addendumError');
-  openDialog('addendumDialog');
-}
-
-function submitAddendum(event) {
-  event.preventDefault();
-  if (!state.doc || !state.addendum) return undefined;
-  const text = $('#addendumText').value;
-  if (!text.trim()) {
-    showError('addendumError', 'Write the addendum text.');
-    return undefined;
-  }
-  if (codePoints(text.trim()) > MAX_ADDENDUM_CHARS) {
-    showError('addendumError', 'An addendum can be at most 20,000 characters.');
-    return undefined;
-  }
-  if (!$('#addendumAttestation').checked) {
-    showError('addendumError', 'Confirm that the addendum is synthetic and contains no real patient information.');
-    return undefined;
-  }
-  return guarded('addendum', async () => {
-    const button = $('#saveAddendum');
-    setBusy(button, true);
-    hideError('addendumError');
-    try {
-      await api(`/api/encounters/${encodeURIComponent(state.doc.id)}/addenda`, { method: 'POST', json: { text, clarification_id: state.addendum.clarificationId, synthetic_attestation: 'yes' } });
-      closeDialog('addendumDialog');
-      await afterChange('Addendum added as a new revision. Processing has started.');
-    } catch (error) {
-      showError('addendumError', error.message);
-    } finally {
-      setBusy(button, false);
-    }
-  });
-}
+// --- stop, resume, export ---
 
 function stopProcessing(button) {
   if (!state.doc) return undefined;
@@ -1734,7 +1805,21 @@ function stopProcessing(button) {
     setBusy(button, true);
     try {
       await api(`/api/encounters/${encodeURIComponent(state.doc.id)}/stop`, { method: 'POST', json: {} });
-      await afterChange('Stop requested. Queued stages are being cancelled.');
+      await afterChange('Stopping. Steps that have not started will not run.');
+    } catch (error) {
+      toast(error.message);
+      setBusy(button, false);
+    }
+  });
+}
+
+function requestRecheck(button) {
+  if (!state.doc) return undefined;
+  return guarded('recheck', async () => {
+    setBusy(button, true);
+    try {
+      await api(`/api/encounters/${encodeURIComponent(state.doc.id)}/second-review`, { method: 'POST', json: {} });
+      await afterChange('Asked. The document review looks once more at what is still open.');
     } catch (error) {
       toast(error.message);
       setBusy(button, false);
@@ -1756,47 +1841,12 @@ function resumeProcessing(button) {
   });
 }
 
-function requestSecondReview(button) {
-  if (!state.doc) return undefined;
-  return guarded('second-review', async () => {
-    setBusy(button, true);
-    try {
-      await api(`/api/encounters/${encodeURIComponent(state.doc.id)}/second-review`, { method: 'POST', json: {} });
-      await afterChange('Second review requested.');
-    } catch (error) {
-      toast(error.message);
-      setBusy(button, false);
-    }
-  });
-}
-
-function submitReconcile(form) {
-  if (!state.doc) return undefined;
-  const note = $('#reconcileNote').value.trim();
-  if (codePoints(note) < MIN_RECONCILE_CHARS) {
-    showError('reconcileError', `Describe how the unknown outcome was reconciled (at least ${MIN_RECONCILE_CHARS} characters).`);
-    return undefined;
-  }
-  return guarded('reconcile', async () => {
-    const button = form.querySelector('button[type="submit"]');
-    setBusy(button, true);
-    hideError('reconcileError');
-    try {
-      await api(`/api/encounters/${encodeURIComponent(state.doc.id)}/reconcile`, { method: 'POST', json: { provider_run_id: form.dataset.run, note } });
-      await afterChange('Reconciliation recorded.');
-    } catch (error) {
-      showError('reconcileError', error.message);
-      setBusy(button, false);
-    }
-  });
-}
-
 function openExport() {
   if (!state.doc) return;
   const readiness = state.doc.readiness || {};
-  $('#exportStatus').classList.toggle('reviewed', readiness.reviewed === true);
+  $('#exportStatus').classList.toggle('reviewed', readiness.approved === true);
   $('#exportStatus').textContent = exportStatusText(state.doc);
-  $('#exportOptions').innerHTML = exportOptions(readiness);
+  $('#exportOptions').innerHTML = exportOptions(state.doc);
   hideError('exportError');
   openDialog('exportDialog');
 }
@@ -1815,20 +1865,21 @@ function generateReport(kind, fmt) {
   if (!state.doc) return undefined;
   return guarded('export', async () => {
     const options = $$('#exportOptions .export-option');
-    options.forEach(option => setBusy(option, true));
+    const enabled = options.filter(option => !option.disabled);
+    enabled.forEach(option => setBusy(option, true));
     hideError('exportError');
     try {
       const report = await api(`/api/encounters/${encodeURIComponent(state.doc.id)}/reports`, { method: 'POST', json: { kind, fmt } });
       const url = safeDownloadUrl(report.download_url);
-      if (!url) throw new ApiError('The server returned an unexpected download address, so nothing was downloaded.');
+      if (!url) throw new ApiError('The download could not be started. Try again.');
       startDownload(url, report.filename);
-      $('#exportStatus').textContent = `${exportStatusText(state.doc)} Downloading ${report.filename || 'the report'}.`;
+      $('#exportStatus').textContent = `${exportStatusText(state.doc)} Downloading ${text(report.filename) || 'the file'}.`;
       refreshDocument();
     } catch (error) {
-      const blockers = Array.isArray(error.details?.blockers) ? error.details.blockers.filter(Boolean) : [];
-      showError('exportError', blockers.length ? `${error.message} ${blockers.join('; ')}.` : error.message);
+      const blockers = strings(error.details?.blockers);
+      showError('exportError', blockers.length ? `${error.message} ${blockers.join(' ')}` : error.message);
     } finally {
-      options.forEach(option => setBusy(option, false));
+      enabled.forEach(option => setBusy(option, false));
     }
   });
 }
@@ -1865,14 +1916,14 @@ function onClick(event) {
     highlightEvidence(evidenceKeys(evidence));
     return;
   }
-  const tab = target.closest('[data-tab]');
-  if (tab) {
-    selectTab(tab.dataset.tab, true);
-    return;
-  }
   const decision = target.closest('[data-decision]');
   if (decision) {
     handleDecision(decision.dataset.decision, decision.dataset.proposal, decision);
+    return;
+  }
+  const choice = target.closest('[data-detail-choice]');
+  if (choice) {
+    chooseDetail(choice.dataset.detail, choice.dataset.detailChoice);
     return;
   }
   const report = target.closest('[data-export-kind]');
@@ -1886,29 +1937,47 @@ function onClick(event) {
     upload: () => openUpload(),
     about: () => openDialog('aboutDialog'),
     export: openExport,
-    'edit-context': openContext,
-    addendum: () => openAddendum(action.dataset.clarification),
+    addendum: () => openAddendum(action.dataset.detail),
+    'use-document-date': () => chooseDetail(action.dataset.detail, USE_DOCUMENT),
+    'clear-date': () => chooseDetail(action.dataset.detail, CLEAR_DATE),
+    'save-details': () => saveDetails(action),
+    'revoke-detail': () => revokeDetail(action),
     stop: () => stopProcessing(action),
     resume: () => resumeProcessing(action),
-    'second-review': () => requestSecondReview(action),
+    recheck: () => requestRecheck(action),
+    reload: () => location.reload(),
     retry: route,
   })[action.dataset.action]?.();
 }
 
+function onChange(event) {
+  const input = event.target;
+  if (input.matches?.('.detail-row input[type="radio"]')) chooseDetail(input.dataset.detail, input.value);
+  else if (input.matches?.('input[data-detail-input]')) enterDetailDate(input);
+}
+
+function onInput(event) {
+  const input = event.target;
+  if (input.id === 'documentSearch') applySearch();
+  else if (input.matches?.('input[data-detail-input]')) enterDetailDate(input);
+  else if (['pasteText', 'serviceDate'].includes(input.id)) forgetAttemptKey();
+}
+
+// The open "Why this code?" and other disclosures survive a refresh of the page's data.
+function onToggle(event) {
+  const element = event.target;
+  if (!(element instanceof HTMLDetailsElement) || !element.dataset.key) return;
+  if (element.open) state.open.add(element.dataset.key);
+  else state.open.delete(element.dataset.key);
+}
+
 function onKeydown(event) {
   if (event.key === 'Escape') closeNavigation();
-  if (!event.target.matches('[role="tab"]') || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-  event.preventDefault();
-  const tabs = $$('[role="tab"]');
-  const current = tabs.indexOf(event.target);
-  const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (current + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
-  selectTab(tabs[next].dataset.tab, true);
 }
 
 function bindDialogs() {
   $('#uploadForm').addEventListener('submit', submitUpload);
   $('#reviewForm').addEventListener('submit', submitReview);
-  $('#contextForm').addEventListener('submit', submitContext);
   $('#addendumForm').addEventListener('submit', submitAddendum);
   $('#uploadFile').addEventListener('change', event => setUploadFile(event.target.files?.[0]));
   $('#clearFile').addEventListener('click', () => setUploadFile(null));
@@ -1943,13 +2012,10 @@ function bindDragAndDrop() {
 
 function boot() {
   document.addEventListener('click', onClick);
+  document.addEventListener('change', onChange);
+  document.addEventListener('input', onInput);
   document.addEventListener('keydown', onKeydown);
-  document.addEventListener('input', event => { if (event.target.id === 'documentSearch') applySearch(); });
-  document.addEventListener('submit', event => {
-    if (event.target.id !== 'reconcileForm') return;
-    event.preventDefault();
-    submitReconcile(event.target);
-  });
+  document.addEventListener('toggle', onToggle, true);
   let pageFrame = 0;
   document.addEventListener('scroll', event => {
     if (event.target.id !== 'sourceScroll' || pageFrame) return;
@@ -1967,19 +2033,24 @@ function boot() {
   });
   $('#sidebarBackdrop').addEventListener('click', closeNavigation);
   window.addEventListener('hashchange', route);
+  window.addEventListener('online', () => refreshIfWaiting());
+  window.addEventListener('offline', () => { if (shouldPoll(state.doc)) setReconnecting(true); });
+  document.addEventListener('visibilitychange', refreshIfWaiting);
   window.matchMedia('(max-width:760px)').addEventListener('change', closeNavigation);
   loadSession().then(route);
 }
 
 if (typeof module === 'object' && module.exports) {
   module.exports = {
-    escapeHtml, lookup, parseIsoDate, formatDate, formatTimestamp, readCookie, safeDownloadUrl, pollDelay, parseRoute,
-    passagesLabel, codeUnitOffsets, mergeSpans, pageRanges, paragraphRanges, paragraphPieces, layoutDocument,
-    factValue, metaFact, exportStatusText, documentLayout, reviewView, documentRow, listBody, listDescription, listedDateEvidence,
-    inviteMarkup, overviewView, documentsView, howItWorksView, exportOptions, state, QUEUE_STATES, decisionLine,
-    hasAgentDecision, candidateDecision, ACKNOWLEDGEMENTS, emptySelectionCopy, attestationText,
-    codingBanner, documentedServices, evidenceChips, secondReviewUnread, inQueue, candidateGroups, serviceDateChip,
-    serviceDateMeta,
+    escapeHtml, lookup, parseIsoDate, formatDate, formatTimestamp, readCookie, safeDownloadUrl, safeOriginalUrl, pollDelay,
+    parseRoute, isClientOutdated, errorText, newClientKey, durationText, clockOffset, elapsedText, codeUnitOffsets, mergeSpans,
+    pageRanges, paragraphRanges, paragraphPieces, layoutDocument, progressPhase, shouldPoll, codeStatus, rowSubLabel, unitsLabel,
+    modifierLabel, reviewModifierOptions, hasAgentDecision, attestationText, tallyText, exportStatusText, serviceDateText,
+    documentRow, listBody, listDescription, inviteMarkup, overviewView, documentsView, howItWorksView, inQueue, uploadAck, ackView,
+    documentLayout, sourcePanel, reviewMeta, progressPanel, checksPanel, detailsPanel, detailRow, questionPassages, earlierAnswers, detailAnswers, answerable, resultRow, resultList,
+    resultsSection, whyThisCode, decisionLine, reviewBar, notSeparatelyCoded, otherCodes, notesSection, recheckOffer, activityLog, reviewView,
+    exportOptions, uploadForm, state, ACKNOWLEDGEMENTS, AGENT_REVIEW, OUTDATED_TEXT, CLIENT_HEADER, CLIENT_VERSION, QUEUE_STATES, RECHECK_LABEL, RECHECK_NOTE, QUEUED_AFTER_DONE_TITLE,
+    STEP_KEYS, CHECK_KEYS, MODIFIER_CHOICES,
   };
 }
 if (typeof document !== 'undefined') boot();

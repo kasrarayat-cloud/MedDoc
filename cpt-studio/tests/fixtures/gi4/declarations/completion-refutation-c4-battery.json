@@ -1,0 +1,29 @@
+{
+ "about": "Completion repair, refutation cycle 4 (2026-11-06): the H4 battery register rows the cycle-4 repair moves back, each from where builder Q1 left it (cptc-q1-admission.json) to the installed release's own reading. The observed-only arm of the removal \"not performed\" exclusion is abandoned under the two-cycle rule (refuted in cycles 3 and 4: a removal stated in words no list holds, or inside the failure's own passage, was excluded as not performed and released the base code READY), so a failed or still-to-come removal beside a lesion only observed is held again, with its question, and holds its base code. Measured on the cycle-4 repair with ops.gi4.battery.run_row; no violation. HARNESS.md \"Refutation of the integrated diff, cycle 4\".",
+ "battery": [
+  [
+   "R8 D1 N1 hot snare polypectomy failed",
+   "45378",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D1 N1 hot snare polypectomy failed",
+   "45385",
+   "excluded/excluded",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D9 release-1 to be removed tomorrow",
+   "45378",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 D9 release-1 to be removed tomorrow",
+   "45385",
+   "excluded/excluded",
+   "selected/needs_clarification"
+  ]
+ ]
+}

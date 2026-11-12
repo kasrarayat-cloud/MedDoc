@@ -14,6 +14,7 @@ import io
 import json
 import os
 import shutil
+import socket
 import stat
 import subprocess
 import sys
@@ -33,13 +34,70 @@ REVISION = 'a' * 40
 OTHER = 'b' * 40
 
 
+# --- the host guard: no installer test reaches Docker, sudo, nginx or a live port ------------------------------------
+# Every module's setUpModule starts it and its tearDownModule stops it, failing the run when a test tried. The installer
+# runs on the live host, and a function newly reading the host through a path a test did not replace would otherwise run
+# the real command (blue/green made replace_services read the vhost and the containers).
+_REAL_SUBPROCESS_RUN = subprocess.run
+_REAL_CREATE_CONNECTION = socket.create_connection
+HOST_COMMANDS = ('docker', 'sudo', 'nginx', 'systemctl', 'certbot')
+# The host's live ports, as literals (the guard must not depend on the installer it guards): nginx, the database,
+# both web ports, and the disposable test databases.
+SERVICE_PORTS = frozenset({80, 443, 55451, 9150, 9151, 55452, 55461})
+HOST_GUARD_ATTEMPTS = []
+
+
+def _guarded_run(argv, *args, **kwargs):
+    words = list(argv) if isinstance(argv, (list, tuple)) else [argv]
+    if words and Path(str(words[0])).name in HOST_COMMANDS:
+        HOST_GUARD_ATTEMPTS.append(' '.join(map(str, words))[:160])
+        raise AssertionError(f'a test tried to run {Path(str(words[0])).name} on this host')
+    return _REAL_SUBPROCESS_RUN(argv, *args, **kwargs)
+
+
+def _guarded_connect(address, *args, **kwargs):
+    host, port = address[0], address[1]
+    if host not in ('127.0.0.1', '::1', 'localhost') or port in SERVICE_PORTS:
+        HOST_GUARD_ATTEMPTS.append(f'connect {host}:{port}')
+        raise AssertionError(f'a test tried to connect to {host}:{port}')
+    return _REAL_CREATE_CONNECTION(address, *args, **kwargs)
+
+
+_HOST_GUARDS = []
+
+
+def guard_host():
+    patches = [mock.patch.object(subprocess, 'run', _guarded_run),
+               mock.patch.object(socket, 'create_connection', _guarded_connect)]
+    for patcher in patches:
+        patcher.start()
+    _HOST_GUARDS.append(patches)
+
+
+def release_host():
+    for patcher in reversed(_HOST_GUARDS.pop()):
+        patcher.stop()
+    if HOST_GUARD_ATTEMPTS:
+        attempts = list(HOST_GUARD_ATTEMPTS)
+        HOST_GUARD_ATTEMPTS.clear()
+        raise AssertionError(f'{len(attempts)} host command(s) or connection(s) were attempted: {attempts[:5]}')
+
+
+def setUpModule():
+    guard_host()
+
+
+def tearDownModule():
+    release_host()
+
+
 def template(kind):
     return (DEPLOY / 'nginx' / f'cpt-quillmd-{kind}.conf').read_text(encoding='utf-8')
 
 
-def rendered():
+def rendered(port=install.WEB_PORT):
     return {'http': install.render(template('http'), {'DOMAIN': install.DOMAIN}),
-            'https': install.render(template('https'), {'DOMAIN': install.DOMAIN, 'UPSTREAM': install.UPSTREAM})}
+            'https': install.render(template('https'), {'DOMAIN': install.DOMAIN, 'UPSTREAM': install.upstream(port)})}
 
 
 def statements(conf):
@@ -102,6 +160,9 @@ class FakeOwnership:
     def stat(self, path):
         return self._owned(path, os.stat(path))
 
+    def fstat(self, fd):
+        return self._owned(self.fds[fd], os.fstat(fd)) if fd in self.fds else os.fstat(fd)
+
 
 def run_body(body, params, paths, fake_os=None):
     """Execute a helper body with container paths mapped onto temp paths; return its JSON."""
@@ -132,12 +193,15 @@ class TemporaryDirectoryTest(unittest.TestCase):
 
 class TemplateRenderingTests(unittest.TestCase):
     def test_templates_render_completely_and_share_the_http_stage(self):
-        confs = rendered()
-        for conf in confs.values():
-            self.assertNotIn('@@', conf)
-            self.assertIn(f'server_name {install.DOMAIN};', conf)
-        self.assertTrue(confs['https'].startswith(confs['http']))
-        self.assertIn(f'proxy_pass http://{install.UPSTREAM};', confs['https'])
+        # For either web port (blue/green alternates it; 9150 is the fresh host's, UPSTREAM's).
+        self.assertEqual(install.UPSTREAM, install.upstream(install.WEB_PORT))
+        for port in install.WEB_PORTS:
+            confs = rendered(port)
+            for conf in confs.values():
+                self.assertNotIn('@@', conf)
+                self.assertIn(f'server_name {install.DOMAIN};', conf)
+            self.assertTrue(confs['https'].startswith(confs['http']))
+            self.assertIn(f'proxy_pass http://127.0.0.1:{port};', confs['https'])
 
     def test_rendered_vhosts_reads_templates_at_the_revision(self):
         calls = []
@@ -589,7 +653,10 @@ class DockerArgumentTests(unittest.TestCase):
         self.assertEqual(self.flags(argv, '--security-opt'), ['no-new-privileges'])
         self.assertEqual(self.flags(argv, '--user'), [f'{install.APP_UID}:{install.APP_UID}'])
         self.assertEqual(self.flags(argv, '--memory'), self.flags(argv, '--memory-swap'))
-        self.assertEqual(self.flags(argv, '-p'), ['127.0.0.1:9150:8000'])
+        self.assertEqual(self.flags(argv, '-p'), ['127.0.0.1:9150:8000'])  # the fresh host's port, WEB_PORT
+        incoming = install.service_args('web', self.IMAGE, REVISION, 'live', 'docs/x.md', name=install.INCOMING_WEB,
+                                        port=9151)
+        self.assertEqual(self.flags(incoming, '-p'), ['127.0.0.1:9151:8000'])  # blue/green's other port
         self.assertEqual(self.flags(argv, '--restart'), ['unless-stopped'])
         self.assertEqual(self.flags(argv, '--env-file'), ['/dev/stdin'])
         self.assertEqual(self.flags(argv, '--ulimit'), ['core=0'])
@@ -607,7 +674,9 @@ class DockerArgumentTests(unittest.TestCase):
         self.assertIn(f'type=bind,src={install.CORTI_TARGET},dst={install.CREDENTIALS_IN_CONTAINER},readonly', mounts)
         self.assertIn(f'CPT_STUDIO_CORTI_CREDENTIALS_FILE={install.CREDENTIALS_IN_CONTAINER}', self.flags(live, '-e'))
         self.assertIn('--no-healthcheck', live)
-        self.assertEqual(self.flags(live, '--stop-timeout'), ['150'])
+        # above a participant phase's 540 s tool-loop deadline and equal to the 600 s stale-stage sweep
+        # (test_install_harness pins both against settings.py)
+        self.assertEqual(self.flags(live, '--stop-timeout'), ['600'])
         self.assertEqual(self.flags(live, '-p'), [])
         disabled = install.service_args('worker', self.IMAGE, REVISION, 'disabled', '')
         self.assertNotIn('corti', ' '.join(disabled).lower())
@@ -1246,7 +1315,8 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
             apply()
             undo()  # as on a failed verification: the removal is put back exactly
             return {}
-        with mock.patch.object(install, 'rendered_vhosts', side_effect=lambda revision: by_revision[revision]), \
+        with mock.patch.object(install, 'rendered_vhosts',
+                               side_effect=lambda revision, port=install.WEB_PORT: by_revision[revision]), \
                 mock.patch.object(install, 'vhost_state', side_effect=lambda: next(states)), \
                 mock.patch.object(install, 'live_vhost_bytes', return_value=old['https'].encode()), \
                 mock.patch.object(install, 'vhost_operation', side_effect=lambda op, **kw: operations.append((op, kw))), \
@@ -1304,7 +1374,7 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
             return {}
         with mock.patch.object(install, 'NGINX_AVAILABLE', available), \
                 mock.patch.object(install, 'NGINX_ENABLED', enabled), \
-                mock.patch.object(install, 'rendered_vhosts', side_effect=lambda revision: new), \
+                mock.patch.object(install, 'rendered_vhosts', side_effect=lambda revision, port=install.WEB_PORT: new), \
                 mock.patch.object(install, 'vhost_operation', side_effect=helper), \
                 mock.patch.object(install, 'publish_vhost', side_effect=publish):
             install.phase_rollback_vhost(self.ctx('rollback-vhost'))
@@ -1318,7 +1388,8 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
                 for path in self.tmp.glob('*.json'):
                     path.unlink()
                 by_revision, live, old = self.republish_case(recorded=recorded)
-                with mock.patch.object(install, 'rendered_vhosts', side_effect=lambda revision: by_revision[revision]), \
+                with mock.patch.object(install, 'rendered_vhosts',
+                                       side_effect=lambda revision, port=install.WEB_PORT: by_revision[revision]), \
                         mock.patch.object(install, 'vhost_state', return_value=live), \
                         mock.patch.object(install, 'live_vhost_bytes', return_value=live_bytes or old['https'].encode()), \
                         mock.patch.object(install, 'vhost_operation') as operation, \
@@ -1349,7 +1420,9 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
                                                    'live': {install.DOMAIN: {}, 'app.quillmd.com': {}}}})
         current = {**files, 'available': {**files['available'], install.VHOST_NAME: https_sha}}
         running = {'State': {'Running': True}, 'Id': 'x'}
+        pair = {install.DB_CONTAINER, *install.SERVICES.values()}  # nothing parked or incoming is left beside it
         with mock.patch.object(install, 'installed_image', return_value='sha256:' + 'c' * 64), \
+                mock.patch.object(install, 'live_web_port', return_value=install.WEB_PORT), \
                 mock.patch.object(install, 'nginx_file_state', return_value=current), \
                 mock.patch.object(install, 'rendered_vhosts', return_value=rendered()), \
                 mock.patch.object(install, 'ingress_checks', return_value=[]), \
@@ -1357,7 +1430,8 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
                 mock.patch.object(install, 'containers', return_value={}), \
                 mock.patch.object(install, 'volumes', return_value=['v']), \
                 mock.patch.object(install, 'le_state', return_value=le_now), \
-                mock.patch.object(install, 'inspect', return_value=running), \
+                mock.patch.object(install, 'inspect', side_effect=lambda kind, name: running if name in pair or
+                                  kind == 'image' else None), \
                 mock.patch.object(install, 'db_container_problems', return_value=[]), \
                 mock.patch.object(install, 'service_problems', return_value=[]), \
                 mock.patch.object(install, 'https_checks', return_value=([], {})), \
@@ -1445,8 +1519,10 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
 
 
 class ServiceReplacementTests(TemporaryDirectoryTest):
-    """A failed replacement removes what it started and restores exactly the parked pair (after closing the stages
-    the new pair left open: tests/test_repairs_r1_m.py)."""
+    """The swap of a host where nothing is served through the vhost (replace_services; a served site is switched
+    blue/green instead, which never stops its web: test_install_bluegreen): a failed replacement removes what it
+    started and restores exactly the parked pair (after closing the stages the new pair left open:
+    tests/test_repairs_r1_m.py)."""
 
     def test_failed_worker_restores_previous_pair(self):
         names = {'cpt-studio-web': 'web', 'cpt-studio-worker': 'worker'}
@@ -1472,10 +1548,12 @@ class ServiceReplacementTests(TemporaryDirectoryTest):
                         del live[name]
             return SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
 
-        def fake_wait(role, revision, image_id):
+        def fake_wait(role, revision, image_id, **kwargs):
+            waited.append((role, kwargs))
             if role == 'worker':
                 raise install.InstallError('worker crashed')
             return {'id': f'new-{role}'}
+        waited = []
         ctx = install.Context(SimpleNamespace(phase='app', revision=REVISION), self.tmp)
         with mock.patch.object(install, 'inspect', fake_inspect), mock.patch.object(install, 'docker', fake_docker), \
                 mock.patch.object(install, 'wait_service', fake_wait), \
@@ -1487,6 +1565,8 @@ class ServiceReplacementTests(TemporaryDirectoryTest):
                          {'cpt-studio-web': 'old-web', 'cpt-studio-worker': 'old-worker'})
         self.assertIn(('start', 'cpt-studio-web'), calls)
         self.assertIn(('start', 'cpt-studio-worker'), calls)
+        # it failed where it was meant to, at the worker; on the fresh host's port, wait_service's own default
+        self.assertEqual(waited, [('web', {}), ('worker', {})])
 
 
 class MainTests(TemporaryDirectoryTest):

@@ -540,6 +540,14 @@ def run_one():
         run.state = 'running'; run.started_at = timezone.now()
         run.save(update_fields=['state', 'started_at'])
     try:
+        # ⚠️ P1 ROUND 4 (2026-11-01): the PDF form guard, immediately before the provider call. Round 3
+        # checked when a save queued the run (SI-3), on the request path; this covers every run however
+        # and whenever it was queued. A refusal, or a check that could not run, fails the run below with
+        # no request sent and nothing charged (failure_message shows the guard's fixed sentence).
+        from .template_source import provider_refusal
+        refusal = provider_refusal(e.template_version.template)
+        if refusal:
+            raise ValidationError(refusal)
         from .coding_dispatch import generate
         result = generate(run)
         with transaction.atomic():
@@ -594,10 +602,11 @@ def failure_message(exc, uncertain):
         return 'The provider response could not be validated. Contact your administrator. Its evidence and known cost are retained; no retry will be sent.'
     # Only static local validation descriptions are displayed, never an arbitrary
     # transport exception, credential, payload, or traceback.
+    from .template_source import FORM_JOB_PREFIX
     safe_prefixes = ('Coding evidence ', 'Exactly one ICD-10-CM release ',
                      'The bound coding reference ', 'The extracted patient name ',
                      'The coding extractor ', 'The coding resolver ',
-                     'An integral-symptom reference ', 'Coding lookup terms ')
+                     'An integral-symptom reference ', 'Coding lookup terms ', FORM_JOB_PREFIX)
     if isinstance(exc, ValidationError) and len(exc.messages) == 1:
         reason = exc.messages[0]
         if len(reason) <= 240 and reason.startswith(safe_prefixes) and not any(ord(c) < 32 for c in reason):

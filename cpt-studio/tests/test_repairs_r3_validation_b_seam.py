@@ -101,7 +101,9 @@ class Validation9StatedAsPerformedWordingTests(SimpleTestCase):
     def test_the_hold_says_where_the_act_was_stated(self):
         outcome = checks.resolve_status([self.STATED])
         detail = checks.status_check(outcome, 'the service reported as 46221').detail
+        # the default hold's words (completion repair, builder Q1: 'CPT Studio could not confirm ...') are never used
         self.assertNotIn('No documentation establishes', detail)
+        self.assertNotIn('CPT Studio could not confirm', detail)
         self.assertIn('The linked passage states the service reported as 46221 as performed under Assessment and plan',
                       detail)
         self.assertIn(f'(cue “{AP}”, linked passage)', detail)
@@ -120,7 +122,8 @@ class Validation9StatedAsPerformedWordingTests(SimpleTestCase):
     def test_controls_other_holds_keep_their_wording(self):
         hedge = checks.Reading('uncertain', ('uncertain: Possible',), 'evidence', 'Possible banding.')
         detail = checks.status_check(checks.resolve_status([hedge]), 'the service reported as 46221').detail
-        self.assertTrue(detail.startswith('No documentation establishes'), detail)
+        # completion repair (builder Q1, U9): the default hold says what CPT Studio could not confirm
+        self.assertTrue(detail.startswith('CPT Studio could not confirm'), detail)
         self.assertIn('(cue “uncertain: Possible”, linked passage)', detail)
         doubted = checks.Reading('uncertain', ("uncertain: unresolved negation 'not' in its clause",
                                                'performed: was performed', AP), 'evidence', 'X.')
@@ -136,3 +139,4 @@ class Validation9StatedAsPerformedWordingTests(SimpleTestCase):
         self.assertEqual(proposals['45385'].status, 'needs_clarification')
         self.assertIn('states Colonoscopy as performed under Assessment and plan', status.detail)
         self.assertNotIn('No documentation establishes', status.detail)
+        self.assertNotIn('CPT Studio could not confirm that', status.detail)  # the default hold's words (builder Q1)

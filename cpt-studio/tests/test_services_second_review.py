@@ -15,6 +15,7 @@ from studio import jobs, models, reports
 from studio.providers.corti import ADAPTER_VERSION
 from studio.types import ProviderRequest, RawExchange
 from tests.support import factories as f
+from tests.support.operator import OperatorReads
 from tests.test_pipeline_api import drain
 
 LIVE = dict(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
@@ -38,7 +39,7 @@ def drain_and_ask(client, encounter_id):
     """The pipeline, then a reviewer's request for the second review whenever the encounter offers one, then the
     pipeline again: what the automatic second review did before the owner's decision, now by a reviewer's hand."""
     drain()
-    offered = client.get(f'/api/encounters/{encounter_id}').json()['second_review']
+    offered = client.get(f'/ops/api/encounters/{encounter_id}').json()['second_review']
     if offered['available']:
         reply = ask(client, encounter_id)
         assert reply.status_code == 201, reply.content
@@ -85,7 +86,7 @@ class TwoPassProvider:
 
 
 @override_settings(**LIVE)
-class SecondReviewTests(TestCase):
+class SecondReviewTests(OperatorReads, TestCase):
     def setUp(self):
         self.ws = f.workspace()
         self.reviewer = f.member(self.ws, f.user('reviewer'))
@@ -108,7 +109,7 @@ class SecondReviewTests(TestCase):
         drain()
         self.assertEqual(len(self.provider.requests), 1)  # the assessment queues nothing
         self.assertFalse(models.Job.objects.filter(encounter_id=encounter_id, kind='review2').exists())
-        offered = self.client.get(f'/api/encounters/{encounter_id}').json()['second_review']
+        offered = self.client.get(f'/ops/api/encounters/{encounter_id}').json()['second_review']
         self.assertTrue(offered['available'], offered)
         self.assertTrue(offered['can_request'])
         self.assertEqual(len(offered['items']), 1)
@@ -148,7 +149,7 @@ class SecondReviewTests(TestCase):
         viewer = f.member(self.ws, f.user('viewer'), role=models.Membership.VIEWER)
         other = Client(enforce_csrf_checks=False)
         other.force_login(viewer)
-        self.assertFalse(other.get(f'/api/encounters/{encounter_id}').json()['second_review']['can_request'])
+        self.assertFalse(other.get(f'/ops/api/encounters/{encounter_id}').json()['second_review']['can_request'])
         self.assertEqual(ask(other, encounter_id).status_code, 403)
         reply = self.client.post(f'/api/encounters/{encounter_id}/context', data=json.dumps({'setting': 'asc'}),
                                  content_type='application/json')
@@ -249,7 +250,7 @@ class SecondReviewTests(TestCase):
         text = REPORT[REPORT.index('Colonoscopy report'):]
         encounter_id = self.create(text)
         drain()
-        offered = self.client.get(f'/api/encounters/{encounter_id}').json()['second_review']
+        offered = self.client.get(f'/ops/api/encounters/{encounter_id}').json()['second_review']
         self.assertFalse(offered['available'])
         self.assertIn('already answered', offered['reason'])
         self.assertEqual(ask(self.client, encounter_id).status_code, 409)
@@ -311,7 +312,7 @@ class SecondReviewTests(TestCase):
                                ('45380', 'was sampled with cold biopsy forceps')]
         encounter_id = self.create()
         drain()
-        offered = self.client.get(f'/api/encounters/{encounter_id}').json()['second_review']
+        offered = self.client.get(f'/ops/api/encounters/{encounter_id}').json()['second_review']
         self.assertEqual((offered['available'], offered['items']), (False, []))
         self.assertEqual(ask(self.client, encounter_id).status_code, 409)
         drain()
@@ -323,7 +324,7 @@ class SecondReviewTests(TestCase):
         drain_and_ask(self.client, encounter_id)
         unknown = models.ProviderRun.objects.get(encounter_id=encounter_id, state='unknown')
         self.assertEqual(unknown.purpose, 'second_review')
-        reply = self.client.post(f'/api/encounters/{encounter_id}/reconcile',
+        reply = self.client.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                                  data=json.dumps({'provider_run_id': str(unknown.pk),
                                                   'note': 'Checked the provider console: no response was recorded.'}),
                                  content_type='application/json')
@@ -351,7 +352,7 @@ VISIT_LINE = 'Established patient office visit for rectal bleeding.'
 CECUM_LINE = 'The colonoscope was advanced to the cecum.'
 
 
-class NoSecondReviewForWhatWasNotDoneTests(TestCase):
+class NoSecondReviewForWhatWasNotDoneTests(OperatorReads, TestCase):
     """A paid second review is sent only for a documented service or act the document states done (triage round 2
     skeptic, proven end to end: checked boxes under consent, equipment, education and "discussed" lists, a "Yes" field
     answering a printed question, and consent sentences had each queued one). The positive control shows the instrument
@@ -417,7 +418,7 @@ class NoSecondReviewForWhatWasNotDoneTests(TestCase):
 
 
 @override_settings(**LIVE)
-class PreUpgradeContextTests(TestCase):
+class PreUpgradeContextTests(OperatorReads, TestCase):
     """Refutation r1 (migrate lens): a context the installed revision recorded (gi-context@1) keeps a member's date as
     plain metadata, where the current rules keep a date that differs from the document as a conflict. A stage given
     such a context remakes it first (jobs._remade_context), so nothing is ever sent with the member's date."""

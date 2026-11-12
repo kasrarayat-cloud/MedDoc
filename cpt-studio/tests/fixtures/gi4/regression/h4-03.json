@@ -1,0 +1,972 @@
+{
+ "id": "h4-03",
+ "manifest": {
+  "author_codes": [
+   "43244"
+  ],
+  "class": "1-conflicted-service-date",
+  "expected_clarifications": [
+   {
+    "fact": "service_date",
+    "scope_in": [
+     "encounter"
+    ]
+   }
+  ],
+  "expected_context": {
+   "service_date": {
+    "origin_in": [
+     "conflict"
+    ]
+   },
+   "setting": {
+    "origin_in": [
+     "document"
+    ],
+    "value_in": [
+     "hospital_outpatient"
+    ]
+   }
+  },
+  "expected_routing": {
+   "families": {
+    "gi.egd": {
+     "facts": {
+      "extent": {
+       "value_contains_any": [
+        "duoden"
+       ]
+      }
+     },
+     "informational": {
+      "mention_statuses_include": [
+       "performed",
+       "historical",
+       "planned"
+      ]
+     },
+     "presence": "required",
+     "status_in": [
+      "performed"
+     ]
+    }
+   },
+   "not_performed": [
+    "gi.office_em",
+    "gi.colonoscopy",
+    "gi.flex_sig",
+    "gi.eus",
+    "gi.ercp"
+   ]
+  },
+  "incomplete_services": [],
+  "must_not_code": [
+   {
+    "family": "gi.office_em",
+    "reason": "No separately identifiable E/M; the pre-banding assessment belongs to the procedure."
+   }
+  ],
+  "review_plan": {
+   "approve_codes": [
+    "43244"
+   ],
+   "context_edit": {
+    "service_date": "2026-10-06"
+   },
+   "reject": null,
+   "walk_note": "The document states two dates of service for one case: the header's 'Exam date: 10/06/2026' and the ledger's 'Service date logged for this case: 10/08/2026', under the same case reference and countersigned by the proceduralist. Nothing in the source settles which is right, so the date must be asked. No member date is entered at upload (upload.service_date null), so the conflict stays the document's own and is not a member-date conflict. The walk checks that the question is open after processing (expected_context and expected_clarifications are judged before any edit), then answers it once through the screen's context form with the documented-answer form {service_date: 2026-10-06}, standing in for the endoscopist's reply to the query. The header date is the answer because it is one of the two dates the document itself states, so the reply never brings in a date the source does not give, and it is the date in the report's identifying block. It is a simulated reply, not a reading: the source alone does not select it, and a run that picks either date without asking has failed this document. must_not_code and incomplete_services are judged after the edit. Tooling note: in the copy of ops/verify_browser.cjs read for format while authoring, planProblems refuses a context_edit without upload.service_date and contextEditPreconditions expect a member-date hold, so this plan needs the documented-answer support before it can run."
+  },
+  "source_sha256": "fa1994ba58b948b1d95dee8d85b4a1d5043834be7523fa097da01f824cee73b2"
+ },
+ "reference_sources": [
+  {
+   "effective_end": "2026-12-31",
+   "effective_start": "2026-10-01",
+   "key": "cms-mue-practitioner-2026q4",
+   "kind": "cms-mue-practitioner",
+   "license_note": "CPT codes are copyright the American Medical Association; descriptors are not imported or displayed. Used for internal synthetic evaluation only; commercial CPT use requires an AMA license.",
+   "publisher": "Centers for Medicare & Medicaid Services (CMS)",
+   "release": "2026-Q4",
+   "scope_note": "Medicare NCCI practitioner MUE values (units per day; not every payer)",
+   "sha256": "4574336755ba4e49b7c8ec07de5b74d3f0b8593e3e6192013631724981180d00",
+   "title": "Medicare NCCI practitioner services MUE table (MCR_MUE_PractitionerServices_Eff_10-01-2026.csv)",
+   "url": "https://www.cms.gov/files/zip/medicare-ncci-2026-q4-practitioner-services-mue-table.zip"
+  },
+  {
+   "effective_end": "2026-12-31",
+   "effective_start": "2026-10-01",
+   "key": "cms-pfs-rvu26d",
+   "kind": "cms-pfs",
+   "license_note": "CPT codes are copyright the American Medical Association; descriptors are not imported or displayed. Used for internal synthetic evaluation only; commercial CPT use requires an AMA license.",
+   "publisher": "Centers for Medicare & Medicaid Services (CMS)",
+   "release": "RVU26D",
+   "scope_note": "Medicare Physician Fee Schedule indicators (not a CPT edition; not payer-specific)",
+   "sha256": "521ff0f4ecbf13b5d99dc1dc04d9f82e5361e55c6b4b6b3033043598bf8406e6",
+   "title": "Medicare Physician Fee Schedule relative value file (PPRRVU2026_Oct_nonQPP.csv)",
+   "url": "https://www.cms.gov/files/zip/rvu26d-updated-08-26-2026.zip"
+  }
+ ],
+ "runs": [
+  {
+   "purpose": "primary",
+   "request_sha256": "8eaed7a5243b64329604387cc6caf8e2c385a4708bd286fbbe2fc1d1b43b5f0e",
+   "response": {
+    "candidates": [
+     {
+      "alternatives": [],
+      "code": "0502F",
+      "display": "PR SUBSEQUENT PRENATAL CARE",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 348,
+        "start": 278,
+        "text": "Patient of record: Radomir Ezenwa-Lindahl (fictional), 58-year-old man"
+       },
+       {
+        "contextIndex": 0,
+        "end": 427,
+        "start": 349,
+        "text": "Proceduralist: Pilar Gutowski-Nnamdi, MD (fictional), hepatology and endoscopy"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "37607",
+      "display": "LIG/BANDING ANGIOACCESS ARTERIOVENOUS FISTULA",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 773,
+        "start": 692,
+        "text": "An earlier screening endoscopy at another center showed large esophageal varices."
+       },
+       {
+        "contextIndex": 0,
+        "end": 911,
+        "start": 774,
+        "text": "Carvedilol was stopped because of lightheadedness with systolic pressures in the 80s, so band ligation was chosen as primary prophylaxis."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G9903",
+      "display": "PR PT SCRN TBCO ID AS NON USER",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 238,
+        "start": 217,
+        "text": "Exam date: 10/06/2026"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1993,
+        "start": 1924,
+        "text": "Clear liquids for the rest of the day, then a soft diet for 48 hours."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2516,
+        "start": 2383,
+        "text": "Entered by Fenna Ruwende-Holm, RN (fictional), charge nurse, and countersigned at case close by Pilar Gutowski-Nnamdi, MD (fictional)"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "1036F",
+      "display": "PR CURRENT TOBACCO NON-USER",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 238,
+        "start": 217,
+        "text": "Exam date: 10/06/2026"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1993,
+        "start": 1924,
+        "text": "Clear liquids for the rest of the day, then a soft diet for 48 hours."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2516,
+        "start": 2383,
+        "text": "Entered by Fenna Ruwende-Holm, RN (fictional), charge nurse, and countersigned at case close by Pilar Gutowski-Nnamdi, MD (fictional)"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G8420",
+      "display": "PR CALC BMI NORM PARAMETERS",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 911,
+        "start": 774,
+        "text": "Carvedilol was stopped because of lightheadedness with systolic pressures in the 80s, so band ligation was chosen as primary prophylaxis."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1993,
+        "start": 1924,
+        "text": "Clear liquids for the rest of the day, then a soft diet for 48 hours."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2516,
+        "start": 2383,
+        "text": "Entered by Fenna Ruwende-Holm, RN (fictional), charge nurse, and countersigned at case close by Pilar Gutowski-Nnamdi, MD (fictional)"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "3074F",
+      "display": "PR MOST RECENT SYSTOLIC BLOOD PRESSURE < 130 MM HG",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 238,
+        "start": 217,
+        "text": "Exam date: 10/06/2026"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1993,
+        "start": 1924,
+        "text": "Clear liquids for the rest of the day, then a soft diet for 48 hours."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2516,
+        "start": 2383,
+        "text": "Entered by Fenna Ruwende-Holm, RN (fictional), charge nurse, and countersigned at case close by Pilar Gutowski-Nnamdi, MD (fictional)"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "3078F",
+      "display": "PR MOST RECENT DIASTOLIC BLOOD PRESSURE < 80 MM HG",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1993,
+        "start": 1924,
+        "text": "Clear liquids for the rest of the day, then a soft diet for 48 hours."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2336,
+        "start": 2291,
+        "text": "Service date logged for this case: 10/08/2026"
+       },
+       {
+        "contextIndex": 0,
+        "end": 2516,
+        "start": 2383,
+        "text": "Entered by Fenna Ruwende-Holm, RN (fictional), charge nurse, and countersigned at case close by Pilar Gutowski-Nnamdi, MD (fictional)"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G8752",
+      "display": "PR SYS BP LESS 140",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1461,
+        "start": 1407,
+        "text": "The duodenal bulb and descending duodenum were normal."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1993,
+        "start": 1924,
+        "text": "Clear liquids for the rest of the day, then a soft diet for 48 hours."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2516,
+        "start": 2383,
+        "text": "Entered by Fenna Ruwende-Holm, RN (fictional), charge nurse, and countersigned at case close by Pilar Gutowski-Nnamdi, MD (fictional)"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G8754",
+      "display": "PR DIAS BP LESS 90",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1461,
+        "start": 1407,
+        "text": "The duodenal bulb and descending duodenum were normal."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1993,
+        "start": 1924,
+        "text": "Clear liquids for the rest of the day, then a soft diet for 48 hours."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2516,
+        "start": 2383,
+        "text": "Entered by Fenna Ruwende-Holm, RN (fictional), charge nurse, and countersigned at case close by Pilar Gutowski-Nnamdi, MD (fictional)"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "36902",
+      "display": "INTRO CATH DIALYSIS CIRCUIT W/TRLUML BALO ANGIOP",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 616,
+        "start": 590,
+        "text": "Clinical Basis for Banding"
+       },
+       {
+        "contextIndex": 0,
+        "end": 691,
+        "start": 617,
+        "text": "Alcohol-associated cirrhosis, abstinent for 14 months, Child-Pugh class B."
+       },
+       {
+        "contextIndex": 0,
+        "end": 773,
+        "start": 692,
+        "text": "An earlier screening endoscopy at another center showed large esophageal varices."
+       },
+       {
+        "contextIndex": 0,
+        "end": 911,
+        "start": 774,
+        "text": "Carvedilol was stopped because of lightheadedness with systolic pressures in the 80s, so band ligation was chosen as primary prophylaxis."
+       }
+      ],
+      "system": "cpt"
+     }
+    ],
+    "codes": [
+     {
+      "alternatives": [
+       {
+        "code": "K70.31",
+        "display": "Alcoholic cirrhosis of liver with ascites"
+       },
+       {
+        "code": "K70.3",
+        "display": "Alcoholic cirrhosis of liver"
+       }
+      ],
+      "code": "K70.30",
+      "display": "Alcoholic cirrhosis of liver without ascites",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 691,
+        "start": 617,
+        "text": "Alcohol-associated cirrhosis, abstinent for 14 months, Child-Pugh class B."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [
+       {
+        "code": "I85.01",
+        "display": "Esophageal varices with bleeding"
+       },
+       {
+        "code": "I85.10",
+        "display": "Secondary esophageal varices without bleeding"
+       }
+      ],
+      "code": "I85.00",
+      "display": "Esophageal varices without bleeding",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 773,
+        "start": 692,
+        "text": "An earlier screening endoscopy at another center showed large esophageal varices."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1280,
+        "start": 1171,
+        "text": "Four columns of large (F3) varices filled the distal third of the esophagus, two of them with red wale marks."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1837,
+        "start": 1747,
+        "text": "1. Large esophageal varices with red wale marks; six bands placed for primary prophylaxis."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [
+       {
+        "code": "I85.10",
+        "display": "Secondary esophageal varices without bleeding"
+       },
+       {
+        "code": "K76.6",
+        "display": "Portal hypertension"
+       }
+      ],
+      "code": "K31.89",
+      "display": "Other diseases of stomach and duodenum",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1406,
+        "start": 1321,
+        "text": "A mild mosaic pattern of portal hypertensive gastropathy covered the fundus and body."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1898,
+        "start": 1838,
+        "text": "2. Mild portal hypertensive gastropathy. No gastric varices."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [],
+      "code": "43244",
+      "display": "EGD BAND LIGATION ESOPHGEAL/GASTRIC VARICES",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1550,
+        "start": 1462,
+        "text": "The gastroscope was withdrawn, fitted with a multiband ligation device and passed again."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1837,
+        "start": 1750,
+        "text": "Large esophageal varices with red wale marks; six bands placed for primary prophylaxis."
+       }
+      ],
+      "system": "cpt"
+     }
+    ],
+    "usageInfo": {
+     "creditsConsumed": 0.037856
+    }
+   },
+   "run": "ddc6511d",
+   "sent": true,
+   "service_date": null,
+   "state": "succeeded"
+  },
+  {
+   "purpose": "primary",
+   "request_sha256": "acdebca2d1af097e4b709337f6007a13baf164ce5025992039c5ccb03a892ce6",
+   "response": {
+    "candidates": [
+     {
+      "alternatives": [],
+      "code": "0502F",
+      "display": "PR SUBSEQUENT PRENATAL CARE",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 348,
+        "start": 278,
+        "text": "Patient of record: Radomir Ezenwa-Lindahl (fictional), 58-year-old man"
+       },
+       {
+        "contextIndex": 0,
+        "end": 427,
+        "start": 349,
+        "text": "Proceduralist: Pilar Gutowski-Nnamdi, MD (fictional), hepatology and endoscopy"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G9903",
+      "display": "PR PT SCRN TBCO ID AS NON USER",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 238,
+        "start": 217,
+        "text": "Exam date: 10/06/2026"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1993,
+        "start": 1924,
+        "text": "Clear liquids for the rest of the day, then a soft diet for 48 hours."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2516,
+        "start": 2383,
+        "text": "Entered by Fenna Ruwende-Holm, RN (fictional), charge nurse, and countersigned at case close by Pilar Gutowski-Nnamdi, MD (fictional)"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "1036F",
+      "display": "PR CURRENT TOBACCO NON-USER",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 238,
+        "start": 217,
+        "text": "Exam date: 10/06/2026"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1993,
+        "start": 1924,
+        "text": "Clear liquids for the rest of the day, then a soft diet for 48 hours."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2516,
+        "start": 2383,
+        "text": "Entered by Fenna Ruwende-Holm, RN (fictional), charge nurse, and countersigned at case close by Pilar Gutowski-Nnamdi, MD (fictional)"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G8420",
+      "display": "PR CALC BMI NORM PARAMETERS",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 911,
+        "start": 774,
+        "text": "Carvedilol was stopped because of lightheadedness with systolic pressures in the 80s, so band ligation was chosen as primary prophylaxis."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1993,
+        "start": 1924,
+        "text": "Clear liquids for the rest of the day, then a soft diet for 48 hours."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2516,
+        "start": 2383,
+        "text": "Entered by Fenna Ruwende-Holm, RN (fictional), charge nurse, and countersigned at case close by Pilar Gutowski-Nnamdi, MD (fictional)"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "37607",
+      "display": "LIG/BANDING ANGIOACCESS ARTERIOVENOUS FISTULA",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 773,
+        "start": 692,
+        "text": "An earlier screening endoscopy at another center showed large esophageal varices."
+       },
+       {
+        "contextIndex": 0,
+        "end": 911,
+        "start": 774,
+        "text": "Carvedilol was stopped because of lightheadedness with systolic pressures in the 80s, so band ligation was chosen as primary prophylaxis."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "3074F",
+      "display": "PR MOST RECENT SYSTOLIC BLOOD PRESSURE < 130 MM HG",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 238,
+        "start": 217,
+        "text": "Exam date: 10/06/2026"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1993,
+        "start": 1924,
+        "text": "Clear liquids for the rest of the day, then a soft diet for 48 hours."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2516,
+        "start": 2383,
+        "text": "Entered by Fenna Ruwende-Holm, RN (fictional), charge nurse, and countersigned at case close by Pilar Gutowski-Nnamdi, MD (fictional)"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "3078F",
+      "display": "PR MOST RECENT DIASTOLIC BLOOD PRESSURE < 80 MM HG",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 238,
+        "start": 217,
+        "text": "Exam date: 10/06/2026"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1993,
+        "start": 1924,
+        "text": "Clear liquids for the rest of the day, then a soft diet for 48 hours."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2336,
+        "start": 2291,
+        "text": "Service date logged for this case: 10/08/2026"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G8752",
+      "display": "PR SYS BP LESS 140",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1993,
+        "start": 1924,
+        "text": "Clear liquids for the rest of the day, then a soft diet for 48 hours."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2516,
+        "start": 2383,
+        "text": "Entered by Fenna Ruwende-Holm, RN (fictional), charge nurse, and countersigned at case close by Pilar Gutowski-Nnamdi, MD (fictional)"
+       },
+       {
+        "contextIndex": 1,
+        "end": 27,
+        "start": 0,
+        "text": "Date of service: 2026-10-06"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G8754",
+      "display": "PR DIAS BP LESS 90",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1993,
+        "start": 1924,
+        "text": "Clear liquids for the rest of the day, then a soft diet for 48 hours."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2516,
+        "start": 2383,
+        "text": "Entered by Fenna Ruwende-Holm, RN (fictional), charge nurse, and countersigned at case close by Pilar Gutowski-Nnamdi, MD (fictional)"
+       },
+       {
+        "contextIndex": 1,
+        "end": 27,
+        "start": 0,
+        "text": "Date of service: 2026-10-06"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "99214",
+      "display": "+PR OFFICE/OUTPATIENT ESTABLISHED MOD MDM 30 MIN",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 943,
+        "start": 912,
+        "text": "He has never bled from varices."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2516,
+        "start": 2383,
+        "text": "Entered by Fenna Ruwende-Holm, RN (fictional), charge nurse, and countersigned at case close by Pilar Gutowski-Nnamdi, MD (fictional)"
+       },
+       {
+        "contextIndex": 1,
+        "end": 27,
+        "start": 0,
+        "text": "Date of service: 2026-10-06"
+       }
+      ],
+      "system": "cpt"
+     }
+    ],
+    "codes": [
+     {
+      "alternatives": [
+       {
+        "code": "K70.3",
+        "display": "Alcoholic cirrhosis of liver"
+       }
+      ],
+      "code": "K70.30",
+      "display": "Alcoholic cirrhosis of liver without ascites",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 691,
+        "start": 617,
+        "text": "Alcohol-associated cirrhosis, abstinent for 14 months, Child-Pugh class B."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1837,
+        "start": 1750,
+        "text": "Large esophageal varices with red wale marks; six bands placed for primary prophylaxis."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [
+       {
+        "code": "I85.01",
+        "display": "Esophageal varices with bleeding"
+       },
+       {
+        "code": "Q27.8",
+        "display": "Other specified congenital malformations of peripheral vascular system"
+       }
+      ],
+      "code": "I85.00",
+      "display": "Esophageal varices without bleeding",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 773,
+        "start": 692,
+        "text": "An earlier screening endoscopy at another center showed large esophageal varices."
+       },
+       {
+        "contextIndex": 0,
+        "end": 943,
+        "start": 912,
+        "text": "He has never bled from varices."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1280,
+        "start": 1171,
+        "text": "Four columns of large (F3) varices filled the distal third of the esophagus, two of them with red wale marks."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1837,
+        "start": 1750,
+        "text": "Large esophageal varices with red wale marks; six bands placed for primary prophylaxis."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [
+       {
+        "code": "I85.10",
+        "display": "Secondary esophageal varices without bleeding"
+       },
+       {
+        "code": "K76.6",
+        "display": "Portal hypertension"
+       }
+      ],
+      "code": "K31.89",
+      "display": "Other diseases of stomach and duodenum",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1406,
+        "start": 1321,
+        "text": "A mild mosaic pattern of portal hypertensive gastropathy covered the fundus and body."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1878,
+        "start": 1841,
+        "text": "Mild portal hypertensive gastropathy."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [],
+      "code": "43244",
+      "display": "EGD BAND LIGATION ESOPHGEAL/GASTRIC VARICES",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1550,
+        "start": 1462,
+        "text": "The gastroscope was withdrawn, fitted with a multiband ligation device and passed again."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1837,
+        "start": 1750,
+        "text": "Large esophageal varices with red wale marks; six bands placed for primary prophylaxis."
+       }
+      ],
+      "system": "cpt"
+     }
+    ],
+    "usageInfo": {
+     "creditsConsumed": 0.032159999999999994
+    }
+   },
+   "run": "7da9256d",
+   "sent": true,
+   "service_date": "2026-10-06",
+   "state": "succeeded"
+  }
+ ],
+ "stored": {
+  "contexts": [
+   [
+    "gi-context@3",
+    "missing",
+    null
+   ],
+   [
+    "gi-context@3",
+    "user",
+    "2026-10-06"
+   ],
+   [
+    "gi-context@3",
+    "user",
+    "2026-10-06"
+   ]
+  ],
+  "decisions": [],
+  "open_clarifications": [
+   [
+    "proposal",
+    "gi.egd",
+    "extent"
+   ],
+   [
+    "proposal",
+    "gi.egd",
+    "extent"
+   ]
+  ],
+  "proposals": [
+   [
+    "0502F",
+    "alternative",
+    "informational",
+    "4c1f9c5f"
+   ],
+   [
+    "1036F",
+    "alternative",
+    "informational",
+    "5cdb376c"
+   ],
+   [
+    "3074F",
+    "alternative",
+    "informational",
+    "d7a728cf"
+   ],
+   [
+    "3078F",
+    "alternative",
+    "informational",
+    "846c3fa7"
+   ],
+   [
+    "37607",
+    "alternative",
+    "informational",
+    "d78b49f0"
+   ],
+   [
+    "43244",
+    "selected",
+    "needs_clarification",
+    "5002e2b1"
+   ],
+   [
+    "99214",
+    "alternative",
+    "informational",
+    "9a1fa159"
+   ],
+   [
+    "G8420",
+    "alternative",
+    "informational",
+    "bfc44f80"
+   ],
+   [
+    "G8752",
+    "alternative",
+    "informational",
+    "14123ac4"
+   ],
+   [
+    "G8754",
+    "alternative",
+    "informational",
+    "9a9d306a"
+   ],
+   [
+    "G9903",
+    "alternative",
+    "informational",
+    "393ce5f2"
+   ]
+  ],
+  "state": "needs_clarification"
+ },
+ "text_sha256": "bb42a0a701dedfeb7fedf0f68673a148f254c90ad22b84000f0199ba52bc963a",
+ "walk_answer": "2026-10-06"
+}

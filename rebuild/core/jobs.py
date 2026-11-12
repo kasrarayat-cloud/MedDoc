@@ -610,6 +610,12 @@ def run_semantic_job(job):
     answers=None
     try:
         e=job.encounter
+        # ⚠️ P1 round 4: the PDF form guard, before anything on this provider path (a no-op for the Word
+        # forms semantic definitions exist for today). A refusal, or a check that could not run, ends the
+        # job unsent below: no stage is sent, nothing is charged, the hold is released.
+        from .template_source import provider_refusal
+        refusal=provider_refusal(e.template_version.template)
+        if refusal: raise NoProviderRequest(refusal)
         try:
             definitions=require_generation(e.template_version)
         except ValidationError as exc:
@@ -740,6 +746,15 @@ def run_one():
     provider_returned=False
     try:
         e=job.encounter
+        # ⚠️ P1 ROUND 4 (2026-11-01): THE PDF FORM GUARD, immediately before the provider path (admission, the
+        # provider slot, then the call), for every generation and transcription however and whenever it was
+        # queued. Round 3 checked at enqueue and so had to keep and re-offer a dictated recording when the check
+        # could not run; here a refusal, or a check that could not run, fails the job as not processed below —
+        # no provider call, nothing charged, the hold released — and the recording stays the job's input, as for
+        # any failed job.
+        from .template_source import provider_refusal
+        refusal=provider_refusal(e.template_version.template)
+        if refusal: raise NoProviderRequest(refusal)
         from .preparation_campaign import provider_slot
         from . import testing_authority
         if testing_authority.identity(job.config):

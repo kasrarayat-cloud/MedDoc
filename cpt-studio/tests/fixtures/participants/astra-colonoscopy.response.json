@@ -1,0 +1,40 @@
+{
+  "id": "resp_synthetic_fixture_0001",
+  "object": "response",
+  "created_at": 1793000000,
+  "status": "completed",
+  "error": null,
+  "incomplete_details": null,
+  "model": "gpt-6-astra",
+  "output": [
+    {
+      "type": "reasoning",
+      "id": "rs_synthetic_fixture_0001",
+      "summary": []
+    },
+    {
+      "type": "message",
+      "id": "msg_synthetic_fixture_0001",
+      "status": "completed",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "{\"date_of_service\":{\"value\":\"2026-10-21\",\"evidence\":[\"Date of service: 2026-10-21\"]},\"services\":[{\"id\":\"s1\",\"family\":\"colonoscopy\",\"status\":\"performed\",\"description\":\"Colonoscopy to the cecum with removal of one polyp and biopsy of another.\",\"anatomy\":\"colon\",\"extent\":\"cecum\",\"technique\":\"cold snare; cold forceps\",\"lesions\":[{\"site\":\"ascending colon\",\"size\":\"6 mm\",\"morphology\":\"sessile\",\"action\":\"removed by cold snare\",\"specimen\":\"retrieved for pathology\"},{\"site\":\"rectum\",\"size\":\"3 mm\",\"morphology\":\"\",\"action\":\"biopsied with cold forceps\",\"specimen\":\"\"}],\"provider_role\":\"\",\"evidence\":[\"The colonoscope was advanced to the cecum.\",\"A 6 mm sessile polyp in the ascending colon was removed with a cold snare and retrieved for pathology.\"]}],\"codes\":[{\"code\":\"45385\",\"modifiers\":[],\"units\":1,\"service_ids\":[\"s1\"],\"basis\":\"The report records a polyp removed with a cold snare.\",\"evidence\":[\"was removed with a cold snare\"],\"confidence\":\"high\"},{\"code\":\"45380\",\"modifiers\":[\"59\"],\"units\":1,\"service_ids\":[\"s1\"],\"basis\":\"The report records a separate polyp biopsied with cold forceps.\",\"evidence\":[\"A 3 mm polyp in the rectum was biopsied with cold forceps.\"],\"confidence\":\"medium\"}],\"not_coded\":[],\"clarifications\":[],\"extraction_issues\":[],\"references_used\":[]}",
+          "annotations": []
+        }
+      ]
+    }
+  ],
+  "usage": {
+    "input_tokens": 2412,
+    "input_tokens_details": {
+      "cached_tokens": 0
+    },
+    "output_tokens": 911,
+    "output_tokens_details": {
+      "reasoning_tokens": 448
+    },
+    "total_tokens": 3323
+  }
+}

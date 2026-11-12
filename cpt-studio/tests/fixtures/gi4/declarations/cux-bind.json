@@ -1,0 +1,170 @@
+{
+ "package": "CUX-BIND",
+ "summary": "CPT Studio core repair and customer interface (2026-11-03), package P1 READ-BIND, declared BEFORE any code: the shared reader's binding of a statement to its procedure, lesion and scope (studio/gi/services.py), one shared explicit-E/M-absence pattern (studio/gi/cues.py) read by routing's E/M base reading (studio/gi/detect.py) and by the inventory's E/M branch, and the validation layer's gating of office E/M documentation questions (studio/validation/engine.py _service_questions). Design: /home/claude/cpt-studio-ux-20261103/DESIGN.md section 10, adopting R1-services-binding.md section 9 (rules 2, 1, 4, 3, minimal 5, 8, optional 6; rule 7 the invariant), R2 section 1.4 and R3 section 7.5.3. Every rule reads structure the document already gives (a hyphenated attributive compound, a lesion label line, a report title naming several services, a copula with a determiner, a field label over its value, page furniture, a negator governing a visit mention); none widens a shared word list.",
+ "base": "c9f20a148a1f21aa2aaa53e477da0a26c07e268f (main after #1463; its cpt-studio/studio, ops and tests are identical to 7c9968a89, the tree R1-R9 mapped). The branch base 165e1089a adds only tests/fixtures/cux/mara and the build design.",
+ "declared_before_code": true,
+ "rules": {
+  "R2": "An act word that is the first element of a hyphenated participle compound used attributively ('the snare-treated lesion', 'biopsy-proven Barrett esophagus', 'a clip-closed defect', 'APC-treated', 'band-ligated', 'snare-resected') is no act statement: services._acts_in drops the mention, and the compound's participle is no act predicate for any other mention (pass 3's has_act_verb and read_clause's performed test). A compound that is itself a predicate ('The polyp was snare-resected', 'was not snare-resected', 'we snare-resected it') reads as installed. The ACTS and BARE_PARTICIPLE patterns are unchanged (services.mention_count and H2(d) cannot move).",
+  "R1": "A lesion introduced under a label - a label token (COL-1, P1, 'Polyp 2', 'Lesion A', '#3') at the start of its line, then a separator, then anatomy or a lesion noun in the same clause - keeps that label in the reader's own label index (unique labels only: a label whose definitions name disjoint sites, or that two lesions would take, resolves to nothing). A later word-bounded, case-sensitive mention of the label in an act's clause, or a specimen reference equal to exactly one lesion's specimen, binds the act to that lesion, its service and its region BEFORE _family_for_act, the act and the lesion together; an act whose own clause names a site the lesion's tract cannot hold, two labels, or an unresolved label reads exactly as installed. A sized lesion restated under a known label (the specimen table) is that lesion, not a new one.",
+  "R4": "A report title (REPORT_TITLE, TITLE_FIELD, TITLE_REPORT_WORDS) that names two or more services is a combined title: its part, and every untitled part that falls back to it, is a report part of no single family; each named service still takes its title reading (performed), the combined title adds no whole-part scope and its own span is no scope of any one service; a site-less, label-less prose denial in such a part is set beside every service that documents the act done (the 'unplaced' extension), never dropped. Lands with or after R1.",
+  "R3": "Copular negation 'S was/were/is/are not a/an/the/any N (of|for) O': the 'not' negates only an act mention in N (as installed), never one in S (no new act: the subject refers to an act stated elsewhere) and never one in O or O's modifiers (no act there either); 'not a second/another/repeat/separate/further/additional N' denies another occurrence (NEG_OTHER's reading, uncertain), and 'not a second/another/repeat <service>' is never performance evidence (pass 1's promotion does not apply). Verbal negation ('The polyp was not removed with a snare.') is unchanged.",
+  "R5": "Minimal: a bare per-procedure section heading (parts() rule f) is NOT ended by a field-label line whose value follows on the next line (the label and the value name no act and no service, the value is short with no sentence stop, routing's layout reads no heading there), a table cell line, or page furniture (with the revision's pages: a line among a page's edge lines that recurs at the same edge of another page; a page-number line; a report title repeating an earlier one, which also opens no part). Every other heading still ends it, and the other-tract site override still wins. build() passes the revision's pages to parts() (and _act_frame does).",
+  "R8": "One shared pattern in cues.py, cues.EM_ABSENCE, for an explicit statement that no separate office E/M service, office visit or office-visit time is documented, performed, provided, rendered or occurred: a negator governing the visit mention with only visit qualifiers between them (separate, separately identifiable, significant, distinct, additional, office, clinic, outpatient, face-to-face, in-person, problem-oriented, same-day), the mention inside 'no <noun phrase> is/was documented|provided|performed|rendered|furnished|reported' or '... occurred/took place', or after the mention 'was/is not (separately) provided|documented|performed|rendered|furnished'. Read by detect._em_base_reading (a mention no other cue decides reads negated, cue 'negated: an explicit statement that no separate office E/M service is documented') and by services._em_service's E/M branch with that distinct cue. An affirmative E/M statement elsewhere outranks it (the denial is then held as uncertain, so a contradictory note still asks); billing wordings ('not billed separately', 'not separately billable', 'not separately reported') read as installed (owner question R2 Q-1).",
+  "V7": "engine._service_questions skips the gi.office_em documentation questions (setting, patient_status, em_basis) when the office E/M service is not established - the inventory reads it uncertain and every uncertain routing reading of it is the procedure-day EM_WITHOUT_BASIS hold - and no decidable E/M proposal (selected, or excluded and reinstatable) exists; they are kept when an E/M code is proposed or the visit is documented performed or incomplete. The unresolved-service count (completeness 'not established') is unchanged.",
+  "R6": "Optional, attempted only after R1-R5, R8 and V7 are green: a sentence's lesion takes the tract when every site it names lies in one tract. Dropped, and recorded as a limit, if any must-stay-held input or pinned test moves in the wrong direction. If attempted it moves tests/test_gi4_pi.py test_h4_04_the_rectal_polyps_bind_as_installed and H3 binding.lower-not-on-upper in the seeded S-h4-04 documents; both would be appended here as after-code movements.",
+  "R7_invariant": "services._same_subject is unchanged; a site-less, lesion-less denial inside one service's own part still pairs with every act of its kind ('No biopsies were taken.'); every test R1 section 9 lists under rule 7 keeps passing."
+ },
+ "cues_added": [],
+ "cues_added_note": "cues.EM_ABSENCE (and its parts) are new names in studio/gi/cues.py read by detect.py and services.py only; neither context.py nor sections.py references them, so H2(a)'s request-side cue inventory is unchanged and lists nothing new.",
+ "movements": {},
+ "movements_note": "H2: NO movement of any class (NEW-SEND 0, NEW-TAKE 0, NEW-HELD 0, SEND->ASK 0, LAYOUT, FACT, REQUEST, MENTIONS 0): nothing context.py or sections.py reads changes, sections.layout is untouched, and services.mention_count reads the unchanged SERVICES and ACTS patterns.",
+ "battery": [],
+ "battery_note": "H4: NO movement in the 50 permanent rows (60 codes) and no new violation. Base scan (build/bind/probes/shape_scan.py): no row has a report title naming two services, a lesion label line, an attributive act compound, a copular negation with an act mention, an explicit E/M absence statement, or a bare-service section ended by a field label, a table cell or page furniture; the one E/M row held uncertain ('telephone-only time') is held by C4, not by EM_WITHOUT_BASIS, and V7 moves questions only, never a bucket or status. No battery row is added: no R8 register row is expected to move.",
+ "replay": {
+  "every document": "EQUAL in every member state (h2-08, h2-10, h4-01, h4-02, h4-03, h4-04, h4-05, h4-06): no regression text has a report title naming two services (h4-02's 'Gastroscopy and Sigmoidoscopy for Suspected Gut GVHD' and h4-04's 'Gastroscopy Then Colonoscopy in One Sitting' carry no report word), a lesion label line, an attributive act compound, a copular negation with an act mention or an explicit E/M absence statement, and none has a bare-service section that a field label, a table cell or page furniture ends (parts() on base: build/bind/logs/parts-base.txt); none reads the office E/M uncertain through EM_WITHOUT_BASIS alone, so V7 asks every question it asked. HARD expectations as on base."
+ },
+ "h3": "Movement expected only in the 72 seeded S-h4-02 documents whose title is the combined report title 'Upper Endoscopy and Flexible Sigmoidoscopy Report' (R1 probe 7): their region-less acts no longer fall back to the upper endoscopy (R4), and both services take the title reading. MUST: no cell that passes on base fails on head. binding.lower-not-on-upper reads act regions only, so it does not move. No generated document has a lesion label, an attributive act compound or a copular negation with an act; R5's exemptions are not expected to occur in the corpus (it carries no pages, so only page-number lines and repeated titles can be furniture).",
+ "register": "R8 register (probes/R8-history-defects r8_cases.py through defects_probe.py, 53 inputs): every row UNCHANGED (no register input has any of the shapes above; F7N's 'Procedure report (fictional)' names no service). No row may move toward ready.",
+ "mara": "tests/fixtures/cux/mara (rev1.txt, the retained Corti response normalized by studio.providers.corti.normalize_coding_response, its request rebuilt to sha256 f93376b0dac38912...) through jobs._analyze_child and jobs._assess_child, member values none, the revision's three pages at the repeated letterhead: base 43239 needs_clarification [conflict:biopsy], 45380 ready, 45385 needs_clarification [conflict:snare], service questions gi.office_em setting, patient_status, em_basis, conflicts S1-C1 and S2-C2, the clip bundled under S1, S1 scope [119, 7185). Head: 43239, 45380 and 45385 selected/ready; 0 proposal questions; 0 gi.office_em questions (S5 negated); 0 conflicts; 'No snare resection was performed on COL-1.' a negated snare at S2-L1, 'No biopsy forceps were used on COL-2.' a negated biopsy at S2-L2 and the prophylactic clip at S2-L2, all in the colonoscopy (S2); the clip bundled under S2; the distinct-lesion (59/XS) modifier consideration on both 45380 and 45385; S1's scope no longer the whole document; the duplicate lesions of the specimen table (base S2-L3, S2-L4) gone.",
+ "class_documents": "tests/fixtures/cux/reader/ (new; each file opens 'SYNTHETIC TEST DOCUMENT - FICTIONAL'): for each rule a positive document in another wording than Mara's, and at least one must-stay-held twin in a different wording, read in tests/test_cux_bind.py (SimpleTestCase) and measured base vs head with build/bind/probes.",
+ "must_hold": [
+  "a genuine same-lesion conflict: a polyp removed with a snare and the same lesion stated not removed with a snare (verbal negation) stays a conflict and its code held",
+  "a site-less blanket denial 'No biopsies were taken.' inside one service's own part beside a forceps removal stays a conflict (rule 7; probe 3 shape 3)",
+  "a combined report title over an unheaded narrative with one site-less denial 'No biopsies were taken.' keeps the EGD biopsy conflict (R1 probe 8c)",
+  "the A1 heading-lapse shapes of pi.json PI-A1-HEADING-LAPSE-REBINDS (tests/test_gi4_pi.py DroppedA1Tests: the sub-headings Polypectomy, Intervention, Treatment, Removal, Therapeutic Intervention, Polyp Removal, Snare Polypectomy and the asides): the unsited snare stays unattributed, 45378 (forward) and 43235 (reverse) stay selected/ready, no item offered",
+  "verbal negation 'The polyp was not removed with a snare.' still denies the snare (tests/test_services_reader.py test_controls_a_negation_of_the_act_itself_still_denies_it)",
+  "an affirmative E/M statement beside the absence statement still asks (S5 not negated, the documentation questions kept)",
+  "'not billed separately' / 'not separately billable' read as installed",
+  "an unresolved or ambiguous lesion label reads as installed",
+  "a predicative compound ('The polyp was snare-resected.') reads as installed"
+ ],
+ "unit_pins": "Expected to move: none of the existing tests (R1 probes 9 and 9b: simulations of R4 and R2 moved none of 304 reader tests, the H1 replay or the H4 battery). tests/test_gi4_corpus.py pins the corpus texts and their cell counts, not the readings, so it does not move. The parity digests (tests/test_harness_engine_parity.py, tests/test_harness2_r2_parity.py) are expected unchanged: no lesion label is added to the serialized inventory (the label index is internal to the reader), and none of their texts has a shape above. Any test that moves is appended here after code with the reason; the shared pins are not re-pinned in this package.",
+ "cost": "H7: linear. R2 one bounded look after each act mention and before each participle; R1 one pass over the lines for label definitions and one bounded label/specimen scan per act clause, dictionary lookups after; R4 one set of families per title line; R3 one copula search per negated clause; R5 one look at the next line per heading inside a running section and one pass over the page edges; R8 one bounded pattern per E/M mention and per sentence; V7 one pass over the routing E/M mentions. Measured with ops.gi4.cost after code.",
+ "h5": "Unchanged (tests/test_gi4_state.py reads no shape above).",
+ "not_changed": [
+  "services._same_subject",
+  "services.ACTS",
+  "services.BARE_PARTICIPLE",
+  "services.SERVICES",
+  "services.HEDGE_WORDS",
+  "services.EM_ROUTINE (its pattern and cue)",
+  "studio/gi/sections.py",
+  "studio/gi/context.py",
+  "detect's C4, D12 and D13 code (P2)",
+  "engine._second_opinion (P2)",
+  "engine._service_considerations (P3)"
+ ],
+ "after_measurement_20261104": {
+  "provenance": "Written on 2026-11-04 AFTER code and measurement, as a record (after code): it changes no declaration above it. Declaration commit 31bad049e (declared_before_code); code commits 6bea1c0fb..ea4887f89 (the last code commit; the commit adding this block touches only this file and ARCHITECTURE.md). Each harness tool ran on sealed git-archive exports of c9f20a148 (base) and ea4887f89036, offline, with the head's own harness (ops.gi4 replay --fixtures, battery --declare, freeze --quick and full --declare, corpus judge --workers 4, cost), and the R8 register through probes/R8-history-defects defects_probe.py. Every key above this one is unchanged: each value is identical, and the only byte added before this key is the comma that separates it.",
+  "H1": "replay --fixtures, base c9f20a148 -> head ea4887f89: EQUAL in every member state of every regression fixture. The replay's controls (head-independent, run at base: --controls) DIFFER where they must: ctl-date-charge-answer 98 paths, ctl-routing-elsewhere-order 30, ctl-request-date-line 54; control 0 EQUAL.",
+  "H4": "battery: base {'rows': 50, 'codes': 60, 'violations': 2, 'judged': 57, 'ready': 11, 'excluded': 7, 'held': 42}; head {'rows': 50, 'codes': 60, 'violations': 2, 'judged': 57, 'ready': 11, 'excluded': 7, 'held': 42}; 0 movements, 0 undeclared; 0 new violations. As declared: battery [] (no row has a P1 shape).",
+  "H2": {
+   "quick": [
+    "(a) cue patterns read by context.py and sections.py: base 324, head 324; changed 0, removed 0, added 0",
+    "sections.layout over 427 texts: identical",
+    "(b) date channel over 3123 text x member states: NEW-SEND 0, NEW-TAKE 0, NEW-HELD 0, SEND->ASK 0",
+    "(c) requests over 1212 primary and dated requests: changed 0",
+    "(d) mention counts over 427 texts: changed 0",
+    "== GATE HOLDS"
+   ],
+   "full": [
+    "(a) cue patterns read by context.py and sections.py: base 324, head 324; changed 0, removed 0, added 0",
+    "sections.layout over 5723 texts: identical",
+    "(b) date channel over 44014 text x member states: NEW-SEND 0, NEW-TAKE 0, NEW-HELD 0, SEND->ASK 0",
+    "(c) requests over 19780 primary and dated requests: changed 0",
+    "(d) mention counts over 5723 texts: changed 0",
+    "== GATE HOLDS"
+   ],
+   "declared": "no movement of any class and no cue added: as declared."
+  },
+  "H3": {
+   "documents": "base 5664 documents, 0 reader errors; head 5664 documents, 0 reader errors",
+   "differential": "no movement",
+   "inventory": "probes/h3_combined.py over the 72 corpus documents under \"Upper Endoscopy and Flexible Sigmoidoscopy Report\", base vs head: 16 move, each the same way - the upper endoscopy loses one performed site-less biopsy act (\"Cold forceps samples were taken ... labelled by jar in the grid below.\" in the combined part's \"Upper Tract Observations\" paragraph), which c9f20a148 gave the upper endoscopy by the first-named fallback. No status, conflict or judged cell moves: each document also states the upper biopsy in its grid and diagnosis lines. This is the declared R4 movement; the declared \"both services take the title reading\" did not happen (R4 narrowed, see deviations)."
+  },
+  "register": "R8 register, 53 inputs: every row unchanged (output identical; JSON equal except timings and tree path). As declared.",
+  "suite": {
+   "db_free": "the R9 DB-free module set (81 modules) plus tests.test_cux_bind, CPT_STUDIO_DB_PORT=9: 1912 tests in 302 s: OK (skipped=2)",
+   "db_backed": "the 52 modules that import studio.gi.services, detect or cues or studio.validation.engine and are not DB-free (build/bind/logs/db-modules.txt), on gi4-cpt-test-pg 127.0.0.1:55461, CPT_STUDIO_TEST_DB_SUFFIX=cuxbind: 1693 tests in 949 s: OK",
+   "unit_pins": "No existing test moved and no pin under tests/fixtures/gi4/pins was re-pinned: as declared."
+  },
+  "H7": {
+   "harness": {
+    "head": "OVER: colonoscope lines: context 0.129s -> 0.354s at 199,999 characters (ratio 2.74 > 2.3); instrument words, one sentence: context 0.075s -> 0.177s at 199,993 characters (ratio 2.36 > 2.3); worded date labels: context 0.089s -> 0.24s at 49,978 characters (ratio 2.70 > 2.3); em time with activities: inventory 0.178s -> 0.443s at 399,995 characters (ratio 2.49 > 2.3); headings beyond reach: context 0.088s -> 0.227s at 49,979 characters (ratio 2.58 > 2.3); headings beyond reach: inventory 0.229s -> 0.528s at 49,979 characters (ratio 2.31 > 2.3); blank lines before the head: ps_helpers 0.192s -> 0.4432s at 400,000 characters (ratio 2.31 > 2.3); one long title line: context 0.076s -> 0.195s at 199,983 characters (ratio 2.57 > 2.3)",
+    "base": "OVER: colonoscope sentences, one line: context 0.057s -> 0.141s at 99,969 characters (ratio 2.47 > 2.3); colonoscope sentences, one line: context 0.197s -> 0.466s at 399,989 characters (ratio 2.37 > 2.3); long line then gastroscope: context 0.083s -> 0.219s at 99,999 characters (ratio 2.64 > 2.3); worded date labels: context 0.207s -> 0.547s at 99,980 characters (ratio 2.64 > 2.3); worded date labels: route 0.148s -> 0.343s at 49,978 characters (ratio 2.32 > 2.3); acts far from carry: inventory 0.299s -> 0.691s at 49,971 characters (ratio 2.31 > 2.3); em time with activities: context 0.052s -> 0.151s at 99,995 characters (ratio 2.90 > 2.3); headings beyond reach: context 0.28s -> 0.647s at 199,973 characters (ratio 2.31 > 2.3); blank lines before the head: ps_helpers 0.0558s -> 0.129s at 100,000 characters (ratio 2.31 > 2.3)",
+    "reading": "ops.gi4.cost on both sealed exports side by side on a shared host (load average 3 to 16 from other sessions): base flags 9 doublings over 2.3 and head 8, none a limit (head analyze child at most 8.4 s, assess child at most 19.0 s, memory within bounds). The head's two inventory flags re-measured cold, best of three, on both trees (build/bind/probes/inv_cost.py) are linear and equal to base: em time with activities 0.338 / 0.344 s at 400k characters, headings beyond reach 2.569 / 2.634 s."
+   },
+   "p1_shapes": {
+    "p1 label definitions and references": "at 406,703 characters: inventory 2.01 -> 2.32 s, route 6.68 -> 6.66 s, analyze child 0.29 -> 0.3 s, assess child 10.75 -> 10.74 s",
+    "p1 one label referenced many times": "at 399,988 characters: inventory 2.01 -> 2.19 s, route 6.45 -> 6.29 s, analyze child 0.36 -> 0.34 s, assess child 8.86 -> 9.39 s",
+    "p1 attributive compounds, one sentence": "at 399,992 characters: inventory 0.36 -> 0.28 s, route 1.47 -> 1.38 s, analyze child 0.26 -> 0.25 s, assess child 2.04 -> 2.24 s",
+    "p1 attributive compounds, lines": "at 399,994 characters: inventory 2.23 -> 2.74 s, route 2.19 -> 2.32 s, analyze child 0.27 -> 0.26 s, assess child 5.04 -> 5.59 s",
+    "p1 copular negations": "at 399,966 characters: inventory 1.83 -> 2.65 s, route 7.23 -> 6.99 s, analyze child 0.34 -> 0.44 s, assess child 9.93 -> 10.82 s",
+    "p1 field labels in a section": "at 399,989 characters: inventory 3.82 -> 7.46 s, route 12.38 -> 12.40 s, analyze child 16.14 -> 15.59 s, assess child 19.56 -> 23.69 s",
+    "p1 repeated combined titles": "at 399,912 characters: inventory 3.36 -> 3.72 s, route 7.97 -> 8.14 s, analyze child 0.12 -> 0.1 s, assess child 13.5 -> 13.02 s",
+    "p1 E/M absence statements": "at 399,925 characters: inventory 1.61 -> 1.87 s, route 2.76 -> 2.63 s, analyze child 3.28 -> 3.47 s, assess child 4.87 -> 4.69 s",
+    "p1 negator runs before a visit noun": "at 399,995 characters: inventory 0.43 -> 0.41 s, route 1.35 -> 1.45 s, analyze child 2.39 -> 2.47 s, assess child 2.36 -> 2.31 s",
+    "p1 no-phrases without a visit noun": "at 399,997 characters: inventory 0.28 -> 0.28 s, route 1.34 -> 1.36 s, analyze child 2.29 -> 2.3 s, assess child 1.85 -> 2.13 s",
+    "p1 specimen references": "at 399,952 characters: inventory 2.15 -> 2.50 s, route 5.00 -> 5.01 s, analyze child 0.43 -> 0.44 s, assess child 7.89 -> 8.97 s",
+    "p1 labelled acts beside many lesions": "at 398,903 characters: inventory 4.60 -> 4.86 s, route 15.91 -> 15.08 s, analyze child 0.41 -> 0.41 s, assess child 20.83 -> 20.69 s",
+    "p1 definitions describing two lesions": "at 404,430 characters: inventory 2.88 -> 3.25 s, route 8.58 -> 7.91 s, analyze child 0.35 -> 0.31 s, assess child 11.42 -> 12.56 s",
+    "p1 combined title over denials": "at 399,992 characters: inventory 1.87 -> 2.34 s, route 5.26 -> 6.32 s, analyze child 0.21 -> 0.13 s, assess child 8.28 -> 8.63 s"
+   },
+   "p1_flags": {
+    "base_flags": 12,
+    "head_flags": 10,
+    "head_inventory_flags": [],
+    "base_inventory_flags": [
+     "p1 combined title over denials: inventory 0.164s -> 0.416s at 49,992 characters (ratio 2.54 > 2.3)",
+     "p1 combined title over denials: inventory 0.66s -> 1.593s at 199,967 characters (ratio 2.41 > 2.3)"
+    ],
+    "head_max_analyze_s": 15.59,
+    "head_max_assess_s": 23.69,
+    "head_overruns": []
+   },
+   "p1_reading": "build/bind/probes/cost_p1.py: ops.gi4.cost's own probe and judge over shapes that grow what P1 reads, both trees side by side. No inventory doubling over 2.3 on head; the head's three route flags (shapes with no E/M mention, where nothing P1 changed in routing runs) re-measured cold, best of two (build/bind/probes/route_cost.py), are linear and equal to base. The children stay far inside their stage limits (analyze 30 s, assess 60 s) at 400k characters. One constant-factor cost: the field-label shape (\"Extent\" / \"Cecum\" pairs inside a bare section), where rule 5 tests each heading-shaped line and the next (_section_structure): the inventory is about 2 times base at every size (3.82 -> 7.46 s at 400k), its doublings linear, assess child 19.6 -> 23.7 s.",
+   "repaired": "Measuring found rule 8's routing reader quadratic on one long sentence of visit mentions (route 2.99, 10.49, 40.93 s at 25k, 50k, 100k characters; base 0.70, 1.38, 2.76 s): repaired in ea4887f89 (the absence pattern and date test once per sentence, one bisection per mention, the absence readings a set): 1.22, 2.50, 3.14, 5.62 s at 25k to 200k, base 5.49 s at 200k (build/bind/probes/route_cost.py)."
+  },
+  "mara": "Final head, through jobs._analyze_child and jobs._assess_child with the retained response normalized by studio.providers.corti.normalize_coding_response (tests/test_cux_bind.py MaraEndToEndTests, with the revision's pages, one page and no pages): 43239, 45380 and 45385 selected/ready; 0 proposal questions; 0 office E/M questions (S5 negated); 0 conflicts; the clip bundled under the colonoscopy (S2); the distinct-lesion (59/XS) consideration on 45380 and 45385; completeness complete_pending_review; S1 (EGD) scope [1462, 2910) and S2 (colonoscopy) [2910, 4482) with the pages; the specimen table's duplicate lesions gone (S2-L1 2 mm specimen C, S2-L2 8 mm specimen D). As declared. 45385 keeps the evidence.support warn it carries at base.",
+  "class_documents": {
+   "moved_toward_ready_as_declared": [
+    "r1-labels-positive: 43239 held [conflict:biopsy] -> ready; the clip bundled under S2 (base S1)",
+    "r2-attributive-positive: 45385 held [conflict:snare] -> ready",
+    "r3-copular-positive: 45385 held [conflict:snare] -> ready",
+    "r5-field-labels-positive: 45385 held [performed_status] -> ready; the clip bundled under S2 (base S1)",
+    "r5-twin-site-heading: 43235 held [base_included] -> ready (the colon snare under the site heading \"Large Bowel\" no longer read in the upper endoscopy; 45385 stays held)"
+   ],
+   "moved_toward_held": [
+    "r1-twin-same-lesion: 45385 ready -> held [conflict:snare] (a genuine same-lesion denial c9f20a148 missed)",
+    "r5-twin-subheading: 43251 ready -> held [performed_status] (a COST of rule 4: an unsited snare under a sub-heading of a combined report is no longer given to the first named service; not declared by name)"
+   ],
+   "questions_removed": [
+    "r8-em-absent-positive, r8-em-absent-post: the office E/M questions go (rule 8: the visit reads negated)",
+    "r8-twin-billing, v7-em-without-basis: the office E/M questions go by V7 alone (the reading is unchanged: uncertain by the procedure-day hold, no E/M code proposed); r8-twin-contradiction still asks"
+   ],
+   "other": [
+    "r4-combined-positive: the clip is no longer bundled under the upper endoscopy (base S1); codes unchanged"
+   ],
+   "unchanged": "every other class document reads as at c9f20a148 (r1-twin-ambiguous, r1-twin-unknown-label, r2-attributive-proven, r2-twin-denied, r2-twin-predicative, r3-twin-existential, r3-twin-verbal, r4-twin-blanket-denial, r5-furniture-positive, r5-twin-not-furniture, r8-twin-contradiction)"
+  },
+  "must_hold": "Every must_hold item above holds on the final head (tests/test_cux_bind.py GenuineConflictTests, LesionLabelTests twins, CombinedTitleTests twins, CopularNegationTests, HeadingLapseShapeTests, EmAbsenceTests, and tests/test_gi4_pi.py DroppedA1Tests and tests/test_services_reader.py unchanged and passing). Added after probing: a combined title never documents a service its body cancels, defers, denies or only schedules (six bodies); a lesion label over a definition line describing two lesions resolves to nothing (three wordings); a denial naming a lesion of its own beside a label is placed as before (two wordings).",
+  "undeclared_movements": [
+   "r5-twin-subheading 43251 ready -> held (rule 4 cost, above)",
+   "H3 inventory: 16 of the 72 combined-title corpus documents lose one upper-endoscopy act (no judged cell moves)",
+   "the office E/M questions of r8-twin-billing and v7-em-without-basis go by V7 with the billing reading unchanged",
+   "rule 5 inventory cost about 2.2 times base on the field-label shape (linear)"
+  ],
+  "deviations": [
+   "R4 narrowed (5ea2d1cc5): a combined title gives its title reading to the first service it names only, not to each: with the rule as declared, under \"EGD and Colonoscopy Report\" a colonoscopy the body says was not performed, cancelled, deferred or \"not done today\" went from excluded to held, one only scheduled lost its performed-status question, and one abandoned at the rectum went from held to READY.",
+   "R1 narrowed (5788f37dd, 0b96d0bfc, de0928dfe): a label resolves only where its definition line (within LABEL_DEF_CHARS) describes one lesion; an act clause naming a lesion of its own beside a label takes no label binding; a specimen reference binds only a clause naming no site of its own; a label's own word is matched by the mention's noun. Each releasing shape found by probing now reads as at c9f20a148.",
+   "R2 narrowed (5788f37dd): a noun after the hyphen (\"biopsy-specimen\", \"stent-lumen\", \"polypectomy-bed\") is no participle.",
+   "Lesion.label is not added to the inventory record: the label index stays internal to the reader, so no serialized inventory (and no parity digest) moves.",
+   "V7 is implemented in engine._service_questions (engine._em_documentation_asked); reconcile.py is untouched.",
+   "R6 not attempted (it would move tests/test_gi4_pi.py test_h4_04_the_rectal_polyps_bind_as_installed and an H1 reading with a live approval).",
+   "No battery row added: no register or battery row has a P1 shape, so none could be a regression row for it."
+  ],
+  "open": [
+   "engine._states_unread_act (P2, _second_opinion) searches the raw ACTS patterns over the code's passage, so \"biopsy-proven Barrett esophagus\" still releases 43239 to READY with no biopsy act read (r2-attributive-proven, base and head). In memory only, replacing that search with services._acts_in(text, reading.start, reading.end) holds it [performed_status] and moves no other class document and not Mara (build/bind/probes/p2_unread_act.py)."
+  ]
+ }
+}

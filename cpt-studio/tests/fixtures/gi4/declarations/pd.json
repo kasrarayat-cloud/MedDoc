@@ -1,0 +1,743 @@
+{
+ "package": "PD",
+ "summary": "GI round 4, package PD (date step 1), studio/gi/context.py only. Wide own-date labels in the document's head (Date seen, Case date, Exam date, Date performed, Day of procedure, and the other forms of _WIDE_DATE_LABEL) and the worded date-of-service field of D2 ('Service date logged for this case: ...') only ever ASK or NARROW, and are never sent: (a) the installed reading sends X and such a label states Y: the date is asked and only X is a member's answer (the narrow release's question, read by charge_date_problem / charge_date_own / charge_question_day, so every reader still reads X); (b) the installed reading already asks with evidence: unchanged; (c) it asks with no evidence at all (any member date taken): the labels become that evidence - one value only when a closing-role line states the same day, several values as a conflict of those values - so only dates the document states are taken. Hardening: no wide or worded label is read when sections.around_procedure_title matches (the installed fact stands); corroboration only from closing-role lines among the last 8 non-empty lines, never from a consent, order, request, booking/scheduling or call/phone line. Built so that the installed candidates - and so the installed fact - are computed exactly as installed (the wide candidates are read beside them, never among them: the prototype's joint pass let _after_another_header keep an addendum's own label 'own' when a wide label stood in the head, a possible NEW-SEND), and every other text reads byte-identically.",
+ "cues_added": [
+  "context.WIDE_DATE_ASK_NOTE",
+  "context.WIDE_DATE_NOTE",
+  "context.WIDE_DATE_QUOTE_NOTE",
+  "context.WIDE_SERVICE_DATE",
+  "context._CLOSING_ROLE",
+  "context._PD_ADDENDUM",
+  "context._PD_ANNOUNCED",
+  "context._PD_AROUND_WORDS",
+  "context._PD_ATTEST",
+  "context._PD_CALL_PHRASE",
+  "context._PD_CLOSING_LINES",
+  "context._PD_COPIED",
+  "context._PD_CREDENTIAL",
+  "context._PD_KIND_FIELD",
+  "context._PD_NAME_BACK",
+  "context._PD_NAME_BEFORE",
+  "context._PD_NAME_SUFFIX",
+  "context._PD_NOT_CLOSING",
+  "context._PD_NOT_NAME",
+  "context._PD_NOT_OWN",
+  "context._PD_OTHER_DATE",
+  "context._PD_OWN_VERB",
+  "context._PD_PERFORMER",
+  "context._PD_PROCEDURE_LABEL",
+  "context._PD_QUOTE_CHARS",
+  "context._PD_QUOTE_WINDOW",
+  "context._PD_THING",
+  "context._PD_TITLE_CHARS",
+  "context._WIDE_DATE_LABEL",
+  "context._WIDE_NOTE_HEAD",
+  "context._WORDED_FIELD"
+ ],
+ "movements": {
+  "FACT-CHANGED": 33807,
+  "NEW-HELD": 14872,
+  "SEND->ASK": 1386
+ },
+ "movement_bounds": {
+  "corpus": "H2 as package PS ran it: the harness corpus (regression texts, generated corpus, seeded families, repository texts) plus /home/claude/cpt-studio-gi4-20261031/stage-a/out/minimal-corpus.jsonl; 51,925 texts, 281,868 text x member states",
+  "how": "computed BEFORE any PD code existed, from the installed tree's observation (80df1831d168) and a regex scan only (wave1/pd/probes/h2_bounds.py): PD can move only a text that carries a wide own-date label or a worded date-of-service field with a valid calendar date and is not titled as a note written around a procedure (sections.around_procedure_title, the PS rule); every other text's candidates are installed's by construction",
+  "FACT-CHANGED": "20,944 = such texts (33,807 carry such a label; 12,863 of them are titled around a procedure and read none)",
+  "SEND->ASK": "4,326 = such texts whose installed 'none' state sends a date (rule (a))",
+  "NEW-HELD": "78,260 = every state of such texts whose answer installed took (strict bound); expected at most 59,099 = those whose answer no wide or worded label of the text states (rule (c) narrows to the stated dates; rules (a) and (b) hold nothing new)",
+  "zero": "NEW-SEND 0 and NEW-TAKE 0 (the gate, by construction: a wide label is never sent, rule (a) takes only installed's own date, rule (c) takes a subset of installed's 'any date'); REQUEST-CHANGED 0, LAYOUT-CHANGED 0, MENTIONS-CHANGED 0, STATE-CHANGED 0, READER-ERROR 0, TEXT-MISSING 0; every moved text is one of the counted texts (checked by set, not only by count)"
+ },
+ "battery": [],
+ "battery_note": "No permanent H4 row carries a wide own-date label or a worded date-of-service field (static scan of ops/gi4/battery.py CASES), so no row can move: every row's bucket, status, violations and fingerprint equal installed's.",
+ "replay": {
+  "h4-01": {"fact": ["missing", null], "evidence": ["Date seen: 10/26/2026"], "note": "WIDE_DATE_NOTE",
+            "accepted": ["2026-10-26"],
+            "newly_held": ["doc:2026-10-14", "doc:2026-11-02", "doc:2026-11-23", "doc:2026-12-14", "far", "minus1", "plus1"],
+            "unchanged": ["none (DATELESS, stored dateless request d47c7756)", "walk 2026-10-26 (stored dated request 37eaacde, retained answer)"],
+            "failed_hard": []},
+  "h4-02": {"fact": ["missing", null], "evidence": ["Case date: 2026-10-21"], "note": "WIDE_DATE_NOTE",
+            "accepted": ["2026-10-21"], "newly_held": ["far", "minus1", "plan", "plus1"],
+            "unchanged": ["none (DATELESS, f02f70f6)", "walk 2026-10-21 (16c1b10b)"], "failed_hard": []},
+  "h4-03": {"fact": ["missing", null], "evidence": ["Exam date: 10/06/2026", "Service date logged for this case: 10/08/2026"],
+            "note": "WIDE_DATE_QUOTE_NOTE",
+            "accepted": "every answer (as installed: the quoted lines limit no answer)", "newly_held": [],
+            "unchanged": ["none (DATELESS, 8eaed7a5)", "walk 2026-10-06 (acdebca2)", "doc:2026-10-08 (taken as installed)", "doc:2026-10-06, doc:2026-10-09, far, minus1, plus1: taken and sent exactly as installed"],
+            "failed_hard": ["date.sends-only-the-truth[doc:2026-10-09]", "date.sends-only-the-truth[far]", "date.sends-only-the-truth[minus1]", "date.sends-only-the-truth[plus1]"],
+            "amended": "2026-11-01: was a conflict of 2026-10-06 and 2026-10-08 with those two taken only (amendment_20261101); then the quote-only fact with every answer taken; then only the strong head's own date 2026-10-06 taken (amendment_20261101_integration, the STRONG-HEAD HOLD); now the hold is DROPPED and the quote-only fact takes every answer again (amendment_20261101_cycle2: h4-03's recorded known limit)"},
+  "h4-04": {"fact": ["missing", null], "evidence": ["Date performed: October 19, 2026"], "note": "WIDE_DATE_NOTE",
+            "accepted": ["2026-10-19"], "newly_held": ["doc:2026-09-28", "far", "minus1", "plan", "plus1"],
+            "unchanged": ["none (DATELESS, 07851e22)", "walk 2026-10-19 (e89468e0)"], "failed_hard": []},
+  "h4-05": "EQUAL",
+  "h4-06": {"fact": ["missing", null], "evidence": ["Day of procedure: Oct 27, 2026"], "note": "WIDE_DATE_NOTE",
+            "accepted": ["2026-10-27"], "newly_held": ["doc:2025-09-30", "far", "minus1", "plan", "plus1"],
+            "unchanged": ["none (DATELESS, b38da885)", "walk 2026-10-27 (83712b2f)"], "failed_hard": []},
+  "h2-08": "EQUAL",
+  "h2-10": "EQUAL",
+  "all": "every stored request sha256 rebuilds unchanged; no state sends a date it did not send; in a newly held state the request is no longer built and the assess child reads the hold (provider failed, no answer), as for every member-date hold; every other state is equal in the compact view (date channel, request, routing, inventory, proposals with fingerprints, questions, offers, completeness)"
+ },
+ "h1_hard_failures": "installed 25 (date.sends-only-the-truth: h4-01 7, h4-02 4, h4-03 4, h4-04 5, h4-06 5 - each a member date taken where the own label is unread) -> b840ae756 0 -> amended 2026-11-01: 4 (h4-03's four, installed's own failures: rule (c) may no longer narrow several values, and neither of h4-03's values is its author's sign-off day 2026-10-09; amendment_20261101) -> amended 2026-11-01 by the integration: 0 (h4-03's four answers are held by the STRONG-HEAD HOLD: its head is a procedure report's own and gives 2026-10-06 alone; amendment_20261101_integration) -> amended 2026-11-01 by cycle 2: 4 again (the STRONG-HEAD HOLD dropped: h4-03's four, installed's own failures; amendment_20261101_cycle2)",
+ "h3": "no MUST regression and no SHOULD regression; movement only in date cells (date.send, date.answer-held, date.no-send-before-answer), fixed only; date.own-read[out] is MAY (PD2, never judged) and stays unsent",
+ "must_hold": [
+  "F7: 'Pre-procedure telephone call / Day of procedure: 11/04/2026 / ... Signed ... Oct 30, 2026' and the variant signed on 11/04: the installed fact (no evidence) stands, the call's own date is taken, nothing is sent before an answer",
+  "F7: 'Endoscopy booking / Case date: 2026-11-04', with or without 'Attested: ..., 2026-11-04': the installed fact stands; 2026-11-04 is never sent by the document",
+  "'Prior colonoscopy at an outside center / Date performed: May 2, 2019' above 'Date of service: October 19, 2026': sends 2026-10-19 as installed; 2019-05-02 is never sent or taken",
+  "'Date of service: 10/06/2026' with 'Last exam date: 04/02/2025': sends 2026-10-06 as installed",
+  "X+Y head conflict 'Date of service: 10/18/2026' + 'Date performed: 10/19/2026': asked (dateless); only 2026-10-18 is taken; every reader reads 2026-10-18",
+  "a wide label never reaches a request: no state sends a date only a wide or worded label states",
+  "a closing-role line outside the last 8 non-empty lines, or on a consent, order, request, booking or call line, corroborates nothing (the installed fact stands)",
+  "a wide label in the head beside an aside header date and an authored addendum's own label: the installed fact stands exactly (never sent where installed asks)",
+  "amended 2026-11-01 (DS-1): a co-signature, an attestation by anyone the head does not name as the performer, or an addendum's signature dated on the label's day narrows nothing; nor does a closing whose closing-role lines state two days (E3b, B3, C2): every member date is taken as installed, the label's line quoted",
+  "amended 2026-11-01 (DS-2): a note around a procedure under the broadened detection narrows nothing - 'Note type: Telephone', a flattened 'TELEPHONE ENCOUNTER   MRN: ...' line, a title on line 7 or over 80 characters, 'Pre procedure', and the titles Endoscopy Appointment, Patient Message, Prep Reminder, Pre-Admission Testing, Colonoscopy appointment reminder, Pre-colonoscopy Nursing Assessment (E1d, E2b, A1-A3, A5-A7, B1, B2, B6, B7, E4)",
+  "amended 2026-11-01 (DS-3): a copied report's signature (a line announcing copied text), a closing-role word on the label's own line, and the head of a short document narrow nothing (B4, B5, C1, C5)",
+  "amended 2026-11-01 (DS-4): several values narrow nothing - the question quotes the lines and never says 'Conflicting dates of service are documented' for them (F1, D1, D2, C4)",
+  "amended 2026-11-01 (CTS-5): rule (a)'s note quotes each differing label's whole line ('Day of procedure: 10/19/2026 Date seen: 10/12/2026 (pre-op clinic)'), never the label and its date alone",
+  "amended 2026-11-01 (integration, the STRONG-HEAD HOLD): a procedure report's own head (detect.todays_procedure_report) whose own-date field gives exactly one date holds every member answer of another day - never narrowed, taken or sent; the head's own date is taken where it was taken; nothing new is ever taken or sent; the 'none' state is unchanged",
+  "amended 2026-11-01 (integration): no hold in a note written around a procedure (rule (c)'s broadened detection) or stating a call or a message - F7's call and booking keep their own day a member's answer; none on a weak head (an attending, a denied or absent sedation field), a head with two own dates, or an own-date field stating another date",
+  "amended 2026-11-01 (integration): the relabelled ledger (F7's 'h4-03 ledger relabelled') takes no answer: rule (a) holds the head's 2026-10-06, the hold holds installed's 2026-10-08; nothing is sent before an answer and every reader reads 2026-10-08",
+  "amended 2026-11-01 (cycle 2): the three integration entries above are WITHDRAWN with the STRONG-HEAD HOLD (amendment_20261101_cycle2): on a strong head a member's answer is taken wherever cycle 1 takes it, and the relabelled ledger takes installed's 2026-10-08 again (rule (a) still holds the head's 2026-10-06 and asks before an answer)",
+  "amended 2026-11-01 (cycle 2, DT-5): a paste or a copy of another report announced in common words ('A copy of the outside report follows.', 'reads as follows', 'included below', 'quoted below', ...) narrows nothing, nor does an own sign-off the note goes on past with another day ('Reviewed by ..., 10/12/2026' after a pasted report's signature): every member date is taken, as installed"
+ ],
+ "guards_and_mutants": "one killing mutant per guard, each detected by tests.test_gi4_pd (SimpleTestCase, no database): the around-procedure title hold; the last-8-lines reach; the not-a-closing-line words; the installed candidates read apart from the wide ones; plus the prototype's guards PD now carries: corroboration of a single value, the own-reading filter, the worded field's occurrence words, the head reach, and rule (a) taking only installed's date. Amended 2026-11-01: see amendment_20261101.mutants (the guards whose anchors the repair replaces are replaced by the new guards' mutants, one killing mutant each) and amendment_20261101.second_entry.mutants, .third_entry.mutants, .fourth_entry.mutants and .fifth_entry.mutants. Amended 2026-11-01 by the integration: amendment_20261101_integration.mutants (retired by cycle 2 with the hold; amendment_20261101_cycle2.drop.mutants and .dt5.mutants)",
+ "deviations_from_the_prototype": [
+  "wide and worded candidates are read beside the installed candidates (_pd_wide_candidates) and appended after the installed post-processing, so _installed_service_date_fact reads exactly the installed candidates",
+  "_head_end counts lines with sections.head_lines_end (one pass, no backtracking on a long blank line)",
+  "a worded field (words before its colon, never alone in its field) is noted with WIDE_DATE_NOTE, never with FIELD_DATE_NOTE (which says the words come after the date)"
+ ],
+ "amendment_20261101": {
+  "date": "2026-11-01",
+  "written": "before any repair code (branch wip/gi4-r2-pd-20261101 from the integrated head b840ae756); every finding reproduced first on sealed exports of 80df1831d168 and b840ae756 (scratch w1r2/pd/out: probes_a..f, probes_cts5, cts6-*.log)",
+  "cycle": "Wave 1 repair, CYCLE 1 of at most 2 for rule (c)'s releasing family (narrowing a member's answers to a wide label's date). If a second refutation breaks it again and the second cycle cannot repair it, it is dropped and recorded as a known limit",
+  "findings": {
+   "DS-1": "reproduced: E3b holds the nurse's 2026-10-30 (co-signature 11/04), B3 the consultation's 2026-10-28 (attested 11/04), C2 the visit's 2026-10-12 (addendum worded field 10/20)",
+   "DS-2": "reproduced: E1d, E2b, E4, A1-A3, A5-A7, B1, B2, B6, B7 each hold the note's own day and take only the planned day",
+   "DS-3": "reproduced: B4, B5 (the copied report's signature), C1, C5 (the label's own head line) narrow to the wrong day",
+   "DS-4": "reproduced: F1, D1, D2 (and C4) - the several-values branch narrows to other occurrences' days and words them 'Conflicting dates of service are documented'",
+   "CTS-5": "reproduced: PD-02/03/04/06/08 quote only label and date ('(pathology)', 'by Mercy GI', '(booked)', 'in clinic; procedure today', '(pre-op clinic)' and the agreeing 'Day of procedure: 10/19/2026' dropped)",
+   "CTS-6": "reproduced (throwaway database 127.0.0.1:55461, suffix w1r2pd): on b840ae756 a setting save sends ['dated', 'DATELESS'] and invalidates the 45378 approval; installed sends ['dated'] and carries it"
+  },
+  "rule_c": {
+   "binding": "the cycle's binding rules: rule (c) NARROWS the accepted answers to a wide label's date ONLY when (1)-(5) below all hold; otherwise it ONLY adds the quoted evidence to the question and leaves the accepted answers as installed (every member date taken)",
+   "narrows_only_when": [
+    "(1) the label's day is the AUTHOR'S OWN sign-off day: a closing-role line of the note's closing region that signs, e-signs, authenticates or finalizes the note (a dictation word beside such a verb does not disqualify it) - never a co-signature or countersignature, a transcription line, or a consent, order, request, booking, scheduling or call line; an attestation counts as the author's own sign-off ONLY when it names the performer a head field names (proceduralist, endoscopist, operator, performing physician, gastroenterologist, colonoscopist, surgeon, attending, physician, provider, seen by, author): h4-06's 'Attested:' line is its colonoscopist's own sign-off, B3's attestation by an unnamed signer is not",
+    "(2) every closing-role line after the head (co-signatures, attestations, dictation and transcription lines and every other) states that same day or no day",
+    "(3) the closing region is the note's own: its last 8 non-empty lines and never any line of the head (a short document whose head is all of it narrows nothing; the label's own line is the head's); no addendum line after the head; no line anywhere announcing copied, pasted, attached, imported, scanned, faxed, forwarded or excerpted text; the sign-off line not under a heading-like line naming another occurrence's record (sections.under_another_occurrence)",
+    "(4) the document is not around a procedure under the BROADENED detection: sections.around_procedure_title, or among the first 12 non-empty lines a title-like line or a flattened line's cell (at most 160 characters, no field value, no closing sentence punctuation) or a kind field ('Note type:', 'Encounter type:', 'Visit type:', 'Type of visit:', 'Encounter:', 'Visit:', 'Note:', ...) whose words name a booking or scheduling, pre-anything procedural (pre-procedure, pre op, pre-admission, pre-colonoscopy, ...), prep, a telephone, phone or call, a message, an appointment, a reminder, instructions, a consent, education, a handout, correspondence, a letter, a review, an outside record, nursing or a nurse, an assessment, triage, a portal, e-mail, fax, a refill, a referral, a request, an order, a cancellation, a no-show, intake, telehealth, telemedicine, a virtual or video visit",
+    "(5) exactly one candidate value: EVERY wide or worded own candidate narrows (each states the one sign-off day), never several",
+    "fail-closed beside the binding rules: the label's date alone in its field; its line at most 240 characters, stating no other date and no addendum word; no wide label put in doubt (birth, part, order)"
+   ],
+   "narrowing_fact": "origin missing; evidence = each label's WHOLE line (it states only the label's date, so the answers are exactly that date, as on b840ae756); note WIDE_DATE_NOTE, reworded to say the note's own signature states the same day (it said the words 'read as naming the encounter', which the question's 'not read as one' contradicted)",
+   "quote_only_fact": "origin missing, value none; evidence = each wide or worded own label's WHOLE line as a quoted span that limits no answer (merge_user_values takes every member date where the evidence holds nothing else, exactly as installed; _date_readings reads no date from it); note WIDE_DATE_QUOTE_NOTE. The question then quotes the line ('No usable date of service was read: the document states “...”, which is not read as one') instead of installed's 'No date of service is documented'. Also on documents titled around a procedure by the PS rule, which b840ae756 read nothing in",
+   "regression_cost": "h4-03 cannot keep its b840ae756 narrowing under (1) and (5): its two values 2026-10-06 and 2026-10-08 are several, and neither is its author's sign-off day 2026-10-09. It becomes the quote-only fact; its four states doc:2026-10-09, far, minus1 and plus1 go back to installed's (taken and sent), so H1's HARD date.sends-only-the-truth fails there again (installed 25 -> b840ae756 0 -> 4). This contradicts the round's 'keep the HARD regression expectations that Wave 1 met'; the binding rules of this cycle are followed and the conflict is recorded for the round's owner. The one rule that would keep it (several values only under a procedure-report head, the refuter's suggestion) is NOT applied: binding rule (5) forbids several values"
+  },
+  "rule_a": "unchanged in scope: an own label of another day than the date installed sends asks, only that date is taken, and W1's sections.around_procedure_title still turns it off - so every 'none' state and every request reads as on b840ae756. WIDE_DATE_ASK_NOTE now quotes each differing label's WHOLE line (whitespace collapsed; a line over 240 characters as a window of 100 characters either side of its label and date, each cut end marked '…'), once per line (CTS-5). The installed own quote after 'is read from' stays the installed evidence span, so no free document text follows it and charge_date_own still reads the note's own date",
+  "cts6_recorded_consequence": "jobs.py is NOT changed (PX's file; no pure guard is PD's to add). The live consequence for the install declaration: a pre-install encounter (its context recorded by installed, labelled gi-context@3) is re-extracted with this reader at its first member context save of ANY field (POST /context), and at any stage that remakes or re-reads its context (PX's gi-context@4 remake, Resume). (i) Rule (a) documents - installed sent the date X and a wide or worded own label in the head states another day, with no PS around-procedure title: the new context asks the date, the request differs from the run in use, and ONE new paid DATELESS primary request is sent (none when an identical dateless request was already retained); every decision whose proposal changes status (Ready for review -> Needs clarification) is invalidated with the recorded reason 'Re-assessed after changes (service date: X -> asked; ...)'. Answering X then sends nothing new (the retained dated run is reused) and returns READY, but the approval must be made again; re-saving X itself first sends nothing and carries the decision. (ii) Rule (c) narrowing documents - installed asked with no evidence, this reader takes only the label's day: a member date of another day entered before the install becomes a member-date conflict at the same moments - nothing is sent, the encounter is held with USER_CONFLICT_NOTE, decisions whose status changes are invalidated. (iii) Quote-only documents: the stored fact gains the quoted line only; no request changes, nothing is sent, member dates stay taken. Until PX bumps CONTEXT_VERSION the new context keeps the label gi-context@3 and cannot be told from an installed-made one. The live count needs the live database, which this package does not read: the install session classifies each current revision text offline with this reader ((i): installed fact 'document', this fact 'conflict' with WIDE_DATE_ASK_NOTE; (ii): a member service_date present and not the narrowed day). Pinned as recorded behaviour by tests.test_gi4_pd_state (the throwaway database)",
+  "expected_vs_b840ae756": {
+   "requests": "0 changed in every 'none' state and for every answer both trees take (rule (a) unchanged; rule (c) is dateless either way); NEW-SEND, SEND->ASK and ASK->SEND of the 'none' state: 0",
+   "TAKEN->HELD": "0: every narrowing now needs a superset of b840ae756's conditions (the own sign-off is a closing-role line in the same last-8-lines region; several values never narrow), so no state is held that b840ae756 took",
+   "HELD->TAKEN": "at most 14,872 states (b840ae756's NEW-HELD against installed on the H2 corpus): each a state installed takes and sends identically (checked by set against installed, not only by count); on the H2 tool run with base b840ae756 these read as NEW-SEND and NEW-TAKE, and every one must equal installed's",
+   "FACT-CHANGED": "at most 33,807 texts (every text carrying a wide own-date label or a worded date-of-service field with a calendar date): narrowing facts whose evidence becomes the whole line or whose note is reworded, rule (a) notes quoting whole lines, quote-only facts (including the PS-titled ones b840ae756 left installed)",
+   "H1": "h4-01, h4-02, h4-04, h4-06: fact, evidence, accepted and held answers, requests and every state unchanged (the narrowing note's text only); h4-03: the quote-only fact, its four states doc:2026-10-09, far, minus1, plus1 taken and sent as installed (assessed with the walk's counterfactual answer, as installed's are), the rest unchanged; h4-05, h2-08, h2-10 equal. READY codes in every walk state unchanged",
+   "H4": "EQUAL (no permanent row carries a wide or worded label)",
+   "cues": "added only, all listed in cues_added; none changed or removed against installed"
+  },
+  "expected_vs_installed": "the H2 gate: NEW-SEND 0 and NEW-TAKE 0 (by construction: a wide label is never sent, rule (a) takes only installed's date, the narrowing takes a subset of installed's 'any date', the quote-only fact takes every date as installed); NEW-HELD at most 14,872 (b840ae756's measured value: this narrowing is a subset of b840ae756's); SEND->ASK exactly b840ae756's 1,386 (declared at most 1,386); FACT-CHANGED at most 33,807; REQUEST-CHANGED, LAYOUT-CHANGED, MENTIONS-CHANGED, STATE-CHANGED, READER-ERROR, TEXT-MISSING 0. H3: no MUST and no SHOULD regression against installed (the date cells b840ae756 fixed may only fall back to installed's failure, never below it)",
+  "mutants": "the b840ae756 PD mutants whose anchors this repair replaces (pd-around-title, pd-closing-last-lines, pd-not-closing-words, pd-corroboration) are replaced by one killing mutant per guard of this repair: rule (a) off under the PS title; the broadened around-procedure detection (title cells, kind fields, the wider word list); the author's own sign-off (no co-signature or transcription line, an attestation only by the head's performer, no consent/order/request/booking/call line); every closing-role day agrees; the closing region never in the head; no addendum line; no copied-text announcement; the sign-off not under another occurrence; every candidate narrows (one value); the label alone with a clean line; the quoted span limits no answer; rule (a) quotes whole lines. Detector: tests.test_gi4_pd (no database); registered in ops/gi4/mutants.py PD_MUTANTS, census updated",
+  "superseded": {
+   "movements": {"FACT-CHANGED": 20944, "NEW-HELD": 78260, "SEND->ASK": 4326},
+   "replay.h4-03": {"fact": ["conflict", null], "note": "Conflicting documented values: 2026-10-06, 2026-10-08.", "accepted": ["2026-10-06", "2026-10-08"], "newly_held": ["doc:2026-10-09", "far", "minus1", "plus1"], "failed_hard": []},
+   "h1_hard_failures": "installed 25 -> 0",
+   "summary_rule_c": "the labels become that evidence - one value only when a closing-role line states the same day, several values as a conflict of those values; corroboration only from closing-role lines among the last 8 non-empty lines (the summary above is kept as written; this amendment governs)"
+  },
+  "second_entry": {
+   "date": "2026-11-01",
+   "written": "after the first entry's code was written and measured (not committed), and BEFORE this guard's code, by the resumed session of the same repair (cycle 1, still one cycle)",
+   "why": "the first entry reads the author's own sign-off from its POSITION (a closing-role line among the note's last 8 non-empty lines, after the head) and its verb, and rules out a copied block only by NEGATIVE evidence (no copied-text announcement, no addendum line, not under a heading naming another occurrence). A copied outside report pasted at a clinic note's end with no announcement and a neutral heading still narrows to the copied report's day - DS-3's class, which the first entry closes only for the refuter's wordings ('GI Clinic Note / Date performed: 09/03/2026 / ... / Electronically signed by B. Other MD, 09/03/2026' takes only 2026-09-03 and holds the visit's own day). Binding rule (1) asks for the AUTHOR'S OWN signature: the positive evidence of whose signature a line is, is a head field naming the note's performer or author",
+   "added_guard": "(1) amended: a sign-off line (it signs, e-signs, authenticates, finalizes or attests) is the author's own only when it NAMES a performer or author a head field names (_PD_PERFORMER among the first 12 non-empty lines: proceduralist, endoscopist, operator, performing physician/endoscopist/provider, gastroenterologist, colonoscopist, surgeon, attending, physician, provider, seen by, author; the field's name cut at its first comma, semicolon, colon, bracket or cell break): the field's surname stands in the sign-off line as the END of the signer's name (not followed by another capitalised word that is no credential or suffix: 'Synthetic Nurse' is not 'Synthetic'), and where the field gives a first name, the name words right before that surname (at most three, a title such as 'Dr.' skipped) agree with it - equal, or an initial of it ('Ilse Halvorsen-Ode' is not 'Wren Halvorsen-Ode'; 'W. Halvorsen-Ode', 'Wren J. Halvorsen-Ode' and 'Dr. Halvorsen-Ode' are); and the sign-off line is at most 240 characters (a longer line is no sign-off; it also bounds the name reading). Every sign-off verb is read alike, so an attestation and a signature are the same case: h4-06's 'Attested:' by the colonoscopist its head names stays its own sign-off, and a signature by anyone the head does not name - or in a note whose head names nobody - narrows nothing. Hold direction only: the guard can only turn a narrowing into the quote-only fact (installed's answers), never the reverse",
+   "cues_added": ["context._PD_NAME_BACK", "context._PD_NAME_BEFORE", "context._PD_NAME_SUFFIX", "context._PD_NOT_NAME"],
+   "expected": "against the first entry (its uncommitted code, the H2 corpus, measured with a scratch model of this rule): of its 1,075 narrowing texts about 979 still narrow - the 4 regression texts h4-01, h4-02, h4-04 and h4-06 among them, each signed by the performer its head names - and about 96 generated procedure reports whose head names no performer become quote-only (every answer taken, as installed); nothing else moves. Against installed and b840ae756: inside the first entry's declared bounds (NEW-SEND 0 and NEW-TAKE 0 against installed; NEW-HELD lower; TAKEN->HELD 0 against b840ae756; SEND->ASK and requests unchanged). H1 as the first entry declares (h4-01, h4-02, h4-04, h4-06 narrowed exactly as on b840ae756; h4-03 quote-only with its four recorded HARD failures); H4 EQUAL; H3 no MUST or SHOULD regression against installed (date cells only fall back to installed's)",
+   "mutants": "pd-attest-performer is replaced by pd-signoff-names-performer (every sign-off verb needs the head's performer); added pd-performer-whole-name (the surname ends the signer's name), pd-performer-first-name (the first name agrees) and pd-signoff-short-line (a sign-off line is at most 240 characters); the anchors of pd-own-not-cosign, pd-not-closing-words and pd-dictated-only follow the restructured lines. PD census 31 -> 34, total 129 -> 132"
+  },
+  "third_entry": {
+   "date": "2026-11-01",
+   "written": "after the second entry's code, BEFORE this guard's code (same session, still cycle 1)",
+   "why": "binding rule (4)'s broadened detection reads the head (titles, cells, kind fields). The judge's F7 call note with a neutral title and its kind written only in the body - 'Endoscopy Unit Note / Author: Synthetic Nurse, RN / Day of procedure: 11/04/2026 / Call placed on 10/30/2026. / Signed: Synthetic Nurse, RN, 11/04/2026 07:10' - passes every other guard (the head names its author, who signs on the planned day) and narrows to the planned day, holding the call's own day",
+   "added_guard": "(4) widened, hold direction only: no narrowing when the document anywhere states a call, a phone contact or a message as an event (_PD_CALL_PHRASE: called, calling, phoned, messaged, texted, e-mailed, voicemail, 'left a (voice) message', 'phone/telephone call|encounter|visit|contact|conversation', 'call placed|made|received|returned|back', 'by|over the|on the|via (tele)phone'); a field label such as 'Phone: 555-0100' or 'Telephone:' and 'Recall' are none",
+   "cues_added": ["context._PD_CALL_PHRASE"],
+   "expected": "measured before coding with the phrase list on the second entry's 979 narrowing texts of the H2 corpus: none carries such a phrase, and no regression text does - so no measured text moves (H1, H2 counts and H4 as the second entry declares); only shapes like the one above move, from narrowing to the quote-only fact (installed's answers)",
+   "mutants": "added pd-no-call-phrase (detector tests.test_gi4_pd). PD census 34 -> 35, total 132 -> 133"
+  },
+  "fourth_entry": {
+   "date": "2026-11-01",
+   "written": "after the third entry's code was committed (4b690ae5c) and measured (H1, H2, H4), BEFORE this guard's code (same session, still cycle 1)",
+   "why": "binding rule (1) names an attestation among the lines that are NOT the author's own sign-off. The second entry reads an attestation by the performer the head names as his own sign-off, which h4-06 needs (its only closing line is 'Attested:' by the colonoscopist its head names). Read that way it also takes a SUPERVISING attestation: 'Fellow: X / Attending: Dr. P / Day of procedure: 11/04/2026 / ... / Electronically signed by X / Attested by Dr. P, 11/04/2026' (the fellow's signature undated) narrows to the attestation's day although the author's own signature states none",
+   "added_guard": "(1) amended: a line that only attests (no sign, authenticate or finalize verb) is the author's own sign-off ONLY when it is the closing region's sole closing-role line - no other signature, co-signature, dictation or transcription line, dated or not, among the note's last 8 non-empty lines after the head - and it names the performer the head names. An attestation beside any other closing line narrows nothing unless an own-verb sign-off naming the performer states the day itself. Hold direction only",
+   "cues_added": [],
+   "expected": "measured before coding on the 979 narrowing texts of the H2 corpus: 108 rest on an attestation-only sign-off and none of them has another closing-role line in its closing region; no regression text moves (h4-06's attestation is its only closing line). So no measured count moves (H1, H2, H4 as declared); only shapes like the one above move, from narrowing to the quote-only fact (installed's answers)",
+   "mutants": "added pd-attest-sole-line (detector tests.test_gi4_pd). PD census 35 -> 36, total 133 -> 134"
+  },
+  "fifth_entry": {
+   "date": "2026-11-01",
+   "written": "after the fourth entry's code was committed (1cedd811d, pins e1fe8db32), BEFORE this guard's code (same session, still cycle 1); the final proofs on e1fe8db32 were stopped unfinished so that they run once, on this guard's commit",
+   "why": "the session's own refutation probe R8: 'GI Consultation / Seen by: A. Doctor MD / Day of procedure: 11/04/2026 / ... / Electronically signed by A. Doctor MD, 11/04/2026 07:30' - a consultation signed late, on the planned procedure's day - passes every guard (its head names its author, who signs on the label's day) and narrows to the planned day, holding the consultation's own day. A label naming a PROCEDURE's occurrence ('Day of procedure', 'Procedure day', 'Case date', 'Date/Day of case', 'Date performed') dates the procedure; only a procedure's own report is positive evidence that the procedure is the note's encounter",
+   "added_guard": "(5) widened, hold direction only: a wide label naming a procedure's occurrence (_PD_PROCEDURE_LABEL) narrows only when the document's head carries a procedure report's own fields (sections.procedure_report_head, PS's: a sedation or anesthesia line, or a field naming who performed it). Visit and exam labels ('Date seen', 'Exam date', 'Day of visit', 'Day of service', ...) and the worded date-of-service field are read as before",
+   "cues_added": ["context._PD_PROCEDURE_LABEL"],
+   "expected": "measured before coding on the 979 narrowing texts of the H2 corpus: every narrowing by such a label has a procedure report's head (h4-02 'Case date', h4-04 'Date performed', h4-06 'Day of procedure' among them), so no measured text moves (H1, H2, H4 as declared); only shapes like R8 move, from narrowing to the quote-only fact (installed's answers)",
+   "mutants": "added pd-procedure-label-head (detector tests.test_gi4_pd). PD census 36 -> 37, total 134 -> 135"
+  }
+ },
+ "amendment_20261101_integration": {
+  "date": "2026-11-01",
+  "written": "by the integration of Wave 1 repair cycle 1 on branch fix/cpt-studio-gi4-interpretation-20261101 (head 4aa1c1f9c: the four cycle-1 repair branches merged onto b840ae756), BEFORE this rule's code is committed. The rule was first modelled in a scratch copy of 4aa1c1f9c and measured there (H1; H2 against 4aa1c1f9c and installed 80df1831d168; H3; H4; tests.test_gi4_pd; every PD mutant): the numbers below are that model's",
+  "decision": "the integrator's decision on h4-03, a named regression case. PD's cycle 1 returned h4-03 to installed's behaviour: in member states doc:2026-10-09, far, minus1 and plus1 a date answer that matches neither date the report states for its own case is TAKEN and sent, so H1 HARD fails 4 of 17. 'Unchanged from installed' is insufficient where installed is known to be wrong",
+  "rule": "STRONG-HEAD HOLD. When the document's head is a procedure report's own head - detect.todays_procedure_report, the strong head PI+PE's cycle 1 reads for E1 (an own-date field, a proceduralist field and a sedation field as labelled fields, one own date, no review or result title), imported and never copied - and that own-date field gives exactly one date, a member's date answer that DIFFERS from it is HELD (asked): never narrowed, never taken, never sent. The question quotes the head's own-date line and any other line of the document that states a service date for the same case (h4-03's case-room ledger, 'Service date logged for this case: 10/08/2026'). It only moves TAKEN -> HELD; NEW-SEND and NEW-TAKE stay 0",
+  "reading": [
+   "the head's one date is the one detect._gi4_head reads (the predicate's own); its own-date fields are the head lines _gi4_head reads, with the same labels and dates (SERVICE_DATE or WIDE_SERVICE_DATE at a line's start after its markdown lead, detect._GI4_MARKUP, among its first sections.PROCEDURE_HEAD_LINES non-empty lines). 'Gives exactly one date': no other date-shaped text (_PD_OTHER_DATE) in the field, up to its field break or its line's end",
+   "a note written AROUND a procedure is no procedure report's own head, whatever fields it carries: under rule (c)'s broadened detection (_pd_around_procedure: titles, cells, kind fields) or stating a call, a phone contact or a message as an event (_PD_CALL_PHRASE), the hold does not read it. Its 'Day of procedure' is the planned procedure's, and the plan's must-hold F7 binds: the call's and the booking's own day stay a member's answer. Hold direction only: where the hold does not read, the reading without it stands (never a new take or send). Measured: none of the texts the hold moves is such a note",
+   "only an answer merge_user_values would TAKE is held: a post-step on its 'user' result for service_date, so an answer it holds keeps its own hold and note, and the head's own day is taken only where it was taken before",
+   "the 'none' state is unchanged: the fact's origin, value and evidence, the request, and every reader's date (service_date_of, charge_question_day). Where the date is asked and an answer of another day would be taken (_takes_another_day: merge_user_values' branches, in its order), the fact's NOTE says so: HEAD_DATE_NOTE replaces a note no reader reads (h4-03's WIDE_DATE_QUOTE_NOTE said 'a member's date is taken', false under the hold); the narrow release's and rule (a)'s question keeps its note, which charge_date_problem reads, and _HEAD_CHARGE_NOTE follows it, naming no document line so that the question's own markers stay its last; a documented conflict's note is its values (documented_values) and stays as made",
+   "a sent date the strong head contradicts (the installed reading sends X and the head gives another day): a member's answer X is held as the rule says, and the 'none' state still sends X (the rule moves no send). Measured: no such text among the 2,453 strong heads of the H2 corpus; each of their 1,292 sent dates equals its head's",
+   "the mark: _HeadHeldFact, a Fact stored, compared, hashed and serialised as the plain fact it copies (to_jsonable unchanged), whose head_day and head_quotes only merge_user_values reads, from a freshly extracted fact (the analyze child's, carried by pickle) - as this module's span classes (_QuotedSpan, _ElsewhereSpan) are read"
+  ],
+  "coupling": "context.py now reads detect's strong head (todays_procedure_report, _gi4_head, _GI4_MARKUP; imported lazily, as detect imports context), whose patterns are outside H2(a)'s cue inventory (context.py's and sections.py's own). A change to them can move an answer only between held-by-this-rule and the reading without it - never a NEW-SEND or a NEW-TAKE against installed - and H2(b) measures it per text and member state",
+  "interaction_53b_54": "the 53(b)/54 precedent behind rule (a) (where installed sends X and a wide or worded own label states Y, only X is a member's answer) meets this hold where the strong head's date is Y: the judge's F7 'h4-03 ledger relabelled' (and the seeded S-h4-03-018 to S-h4-03-035) now takes NO answer - Y is held by rule (a), X by this hold. The 'none' state stays dateless, every reader still reads X, and an addendum settles it. TAKEN -> HELD, as the rule allows; recorded for the round's owner, because 53(b)/54 made X a member's answer. tests.test_gi4_pd's relabelled-ledger case is amended accordingly",
+  "known_limits": [
+   "a note whose head carries a proceduralist field, a sedation field and one own date of a PLANNED procedure under a title the broadened detection does not name (a 'GI Consultation' listing the planned procedure's fields, signed on the visit's day) passes the strong head: its own day is held and the planned day stays the only answer taken (no new send or take; the correct answer refused). The predicate is PI+PE's; E1 also excludes an office visit read by routing, which the date reader cannot read (routing reads its date). Measured: no such text in the H2 corpus",
+   "the encounter question before any answer is worded by checks._date_problem (installed code, not PD's): it quotes the first evidence line only - for h4-03 'Exam date: 10/06/2026'. The fact's note, and the question once an answer is held (HEAD_HOLD_NOTE), quote the head's line and the ledger's"
+  ],
+  "expected": {
+   "vs_4aa1c1f9c": "H2 over the H2 corpus (51,925 texts, 281,868 text x member states): NEW-SEND 0, NEW-TAKE 0, SEND->ASK 0, NEW-HELD 239 (91 texts: reg:h4-03, 89 of h4-03's seeded family S-h4-03-*, and minimal-corpus.jsonl's copy of h4-03; by fact: 37 quote-only texts (185 states), 18 rule (a) texts (18), 36 documented conflicts (36)), FACT-CHANGED 55 (the 37 quote-only notes and the 18 rule (a) notes; no origin, value or evidence changes), REQUEST-CHANGED 0, LAYOUT-CHANGED 0, MENTIONS-CHANGED 0, READER-ERROR 0; cues added 6 (cues_added below). H1: h4-03 only - doc:2026-10-08, doc:2026-10-09, far, minus1 and plus1 TAKEN -> HELD (no request; assessed as a member-date hold) and the 'none' state's note; every other document and state equal. H3: MUST date.answer-held fixed 72, MUST date.send fixed 36, nothing regressed (5,664 documents, 0 reader errors). H4: 0 movements",
+   "vs_installed": "H2: NEW-SEND 0, NEW-TAKE 0, NEW-HELD 5,702 (PD cycle 1's 5,463 + 239; within this declaration's bound of 14,872), SEND->ASK 1,386, FACT-CHANGED 14,431 (unchanged: the 55 facts had changed already), REQUEST-CHANGED 0 over 206,136 requests, layout identical, mention counts unchanged",
+   "H1": "h4-03 HARD 13/17 -> 17/17 (the four date.sends-only-the-truth failures doc:2026-10-09, far, minus1, plus1 now HELD), SOFT 2/5 and INFO 1/2 unchanged; accepted answers ['2026-10-06'] only; the 'none' state dateless (8eaed7a5); the walk 2026-10-06 sends the stored dated request acdebca2 and its retained answer keeps 43244 READY. HARD failures over the regression set: installed 25 -> b840ae756 0 -> PD cycle 1 4 -> 0"
+  },
+  "walk_state": "reported as directed, the rule unchanged: the member state that enters the head's own date (walk 2026-10-06; doc:2026-10-06 is the same answer) is TAKEN and sent although the ledger states 2026-10-08 for the same case - the stored dated request acdebca2, the retained answer 7da9256d, 43244 READY, no question open, completeness complete_pending_review. Before the answer the encounter question quotes only 'Exam date: 10/06/2026' (the fact's note quotes both lines), so if the ledger's 2026-10-08 were the true date, a member entering the head's 2026-10-06 is taken and sent without being shown the other date there",
+  "must_hold_scope": "the amended must-holds DS-1 to DS-4 ('every member date is taken as installed') read the refuter's documents, none of which has a strong head (each passes unchanged); on a strong head this hold governs, and a member's answer of another day than its head's is held",
+  "mutants": "one killing mutant per guard of the hold, detector tests.test_gi4_pd (StrongHeadHoldTests): pd-head-hold (the hold), pd-head-strong (the strong head, never PS's procedure_report_head), pd-head-one-date (the field gives one date), pd-head-around (rule (c)'s broadened detection), pd-head-call (a call or a message stated), pd-head-note (HEAD_DATE_NOTE), pd-head-charge-note (_HEAD_CHARGE_NOTE). PD census 37 -> 44, total 226 -> 233. Measured on the model: all 44 PD mutants killed, each restored to its original sha256",
+  "tests": "tests.test_gi4_pd: StrongHeadHoldTests - h4-03, and synthetic variants written for it: a strong head whose date differs from the entered date (an EGD report), a weak head (an attending; a denied sedation field), a head with no single date (two own-date fields; one field stating two dates), a consult with a planned procedure date, a booking and a call note with strong heads, a documented conflict, the relabelled ledger, the mark's identity and carriage, and _takes_another_day against merge_user_values. report()'s sedation field is now denied ('Sedation: none'), so the rule (c) cases read rule (c) alone, as written (they pass unchanged on 4aa1c1f9c); the h4-03 and relabelled-ledger cases are amended",
+  "live_consequence": "for the install declaration: an encounter recorded before the install whose member date is another day than its strong head's own date is re-read at its next context save of any field, its remake or Resume: the member's date is held (HEAD_HOLD_NOTE), nothing is sent for it, and decisions whose proposal status changes are invalidated. Measured over the H2 corpus only (91 texts); the live count needs the live database, which this integration does not read",
+  "cues_added": [
+   "context.HEAD_DATE_NOTE",
+   "context.HEAD_HOLD_NOTE",
+   "context.PROCEDURE_HEAD_LINES",
+   "context._HEAD_ALSO",
+   "context._HEAD_CHARGE_NOTE",
+   "context._HEAD_OTHER_LINES"
+  ],
+  "superseded": {
+   "replay.h4-03": {
+    "fact": [
+     "missing",
+     null
+    ],
+    "evidence": [
+     "Exam date: 10/06/2026",
+     "Service date logged for this case: 10/08/2026"
+    ],
+    "note": "WIDE_DATE_QUOTE_NOTE",
+    "accepted": "every answer (as installed: the quoted lines limit no answer)",
+    "newly_held": [],
+    "unchanged": [
+     "none (DATELESS, 8eaed7a5)",
+     "walk 2026-10-06 (acdebca2)",
+     "doc:2026-10-08 (taken as installed)",
+     "doc:2026-10-06, doc:2026-10-09, far, minus1, plus1: taken and sent exactly as installed"
+    ],
+    "failed_hard": [
+     "date.sends-only-the-truth[doc:2026-10-09]",
+     "date.sends-only-the-truth[far]",
+     "date.sends-only-the-truth[minus1]",
+     "date.sends-only-the-truth[plus1]"
+    ],
+    "amended": "2026-11-01: was a conflict of 2026-10-06 and 2026-10-08 with those two taken only (amendment_20261101)"
+   },
+   "h1_hard_failures": "installed 25 (date.sends-only-the-truth: h4-01 7, h4-02 4, h4-03 4, h4-04 5, h4-06 5 - each a member date taken where the own label is unread) -> b840ae756 0 -> amended 2026-11-01: 4 (h4-03's four, installed's own failures: rule (c) may no longer narrow several values, and neither of h4-03's values is its author's sign-off day 2026-10-09; amendment_20261101)",
+   "tests": "tests.test_gi4_pd: test_h4_03_is_only_quoted_its_two_values_narrow_nothing (every answer taken) and test_the_relabelled_ledger_keeps_installeds_date (installed's 2026-10-08 taken)"
+  }
+ },
+ "amendment_20261101_cycle2": {
+  "date": "2026-11-01",
+  "written": "by Wave 1 repair cycle 2, group PD+PO+PA, on branch wip/gi4-c2-pdpo-20261101 from fbc59ee53 (its cpt-studio equals the integrated cycle-1 head 5fa531d1a), BEFORE any of this cycle's code is committed. Every finding was reproduced first on sealed exports of fbc59ee53, of 4aa1c1f9c (the cycle-1 merge before the hold) and of installed 80df1831d168; the code was then modelled in a scratch copy of the fbc59ee53 export, and every number below is that model's (scratch: /home/claude/cpt-studio-gi4-20261031/w1c2/pdpopa)",
+  "cycle": "Wave 1 repair CYCLE 2 of at most 2 (design-out/plan.txt, 'Rules for the round': each releasing family gets at most two refutation-and-fix cycles; after that it is DROPPED and recorded as a known limit). The integration's STRONG-HEAD HOLD is dropped (below); rule (c)'s narrowing gets its second and last fix (DT-5, below): a third refutation drops rule (c)",
+  "drop": {
+   "what": "the integration's STRONG-HEAD HOLD (amendment_20261101_integration; d3dbbd146, e04439146, 9ef44bb51). Its code is removed: _head_own_date, _takes_another_day, _head_holds, _HeadHeldFact, _head_held, HEAD_DATE_NOTE, _HEAD_CHARGE_NOTE, HEAD_HOLD_NOTE, _HEAD_ALSO, _HEAD_OTHER_LINES, the PROCEDURE_HEAD_LINES import, the _head_holds call in _context and merge_user_values' post-step - so studio/gi/context.py is 4aa1c1f9c's byte for byte before the DT-5 code below, and merge_user_values is the cycle-1 merge exactly (its rules, docstring and last lines, which ops/verification/test_verify_browser.cjs pins as it did at 4aa1c1f9c). Every reading of the shapes the hold governed returns to the reading without it: an answer the hold held is taken and sent again exactly where 4aa1c1f9c takes it - on the hold's own inputs, exactly where installed takes it",
+   "why": {
+    "DT-1": "it settled a documented two-date conflict by line position: a hospital record's visit or encounter date in the first cell or within the first 12 non-empty lines held the EGD's own 'Procedure date', which is also the author's sign-off day; only the encounter date could be entered, and it was then sent as the EGD's date (swapping the cells flipped the outcome)",
+    "DT-2": "it read an office or results visit whose head summarises a PAST procedure's date, endoscopist and sedation as fields as that procedure's report: the visit's own day (its sign-off day, the date installed and cycle 1 take) was held, and the past procedure's date became the only answer, then sent for the office visit",
+    "DT-3": "it adopted any line-start own-date label of the head without the date reader's exclusions (a history section, a 'last' or 'prior' qualifier, a cancelled exam): it enforced a previous or cancelled exam's date, and held a member answer equal to the date the document itself sends",
+    "DT-4": "where the merge took only a date other than the head's, it left NO acceptable answer: an addendum's corrected date of service, and the true date installed sends, were refused; its notes were false (the head's own day implied taken, 'add an addendum' where one exists, the corrected line never quoted)",
+    "DT-6": "before any answer, the encounter question said the head's own-date line 'is not read as' a date of service, while the hold made that date the only answer it would take",
+    "CTS2-1": "an addendum can never change what the hold read (the first 12 non-empty lines; the product appends an addendum at the end), so the remedy its own note and MEMBER_DATE_CONFLICT_MESSAGE named never worked: the member's corrected date, matching the addendum, stayed held and the READY installed reaches after the correction was never reached",
+    "CTS2-2": "on a strong-head report stating a corrected or revised date of service in its body, HEAD_DATE_NOTE promised that only another day is held while the head's own day was held too, never quoted the corrected line, and is printed in the draft report: no answer could be taken"
+   },
+   "reproduced": "on fbc59ee53, offline, with the refuters' own texts: the dates lens's probes_a, _b, _c, _d, _g and _h (DT-1 to DT-4 and DT-6) and the failclosed-text-state lens's ADD-*, W-* and HDN-* texts (CTS2-1's addendum appended as jobs.addendum_block_text appends it, CTS2-2's correction in the body): every answer the hold holds there is taken by installed and by 4aa1c1f9c (W-1, W-2, HDN-1, HDN-3: no answer at all is taken on fbc59ee53, the corrected 2026-10-20 on the others). On the scratch model of this drop every state of every one of those texts equals 4aa1c1f9c's, and installed's except where PD cycle 1's declared rules differ (rule (a)'s SEND->ASK on A3, B4 and W-1; h4-06's narrowing). CTS2-1's Django flow (POST /addenda) was not re-run: the text it reads is the one above",
+   "known_limit": "h4-03 goes back to PD cycle 1's reading, which is installed's in every answer: the quote-only fact (both lines quoted, WIDE_DATE_QUOTE_NOTE) and every member answer taken and sent as installed takes it. H1 HARD is 13/17 again: date.sends-only-the-truth fails in doc:2026-10-09, far, minus1 and plus1 (an answer matching neither date the report states for its own case is taken and sent, as on installed); doc:2026-10-08 is taken again (a truth date: HARD passes); the walk 2026-10-06 (acdebca2, 43244 READY) and the 'none' state (DATELESS, 8eaed7a5) are unchanged. Rule (c) cannot narrow h4-03 (two values, and neither is its author's sign-off day 2026-10-09: binding rules (1) and (5)), and no rule replaces the dropped hold this round. The relabelled ledger (F7, the 53(b)/54 precedent) takes installed's 2026-10-08 again. Recorded for the round's owner: holding a member's date against a procedure report's own head date is a PD2-class question (a head date installed does not read), not a fail-closed repair",
+   "tests": "tests.test_gi4_pd, each change said in the test: RegressionDocumentTests' h4-03 test is cycle 1's again (test_h4_03_is_only_quoted_its_two_values_narrow_nothing: every answer taken); InstalledSendsXTests' relabelled-ledger test takes installed's 2026-10-08 again (rule (a)'s ask and readers kept); StrongHeadHoldTests becomes DroppedStrongHeadHoldTests - the hold's own thirteen tests on its own inputs, each renamed (its old name in a comment) and changed to pin what installed takes or holds (INSTALLED_TAKES, measured on a sealed export of 80df1831d168); the mark's test becomes test_the_hold_is_gone (the removed names are absent, the fact is a plain Fact); none deleted. report()'s sedation field is cycle 1's again ('propofol by CRNA': the integration had denied it to keep the hold away)",
+   "mutants": "retired with the code they guarded: pd-head-hold, pd-head-strong, pd-head-one-date, pd-head-around, pd-head-call, pd-head-note, pd-head-charge-note (ops/gi4/mutants.py; census PD 44 -> 37 before the DT-5 mutants below)",
+   "cues_removed": [
+    "context.HEAD_DATE_NOTE",
+    "context.HEAD_HOLD_NOTE",
+    "context.PROCEDURE_HEAD_LINES",
+    "context._HEAD_ALSO",
+    "context._HEAD_CHARGE_NOTE",
+    "context._HEAD_OTHER_LINES"
+   ]
+  },
+  "dt5": {
+   "finding": "DT-5 (dates lens, refuting fbc59ee53): rule (c) still narrowed a member's answers to a pasted outside report's date (1) where the paste is announced in common words outside _PD_COPIED - 'A copy of the outside report follows.', 'reads as follows', 'included below', 'quoted below' - and (2) where the review note's own dated line follows the paste with a verb outside _CLOSING_ROLE - 'Reviewed by C. Reviewer MD, 10/12/2026', 'Note completed by ...'. The review visit's own day was held and only the outside colonoscopy's date taken (the DS-3 class)",
+   "reproduced": "on fbc59ee53 and on 4aa1c1f9c with the finding's probes byte for byte (probes_f F1-F4 and F6, probes_i I1 and I2): 2026-10-12 HELD, only 2026-09-03 taken; installed takes both. Controls F5 ('Copied report text follows.'), I3 and J1/J2 narrow nothing on every tree",
+   "rule": [
+    "(1) no narrowing when the text anywhere announces a paste or a copy of another report in common words (_PD_ANNOUNCED, a closed list read only to HOLD, beside _PD_COPIED): 'a copy of / copies of ... follows | below | enclosed | appended | included | reproduced | inserted | here', a report, record, note, letter, summary, result, text, documentation, dictation, consultation or correspondence that 'follows', is 'below' or reads 'as follows', 'included | quoted | reproduced | transcribed | appended | inserted | enclosed | incorporated | duplicated | reprinted | cited' 'below | here | verbatim | in full | as follows', 'the following ... report', 'from | per the ... report:', 'report received | obtained from', 'verbatim', 'word for word', 'carried | pulled | brought forward'. A copy of the note itself sent elsewhere ('a copy of this note goes to her primary care clinician', h4-01's head; 'Copy to:') announces nothing",
+    "(2) no narrowing when the note goes on past the author's own sign-off with another day: any date-shaped text after the last own sign-off line (_PD_OTHER_DATE) that is not that day - or that this reader cannot read as that day ('10/12/26'): when unsure, quote-only - and is no date of birth (_pd_dated_after): a reviewer's 'Reviewed by ..., 10/12/2026' or 'Note completed by ...' after a pasted report's signature. A same-day line ('Printed 10/21/2026') or a date of birth after it narrows as before",
+    "hold direction only: each turns a narrowing into the quote-only fact (every member date taken, as installed takes it) and never the reverse; no other reading moves"
+   ],
+   "cues_added": [
+    "context._PD_ANNOUNCED",
+    "context._PD_THING"
+   ],
+   "expected": {
+    "H2_corpus": "measured on the scratch model over the H2 corpus (52,731 texts with the cycle-1 probes): 1,184 texts narrow on 4aa1c1f9c and the same 1,184 on the model, and no text's fact moves (origin, value, evidence, quote-only): no corpus text carries such an announcement or a later day after a narrowing sign-off. So DT-5 moves nothing in H1, H2 or H4; only shapes like the finding's move, from the narrowing fact to the quote-only fact (HELD -> TAKEN against fbc59ee53, equal to installed)",
+    "rows": "the finding's F1-F4, F6, I1 and I2: every answer taken (2026-10-12, 2026-09-03, 1998-01-01), as installed; F5, I3, J1, J2 unchanged (each already quote-only); h4-01, h4-02, h4-04, h4-06 narrow exactly as before (RegressionDocumentTests)"
+   },
+   "tests": "tests.test_gi4_pd AnnouncedCopyTests: the finding's inputs byte for byte; the announcement in the finding's words and twelve independent variants, each read only by _PD_ANNOUNCED (kills pd-announced-copy); a copy of the note sent elsewhere still narrows; a later day after the own sign-off, without any announcement, in the finding's two wordings and four independent ones (kills pd-dated-after-signoff); a same-day line, a date of birth or a page line after it still narrows",
+   "mutants": "one killing mutant per new guard, detector tests.test_gi4_pd: pd-announced-copy (the announcement hold), pd-dated-after-signoff (the later day). PD census 37 -> 39; with the drop 44 -> 39. The cycle-1 mutants' anchors are kept: the new checks stand on lines of their own",
+   "known_limits": [
+    "a report pasted in with NO announcement and no later dated line still narrows to its own signature's day where that signature names the performer the head names (the cycle-1 limit, amendment_20261101.second_entry)",
+    "the announcement list is closed: a paste announced in words it does not list (and no later day after the pasted signature) still narrows; a reviewer's dated line placed BEFORE the pasted report's signature is read by neither guard",
+    "the later-day hold is read from the text after the own sign-off: a footer stating another day ('Printed 11/01/2026') after a correct sign-off turns a correct narrowing into the quote-only fact (installed's answers; measured: no such text in the H2 corpus)"
+   ]
+  },
+  "expected": {
+   "vs_fbc59ee53": {
+    "H1": "only h4-03 moves (93 replay differences, all in h4-03): doc:2026-10-08, doc:2026-10-09, far, minus1 and plus1 HELD -> TAKEN and sent exactly as installed; the 'none' note back to WIDE_DATE_QUOTE_NOTE; accepted answers every one; HARD 17/17 -> 13/17 (the four failures above), SOFT 2/5 and INFO 1/2 unchanged; 43244 READY at the walk unchanged. Every other document and state equal",
+    "H2": "over 52,231 texts and 283,460 text x member states (the H2 corpus with the cycle-1 probes): NEW-SEND 243 and NEW-TAKE 243 against fbc59ee53 - the hold's held states taken and sent again, each equal to installed's (checked by set against installed); NEW-HELD 0, SEND->ASK 0, FACT-CHANGED 56 (the notes the hold had rewritten), REQUEST-CHANGED 0, LAYOUT-CHANGED 0, MENTIONS-CHANGED 0; cues removed: the hold's six (cues_removed), added: DT-5's two",
+    "H4": "0 movements (50 rows, 60 codes)"
+   },
+   "vs_installed": {
+    "H2": "the gate: NEW-SEND 0, NEW-TAKE 0; NEW-HELD 5,466 (fbc59ee53: 5,709 - the hold's), SEND->ASK 1,391 (unchanged), FACT-CHANGED 14,439, REQUEST-CHANGED 0 over 206,761 requests, layout identical over 52,231 texts, mention counts unchanged; cues added 44 (cues_added: the hold's six gone, DT-5's two added), none changed or removed",
+    "H1": "HARD failures over the regression set: installed 25 -> b840ae756 0 -> PD cycle 1 4 -> the integration 0 -> cycle 2 4 (h4-03's four, installed's own): h4-01 18/18, h4-02 14/14, h4-03 13/17, h4-04 14/14, h4-05 17/17, h4-06 16/16, h2-08 18/18, h2-10 9/9",
+    "H4": "the same three declared movements as cycle 1 and none of this package's: S3h 43259 (PA), 'last visit time' 99213 and 'telephone-only time' 99212 (PV1)"
+   }
+  },
+  "superseded": {
+   "replay.h4-03": {
+    "fact": [
+     "missing",
+     null
+    ],
+    "evidence": [
+     "Exam date: 10/06/2026",
+     "Service date logged for this case: 10/08/2026"
+    ],
+    "note": "HEAD_DATE_NOTE",
+    "accepted": [
+     "2026-10-06"
+    ],
+    "newly_held": [
+     "doc:2026-10-08",
+     "doc:2026-10-09",
+     "far",
+     "minus1",
+     "plus1"
+    ],
+    "unchanged": [
+     "none (DATELESS, 8eaed7a5)",
+     "walk 2026-10-06 (acdebca2)"
+    ],
+    "failed_hard": [],
+    "amended": "2026-11-01: was a conflict of 2026-10-06 and 2026-10-08 with those two taken only (amendment_20261101); then the quote-only fact with every answer taken; now only the strong head's own date 2026-10-06 is taken (amendment_20261101_integration, the STRONG-HEAD HOLD)"
+   },
+   "cues_added": [
+    "context.HEAD_DATE_NOTE",
+    "context.HEAD_HOLD_NOTE",
+    "context.PROCEDURE_HEAD_LINES",
+    "context.WIDE_DATE_ASK_NOTE",
+    "context.WIDE_DATE_NOTE",
+    "context.WIDE_DATE_QUOTE_NOTE",
+    "context.WIDE_SERVICE_DATE",
+    "context._CLOSING_ROLE",
+    "context._HEAD_ALSO",
+    "context._HEAD_CHARGE_NOTE",
+    "context._HEAD_OTHER_LINES",
+    "context._PD_ADDENDUM",
+    "context._PD_AROUND_WORDS",
+    "context._PD_ATTEST",
+    "context._PD_CALL_PHRASE",
+    "context._PD_CLOSING_LINES",
+    "context._PD_COPIED",
+    "context._PD_CREDENTIAL",
+    "context._PD_KIND_FIELD",
+    "context._PD_NAME_BACK",
+    "context._PD_NAME_BEFORE",
+    "context._PD_NAME_SUFFIX",
+    "context._PD_NOT_CLOSING",
+    "context._PD_NOT_NAME",
+    "context._PD_NOT_OWN",
+    "context._PD_OTHER_DATE",
+    "context._PD_OWN_VERB",
+    "context._PD_PERFORMER",
+    "context._PD_PROCEDURE_LABEL",
+    "context._PD_QUOTE_CHARS",
+    "context._PD_QUOTE_WINDOW",
+    "context._PD_TITLE_CHARS",
+    "context._WIDE_DATE_LABEL",
+    "context._WIDE_NOTE_HEAD",
+    "context._WORDED_FIELD"
+   ]
+  }
+ },
+ "integration_20261101_cycle2": {
+  "date": "2026-11-01",
+  "written": "by the Wave 1 repair cycle 2 integration on fix/cpt-studio-gi4-interpretation-20261101 (merges 4bbac86d7 PD+PO+PA, 96b2a1372 PV1, 5bc13d6d1 PI, 488e8093e the acceptance tool; comments 18ccea7a5; pins 53ccc98c0), BEFORE the label code it declares. Every row was measured offline or on the throwaway database (127.0.0.1:55461) on sealed exports of installed 80df1831d168, b840ae756, fbc59ee53 and the merged head 18ccea7a5, whose readings the label code does not move (scratch: /home/claude/cpt-studio-gi4-20261031/w1c2/integ)",
+  "px_a_version_labels": {
+   "precedent": "interpretations 49 and 50(d) (docs/foundation/rulings/2026-10-23-cpt-studio-gi.md): a reader that reads differently from the installed revision carries a new label, so a download made before the install and one made after it never name the same rules for different readings; a context recorded under earlier context rules is remade under the current ones before any stage sends or assesses on it, and no second review is offered or sent on one",
+   "readers_measured": {
+    "about": "installed 80df1831d168 against the merged head 18ccea7a5: the compact H1 replay of the eight regression documents in every member state (ops.gi4.pins.compact_replay) - a reader's own movement is read where both trees send the same request for the same date - and the code; the corpus measurements are the integration's H2-H4 on the final head",
+    "context (jobs.CONTEXT_VERSION, gi-context@3)": "reads differently: the date channel moves in h4-01 (7 states), h4-02 (4), h4-04 (5) and h4-06 (5) - PD's rules (a) and (c) - and context.py and sections.py changed (PD, PS)",
+    "routing (detect.ROUTING_VERSION, gi-routing@4)": "reads differently: h4-04 in all 7 states, among them none and walk, where both trees send the same request (gi.egd extent \"incomplete: stomach\" -> \"second part of duodenum\", PE's routing-only reach); detect.py and cues.py changed (PE, PV1's C4, C4-time and EMR-9 holds, PS)",
+    "inventory (services.INVENTORY_VERSION, gi-services@1)": "reads differently: h4-04 in all 7 states, none and walk among them at the same request (gi.egd extent; gi.colonoscopy negated -> uncertain, S1); services.py changed (PI's S1, W1 and reach predicate)",
+    "engine (engine.ENGINE_VERSION, cpt-studio-validation@4)": "reads differently: h4-05 moves in all 9 states in nothing but its offers, every request and reading the same (gi.eus no_proposal offered False -> True, PO-2), and h4-02 in none and walk at the same request (PO-1); engine.py and validation/checks.py changed (PA, PO, PV1's V3)",
+    "unchanged since installed": "jobs.py (until these labels), review.py and profiles.py (gi-profiles@3 stays)"
+   },
+   "labels": {
+    "jobs.CONTEXT_VERSION": "gi-context@3 -> gi-context@4; gi-context@3 joins jobs.EARLIER_CONTEXT_VERSIONS",
+    "detect.ROUTING_VERSION": "gi-routing@4 -> gi-routing@5",
+    "services.INVENTORY_VERSION": "gi-services@1 -> gi-services@2, with the inventory's check source reconcile.INVENTORY_SOURCE cpt-studio:gi-services@1 -> cpt-studio:gi-services@2",
+    "engine.ENGINE_VERSION": "cpt-studio-validation@4 -> cpt-studio-validation@5"
+   },
+   "readers_of_the_labels": {
+    "context": "jobs.make_context stamps it. _remade_context: a predict, assess or reconciliation given a context of an earlier version remakes it under the current rules before it sends or assesses, and the upgrade's own predict never sends (only a member's Resume does); _second_review_bounds and stage_review2: no second review is offered or sent on one (SECOND_REVIEW_EARLIER_CONTEXT) until a member's save reads it again; the audit event context.remade; the reports and the API show it. Every encounter recorded before the install carries gi-context@3 and meets this at its next stage; none runs at the install (a reload runs no stage, so it keeps showing its recorded reading until then)",
+    "routing": "RoutingRun.version, the API and the reports' Versions line. RoutingRun.sha256 hashes the result, so a re-assessment's stated reasons name \"document routing\" among its changes. No decision reads it",
+    "inventory": "Assessment.services (the reports' \"Read by gi-services@2\") and the source of each inventory check (Check.source). No fingerprint reads either",
+    "engine": "Assessment.engine_version and the reports' Versions line; review._what_changed names \"engine cpt-studio-validation@4 -> cpt-studio-validation@5\" in a re-assessment's reasons, and review._what_differs words an invalidation \"re-assessed by another engine version\" where no persisted part of the proposal differs; review._carry_decisions carries by fingerprint alone",
+    "fingerprints": "engine._fingerprint reads code, family, profile_version, the evidence texts, [check id, status], the context values, units and status: no label",
+    "tests": "test_repairs_status_r2_routing VersionTests (@5) and test_repairs_status_r2_validation EngineVersionTests (@5); test_gi4_pd_state's CTS-6 rows run the pre-install stages under installed's labels (gi-context@3, remade as @4 at the save); test_gi4_state (H5): the earlier labels the remake row uses are installed's, and three new rows (below). The generic next-bump tests (test_repairs_gi2_sends F3, the round-3 upgrade rows) stand unchanged; test_reports' synthetic gi-services@1 inventories are data, not the label"
+   },
+   "proof_49": "tests.test_gi4_state: test_an_earlier_context_version_is_remade_and_the_upgrades_predict_never_sends (now asserting the earlier labels are installed's own: a gi-context@3 context is remade before the queued assess runs, and the upgrade's predict sends nothing; only Resume sends); test_a_predict_queued_before_the_install_is_remade_under_the_new_rules_before_it_sends (CTS-6's rule (a) document, recorded with installed's reading and labels: the queued predict remakes the context - the round-4 rules ask the date - and sends only the dateless request, never installed's dated one); test_no_second_review_on_a_pre_install_context_until_a_save_reads_it_again (offer refused with SECOND_REVIEW_EARLIER_CONTEXT, the ask 409, no REVIEW2 job, nothing sent; a save remakes it as gi-context@4 and one ask then sends once); RoundFourLabelTests.test_a_label_moves_no_fingerprint (every H4 row under installed's routing, inventory and engine labels and under these: every proposal's fingerprint equal, the labels each result carries checked to differ)",
+   "decisions": "A label alone invalidates no decision: no fingerprint reads one. What invalidates a decision is a reading that moves its proposal's fingerprint, at its encounter's next assessment after the install (review._carry_decisions: carried exactly when the fingerprint is equal, otherwise invalidated with a recorded reason). In the eight retained live states the only decision is h4-04's 43251 approval on 92e16310, which reads 9d6bff8e here: invalidated at h4-04's next assessment (pi.json integration_20261101_cycle2.px_c). The date rules add their own (px_d below). The live database is not read here: the install session classifies each current revision offline with this reader, installed's fingerprints against these, as CTS-6's record says",
+   "expected": {
+    "H1": "4 paths more than the readings move, against installed and against fbc59ee53: /versions/context, routing, inventory and engine; every document and state as without the labels",
+    "H2, H3, H4, H7": "no movement from the labels (no reader they record reads one)",
+    "pins": "only the commit stamp moves (ops.gi4.pins.compact_replay records no version)",
+    "H5 and the suites": "pass"
+   }
+  },
+  "px_d_cts6": {
+   "finding": "CTS-6 (amendment_20261101.findings): on b840ae756 a member's setting save on an encounter recorded before the install sends ['dated', 'DATELESS'] and invalidates the 45378 approval; installed sends ['dated'] and carries it",
+   "reproduced": "on the throwaway database, on sealed exports of installed 80df1831d168 and the merged head 18ccea7a5: the encounter's stages before the install run under installed's reading and labels (gi-context@3, patched in; on installed the patches change nothing), then the member saves the care setting; the refuter's rule (a) document (PD-06: installed sends 2026-10-19, this reader asks) and a rule (c) narrowing document (a member date of another day entered before the install)",
+   "rows_about": "[case, step, requests sent, 45378 status, context version, service date [origin, value], approval invalidated, decision carried]; \"dated 36c86c4f\" is the member's 2026-10-30 request",
+   "rows_installed": [
+    [
+     "1 setting save then the installed date",
+     "before the install, approved",
+     [
+      "dated 2026-10-19"
+     ],
+     "ready",
+     "gi-context@3",
+     [
+      "document",
+      "2026-10-19"
+     ],
+     false,
+     false
+    ],
+    [
+     "1 setting save then the installed date",
+     "after a setting save",
+     [
+      "dated 2026-10-19"
+     ],
+     "ready",
+     "gi-context@3",
+     [
+      "document",
+      "2026-10-19"
+     ],
+     false,
+     true
+    ],
+    [
+     "1 setting save then the installed date",
+     "after answering 2026-10-19",
+     [
+      "dated 2026-10-19"
+     ],
+     "ready",
+     "gi-context@3",
+     [
+      "user",
+      "2026-10-19"
+     ],
+     false,
+     true
+    ],
+    [
+     "2 the installed date re saved first",
+     "after re-saving 2026-10-19",
+     [
+      "dated 2026-10-19"
+     ],
+     "ready",
+     "gi-context@3",
+     [
+      "user",
+      "2026-10-19"
+     ],
+     false,
+     true
+    ],
+    [
+     "3 a member date of another day on a narrowed document",
+     "before the install, 2026-10-30 taken, approved",
+     [
+      "DATELESS",
+      "dated 36c86c4f"
+     ],
+     "ready",
+     "gi-context@3",
+     [
+      "user",
+      "2026-10-30"
+     ],
+     false,
+     false
+    ],
+    [
+     "3 a member date of another day on a narrowed document",
+     "after a setting save",
+     [
+      "DATELESS",
+      "dated 36c86c4f"
+     ],
+     "ready",
+     "gi-context@3",
+     [
+      "user",
+      "2026-10-30"
+     ],
+     false,
+     true
+    ]
+   ],
+   "rows_merged_head": [
+    [
+     "1 setting save then the installed date",
+     "before the install, approved",
+     [
+      "dated 2026-10-19"
+     ],
+     "ready",
+     "gi-context@3",
+     [
+      "document",
+      "2026-10-19"
+     ],
+     false,
+     false
+    ],
+    [
+     "1 setting save then the installed date",
+     "after a setting save",
+     [
+      "dated 2026-10-19",
+      "DATELESS"
+     ],
+     "needs_clarification",
+     "gi-context@3",
+     [
+      "conflict",
+      null
+     ],
+     true,
+     false
+    ],
+    [
+     "1 setting save then the installed date",
+     "after answering 2026-10-19",
+     [
+      "dated 2026-10-19",
+      "DATELESS"
+     ],
+     "ready",
+     "gi-context@3",
+     [
+      "user",
+      "2026-10-19"
+     ],
+     true,
+     false
+    ],
+    [
+     "2 the installed date re saved first",
+     "after re-saving 2026-10-19",
+     [
+      "dated 2026-10-19"
+     ],
+     "ready",
+     "gi-context@3",
+     [
+      "user",
+      "2026-10-19"
+     ],
+     false,
+     true
+    ],
+    [
+     "3 a member date of another day on a narrowed document",
+     "before the install, 2026-10-30 taken, approved",
+     [
+      "DATELESS",
+      "dated 36c86c4f"
+     ],
+     "ready",
+     "gi-context@3",
+     [
+      "user",
+      "2026-10-30"
+     ],
+     false,
+     false
+    ],
+    [
+     "3 a member date of another day on a narrowed document",
+     "after a setting save",
+     [
+      "DATELESS",
+      "dated 36c86c4f"
+     ],
+     "not proposed",
+     "gi-context@3",
+     [
+      "conflict",
+      null
+     ],
+     true,
+     false
+    ]
+   ],
+   "differs": "yes, as on b840ae756: (i) the setting save sends ONE new paid dateless primary request, 45378 goes Ready for review -> Needs clarification and the approval is invalidated (\"Re-assessed after changes (service date: 2026-10-19 -> asked; setting: not documented -> asc [member-supplied]): the status of 45378 changed from Ready for review to Needs clarification.\"); answering 2026-10-19 then sends nothing and returns READY, but the approval must be made again; re-saving the date first carries it, as installed. (ii) the member's 2026-10-30, taken and sent by installed, is held at the save (a member date conflict): nothing is sent, 45378 is no longer proposed and the approval is invalidated",
+   "cause": "the save re-reads the context with this reader: PD's rule (a) asks the date installed sent (the head's \"Date seen: 10/12/2026 in clinic; procedure today\" states another own day), and rule (c) narrows the accepted answers to the sign-off's day. Both are declared holds that the round keeps (amendment_20261101; neither was refuted in cycle 2). With gi-context@3 now an earlier version, the same re-read also happens at the first stage that remakes such a context (a Resume, a reconciliation, a predict queued at the swap), as interpretation 49 requires; never at the install itself",
+   "fix": "NONE. No change restores installed's behaviour exactly: a hold (not sending the dateless request) still leaves the approval invalidated and 45378 held, so it is not installed's reading either; keeping a pre-install context's date across a save is the stale-context state interpretation 49 forbids, and would be a new releasing rule; reverting rule (a) or (c) undoes declared holds over the whole corpus (SEND->ASK 1,391; the narrowing), not this consequence. Under the round's two-cycle rule no releasing rule is added",
+   "known_limit": "KNOWN LIMIT, recorded with the rows above: an encounter recorded before the install whose document rule (a) now asks (installed sent its date) sends one new dateless primary request and loses the approvals whose status changes at its first context save or remake after the install; one whose member date rule (c) now holds is held there, nothing sent, its approvals invalidated. Re-saving the installed date first sends nothing and carries the decision. tests/test_gi4_pd_state.py RecordedInstallConsequenceTests pins it, with the pre-install stages under installed's labels; after the label code the save's context is gi-context@4 and every other value of these rows is unchanged (declared here, measured on the final head)"
+  }
+ },
+ "after_measurement_20261101_cycle2_integration": {
+  "date": "2026-11-01",
+  "written": "AFTER measurement, as a record: it changes no declaration above it. Final head 4620713d2 (the labels a6ac28c67, declared in integration_20261101_cycle2 at 40b972b58; pins re-written 4620713d2), each tool on sealed exports of it, of installed 80df1831d168 and of fbc59ee53, offline or on the throwaway database (127.0.0.1:55461), with the final head's own harness",
+  "px_a": "as declared. H1: the labels move exactly the 4 /versions paths, against installed and against fbc59ee53, every document and state as the readings move them; the pins move only their commit stamp; H2, H3, H4 and H7 read no label. H5 (tests.test_gi4_state, test_gi4_pd_state, test_gi4_po_state): 17 of 17 on the final export. Negative controls on copies of it (sha256 printed after applying and after restoring, each restore equal to the original): with gi-context@3 left out of EARLIER_CONTEXT_VERSIONS four H5 rows fail (the remake, the queued predict, the second-review refusal, the labels); with the engine label added to engine._fingerprint test_a_label_moves_no_fingerprint fails. Over the H3 corpus (5,664 documents, read for their true dates) the readers' own outputs differ from installed in 1,439 documents (the context fact), 528 (routing) and 653 (the inventory)",
+  "px_d_rows_final_head": [
+   [
+    "1 setting save then the installed date",
+    "before the install, approved",
+    [
+     "dated 2026-10-19"
+    ],
+    "ready",
+    "gi-context@3",
+    [
+     "document",
+     "2026-10-19"
+    ],
+    false,
+    false
+   ],
+   [
+    "1 setting save then the installed date",
+    "after a setting save",
+    [
+     "dated 2026-10-19",
+     "DATELESS"
+    ],
+    "needs_clarification",
+    "gi-context@4",
+    [
+     "conflict",
+     null
+    ],
+    true,
+    false
+   ],
+   [
+    "1 setting save then the installed date",
+    "after answering 2026-10-19",
+    [
+     "dated 2026-10-19",
+     "DATELESS"
+    ],
+    "ready",
+    "gi-context@4",
+    [
+     "user",
+     "2026-10-19"
+    ],
+    true,
+    false
+   ],
+   [
+    "2 the installed date re saved first",
+    "after re-saving 2026-10-19",
+    [
+     "dated 2026-10-19"
+    ],
+    "ready",
+    "gi-context@4",
+    [
+     "user",
+     "2026-10-19"
+    ],
+    false,
+    true
+   ],
+   [
+    "3 a member date of another day on a narrowed document",
+    "before the install, 2026-10-30 taken, approved",
+    [
+     "DATELESS",
+     "dated 36c86c4f"
+    ],
+    "ready",
+    "gi-context@3",
+    [
+     "user",
+     "2026-10-30"
+    ],
+    false,
+    false
+   ],
+   [
+    "3 a member date of another day on a narrowed document",
+    "after a setting save",
+    [
+     "DATELESS",
+     "dated 36c86c4f"
+    ],
+    "not proposed",
+    "gi-context@4",
+    [
+     "conflict",
+     null
+    ],
+    true,
+    false
+   ]
+  ],
+  "px_d": "as declared: every value of the merged head's rows again, the save's context now gi-context@4; the invalidation reasons unchanged. The known limit stands",
+  "h2_declared_count": "against installed with the union declaration (every package's top-level cues_added and battery, PD's movements) over 52,231 texts (the 51,925-text H2 corpus plus the 306 cycle-1 probes first used by the cycle-1 integration): NEW-SEND 0, NEW-TAKE 0, NEW-HELD 5,466, SEND->ASK 1,391, FACT-CHANGED 14,439, 206,761 requests unchanged, layout identical, mention counts unchanged, 44 cues added and declared. The tool's \"GATE FAILS: SEND->ASK = 1391, declared 1386\" is that count only: 1,386 (top-level movements, b840ae756's measurement on the 51,925 texts) is exactly what the 51,925 texts give here (90 seeded and 1,296 h2-corpus texts); the other 5 are cycle1-probes.jsonl lines 786, 787, 788, 790 and 792, PD cycle 1's CTS-5 probes (PD-02, -03, -04, -06, -08: rule (a) asks the 2026-10-19 installed sent beside \"Date performed: 10/21/2026 (pathology)\", \"... by Mercy GI\", \"Case date: 10/12/2026 (booked)\", \"Date seen: 10/12/2026 in clinic; procedure today\", \"Day of procedure: 10/19/2026 Date seen: 10/12/2026 (pre-op clinic)\"). amendment_20261101_cycle2.dt5.expected's \"52,731 texts\" is a typo for 52,231",
+  "h2_vs_fbc59ee53": "NEW-SEND 243, NEW-TAKE 243, NEW-HELD 0, SEND->ASK 0, FACT-CHANGED 56, 201,052 requests unchanged, layout and mention counts identical, cues -6 +2: amendment_20261101_cycle2.expected.vs_fbc59ee53 exactly; every one of the 243 states equals installed's (sends, taken, held, request), checked by set, over 92 texts (reg:h4-03, 89 of S-h4-03-*, and the h2 and probe corpora's copies of h4-03)",
+  "h1": "fixtures and the retained raw inputs (/home/claude/cpt-studio-gi-regression-sets) read the same: HARD installed 98/123 -> fbc59ee53 123/123 -> final 119/123 (h2-08 18/18, h2-10 9/9, h4-01 18/18, h4-02 14/14, h4-03 13/17, h4-04 14/14, h4-05 17/17, h4-06 16/16; h4-03's four failures are installed's own); walk READY installed {43251, 43274} -> fbc59ee53 {99204, 43244, 43251, 45385, 43274} -> final {43251, 43274}. 560 paths differ from installed and 195 from fbc59ee53: the 4 /versions, h4-01 56 (PV1), h4-03 114 (PD's 93 plus PI's 21) and h4-06 21 (PI); the expectations that move are h4-01 SOFT approvable[99204] and routing.not-missing[em_basis], INFO author-code-ready[99204] and routing.fact[em_basis]; h4-03 HARD date.sends-only-the-truth[doc:2026-10-09, far, minus1, plus1], SOFT approvable[43244], INFO author-code-ready[43244]; h4-06 SOFT approvable[45385], INFO author-code-ready[45385] - each back to installed's value. Controls: the final tree against itself EQUAL, the three planted mutations differ (98, 30, 54 paths). 43251's walk fingerprint on the final head 9d6bff8e, as declared (px_c)",
+  "h3": "5,664 documents, 0 reader errors. Against installed: no MUST regression (date.answer-held +3,352, date.no-send-before-answer +90, date.send +977, em.not-office-basis +216, em.time-not-another-occurrence +216, extent.never-false-incomplete +75, status.not-performed +288; SHOULD extent.read +75, status.performed -18: pv1.json's declared 12 and the 6 of amendment_20261101_cycle2_b). Against fbc59ee53: MUST binding.lower-not-on-upper -25 (PI's A1 drop), date.answer-held -72 and date.send -36 (PD's drop), status.not-denied -42 and status.not-performed -18 (PV1's drop), SHOULD em.mdm-read -180, em.time-read -252, status.performed -60; every one of those cells fails on installed too, except the 6 SHOULD status.performed cells pv1.json's _b declares",
+  "h4": "against installed with the union declaration: 3 movements, all declared (S3h 43259, 99213, 99212), 0 undeclared, 0 new violations (5 -> 2); against fbc59ee53: 0 movements. U1 and U2 read the same on the final head as px_b records",
+  "h6": "195 of 195 mutants killed on copies of the sealed final export (unit 182, freeze 4, battery 4, replay 3, state 2), each printed \"mutation applied: True\" with a moved sha256 and \"restored: True\" with the original sha256; all 42 detector baselines passed; the two state detectors ran on a test database of this run's own (the harness hard-codes the suffix gi4mut)",
+  "pins_commit_correction": "53ccc98c0's message counted h4-03's attribution in two units at once: by its 57 differing paths (ops.gi4.boot.differences) PD's tree alone moves 28, PI's alone 9 and the two drops together 20; by JSON leaves 36, 10 and 10 (56). Every other number there stands",
+  "suites": {
+   "manage.py check": "System check identified no issues (0 silenced)",
+   "makemigrations --check --dry-run": "No changes detected",
+   "manage.py test tests (CI settings: the workflow environment, port 55461, suffix w1c2integ)": "Ran 4082 tests in 2081.246 s: OK (skipped=3)",
+   "unittest discover -s ops": "Ran 211 tests: OK (test_install and test_verify_downloads each with passing tests)",
+   "unittest discover -s ops/verification": "Ran 37 tests: OK",
+   "node ops/verification/test_verify_browser.cjs": "81 of 81 pass, 0 fail (the named checkIncomplete test among them)",
+   "node tests/frontend/app.test.cjs (also run by tests.test_frontend inside the Django suite)": "56 of 56 pass, 0 fail, 0 skipped, 0 todo",
+   "pip_audit": "not run: it needs the network, which this integration does not use (interpretation 68: the audit stays red on pypdf 6.21.2, declared)"
+  },
+  "h7": "H7 (ops.gi4.cost, default sizes 25,000-400,000, the 12 registered shapes, sealed final export, load 11-14 with the full Django suite running beside it): every stage limit holds - worst analyze child 8.98 s (limit 30), worst assess child 23.46 s (limit 60), peak child 222 MiB, no overrun. The 2.3 doubling-ratio gate is NOT certified: wall clock flags 29 scattered steps. Re-measured by CPU time (best of 3, the cycle-1 integration's cpu_ratios.py) on the final head and on fbc59ee53 side by side: 10 flags on the final head and 17 on fbc59ee53, at different shapes and steps; total CPU over the 60 probes final/fbc59ee53 context 26.90/27.67 s, routing 115.72/114.59 s, inventory 113.67/111.95 s, PS helpers 1.41/1.45 s; from 25k to 400k (16 times the size) every reader grows 3.1-19.0 times on both trees. No growth class moves; the gate's verdict needs a quiet machine, as at the cycle-1 integration."
+ }
+}

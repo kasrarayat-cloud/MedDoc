@@ -1,0 +1,1644 @@
+{
+ "id": "h4-01",
+ "manifest": {
+  "author_codes": [
+   "99204"
+  ],
+  "class": "5-visit-performed-today-future-occurrences-not-coded",
+  "expected_clarifications": [],
+  "expected_context": {
+   "patient_status": {
+    "origin_in": [
+     "document"
+    ],
+    "value_in": [
+     "new"
+    ]
+   },
+   "service_date": {
+    "origin_in": [
+     "document"
+    ],
+    "value_in": [
+     "2026-10-26"
+    ]
+   },
+   "setting": {
+    "origin_in": [
+     "document"
+    ],
+    "value_in": [
+     "office"
+    ]
+   }
+  },
+  "expected_routing": {
+   "families": {
+    "gi.colonoscopy": {
+     "presence": "optional",
+     "status_in": [
+      "planned",
+      "uncertain"
+     ]
+    },
+    "gi.egd": {
+     "presence": "required",
+     "status_in": [
+      "planned"
+     ]
+    },
+    "gi.office_em": {
+     "facts": {
+      "em_basis": {}
+     },
+     "informational": {
+      "facts": {
+       "em_basis": {
+        "value_contains_any": [
+         "time",
+         "mdm",
+         "medical decision",
+         "decision making"
+        ]
+       }
+      }
+     },
+     "missing_excludes": [
+      "setting",
+      "patient_status",
+      "em_basis"
+     ],
+     "presence": "required",
+     "status_in": [
+      "performed"
+     ]
+    }
+   },
+   "not_performed": [
+    "gi.egd",
+    "gi.colonoscopy",
+    "gi.flex_sig",
+    "gi.eus",
+    "gi.ercp"
+   ]
+  },
+  "incomplete_services": [],
+  "must_not_code": [
+   {
+    "family": "gi.egd",
+    "reason": "The upper endoscopy is booked for 11/23/2026; nothing endoscopic took place at this visit."
+   },
+   {
+    "family": "gi.colonoscopy",
+    "reason": "A colonoscopy would be added only if the calprotectin comes back raised; it has not happened."
+   }
+  ],
+  "review_plan": {
+   "approve_codes": [
+    "99204"
+   ],
+   "context_edit": {
+    "service_date": "2026-10-26"
+   },
+   "reject": null
+  },
+  "source_sha256": "339ad040d8ab96dd4e4a252e0d6a7ac8c48939186904973c6bdcb7af540017ba"
+ },
+ "reference_sources": [
+  {
+   "effective_end": "2026-12-31",
+   "effective_start": "2026-10-01",
+   "key": "cms-mue-practitioner-2026q4",
+   "kind": "cms-mue-practitioner",
+   "license_note": "CPT codes are copyright the American Medical Association; descriptors are not imported or displayed. Used for internal synthetic evaluation only; commercial CPT use requires an AMA license.",
+   "publisher": "Centers for Medicare & Medicaid Services (CMS)",
+   "release": "2026-Q4",
+   "scope_note": "Medicare NCCI practitioner MUE values (units per day; not every payer)",
+   "sha256": "4574336755ba4e49b7c8ec07de5b74d3f0b8593e3e6192013631724981180d00",
+   "title": "Medicare NCCI practitioner services MUE table (MCR_MUE_PractitionerServices_Eff_10-01-2026.csv)",
+   "url": "https://www.cms.gov/files/zip/medicare-ncci-2026-q4-practitioner-services-mue-table.zip"
+  },
+  {
+   "effective_end": "2026-12-31",
+   "effective_start": "2026-10-01",
+   "key": "cms-pfs-rvu26d",
+   "kind": "cms-pfs",
+   "license_note": "CPT codes are copyright the American Medical Association; descriptors are not imported or displayed. Used for internal synthetic evaluation only; commercial CPT use requires an AMA license.",
+   "publisher": "Centers for Medicare & Medicaid Services (CMS)",
+   "release": "RVU26D",
+   "scope_note": "Medicare Physician Fee Schedule indicators (not a CPT edition; not payer-specific)",
+   "sha256": "521ff0f4ecbf13b5d99dc1dc04d9f82e5361e55c6b4b6b3033043598bf8406e6",
+   "title": "Medicare Physician Fee Schedule relative value file (PPRRVU2026_Oct_nonQPP.csv)",
+   "url": "https://www.cms.gov/files/zip/rvu26d-updated-08-26-2026.zip"
+  }
+ ],
+ "runs": [
+  {
+   "purpose": "primary",
+   "request_sha256": "d47c77566f33b9d056bacab1986bc5d7489f4631d174905d750c68d958f1b0f3",
+   "response": {
+    "candidates": [
+     {
+      "alternatives": [],
+      "code": "G9903",
+      "display": "PR PT SCRN TBCO ID AS NON USER",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 205,
+        "start": 152,
+        "text": "Encounter location: office suite, place of service 11"
+       },
+       {
+        "contextIndex": 0,
+        "end": 916,
+        "start": 848,
+        "text": "She does not wake at night to open her bowels and has seen no blood."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1988,
+        "start": 1867,
+        "text": "Celiac disease is the leading concern given her sister's diagnosis; microscopic colitis and other causes remain possible."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2502,
+        "start": 2394,
+        "text": "- Upper endoscopy with duodenal biopsies is booked for 11/23/2026 at Wexmoor Endoscopy Pavilion (fictional)."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "1036F",
+      "display": "PR CURRENT TOBACCO NON-USER",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1988,
+        "start": 1867,
+        "text": "Celiac disease is the leading concern given her sister's diagnosis; microscopic colitis and other causes remain possible."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2502,
+        "start": 2394,
+        "text": "- Upper endoscopy with duodenal biopsies is booked for 11/23/2026 at Wexmoor Endoscopy Pavilion (fictional)."
+       },
+       {
+        "contextIndex": 0,
+        "end": 3061,
+        "start": 2814,
+        "text": "Total time I spent on her care on the date of this visit: 52 minutes, covering her history, review of the outside results and note, the examination, counseling about the celiac work-up and keeping gluten in her diet, the orders, and documentation."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "99205",
+      "display": "PR OFFICE/OUTPATIENT NEW HIGH MDM 60 MINUTES",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 2502,
+        "start": 2394,
+        "text": "- Upper endoscopy with duodenal biopsies is booked for 11/23/2026 at Wexmoor Endoscopy Pavilion (fictional)."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2633,
+        "start": 2544,
+        "text": "- If the calprotectin comes back raised, a colonoscopy will be added at the same session."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2775,
+        "start": 2691,
+        "text": "- Return visit in this office on 12/14/2026 to go over the blood and biopsy results."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2813,
+        "start": 2777,
+        "text": "Documentation of Time and Complexity"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G8510",
+      "display": "PR PT INELIG NEG SCRN DEPRES",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 205,
+        "start": 152,
+        "text": "Encounter location: office suite, place of service 11"
+       },
+       {
+        "contextIndex": 0,
+        "end": 498,
+        "start": 380,
+        "text": "Referral: self-referred; a copy of this note goes to her primary care clinician, Bronagh Esquivel-Tate, NP (fictional)"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1988,
+        "start": 1867,
+        "text": "Celiac disease is the leading concern given her sister's diagnosis; microscopic colitis and other causes remain possible."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2502,
+        "start": 2394,
+        "text": "- Upper endoscopy with duodenal biopsies is booked for 11/23/2026 at Wexmoor Endoscopy Pavilion (fictional)."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G8420",
+      "display": "PR CALC BMI NORM PARAMETERS",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 287,
+        "start": 228,
+        "text": "Name: Ottilie Brannigan-Sefa (fictional), 37-year-old woman"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1570,
+        "start": 1560,
+        "text": "Weight 61."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1988,
+        "start": 1867,
+        "text": "Celiac disease is the leading concern given her sister's diagnosis; microscopic colitis and other causes remain possible."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2502,
+        "start": 2394,
+        "text": "- Upper endoscopy with duodenal biopsies is booked for 11/23/2026 at Wexmoor Endoscopy Pavilion (fictional)."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G8417",
+      "display": "PR CALC BMI ABV UP PARAM F/U",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 916,
+        "start": 848,
+        "text": "She does not wake at night to open her bowels and has seen no blood."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1608,
+        "start": 1570,
+        "text": "4 kg, blood pressure 112/70, pulse 78."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2502,
+        "start": 2394,
+        "text": "- Upper endoscopy with duodenal biopsies is booked for 11/23/2026 at Wexmoor Endoscopy Pavilion (fictional)."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G9781",
+      "display": "PR DOC RSN NO STATIN",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1988,
+        "start": 1867,
+        "text": "Celiac disease is the leading concern given her sister's diagnosis; microscopic colitis and other causes remain possible."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2502,
+        "start": 2394,
+        "text": "- Upper endoscopy with duodenal biopsies is booked for 11/23/2026 at Wexmoor Endoscopy Pavilion (fictional)."
+       },
+       {
+        "contextIndex": 0,
+        "end": 3061,
+        "start": 2814,
+        "text": "Total time I spent on her care on the date of this visit: 52 minutes, covering her history, review of the outside results and note, the examination, counseling about the celiac work-up and keeping gluten in her diet, the orders, and documentation."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "99203",
+      "display": "PR OFFICE/OUTPATIENT NEW LOW MDM 30 MINUTES",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 2502,
+        "start": 2394,
+        "text": "- Upper endoscopy with duodenal biopsies is booked for 11/23/2026 at Wexmoor Endoscopy Pavilion (fictional)."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2543,
+        "start": 2503,
+        "text": "She is to keep eating gluten until then."
+       },
+       {
+        "contextIndex": 0,
+        "end": 3061,
+        "start": 2814,
+        "text": "Total time I spent on her care on the date of this visit: 52 minutes, covering her history, review of the outside results and note, the examination, counseling about the celiac work-up and keeping gluten in her diet, the orders, and documentation."
+       }
+      ],
+      "system": "cpt"
+     }
+    ],
+    "codes": [
+     {
+      "alternatives": [
+       {
+        "code": "D50.9",
+        "display": "Iron deficiency anemia, unspecified"
+       },
+       {
+        "code": "K90.0",
+        "display": "Celiac disease"
+       },
+       {
+        "code": "A04.71",
+        "display": "Enterocolitis due to Clostridium difficile, recurrent"
+       },
+       {
+        "code": "A06.1",
+        "display": "Chronic intestinal amebiasis"
+       },
+       {
+        "code": "A09",
+        "display": "Infectious gastroenteritis and colitis, unspecified"
+       },
+       {
+        "code": "D50.8",
+        "display": "Other iron deficiency anemias"
+       },
+       {
+        "code": "E61.1",
+        "display": "Iron deficiency"
+       },
+       {
+        "code": "K52.9",
+        "display": "Noninfective gastroenteritis and colitis, unspecified"
+       },
+       {
+        "code": "K59.09",
+        "display": "Other constipation"
+       },
+       {
+        "code": "K59.1",
+        "display": "Functional diarrhea"
+       }
+      ],
+      "code": "R19.7",
+      "display": "Diarrhea, unspecified",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 626,
+        "start": 567,
+        "text": "Loose stools, bloating and tiredness for about four months."
+       },
+       {
+        "contextIndex": 0,
+        "end": 722,
+        "start": 647,
+        "text": "Since early summer she has passed three or four soft to watery stools a day"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1873,
+        "start": 1787,
+        "text": "Working Diagnosis\n1. Chronic diarrhea with bloating and iron deficiency anemia. Celiac"
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [
+       {
+        "code": "D50.9",
+        "display": "Iron deficiency anemia, unspecified"
+       },
+       {
+        "code": "A04.71",
+        "display": "Enterocolitis due to Clostridium difficile, recurrent"
+       },
+       {
+        "code": "D50.8",
+        "display": "Other iron deficiency anemias"
+       },
+       {
+        "code": "E61.1",
+        "display": "Iron deficiency"
+       },
+       {
+        "code": "K31.0",
+        "display": "Acute dilatation of stomach"
+       },
+       {
+        "code": "K31.89",
+        "display": "Other diseases of stomach and duodenum"
+       },
+       {
+        "code": "K52.9",
+        "display": "Noninfective gastroenteritis and colitis, unspecified"
+       },
+       {
+        "code": "K59.09",
+        "display": "Other constipation"
+       },
+       {
+        "code": "R14.3",
+        "display": "Flatulence"
+       }
+      ],
+      "code": "R14.0",
+      "display": "Abdominal distension (gaseous)",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 626,
+        "start": 567,
+        "text": "Loose stools, bloating and tiredness for about four months."
+       },
+       {
+        "contextIndex": 0,
+        "end": 803,
+        "start": 752,
+        "text": "with bloating and crampy lower abdominal discomfort"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1873,
+        "start": 1787,
+        "text": "Working Diagnosis\n1. Chronic diarrhea with bloating and iron deficiency anemia. Celiac"
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [
+       {
+        "code": "R10.30",
+        "display": "Lower abdominal pain, unspecified"
+       },
+       {
+        "code": "R10.31",
+        "display": "Right lower quadrant pain"
+       },
+       {
+        "code": "R10.33",
+        "display": "Periumbilical pain"
+       },
+       {
+        "code": "R10.9",
+        "display": "Unspecified abdominal pain"
+       }
+      ],
+      "code": "R10.32",
+      "display": "Left lower quadrant pain",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 847,
+        "start": 752,
+        "text": "with bloating and crampy lower abdominal discomfort that eases once she has emptied her bowels."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1724,
+        "start": 1630,
+        "text": "Abdomen soft and mildly distended, slightly tender in the left lower quadrant without guarding"
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [
+       {
+        "code": "E88.A",
+        "display": "Wasting disease (syndrome) due to underlying condition"
+       },
+       {
+        "code": "R64",
+        "display": "Cachexia"
+       }
+      ],
+      "code": "R63.4",
+      "display": "Abnormal weight loss",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1010,
+        "start": 927,
+        "text": "About 2 kg of weight has gone without dieting, and she has felt drained for months."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [
+       {
+        "code": "R53.81",
+        "display": "Other malaise"
+       }
+      ],
+      "code": "R53.83",
+      "display": "Other fatigue",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 626,
+        "start": 548,
+        "text": "Presenting Concern\nLoose stools, bloating and tiredness for about four months."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1010,
+        "start": 927,
+        "text": "About 2 kg of weight has gone without dieting, and she has felt drained for months."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [
+       {
+        "code": "D53.9",
+        "display": "Nutritional anemia, unspecified"
+       },
+       {
+        "code": "E61.1",
+        "display": "Iron deficiency"
+       }
+      ],
+      "code": "D50.9",
+      "display": "Iron deficiency anemia, unspecified",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1459,
+        "start": 1320,
+        "text": "Blood results sent from her primary care office, collected 10/14/2026 and reviewed today: hemoglobin 11.2 g/dL, MCV 76 fL, ferritin 7 ng/mL"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1873,
+        "start": 1787,
+        "text": "Working Diagnosis\n1. Chronic diarrhea with bloating and iron deficiency anemia. Celiac"
+       },
+       {
+        "contextIndex": 0,
+        "end": 2690,
+        "start": 2636,
+        "text": "Start ferrous sulfate 325 mg by mouth every other day."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [
+       {
+        "code": "K30",
+        "display": "Functional dyspepsia"
+       },
+       {
+        "code": "K90.0",
+        "display": "Celiac disease"
+       },
+       {
+        "code": "K92.9",
+        "display": "Disease of digestive system, unspecified"
+       },
+       {
+        "code": "R85.9",
+        "display": "Unspecified abnormal finding in specimens from digestive organs and abdominal cavity"
+       },
+       {
+        "code": "Z03.89",
+        "display": "Encounter for observation for other suspected diseases and conditions ruled out"
+       },
+       {
+        "code": "Z04.9",
+        "display": "Encounter for examination and observation for unspecified reason"
+       },
+       {
+        "code": "Z13.1",
+        "display": "Encounter for screening for diabetes mellitus"
+       },
+       {
+        "code": "Z13.810",
+        "display": "Encounter for screening for upper gastrointestinal disorder"
+       },
+       {
+        "code": "Z13.811",
+        "display": "Encounter for screening for lower gastrointestinal disorder"
+       }
+      ],
+      "code": "Z13.818",
+      "display": "Encounter for screening for other digestive system disorders",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1988,
+        "start": 1867,
+        "text": "Celiac disease is the leading concern given her sister's diagnosis; microscopic colitis and other causes remain possible."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2459,
+        "start": 2396,
+        "text": "Upper endoscopy with duodenal biopsies is booked for 11/23/2026"
+       },
+       {
+        "contextIndex": 0,
+        "end": 2543,
+        "start": 2503,
+        "text": "She is to keep eating gluten until then."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [
+       {
+        "code": "E03.8",
+        "display": "Other specified hypothyroidism"
+       }
+      ],
+      "code": "E03.9",
+      "display": "Hypothyroidism, unspecified",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1185,
+        "start": 1139,
+        "text": "Hypothyroidism, on levothyroxine 75 mcg daily."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2034,
+        "start": 1965,
+        "text": "causes remain possible.\n2. Hypothyroidism, controlled on replacement."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [],
+      "code": "99204",
+      "display": "PR OFFICE/OUTPATIENT NEW MODERATE MDM 45 MINUTES",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 379,
+        "start": 288,
+        "text": "Relationship to practice: new patient; no clinician in this group has seen her before today"
+       },
+       {
+        "contextIndex": 0,
+        "end": 3061,
+        "start": 2814,
+        "text": "Total time I spent on her care on the date of this visit: 52 minutes, covering her history, review of the outside results and note, the examination, counseling about the celiac work-up and keeping gluten in her diet, the orders, and documentation."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G8754",
+      "display": "PR DIAS BP LESS 90",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 205,
+        "start": 152,
+        "text": "Encounter location: office suite, place of service 11"
+       },
+       {
+        "contextIndex": 0,
+        "end": 287,
+        "start": 228,
+        "text": "Name: Ottilie Brannigan-Sefa (fictional), 37-year-old woman"
+       },
+       {
+        "contextIndex": 0,
+        "end": 2502,
+        "start": 2394,
+        "text": "- Upper endoscopy with duodenal biopsies is booked for 11/23/2026 at Wexmoor Endoscopy Pavilion (fictional)."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "3078F",
+      "display": "PR MOST RECENT DIASTOLIC BLOOD PRESSURE < 80 MM HG",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 205,
+        "start": 152,
+        "text": "Encounter location: office suite, place of service 11"
+       },
+       {
+        "contextIndex": 0,
+        "end": 227,
+        "start": 206,
+        "text": "Date seen: 10/26/2026"
+       },
+       {
+        "contextIndex": 0,
+        "end": 287,
+        "start": 228,
+        "text": "Name: Ottilie Brannigan-Sefa (fictional), 37-year-old woman"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "3074F",
+      "display": "PR MOST RECENT SYSTOLIC BLOOD PRESSURE < 130 MM HG",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1988,
+        "start": 1867,
+        "text": "Celiac disease is the leading concern given her sister's diagnosis; microscopic colitis and other causes remain possible."
+       },
+       {
+        "contextIndex": 0,
+        "end": 3061,
+        "start": 2814,
+        "text": "Total time I spent on her care on the date of this visit: 52 minutes, covering her history, review of the outside results and note, the examination, counseling about the celiac work-up and keeping gluten in her diet, the orders, and documentation."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G8752",
+      "display": "PR SYS BP LESS 140",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 205,
+        "start": 152,
+        "text": "Encounter location: office suite, place of service 11"
+       },
+       {
+        "contextIndex": 0,
+        "end": 287,
+        "start": 228,
+        "text": "Name: Ottilie Brannigan-Sefa (fictional), 37-year-old woman"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1988,
+        "start": 1867,
+        "text": "Celiac disease is the leading concern given her sister's diagnosis; microscopic colitis and other causes remain possible."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2502,
+        "start": 2394,
+        "text": "- Upper endoscopy with duodenal biopsies is booked for 11/23/2026 at Wexmoor Endoscopy Pavilion (fictional)."
+       }
+      ],
+      "system": "cpt"
+     }
+    ],
+    "usageInfo": {
+     "creditsConsumed": 0.089012
+    }
+   },
+   "run": "eb4c562f",
+   "sent": true,
+   "service_date": null,
+   "state": "succeeded"
+  },
+  {
+   "purpose": "primary",
+   "request_sha256": "37eaacde4edd21497d3993a0803c62d2a671da10ba1309821eb33f0ba7c88e07",
+   "response": {
+    "candidates": [
+     {
+      "alternatives": [],
+      "code": "G9903",
+      "display": "PR PT SCRN TBCO ID AS NON USER",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 205,
+        "start": 152,
+        "text": "Encounter location: office suite, place of service 11"
+       },
+       {
+        "contextIndex": 0,
+        "end": 916,
+        "start": 848,
+        "text": "She does not wake at night to open her bowels and has seen no blood."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1988,
+        "start": 1867,
+        "text": "Celiac disease is the leading concern given her sister's diagnosis; microscopic colitis and other causes remain possible."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2502,
+        "start": 2394,
+        "text": "- Upper endoscopy with duodenal biopsies is booked for 11/23/2026 at Wexmoor Endoscopy Pavilion (fictional)."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "1036F",
+      "display": "PR CURRENT TOBACCO NON-USER",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 205,
+        "start": 152,
+        "text": "Encounter location: office suite, place of service 11"
+       },
+       {
+        "contextIndex": 0,
+        "end": 287,
+        "start": 228,
+        "text": "Name: Ottilie Brannigan-Sefa (fictional), 37-year-old woman"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1988,
+        "start": 1867,
+        "text": "Celiac disease is the leading concern given her sister's diagnosis; microscopic colitis and other causes remain possible."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2502,
+        "start": 2394,
+        "text": "- Upper endoscopy with duodenal biopsies is booked for 11/23/2026 at Wexmoor Endoscopy Pavilion (fictional)."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "99205",
+      "display": "PR OFFICE/OUTPATIENT NEW HIGH MDM 60 MINUTES",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 2502,
+        "start": 2394,
+        "text": "- Upper endoscopy with duodenal biopsies is booked for 11/23/2026 at Wexmoor Endoscopy Pavilion (fictional)."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2633,
+        "start": 2544,
+        "text": "- If the calprotectin comes back raised, a colonoscopy will be added at the same session."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2775,
+        "start": 2691,
+        "text": "- Return visit in this office on 12/14/2026 to go over the blood and biopsy results."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2813,
+        "start": 2777,
+        "text": "Documentation of Time and Complexity"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G8510",
+      "display": "PR PT INELIG NEG SCRN DEPRES",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 205,
+        "start": 152,
+        "text": "Encounter location: office suite, place of service 11"
+       },
+       {
+        "contextIndex": 0,
+        "end": 498,
+        "start": 380,
+        "text": "Referral: self-referred; a copy of this note goes to her primary care clinician, Bronagh Esquivel-Tate, NP (fictional)"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1988,
+        "start": 1867,
+        "text": "Celiac disease is the leading concern given her sister's diagnosis; microscopic colitis and other causes remain possible."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2502,
+        "start": 2394,
+        "text": "- Upper endoscopy with duodenal biopsies is booked for 11/23/2026 at Wexmoor Endoscopy Pavilion (fictional)."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G8420",
+      "display": "PR CALC BMI NORM PARAMETERS",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1570,
+        "start": 1560,
+        "text": "Weight 61."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1988,
+        "start": 1867,
+        "text": "Celiac disease is the leading concern given her sister's diagnosis; microscopic colitis and other causes remain possible."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2502,
+        "start": 2394,
+        "text": "- Upper endoscopy with duodenal biopsies is booked for 11/23/2026 at Wexmoor Endoscopy Pavilion (fictional)."
+       },
+       {
+        "contextIndex": 0,
+        "end": 3061,
+        "start": 2814,
+        "text": "Total time I spent on her care on the date of this visit: 52 minutes, covering her history, review of the outside results and note, the examination, counseling about the celiac work-up and keeping gluten in her diet, the orders, and documentation."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G8417",
+      "display": "PR CALC BMI ABV UP PARAM F/U",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 916,
+        "start": 848,
+        "text": "She does not wake at night to open her bowels and has seen no blood."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1608,
+        "start": 1570,
+        "text": "4 kg, blood pressure 112/70, pulse 78."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2502,
+        "start": 2394,
+        "text": "- Upper endoscopy with duodenal biopsies is booked for 11/23/2026 at Wexmoor Endoscopy Pavilion (fictional)."
+       },
+       {
+        "contextIndex": 0,
+        "end": 3298,
+        "start": 3210,
+        "text": "Electronically authenticated by Ines Marchbanks-Tiwari, MD (fictional), 10/26/2026 18:22"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G9781",
+      "display": "PR DOC RSN NO STATIN",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1988,
+        "start": 1867,
+        "text": "Celiac disease is the leading concern given her sister's diagnosis; microscopic colitis and other causes remain possible."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2502,
+        "start": 2394,
+        "text": "- Upper endoscopy with duodenal biopsies is booked for 11/23/2026 at Wexmoor Endoscopy Pavilion (fictional)."
+       },
+       {
+        "contextIndex": 0,
+        "end": 3061,
+        "start": 2814,
+        "text": "Total time I spent on her care on the date of this visit: 52 minutes, covering her history, review of the outside results and note, the examination, counseling about the celiac work-up and keeping gluten in her diet, the orders, and documentation."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "99203",
+      "display": "PR OFFICE/OUTPATIENT NEW LOW MDM 30 MINUTES",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 2502,
+        "start": 2394,
+        "text": "- Upper endoscopy with duodenal biopsies is booked for 11/23/2026 at Wexmoor Endoscopy Pavilion (fictional)."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2543,
+        "start": 2503,
+        "text": "She is to keep eating gluten until then."
+       },
+       {
+        "contextIndex": 0,
+        "end": 3061,
+        "start": 2814,
+        "text": "Total time I spent on her care on the date of this visit: 52 minutes, covering her history, review of the outside results and note, the examination, counseling about the celiac work-up and keeping gluten in her diet, the orders, and documentation."
+       }
+      ],
+      "system": "cpt"
+     }
+    ],
+    "codes": [
+     {
+      "alternatives": [
+       {
+        "code": "A04.71",
+        "display": "Enterocolitis due to Clostridium difficile, recurrent"
+       },
+       {
+        "code": "A06.1",
+        "display": "Chronic intestinal amebiasis"
+       },
+       {
+        "code": "A09",
+        "display": "Infectious gastroenteritis and colitis, unspecified"
+       },
+       {
+        "code": "K52.9",
+        "display": "Noninfective gastroenteritis and colitis, unspecified"
+       },
+       {
+        "code": "K59.09",
+        "display": "Other constipation"
+       },
+       {
+        "code": "K59.1",
+        "display": "Functional diarrhea"
+       },
+       {
+        "code": "K59.9",
+        "display": "Functional intestinal disorder, unspecified"
+       }
+      ],
+      "code": "R19.7",
+      "display": "Diarrhea, unspecified",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 626,
+        "start": 567,
+        "text": "Loose stools, bloating and tiredness for about four months."
+       },
+       {
+        "contextIndex": 0,
+        "end": 722,
+        "start": 647,
+        "text": "Since early summer she has passed three or four soft to watery stools a day"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1866,
+        "start": 1787,
+        "text": "Working Diagnosis\n1. Chronic diarrhea with bloating and iron deficiency anemia."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [
+       {
+        "code": "K31.89",
+        "display": "Other diseases of stomach and duodenum"
+       },
+       {
+        "code": "K63.89",
+        "display": "Other specified diseases of intestine"
+       }
+      ],
+      "code": "R14.0",
+      "display": "Abdominal distension (gaseous)",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 626,
+        "start": 567,
+        "text": "Loose stools, bloating and tiredness for about four months."
+       },
+       {
+        "contextIndex": 0,
+        "end": 803,
+        "start": 752,
+        "text": "with bloating and crampy lower abdominal discomfort"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1866,
+        "start": 1787,
+        "text": "Working Diagnosis\n1. Chronic diarrhea with bloating and iron deficiency anemia."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [
+       {
+        "code": "R10.30",
+        "display": "Lower abdominal pain, unspecified"
+       },
+       {
+        "code": "R10.31",
+        "display": "Right lower quadrant pain"
+       },
+       {
+        "code": "R10.33",
+        "display": "Periumbilical pain"
+       },
+       {
+        "code": "R10.9",
+        "display": "Unspecified abdominal pain"
+       }
+      ],
+      "code": "R10.32",
+      "display": "Left lower quadrant pain",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 847,
+        "start": 752,
+        "text": "with bloating and crampy lower abdominal discomfort that eases once she has emptied her bowels."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1724,
+        "start": 1630,
+        "text": "Abdomen soft and mildly distended, slightly tender in the left lower quadrant without guarding"
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [
+       {
+        "code": "E88.A",
+        "display": "Wasting disease (syndrome) due to underlying condition"
+       },
+       {
+        "code": "R64",
+        "display": "Cachexia"
+       }
+      ],
+      "code": "R63.4",
+      "display": "Abnormal weight loss",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 972,
+        "start": 927,
+        "text": "About 2 kg of weight has gone without dieting"
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [
+       {
+        "code": "R53.81",
+        "display": "Other malaise"
+       }
+      ],
+      "code": "R53.83",
+      "display": "Other fatigue",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 626,
+        "start": 567,
+        "text": "Loose stools, bloating and tiredness for about four months."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1010,
+        "start": 978,
+        "text": "she has felt drained for months."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [
+       {
+        "code": "D53.9",
+        "display": "Nutritional anemia, unspecified"
+       },
+       {
+        "code": "E61.1",
+        "display": "Iron deficiency"
+       }
+      ],
+      "code": "D50.9",
+      "display": "Iron deficiency anemia, unspecified",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1459,
+        "start": 1320,
+        "text": "Blood results sent from her primary care office, collected 10/14/2026 and reviewed today: hemoglobin 11.2 g/dL, MCV 76 fL, ferritin 7 ng/mL"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1629,
+        "start": 1609,
+        "text": "Conjunctival pallor."
+       },
+       {
+        "contextIndex": 0,
+        "end": 1866,
+        "start": 1787,
+        "text": "Working Diagnosis\n1. Chronic diarrhea with bloating and iron deficiency anemia."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2690,
+        "start": 2636,
+        "text": "Start ferrous sulfate 325 mg by mouth every other day."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [
+       {
+        "code": "K90.1",
+        "display": "Tropical sprue"
+       },
+       {
+        "code": "K90.41",
+        "display": "Non-celiac gluten sensitivity"
+       },
+       {
+        "code": "K90.49",
+        "display": "Malabsorption due to intolerance, not elsewhere classified"
+       },
+       {
+        "code": "Z03.89",
+        "display": "Encounter for observation for other suspected diseases and conditions ruled out"
+       },
+       {
+        "code": "Z13.810",
+        "display": "Encounter for screening for upper gastrointestinal disorder"
+       },
+       {
+        "code": "Z13.811",
+        "display": "Encounter for screening for lower gastrointestinal disorder"
+       },
+       {
+        "code": "Z13.818",
+        "display": "Encounter for screening for other digestive system disorders"
+       }
+      ],
+      "code": "K90.0",
+      "display": "Celiac disease",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1988,
+        "start": 1867,
+        "text": "Celiac disease is the leading concern given her sister's diagnosis; microscopic colitis and other causes remain possible."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2459,
+        "start": 2396,
+        "text": "Upper endoscopy with duodenal biopsies is booked for 11/23/2026"
+       },
+       {
+        "contextIndex": 0,
+        "end": 2543,
+        "start": 2503,
+        "text": "She is to keep eating gluten until then."
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [
+       {
+        "code": "E03.8",
+        "display": "Other specified hypothyroidism"
+       }
+      ],
+      "code": "E03.9",
+      "display": "Hypothyroidism, unspecified",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1185,
+        "start": 1139,
+        "text": "Hypothyroidism, on levothyroxine 75 mcg daily."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2042,
+        "start": 1972,
+        "text": "remain possible.\n2. Hypothyroidism, controlled on replacement.\n\nOrders"
+       }
+      ],
+      "system": "icd10cm-outpatient"
+     },
+     {
+      "alternatives": [],
+      "code": "99204",
+      "display": "PR OFFICE/OUTPATIENT NEW MODERATE MDM 45 MINUTES",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 379,
+        "start": 288,
+        "text": "Relationship to practice: new patient; no clinician in this group has seen her before today"
+       },
+       {
+        "contextIndex": 0,
+        "end": 3061,
+        "start": 2814,
+        "text": "Total time I spent on her care on the date of this visit: 52 minutes, covering her history, review of the outside results and note, the examination, counseling about the celiac work-up and keeping gluten in her diet, the orders, and documentation."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G8754",
+      "display": "PR DIAS BP LESS 90",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 205,
+        "start": 152,
+        "text": "Encounter location: office suite, place of service 11"
+       },
+       {
+        "contextIndex": 0,
+        "end": 287,
+        "start": 228,
+        "text": "Name: Ottilie Brannigan-Sefa (fictional), 37-year-old woman"
+       },
+       {
+        "contextIndex": 0,
+        "end": 2502,
+        "start": 2394,
+        "text": "- Upper endoscopy with duodenal biopsies is booked for 11/23/2026 at Wexmoor Endoscopy Pavilion (fictional)."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "3078F",
+      "display": "PR MOST RECENT DIASTOLIC BLOOD PRESSURE < 80 MM HG",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 205,
+        "start": 152,
+        "text": "Encounter location: office suite, place of service 11"
+       },
+       {
+        "contextIndex": 0,
+        "end": 227,
+        "start": 206,
+        "text": "Date seen: 10/26/2026"
+       },
+       {
+        "contextIndex": 0,
+        "end": 287,
+        "start": 228,
+        "text": "Name: Ottilie Brannigan-Sefa (fictional), 37-year-old woman"
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "3074F",
+      "display": "PR MOST RECENT SYSTOLIC BLOOD PRESSURE < 130 MM HG",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 1988,
+        "start": 1867,
+        "text": "Celiac disease is the leading concern given her sister's diagnosis; microscopic colitis and other causes remain possible."
+       },
+       {
+        "contextIndex": 0,
+        "end": 3061,
+        "start": 2814,
+        "text": "Total time I spent on her care on the date of this visit: 52 minutes, covering her history, review of the outside results and note, the examination, counseling about the celiac work-up and keeping gluten in her diet, the orders, and documentation."
+       }
+      ],
+      "system": "cpt"
+     },
+     {
+      "alternatives": [],
+      "code": "G8752",
+      "display": "PR SYS BP LESS 140",
+      "evidences": [
+       {
+        "contextIndex": 0,
+        "end": 205,
+        "start": 152,
+        "text": "Encounter location: office suite, place of service 11"
+       },
+       {
+        "contextIndex": 0,
+        "end": 287,
+        "start": 228,
+        "text": "Name: Ottilie Brannigan-Sefa (fictional), 37-year-old woman"
+       },
+       {
+        "contextIndex": 0,
+        "end": 1988,
+        "start": 1867,
+        "text": "Celiac disease is the leading concern given her sister's diagnosis; microscopic colitis and other causes remain possible."
+       },
+       {
+        "contextIndex": 0,
+        "end": 2502,
+        "start": 2394,
+        "text": "- Upper endoscopy with duodenal biopsies is booked for 11/23/2026 at Wexmoor Endoscopy Pavilion (fictional)."
+       }
+      ],
+      "system": "cpt"
+     }
+    ],
+    "usageInfo": {
+     "creditsConsumed": 0.082032
+    }
+   },
+   "run": "8bbd9f45",
+   "sent": true,
+   "service_date": "2026-10-26",
+   "state": "succeeded"
+  }
+ ],
+ "stored": {
+  "contexts": [
+   [
+    "gi-context@3",
+    "missing",
+    null
+   ],
+   [
+    "gi-context@3",
+    "user",
+    "2026-10-26"
+   ],
+   [
+    "gi-context@3",
+    "user",
+    "2026-10-26"
+   ]
+  ],
+  "decisions": [],
+  "open_clarifications": [
+   [
+    "proposal",
+    "gi.office_em",
+    "em_basis"
+   ],
+   [
+    "proposal",
+    "gi.office_em",
+    "em_basis"
+   ]
+  ],
+  "proposals": [
+   [
+    "1036F",
+    "alternative",
+    "informational",
+    "695908af"
+   ],
+   [
+    "3074F",
+    "excluded",
+    "excluded",
+    "873b1342"
+   ],
+   [
+    "3078F",
+    "excluded",
+    "excluded",
+    "303f8ab1"
+   ],
+   [
+    "99203",
+    "alternative",
+    "informational",
+    "ab8019a2"
+   ],
+   [
+    "99204",
+    "selected",
+    "needs_clarification",
+    "1a9e05a4"
+   ],
+   [
+    "99205",
+    "alternative",
+    "informational",
+    "d87437ec"
+   ],
+   [
+    "G8417",
+    "alternative",
+    "informational",
+    "4a38b03b"
+   ],
+   [
+    "G8420",
+    "alternative",
+    "informational",
+    "6c48cef3"
+   ],
+   [
+    "G8510",
+    "alternative",
+    "informational",
+    "b99ef796"
+   ],
+   [
+    "G8752",
+    "excluded",
+    "excluded",
+    "864256b9"
+   ],
+   [
+    "G8754",
+    "excluded",
+    "excluded",
+    "e830f60e"
+   ],
+   [
+    "G9781",
+    "alternative",
+    "informational",
+    "0e80ee5d"
+   ],
+   [
+    "G9903",
+    "alternative",
+    "informational",
+    "554f4e10"
+   ]
+  ],
+  "state": "needs_clarification"
+ },
+ "text_sha256": "339ad040d8ab96dd4e4a252e0d6a7ac8c48939186904973c6bdcb7af540017ba",
+ "walk_answer": "2026-10-26"
+}

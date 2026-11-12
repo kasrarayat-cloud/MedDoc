@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Optional, Sequence
 
 from studio.gi.profiles import ServiceProfile
-from studio.validation.checks import MEMBER_ENTERED, StatusOutcome, excerpt, plural, fact_label
+from studio.validation.checks import CONFIRMED_HEADING, MEMBER_ENTERED, StatusOutcome, excerpt, plural, fact_label
 
 STATE_PHRASES = {
     'performed': 'performed',
@@ -33,18 +33,24 @@ def _state_phrase(outcome: StatusOutcome) -> str:
 
 def selected_rationale(*, provider: str, units: int, evidence_count: int, profile: ServiceProfile, detected: bool,
                        outcome: Optional[StatusOutcome], facts: Sequence[tuple[str, str]],
-                       entered: Sequence[tuple[str, str]] = ()) -> str:
+                       entered: Sequence[tuple[str, str]] = (), lead: str = '', status_words: str = '',
+                       confirmed: Sequence[str] = ()) -> str:
     """``entered``: values a workspace member supplied as encounter metadata, named as such - never among the
-    documented facts (refutation r1, context-7)."""
+    documented facts (refutation r1, context-7). ``lead``: the first sentence of an independent participant's own
+    proposal, in place of "Selected by" (HARNESS.md 11.4: "Proposed by Fable; Corti did not propose this code.").
+    ``status_words`` and ``confirmed``: a status and facts a reviewer confirmed from a participant's located passage
+    (HARNESS.md 11.3), each said to be confirmed - never listed as documented."""
     times = f' {units} times' if units > 1 else ''
-    parts = [f'Selected by {provider}{times}.', f'{plural(evidence_count, "exact evidence passage")}.']
+    parts = [lead or f'Selected by {provider}{times}.', f'{plural(evidence_count, "exact evidence passage")}.']
     if outcome is not None:
         parts.append(_family_sentence(profile, detected))
-        parts.append(f'Service status: {_state_phrase(outcome)}.')
+        parts.append(f'Service status: {_state_phrase(outcome)}' + (f' ({status_words})' if status_words else '') + '.')
     for heading, pairs in (('Documented facts', facts), (MEMBER_ENTERED, entered)):
         if pairs:
             listed = '; '.join(f'{fact_label(name)} = {excerpt(str(value))}' for name, value in pairs)
             parts.append(f'{heading}: {listed}.')
+    if confirmed:
+        parts.append(f'{CONFIRMED_HEADING}: {"; ".join(confirmed)}.')
     return ' '.join(parts)
 
 

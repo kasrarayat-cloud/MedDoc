@@ -755,3 +755,40 @@ class Round3VerifierTests(unittest.TestCase):
         raw = txt_report('reviewed', proposals)  # the raw control characters, as no genuine file prints them
         results = Workspace([('reviewed', 'txt', raw)], snapshot=doc).run()[1]
         self.assertIn('evidence.present', failed(results))
+
+
+class ParticipantAlternativeBesideSecondReviewTests(unittest.TestCase):
+    """Walk-tool repair W1 (refutation round 5's integration): the second-review check counted a harness participant's
+    alternative (origin 'participant') as a provider alternative, and failed a right report that words it as its
+    participant's. It is counted only when worded as the provider's or the second review's, which is a wrong report."""
+
+    HEADING = 'ALTERNATIVES (informational, never selectable)'
+
+    def run_check(self, participant_line):
+        api = {'assessment': {'proposals': [
+            {'code': '45380', 'bucket': 'alternative', 'support': {'origin': 'second_review'}},
+            {'code': '45378', 'bucket': 'alternative', 'support': {'origin': 'participant'}}]}, 'provider_runs': []}
+        sections = [(self.HEADING, [
+            '  - 45380 · Colonoscopy — second-review alternative, never selectable: listed by the second review',
+            '     Proposed by: Corti',
+            participant_line,
+            '     Proposed by: Astra']), ('PROVIDER USAGE', [])]
+        results = {r.check: r for r in vd._txt_second_review('doc', 'reviewed.txt', sections, api)}
+        return results['txt.second_review.alternatives']
+
+    def test_a_participant_alternative_worded_as_its_participant_s_passes(self):
+        for line in ('  - 45378 · Colonoscopy — proposed by Astra, not added as a proposal, never selectable: why',
+                     '  - 45378 · Colonoscopy — listed by Astra with no quote found verbatim in the document, so not '
+                     'proposed, never selectable: why',
+                     # the three forms reports._alternative_words prints since round 5's D12 (R5-ACCOUNT's NEEDS 1)
+                     '  - 45378 · Colonoscopy — proposed by Astra, not added as a proposal; listed by Fable with no quote '
+                     'found verbatim in the document, so not proposed by Fable, never selectable: why'):
+            with self.subTest(line=line):
+                result = self.run_check(line)
+                self.assertEqual(result.status, 'pass', result.detail)
+                self.assertEqual(result.detail, '1 alternative(s), each worded by its origin')
+
+    def test_a_participant_alternative_worded_as_the_provider_s_fails(self):
+        result = self.run_check('  - 45378 · Colonoscopy — provider alternative, never selectable: why')
+        self.assertEqual(result.status, 'fail')
+        self.assertIn("('45378', 'provider alternative')", result.detail)

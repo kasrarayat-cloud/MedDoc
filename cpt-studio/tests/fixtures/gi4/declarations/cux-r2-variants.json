@@ -1,0 +1,1077 @@
+{
+ "package": "VARIANT REPAIR, ROUND 2 (cux-r2-variants): refutation round 2's L1/R05, L1/R06 and L1/R12 - a form a reader already declares (R8 D8's indication line, P1 rule 2's attributive act compound, R8 D12's 'not seen in person') written in a variant spelling or layout - read as the declared form is, failing closed",
+ "summary": "Findings L1/R05, L1/R06 and L1/R12 of /home/claude/cpt-studio-ux-20261103/refute-r2/results.json, each REPRODUCED by its verifier (verdicts verify:L1:R05, verify:L1:R06, verify:L1:R12) and pre-existing on the installed 41e03656d. Each misreads a form the code already declares it reads: R05, the indication heading line inside a titled report is held only when it ends in a full stop, question or exclamation mark (services._statement_line_end), so the same line without its period is today's report; R06, rule 2's attributive compound needs an ASCII '-' (services.COMPOUND_PARTICIPLE_AFTER, _compound_participle), so the hyphen's Unicode spellings read the act word as today's act; R12, cues.NOT_IN_PERSON reads 'not seen in person' but not its hyphenated or contracted forms, and detect's in-person reading lets the phrase clear itself when a lookbehind's one ASCII space or ASCII apostrophe is not there. Each rule below reads the variant exactly as the declared form is read and holds where it holds; wording outside every declared list stays as installed and is recorded as a residual (residuals_measured).",
+ "base": "e25286af03a99165ab803ac26e27e8702948adda (the integrated head of the core-repair branch after refutation round 2)",
+ "installed": "41e03656df617d5fab4a551ba7a0d7aea5ca3380",
+ "declared_before_code": true,
+ "declared_at": "2026-11-04T08:25Z, written before any code change and committed alone, first; the commit that adds this file is its time (the code commit follows it)",
+ "standard": "Round-4 (ruling 2026-11-03 (g); R8 section 4) and the refutation round's brief: when the document does not settle a reading, hold or ask - never release, never exclude a supported code. Every earlier repair stays (Mara's acceptance; every declared row of cux-bind.json, cux-hold.json, cux-lead.json, cux-r2-bind.json and cux-r2-em.json). Each rule only reads a variant of a declared form as that form is read; the one release (R06's attributive control) is the declared form's own reading. Any movement not declared below is a finding, measured and amended (dated, after code) before it is accepted.",
+ "findings": {
+  "L1/R05": "blocking, pre-existing (41e03656d too): 'Indication: Surveillance after a sigmoid polyp was removed with a hot snare' (no final period) in R8 D8's titled colonoscopy report, 45385 citing it with the reach sentence: READY, the inventory's snare performed on the indication line; and 'Indication: surveillance - sigmoid polyp removed with hot snare' cited alone: READY. The same line with its period is held (D8).",
+  "L1/R06": "blocking, pre-existing: 'Surveillance of biopsy\u2013proven Barrett esophagus was performed.' (U+2013) with 43239: READY; U+2010 and U+2011 too. The ASCII 'biopsy-proven' row (the lead's L3) is held. (b) 'biopsy proven' (a space) and (c) 'The polypectomy scar in the sigmoid colon was healed.' (a noun compound, 45385 by the own-passage release) are READY as well; neither is a variant of the declared form.",
+  "L1/R12": "blocking (re-graded by the verifier), pre-existing: 'Patient not seen in-person today.' and \"Patient wasn't seen in person today.\" (and \"isn't\", and the U+2019 apostrophe) under R8 D12's h4-01 twin: 99204 READY; the register's 'Patient not seen in person today.' rows are held. 'Patient not evaluated in person today.' (another verb) is READY too and is not a variant of the declared phrase."
+ },
+ "rules": {
+  "V05": "services._time_parts (R8 D8): an indication section of routing's layout (sections.layout's 'indication' kind: 'Indication:', 'Indications:', 'Reason for procedure:', 'Chief complaint:', ...) whose heading line carries text after its heading reads that heading line as the indication's own line ('indication_line', services._time_kind) whatever the line ends with - a full stop, a semicolon, a dash, a word or nothing: inside a titled report too, the line's acts are the indication's (INDICATION_READING, held), never today's. Only the heading line: after it the section reads exactly as before - today's report inside a titled report (D8's trap: today's biopsy under an unterminated 'Indication: surveillance' stays READY) and the indication outside one (the whole paragraph, as before, so a multi-line indication never gives its next line to today's report). The line read is the reflowed one (services.reflow), as before. services._statement_line_end keeps its full-stop test for every other reader (a keyword reads the heading line without it for the indication only), so _time_end - a history or plan section's end - is unchanged: a history section's heading line is already never today's (history from its heading to its end without a final full stop, the line alone with one), and a plan section inside a titled report stays that report's, as PLAN_HEADING has it.",
+  "V06": "services.COMPOUND_PARTICIPLE_AFTER and services._compound_participle (P1 rule 2; the lead's L3; R2a): the hyphen of an attributive act compound is read in its Unicode spellings too - U+2010 hyphen, U+2011 non-breaking hyphen, U+2012 figure dash, U+2013 en dash, U+2014 em dash (one new name, cues.HYPHEN) - exactly where the ASCII hyphen is read: _attributive_compound (services._acts_in, so the inventory's pass 3 and the engine's own-passage release, engine._states_unread_act), _attributive_position (R2a's doubtful compounds: a field label 'Snare\u2013resected: No', a negated predicate, read only as denials) and _compound_participle (_predicate_participle: the compound's participle is no act predicate). A compound written with a space ('biopsy proven'), a spaced dash or any other character reads as installed. ACTS, BARE_PARTICIPLE and COMPOUND_PREDICATE_BEFORE are unchanged (mention_count reads ACTS: H2 (d) cannot move). The one release is the declared form's own reading: 'The snare\u2013resected sigmoid polyp was not retrieved.' beside today's snare no longer reads a denied snare (a false conflict, Mara's class), as the ASCII control R8 R2 F05 reads it.",
+  "V12": "cues.NOT_IN_PERSON (R8 D12; read only to hold an E/M reading, detect._not_in_person): 'not seen in (the) office|clinic|person' is also read hyphenated ('not seen in-person', 'in-office', 'in-clinic', the hyphen in V06's spellings) and with its negation contracted (\"wasn't seen in person\", \"isn't seen in person\": n't after a letter, with an ASCII or a U+2019 apostrophe); '(patient|pt|she|he) (was|is) not seen' also as \"(patient|pt|she|he) (wasn't|isn't) seen\"; and 'no in-person' takes V06's hyphen spellings. detect._PV1_ATTENDANCE reads the contraction (\"n't seen\") and those hyphens as it reads 'not seen' and 'no in-person', so a variant takes its plain form's path (another time or another service in its clause still clears it, as for the plain form). detect._pv1_todays_mode no longer lets an in-person reading (_PV1_IN_PERSON) that overlaps the NOT_IN_PERSON match being judged clear that match: the phrase's own words are no statement of an in-person visit ('Patient not  seen in person today.' with two spaces, a line break inside the phrase, or \"wasn\u2019t seen in person\": the fixed-width lookbehinds (?<!not ) and (?<!n't ) read one ASCII space and an ASCII apostrophe only). Hold-only: nothing that clears a C4 hold reads more ('seen in-person today' with a Unicode hyphen clears nothing, as installed)."
+ },
+ "cues_added": [
+  "cues.HYPHEN (a hyphen in its ASCII and Unicode spellings; read by services' compound readers, cues.NOT_IN_PERSON and detect._PV1_ATTENDANCE; neither context.py nor sections.py reads it, so H2 (a) cannot move)"
+ ],
+ "cues_changed": [
+  "cues.NOT_IN_PERSON (V12: only widened; neither context.py nor sections.py reads it)"
+ ],
+ "detect_changed": [
+  "detect._PV1_ATTENDANCE (V12)",
+  "detect._pv1_todays_mode / _pv1_in_person_today (V12: the overlap rule; hold-only)"
+ ],
+ "services_changed": [
+  "services._time_parts and services._statement_line_end (V05: a keyword, default unchanged)",
+  "services.COMPOUND_PARTICIPLE_AFTER and services._compound_participle (V06)"
+ ],
+ "engine_changed": "none: engine._states_unread_act reads services._acts_in, which V06 changes; the engine's own code is unchanged",
+ "battery_rows_added": [
+  "R8 R2 V R05 control, a biopsy today under an unterminated indication",
+  "R8 R2 V R05 control, a snare today under the unterminated line",
+  "R8 R2 V R05 control, the dash-form line with its period",
+  "R8 R2 V R05 control, the unterminated line in an untitled note",
+  "R8 R2 V R05a indication line without its period, the reach sentence cited",
+  "R8 R2 V R05b dash-form indication line cited alone",
+  "R8 R2 V R05c indication line ending in a semicolon, the reach sentence cited",
+  "R8 R2 V R06 control, an en dash attributive compound",
+  "R8 R2 V R06 control, an en dash compound and a biopsy today",
+  "R8 R2 V R06 control, an en dash predicate compound",
+  "R8 R2 V R06 em dash compound, no act today",
+  "R8 R2 V R06 en dash compound, biopsy-confirmed adenoma",
+  "R8 R2 V R06 en dash field label answered No",
+  "R8 R2 V R06 non-breaking hyphen compound, no act today",
+  "R8 R2 V R06a en dash compound, no act today",
+  "R8 R2 V R12 control, seen in-person today",
+  "R8 R2 V R12a not seen in-person, exam",
+  "R8 R2 V R12a not seen in-person, history",
+  "R8 R2 V R12b wasn't seen in person, exam",
+  "R8 R2 V R12c the contraction with a curly apostrophe, exam",
+  "R8 R2 V R12d isn't seen in person, exam",
+  "R8 R2 V R12e the patient wasn't seen, exam",
+  "R8 R2 V R12f two spaces in the phrase, exam",
+  "R8 R2 V R12g non-breaking hyphen in in-person, exam"
+ ],
+ "battery": [
+  [
+   "R8 R2 V R05a indication line without its period, the reach sentence cited",
+   "45385",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 R2 V R05b dash-form indication line cited alone",
+   "45385",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 R2 V R05c indication line ending in a semicolon, the reach sentence cited",
+   "45385",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 R2 V R06 control, an en dash attributive compound",
+   "45385",
+   "selected/needs_clarification",
+   "selected/ready"
+  ],
+  [
+   "R8 R2 V R06 em dash compound, no act today",
+   "43239",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 R2 V R06 en dash compound, biopsy-confirmed adenoma",
+   "43239",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 R2 V R06 en dash field label answered No",
+   "45385",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 R2 V R06 non-breaking hyphen compound, no act today",
+   "43239",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 R2 V R06a en dash compound, no act today",
+   "43239",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 R2 V R12a not seen in-person, exam",
+   "99204",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 R2 V R12a not seen in-person, history",
+   "99204",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 R2 V R12b wasn't seen in person, exam",
+   "99204",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 R2 V R12c the contraction with a curly apostrophe, exam",
+   "99204",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 R2 V R12d isn't seen in person, exam",
+   "99204",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 R2 V R12e the patient wasn't seen, exam",
+   "99204",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 R2 V R12f two spaces in the phrase, exam",
+   "99204",
+   "selected/ready",
+   "selected/needs_clarification"
+  ],
+  [
+   "R8 R2 V R12g non-breaking hyphen in in-person, exam",
+   "99204",
+   "selected/ready",
+   "selected/needs_clarification"
+  ]
+ ],
+ "battery_note": "The 24 rows are new (prefix 'R8 R2 V ': register rows, which the round-4 counts of tests/test_gi4_battery.py and tests/test_gi4_po.py leave out). Their 'from' cells were measured on e25286af0's code with the rows added (python -m ops.gi4.battery --tree <sealed e25286af0 export> --only 'R8 R2 V ': 24 rows, 31 codes, 16 violations - every finding input and every variant row READY where its truth says not done today; scratch-r2-variants/out/rows-base.json). Declared 'to' cells: the 16 variant inputs held (needs_clarification, never excluded), and one release, R06's attributive control ('The snare\u2013resected sigmoid polyp was not retrieved.' beside today's cold snare: 45385 held [conflict:snare] -> READY, the ASCII control R8 R2 F05's own reading on this base). Every other code of the rows keeps its base state (unmoved, below), the controls among them. Every other row of the battery: 0 movements, 0 new violations - a shape scan (scratch-r2-variants/probes/scan.py, positive-controlled on these rows) finds no unterminated indication heading line, no Unicode-dash compound and no hyphenated, contracted or two-space 'not seen in person' in any of the 131 earlier rows.",
+ "unmoved": {
+  "R8 R2 V R05 control, a biopsy today under an unterminated indication | 45380": "selected/ready",
+  "R8 R2 V R05 control, a snare today under the unterminated line | 45380": "selected/ready",
+  "R8 R2 V R05 control, a snare today under the unterminated line | 45385": "selected/ready",
+  "R8 R2 V R05 control, the dash-form line with its period | 45380": "selected/ready",
+  "R8 R2 V R05 control, the dash-form line with its period | 45385": "selected/needs_clarification",
+  "R8 R2 V R05 control, the unterminated line in an untitled note | 45380": "selected/ready",
+  "R8 R2 V R05 control, the unterminated line in an untitled note | 45385": "selected/needs_clarification",
+  "R8 R2 V R05a indication line without its period, the reach sentence cited | 45380": "selected/ready",
+  "R8 R2 V R05b dash-form indication line cited alone | 45380": "selected/ready",
+  "R8 R2 V R05c indication line ending in a semicolon, the reach sentence cited | 45380": "selected/ready",
+  "R8 R2 V R06 control, an en dash compound and a biopsy today | 43239": "selected/ready",
+  "R8 R2 V R06 control, an en dash predicate compound | 45378": "selected/needs_clarification",
+  "R8 R2 V R06 control, an en dash predicate compound | 45385": "selected/ready",
+  "R8 R2 V R12 control, seen in-person today | 99204": "selected/ready"
+ },
+ "residuals_measured": {
+  "note": "Wording outside every declared list (ACCURACY-RESIDUALS.md's rule: measured and listed, not changed). Kept out of CASES as ops.gi4.battery.R2V_RESIDUALS because their honest truths make them violations, and a register row carries none (tests/test_gi4_battery.AssessBatteryTests.test_no_new_violation: every violation must be one of the two pinned S2/S3 rows); tests/test_cux_r2_variants.py reads them. Measured on e25286af0's code (scratch-r2-variants/out/residuals-base.json); declared unchanged after code.",
+  "rows": {
+   "R8 R2 V residual R06, the noun compound polypectomy scar": {
+    "45385": "selected/ready"
+   },
+   "R8 R2 V residual R06, the space form biopsy proven": {
+    "43239": "selected/ready"
+   },
+   "R8 R2 V residual R12, not evaluated in person": {
+    "99204": "selected/ready"
+   }
+  },
+  "why": {
+   "R8 R2 V residual R06, the space form biopsy proven": "new wording, not a variant of rule 2's hyphenated compound: an act word, a space and a participle is also how a report states its act ('Biopsy performed today', 'Biopsies obtained showed ...'), so a rule for it would hold acts done today; not shown to fail closed, so left as installed (the brief)",
+   "R8 R2 V residual R06, the noun compound polypectomy scar": "a noun compound, not a participle compound ('polypectomy scar', 'polypectomy site'): outside rule 2; services.ACTS' 'snare' pattern (read by mention_count, H2-frozen) excludes only 'snare site'",
+   "R8 R2 V residual R12, not evaluated in person": "another verb ('evaluated'), not a form of the declared phrase 'not seen in person' (the brief)"
+  }
+ },
+ "offers": "The rows' second-review offers (tests/test_gi4_po.offers_of: the row's own answer and an empty one) are measured on e25286af0's code with the rows added and recorded below ('offer_battery') in the commit that adds the rows, before code; tests/test_cux_hold.RegisterOfferTests reads them. Expected after code, as for the declared forms: the eight R12 variants lose their empty-answer office-visit offer, as R8 D12's held rows did (cux-hold.json's after-code amendment); R06's field-label row loses its own-answer not-covered biopsy item ('Forceps\u2013removed: Yes' becomes a doubtful compound, never an act done: R8 R2 F05a's reading); every other cell unchanged. Re-measured after code and recorded in an after-code amendment, which RegisterOfferTests then reads.",
+ "replay": "EQUAL predicted for the 8 regression documents (h2-08, h2-10, h4-01..h4-06) in every member state (python -m ops.gi4.replay --fixtures, base e25286af0): the shape scan finds none of the three shapes in their texts.",
+ "h2": "No movement of any class (GATE HOLDS): context.py and sections.py read none of the changed names (the cue inventory is unchanged: cues.HYPHEN and cues.NOT_IN_PERSON are read by neither); sections.layout is read, never changed; services.mention_count and detect.service_mention_count read ACTS, SERVICES and routing's service patterns, none of which changes; the date channel and the requests read context.py's facts.",
+ "h3": "A shape scan of the H3 corpus's 5,723 distinct texts (generated, seeded, repo and regression texts: scratch-r2-variants/probes/scan_corpus.py) finds one unterminated indication heading line, tests/corpus/services/documents/svc-26-colo-lst-referred-for-emr.txt 'Indication: Diagnostic - hematochezia and a positive stool DNA test' (no act word, no service word: no movement expected), and no Unicode-dash compound or 'not seen in person' variant.",
+ "register": "Every existing 'R8 ' battery row unchanged (the scan above).",
+ "mara": "tests/fixtures/cux/mara unchanged: its 'Indications:' paragraph reflows (services.reflow) into one heading line ending in a full stop, already D8's indication line; it has no Unicode-dash compound and no C4 phrase. 43239, 45380 and 45385 READY, 0 proposal questions, 0 office E/M questions (tests/test_cux_bind.MaraEndToEndTests).",
+ "must_hold": [
+  "every must_hold item of cux-bind.json, cux-hold.json, cux-lead.json, cux-r2-bind.json and cux-r2-em.json",
+  "R8 D8's rows and their trap: the indication line with its period held; today's biopsy under an unterminated 'Indication: surveillance' READY (tests/test_cux_hold.py's trap, and the R8 R2 V R05 control row)",
+  "a snare stated today under the unterminated indication line stays READY (only the heading line is the indication's)",
+  "outside a titled report the unterminated indication's whole paragraph is the indication's, as before",
+  "a history section's heading line is never today's, with or without its final full stop (unchanged)",
+  "the ASCII compounds read as they do on e25286af0: L3's rows held, F05a-F05c held, the F05 control READY",
+  "a predicate compound with a Unicode hyphen ('was snare\u2013resected') states the act, as the ASCII one does",
+  "R8 D12's rows held; the h4-01 twin READY; 'Patient seen in-person today.' READY"
+ ],
+ "must_release": [
+  "R06's attributive control ('The snare\u2013resected sigmoid polyp was not retrieved.' beside today's snare): 45385 READY, as the ASCII control R8 R2 F05 reads"
+ ],
+ "unit_pins": "Expected to move: none of the existing tests or pins (no text they read carries a shape above). tests/test_cux_hold.RegisterOfferTests reads this declaration's offers beside the five others. tests/test_harness_engine_parity.py, tests/test_harness2_r2_parity.py and tests/test_harness_pipeline.py are expected unchanged; if a pin moves, the rows that moved and why are recorded before it is re-pinned. Known before code and not this package's: tests.test_cux_r2_bind.R2RowsTests.test_the_rows already fails on e25286af0 (it compares cux-r2-bind.json's 29 rows with every 'R8 R2 ' row, and the integration added the seven 'R8 R2 EM ' rows: scratch-r2-variants/logs/baseline-r2v2.log, 265 tests, 1 failure); this package's 'R8 R2 V ' rows fall under the same prefix, and the test is not this package's file.",
+ "not_changed": [
+  "services.ACTS",
+  "services.BARE_PARTICIPLE",
+  "services.SERVICES",
+  "services.COMPOUND_PREDICATE_BEFORE",
+  "services.COMPOUND_NOUN_AFTER",
+  "services._time_end (history and plan sections)",
+  "services._paragraph_end",
+  "services.reflow",
+  "studio/gi/sections.py",
+  "studio/gi/context.py",
+  "detect._PV1_IN_PERSON (the clearing side: no new form clears a hold)",
+  "detect._p2_fold",
+  "studio/validation/engine.py",
+  "studio/validation/reconcile.py",
+  "the request side",
+  "the reader labels (the head already differs from the installed revision)"
+ ],
+ "cost": "Linear, bounded: V05 reads each indication section's heading line once more, the read _statement_line_end already makes (bounded by the section); V06 is a character class in place of one character; V12 widens one alternative of one pattern pass and adds one span comparison per in-person match read (CLAUSE_REACH-bounded, as before). Probed after code on the battery rows and the R05 cost probe (scratch-r2-variants/probes/probe_cost.py: common indication lines beside acts done today, with and without their final full stop - every act done today must stay READY).",
+ "offers_before_code_20261104": {
+  "note": "Measured before code (not a prediction): the 24 rows' second-review offers, tests/test_gi4_po.offers_of with the row's own answer and with an empty one, on e25286af0's code with the rows added (scratch-r2-variants/probes/offers.py against the sealed export; out/offers-base.json). Committed with the rows, before code, so tests/test_cux_hold.RegisterOfferTests reads them; the 'offers' key above says what the code is expected to move, and an after-code amendment records the head's.",
+  "offer_battery": {
+   "R8 R2 V R05 control, a biopsy today under an unterminated indication": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R05 control, a snare today under the unterminated line": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R05 control, the dash-form line with its period": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R05 control, the unterminated line in an untitled note": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R05a indication line without its period, the reach sentence cited": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R05b dash-form indication line cited alone": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R05c indication line ending in a semicolon, the reach sentence cited": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R06 control, an en dash attributive compound": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R06 control, an en dash compound and a biopsy today": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R06 control, an en dash predicate compound": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R06 em dash compound, no act today": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R06 en dash compound, biopsy-confirmed adenoma": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R06 en dash field label answered No": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": [
+     [
+      "gi.colonoscopy",
+      "biopsy",
+      "not_covered",
+      true
+     ]
+    ]
+   },
+   "R8 R2 V R06 non-breaking hyphen compound, no act today": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R06a en dash compound, no act today": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R12 control, seen in-person today": {
+    "empty": [
+     [
+      "gi.office_em",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R12a not seen in-person, exam": {
+    "empty": [
+     [
+      "gi.office_em",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R12a not seen in-person, history": {
+    "empty": [
+     [
+      "gi.office_em",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R12b wasn't seen in person, exam": {
+    "empty": [
+     [
+      "gi.office_em",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R12c the contraction with a curly apostrophe, exam": {
+    "empty": [
+     [
+      "gi.office_em",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R12d isn't seen in person, exam": {
+    "empty": [
+     [
+      "gi.office_em",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R12e the patient wasn't seen, exam": {
+    "empty": [
+     [
+      "gi.office_em",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R12f two spaces in the phrase, exam": {
+    "empty": [
+     [
+      "gi.office_em",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R12g non-breaking hyphen in in-person, exam": {
+    "empty": [
+     [
+      "gi.office_em",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   }
+  }
+ },
+ "after_code_20261104": {
+  "provenance": "Written 2026-11-04 AFTER the code and its measurement, as a record: it changes no key above it (each value is identical; the only bytes added before this key are the separating comma, checked when it was appended). Declaration commit 8ea13a959f2a (2026-11-04T08:25:22Z, declared_before_code, committed alone); the 24 rows, their offers measured before code and RegisterOfferTests' read of this file in 6c5c213e9544 (08:26:05Z); the same declaration written as ASCII JSON, every value unchanged, in 2c9805a52f0c (08:36:09Z); the code in 0b8b1d871a31 (08:43:46Z) and f5cb22d825c9 (08:53:24Z, the second keeps two mutant anchors whole: added_after_code V12b). Each harness tool ran offline on a sealed git-archive export of e25286af0 (base) and on the clean worktree at f5cb22d825c9 (head), with this tree's harness; the same tools on 0b8b1d871a31 gave the same results (scratch-r2-variants/logs/0b8b1d87-*).",
+  "added_after_code": {
+   "V06": "services._own_question - R2a's field-label reader - names a doubtful compound with its participle (services._compound_end). Routing's label words (detect._BOX_LABEL_WORD) join an ASCII compound into one word and split one written with a Unicode hyphen, so 'Snare\u2013resected: No' was a question about other words and its denial held nothing: the battery's own row 'R8 R2 V R06 en dash field label answered No' stayed READY after the first code pass. Not named among V06's readers before code; the row's movement was declared, and it now reads as R8 R2 F05a does ([conflict:snare]).",
+   "V05": "Measured after code, not a battery row: an unterminated indication heading line wrapped in lower case ('... was removed with a hot' / 'snare') reflows (services.reflow) into one heading line, so it is held as V05 reads (45385 READY on e25286af0, held on the head); an upper-case next line keeps D8's reading (held on both when it is cited alone).",
+   "V12": "Unit inputs added after the first test pass, each read as its plain form: \"Ms. Lane wasn't seen in person today.\" (only the first form's contraction reads it), 'No in\u2011person visit was needed for the CT results.' (the attendance path: another service in the clause clears it, as for the ASCII form), and 'Patient not seen' / 'in person today.' (a line break inside the phrase).",
+   "V12b": "Found after code by tests.test_gi4_mutants and tests.test_gi4_pv1_mutants (every registered mutant's anchor occurs exactly once): 0b8b1d871a31 had rewritten two anchored lines - session 2's \"the patient was not seen\" line of cues.NOT_IN_PERSON (pv1-c4-synonyms) and the _pv1_in_person_today call in detect._pv1_todays_mode (pv1-c4-in-person) - so those mutants could no longer be applied. f5cb22d825c9 restores both lines byte for byte: the contracted subject form is its own alternative beside the declared phrase's other forms, and the in-person rule is read inside _pv1_in_person_today (an in-person reading that any NOT_IN_PERSON match overlaps, searched within _PV1_QUOTE_WINDOW characters, clears nothing; the overlap is only ever the phrase's own words). All 195 anchors occur once; every measurement here was re-run on f5cb22d825c9."
+  },
+  "H4_battery": "python -m ops.gi4.battery --base e25286af0 --head <worktree> --declare <the 34 movements of scratch-lead3/gi4r2/combined-decl.json plus this file's 17>: base {'rows': 155, 'codes': 225, 'violations': 18, 'judged': 221, 'ready': 67, 'excluded': 11, 'held': 147}, head {'rows': 155, 'codes': 225, 'violations': 2, 'judged': 221, 'ready': 52, 'excluded': 11, 'held': 162}; 17 movements, 0 undeclared, 0 new violations - exactly the 17 declared. The 131 earlier rows do not move; the 2 violations left are the known S2/S3 exclusions (scratch-r2-variants/logs/battery-2.log).",
+  "H1_replay": "python -m ops.gi4.replay --fixtures --base e25286af0 --head <worktree>: EQUAL in every member state of the 8 regression documents (h4-03's four date.sends-only-the-truth HARD failures are on base and head alike, as the lead recorded). As declared.",
+  "H2_freeze": [
+   "(a) cue patterns read by context.py and sections.py: base 324, head 324; changed 0, removed 0, added 0",
+   "sections.layout over 5723 texts: identical",
+   "(b) date channel over 44014 text x member states: NEW-SEND 0, NEW-TAKE 0, NEW-HELD 0, SEND->ASK 0",
+   "(c) requests over 19780 primary and dated requests: changed 0",
+   "(d) mention counts over 5723 texts: changed 0",
+   "== GATE HOLDS (python -m ops.gi4.freeze --workers 6). As declared."
+  ],
+  "offers": "Re-measured on the head (scratch-r2-variants/probes/offers.py; out/offers-head.json): exactly as the 'offers' key predicted. The eight R12 variants lose their empty-answer office-visit offer (the E/M reading is held, as R8 D12's rows); R06's field-label row loses its own-answer not-covered biopsy item ('Forceps\u2013removed: Yes' is a doubtful compound, never an act done, as R8 R2 F05a reads). Every other cell of the 24 rows is unchanged. offer_battery below is the head's; tests/test_cux_hold.RegisterOfferTests reads it.",
+  "moved_against_base": {
+   "R8 R2 V R06 en dash field label answered No": {
+    "base": {
+     "empty": [
+      [
+       "gi.colonoscopy",
+       "",
+       "no_proposal",
+       true
+      ]
+     ],
+     "own": [
+      [
+       "gi.colonoscopy",
+       "biopsy",
+       "not_covered",
+       true
+      ]
+     ]
+    },
+    "head": {
+     "empty": [
+      [
+       "gi.colonoscopy",
+       "",
+       "no_proposal",
+       true
+      ]
+     ],
+     "own": []
+    }
+   },
+   "R8 R2 V R12a not seen in-person, exam": {
+    "base": {
+     "empty": [
+      [
+       "gi.office_em",
+       "",
+       "no_proposal",
+       true
+      ]
+     ],
+     "own": []
+    },
+    "head": {
+     "empty": [],
+     "own": []
+    }
+   },
+   "R8 R2 V R12a not seen in-person, history": {
+    "base": {
+     "empty": [
+      [
+       "gi.office_em",
+       "",
+       "no_proposal",
+       true
+      ]
+     ],
+     "own": []
+    },
+    "head": {
+     "empty": [],
+     "own": []
+    }
+   },
+   "R8 R2 V R12b wasn't seen in person, exam": {
+    "base": {
+     "empty": [
+      [
+       "gi.office_em",
+       "",
+       "no_proposal",
+       true
+      ]
+     ],
+     "own": []
+    },
+    "head": {
+     "empty": [],
+     "own": []
+    }
+   },
+   "R8 R2 V R12c the contraction with a curly apostrophe, exam": {
+    "base": {
+     "empty": [
+      [
+       "gi.office_em",
+       "",
+       "no_proposal",
+       true
+      ]
+     ],
+     "own": []
+    },
+    "head": {
+     "empty": [],
+     "own": []
+    }
+   },
+   "R8 R2 V R12d isn't seen in person, exam": {
+    "base": {
+     "empty": [
+      [
+       "gi.office_em",
+       "",
+       "no_proposal",
+       true
+      ]
+     ],
+     "own": []
+    },
+    "head": {
+     "empty": [],
+     "own": []
+    }
+   },
+   "R8 R2 V R12e the patient wasn't seen, exam": {
+    "base": {
+     "empty": [
+      [
+       "gi.office_em",
+       "",
+       "no_proposal",
+       true
+      ]
+     ],
+     "own": []
+    },
+    "head": {
+     "empty": [],
+     "own": []
+    }
+   },
+   "R8 R2 V R12f two spaces in the phrase, exam": {
+    "base": {
+     "empty": [
+      [
+       "gi.office_em",
+       "",
+       "no_proposal",
+       true
+      ]
+     ],
+     "own": []
+    },
+    "head": {
+     "empty": [],
+     "own": []
+    }
+   },
+   "R8 R2 V R12g non-breaking hyphen in in-person, exam": {
+    "base": {
+     "empty": [
+      [
+       "gi.office_em",
+       "",
+       "no_proposal",
+       true
+      ]
+     ],
+     "own": []
+    },
+    "head": {
+     "empty": [],
+     "own": []
+    }
+   }
+  },
+  "offer_battery": {
+   "R8 R2 V R05 control, a biopsy today under an unterminated indication": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R05 control, a snare today under the unterminated line": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R05 control, the dash-form line with its period": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R05 control, the unterminated line in an untitled note": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R05a indication line without its period, the reach sentence cited": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R05b dash-form indication line cited alone": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R05c indication line ending in a semicolon, the reach sentence cited": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R06 control, an en dash attributive compound": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R06 control, an en dash compound and a biopsy today": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R06 control, an en dash predicate compound": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R06 em dash compound, no act today": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R06 en dash compound, biopsy-confirmed adenoma": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R06 en dash field label answered No": {
+    "empty": [
+     [
+      "gi.colonoscopy",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R06 non-breaking hyphen compound, no act today": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R06a en dash compound, no act today": {
+    "empty": [
+     [
+      "gi.egd",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R12 control, seen in-person today": {
+    "empty": [
+     [
+      "gi.office_em",
+      "",
+      "no_proposal",
+      true
+     ]
+    ],
+    "own": []
+   },
+   "R8 R2 V R12a not seen in-person, exam": {
+    "empty": [],
+    "own": []
+   },
+   "R8 R2 V R12a not seen in-person, history": {
+    "empty": [],
+    "own": []
+   },
+   "R8 R2 V R12b wasn't seen in person, exam": {
+    "empty": [],
+    "own": []
+   },
+   "R8 R2 V R12c the contraction with a curly apostrophe, exam": {
+    "empty": [],
+    "own": []
+   },
+   "R8 R2 V R12d isn't seen in person, exam": {
+    "empty": [],
+    "own": []
+   },
+   "R8 R2 V R12e the patient wasn't seen, exam": {
+    "empty": [],
+    "own": []
+   },
+   "R8 R2 V R12f two spaces in the phrase, exam": {
+    "empty": [],
+    "own": []
+   },
+   "R8 R2 V R12g non-breaking hyphen in in-person, exam": {
+    "empty": [],
+    "own": []
+   }
+  },
+  "residuals": "ops.gi4.battery.R2V_RESIDUALS read on the head exactly as on e25286af0 (READY, the violation their honest truth gives): {\"R8 R2 V residual R06, the noun compound polypectomy scar\": {\"45385\": \"selected/ready\"}, \"R8 R2 V residual R06, the space form biopsy proven\": {\"43239\": \"selected/ready\"}, \"R8 R2 V residual R12, not evaluated in person\": {\"99204\": \"selected/ready\"}}",
+  "left_as_installed_measured": {
+   "note": "Shapes this package leaves as they read (scratch-r2-variants/probes/left.py; base e25286af0 and head). The R06 and R12 ones are new wording. The C4 ones are other declared forms written with a Unicode hyphen or apostrophe - outside R12's phrase, the brief's scope - and are reported to the lead, not accepted as residuals.",
+   "base": {
+    "C4 audio-only ASCII": {
+     "99204": "selected/needs_clarification"
+    },
+    "C4 audio-only U+2011": {
+     "99204": "selected/ready"
+    },
+    "C4 didnt show up ASCII": {
+     "99204": "selected/needs_clarification"
+    },
+    "C4 didnt show up curly": {
+     "99204": "selected/ready"
+    },
+    "C4 no-show ASCII": {
+     "99204": "selected/needs_clarification"
+    },
+    "C4 no-show U+2011": {
+     "99204": "selected/ready"
+    },
+    "R05 lower-case wrap, no period": {
+     "45380": "selected/ready",
+     "45385": "selected/ready"
+    },
+    "R05 next line upper case, unterminated": {
+     "45380": "selected/ready",
+     "45385": "selected/needs_clarification"
+    },
+    "R05 next line upper case, with period": {
+     "45380": "selected/ready",
+     "45385": "selected/needs_clarification"
+    },
+    "R06 polypectomy site": {
+     "45385": "selected/ready"
+    },
+    "R06 spaced en dash": {
+     "43239": "selected/ready"
+    },
+    "R12 not evaluated in-person": {
+     "99204": "selected/ready"
+    },
+    "R12 not examined in person": {
+     "99204": "selected/ready"
+    }
+   },
+   "head": {
+    "C4 audio-only ASCII": {
+     "99204": "selected/needs_clarification"
+    },
+    "C4 audio-only U+2011": {
+     "99204": "selected/ready"
+    },
+    "C4 didnt show up ASCII": {
+     "99204": "selected/needs_clarification"
+    },
+    "C4 didnt show up curly": {
+     "99204": "selected/ready"
+    },
+    "C4 no-show ASCII": {
+     "99204": "selected/needs_clarification"
+    },
+    "C4 no-show U+2011": {
+     "99204": "selected/ready"
+    },
+    "R05 lower-case wrap, no period": {
+     "45380": "selected/ready",
+     "45385": "selected/needs_clarification"
+    },
+    "R05 next line upper case, unterminated": {
+     "45380": "selected/ready",
+     "45385": "selected/needs_clarification"
+    },
+    "R05 next line upper case, with period": {
+     "45380": "selected/ready",
+     "45385": "selected/needs_clarification"
+    },
+    "R06 polypectomy site": {
+     "45385": "selected/ready"
+    },
+    "R06 spaced en dash": {
+     "43239": "selected/ready"
+    },
+    "R12 not evaluated in-person": {
+     "99204": "selected/ready"
+    },
+    "R12 not examined in person": {
+     "99204": "selected/ready"
+    }
+   }
+  },
+  "tests": {
+   "reproduction": "tests/test_cux_r2_variants.py run on the pre-code studio files (services.py, cues.py and detect.py as committed in 2c9805a52f0c, written into the worktree and restored afterwards with equal sha256s): 163 failures and 3 errors over 12 of its 18 tests (scratch-r2-variants/mut/repro-r2v7.log) - every variant test fails; the six that pass are the controls and the residual pins. On the code: 18 tests, OK.",
+   "final_run": "On f5cb22d825c9 with this record in place (scratch-r2-variants/mut/t_full.sh r2v40: tools/t.sh's environment, the throwaway test server, the whole log kept; logs/final-r2v40.log): the brief's twelve modules and tests.test_cux_r2_variants, with 33 more that read the changed readers (tests.test_gi4_pv1, _pv1_cycle1, _pv1_cycle2, _pv1_mutants, _freeze, _po, _pa, _mutants, test_repairs_gi2_conflicts, test_cux_r2_overlay, test_harness2_r2_evidence, test_services_reader, test_services_reconcile, test_gi_routing, test_candidates and eighteen test_repairs_* modules with indication, box and C4 texts): 1563 tests, 1 failure - tests.test_cux_r2_bind.R2RowsTests.test_the_rows, below. tests.test_cux_hold.RegisterOfferTests passes with this record (its 9 declared offer cells failed between the code commit and this record: logs/required-r2v23.log, 283 tests).",
+   "known_failure_not_this_package": "tests.test_cux_r2_bind.R2RowsTests.test_the_rows fails on e25286af0 already (logs/baseline-r2v2.log: the brief's twelve modules, 265 tests, 1 failure): it compares cux-r2-bind.json's 29 rows with every 'R8 R2 ' row, and the integration's seven 'R8 R2 EM ' rows - and now these 24 'R8 R2 V ' rows - share that prefix. tests/test_cux_r2_bind.py is not this package's file: a narrower filter there (leaving out 'R8 R2 EM ' and 'R8 R2 V ') would mend it.",
+   "pins": "No parity, I1 or battery pin moved: tests.test_harness_engine_parity, test_harness2_r2_parity, test_harness_pipeline and test_gi4_battery pass unchanged. The mutant registries (tests.test_gi4_mutants, test_gi4_pv1_mutants) failed on 0b8b1d871a31 - two anchors rewritten - and pass on f5cb22d825c9 (added_after_code V12b; logs/related-r2v24.log, 1280 tests, those 2 failures).",
+   "h3_text": "The one H3 corpus text with an unterminated indication heading line (tests/corpus/services/documents/svc-26-colo-lst-referred-for-emr.txt) has the same inventory on base and head: gi.colonoscopy performed; biopsy negated, emr planned, injection and tattoo performed (scratch-r2-variants/probes/svc26.py)."
+  },
+  "mutations": "scratch-r2-variants/mut/mutate.py: 14 guards, each reverted alone (the mutation asserted applied), tests.test_cux_r2_variants run (every one FAILED: killed), the file restored with its sha256 equal to the one taken before - M01 V05 the line read with the full-stop test; M02 V05 the whole paragraph as the line (D8's blanket hold, caught by the trap); M03 V05 the paragraph after the line dropped (caught by the untitled note); M04 V05 _statement_line_end ignoring complete; M05 V06 COMPOUND_PARTICIPLE_AFTER ASCII only; M06 V06 _compound_participle ASCII only; M07 V06 _own_question naming the act word only; M08 V12 NOT_IN_PERSON without the hyphen; M09 its first form without the contraction; M10 its subject form without the contraction; M11 'no in-person' ASCII only; M12 _PV1_ATTENDANCE without the contraction; M13 its 'no in-person' ASCII only; M14 the phrase's own words clearing it again. 14 applied, 14 killed, 14 restored on 0b8b1d871a31 (mut/mutate-run1.log) and again on f5cb22d825c9, M10 and M14 re-anchored to its lines (mut/mutate-run2.log).",
+  "installed_comparison": "The 24 rows on the installed 41e03656d (python -m ops.gi4.battery --tree <sealed 41e03656d export> --only 'R8 R2 V '; out/rows-installed.json) read as on e25286af0 except one control, 'R8 R2 V R05 control, the dash-form line with its period', READY there: R8 D8's hold is the core repair's. Every variant input this package holds is READY on installed, as the verifiers recorded: no regression, the class pre-existing.",
+  "cost": "Linear, as declared. The R05 cost probe (scratch-r2-variants/probes/probe_cost.py: 13 common indication heading lines, with and without their final full stop, in titled colonoscopy and upper endoscopy reports beside acts done today, 52 rows): 0 movements against e25286af0, every act done today READY.",
+  "false_hold_costs_measured": {
+   "note": "Measured after code, not declared before it (scratch-r2-variants/probes/dash_sep.py, base e25286af0 and head): V06's cost. An act word followed with no space by a dash and a participle now reads as rule 2's compound whatever the dash, as it already did for the ASCII hyphen; an em or en dash written as a separator there ('Biopsies\u2014taken from the antrum and body\u2014were sent for pathology.', 'Cold snare polypectomy\u2014completed without bleeding.') therefore holds a code done today that e25286af0 made READY - the ASCII-hyphen spelling of the same sentences is held on both. Hold-only (held, never excluded or released); no battery, regression or H3 corpus text carries such a dash. The brief names U+2010 to U+2014, and the finding's own spelling is the en dash, so both dashes stay read; narrowing the class (to U+2010 and U+2011, the hyphens proper, for instance) is the lead's call.",
+   "base": {
+    "0x2013 colon polypectomy separator": {
+     "45385": "selected/ready"
+    },
+    "0x2013 colon snare completed": {
+     "45385": "selected/ready"
+    },
+    "0x2013 egd biopsies separator": {
+     "43239": "selected/ready"
+    },
+    "0x2014 colon polypectomy separator": {
+     "45385": "selected/ready"
+    },
+    "0x2014 colon snare completed": {
+     "45385": "selected/ready"
+    },
+    "0x2014 egd biopsies separator": {
+     "43239": "selected/ready"
+    },
+    "0x2d colon polypectomy separator": {
+     "45385": "selected/ready"
+    },
+    "0x2d colon snare completed": {
+     "45385": "selected/needs_clarification"
+    },
+    "0x2d egd biopsies separator": {
+     "43239": "selected/needs_clarification"
+    }
+   },
+   "head": {
+    "0x2013 colon polypectomy separator": {
+     "45385": "selected/ready"
+    },
+    "0x2013 colon snare completed": {
+     "45385": "selected/needs_clarification"
+    },
+    "0x2013 egd biopsies separator": {
+     "43239": "selected/needs_clarification"
+    },
+    "0x2014 colon polypectomy separator": {
+     "45385": "selected/ready"
+    },
+    "0x2014 colon snare completed": {
+     "45385": "selected/needs_clarification"
+    },
+    "0x2014 egd biopsies separator": {
+     "43239": "selected/needs_clarification"
+    },
+    "0x2d colon polypectomy separator": {
+     "45385": "selected/ready"
+    },
+    "0x2d colon snare completed": {
+     "45385": "selected/needs_clarification"
+    },
+    "0x2d egd biopsies separator": {
+     "43239": "selected/needs_clarification"
+    }
+   }
+  }
+ }
+}

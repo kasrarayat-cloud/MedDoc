@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
 import os
@@ -15,6 +16,10 @@ import tempfile
 MAX_UPLOAD = 10 * 1024 * 1024
 MAX_OUTPUT = 30 * 1024 * 1024
 TIMEOUT_SECONDS = 20
+#: For the check (check_original): an original that is not there, or that became a symbolic link after the caller
+#: resolved its path (the O_NOFOLLOW open refuses it: ELOOP), is source_unavailable; any other failure to open it is
+#: a check that could not run (GR1-EXPORT-OPEN).
+MISSING_ORIGINAL_ERRNOS = frozenset((errno.ENOENT, errno.ENOTDIR, errno.ELOOP))
 
 
 class DocumentError(ValueError):
@@ -62,6 +67,9 @@ def _run(path, operation, mapping=None, answers=None, output_path=None, *,
         suffix = ".pdf"
     else:
         raise DocumentError("Only DOCX and PDF documents are supported.", "unsupported_format")
+    if operation == "check" and suffix != ".pdf":
+        # The download check is for PDFs only; a stored DOCX is not re-inspected when served.
+        raise DocumentError("Only PDF originals are checked before they are served.", "unsupported_format")
     target = Path(output_path) if output_path is not None else None
     if target is not None and (target.resolve() == source.resolve() or target.exists() or target.is_symlink()):
         raise DocumentError("Export must use a new file; originals and existing exports cannot be overwritten.", "immutable_original")
@@ -151,6 +159,42 @@ def _run(path, operation, mapping=None, answers=None, output_path=None, *,
 def inspect_template(path):
     """Inspect a newly stored original. Raises DocumentError for unsafe/unsupported files."""
     return _run(path, "inspect")
+
+
+def check_original(path, *, expected_sha256=None):
+    """The active-content check a stored PDF original must pass before its bytes are served.
+
+    ⚠️ Inspection at upload is not enough on its own (finding P1, docs/rebuild/pypdf-6.21.4.md):
+    originals accepted before the raw scan existed are still stored and still served, and the
+    check can only get stricter. This runs, in the isolated worker, the same raw scan, pypdf walk,
+    single-catalog and annotation rules as inspection, without the field or capacity rules, on
+    the bytes whose sha256 is `expected_sha256`. Raises DocumentError when they must not be served.
+
+    ⚠️ FINDING GR-1 (2026-11-01). A check that cannot even START — the worker process cannot be
+    spawned (fork/clone EAGAIN or ENOMEM at a pids or memory limit), its pipes or its temporary
+    workspace cannot be created or written (EMFILE, ENOSPC, EDQUOT) — fails in this parent with an
+    OSError, before any DocumentError exists. That says nothing about the file, so it is raised as
+    the DocumentError `sandbox_unavailable` (a check that could not run), never let through as an
+    exception every caller turned into a 500.
+
+    ⚠️ FINDING GR1-EXPORT-OPEN (round-4 refutation, 2026-11-01). _run reports ANY failure to open
+    the original as source_unavailable, and the export answers that code permanently ("missing or
+    changed, contact your administrator"). A full descriptor table (EMFILE, ENFILE), ENOMEM, EACCES or
+    EIO at that open says nothing about the file, so for the check only an original that is not there,
+    or is no longer the resolved file (it became a symbolic link before the O_NOFOLLOW open: ELOOP),
+    stays source_unavailable;
+    every other open failure is a check that could not run. Inspection, fill and preparation keep
+    _run's code unchanged: preparation records an unlisted code as provider_unknown.
+    """
+    try:
+        return _run(path, "check", expected_sha256=expected_sha256)
+    except DocumentError as exc:
+        cause = exc.__cause__
+        if exc.code == "source_unavailable" and isinstance(cause, OSError) and cause.errno not in MISSING_ORIGINAL_ERRNOS:
+            raise DocumentError("The isolated document check could not be started.", "sandbox_unavailable") from cause
+        raise
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise DocumentError("The isolated document check could not be started.", "sandbox_unavailable") from exc
 
 
 def fill_template(original_path, mapping: list, answers: dict, output_path, *,
