@@ -45,6 +45,16 @@ def page_texts(data: bytes) -> list[str]:
         from pypdf import PdfReader
     except ImportError as exc:
         raise CannotCheck(f'pypdf is not available: {exc}') from exc
+    # The passages were proven on pypdf 6.21.2's reading; pypdf 6.21.4 is read the same way, as the extraction child
+    # reads it (studio/ingest/pypdf_compat.py), so a verdict never changes with the library.
+    service = str(Path(__file__).resolve().parents[1])
+    if service not in sys.path:
+        sys.path.insert(0, service)
+    from studio.ingest.pypdf_compat import PypdfCompatError, apply  # noqa: PLC0415
+    try:
+        apply()
+    except PypdfCompatError as exc:
+        raise CannotCheck(f'pypdf is not the version this check was proven with: {exc}') from exc
     try:
         return [page.extract_text() or '' for page in PdfReader(io.BytesIO(data)).pages]
     except Exception as exc:  # noqa: BLE001 - any parse failure means the text could not be read

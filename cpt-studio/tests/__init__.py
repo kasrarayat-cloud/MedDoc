@@ -8,6 +8,10 @@ header to prove what a call without it is answered.
 from django.test import client as _client
 
 from studio import client_contract as _contract
+from studio.ingest import pypdf_compat as _pypdf_compat
+
+# Tests that call the PDF reader in this process read pypdf 6.21.4 as the extraction child does (_child.parse).
+_pypdf_compat.apply()
 
 _factory_init = _client.RequestFactory.__init__
 

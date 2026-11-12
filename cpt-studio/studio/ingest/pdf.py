@@ -86,7 +86,7 @@ from typing import TYPE_CHECKING
 
 import pypdf
 from pypdf import PasswordType
-from pypdf.errors import DependencyError
+from pypdf.errors import DependencyError, LimitReachedError
 from pypdf.generic import DictionaryObject, NullObject, StreamObject
 from pypdf.generic._font import Font
 
@@ -179,6 +179,12 @@ OBJECTS_DAMAGED = ('The PDF is damaged: a compressed block of its objects could 
                    'text may be missing or wrong.')
 XFA = ('The PDF contains an XFA form; XFA content is not read, so form content that an XFA-capable viewer shows '
        'may be missing from the text.')
+# Limits pypdf 6.21.4 added as advisory fixes (#4269: cross-reference stream entries, CVE-2026-119209; #4290: page
+# dictionary entries copied while flattening the page tree, CVE-2026-119204). Reading past them is what the
+# advisories exploit, so such a file is refused and named, never read with a section left out, never called damaged.
+LIMIT_REACHED = ('The PDF could not be read: its structure goes past a limit this server applies to uploaded files '
+                 '(such as the number of its cross-reference or page entries).')
+ADVISORY_LIMITS = ('Maximum XRef stream entry limit reached', 'Maximum page tree page entry limit exceeded')
 # pypdf reports these through logging, not exceptions, and then reads less than the page holds.
 DECODING_LOGGERS = ('pypdf.filters',)
 DECODING_WARNINGS = ('Impossible to decode XFormObject', 'Detected cyclic form XObject', 'Expected StreamObject')
@@ -310,6 +316,7 @@ def _open(data: bytes) -> tuple[pypdf.PdfReader | None, str]:
     if b'startxref' in data[:end] and b'startxref' not in data[data.rfind(b'%%EOF', 0, end) + 1:end]:
         # The last revision has no startxref of its own: a parser would fall back to an earlier one.
         return None, UNANCHORED
+    reader = None
     try:
         # pypdf reads the file as it ends at that revision's marker: the padding carries no PDF data.
         reader = pypdf.PdfReader(io.BytesIO(data[:end + len(b'%%EOF')]))
@@ -319,9 +326,25 @@ def _open(data: bytes) -> tuple[pypdf.PdfReader | None, str]:
             reader.get_page(0)  # flattens the page tree: a broken one fails here, not mid-document
     except (DependencyError, MemoryError):
         raise
-    except Exception:  # any parser error on untrusted bytes means the file is unreadable
-        return None, DAMAGED
+    except Exception as exc:  # any parser error on untrusted bytes means the file is unreadable
+        return None, LIMIT_REACHED if _advisory_limit(exc, reader) else DAMAGED
+    if _advisory_limit(None, reader):
+        return None, LIMIT_REACHED
     return reader, ''
+
+
+def _advisory_limit(exc, reader) -> bool:
+    """Whether pypdf stopped at one of ADVISORY_LIMITS: raised (``exc`` or one of its causes), or met while reading
+    a cross-reference stream it then left out (pypdf only logs that the section could not be read)."""
+    for _ in range(16):
+        if exc is None:
+            break
+        if isinstance(exc, LimitReachedError) and str(exc).startswith(ADVISORY_LIMITS):
+            return True
+        exc = exc.__cause__ or exc.__context__
+    counted = getattr(reader, '_xref_stream_entry_count', 0)
+    limit = getattr(reader, '_xref_stream_maximum_entries', None)
+    return isinstance(counted, int) and isinstance(limit, int) and counted > limit
 
 
 def _padding(data: bytes) -> bool:
