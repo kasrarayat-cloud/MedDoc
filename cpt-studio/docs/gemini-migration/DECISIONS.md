@@ -14644,3 +14644,210 @@ evidence, and such an argument comes back to the owner of these decisions.
     - `factset()` is public.
     - `apart_by_place` reads `target.places` only.
     - A value is None only for an empty claim.
+
+## FINAL-V2 amendment 1 adopted (2026-11-12, session 68197eb1)
+
+- **D208 FINAL-V2 amendment 1 is adopted after three bounded refutations: the codes are updated automatically after a
+  save (owner amendment of 2026-11-12; D184).**
+  - **The text.** `docs/gemini-migration/AMENDMENT-1.md` (sha256
+    `204487df9c50375495d27ed72fef38efcc70723258d25a43b92eddb4675066db`, 222,209 bytes) is committed with this entry and is
+    byte-identical to the session's `design-v2/amend1/AMENDMENT-1.md`. The three judgements are committed beside it:
+    - `AMEND1-REFUTATIONS-R1.md` (sha256 `8cbed069...2b0`): 30 findings, 30 accepted;
+    - `AMEND1-REFUTATIONS-R2.md` (sha256 `d11729a3...72e`): 16 findings, 14 accepted, 1 in part, 1 rejected (R2B-8);
+    - `AMEND1-REFUTATIONS-R3.md` (sha256 `79bcbe2b...1f2`): 13 findings, 12 accepted, 1 in part (R3B-4).
+    Each revision's earlier text and the lens reports stay in the session directory.
+  - **How it was made.** Each round was blind to `acceptance-a1/` and to every sealed set, and none built, sent,
+    installed or ran docker.
+    - wf_9a00a8ff-e79 designed it: a designer, three refuters (races; truth; legacy) and a judge (2,758,859 tokens).
+    - wf_a638d215-a27 ran the second refutation of that revision (1,665,930 tokens).
+    - wf_afd77e61-c5d ran the third refutation of the second revision (2,396,990 tokens).
+  - **What the integration owner checked before adopting.**
+    - The owner's eight requirements and his three verification words (rapid successive edits, failures, reload
+      persistence, actual exports) against sections 1-9 and against 11.1 (U1-U22) and 11.2 (W1-W8). Each requirement is
+      met in the text, and each verification word has unit tests and an installed-walk check.
+    - Nothing new reads document text. "Changed" compares the four coding-context values under the row lock (1.3), and
+      no word, phrase or marker list is added.
+    - Customer strings: the judges matched every new or changed string against `customer_api.FORBIDDEN` (0 hits in each
+      round). 3c's customer scan covers them when they are built.
+    - Owner's authority: the second call was approved by D183. A legacy encounter's first edit costs both passes and at
+      most one Corti request (9.2), which is the cost of the owner's "apply this to edited legacy encounters".
+  - **Why no fourth paper round.** Each round found real defects in the previous round's repairs (30, 16, then 13
+    findings, and one critical in round 3, on a narrow fallback path). The rest is attacked in code, where an input and
+    an output can be shown:
+    - by 5b's and 5d's independent refutations, told to attack the `[R3:...]` passages first;
+    - by the mandatory refutation of the finished diff (FINAL-V2 9.8);
+    - by U1-U22 and the walk checks W1-W8.
+  - **The decisions it takes (A1-A21), verbatim from the amendment.** Each section of the amendment gives its reason.
+  - **A1** A save is accepted while an update is pending; the newer save supersedes the older one (3.1). The refusal while
+    busy stays for clinical answers, their withdrawal, Resume, reconcile, Retry and the second review; and a context save is
+    refused while a member-act stage on the current context is queued or running (A18) [R:races-R4][R:races-R5].
+  - **A2** Binding is by inputs: a result becomes current only if, at its commit and under the row lock, its revision, its
+    context and the saved values are the encounter's (4). Superseded work is recorded as superseded, never as a failure.
+  - **A3** A save with no changed value writes nothing. A save that restores the earlier codes' own values makes those codes
+    current again, with nothing queued, at any point before the update's final assessment: the earlier codes stay the
+    current assessment until then (A17), so a recorded assess #1 of the update no longer turns a restore into a new update
+    (2.5) [R:races-R3][R:legacy-L6]. A restore applies only within one revision, only to final earlier codes, and only to
+    earlier codes that can be current again as they stand (A19) [R2:binding-R2B-4][R2:binding-R2B-5].
+  - **A4** On a revision with no inventory at the current versions, a save stores the values and queues the first stage the
+    reading owes, coalesced with one already queued (never with one that is running, which may not reach the analyze: the
+    save queues the owed stage beside it, and the doors reuse what it stores) [R:races-R6]. Coalescing is a compare-and-set
+    that renews the queued stage's queue deadline, and never takes the stale sweep's settled path, which sends nothing
+    whatever it finds [R2:binding-R2B-7]. Analyze derives the context with the newest values under the row lock (2.3, 4.2).
+  - **A5** One new nullable column, `EncounterContext.earlier_assessment`, set at insert (4.5). It names the earlier codes
+    while the update runs and the base of "what changed" afterwards.
+  - **A6** During an update, the earlier codes E are replaced only by a final assessment (A17) whose reading settled and whose
+    document review succeeded, was reused, or was held on purpose (a member date conflict) — or whose document review is
+    E's own: the update's Corti request is byte-identical to the one E's run carried, or neither could be built from the
+    same revision text, so the review's input did not change and its outcome is E's, with nothing re-sent
+    [R:legacy-L4]. Any other outcome — a failure, a request not sent for any reason, a request that cannot be built — ends
+    the update failed, or paused under a provider hold (A16), and leaves the earlier codes in place as earlier codes (7)
+    [R:legacy-L5].
+  - **A7** While an update is pending, every decision and every new export of the earlier codes is refused server-side (5.3).
+  - **A8** "What changed" is computed from stored rows only, against the assessment the update replaced (6.2).
+  - **A9** Earlier exports stay downloadable. An export is current only while its marker matches AND no update is pending
+    [R:races-R1][R:truth-T1][R:legacy-L1]; a customer download of an export that is not current is served with an EARLIER
+    EXPORT banner, instead of today's 409 for an approved one; every new export states the revision, the details and the
+    time its codes were made (customer report format @2) (8).
+  - **A10** Retry: the recorded retry of D11 for the reading (pass 1 and pass 2); a recorded, once-per-failed-run retry of the
+    document review for a failure whose status 7.3's table does not hold (a 5xx, another 4xx, a transport failure, or a
+    request not sent for a local reason) [R3:binding-R3B-4]; a re-run of a failed stage that sends nothing (7.2).
+    Authentication, permission, payment and quota refusals — the statuses 7.3's table holds, read by status whether or not
+    a `ProviderHold` row names the run — are never retried by a member: from the install on they set the provider hold
+    (A16), as A20 classifies them [R:races-R2][R:legacy-L2][R2:truth-RT1]; one recorded before the install stays held
+    against its identical request, and an update that meets it ends failed with its own text and nothing to retry (7.1,
+    7.3) [R3:binding-R3B-4][R3:truth-R3T-6]. No retry of a document too long to be read (C5).
+  - **A11** HTTP 402 joins the interpreter's quota hold (fail-closed; Google is not documented to send it) (7.3).
+  - **A12** A context save on a revision that has no inventory at the current versions and is over the size bound, or cannot be
+    framed, is refused before anything is written: its update could never finish (1.4). The same refusal applies to an
+    addendum whose combined text would be over the bound or cannot be framed, before the revision is recorded and before any
+    decision is invalidated (2.4) [R:truth-T7].
+  - **A13** An addendum whose text equals the current revision's own addendum text is refused as a duplicate (3.9).
+  - **A14** The earlier codes of a legacy encounter are always read under their own sentinel label (5.1).
+  - **A15** The member-actions invariant of `jobs.py` ("at most one stage chain is ever queued per encounter") is replaced by:
+    at most one chain serves the saved state; every other chain sends nothing after it is superseded, and nothing it computes
+    becomes current (3.10).
+  - **A16** [R:races-R2][R:legacy-L2] Corti, Astra and Fable each get an installation-wide provider hold, shaped like the
+    interpreter's (append-only, ended by an operator's recorded release): an authentication, permission, payment or quota
+    refusal by that provider sets it (A20's classification, recorded with the outcome that carries it, whatever the stage)
+    [R2:truth-RT1][R2:binding-R2B-1], and while it stands no request of that provider is sent by any encounter (7.3); a
+    stored answer is still reused. A Corti request that sets it pauses its document as one the hold keeps unsent does, in a
+    first processing as during an update [R2:truth-RT6], and no save made while it is paused re-checks with that refused
+    run: the save queues the predict, which the hold pauses again or, after the release, sends once (2.2)
+    [R3:binding-R3B-5][R3:truth-R3T-4]. This amends FINAL-V2 4.12 ("Corti, Astra and Fable unchanged"): the owner's
+    "Handle quota and payment failures without repeated requests" and D184's "quota, authentication and payment failures
+    hold without repeated requests" rule it, and the automatic recheck is what multiplies the sends a refusal would
+    otherwise repeat.
+  - **A17** [R:races-R3][R:legacy-L6][R:truth-T6] While an update is pending, an assessment that is not final (an assess #1
+    that owes peer stages) is recorded without becoming the current assessment and changes no other assessment's rows (it
+    withdraws and closes no earlier clarification); the final assessment that passes 4.1 becomes current and does everything
+    `persist_assessment` does today. So the earlier codes stay the current assessment, with their open questions, until the
+    update's final assessment; a restore applies until then (2.5); and nothing on the page is read from the update's
+    unfinished work. During a first processing nothing changes: its assess #1 becomes current as today.
+  - **A18** [R:races-R4][R:races-R5][R:truth-T12] A context save is refused (the existing busy sentence) while a member-act
+    stage on the current context is queued or running, and an answer's withdrawal is refused while an update is pending, as
+    a new answer is (1.4). A member's act on the current codes is therefore never superseded by a context save, and a
+    restore never brings back codes that read an answer whose change was never applied (A19 covers the answer a details
+    save itself replaces [R2:binding-R2B-5], and the one it records beside a change of the details, which no recompute
+    reads [R3:binding-R3B-2]).
+  - **A19** [R2:binding-R2B-4][R2:binding-R2B-5] A restore applies only to earlier codes that can be current again as they
+    stand: B reads no member answer that no longer stands (`review._reads_a_withdrawn_answer(B)` is false; a value saved in
+    a details row answered "Not documented" revokes that answer, `answers._save_details`), and B's document review is not an
+    unknown outcome an operator's reconciliation has released (`B.provider_run` UNKNOWN with `reconciled_at` set: its one
+    released attempt is still owed, and `jobs.reconcile` will not release it twice); and, where B is on a gemini context
+    (whose answers are recomputed, `jobs.recompute_after_answers`; on a legacy one an answer stands on the overlay by
+    design), every member answer of B's revision recorded after B was made that still stands had a re-assessment of B
+    queued after it (an assess on B's context carrying `jobs.AGAIN_MARK`) — a details save that records an answer beside a
+    change of the details queues none, leaving the answer to the change's own chain (`answers._save_details`), so B would
+    come back with that answer applied by the overlay alone, read by no assessment [R3:binding-R3B-2]. Otherwise a save of
+    B's values is an ordinary change where it makes a new context (case A, 2.2): its chain makes the codes for those values
+    with the answers that stand now and spends the released attempt, reusing every stored provider answer; where it would
+    keep the context (case B) it is refused with RESTORE_REFUSED, nothing written (2.5), because the kept context's rows
+    would read B fresh again with every stage superseded (for a reconciled unknown, A21 keeps them from reading fresh; the
+    one refusal is kept for every cause, J5) [R3:binding-R3B-3]. The texts offer a restore only where one applies
+    (`update.restorable`, 5.1).
+  - **A20** [R2:truth-RT1][R2:binding-R2B-2][R2:binding-R2B-1][R2:truth-RT2] One classification of the refusals that set a
+    provider hold, stated once (7.3's table) and read by every other passage: Corti's coding service answering 401, 402,
+    403 or 429; Corti's token endpoint answering any 4xx (its request carries only the installation's credentials and is
+    the same for every encounter, so no 4xx of it is request-specific); a participant's exchange answering any 4xx but 413
+    (fail-closed: a vendor's payment refusal may arrive under another status, D39's lesson; Anthropic has answered an
+    exhausted credit balance with HTTP 400). `jobs._send` records the hold in the transaction that records that status, so
+    on that path no such status is committed without its hold; when that record fails, the fallback records the run
+    unknown with the status among its few fields, and the hold right after it in a transaction of its own, so the run's
+    encounter is blocked whatever that second write does (7.3) [R3:binding-R3B-1]. A hold-setting run is a run a
+    `ProviderHold` row names, never one read by its status alone; a refusal recorded before the install, which no row
+    names, is still never retried by a member (A10, by status) and holds only its identical request, in its encounter
+    (7.3) [R3:binding-R3B-4].
+  - **A21** [R3:binding-R3B-3] An operator's reconciliation that releases the current codes' own unknown document review
+    while a reading is owed (a legacy encounter, or a v2 revision whose inventory is of an older version) starts an update
+    of those codes: there the one attempt it releases is the reading (7.4, `jobs.reconcile`; on a context that is not a
+    gemini context nothing else can be sent, `jobs._earlier_reading`), so those codes are no longer fresh (vocabulary), the
+    reading is a target job that 3.4 never supersedes as restored, and its chain ends in a final that replaces them, with
+    "what changed" against them. No save started it: `update.kind` is `check`, and the update's texts name no change of the
+    member's (5.1, 7.1). Before the reconciliation the codes stay fresh and read "being confirmed", truly.
+  - **FINAL-V2 text superseded or amended** (amendment section 10's table, recorded here):
+    - superseded:
+      - 0's "a legacy context save is an explicit re-check";
+      - 6.2 "Legacy encounters and context saves";
+      - 7.4's legacy-save sentence;
+      - 8.1 step 5b's `_change_context` file entry and its D8 done-when;
+      - 10's R24.
+    - amended:
+      - 1.1's INVENTORY_VERSION row;
+      - 6.2's older-version paragraph;
+      - 9.3's D8;
+      - v1's D8 (by D184);
+      - 4.12's "Corti, Astra and Fable unchanged", by A16 and A20: an installation-wide provider hold on an
+        authentication, permission, payment or quota refusal;
+      - HARNESS.md 12.1 as `review.persist_assessment` applies it, by A17 while an update is pending.
+    - extended:
+      - 6.4, by 9.4 (the `update_pending` hazard);
+      - 7.4's Resume, by 3.6;
+      - 7.5, by 7.1;
+      - 9.9, by 11.2.
+    - closed: 8.1 step 8's legacy context-save loss (D184).
+  - **The build plan changes** (section 10):
+    - **1d** gains `EncounterContext.earlier_assessment`, `ProviderHold` and `ProviderHoldRelease` in migration 0015.
+      0015 is not installed anywhere, so this is an edit of 0015, and INT-1's ops receipt is recomputed from the
+      install gate's output.
+    - **3b** gains HOLD_STATUSES[402] = QUOTA (A11).
+    - **3c** gains the update texts and the refusal sentences. The `customer_api.py` keys are 3c's file, applied on 5d's
+      request.
+    - **5b** gains:
+      - `studio/provider_holds.py`;
+      - Corti's token status;
+      - the jobs, review and progress rows of section 10;
+      - `tests/v2/test_update_pipeline.py` and `test_update_review.py`.
+    - **A new step 5d UPDATE-UX** owns:
+      - `api.py`, `cptstudio/urls.py`, `answers.py`, `reports.py` (format @2), `client_contract.py`, `app.js`,
+        `styles.css`;
+      - `API.md` and `CORE-UX-DESIGN.md` section 7;
+      - its tests.
+
+      It depends on 5b and 3c, and merges after 5b and before 6a.
+    - **6a** gains the new worlds (U15).
+    - **6b** gains:
+      - the `provider_hold` command;
+      - the install counts of 9.5, A21's count included;
+      - the contract keys;
+      - the 11.3 differential check;
+      - the rollback rows.
+    - The tests changed by the amendment are named in its "Pinned behaviours" paragraph and updated by each file's
+      owner.
+  - **Owner items, raised before the install** with the measured counts (standing authority). None of them gates the
+    build, and each has a stated default:
+    - **class a, R2B-8.** While a participant's hold stands, updates complete without that participant's check. The
+      alternative is pausing every update. Default: they complete, at the stated cost.
+    - **class a, A21 on a legacy encounter.** An operator's reconciliation reads the document with the current reading
+      (two Gemini passes and the Corti attempt), and its final clears the legacy approvals. The alternative is a
+      reconciliation that changes nothing. Default: A21 as written.
+    - **class b, refusals recorded before the install.**
+      - Their count.
+      - A pre-install token refusal is sent once after the install, and a refusal again sets the hold.
+      - An update that meets a pre-install refusal for a request other than the earlier codes' own cannot finish for
+        those details. The restore is the way back.
+    - **class b, D197.** 46221 is never READY.
+    - **Reported, not asked:**
+      - the per-document cost measured at D1-D3 (D203);
+      - A21's install count (expected 0).
+  - **Still unmeasured, carried:** the vendors' refusal statuses (Corti's 402 and 429, both participants'). A20's
+    fail-closed reading stands until they are measured.
