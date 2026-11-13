@@ -461,9 +461,14 @@ class MigrationReceiptTests(TemporaryDirectoryTest):
                                                 'assessment.interpretation: nullable',
                                                 'InterpreterHold: a new table no older revision reads',
                                                 'InterpreterHoldRelease: a new table no older revision reads']})
-        # design v2 (FINAL-V2 6.3, 2026-11-12): 0015 adds EventInventory.appraisal_run, nullable, read safe
+        # design v2 (FINAL-V2 6.3, 2026-11-12): 0015 adds EventInventory.appraisal_run, nullable, read safe; and, by
+        # FINAL-V2 amendment 1 (D208; its section 10's first row, step 1d-A1), EncounterContext.earlier_assessment,
+        # nullable, and the ProviderHold and ProviderHoldRelease tables, read safe
         self.assertEqual(migrations['after_baseline']['0015_inventory_appraisal'],
-                         {'safe': True, 'why': ['eventinventory.appraisal_run: nullable']})
+                         {'safe': True, 'why': ['eventinventory.appraisal_run: nullable',
+                                                'encountercontext.earlier_assessment: nullable',
+                                                'ProviderHold: a new table no older revision reads',
+                                                'ProviderHoldRelease: a new table no older revision reads']})
         self.assertTrue(all(verdict['safe'] for verdict in migrations['after_baseline'].values()))
 
     def test_0008_adds_no_column_to_an_existing_table(self):

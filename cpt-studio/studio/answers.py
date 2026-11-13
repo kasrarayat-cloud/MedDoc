@@ -106,6 +106,12 @@ PROMPTS = {
     'statement_scope': 'Does the statement quoted apply to this act?',
     'act_method': 'By which method was the lesion removed?',
     'procedure': 'In which procedure was this act done?',
+    # design v2's five new facts (FINAL-V2 4.8; DECISIONS D181), worded as the seven above
+    'event_entry': 'In whose entry is this act documented?',
+    'exam_stations': 'Which parts of the upper tract were examined?',
+    'act_yield': 'What did this extraction retrieve?',
+    'act_cause': 'What caused the bleeding this act treated?',
+    'act_part': 'Was this act part of another act?',
 }
 CONFLICT_PROMPT = 'The record has conflicting statements about the {act}. Which is right for this date?'
 DEFAULT_PROMPT = 'CPT Studio could not confirm a detail this code depends on.'  # U9: CPT Studio's reading

@@ -12,7 +12,10 @@ What is proved here, each against the design's text or against v1 computed in th
   carry, and ``whole`` all of them (the rows DECISIONS D200 confirms);
 - each family's id letter (DECISIONS D185) is engine/types.IdFamily's;
 - DEFINITIONS gives each enumeration of the schema one line that names its values, describes meanings and quotes
-  nothing; no code reads it but its canonical form; no line needs a named exemption from 2a's scans (triage 2a R5);
+  nothing; no code reads it but its canonical form; no line needs a named exemption from 2a's scans (triage 2a R5), and
+  2a's scans run over it with only 2a's reviewed runs exempt, passed explicitly (integration O7);
+- the definitions the integration owner ruled, in the lines and in both passes' instructions: pressure_measurement and
+  manometry narrowed both ways (DECISIONS D209, pass 1's half), motility and anorectal made disjoint (D214);
 - the schema shas the integration owner pins, measured (DEFINITIONS has no pin of its own: D202), and the sizes (about
   7.9x v1's, measured at D1 before any compaction: D203);
 - 5.7 measure 4 already holds here (step 0b's rules), DEFINITIONS being the pinned OUTPUT table the rule names.
@@ -43,12 +46,14 @@ A, F = ct.Attribute, xs.Family
 
 # The shas this step hands the integration owner (2.5: LOCAL_SCHEMA_SHA256_V2, RESPONSE_SCHEMA_SHA256_V2), measured on
 # this tree. A changed byte of either changes them: until the first recording under gemini-events@2 (D1) it needs only
-# the recomputed pin, after it a new INTERPRETATION_VERSION (DECISIONS D202).
+# the recomputed pin, after it a new INTERPRETATION_VERSION (DECISIONS D202). Step 1b3's rulings (D209's pass-1 half,
+# D214) change definitions only, which are no schema bytes, so both are as INT-5 wrote them (measured again by 1b3).
 LOCAL_SHA256 = '7cd387041de317825f371415070bcee1703be0d9022c92bf77580f59dda3d04c'
 RESPONSE_SHA256 = 'bcb7fce8f1fa0b28c5fb8ea7514ba22f14ce06f18d1f557b16b92798f1109cab'
 # DEFINITIONS has no pin of its own (DECISIONS D202): 2a renders every line verbatim into INSTRUCTIONS_2, whose pin
 # covers them. This sha is this step's own change detector, so a changed definition is seen here before 2a's pin moves.
-DEFINITIONS_SHA256 = 'ac34cda7a617cc74294fae440d8648c604db1032e52ae73ddbf87cb4e2231ce3'
+# Step 1b3's value, after D209's act kinds and D214's session kinds (ac34cda7... is superseded).
+DEFINITIONS_SHA256 = '1b7563e52a8203dfc4bcd614c766b9d84bfed4692e82a65c60bac3b72fc30a9c'
 SIZES = {'local': 89_759, 'response': 95_046, 'fact_nodes': 53, 'source_nodes': 112, 'enum_sites': 299, 'depth': 12}
 
 
@@ -491,9 +496,12 @@ class DefinitionTests(SimpleTestCase):
         self.assertIn('office_em (an office or outpatient evaluation and management visit)', kinds)
         self.assertIsNotNone(re.search(r'(?i)\bsetting', 'in another setting'))  # the control
 
-    def test_2as_scans_pass_over_the_instruction_with_no_named_exemption(self):
+    def test_2as_scans_exempt_no_quoted_phrase_and_only_2as_reviewed_runs(self):
         # 2a's own scans (one implementation, imported here because 2a's test module imports this one), run over the
-        # instruction 2a renders the definitions into, with neither exemption
+        # instruction 2a renders the definitions into. No quoted phrase is exempt, by name or whole (triage 2a R5: the
+        # 'not stated' and 'setting' exemptions are gone); the only runs exempt are 2a's reviewed runs of three or four
+        # words (SHARED_RUNS, each with its reason, none a whole phrase), passed explicitly here (integration O7 = 2a-2
+        # R3), and every run the definitions share with survey 4 is one of them.
         from studio.interpretation.contract import extract_prompt as xp
         from tests.v2 import test_extract_prompt as scans
         self.assertIsNone(re.search(r'(?i)\bsetting', xp.INSTRUCTIONS_2))  # D3: no setting, none allowed
@@ -505,9 +513,21 @@ class DefinitionTests(SimpleTestCase):
         self.assertEqual(hashlib.sha256(data).hexdigest(), scans.SURVEY_4_SHA256)  # the survey 2a's scan is written for
         phrases = scans.survey_4_phrases(data.decode('utf-8'))
         self.assertIn(('not', 'stated'), phrases)  # the phrase once exempted is still a survey phrase, scanned for
-        self.assertEqual(scans.phrase_hits(scans.words(xp.INSTRUCTIONS_2), phrases), [])
-        self.assertEqual(scans.phrase_hits(scans.words('\n'.join(xs.DEFINITIONS.values())), phrases), [])
-        self.assertTrue(scans.phrase_hits(scans.words('a snare not stated as cold or hot'), phrases))  # the control
+        definitions = scans.words('\n'.join(xs.DEFINITIONS.values()))
+        self.assertEqual(scans.phrase_hits(scans.words(xp.INSTRUCTIONS_2), phrases, exempt=scans.SHARED_RUNS), [])
+        self.assertEqual(scans.phrase_hits(definitions, phrases, exempt=scans.SHARED_RUNS), [])
+        # with nothing exempt, what the definitions share is a subset of the reviewed runs, none of them a whole phrase
+        shared = scans.phrase_hits(definitions, phrases, exempt=())
+        self.assertLessEqual(set(shared), set(scans.SHARED_RUNS))
+        self.assertFalse({tuple(run.split()) for run in scans.SHARED_RUNS} & phrases)
+        # the controls: the phrase once exempted is found; and three words from the middle of a long survey phrase that
+        # are no reviewed run, added to the definitions' words, break the subset
+        self.assertTrue(scans.phrase_hits(scans.words('a snare not stated as cold or hot'), phrases,
+                                          exempt=scans.SHARED_RUNS))
+        long = max(sorted(phrases), key=len)
+        middle = next(list(long[at:at + scans.SUB_PHRASE]) for at in range(2, len(long) - scans.SUB_PHRASE + 1)
+                      if ' '.join(long[at:at + scans.SUB_PHRASE]) not in scans.SHARED_RUNS)
+        self.assertFalse(set(scans.phrase_hits(definitions + middle, phrases, exempt=())) <= set(scans.SHARED_RUNS))
 
     def test_no_code_reads_the_definitions_but_their_canonical_form(self):
         for name in ('extract_schema.py', 'extract_read.py'):
@@ -518,6 +538,79 @@ class DefinitionTests(SimpleTestCase):
                         for node in ast.walk(function) if isinstance(node, ast.Attribute) and node.attr == 'DEFINITIONS'}
             with self.subTest(module=name):
                 self.assertEqual(readers, {'definitions_document'} if name == 'extract_schema.py' else set())
+
+
+# --- the definitions the integration owner ruled (D209's pass-1 half, D214) --------------------------------------------
+
+# Each is a sentence of its value line (a meaning, never a word list or a keyword rule: 5.7), rendered verbatim into
+# pass 1's instruction; the act kinds' line also into pass 2's (appraise_prompt renders it, step 2c), so both passes say
+# the same (D209). DECISIONS D209: pressure_measurement names the sphincter of Oddi (it serves only 43263); manometry
+# names every manometry study other than the sphincter of Oddi's. D214: motility never takes anorectal testing, and
+# anorectal testing, anorectal manometry included, is always anorectal.
+PRESSURE_MEASUREMENT = 'pressure_measurement (a pressure measurement of the sphincter of Oddi)'
+MANOMETRY = ('manometry (any manometry study other than one of the sphincter of Oddi, that is esophageal, gastric, '
+             'duodenal or small-bowel, colonic or anorectal manometry, and an esophageal balloon distension study)')
+MOTILITY = ('motility (a motility or manometry study of the esophagus, the stomach, the small bowel or the colon, never '
+            'anorectal testing)')
+ANORECTAL = 'anorectal (anorectal testing, anorectal manometry included)'
+# the lines as step 1b wrote them, before the rulings: names only for the two kinds, overlapping session kinds
+BEFORE_RULINGS = ('pressure_measurement, capsule_study, manometry, ph_monitoring',
+                  'motility (a motility or manometry study)', 'anorectal (anorectal testing)')
+
+
+def meaning(line: str, value: str) -> str:
+    """What ``line`` says ``value`` means: the words inside the parentheses that follow the value's name. ValueError
+    unless the line defines the value exactly once."""
+    head = f'{value} ('
+    if line.count(head) != 1:
+        raise ValueError(f'{value} is defined {line.count(head)} times in the line.')
+    start = line.index(head) + len(head)
+    return line[start:line.index(')', start)]
+
+
+class RuledDefinitionTests(SimpleTestCase):
+    def test_d209_pressure_measurement_is_the_sphincter_of_oddi_and_manometry_every_other_study(self):
+        from studio.interpretation.contract import appraise_prompt, extract_prompt as xp
+        kinds = xs.DEFINITIONS[ct.Kind]
+        for ruled in (PRESSURE_MEASUREMENT, MANOMETRY):
+            with self.subTest(ruled=ruled[:30]):
+                self.assertEqual(kinds.count(ruled), 1)  # the act kinds' line says it
+                self.assertEqual(xp.INSTRUCTIONS_2.count(ruled), 1)  # pass 1's instruction says it
+                self.assertEqual(appraise_prompt.INSTRUCTIONS.count(ruled), 1)  # and pass 2's, from the same line
+        pressure, manometry = meaning(kinds, 'pressure_measurement'), meaning(kinds, 'manometry')
+        # narrowed both ways: the one site pressure_measurement names is the one manometry sets apart, and every
+        # manometry study the ruling lists is manometry's
+        self.assertEqual(pressure, 'a pressure measurement of the sphincter of Oddi')
+        self.assertIn('other than one of the sphincter of Oddi', manometry)
+        for study in ('esophageal', 'gastric', 'duodenal or small-bowel', 'colonic', 'anorectal manometry',
+                      'esophageal balloon distension study'):
+            with self.subTest(study=study):
+                self.assertIn(study, manometry)
+                self.assertNotIn(study, pressure)
+        self.assertNotIn('manometry', pressure)
+        self.assertFalse([line for line in BEFORE_RULINGS[:1] if line in kinds])
+        # the control: the line as 1b wrote it named both kinds and defined neither
+        self.assertRaises(ValueError, meaning, BEFORE_RULINGS[0], 'manometry')
+        self.assertRaises(ValueError, meaning, BEFORE_RULINGS[0], 'pressure_measurement')
+
+    def test_d214_the_motility_and_anorectal_session_kinds_are_disjoint(self):
+        from studio.interpretation.contract import extract_prompt as xp
+        sessions = xs.DEFINITIONS[ct.SessionKind]
+        for ruled in (MOTILITY, ANORECTAL):
+            with self.subTest(ruled=ruled[:30]):
+                self.assertEqual(sessions.count(ruled), 1)
+                self.assertEqual(xp.INSTRUCTIONS_2.count(ruled), 1)
+        motility, anorectal = meaning(sessions, 'motility'), meaning(sessions, 'anorectal')
+        # motility names its four organs and sets anorectal testing apart; anorectal takes anorectal manometry
+        for organ in ('the esophagus', 'the stomach', 'the small bowel', 'the colon'):
+            with self.subTest(organ=organ):
+                self.assertIn(organ, motility)
+                self.assertNotIn(organ, anorectal)
+        self.assertTrue(motility.endswith('never anorectal testing'))
+        self.assertEqual(anorectal, 'anorectal testing, anorectal manometry included')
+        self.assertFalse([line for line in BEFORE_RULINGS[1:] if line in sessions])
+        # the control: as 1b wrote them, motility's meaning did not set anorectal testing apart
+        self.assertFalse(meaning(BEFORE_RULINGS[1], 'motility').endswith('never anorectal testing'))
 
 
 # --- the pins, the sizes, and 5.7 measure 4 -----------------------------------------------------------------------------

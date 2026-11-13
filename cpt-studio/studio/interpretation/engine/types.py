@@ -3,8 +3,9 @@ read (4.1), what a rule decides for one code (Evaluation, HeldFact, 4.4 and 4.8)
 
 **The boundary is typed** (FINAL-V2 4.1, 5.7 measure 5). Every value the FactSet holds is an Enum member of
 contract/types.py, an Id, an IsoDate or an integer Span: never a string, so a string operation on a fact value is a type
-error under ``mypy --strict``, and no field here holds document text. engine/facts.py (step 2d) builds the FactSet from
-the stored row and strips every text; wording.quote(span) slices the revision after the decision.
+error under ``mypy --strict``, and no field here holds document text. engine/facts.py (step 2d) builds the FactSet only
+from store.textfree_v2's view of the stored row, in which every source's words are offsets and no text remains
+(DECISIONS D188); wording.quote(span) slices the revision after the decision.
 
 **Imports**: the standard library and contract/types.py's enumerations and Span, nothing else - none of the retired v1
 modules (5.0), and none of contract's text modules (segment, geometry, fold, date_literals). The records are frozen
@@ -256,12 +257,11 @@ class HeldFact:
     for an encounter-scope fact. result: the settled result of the fact the hold rests on (Result; 4.2's witness
     (subject, attribute, result, reason), 9.1's held_facts[].result, DECISIONS D189); None for a hold that is about no
     single fact (a coding relation, member context). kind: question | explanation (ItemKind). cause: who owns the hold
-    in measurement (4.4:
-    reading_unknown, reading_contradicted, unestablished:<reason>, appraisal:<verdict or coherence>, relation:<type>,
-    unlisted, coding_rule:<id>, context_missing, date_unknown), operator data that names no vendor [R:MO-2]. reason: the
-    settle reason of the fact the hold rests on (Reason); None when there is none (an established fact failing a coding
-    rule). spans: the spans its item quotes. rank: its rank in RANK; None for the encounter-scope service_date, which
-    RANK does not rank (4.8).
+    in measurement (4.4: reading_unknown, reading_contradicted, unestablished:<reason>, appraisal:<verdict or
+    coherence>, relation:<type>, unlisted, coding_rule:<id>, context_missing, date_unknown), operator data that names no
+    vendor [R:MO-2]. reason: the settle reason of the fact the hold rests on (Reason); None when there is none (an
+    established fact failing a coding rule). spans: the spans its item quotes. rank: its rank in RANK; None for the
+    encounter-scope service_date, which RANK does not rank (4.8).
 
     fact and cause are CPT Studio's codes in the parameterized forms 4.4 and 4.8 write them - never document text."""
     fact: str

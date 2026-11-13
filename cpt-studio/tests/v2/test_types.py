@@ -9,6 +9,14 @@ What is proved here, each against the design or against v1 computed in the test:
   design derives from v1 equal to v1's tuples by value;
 - the records: frozen dataclasses with slots holding exactly the fields the design names, each of the type it names
   (typing.get_type_hints); the engine's text-free boundary, typed (no field holds a str but HeldFact's two code fields);
+- the check records of DECISIONS D206 (the waves 1-2 triage's INT-4): Citation, AnchorCitation and SectionPlace are
+  contract/geometry.py's records field for field, closers included (the integration's O3), and convert from geometry's
+  output with nothing lost; Checked freezes what it is given, is generic in the answer's fact key (mypy --strict refuses
+  another key), holds only this module's and the standard library's types, and carries every finding the checks give
+  (the reader's, geometry's, consistency's) and every input claims.py's Basis reads besides pass 1's answer;
+- the docstrings the integration's O4 and t0's note 7 named: engine/facts.iso_value names store's _v2_date_precision,
+  engine/types.py says facts.py builds from store.textfree_v2's view (D188), and no docstring line of either types
+  module stops short inside its paragraph;
 - the done-when of 8.1 step 0b: the types import with no v1 module (a fresh interpreter), and mypy --strict passes on
   both types.py (run here, with a positive control: a string operation on a fact value is refused);
 - the new modules already keep 5.7 measure 4 (the guard proper is step 6a's), each rule with a planted control;
@@ -21,6 +29,7 @@ import copy
 import dataclasses
 import datetime
 import enum
+import hashlib
 import inspect
 import os
 import re
@@ -28,7 +37,7 @@ import subprocess
 import sys
 import types
 import typing
-from collections.abc import Mapping
+from collections.abc import Hashable, Mapping
 from pathlib import Path
 
 import hypothesis
@@ -38,13 +47,16 @@ from hypothesis import strategies as st
 
 from studio import interpretation
 from studio.interpretation import prompt, schema  # v1, read only for the parity proofs (computed here)
-from studio.interpretation.contract import jsonschema
+from studio.interpretation import store
+from studio.interpretation.contract import claims, consistency, extract_read, extract_schema, geometry, jsonschema
 from studio.interpretation.contract import types as ct
+from studio.interpretation.engine import facts
 from studio.interpretation.engine import types as et
 from studio.models import Assessment, EncounterContext, EventInventory, Job, ProviderRun, RoutingRun
 
 APP = Path(__file__).resolve().parents[2]
 PACKAGE = APP / 'studio' / 'interpretation'
+DEV_EXCLUSION = APP / 'docs' / 'gemini-migration' / 'acceptance-a1' / 'DEV-EXCLUSION.sha256'  # hashes only
 NEW_MODULES = {
     'contract/__init__': PACKAGE / 'contract' / '__init__.py',
     'contract/types': PACKAGE / 'contract' / 'types.py',
@@ -437,6 +449,13 @@ FIELDS = {
     ct.ControlVerdict: ('claim', 'verdict'),
     ct.Appraisal: ('claim', 'content', 'verdict', 'attached', 'qualifiers', 'evidence', 'control'),
     ct.SettledFact: ('claim', 'sources', 'checks', 'appraisal', 'result', 'reasons'),
+    # DECISIONS D206: what contract/checks.check returns, and contract/geometry.py's records inside it, field for field
+    ct.Citation: ('units', 'span', 'words', 'place', 'reasons'),
+    ct.AnchorCitation: ('units', 'span', 'kind_words', 'status_words', 'place', 'reasons'),
+    ct.SectionPlace: ('id', 'index', 'start', 'opening', 'start_units', 'end_units', 'closers', 'closed', 'closing',
+                      'span', 'reasons'),
+    ct.Checked: ('units', 'closures', 'citations', 'anchors', 'sections', 'containing', 'restatements', 'findings',
+                 'failed_links', 'literals', 'joined', 'document_date', 'objectless_doubts'),
     et.Id: ('family', 'number'),
     et.IsoDate: ('value', 'precision'),
     et.Cited: ('link', 'units', 'at'),  # DECISIONS D188
@@ -486,6 +505,25 @@ TYPES = {
                    'control': ct.ControlVerdict | None},
     ct.SettledFact: {'claim': ct.SettledClaim, 'sources': tuple[ct.SettledSource, ...], 'checks': ct.Checks,
                      'appraisal': ct.Appraisal | None, 'result': ct.Result, 'reasons': tuple[ct.Reason, ...]},
+    ct.Citation: {'units': tuple[str, ...], 'span': ct.Span | None, 'words': ct.LocatedWords | None,
+                  'place': ct.Span | None, 'reasons': tuple[ct.Reason, ...]},
+    ct.AnchorCitation: {'units': tuple[str, ...], 'span': ct.Span | None, 'kind_words': ct.LocatedWords | None,
+                        'status_words': ct.LocatedWords | None, 'place': ct.Span | None,
+                        'reasons': tuple[ct.Reason, ...]},
+    ct.SectionPlace: {'id': str, 'index': int, 'start': int | None, 'opening': ct.Span | None,
+                      'start_units': tuple[str, ...], 'end_units': tuple[tuple[str, ...], ...],
+                      'closers': tuple[ct.Span | None, ...], 'closed': bool, 'closing': int | None,
+                      'span': ct.Span | None, 'reasons': tuple[ct.Reason, ...]},
+    # generic in the answer's fact key, ct.Key (checks.check fills Checked[extract_read.FactKey])
+    ct.Checked: {'units': tuple[ct.Unit, ...], 'closures': Mapping[tuple[str, ...], tuple[str, ...]],
+                 'citations': Mapping[ct.Source, ct.Citation], 'anchors': Mapping[str, ct.AnchorCitation],
+                 'sections': tuple[ct.SectionPlace, ...], 'containing': Mapping[str, str],
+                 'restatements': Mapping[tuple[str, int], str | None],
+                 'findings': Mapping[ct.Key, tuple[ct.Reason, ...]],
+                 'failed_links': Mapping[ct.Key, tuple[ct.Source, ...]],
+                 'literals': Mapping[ct.Key, tuple[ct.StoredLiteral, ...]],
+                 'joined': tuple[tuple[tuple[ct.Key, ...], tuple[ct.Key, ...]], ...],
+                 'document_date': datetime.date | None, 'objectless_doubts': Mapping[int, tuple[str, ...]]},
     et.Id: {'family': et.IdFamily, 'number': int},
     et.IsoDate: {'value': datetime.date, 'precision': ct.Precision},
     et.Cited: {'link': ct.Link, 'units': ct.Span, 'at': ct.Span | None},
@@ -529,6 +567,14 @@ def _samples() -> dict:
     held = et.HeldFact('event_time', ct.Attribute.DATE_RELATION, E1, ct.Result.UNKNOWN, et.ItemKind.QUESTION,
                        'reading_unknown', ct.Reason.DOUBT_UNCLEAR, (span,), 6)
     exclusion = et.Exclusion(E2, ct.Attribute.STATUS, et.Cover.CITATION, (span,))
+    citation = ct.Citation(('S1', 'S2'), span, words, span, ())
+    anchor = ct.AnchorCitation(('S1',), span, words, None, span, ())
+    place = ct.SectionPlace('N1', 1, 0, ct.Span(0, 2), ('S1',), (('S2',),), (ct.Span(2, 4),), True, 4, span, ())
+    status, kind = _fact_key('E1', ct.Attribute.STATUS), _fact_key('E1', ct.Attribute.KIND)
+    checked = ct.Checked((ct.Unit('S1', 0, 4, 1, 1, 1, False),), {('S1',): ('S1',)}, {source: citation}, {'E1': anchor},
+                         (place,), {'E1': 'N1'}, {('E1', 0): 'N1'}, {status: (ct.Reason.GEOMETRY_STATEMENT,)},
+                         {status: (source,)}, {kind: (ct.StoredLiteral('2026-11-09', ct.Precision.DAY),)},
+                         (((status,), (kind,)),), datetime.date(2026, 11, 9), {0: ('E1',)})
     return {
         ct.Span: span,
         ct.Unit: ct.Unit('S1', 0, 4, 1, 1, 1, False),
@@ -551,6 +597,10 @@ def _samples() -> dict:
         ct.ControlVerdict: control,
         ct.Appraisal: appraisal,
         ct.SettledFact: ct.SettledFact(claim, (settled_source,), checks, appraisal, ct.Result.SUPPORTED, ()),
+        ct.Citation: citation,
+        ct.AnchorCitation: anchor,
+        ct.SectionPlace: place,
+        ct.Checked: checked,
         et.Id: E1,
         et.IsoDate: et.IsoDate(datetime.date(2026, 11, 9), ct.Precision.DAY),
         et.Cited: cited,
@@ -718,6 +768,315 @@ def _leaves(hint) -> set:
         return {hint}
     return set().union(*(_leaves(arg) for arg in args)) | ({typing.get_origin(hint)} if typing.get_origin(hint)
                                                              is not types.UnionType else set())
+
+
+# --- the check records (DECISIONS D206; the waves 1-2 triage's INT-4) -------------------------------------------------
+
+# A synthetic note, written for these tests (the clinician is fictional; no development or acceptance document), whose
+# sections give geometry one closing source that locates (N1's) and one that does not (N2's).
+NOTE = ('SYNTHETIC COLONOSCOPY NOTE\n'
+        'Findings: The colonoscope was advanced to the cecum. A polyp was removed with a cold snare.\n'
+        'Signed by Q. R. Vance, MD (fictional).\n'
+        'Plan: Repeat colonoscopy in 3 years.\n')
+# contract/geometry.py's records: those Checked carries (defined in contract/types.py, D206), its inputs, and those used
+# only inside checks.check (G5's unit sets and the subject G1 measures against).
+GEOMETRY_CARRIED = {'Citation': ct.Citation, 'AnchorCitation': ct.AnchorCitation, 'SectionPlace': ct.SectionPlace}
+GEOMETRY_INPUTS = frozenset({'Anchor', 'Restatement', 'Section', 'Event'})
+GEOMETRY_INTERNAL = frozenset({'Extent', 'Subject'})
+# Each field of contract/consistency.Findings (step 2b), and the Checked field that carries it.
+FINDINGS_HOME = {'structure': 'findings', 'consistency': 'findings', 'literal': 'findings', 'qualified': 'findings',
+                 'literals': 'literals', 'joined': 'joined', 'document_date': 'document_date'}
+# Each field contract/claims.Basis (step 2c) reads besides pass 1's answer, and the Checked field it comes from.
+BASIS_HOME = {'units': 'units', 'findings': 'findings', 'closures': 'closures', 'sections': 'containing',
+              'restatement_sections': 'restatements', 'anchor_words': 'anchors'}
+KEYED = frozenset({'findings', 'failed_links', 'literals', 'joined'})  # the Checked fields typed by the fact key
+STANDARD_TYPES = frozenset({str, int, bool, type(None), datetime.date, tuple, Mapping})
+# mypy --strict reads a Checked by its fact key: a key of that type passes, its iteration yields it, another is refused
+# (line 11 alone, its errors naming the key).
+GENERIC_PROBE = ('from dataclasses import dataclass\n'
+                 'from studio.interpretation.contract.types import Checked, Reason\n'
+                 '@dataclass(frozen=True)\n'
+                 'class FactKey:\n'
+                 '    number: int\n'
+                 'def reasons(checked: Checked[FactKey]) -> tuple[Reason, ...]:\n'
+                 '    return checked.findings.get(FactKey(1), ())\n'
+                 'def first(checked: Checked[FactKey]) -> int:\n'
+                 '    return next(iter(checked.findings)).number + checked.joined[0][1][0].number\n'
+                 'def wrong(checked: Checked[FactKey]) -> tuple[Reason, ...]:\n'
+                 '    return checked.findings.get("E1", ())\n')
+
+
+def _fact_key(event: str, attribute: ct.Attribute, index: int = 0) -> extract_read.FactKey:
+    """An event's fact key, as contract/extract_read keys it (the key checks.check fills Checked with)."""
+    return extract_read.FactKey(extract_schema.Family.EVENT, event, attribute, index)
+
+
+def _inside(record: type) -> set:
+    """Every type the fields of ``record`` are built from, and those of every record among them, recursively."""
+    found: set = set()
+    pending = [record]
+    while pending:
+        for hint in typing.get_type_hints(pending.pop()).values():
+            for leaf in _leaves(hint):
+                if leaf not in found:
+                    found.add(leaf)
+                    if dataclasses.is_dataclass(leaf):
+                        pending.append(leaf)
+    return found
+
+
+def _note_geometry() -> tuple:
+    """NOTE's layout and sections, as contract/geometry.py computes them."""
+    layout = geometry.Layout.of(NOTE)
+    sections = geometry.Sections(layout, [
+        geometry.Section('N0', ct.Source((), '', ct.Link.SECTION), ()),
+        geometry.Section('N1', ct.Source(('S2',), 'Findings:', ct.Link.SECTION),
+                         (ct.Source(('S4',), 'Signed by Q. R. Vance', ct.Link.SECTION),)),
+        geometry.Section('N2', ct.Source(('S5',), 'Plan:', ct.Link.SECTION),
+                         (ct.Source(('S9',), 'nothing', ct.Link.SECTION),))])
+    return layout, sections
+
+
+def _moved(cls: type, record: object) -> object:
+    """``record`` copied field for field into ``cls``: how checks.check can put geometry's records into a Checked until
+    geometry returns contract/types.py's own (the request to step 1c)."""
+    return cls(**{field.name: getattr(record, field.name) for field in dataclasses.fields(record)})
+
+
+def _short_lines(source: str) -> list:
+    """Each docstring line (number, text) that stops short inside its paragraph: 79 characters or fewer, followed by
+    another line of the same paragraph (the modules wrap at 120). A list item or a table row (a line opening with -,
+    *, | or a number and a full stop) starts a line of its own, so a short line before one ends nothing early."""
+    lines, found = source.split('\n'), []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and node.body:
+            first = node.body[0]
+            if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant) \
+                    and isinstance(first.value.value, str):
+                for number in range(first.lineno, first.end_lineno):
+                    line, following = lines[number - 1], lines[number].strip()
+                    opener = following.split(' ', 1)[0]
+                    item = following.startswith(('-', '*', '|')) or (opener.endswith('.') and opener[:-1].isdigit())
+                    if line.strip() and following and following != '"""' and not item and len(line) < 80:
+                        found.append((number, line))
+    return found
+
+
+class CheckRecordTests(SimpleTestCase):
+    def test_the_note_is_synthetic_and_no_acceptance_document(self):
+        with open(DEV_EXCLUSION, encoding='ascii') as handle:
+            excluded = {line.strip() for line in handle if line.strip()}
+        self.assertEqual(len(excluded), 288)
+        for data in (NOTE.encode('utf-8'), NOTE.strip().encode('utf-8')):
+            self.assertNotIn(hashlib.sha256(data).hexdigest(), excluded)
+
+    def test_geometrys_records_are_defined_here_field_for_field(self):
+        # D206: the records inside Checked live in this module. Each equals geometry's own in its fields, their order,
+        # their types and its dataclass form, so geometry can import it from here with no other change.
+        for name, record in GEOMETRY_CARRIED.items():
+            theirs = getattr(geometry, name)
+            with self.subTest(record=name):
+                self.assertEqual([field.name for field in dataclasses.fields(record)],
+                                 [field.name for field in dataclasses.fields(theirs)])
+                self.assertEqual(typing.get_type_hints(record), typing.get_type_hints(theirs))
+                self.assertEqual(record.__slots__, theirs.__slots__)
+                self.assertEqual(repr(record.__dataclass_params__), repr(theirs.__dataclass_params__))
+        # the integration's O3: SectionPlace carries closers, each closing source's place, right after end_units
+        names = [field.name for field in dataclasses.fields(ct.SectionPlace)]
+        self.assertEqual(names.index('closers'), names.index('end_units') + 1)
+        self.assertEqual(typing.get_type_hints(ct.SectionPlace)['closers'], tuple[ct.Span | None, ...])
+
+    def test_geometrys_output_moves_into_them_with_nothing_lost(self):
+        layout, sections = _note_geometry()
+        located, unlocated = sections.place('N1'), sections.place('N2')
+        # both kinds of closer: one that locates (its place) and one that does not (None; G2 then fails)
+        self.assertEqual((located.closers, located.closing, located.span),
+                         ((ct.Span(119, 140),), 140, ct.Span(27, 140)))
+        self.assertEqual((unlocated.closers, unlocated.closing, unlocated.span, unlocated.reasons),
+                         ((None,), None, None, (ct.Reason.SECTION_START_UNLOCATED,)))
+        anchor = geometry.locate_anchor(layout, geometry.Anchor(('S3',), 'cold snare', 'was removed'))
+        citation = geometry.locate(layout, ct.Source(('S2', 'S3'), 'cecum. A polyp', ct.Link.STATEMENT))
+        self.assertEqual((anchor.reasons, citation.reasons), ((), ()))
+        produced = ((located, ct.SectionPlace), (unlocated, ct.SectionPlace), (sections.opening, ct.SectionPlace),
+                    (anchor, ct.AnchorCitation), (citation, ct.Citation))
+        for record, mine in produced:
+            with self.subTest(record=type(record).__name__):
+                moved = _moved(mine, record)
+                self.assertIs(type(moved), mine)
+                self.assertEqual(dataclasses.astuple(moved), dataclasses.astuple(record))
+        # what geometry returns is what Checked's records hold, by the type geometry declares
+        self.assertIs(typing.get_type_hints(geometry.locate)['return'], geometry.Citation)
+        self.assertIs(typing.get_type_hints(geometry.bind_words)['return'], geometry.Citation)
+        self.assertIs(typing.get_type_hints(geometry.locate_anchor)['return'], geometry.AnchorCitation)
+        self.assertEqual(typing.get_type_hints(geometry.Sections.place)['return'], geometry.SectionPlace | None)
+
+    def test_checked_freezes_what_it_is_given(self):
+        key, other = _fact_key('E1', ct.Attribute.STATUS), _fact_key('E2', ct.Attribute.STATUS)
+        clean = _fact_key('E3', ct.Attribute.STATUS)  # given with empty entries: absent means none
+        source = ct.Source(('S1',), '', ct.Link.STATEMENT)
+        unit = ct.Unit('S1', 0, 4, 1, 1, 1, False)
+        citation = ct.Citation(('S1',), ct.Span(0, 4), None, ct.Span(0, 4), ())
+        anchor = ct.AnchorCitation(('S1',), ct.Span(0, 4), None, None, ct.Span(0, 4), ())
+        place = ct.SectionPlace('N0', 0, 0, ct.Span(0, 0), (), (), (), False, None, ct.Span(0, 4), ())
+        literal = ct.StoredLiteral('2026-11', ct.Precision.MONTH)
+        given = {'units': [unit], 'closures': {('S1',): ['S1']}, 'citations': {source: citation},
+                 'anchors': {'E1': anchor}, 'sections': [place], 'containing': {'E1': 'N0'},
+                 'restatements': {('E1', 0): None}, 'findings': {key: [ct.Reason.UNIT_UNKNOWN]},
+                 'failed_links': {key: [source]}, 'literals': {key: [literal]}, 'joined': [([key], [other])],
+                 'document_date': datetime.date(2026, 11, 9), 'objectless_doubts': {0: ['E1']}}
+        for name in ('findings', 'failed_links', 'literals'):
+            given[name][clean] = []
+        given['objectless_doubts'][2] = []  # kept: no event qualifies (D200)
+        checked = ct.Checked(**given)
+        frozen = {'units': (unit,), 'closures': {('S1',): ('S1',)}, 'citations': {source: citation},
+                  'anchors': {'E1': anchor}, 'sections': (place,), 'containing': {'E1': 'N0'},
+                  'restatements': {('E1', 0): None}, 'findings': {key: (ct.Reason.UNIT_UNKNOWN,)},
+                  'failed_links': {key: (source,)}, 'literals': {key: (literal,)}, 'joined': (((key,), (other,)),),
+                  'document_date': datetime.date(2026, 11, 9), 'objectless_doubts': {0: ('E1',), 2: ()}}
+        # the caller's containers change, inside and out; the Checked does not
+        given['units'].append(ct.Unit('S2', 5, 9, 1, 1, 1, False))
+        given['closures'][('S1',)].append('S2')
+        given['closures'][('S2',)] = ['S2']
+        given['citations'].clear()
+        given['anchors']['E2'] = anchor
+        given['sections'].clear()
+        given['containing']['E2'] = 'N0'
+        given['restatements'][('E1', 1)] = 'N0'
+        given['findings'][key].append(ct.Reason.SOURCE_TOO_LONG)
+        given['findings'][other] = [ct.Reason.SILENT]
+        given['failed_links'][key].clear()
+        given['literals'][key].append(literal)
+        given['joined'][0][0].append(other)
+        given['joined'].append(([], []))
+        given['objectless_doubts'][0].append('E2')
+        given['objectless_doubts'][1] = []
+        for name, value in frozen.items():
+            with self.subTest(field=name):
+                held = getattr(checked, name)
+                self.assertEqual(dict(held) if isinstance(held, Mapping) else held, value)
+                if isinstance(held, Mapping):  # read-only, and every sequence value a tuple
+                    with self.assertRaises(TypeError):
+                        held['a key'] = ()
+                    self.assertTrue(all(type(item) is not list for item in held.values()))
+                elif name != 'document_date':
+                    self.assertIs(type(held), tuple)
+        self.assertTrue(all(type(side) is tuple for pair in checked.joined for side in pair))
+        self.assertTrue(all(clean not in getattr(checked, name) for name in ('findings', 'failed_links', 'literals')))
+        with self.assertRaises(TypeError):  # it holds read-only mappings, so it is not hashable
+            hash(checked)
+        self.assertEqual(checked, ct.Checked(**frozen))
+
+    def test_checked_is_generic_in_the_answers_fact_key(self):
+        # extract_read defines FactKey and imports this module, so the key is a type parameter, bound to Hashable
+        self.assertIs(ct.Key.__bound__, Hashable)
+        self.assertTrue(issubclass(extract_read.FactKey, Hashable))
+        hints = typing.get_type_hints(ct.Checked)
+        self.assertEqual({name for name, hint in hints.items() if ct.Key in _leaves(hint)}, KEYED)
+        self.assertIs(typing.get_origin(ct.Checked[extract_read.FactKey]), ct.Checked)
+        self.assertEqual(typing.get_args(ct.Checked[extract_read.FactKey]), (extract_read.FactKey,))
+        self.assertIn(typing.Generic, ct.Checked.__mro__)
+
+    def test_mypy_reads_a_checked_by_its_fact_key_and_refuses_another(self):
+        probe = subprocess.run([sys.executable, '-m', 'mypy', '--strict', '--cache-dir', os.devnull, '-c',
+                                GENERIC_PROBE], capture_output=True, text=True, timeout=300, cwd=APP)
+        errors = [line for line in probe.stdout.splitlines() if ': error:' in line]
+        self.assertEqual(probe.returncode, 1, probe.stdout + probe.stderr)
+        self.assertEqual({error.split(':')[1] for error in errors}, {'11'}, probe.stdout)
+        self.assertTrue(any('No overload variant of "get" of "Mapping" matches argument types "str"' in error
+                            for error in errors), probe.stdout)
+        self.assertIn('def get(self, FactKey, /) -> tuple[Reason, ...] | None', probe.stdout)
+
+    def test_every_type_inside_checked_is_this_modules_or_the_standard_librarys(self):
+        # so settle.py and claims.py read a Checked importing contract/types.py alone (D206)
+        found = _inside(ct.Checked)
+        own = {leaf for leaf in found if isinstance(leaf, type) and leaf.__module__ == ct.__name__}
+        self.assertEqual(found - own - STANDARD_TYPES - {...}, {ct.Key})  # ...: tuple[X, ...]'s ellipsis
+        self.assertLessEqual({ct.Citation, ct.AnchorCitation, ct.SectionPlace, ct.Unit, ct.Source, ct.LocatedWords,
+                              ct.Span, ct.StoredLiteral, ct.Reason, ct.Link, ct.Precision}, own)
+
+    def test_checked_carries_every_finding_its_producers_give(self):
+        checked = typing.get_type_hints(ct.Checked)
+        reasons = typing.get_args(checked['findings'])[1]
+        self.assertEqual(reasons, tuple[ct.Reason, ...])
+        # consistency.Findings (2b): K1-K7, L1 and Q1 by fact key into findings; L1's literals, K8's groups and the
+        # claim-time reference date each into their own field
+        produced = typing.get_type_hints(consistency.Findings)
+        self.assertEqual(set(produced), set(FINDINGS_HOME))
+        self.assertLessEqual(set(FINDINGS_HOME.values()), set(checked))
+        for name in ('structure', 'consistency', 'literal', 'qualified'):
+            with self.subTest(findings=name):
+                self.assertEqual(produced[name], Mapping[extract_read.FactKey, reasons])
+        self.assertEqual(typing.get_args(produced['literals']),
+                         (extract_read.FactKey, typing.get_args(checked['literals'])[1]))
+        self.assertEqual(produced['document_date'], checked['document_date'])
+        # K8: a Joined's family, object and attribute are each of its keys' own, so the pair (supported, negated)
+        # carries it whole
+        joined, key = typing.get_type_hints(consistency.Joined), typing.get_type_hints(extract_read.FactKey)
+        self.assertEqual(produced['joined'], tuple[consistency.Joined, ...])
+        self.assertEqual([field.name for field in dataclasses.fields(consistency.Joined)],
+                         ['family', 'object', 'attribute', 'supported', 'negated'])
+        self.assertEqual({name: joined[name] for name in ('family', 'object', 'attribute')},
+                         {name: key[name] for name in ('family', 'object', 'attribute')})
+        self.assertEqual((joined['supported'], joined['negated']), (tuple[extract_read.FactKey, ...],) * 2)
+        self.assertEqual(checked['joined'], tuple[tuple[tuple[ct.Key, ...], tuple[ct.Key, ...]], ...])
+        # the reader's (1b) item-level findings: closed-list reasons by fact key, as findings keeps them; a doubt by
+        # its position, as objectless_doubts keys it
+        for record in (extract_read.ReadFact, extract_read.ReadMember):
+            with self.subTest(read=record.__name__):
+                hints = typing.get_type_hints(record)
+                self.assertEqual((hints['key'], hints['reasons']), (extract_read.FactKey, reasons))
+        self.assertIs(typing.get_type_hints(extract_read.ReadDoubt)['index'],
+                      typing.get_args(checked['objectless_doubts'])[0])
+        # geometry (1c): every record it defines is an input, a record Checked carries, or used inside checks.check
+        records = {name for name, value in vars(geometry).items() if isinstance(value, type)
+                   and dataclasses.is_dataclass(value) and (value.__module__ == geometry.__name__
+                                                            or name in GEOMETRY_CARRIED)}
+        self.assertEqual(records, set(GEOMETRY_CARRIED) | GEOMETRY_INPUTS | GEOMETRY_INTERNAL)
+        self.assertLessEqual(set(GEOMETRY_CARRIED.values()), _inside(ct.Checked))
+
+    def test_checked_carries_every_input_claims_reads(self):
+        # claims.Basis (2c) reads pass 1's answer and what geometry computed: each of the latter from one Checked field
+        basis, checked = typing.get_type_hints(claims.Basis), typing.get_type_hints(ct.Checked)
+        self.assertEqual(set(basis) - {'answer'}, set(BASIS_HOME))
+        self.assertLessEqual(set(BASIS_HOME.values()), set(checked))
+        for name in ('units', 'closures', 'sections'):
+            with self.subTest(basis=name):
+                self.assertEqual(basis[name], checked[BASIS_HOME[name]])
+        self.assertEqual(typing.get_args(basis['findings']),
+                         (extract_read.FactKey, typing.get_args(checked['findings'])[1]))
+        # a restatement's section: Checked's None marks a restatement G6 counts that lies attached in no section
+        theirs, mine = typing.get_args(basis['restatement_sections']), typing.get_args(checked['restatements'])
+        self.assertEqual((mine[0], mine[1]), (theirs[0], theirs[1] | None))
+        # an event's located kind and status words: Basis takes their spans, which each AnchorCitation's hold
+        self.assertEqual(basis['anchor_words'], Mapping[str, tuple[ct.Span | None, ct.Span | None]])
+        self.assertEqual(checked['anchors'], Mapping[str, ct.AnchorCitation])
+        anchor, words = typing.get_type_hints(ct.AnchorCitation), typing.get_type_hints(ct.LocatedWords)
+        self.assertEqual((anchor['kind_words'], anchor['status_words']), (ct.LocatedWords | None,) * 2)
+        self.assertEqual((words['start'], words['end']), (int, int))
+
+    def test_the_engine_docstrings_say_what_is_built(self):
+        # the integration's O4: iso_value reads a date as store's _v2_date_precision does (1d#6 dropped _v2_precision)
+        self.assertIn("(store's _v2_date_precision)", facts.iso_value.__doc__)
+        self.assertTrue(callable(store._v2_date_precision))
+        self.assertFalse(hasattr(store, '_v2_precision'))
+        # t0's note 7: facts.py builds the FactSet from store.textfree_v2's view of the row (DECISIONS D188)
+        module = ' '.join(et.__doc__.split())
+        self.assertIn("engine/facts.py (step 2d) builds the FactSet only from store.textfree_v2's view of the stored "
+                      "row, in which every source's words are offsets and no text remains (DECISIONS D188)", module)
+        self.assertNotIn('strips every text', module)
+        self.assertTrue(callable(store.textfree_v2))
+        # and no docstring line of either types module stops short inside its paragraph (HeldFact's "(4.4:" line did)
+        for name in ('contract/types', 'engine/types'):
+            with self.subTest(module=name):
+                self.assertEqual(_short_lines(NEW_MODULES[name].read_text(encoding='utf-8')), [])
+        held = ' '.join(et.HeldFact.__doc__.split())
+        self.assertIn('who owns the hold in measurement (4.4: reading_unknown, reading_contradicted,', held)
+        # the rule's planted controls: a paragraph broken early is found, one wrapped at the width is not
+        broken = 'def f():\n    """A paragraph that\n    goes on after an early break."""\n'
+        self.assertEqual(_short_lines(broken), [(2, '    """A paragraph that')])
+        self.assertEqual(_short_lines('def f():\n    """' + 'word ' * 22 + '\n    goes on."""\n'), [])
+        listed = 'def f():\n    """The steps:\n    - one;\n    - two.\n    1. three.\n    | a | b |\n    """\n'
+        self.assertEqual(_short_lines(listed), [])
 
 
 # --- the boundary: done-when of 8.1 step 0b, and 5.7 measure 4 kept ahead of step 6a's guard --------------------------

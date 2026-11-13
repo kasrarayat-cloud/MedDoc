@@ -1,7 +1,7 @@
 """The contract's shared types (docs/gemini-migration/FINAL-V2.md, step 0b of 8.1): every enumeration of FINAL-V2
 1.3-1.7, 2.4 and 3.2-3.3 as an Enum, and the records the contract passes between its modules - a unit (1.2), pass 1's
-source, fact and doubt (1.3), pass 2's claim, card, verdict and unlisted statement (2.4, 3.2), and the settled fact the
-EventInventory row stores (1.7).
+source, fact and doubt (1.3), pass 2's claim, card, verdict and unlisted statement (2.4, 3.2), the settled fact the
+EventInventory row stores (1.7), and what the deterministic checks found (3.1; DECISIONS D206).
 
 **Every enumeration is a plain Enum** whose values are the design's strings, in the design's order. Three hold values
 the design does not write as strings: CheckStatus's failed and Attribute's dotted 1.4 paths (readings DECISIONS D207
@@ -16,14 +16,26 @@ value, so this module executes no v1 code (5.7).
 them. The pass-1 and pass-2 records keep the wire form - ids and values as the answers write them - because they are
 read and checked here, in the contract; the engine never sees them (engine/types.py holds its typed, text-free view).
 
+**The check records** (DECISIONS D206; the waves 1-2 triage's INT-4): Checked is the one record contract/checks.check
+(step 3a) returns, and the records inside it - Citation, AnchorCitation and SectionPlace, contract/geometry.py's located
+citation, located anchor and section geometry, field for field (SectionPlace with its closers, the integration's O3) -
+are defined here, so that contract/settle.py and contract/claims.py read the checks' results by importing this module
+alone, and never segment or call geometry. Checked is generic in the answer's fact key (``Key``): contract/extract_read,
+which defines FactKey, imports this module, so this module cannot name it, and checks.check returns
+``Checked[extract_read.FactKey]``. Checked freezes the mappings it is given, so it is not hashable.
+
 This module imports nothing but the standard library. It holds no word list: each Enum is the closed list of values the
 design names (NoWordLists, FINAL-V2 5.7 measure 4, admits the values of a contract enumeration), and nothing here
 compares a value with document text.
 """
 from __future__ import annotations
 
+from collections.abc import Hashable, Iterable, Mapping
 from dataclasses import dataclass
+from datetime import date
 from enum import Enum, unique
+from types import MappingProxyType
+from typing import Generic, TypeVar
 
 # --- pass 1's fact and doubt (FINAL-V2 1.3) ---------------------------------------------------------------------------
 
@@ -1198,3 +1210,210 @@ class SettledFact:
     appraisal: Appraisal | None
     result: Result
     reasons: tuple[Reason, ...]
+
+
+# --- what the deterministic checks found (FINAL-V2 3.1; DECISIONS D206) -----------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class Citation:
+    """A citation located in the revision (FINAL-V2 1.2 rule 7; 3.1 I1-I3, I2 [R:CO-4]): what contract/geometry.py's
+    bind_words and locate give for one cited run of units and its words, field for field, and what Checked holds for
+    every source of pass 1's answer (DECISIONS D206). Offsets and the revision's own slice only, never pass 1's string
+    (P9).
+
+    units: the cited unit ids, as pass 1 wrote them. span: the slice of the revision from the first unit's start to the
+    last unit's end; None when the run fails I1 (a unit the text does not have) or I3 (not one or more consecutive units
+    of one paragraph, or more than 12). words: the words located (LocatedWords: their offsets and the revision's own
+    slice there, which store.row proves before a row is written, P9), at the first occurrence on word boundaries, the
+    exact tier before the fold tier; None when the source cites its whole units (pass 1's words '') or its words do not
+    locate. place: where the citation stands - its located words, or its units' span for words '' - None when it cannot
+    be placed. reasons: its I1-I3 findings, in Reason's order - unit_unknown, units_not_consecutive or source_too_long
+    for the run, else words_not_in_units (no occurrence in either tier) or words_not_bounded (occurrences, none on word
+    boundaries) for the words; () when it passed."""
+    units: tuple[str, ...]
+    span: Span | None
+    words: LocatedWords | None
+    place: Span | None
+    reasons: tuple[Reason, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class AnchorCitation:
+    """An event's anchor located (FINAL-V2 1.4 EVENT.anchor; 3.1 I3 [R:CO-4]): what contract/geometry.py's
+    locate_anchor gives, field for field, and what Checked holds for every event (DECISIONS D206).
+
+    units: the anchor's unit ids, as pass 1 wrote them. span: their slice of the revision; None when the run fails I1 or
+    I3. kind_words, status_words: the anchor's kind words and status words, each located inside its units by I2's rule
+    (LocatedWords); None for words '' or words that do not locate. A card quotes them when another event shares an
+    anchor unit (2.4 [R:CO-7]), and settle stores them (1.7). place: the act's own words, from the first of its kind and
+    status words to the last (the units' span for words ''), which containment reads (1.5: an act told after a mid-unit
+    label is told in that label's section); None when the anchor fails. reasons: unit_unknown, units_not_consecutive or
+    source_too_long for the run, else anchor_words when either the kind or the status words do not locate; () when it
+    passed. An anchor with any reason is invalid (a unit the text does not have fails I1 and cannot make I3's
+    consecutive run either), and every fact of its event is unresolved (3.1's cross-object rule, anchor_invalid)."""
+    units: tuple[str, ...]
+    span: Span | None
+    kind_words: LocatedWords | None
+    status_words: LocatedWords | None
+    place: Span | None
+    reasons: tuple[Reason, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class SectionPlace:
+    """One section's geometry (FINAL-V2 3.1 G2; 1.5; DECISIONS D199): what contract/geometry.py's Sections computes for
+    each section, field for field, closers included (the integration's O3), and what Checked holds for every section
+    (DECISIONS D206).
+
+    id: the section's id. index: its place in the answer's list (index 0 is the opening part, N0). start: the offset
+    where it begins - 0 for an opening part at the text's start (its start cites no unit, or units with no unit of the
+    text before them), else the offset of its start words (an opening part that is not at the text's start is
+    section_order) - None when its start does not locate. opening: its start source's place; Span(0, 0) for an opening
+    part whose start cites no unit (a part of length zero at offset 0, D199); None when the start does not locate.
+    start_units: its start's unit ids, as cited. end_units: each closing source's unit ids, in the answer's order.
+    closers: each closing source's place, aligned with end_units, None for one that does not locate; G1 ``section``
+    reads it (a section source lies inside the start's place or one of the closers). closed: whether it gives closing
+    sources. closing: where its closing sources end (the latest end among them), None when it gives none or one does
+    not locate. span: [start, end) when G2 passed and its end is known - to where its closing sources end when it gives
+    any, else to the next start in the text, the last to the end of the text; None otherwise (then nothing lies
+    attached inside it and no act inherits from it, G4). reasons: section_order, section_start_unlocated (G2's two,
+    D186); () when G2 passed."""
+    id: str
+    index: int
+    start: int | None
+    opening: Span | None
+    start_units: tuple[str, ...]
+    end_units: tuple[tuple[str, ...], ...]
+    closers: tuple[Span | None, ...]
+    closed: bool
+    closing: int | None
+    span: Span | None
+    reasons: tuple[Reason, ...]
+
+
+# The fact key Checked is generic in: where a fact sits in pass 1's answer. contract/checks.check (step 3a) returns
+# Checked[extract_read.FactKey] (family, object id, attribute, position); extract_read imports this module, so the key
+# is a type parameter here rather than a name.
+Key = TypeVar('Key', bound=Hashable)
+_K = TypeVar('_K')
+_V = TypeVar('_V')
+
+
+def _frozen(mapping: Mapping[_K, _V]) -> Mapping[_K, _V]:
+    """A read-only copy of ``mapping``, in its order."""
+    return MappingProxyType(dict(mapping))
+
+
+def _frozen_tuples(mapping: Mapping[_K, Iterable[_V]]) -> Mapping[_K, tuple[_V, ...]]:
+    """A read-only copy of ``mapping``, in its order, each value a tuple."""
+    return MappingProxyType({key: tuple(value) for key, value in mapping.items()})
+
+
+def _frozen_present(mapping: Mapping[_K, Iterable[_V]]) -> Mapping[_K, tuple[_V, ...]]:
+    """A read-only copy of ``mapping``, in its order, each value a tuple, without the keys whose value is empty."""
+    found = {key: tuple(value) for key, value in mapping.items()}
+    return MappingProxyType({key: value for key, value in found.items() if value})
+
+
+@dataclass(frozen=True, slots=True)
+class Checked(Generic[Key]):
+    """What the deterministic checks found in pass 1's answer to one revision (FINAL-V2 3.1; DECISIONS D206). One
+    function, contract/checks.check(text, pages, read) (step 3a), runs the segmentation (1.2), takes the reader's
+    item-level findings (contract/extract_read, 1b), and runs geometry (I2, I3, G1-G6, sentence closures, section
+    places: contract/geometry, 1c) and consistency (K1-K8, L1, Q1: contract/consistency, 2b); it returns one Checked.
+    claims.py (step 2c) and settle.py (3a) read it as data and import this module for it, never segment or geometry (5.7
+    WordsNeverDecide, unchanged), so the claim set and the settled inventory rest on one implementation and stay a pure
+    function of the revision text and pass 1's bytes (7.4 [R:MO-5]). What it holds follows INVENTORY_VERSION_V2's checks
+    (1.1): a changed check changes it, and stored pass-1 bytes are re-settled.
+
+    It holds unit ids, offsets, sentence closures, section places and closed-list findings. The one text it carries is
+    the revision's own slice inside a LocatedWords - a source's or an anchor's located words - which settle stores as
+    1.7 says; it holds no value of pass 1's but the Source records ``citations`` is keyed by and ``failed_links`` lists.
+    A finding only ever demotes: nothing here sets, changes or creates a value, a fact, a support, an exclusion or a
+    contradiction (3.1, "What a failure does"; 3.4).
+
+    **Keys.** A fact, and a member of a statement's scope list, is keyed by its own fact key (``Key``); an act's
+    inherited fact - its effective date relation, performer or performer_person, and its entry (1.5) - by the act's key
+    of that attribute, as claims.py keys it; and L1's per-event date rule by the event's own date_relation key, as
+    consistency.py keys it (DECISIONS D193). An event and a section are named by their ids as pass 1 wrote them, a
+    restatement by (its event's id, its position among the event's restatements), a doubt by its position in the
+    answer's doubts.
+
+    **The units.** units: the revision's units (contract/segment.units of the text and its pages, 1.2 rules 1-5), in
+    document order: ids and offsets, which settle stores as the segmentation table (1.7) and claims orders by. closures:
+    the sentence closure (1.2 rule 6) of each run of units the answer cites (every ``units`` list in it), by the run as
+    cited; a run failing I1 or I3 has none and is absent, and nothing is cited through it (3.2.2).
+
+    **Where the citations sit.** citations: every source in the answer located (I1-I3; Citation), keyed by the Source
+    itself - each fact's and each option's sources, the date of service's, each person's name, each section's start and
+    closing sources and each lesion's description. Settle stores each one's located words (1.7 sources[].words), and
+    reads here, for 3.3's first row, a contradicted fact's sides' sources beside their read findings
+    (extract_read.ReadFact.sides). anchors: each event's anchor located (I3; AnchorCitation), by the event's id: its
+    kind and status words, which settle stores and a card quotes (2.4 [R:CO-7]), its place, and its findings. sections:
+    each section's geometry (G2; SectionPlace), in the answer's order. containing: each event's containing section
+    (1.5), by the event's id, when the act's own words (its anchor's place) lie inside that section's span (G4's edge:
+    geometry's Sections.attached); an event absent here inherits nothing and has no section to take its entry from.
+    restatements: each restatement G6 counts (its units a valid run, none of them any event's anchor unit, and a title
+    restatement in N0 or in a section's start), by (event id, position): the section its units lie attached in (G4's
+    edge), None when they lie attached in none. A restatement G6 ignores is absent: it never moves an entry (1.5) and
+    its role is never claimed.
+
+    **The findings.** findings: every closed-list reason (Reason) the checks give each fact, by its key - S2, I1, I3's
+    per-source bound and I4 as the reader gives them; I2 and I3 on each of its sources; G1-G5's (geometry_<link>;
+    section_order and section_start_unlocated on a section's owner, occasion and performer; target_detached;
+    inherit_unattached; extent_inferred), G6 giving none (it only drops a restatement from ``restatements``); K1's
+    structure_<rule> and K2-K7's; L1's literal_mismatch at claim time; Q1's qualified:<q>; and anchor_invalid on every
+    fact of an event whose anchor has a reason (3.1's cross-object rule that reads the checks alone). Distinct, in
+    Reason's order (hand-off 1c:R6: a fact's reasons are a set); a fact with none is absent. A fact with any finding is
+    never claimed (3.2.1) and settles unresolved (3.3 rows 4-5). failed_links: by a fact's key, its sources whose link
+    geometry fails G1 (its own sources, then its options', each once); a fact every source of which holds is absent.
+    Settle stores each source's geometry from it (1.7 sources[].geometry; SettledSource). literals: the date literals L1
+    read in each date and timing fact's own words (StoredLiteral), by its key; settle stores them (1.7 checks.literals)
+    so that assess and read time re-judge them with no text (4.2 effective; D193). joined: K8's groups (3.1 K8
+    [R:HO-9]), each the pair (the keys of the supported facts, the keys of the negated facts) of one object's reached,
+    stations or act places, whose family, object and attribute are its keys' own: the two sides settle as ONE
+    contradicted fact of pass 1, both sides' sources kept (3.3 row 1); K8 is no finding, and nothing is created.
+    document_date: L1's reference at claim time, pass 1's stated date of service when its own literal passed, else None;
+    never a member value (3.1 L1 [R:MO-5]).
+
+    **The doubts.** objectless_doubts: each malformed doubt that names no object it resolves
+    (extract_read.ReadDoubt.objects empty; DECISIONS D200), by its position: the ids of the events whose anchor units
+    include one of its units, in the answer's order - the doubt names every fact of each - or () when none does, and
+    settle keeps it as an unlisted doubt with no kind and no session (3.2.6 rule 4). It reads unit ids only; every other
+    doubt names its facts through extract_read.ReadDoubt.named.
+
+    Every mapping is frozen at construction (a MappingProxyType over a copy, in its order, each sequence value a tuple),
+    and so is every sequence, so neither reader can change what the other reads (P-DET); a Checked is therefore not
+    hashable. An entry of findings, failed_links or literals that holds nothing is dropped then, so a key there always
+    holds something and absent means none, whichever way a reader asks; objectless_doubts keeps its empty entries, whose
+    () says that no event qualifies."""
+    units: tuple[Unit, ...]
+    closures: Mapping[tuple[str, ...], tuple[str, ...]]
+    citations: Mapping[Source, Citation]
+    anchors: Mapping[str, AnchorCitation]
+    sections: tuple[SectionPlace, ...]
+    containing: Mapping[str, str]
+    restatements: Mapping[tuple[str, int], str | None]
+    findings: Mapping[Key, tuple[Reason, ...]]
+    failed_links: Mapping[Key, tuple[Source, ...]]
+    literals: Mapping[Key, tuple[StoredLiteral, ...]]
+    joined: tuple[tuple[tuple[Key, ...], tuple[Key, ...]], ...]
+    document_date: date | None
+    objectless_doubts: Mapping[int, tuple[str, ...]]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, 'units', tuple(self.units))
+        object.__setattr__(self, 'closures', MappingProxyType({tuple(run): tuple(closure)
+                                                               for run, closure in self.closures.items()}))
+        object.__setattr__(self, 'citations', _frozen(self.citations))
+        object.__setattr__(self, 'anchors', _frozen(self.anchors))
+        object.__setattr__(self, 'sections', tuple(self.sections))
+        object.__setattr__(self, 'containing', _frozen(self.containing))
+        object.__setattr__(self, 'restatements', _frozen(self.restatements))
+        object.__setattr__(self, 'findings', _frozen_present(self.findings))
+        object.__setattr__(self, 'failed_links', _frozen_present(self.failed_links))
+        object.__setattr__(self, 'literals', _frozen_present(self.literals))
+        object.__setattr__(self, 'joined', tuple((tuple(supported), tuple(negated))
+                                                 for supported, negated in self.joined))
+        object.__setattr__(self, 'objectless_doubts', _frozen_tuples(self.objectless_doubts))

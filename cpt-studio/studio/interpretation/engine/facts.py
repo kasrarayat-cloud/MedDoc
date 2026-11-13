@@ -220,7 +220,7 @@ def _id(value: object, where: str) -> Id:
 
 def iso_value(value: str) -> IsoDate:
     """The IsoDate pass 1 writes as ``value`` - YYYY, YYYY-MM or YYYY-MM-DD in canonical ASCII digits, a real date, the
-    year at least 1 (store's _v2_precision) - by calendar arithmetic only. ValueError for anything else."""
+    year at least 1 (store's _v2_date_precision) - by calendar arithmetic only. ValueError for anything else."""
     size = len(value)
     if size == 4:
         precision, rest = Precision.YEAR, '-01-01'

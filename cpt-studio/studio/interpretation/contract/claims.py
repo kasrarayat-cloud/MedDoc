@@ -38,28 +38,34 @@ and a segment's two places, are each told by one sentence and so share one claim
 kind, family, owner or any other label of pass 1's values. When two events share an anchor unit, each card carries that
 event's own kind-words and status-words spans (document text, quoted by the request), so the two cards differ.
 
-**Controls** (3.2.3 [R:SC-C]; DECISIONS D194-D196) are generated from CONTROLS, a table over (object class, attribute,
-state, values, kinds): each rule says which contrary - a sibling or contrary table's value, a fixed value, the other
-polarity, a contrast place, or another object of the document - is asserted about the same object, citing the same
-units, in the real-claim form of its contrary. A performed act's control is the statement-phrased "This statement says
-that {kind} was not done." (D196), a real claim's form on an event card; the restatement's summary form, the
-statement's "was done" form and the completeness claim's limitation form are the three own forms 3.2.3 prescribes. A
-contrast place is the first of the place's CONTRAST_PLACES candidates (a segment: its first place's nearest, then its
-last place's, then the far ones) compatible with no place of the object - none of its places, of any state, and
-nothing of a segment's whole range, read in the tract's order (TRACT_ORDER) - and every list ends with far places of
-six regions (CONTRAST_FALLBACK); a place whose candidates the object's places all use up is not claimed (D196: every
-place a READY or exclusion path reads is controlled). Another object is never one of the object's own values. No control
+**Controls** (3.2.3 [R:SC-C]; DECISIONS D194-D196, D209-D213) are generated from CONTROLS, a table over (object class,
+attribute, state, values, kinds): each rule says which contrary - a sibling or contrary table's value, a fixed value,
+the other polarity, a contrast place, or another object of the document - is asserted about the same object, citing the
+same units, in the real-claim form of its contrary. Every sibling's label is a contrary of the claim's kind (D209):
+KIND_LABELS and the session labels are narrowed wherever a sibling label named a genus of the claim's kind, so each
+kind claim stays true of every act of its kind and each control is false of it. A performed act's control is the
+statement-phrased "This statement says that {kind} was not done." (D196), a real claim's form on an event card; the
+restatement's summary form, the statement's "was done" form and the completeness claim's limitation form are the three
+own forms 3.2.3 prescribes, and a targeted breadth's exceptive form over the same targets the one D213 prescribes. An
+act's device outside the technique classes, and a statement's every device, take the device's sibling in its family,
+else another device (D213: DEVICE_CONTRARY). A contrast place is the first of the place's CONTRAST_PLACES candidates (a
+segment: its first place's nearest, then its last place's, then the far ones; D213 pins the order) compatible with no
+place of the object - none of its places, of any state, and nothing of a segment's whole range, read in the tract's
+order (TRACT_ORDER) - and every list ends with far places of six regions (CONTRAST_FALLBACK); a place whose candidates
+the object's places all use up is not claimed (D196: every place a READY or exclusion path reads is controlled). A
+lesion's places take the same contrast rule (D212). Another object is never one of the object's own values. An
+all_of_kind breadth's control lists the reported acts that may lie in the statement's own session (D210). No control
 asserts what one of the same object's real claims asserts (D196): where pass 1 gives a value and its contrary, neither
 is claimed, and the build asserts it. A control that exists in the document but cannot be written without a fact that
 is not claimable leaves its fact unclaimed (fail-closed), and the facts sharing its claim with it. UNCONTROLLED names
-each attribute decided by a single verdict, with its reason. Pair controls (3.2.3 [R:SC-B]; D196) ask each object about
-the other's place or lesion - never one of its own - wherever a statement with a single, listed or segment target
+each attribute decided by a single verdict, with its reason. Pair controls (3.2.3 [R:SC-B]; D196, D211) ask each object
+about the other's place or lesion - never one of its own - wherever a statement with a single, listed or segment target
 meets an act of a compatible or sibling kind of its session, and for every pair of acts of one session whose kinds a
-place-identity rule reads (D118's one stricture; bundling identity by place: the kinds are read from the requirement
-table's read-sets), in both directions; their number grows with the square of such acts in one session, and a set
-over CLAIM_BOUND is never sent. The completeness claim (3.2.2 [R:SC-B]) is made for an upper EUS session whose station
-list is empty, its kind and tract claimable. Nothing in a control's wording marks it, and the seeded order interleaves
-it with the claims.
+place-identity rule reads together (D118's one stricture, the one same-kind identity; bundling identity by place, an
+act and a whole of another kind: the kinds are read from the requirement table's read-sets), in both directions; their
+number grows with the product of such acts in one session, and a set over CLAIM_BOUND is never sent. The completeness
+claim (3.2.2 [R:SC-B]) is made for an upper EUS session whose station list is empty, its kind and tract claimable.
+Nothing in a control's wording marks it, and the seeded order interleaves it with the claims.
 
 **Content keys and the order.** Each claim's content key is the sha256 of (template, subject, value, units, and every
 other parameter its sentence renders, as pass 1's ids, values and unit ids): a verdict is stored with it and never read
@@ -132,10 +138,11 @@ class TemplateId(Enum):
     """Every claim template, by id. The ACT_, VISIT_, SESSION_, ANATOMY_, LESION_ and ENCOUNTER_ templates and the
     statement's breadth and covers forms are TEMPLATES (3.2.2's first table writes statement.breadth and
     statement.covers there); the other STMT_ templates are STATEMENT_TEMPLATES (3.2.2's statement-phrased table, with
-    DECISIONS D195's statement person). Three serve only as a control's form (3.2.3's own forms): ACT_RESTATES_SUMMARY,
-    STMT_DONE and SESSION_SOME_STATIONS. ACT_STATUS_NEGATED is 3.2.2's form of an act's negated status, which no claim
-    takes: an event whose status is negated is a statement (3.2.1), and a performed act's control is the
-    statement-phrased STMT_NOT_DONE (D196)."""
+    DECISIONS D195's statement person). LESION_PLACES is DECISIONS D212's. Four serve only as a control's form: 3.2.3's
+    own forms ACT_RESTATES_SUMMARY, STMT_DONE and SESSION_SOME_STATIONS, and D213's STMT_BREADTH_EXCEPT_TARGETS (a
+    targeted breadth's control: the exceptive breadth over the same targets). ACT_STATUS_NEGATED is 3.2.2's form of an
+    act's negated status, which no claim takes: an event whose status is negated is a statement (3.2.1), and a
+    performed act's control is the statement-phrased STMT_NOT_DONE (D196)."""
     ACT_KIND = 'act.kind'
     ACT_OTHER_CLASS = 'act.other_class'
     ACT_STATUS = 'act.status'
@@ -190,12 +197,14 @@ class TemplateId(Enum):
     ANATOMY_SUBTYPE = 'anatomy.subtype'
     ANATOMY_JOINS = 'anatomy.joins'
     LESION_MULTIPLICITY = 'lesion.multiplicity'
+    LESION_PLACES = 'lesion.places'
     LESION_DISTINCT = 'lesion.distinct_from'
     LESION_SAME = 'lesion.same_as'
     ENCOUNTER_DATE = 'encounter.date_of_service'
     STMT_BREADTH_ALL = 'statement.scope.breadth.all_of_kind'
     STMT_BREADTH_EXCEPTIVE = 'statement.scope.breadth.exceptive'
     STMT_BREADTH_TARGETED = 'statement.scope.breadth.targeted'
+    STMT_BREADTH_EXCEPT_TARGETS = 'statement.scope.breadth.exceptive_targets'
     STMT_COVERS = 'statement.scope.covers'
     STMT_KIND = 'statement.kind'
     STMT_NOT_DONE = 'statement.status.negated'
@@ -324,12 +333,15 @@ TEMPLATES: Mapping[TemplateId, str] = MappingProxyType({
     T.ANATOMY_SUBTYPE: 'This anastomosis is {subtype}.',
     T.ANATOMY_JOINS: 'This anastomosis joins the {place}.',
     T.LESION_MULTIPLICITY: 'Lesion {lesion} is {multiplicity}.',
+    T.LESION_PLACES: 'Lesion {lesion} is in the {place}.',  # DECISIONS D212
     T.LESION_DISTINCT: 'Lesions {lesion} and {other} are different lesions.',
     T.LESION_SAME: 'Lesions {lesion} and {other} are the same lesion.',
     T.ENCOUNTER_DATE: 'The date of service of this document is {date}.',
     T.STMT_BREADTH_ALL: 'This statement says no {kind} at all was done in session {session}.',
     T.STMT_BREADTH_EXCEPTIVE: 'This statement denies only {kinds} other than acts {acts}.',
     T.STMT_BREADTH_TARGETED: 'This statement denies {kind} of {target}.',
+    # DECISIONS D213: a targeted breadth's control, the exceptive breadth over the same targets
+    T.STMT_BREADTH_EXCEPT_TARGETS: 'This statement denies only {kinds} other than those of {target}.',
     T.STMT_COVERS: 'This statement applies to act {act}.',
 })
 
@@ -356,7 +368,8 @@ STATEMENT_TEMPLATES: Mapping[TemplateId, str] = MappingProxyType({
 NAMES_THE_KIND: frozenset[TemplateId] = frozenset({
     T.STMT_NOT_DONE, T.STMT_DONE, T.STMT_DATE_RELATION, T.STMT_PERFORMER, T.STMT_PERFORMER_PERSON,
     T.STMT_TARGET_LESION, T.STMT_TARGET_PLACE, T.STMT_TARGET_SEGMENT, T.STMT_TARGET_ANATOMY, T.STMT_TARGET_DUCT,
-    T.STMT_DEVICE, T.STMT_BREADTH_ALL, T.STMT_BREADTH_EXCEPTIVE, T.STMT_BREADTH_TARGETED})
+    T.STMT_DEVICE, T.STMT_BREADTH_ALL, T.STMT_BREADTH_EXCEPTIVE, T.STMT_BREADTH_TARGETED,
+    T.STMT_BREADTH_EXCEPT_TARGETS})
 
 
 def template(template_id: TemplateId) -> str:
@@ -368,17 +381,31 @@ def template(template_id: TemplateId) -> str:
 # --- the label tables (3.2.2: "labels come from fixed tables"): pinned OUTPUT tables -----------------------------------
 
 # A kind's three forms: (bare, with its article, plural), as the templates use them ({kind}, {kind_a}, {kinds}). Each
-# names the meaning 1.4's definition gives, never a surface form of a document.
+# names the meaning 1.4's definition gives, never a surface form of a document. A kind whose label is another kind's
+# KIND_SIBLINGS control is narrowed so that the control is false of that kind while its own claim stays true of every
+# act of its own kind (DECISIONS D209: sibling labels are contraries; a sibling label never names a genus of the
+# claim's kind), its qualifier in parentheses where a template writes more after the label: pressure_measurement
+# names the sphincter of Oddi and manometry every other manometry study (D209's own pair); the examination is never a
+# capsule study (capsule_study's sibling); a forceps biopsy is never one with hot forceps (hot_biopsy's); a snare
+# removal is never an endoscopic mucosal resection (emr's); a stent removal is never a whole exchange
+# (stent_exchange's) and a tube placement never a whole replacement (tube_replacement's), each the part, never the
+# whole act it is a part of; a cannulation is never an examination inside the duct with a cholangioscope
+# (cholangioscopy's); and an intervention is never sedation (moderate sedation's, DECISIONS D213).
 KIND_LABELS: Mapping[Kind, tuple[str, str, str]] = MappingProxyType({
-    Kind.EXAMINATION: ('examination as a whole', 'the examination itself, not an act done during it',
-                       'examinations as a whole'),
+    Kind.EXAMINATION: ('examination as a whole (not a capsule study)',
+                       'the examination itself, not an act done during it and not a capsule study',
+                       'examinations as a whole (not capsule studies)'),
     Kind.EM_VISIT: ('evaluation and management visit', 'an evaluation and management visit',
                     'evaluation and management visits'),
     Kind.EM_PROLONGED: ('prolonged visit time', 'prolonged visit time stated as such', 'prolonged visit time'),
-    Kind.BIOPSY: ('tissue sampling with forceps', 'a tissue sampling with forceps', 'tissue samplings with forceps'),
+    Kind.BIOPSY: ('tissue sampling with forceps (not hot forceps)',
+                  'a tissue sampling with forceps other than hot forceps',
+                  'tissue samplings with forceps (not hot forceps)'),
     Kind.HOT_BIOPSY: ('removal or sampling with hot forceps', 'a removal or sampling with hot forceps',
                       'removals or samplings with hot forceps'),
-    Kind.SNARE: ('removal with a snare', 'a removal with a snare', 'removals with a snare'),
+    Kind.SNARE: ('removal with a snare (not an endoscopic mucosal resection)',
+                 'a removal with a snare that is not an endoscopic mucosal resection',
+                 'removals with a snare (not endoscopic mucosal resections)'),
     Kind.EMR: ('endoscopic mucosal resection', 'an endoscopic mucosal resection', 'endoscopic mucosal resections'),
     Kind.ESD: ('endoscopic submucosal dissection', 'an endoscopic submucosal dissection',
                'endoscopic submucosal dissections'),
@@ -393,12 +420,15 @@ KIND_LABELS: Mapping[Kind, tuple[str, str, str]] = MappingProxyType({
     Kind.BAND_LIGATION: ('band ligation', 'a band ligation', 'band ligations'),
     Kind.DILATION: ('dilation of a narrowing', 'a dilation of a narrowing', 'dilations of a narrowing'),
     Kind.STENT: ('stent placement', 'a stent placement', 'stent placements'),
-    Kind.STENT_REMOVAL: ('stent removal', 'a stent removal', 'stent removals'),
+    Kind.STENT_REMOVAL: ('stent removal (not a whole exchange of a stent)',
+                         'a stent removal that is not a whole exchange of the stent for a new one',
+                         'stent removals (not whole exchanges of a stent)'),
     Kind.STENT_EXCHANGE: ('stent exchange', 'a stent exchange', 'stent exchanges'),
     Kind.FOREIGN_BODY: ('foreign body removal', 'a foreign body removal', 'foreign body removals'),
     Kind.DECOMPRESSION: ('decompression', 'a decompression', 'decompressions'),
-    Kind.TUBE_PLACEMENT: ('tube placement other than a gastrostomy', 'a tube placement other than a gastrostomy',
-                          'tube placements other than a gastrostomy'),
+    Kind.TUBE_PLACEMENT: ('tube placement (not a gastrostomy, and not a whole replacement of a tube)',
+                          'a tube placement other than a gastrostomy that is not a whole replacement of a tube',
+                          'tube placements (not gastrostomies, and not whole replacements of a tube)'),
     Kind.TUBE_REPLACEMENT: ('feeding tube replacement', 'a feeding tube replacement', 'feeding tube replacements'),
     Kind.PEG: ('percutaneous endoscopic gastrostomy placement', 'a percutaneous endoscopic gastrostomy placement',
                'percutaneous endoscopic gastrostomy placements'),
@@ -407,20 +437,30 @@ KIND_LABELS: Mapping[Kind, tuple[str, str, str]] = MappingProxyType({
     Kind.FNA: ('fine-needle aspiration or biopsy', 'a fine-needle aspiration or biopsy',
                'fine-needle aspirations or biopsies'),
     Kind.DRAINAGE: ('drainage', 'a drainage', 'drainages'),
-    Kind.CANNULATION: ('cannulation of a duct', 'a cannulation of a duct', 'cannulations of a duct'),
+    Kind.CANNULATION: ('cannulation of a duct (not an examination inside it with a cholangioscope)',
+                       'a cannulation of a duct that is not an examination inside the duct with a cholangioscope',
+                       'cannulations of a duct (not examinations inside it with a cholangioscope)'),
     Kind.SPHINCTEROTOMY: ('sphincterotomy', 'a sphincterotomy', 'sphincterotomies'),
     Kind.STONE_EXTRACTION: ('extraction of stones', 'an extraction of stones', 'extractions of stones'),
     Kind.LITHOTRIPSY: ('lithotripsy', 'a lithotripsy', 'lithotripsies'),
     Kind.CHOLANGIOSCOPY: ('cholangioscopy', 'a cholangioscopy', 'cholangioscopies'),
-    Kind.PRESSURE_MEASUREMENT: ('pressure measurement', 'a pressure measurement', 'pressure measurements'),
+    # DECISIONS D209: pressure_measurement serves only 43263, the sphincter of Oddi's; manometry is every other study
+    Kind.PRESSURE_MEASUREMENT: ('pressure measurement of the sphincter of Oddi',
+                                'a pressure measurement of the sphincter of Oddi',
+                                'pressure measurements of the sphincter of Oddi'),
     Kind.CAPSULE_STUDY: ('capsule study', 'a capsule study', 'capsule studies'),
-    Kind.MANOMETRY: ('manometry', 'a manometry study', 'manometry studies'),
+    Kind.MANOMETRY: ('manometry (not of the sphincter of Oddi)',
+                     'a manometry study other than one of the sphincter of Oddi (an esophageal, gastric, duodenal or '
+                     'small-bowel, colonic or anorectal manometry, or an esophageal balloon distension study)',
+                     'manometry studies (not of the sphincter of Oddi)'),
     Kind.PH_MONITORING: ('pH monitoring', 'a pH monitoring study', 'pH monitoring studies'),
     Kind.RECTAL_SENSATION: ('rectal sensation, tone or compliance testing',
                             'a rectal sensation, tone or compliance test', 'rectal sensation, tone or compliance tests'),
     Kind.BALLOON_EXPULSION: ('balloon expulsion testing', 'a balloon expulsion test', 'balloon expulsion tests'),
     Kind.MODERATE_SEDATION: ('moderate sedation', 'moderate sedation', 'moderate sedation'),
-    Kind.INTERVENTION: ('intervention of any kind', 'an intervention of any kind', 'interventions of any kind'),
+    # moderate sedation's KIND_SIBLINGS control (DECISIONS D213): true of a procedure on the patient, false of sedation
+    Kind.INTERVENTION: ('intervention of any kind (not sedation)', 'an intervention of any kind other than sedation',
+                        'interventions of any kind (not sedation)'),
     Kind.OTHER: ('act of another kind', 'an act of another kind', 'acts of another kind'),
 })
 
@@ -505,7 +545,11 @@ LABELS: Mapping[Enum, str] = MappingProxyType({
     EmBasis.TOTAL_TIME: 'the total time spent', EmBasis.MEDICAL_DECISION_MAKING: 'medical decision making',
     # "Session {session} is {family}."
     SessionKind.OFFICE_EM: 'an office or outpatient evaluation and management visit',
-    SessionKind.EGD: 'an upper endoscopy', SessionKind.ENTEROSCOPY: 'a small-bowel enteroscopy',
+    # an upper endoscopy names a genus of the three families whose SESSION_SIBLINGS control it is (an upper EUS, an ERCP
+    # and a push enteroscopy are each done by a scope passed into the upper tract): it sets them apart (DECISIONS D209)
+    SessionKind.EGD: ('an upper endoscopy that is not an endoscopic ultrasound examination, an endoscopic retrograde '
+                      'cholangiopancreatography or a small-bowel enteroscopy'),
+    SessionKind.ENTEROSCOPY: 'a small-bowel enteroscopy',
     SessionKind.COLONOSCOPY: 'a colonoscopy', SessionKind.FLEX_SIG: 'a flexible sigmoidoscopy',
     SessionKind.EUS: 'an endoscopic ultrasound examination',
     SessionKind.ERCP: 'an endoscopic retrograde cholangiopancreatography', SessionKind.CAPSULE: 'a capsule endoscopy',
@@ -675,8 +719,8 @@ FORMS: Mapping[tuple[ObjectClass, Attribute, FactState], TemplateId] = MappingPr
     (_ANAT_C, _A.TYPE, _S): T.ANATOMY_TYPE, (_ANAT_C, _A.ORGAN, _S): T.ANATOMY_ORGAN_ABSENT,
     (_ANAT_C, _A.ORGAN, _N): T.ANATOMY_ORGAN_NOT_ABSENT, (_ANAT_C, _A.SUBTYPE, _S): T.ANATOMY_SUBTYPE,
     (_ANAT_C, _A.JOINS, _S): T.ANATOMY_JOINS,
-    (_LES_C, _A.MULTIPLICITY, _S): T.LESION_MULTIPLICITY, (_LES_C, _A.DISTINCT_FROM, _S): T.LESION_DISTINCT,
-    (_LES_C, _A.SAME_AS, _S): T.LESION_SAME,
+    (_LES_C, _A.MULTIPLICITY, _S): T.LESION_MULTIPLICITY, (_LES_C, _A.PLACES, _S): T.LESION_PLACES,
+    (_LES_C, _A.DISTINCT_FROM, _S): T.LESION_DISTINCT, (_LES_C, _A.SAME_AS, _S): T.LESION_SAME,
     (_ENC_C, _A.DATE_OF_SERVICE, _S): T.ENCOUNTER_DATE,
 })
 # The rows whose template the value chooses: a statement's breadth.
@@ -708,10 +752,11 @@ class Contrary(Enum):
     document order, that a card can show and that is none of the object's own values of the attribute;
     ANOTHER_LESION_OF_SESSION: the first other lesion an act of the same session is done to; ANOTHER_POSITIVE_ACT: the
     first other act of the same session claimed performed, other than the act's own cause_event; REPORTED_ACTS: the acts
-    of a kind the statement covers, claimed performed (their kind and status claimable); ANATOMY_POINT: the place an
-    anatomy entry of the claimed type is (an anastomosis, a stoma or a pouch); CONTRAST: the first CONTRAST_PLACES
-    candidate of the place compatible with no place of the object (DECISIONS D196); FIRST_CONTRAST: the same for a
-    segment, from its first place's candidates and then its last place's, compatible with nothing of its whole range.
+    of a kind the statement covers that may lie in its session, claimed performed (their kind and status claimable;
+    DECISIONS D210); ANATOMY_POINT: the place an anatomy entry of the claimed type is (an anastomosis, a stoma or a
+    pouch); CONTRAST: the first CONTRAST_PLACES candidate of the place compatible with no place of the object (DECISIONS
+    D196; an act's, a statement's or a lesion's, D212); FIRST_CONTRAST: the same for a segment, from its first place's
+    candidates and then its last place's, compatible with nothing of its whole range.
     Where no other object, reported act or anatomy point exists in the document, the fact has no control there (the
     claim alone decides, as 3.2.3's rows say). A contrast has no such condition: a place whose candidates are all
     compatible with the object's places is not claimed (Unclaimable.CONTROL)."""
@@ -737,6 +782,8 @@ class Table(Enum):
     SESSION_SIBLINGS = 'session_siblings'
     CONTRAST_PLACES = 'contrast_places'
     DEVICE_SIBLINGS = 'device_siblings'
+    ANOTHER_DEVICE = 'another_device'
+    DEVICE_CONTRARY = 'device_contrary'
     TYPE_SIBLINGS = 'type_siblings'
     SUBTYPE_SIBLINGS = 'subtype_siblings'
     DATE_CONTRARY = 'date_contrary'
@@ -753,11 +800,14 @@ class Table(Enum):
     MULTIPLICITY_CONTRARY = 'multiplicity_contrary'
 
 
-# KIND_SIBLINGS: the sibling a kind claim's control asserts (an act's and a statement's alike), 3.2.3's list and the
+# KIND_SIBLINGS: the sibling a kind claim's control asserts (an act's and a statement's alike), 3.2.3's list, the
 # three DECISIONS D194 adds, each chosen outside the kind so a faithful second reading rejects it: removal/biopsy,
-# intervention/examination, em_prolonged/em_visit (99417 has a READY path). The examination and the visit are decided
-# through session.kind and the visit facts (3.2.3), which are controlled; moderate sedation and kind other get none, as
-# no READY or exclusion path reads their kind (D194: engine/requirements reads it on the hold path only).
+# intervention/examination, em_prolonged/em_visit (99417 has a READY path), and DECISIONS D213's moderate
+# sedation/intervention (the same-day rule's READY path and base_included read every act's kind: a sibling false of
+# sedation and true of a procedure on the patient, by D209's contrary test). Every pair's control is false of the
+# claim's kind (D209: a sibling label never names a genus of the claim's kind; KIND_LABELS narrows the labels that
+# did). The examination and the visit are decided through session.kind and the visit facts (3.2.3), which are
+# controlled; kind other gets none, as no READY or exclusion path reads it (D194: no catalogue kind).
 KIND_SIBLINGS: Mapping[Kind, Kind] = MappingProxyType({
     Kind.SNARE: Kind.EMR, Kind.EMR: Kind.SNARE, Kind.ESD: Kind.EMR, Kind.HOT_BIOPSY: Kind.BIOPSY,
     Kind.BIOPSY: Kind.HOT_BIOPSY, Kind.CLIP: Kind.INJECTION, Kind.INJECTION: Kind.CLIP, Kind.TATTOO: Kind.INJECTION,
@@ -772,10 +822,13 @@ KIND_SIBLINGS: Mapping[Kind, Kind] = MappingProxyType({
     Kind.PRESSURE_MEASUREMENT: Kind.MANOMETRY, Kind.PH_MONITORING: Kind.MANOMETRY,
     Kind.RECTAL_SENSATION: Kind.BALLOON_EXPULSION, Kind.BALLOON_EXPULSION: Kind.RECTAL_SENSATION,
     Kind.REMOVAL: Kind.BIOPSY, Kind.INTERVENTION: Kind.EXAMINATION, Kind.EM_PROLONGED: Kind.EM_VISIT,
+    Kind.MODERATE_SEDATION: Kind.INTERVENTION,
 })
 # SESSION_SIBLINGS: 3.2.3's list and the five DECISIONS D196 adds (office_em/em_other, motility/reflux, reflux/motility,
 # anorectal/motility, feeding_tube/egd). With them every family a code of which can be READY has a sibling; sedation's
-# two codes are recognised only (D80) and em_other, other_gi and not_gi have none.
+# two codes are recognised only (D80) and em_other, other_gi and not_gi have none. Every pair's control is false of the
+# claim's family (D209): egd's label sets apart the EUS, the ERCP and the enteroscopy whose sibling it is, and
+# motility's sets apart anorectal testing.
 SESSION_SIBLINGS: Mapping[SessionKind, SessionKind] = MappingProxyType({
     SessionKind.COLONOSCOPY: SessionKind.FLEX_SIG, SessionKind.FLEX_SIG: SessionKind.COLONOSCOPY,
     SessionKind.EGD: SessionKind.EUS, SessionKind.EUS: SessionKind.EGD, SessionKind.ERCP: SessionKind.EGD,
@@ -895,11 +948,31 @@ def _tract_order() -> tuple[Landmark, ...]:
 TRACT_ORDER: tuple[Landmark, ...] = _tract_order()
 _PLACE_ORDER: Mapping[Landmark, int] = MappingProxyType({place: position for position, place in enumerate(TRACT_ORDER)})
 # 3.2.3's statement.device: "the sibling device of its class (cold_snare/hot_snare, cold_forceps/hot_forceps,
-# balloon/wire_bougie)".
+# balloon/wire_bougie)"; and DECISIONS D213's sibling in its family of the snare and of the forceps the document does
+# not call cold or hot ("forceps and hot forceps"): the hot one of each.
 DEVICE_SIBLINGS: Mapping[Device, Device] = MappingProxyType({
     Device.COLD_SNARE: Device.HOT_SNARE, Device.HOT_SNARE: Device.COLD_SNARE, Device.COLD_FORCEPS: Device.HOT_FORCEPS,
     Device.HOT_FORCEPS: Device.COLD_FORCEPS, Device.BALLOON: Device.WIRE_BOUGIE, Device.WIRE_BOUGIE: Device.BALLOON,
+    Device.SNARE: Device.HOT_SNARE, Device.FORCEPS: Device.HOT_FORCEPS,
 })
+# DECISIONS D213, for a device with no sibling in its family: "another device the same row would treat as different"
+# (4.5's technique row sets a pair apart on any two established devices that differ), each chosen so a faithful reading
+# of an act done with the device rejects it - an instrument of another job that no act done with the device is done
+# with instead or beside: a scope against a capsule, a puncture or a stent against a band, a clip and a band against
+# each other, one energy against another, the biliary instruments against one another, a bougie (a statement's: an
+# act's bougie is a technique class, controlled by its negated form) against a balloon.
+ANOTHER_DEVICE: Mapping[Device, Device] = MappingProxyType({
+    Device.ENDOSCOPE: Device.CAPSULE, Device.CAPSULE: Device.ENDOSCOPE, Device.NEEDLE: Device.BAND,
+    Device.INJECTION: Device.BAND, Device.CLIP: Device.BAND, Device.BAND: Device.CLIP, Device.BOUGIE: Device.BALLOON,
+    Device.ARGON_PLASMA: Device.RADIOFREQUENCY, Device.RADIOFREQUENCY: Device.ARGON_PLASMA,
+    Device.CRYOTHERAPY: Device.ARGON_PLASMA, Device.THERMAL_PROBE: Device.CRYOTHERAPY,
+    Device.ELECTROCAUTERY: Device.CRYOTHERAPY, Device.STENT: Device.BAND, Device.BASKET: Device.SPHINCTEROTOME,
+    Device.EXTRACTION_BALLOON: Device.SPHINCTEROTOME, Device.SPHINCTEROTOME: Device.BASKET,
+    Device.LITHOTRIPTER: Device.SPHINCTEROTOME, Device.CHOLANGIOSCOPE: Device.SPHINCTEROTOME,
+    Device.CATHETER: Device.BASKET, Device.MANUAL: Device.CLIP, Device.OTHER: Device.BAND,
+})
+# A device's control value (DECISIONS D213): its sibling in its family, else another device.
+DEVICE_CONTRARY: Mapping[Device, Device] = MappingProxyType({**ANOTHER_DEVICE, **DEVICE_SIBLINGS})
 # 3.2.3's anatomy.type: "ileal_pouch, gastric_pouch, stoma ... the sibling type (ileal_pouch/gastric_pouch,
 # stoma/anastomosis)".
 TYPE_SIBLINGS: Mapping[AnatomyType, AnatomyType] = MappingProxyType({
@@ -966,6 +1039,8 @@ def table(name: Table) -> Mapping[Enum, Enum]:
         Table.KIND_SIBLINGS: cast(Mapping[Enum, Enum], KIND_SIBLINGS),
         Table.SESSION_SIBLINGS: cast(Mapping[Enum, Enum], SESSION_SIBLINGS),
         Table.DEVICE_SIBLINGS: cast(Mapping[Enum, Enum], DEVICE_SIBLINGS),
+        Table.ANOTHER_DEVICE: cast(Mapping[Enum, Enum], ANOTHER_DEVICE),
+        Table.DEVICE_CONTRARY: cast(Mapping[Enum, Enum], DEVICE_CONTRARY),
         Table.TYPE_SIBLINGS: cast(Mapping[Enum, Enum], TYPE_SIBLINGS),
         Table.SUBTYPE_SIBLINGS: cast(Mapping[Enum, Enum], SUBTYPE_SIBLINGS)}
     return siblings[name] if name in siblings else CONTRARY[name]
@@ -1029,9 +1104,12 @@ class ControlRule:
 
 
 _CR = ControlRule
-# 3.2.3's table, row for row, as DECISIONS D194-D196 complete it: a performed act's control in the statement form; the
-# places of every kind (the contrast rule); the duct; the statement's person (D195); session.through; the access
-# outcome's third value (ACCESS_CONTRARY); the session siblings (SESSION_SIBLINGS).
+_TARGETED_BREADTHS = frozenset({Breadth.SINGLE_TARGET, Breadth.LISTED_TARGETS, Breadth.SEGMENT})
+# 3.2.3's table, row for row, as DECISIONS D194-D196 and D212-D213 complete it: a performed act's control in the
+# statement form; the places of every kind (the contrast rule); the duct; the statement's person (D195);
+# session.through; the access outcome's third value (ACCESS_CONTRARY); the session siblings (SESSION_SIBLINGS); a
+# lesion's places (D212: the contrast rule); an act's device outside the technique classes and a statement's every
+# device (D213: DEVICE_CONTRARY); a targeted breadth (D213: the exceptive form over the same targets).
 CONTROLS: tuple[ControlRule, ...] = (
     _CR(_ACT, _A.STATUS, _S, Contrary.SAME, frozenset({Status.PERFORMED}), as_state=_N, form=T.STMT_NOT_DONE),
     _CR(_ACT, _A.STATUS, _S, Contrary.FIXED, frozenset({Status.ATTEMPTED_NOT_COMPLETED, Status.PLANNED}),
@@ -1049,6 +1127,8 @@ CONTROLS: tuple[ControlRule, ...] = (
     _CR(_ACT, _A.TARGET_LESION, _S, Contrary.ANOTHER_LESION_OF_SESSION),
     _CR(_ACT, _A.TARGET_DUCT, _S, Contrary.TABLE, table=Table.DUCT_CONTRARY),
     _CR(_ACT, _A.TECHNIQUE_DEVICE, _S, Contrary.SAME, frozenset(catalogue.TECHNIQUE_CLASS), as_state=_N),
+    _CR(_ACT, _A.TECHNIQUE_DEVICE, _S, Contrary.TABLE,
+        frozenset(device for device in Device if device not in catalogue.TECHNIQUE_CLASS), table=Table.DEVICE_CONTRARY),
     _CR(_ACT, _A.TECHNIQUE_ROUTE, _S, Contrary.FIXED, frozenset({Route.EUS_TRANSMURAL}), fixed=Route.SUBMUCOSAL),
     _CR(_ACT, _A.TARGET_STRUCTURE, _S, Contrary.FIXED, frozenset({Structure.PANCREATIC_FLUID_COLLECTION}),
         fixed=Structure.WALL),
@@ -1074,8 +1154,9 @@ CONTROLS: tuple[ControlRule, ...] = (
     _CR(_STMT, _A.SCOPE_TARGETS, _S, Contrary.ANOTHER_LESION, as_attribute=_A.TARGET_LESION),
     _CR(_STMT, _A.SCOPE_BREADTH, _S, Contrary.FIXED, frozenset({Breadth.EXCEPTIVE}), fixed=Breadth.ALL_OF_KIND),
     _CR(_STMT, _A.SCOPE_BREADTH, _S, Contrary.REPORTED_ACTS, frozenset({Breadth.ALL_OF_KIND})),
+    _CR(_STMT, _A.SCOPE_BREADTH, _S, Contrary.SAME, _TARGETED_BREADTHS, form=T.STMT_BREADTH_EXCEPT_TARGETS),
     _CR(_STMT, _A.SCOPE_EXCEPTS, _S, Contrary.SAME, as_attribute=_A.SCOPE_COVERS),
-    _CR(_STMT, _A.TECHNIQUE_DEVICE, _S, Contrary.TABLE, table=Table.DEVICE_SIBLINGS),
+    _CR(_STMT, _A.TECHNIQUE_DEVICE, _S, Contrary.TABLE, table=Table.DEVICE_CONTRARY),
     _CR(_SESSION_C, _A.KIND, _S, Contrary.TABLE, table=Table.SESSION_SIBLINGS),
     _CR(_SESSION_C, _A.ENCOUNTER, _S, Contrary.TABLE, table=Table.ENCOUNTER_CONTRARY),
     _CR(_SESSION_C, _A.TRACT, _S, Contrary.TABLE, table=Table.TRACT_CONTRARY),
@@ -1092,6 +1173,7 @@ CONTROLS: tuple[ControlRule, ...] = (
     _CR(_ANAT_C, _A.ORGAN, _S, Contrary.SAME, as_state=_N),
     _CR(_ANAT_C, _A.SUBTYPE, _S, Contrary.TABLE, table=Table.SUBTYPE_SIBLINGS),
     _CR(_LES_C, _A.MULTIPLICITY, _S, Contrary.TABLE, table=Table.MULTIPLICITY_CONTRARY),
+    _CR(_LES_C, _A.PLACES, _S, Contrary.CONTRAST, table=Table.CONTRAST_PLACES),
     _CR(_LES_C, _A.DISTINCT_FROM, _S, Contrary.SAME, as_attribute=_A.SAME_AS),
 )
 del _CR
@@ -1196,12 +1278,12 @@ class Unclaimable(Enum):
     (part_of and part_relation; a breadth's session, excepted acts, targets or segment; an anastomosis's type). UNITS: a
     run it must cite has no sentence closure. REFERENCE: an object its sentence names has no card. CONTROL: its control
     (3.2.3) exists in the document but cannot be written without a fact that is not claimable - a performed act's
-    statement-form control names its kind, an all_of_kind breadth's names the reported acts of its kind (their kind and
-    status), an exceptive breadth's names its session - or, for a place, every contrast candidate is compatible with
-    one of the object's places: the claim would stand uncontrolled, so it is not made (fail-closed), and the facts
-    sharing its claim go with it (PARTNER). CONTRARY: its control would assert what another claim about the same object
-    asserts, or its claim is what another fact's control asserts (pass 1 gives a value and its contrary): neither is
-    claimed (DECISIONS D196)."""
+    statement-form control names its kind, an all_of_kind breadth's names the reported acts of its kind that may lie in
+    its session (their kind and status; DECISIONS D210), an exceptive breadth's names its session - or, for a place,
+    every contrast candidate is compatible with one of the object's places: the claim would stand uncontrolled, so it
+    is not made (fail-closed), and the facts sharing its claim go with it (PARTNER). CONTRARY: its control would assert
+    what another claim about the same object asserts, or its claim is what another fact's control asserts (pass 1
+    gives a value and its contrary): neither is claimed (DECISIONS D196)."""
     NO_TEMPLATE = 'no_template'
     KIND = 'kind'
     PARTNER = 'partner'
@@ -1386,6 +1468,7 @@ _LABEL_SLOT: Mapping[TemplateId, Slot] = MappingProxyType({
     T.SESSION_COMPLETION: Slot.COMPLETION, T.ANATOMY_SUBTYPE: Slot.SUBTYPE, T.LESION_MULTIPLICITY: Slot.MULTIPLICITY,
     T.STMT_PERFORMER: Slot.PERFORMER, T.STMT_DEVICE: Slot.DEVICE, T.ACT_TARGET_PLACE: Slot.PLACE,
     T.ACT_TARGET_PLACE_NEGATED: Slot.PLACE, T.STMT_TARGET_PLACE: Slot.PLACE, T.ANATOMY_JOINS: Slot.PLACE,
+    T.LESION_PLACES: Slot.PLACE,
     T.SESSION_REACHED: Slot.POINT, T.SESSION_REACHED_NEGATED: Slot.POINT, T.SESSION_STATION: Slot.STATION,
     T.SESSION_STATION_NEGATED: Slot.STATION, T.ANATOMY_ORGAN_ABSENT: Slot.ORGAN, T.ANATOMY_ORGAN_NOT_ABSENT: Slot.ORGAN,
     T.ACT_TARGET_DUCT: Slot.DUCT, T.STMT_TARGET_DUCT: Slot.DUCT, T.ANATOMY_TYPE: Slot.TYPE})
@@ -1573,11 +1656,14 @@ class _Builder:
                 found += [option.value for option in item.fact.options]
         return [value for value in found if value != '']
 
-    def own_places(self, event: str) -> list[Landmark]:
-        """Every place of an event (DECISIONS D196: a contrast is compatible with none of them): each value of its
-        target.places, and its segment's whole range (segment_range) - or its places, when the segment is not two."""
-        found = [Landmark(value) for value in self.values_of(Family.EVENT, event, _A.TARGET_PLACES)]
-        segment = [Landmark(value) for value in self.values_of(Family.EVENT, event, _A.SCOPE_SEGMENT)]
+    def own_places(self, subject: Ref) -> list[Landmark]:
+        """Every place of an object (DECISIONS D196: a contrast is compatible with none of them). An event's: each
+        value of its target.places, and its segment's whole range (segment_range) - or its places, when the segment is
+        not two. A lesion's (DECISIONS D212): each value of its places; a lesion has no segment."""
+        if subject.family is Family.LESION:
+            return [Landmark(value) for value in self.values_of(Family.LESION, subject.object, _A.PLACES)]
+        found = [Landmark(value) for value in self.values_of(Family.EVENT, subject.object, _A.TARGET_PLACES)]
+        segment = [Landmark(value) for value in self.values_of(Family.EVENT, subject.object, _A.SCOPE_SEGMENT)]
         return found + list(segment_range(segment[0], segment[1]) if len(segment) == 2 else segment)
 
     def own_lesions(self, event: str) -> list[str]:
@@ -1673,7 +1759,7 @@ class _Builder:
         """The slots of ``form`` for one value, and the parameters its sentence renders beyond it."""
         if subject.family is Family.SESSION:
             slots.append((Slot.SESSION, subject))
-        if form in (T.LESION_MULTIPLICITY, T.LESION_DISTINCT, T.LESION_SAME):
+        if form in (T.LESION_MULTIPLICITY, T.LESION_PLACES, T.LESION_DISTINCT, T.LESION_SAME):
             slots.append((Slot.LESION, subject))
         if form in _LABEL_SLOT:
             if form is T.ANATOMY_TYPE:
@@ -1714,7 +1800,8 @@ class _Builder:
             return None
         if form is T.ACT_PART_OF:
             return self.part_of_slots(subject.object, attribute, value, slots, params)
-        if form in (T.STMT_BREADTH_ALL, T.STMT_BREADTH_EXCEPTIVE, T.STMT_BREADTH_TARGETED, T.STMT_TARGET_SEGMENT):
+        if form in (T.STMT_BREADTH_ALL, T.STMT_BREADTH_EXCEPTIVE, T.STMT_BREADTH_TARGETED, T.STMT_TARGET_SEGMENT,
+                    T.STMT_BREADTH_EXCEPT_TARGETS):
             return self.breadth_slots(form, subject.object, slots, params)
         if form in (T.ACT_ENTRY, T.ACT_RESTATES, T.ACT_RESTATES_SUMMARY):
             return None  # filled by claim_entry and claim_restatements, which know the section and the restatement
@@ -1738,7 +1825,8 @@ class _Builder:
     def breadth_slots(self, form: TemplateId, statement: str, slots: list[tuple[Slot, _Value]],
                       params: list[str]) -> Unclaimable | None:
         """The breadth forms' slots: the statement's session (all_of_kind); its excepted acts (exceptive); its target -
-        one lesion or place, the listed lesions, or the segment's two places (single, listed or segment); and the
+        one lesion or place, the listed lesions, or the segment's two places (single, listed or segment), which the
+        targeted breadth's control names too (DECISIONS D213: the exceptive form over the same targets); and the
         segment claim's two places. Every fact they name must be claimable."""
         if form is T.STMT_BREADTH_ALL:
             session = self.claimed_value(Family.EVENT, statement, _A.SESSION)
@@ -1860,7 +1948,7 @@ class _Builder:
             candidates = contrast_candidates(places)
             if not candidates:
                 return None  # a surgically made place, or other: engine/anatomy sets it apart from nothing
-            found_place = contrast(candidates, self.own_places(subject.object))
+            found_place = contrast(candidates, self.own_places(subject))
             return Unclaimable.CONTROL if found_place is None else found_place.value
         if how is Contrary.ANOTHER_SESSION:
             own = [fact.value, *self.values_of(subject.family, subject.object, _A.SESSION)]
@@ -1903,30 +1991,37 @@ class _Builder:
         return min(found)[1] if found else None
 
     def reported_acts_control(self, subject: Ref, units: tuple[str, ...]) -> _Spec | Unclaimable | None:
-        """all_of_kind's control: the exceptive form listing the reported acts of a kind the statement covers (3.2.3:
-        "only when reported acts of the kind exist"; None when none does). An act is reported when pass 1 asserts of
-        it, whatever the checks or doubts (asserted_values: a contradicted fact's options included), the performed
-        status and a kind the statement's covers - so weakening an act's status or kind from doubted to contradicted
-        never takes the control away. The control lists only acts whose kind and status are claimable and whose card
-        can be shown, so it never shows a doubted, contradicted or failed value; when no reported act is such, the
-        breadth is not claimed (Unclaimable.CONTROL: it settles unappraised, fail-closed)."""
+        """all_of_kind's control: the exceptive form listing the reported acts of a kind the statement covers that may
+        lie in the statement's own session (3.2.3: "only when reported acts of the kind exist"; None when none does).
+        An act is reported when pass 1 asserts of it, whatever the checks or doubts (asserted_values: a contradicted
+        fact's options included), the performed status and a kind the statement's covers - so weakening an act's
+        status or kind from doubted to contradicted never takes the control away. DECISIONS D210: an act may lie in the
+        statement's session when its session is the statement's, or is not established - its session fact is not
+        claimable (silent, doubted, contradicted or failed: fail-closed); an act whose claimable session is another
+        neither confirms nor denies "no {kind} at all ... in session {X}", so it is never listed and has no effect.
+        Every act that may lie in the statement's session is listed, so each must be listable - a claimable event (a
+        valid anchor: its card can be shown) whose kind and status are claimable - and the control never shows a
+        doubted, contradicted or failed value; when one is not, the breadth is not claimed (Unclaimable.CONTROL: it
+        settles unappraised, fail-closed), as a list without it would make the control rejectable for an exceptive
+        statement misfiled as all_of_kind."""
         kind = self.statement_kind(subject.object)
         if kind is None:
             return None
+        session = self.claimed_value(Family.EVENT, subject.object, _A.SESSION)
         reported = [name for name in self.ids[Family.EVENT]
                     if name != subject.object and self.object_class(name) is _ACT
                     and any(value == Status.PERFORMED.value
                             for value in self.asserted_values(Family.EVENT, name, _A.STATUS))
                     and any(catalogue.covers(kind, Kind(value))
-                            for value in self.asserted_values(Family.EVENT, name, _A.KIND))]
+                            for value in self.asserted_values(Family.EVENT, name, _A.KIND))
+                    and self.claimed_value(Family.EVENT, name, _A.SESSION) in (None, session)]
         if not reported:
             return None
-        acts = sorted((self.at(self.anchor(name)), name) for name in reported
-                      if self.claimable_event(name)
-                      and self.claimed_value(Family.EVENT, name, _A.STATUS) == Status.PERFORMED.value
-                      and self.claimed_value(Family.EVENT, name, _A.KIND) is not None)
-        if not acts:
+        if not all(self.claimable_event(name)
+                   and self.claimed_value(Family.EVENT, name, _A.STATUS) == Status.PERFORMED.value
+                   and self.claimed_value(Family.EVENT, name, _A.KIND) is not None for name in reported):
             return Unclaimable.CONTROL
+        acts = sorted((self.at(self.anchor(name)), name) for name in reported)
         bare, _article, plural = KIND_LABELS[kind]
         slots: tuple[tuple[Slot, _Value], ...] = (
             (Slot.KIND, bare), (Slot.KINDS, plural), (Slot.ACTS, tuple(Ref(Family.EVENT, name) for _at, name in acts)))
@@ -2435,8 +2530,8 @@ def _place_read_kinds(requirement: rq.Requirement, role: rq.Role) -> frozenset[K
     return frozenset(found)
 
 
-# The rules of identity by place whose pairs get pair controls (3.2.3 [R:SC-B]; DECISIONS D196), each read from the
-# requirement table: D118's one stricture (4.7 competing: two acts whose places the competition reads, both of these
+# The rules of identity by place whose pairs get pair controls (3.2.3 [R:SC-B]; DECISIONS D196, D211), each read from
+# the requirement table: D118's one stricture (4.7 competing: two acts whose places the competition reads, both of these
 # kinds), and bundling identity by place (4.7 bundling: an act of the first kinds beside a whole of the second).
 STRICTURE_PAIR_KINDS: frozenset[Kind] = _place_read_kinds(rq.Requirement.COMBINATION, rq.Role.ACT)
 BUNDLING_PAIR_KINDS: tuple[frozenset[Kind], frozenset[Kind]] = (
@@ -2444,13 +2539,18 @@ BUNDLING_PAIR_KINDS: tuple[frozenset[Kind], frozenset[Kind]] = (
 
 
 def _place_identity_pair(one: Kind | None, other: Kind | None) -> bool:
-    """Whether two acts' kinds are read together by a rule of identity by place: both of STRICTURE_PAIR_KINDS, or one
-    of BUNDLING_PAIR_KINDS' act kinds and the other of its whole kinds (either way round)."""
+    """Whether two acts' kinds are read together by a rule of identity by place (DECISIONS D211): one of
+    BUNDLING_PAIR_KINDS' act kinds and the other of its whole kinds (either way round), never two acts of one kind - the
+    bundling rules read an act against the whole it may be part of, a lift, a resection technique, a biopsy of a
+    removed lesion or a drainage's step, never a whole of its own kind; or both of STRICTURE_PAIR_KINDS, the one rule
+    that reads a same-kind identity (D118's one stricture: the competition reads two acts of the dilation kinds in one
+    role)."""
     if one is None or other is None:
         return False
+    if one in STRICTURE_PAIR_KINDS and other in STRICTURE_PAIR_KINDS:
+        return True
     acts, wholes = BUNDLING_PAIR_KINDS
-    return ((one in STRICTURE_PAIR_KINDS and other in STRICTURE_PAIR_KINDS)
-            or (one in acts and other in wholes) or (other in acts and one in wholes))
+    return one is not other and ((one in acts and other in wholes) or (other in acts and one in wholes))
 
 
 def _distinct(places: list[Landmark]) -> list[Landmark]:
@@ -2554,12 +2654,17 @@ def controls_document() -> dict[str, object]:
         'contrast': ("the first candidate of the place (a segment: its first place's nearest candidates, then its last "
                      "place's, then the fallback places) that "
                      'engine/anatomy.compatible finds compatible with no place of the object - each value of its '
-                     "target.places, of any state, its options included, and its segment's whole range: its two "
-                     'places and every place between them in the tract order all of whose places are between them '
-                     'too; every list ends with the fallback places; when every candidate is compatible with a place '
-                     'of the object, the place is not claimed (control); a place with no candidates has no control'),
+                     "target.places (a lesion's places), of any state, its options included, and its segment's whole "
+                     'range: its two places and every place between them in the tract order all of whose places are '
+                     'between them too; every list ends with the fallback places; when every candidate is compatible '
+                     'with a place of the object, the place is not claimed (control); a place with no candidates has '
+                     'no control'),
         'tract_order': [place.value for place in TRACT_ORDER],
         'contrast_fallback': [place.value for place in CONTRAST_FALLBACK],
+        # DECISIONS D213 (refute-2c-r2 E): a segment's candidates in their order - its first place's nearest, then its
+        # last place's, then the far ones - for every ordered pair of placed landmarks, so the pin moves with the order
+        'segment_candidates': [[first.value, last.value, [place.value for place in contrast_candidates([first, last])]]
+                               for first in CONTRAST_PLACES for last in CONTRAST_PLACES],
         'another': ('the first object of its family in document order that a card can show and that is none of the '
                     "object's own values of the attribute (an inherited value included)"),
         'no_control_is_a_claim': 'a control never asserts what a real claim about the same object asserts '
@@ -2567,8 +2672,14 @@ def controls_document() -> dict[str, object]:
                                  'neither fact is claimed (contrary), nor any fact sharing either claim (partner)',
         'unwritable_control': 'a control the document calls for whose sentence needs a fact that is not claimable '
                               'leaves its fact unclaimed (control), and every fact sharing its claim (partner)',
-        'reported_acts': 'acts pass 1 asserts performed, of a kind the statement covers (a contradicted '
-                         "fact's options included); listed when their kind and status are claimable",
+        'reported_acts': ('acts pass 1 asserts performed, of a kind the statement covers (a contradicted '
+                          "fact's options included), whose session is the statement's or is not claimable; every one "
+                          'listed, each a claimable event whose kind and status are claimable, else the breadth is '
+                          "not claimed (control); an act whose claimable session is another is never listed"),
+        'lesion_places': "a lesion's places: the contrast rule over every place of the lesion",
+        'targeted_breadth': 'a single, listed or segment breadth: the exceptive form over the same targets',
+        'device': ("an act's device outside the technique classes, and a statement's every device: its sibling in "
+                   'its family, else another device (device_contrary)'),
         'pair_controls': {
             'statements': _members(_TARGETED),
             'pair_kinds': [[statement.value, act.value] for statement in Kind for act in Kind
@@ -2578,7 +2689,9 @@ def controls_document() -> dict[str, object]:
             'stricture_kinds': _members(STRICTURE_PAIR_KINDS),
             'bundling_kinds': {'act': _members(acts), 'whole': _members(wholes)},
             'place_identity_pairs': 'two acts both of the stricture kinds, or one of the bundling act kinds and the '
-                                    'other of the bundling whole kinds',
+                                    'other, of another kind, of the bundling whole kinds',
+            'place_identity_kind_pairs': [[one.value, other.value] for one in Kind for other in Kind
+                                          if _place_identity_pair(one, other)],
             'pairs_unless': 'both sessions claimable and different',
             'asks': 'each place of the other that none of its own places is compatible with (engine/anatomy); each '
                     'lesion of the other when the two lesion sets differ, never one of its own (its target lesion '

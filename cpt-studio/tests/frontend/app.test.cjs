@@ -1482,7 +1482,8 @@ test('the new path\'s facts are drawn in the server\'s words, answerable only as
   const missing = /^MISSING = \{\n((?:    '[a-z_]+': '[^']*',\n)+)\}/m.exec(wording);
   assert.ok(missing, 'interpretation.wording.MISSING not found');
   const facts = [...missing[1].matchAll(/^    '([a-z_]+)': '([^']*)',$/gm)].map(match => [match[1], match[2]]);
-  assert.deepEqual(facts.map(([fact]) => fact), ['event_time', 'event_performer', 'act_target', 'technique', 'statement_scope', 'act_method', 'procedure']);
+  assert.deepEqual(facts.map(([fact]) => fact), ['event_time', 'event_performer', 'act_target', 'technique', 'statement_scope', 'act_method', 'procedure',
+    'event_entry', 'exam_stations', 'act_yield', 'act_cause', 'act_part']);
   const passage = 'The colonoscope was advanced to the cecum.';
   for (const [fact, what] of facts) {
     const prompt = new RegExp(`^    '${fact}': '([^']*)',$`, 'm').exec(answers);

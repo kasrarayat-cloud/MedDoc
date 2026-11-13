@@ -9,10 +9,11 @@ What is proved here, item by item against the done-when of 8.1 step 2a:
   instruction, the framed document and the generation settings (BodyTests);
 - no member value can enter the body (BodyTests); the instruction holds no CPT code, no case, no expected answer, no
   phrase of survey 4's failure cases (loaded from the survey file in the test), no quoted example of 2.1 or 2.2, no
-  phrase of a development document (the U32 registry, refutation round 6's case files, FRESH's inputs, each checked
-  against the acceptance set's DEV-EXCLUSION list before use; the earlier rounds' case files are not read yet, see
-  CORPORA), no statement that a second reading exists, no provider or product name and no quoted surface form
-  (ScanTests);
+  phrase of a development document (the U32 registry, every refutation round's case files - round 6's, and the earlier
+  rounds' under round5* and refute/w3-w5 (DECISIONS D215) - and FRESH's inputs, each checked against the acceptance set's
+  DEV-EXCLUSION list before use, with a read pin per corpus, a reviewed list of the generic runs shared today and a
+  planted run per corpus that fails the scan), no statement that a second reading exists, no provider or product name
+  and no quoted surface form (ScanTests);
 - the framing (FramingTests): v1's document line, second line and marker lines around contract/segment.py's units,
   every refusal of 1.2 rule 8, and a pure function of the text;
 - the pins handed to the integration owner, and no request under an empty or changed pin (PinTests); 7.3's measure of
@@ -27,6 +28,8 @@ This step's readings of the design (v1's second line, an empty text refused, com
 with P13, the rewording of 'as part of', the scans' definition of a phrase, the id-pin scope, the D3 exception for
 catalogue words, the body dict, the segmentation pin in check_pins, BF5's anus for anal_canal) are recorded in DECISIONS
 D207; the arbiter triage's repairs of the step (2a#1-2a#4) and D185's id sentence are named where they are tested.
+Step 1b3 (the waves 1-2 follow-up of 1b's and 2a's files) adds D215's corpora and moves INSTRUCTIONS_SHA256 for the
+definitions D209 and D214 rule (tested in tests/v2/test_extract_schema.py, RuledDefinitionTests).
 """
 from __future__ import annotations
 
@@ -38,6 +41,7 @@ import inspect
 import json
 import os
 import re
+import struct
 import subprocess
 import sys
 from pathlib import Path
@@ -72,18 +76,33 @@ CORPORA = {  # the development documents of FINAL-V2 9.6 that the corpus scan re
     'FRESH-1 and FRESH-2 inputs': 'gemini-migration/fresh/inputs/[ABC]/*',
     'the U32 registry': 'design-r3/registry/inputs/*',
     'refutation round 6': 'gemini-migration/refute6/*/cases/*',
+    # the earlier refutation rounds' case files (DECISIONS D215, triage 2a#8): every file of every lens's cases/ tree,
+    # read recursively ('**'). Of round5*, only 5f (one tree), 5g (five, one empty) and 5h (seven) left cases/ trees;
+    # refute/w3 left two, w4 and w5 one each.
+    'refutation round 5f': 'gemini-migration/round5f/*/cases/**',
+    'refutation round 5g': 'gemini-migration/round5g/*/cases/**',
+    'refutation round 5h': 'gemini-migration/round5h/*/cases/**',
+    'refutation round w3': 'refute/w3/*/cases/**',
+    'refutation round w4': 'refute/w4/*/cases/**',
+    'refutation round w5': 'refute/w5/*/cases/**',
 }
-# NOT READ, and owed (triage 2a#8, open): 9.6 names every refutation round's case files, and the earlier rounds'
-# (round5* and refute/w3-w5, 170 files by the step's reviewer) are not in this list. This step's builders may open only
-# the three corpora above, so adding them - their globs, their row of the scan's read pin, and a reviewed list of any
-# run they share with the instruction - is requested of the integration owner. INT-9 runs the scans unskipped; it adds
-# nothing. A corpus added here is held to the scan's per-corpus control (its own run, planted, is found) unchanged.
+# The earlier rounds' corpora (D215), and the globs that find every cases/ tree of those rounds: the files of the second
+# must be exactly the first's, so a round's tree that no corpus names is a failure, never a file left unread.
+EARLIER_ROUNDS = ('refutation round 5f', 'refutation round 5g', 'refutation round 5h', 'refutation round w3',
+                  'refutation round w4', 'refutation round w5')
+EARLIER_TREES = ('gemini-migration/round5*/*/cases/**', 'refute/w[345]/*/cases/**')
+# The directories under EVIDENCE that no scan opens (the acceptance set and the sealed sets, whatever the glob): a path
+# through one, as globbed or once its links are resolved, or one whose links lead outside EVIDENCE, is counted and never
+# read, not even hashed.
+NEVER_OPENED = frozenset({'g1', 'g1-stage', 'c6', 'c7', 'docs-c6', 'docs-c7', 'walk-c6', 'walk-c7'})
+NEVER_OPENED_PREFIXES = ('sealed', 'acceptance')
 
 # The shas this step hands the integration owner for studio/interpretation/__init__.py (FINAL-V2 2.5, 8.0), written by
 # it after the wave's last repair (DECISIONS D202, INT-5). INSTRUCTIONS_SHA256_V2: the sha256 of INSTRUCTIONS_2 (UTF-8),
 # after 1b's rewording of the device and session-kind lines (triage 2a R5), 2a#1's anchor sentence and D185's id
-# sentence (48f64718... and 59838c74... are superseded)
-INSTRUCTIONS_SHA256 = '244858ab0e2f57c98d4d2f0e7ad8d5360e88e9d90bff543b4f489831c7c7ae54'
+# sentence, and then step 1b3's definitions of D209's two act kinds and D214's two session kinds (48f64718...,
+# 59838c74... and INT-5's 244858ab... are superseded; the integration owner writes it in the waves 3-4 pin change)
+INSTRUCTIONS_SHA256 = '462631172d4741a35418ef99bc6befd8ac3dcef95e46649fa5f4f260e98c98f9'
 SEGMENTATION_SHA256 = '41d2245ada69f2a573d0354486323d9f30e00fef7091f531e2e0541a11af8e78'  # step 1a's rule constants
 PINS = {'INSTRUCTIONS_SHA256_V2': INSTRUCTIONS_SHA256, 'RESPONSE_SCHEMA_SHA256_V2': RESPONSE_SHA256,
         'LOCAL_SCHEMA_SHA256_V2': LOCAL_SHA256, 'SEGMENTATION_SHA256': SEGMENTATION_SHA256}
@@ -111,7 +130,7 @@ NOTE_BODY = ('[Page 1]\n'
 V1_SECOND_LINE = ('Its extracted text follows between the two marker lines. The [Page N] lines mark where each page begins '
                   'and are not part of the text.')
 # the sha256 of the whole body (providers.base.canonical_body) for NOTE as a PDF, under the pins above
-NOTE_PDF_REQUEST_SHA256 = 'ebc5bafbbce74c90d92ba5f1380f838bcf68a507223d3c38e83508964c2a51b3'
+NOTE_PDF_REQUEST_SHA256 = '739e001c40caf300f257c2359019ef51a7077128c3ed4f63ee34a812ca1797f0'
 
 WORD = re.compile(r"[a-z0-9_]+(?:'[a-z]+)?")  # a word: letters, digits and '_' (an enumeration value is one word)
 
@@ -537,6 +556,8 @@ SHARED_RUNS = {
     'where the act': "refers_back's definition, where the act is told (1b's RestatementRole line)",
     'part of the': "plain English, a part of the document (THE DOCUMENT; 1b's Link, Qualifier, Owner, SectionRole, Tract "
                    'and Station lines)',
+    'of the esophagus': "plain English naming an organ, in the motility definition DECISIONS D214 rules (1b's SessionKind "
+                        'line)',
 }
 
 
@@ -583,9 +604,40 @@ def excluded_hashes() -> set:
 
 
 def is_excluded(data: bytes, excluded: set) -> bool:
-    """Whether a development document hashes, as written or stripped of surrounding whitespace, to the list."""
-    stripped = data.decode('utf-8', 'surrogatepass').strip().encode('utf-8', 'surrogatepass')
+    """Whether a development document hashes, as written or stripped of surrounding whitespace, to the list. Bytes that
+    are no UTF-8 text (a cached bytecode file of a case tree) are stripped of surrounding ASCII whitespace instead."""
+    try:
+        stripped = data.decode('utf-8', 'surrogatepass').strip().encode('utf-8', 'surrogatepass')
+    except UnicodeDecodeError:
+        stripped = data.strip()
     return hashlib.sha256(data).hexdigest() in excluded or hashlib.sha256(stripped).hexdigest() in excluded
+
+
+def never_opened(path: str) -> bool:
+    """Whether ``path`` lies under a directory of EVIDENCE that no scan opens (NEVER_OPENED, NEVER_OPENED_PREFIXES), as
+    globbed or once its links are resolved (resolving reads no file); a path whose links lead outside EVIDENCE is never
+    opened either."""
+    real, root = Path(path).resolve(), EVIDENCE.resolve()
+    if not real.is_relative_to(root):
+        return True
+    return any(part in NEVER_OPENED or part.startswith(NEVER_OPENED_PREFIXES)
+               for parts in (Path(path).relative_to(EVIDENCE).parts, real.relative_to(root).parts) for part in parts)
+
+
+def bytecode_of_a_read_source(path: str, data: bytes, paths: set) -> bool:
+    """Whether ``path`` is CPython's cached bytecode of a case builder the scan reads as source: a file
+    ``__pycache__/<name>.<tag>.pyc`` whose source ``<name>.py`` beside the ``__pycache__`` directory is among ``paths``,
+    with a timestamp header (PEP 552: flags 0) recording that source's mtime and size, so the strings compiled into it
+    are the source's, which the scan reads. Nothing in it is unmarshalled or run."""
+    cached = Path(path)
+    if cached.parent.name != '__pycache__' or cached.suffix != '.pyc' or len(data) < 16:
+        return False
+    source = cached.parent.parent / (cached.name.split('.')[0] + '.py')
+    if str(source) not in paths:
+        return False
+    flags, mtime, size = struct.unpack('<III', data[4:16])
+    stat = source.stat()
+    return flags == 0 and mtime == int(stat.st_mtime) & 0xFFFFFFFF and size == stat.st_size & 0xFFFFFFFF
 
 
 def case_texts(path: str) -> list:
@@ -639,19 +691,36 @@ SECOND_READING = re.compile(r'\b(check\w*|verif\w*|apprais\w*|review\w*|controls
 
 def corpus_scan(instruction: list, excluded: set) -> dict:
     """What each corpus of CORPORA shares with ``instruction`` (words): the runs of CORPUS_NGRAM consecutive words that
-    both hold. Every file, and every text inside one, is checked against the acceptance set's exclusion list BEFORE it
-    is used: one that hashes to it, as written or stripped, is refused and never read for phrases. Per corpus: files
-    (as globbed), texts and words (as read), refused, hits (the shared runs), and plant - the first CORPUS_NGRAM words
-    of the first text read that has as many, which the positive control plants in the instruction (None when the corpus
-    gave no such text)."""
+    both hold. A path never_opened refuses (a directory no scan opens, its links resolved) is counted (sealed) and never
+    read. Every other file, and every text inside one, is checked against the acceptance set's exclusion list BEFORE it
+    is used: one that hashes to it, as written or stripped, is refused and never read for phrases. A file that is no
+    UTF-8 text is read for nothing: it is counted as binary when it is the cached bytecode of a case builder the scan
+    reads as source (bytecode_of_a_read_source), and as unread otherwise. Per corpus: files (as globbed), texts and
+    words (as read), refused, sealed, binary, unread, hits (the shared runs), and plant - the last CORPUS_NGRAM words of
+    the last text read that has more than CORPUS_NGRAM words (so the run is never its text's first), which the positive
+    control plants in the middle of the instruction (None when the corpus gave no such text)."""
     grams = {tuple(instruction[at:at + CORPUS_NGRAM]) for at in range(len(instruction) - CORPUS_NGRAM + 1)}
     scanned = {}
     for name, pattern in CORPORA.items():
-        paths = sorted(path for path in glob.glob(str(EVIDENCE / pattern)) if os.path.isfile(path))
-        read = SimpleNamespace(files=len(paths), texts=0, words=0, refused=0, hits=set(), plant=None)
+        paths = sorted(path for path in glob.glob(str(EVIDENCE / pattern), recursive=True) if os.path.isfile(path))
+        members = set(paths)
+        read = SimpleNamespace(files=len(paths), texts=0, words=0, refused=0, sealed=0, binary=0, unread=0, hits=set(),
+                               plant=None)
         for path in paths:
-            if is_excluded(Path(path).read_bytes(), excluded):
+            if never_opened(path):
+                read.sealed += 1
+                continue
+            data = Path(path).read_bytes()
+            if is_excluded(data, excluded):
                 read.refused += 1
+                continue
+            try:
+                data.decode('utf-8')
+            except UnicodeDecodeError:
+                if bytecode_of_a_read_source(path, data, members):
+                    read.binary += 1
+                else:
+                    read.unread += 1
                 continue
             for text in case_texts(path):
                 if is_excluded(text.encode('utf-8', 'surrogatepass'), excluded):
@@ -660,14 +729,35 @@ def corpus_scan(instruction: list, excluded: set) -> dict:
                 text_words = words(text)
                 read.texts += 1
                 read.words += len(text_words)
-                if read.plant is None and len(text_words) >= CORPUS_NGRAM:
-                    read.plant = tuple(text_words[:CORPUS_NGRAM])
+                if len(text_words) > CORPUS_NGRAM:
+                    read.plant = tuple(text_words[-CORPUS_NGRAM:])
                 for at in range(len(text_words) - CORPUS_NGRAM + 1):
                     gram = tuple(text_words[at:at + CORPUS_NGRAM])
                     if gram in grams:
                         read.hits.add(' '.join(gram))
         scanned[name] = read
     return scanned
+
+
+# The runs of CORPUS_NGRAM words the instruction shares today with the development corpora, each reviewed, with its
+# reason, by corpus (DECISIONS D215: the three generic runs the step's reviewer measured in the earlier rounds' case files,
+# all from round 5h's). Each is the instruction's own plain wording of the design's term for on_date_of_service (1.4's
+# DATE_RELATIONS; P10), never a case's wording; the instruction is not reworded for them (D215). Only these exact runs are
+# exempt, and only in the corpora named; the scan asserts they are exactly the runs shared today, none stale, none missing.
+CORPUS_SHARED_RUNS = {
+    'on the date of service': ('the design\'s term for the encounter\'s date, as on_date_of_service says it in words (P3 '
+                               "OBJECTS, P10 TIMING, 1b's DateRelation line)", ('refutation round 5h',)),
+    'was done on the date': ('P10 TIMING: on_date_of_service is when an act was done on the date of service',
+                             ('refutation round 5h',)),
+    'done on the date of': ('P10 TIMING: an act done on the date of service', ('refutation round 5h',)),
+}
+
+
+def unreviewed(scanned: dict) -> list:
+    """The corpus scan's finding: every run a corpus shares with the instruction that CORPUS_SHARED_RUNS does not
+    review for that corpus."""
+    return sorted({run for name, read in scanned.items() for run in read.hits
+                   if name not in CORPUS_SHARED_RUNS.get(run, ('', ()))[1]})
 
 
 class ScanTests(SimpleTestCase):
@@ -724,6 +814,63 @@ class ScanTests(SimpleTestCase):
         self.assertEqual(len(excluded), 288)
         self.assertFalse(is_excluded(NOTE.encode('utf-8'), excluded))
         self.assertTrue(is_excluded(b'  x  ', excluded | {hashlib.sha256(b'x').hexdigest()}))  # the control: stripped
+        # bytes that are no UTF-8 text (a cached bytecode file) are hashed as written and stripped too, never skipped
+        cached = b'\xcb\r\r\n\x00\x00\x00\x00'
+        self.assertTrue(is_excluded(b' ' + cached + b' \n', {hashlib.sha256(cached).hexdigest()}))
+        self.assertTrue(is_excluded(cached, {hashlib.sha256(cached).hexdigest()}))
+        self.assertFalse(is_excluded(cached, excluded))
+        # a path through a directory no scan opens is never read; a case tree's path is (names only: nothing is opened)
+        paths = {'gemini-migration/round5g/x/sealed-c6/cases/a.json': True, 'acceptance/a.txt': True,
+                 'gemini-migration/round5g/colon6/probe/c7/a.json': True, 'g1-stage/a': True,
+                 'gemini-migration/round5h/egd9/cases/src/a.py': False, 'refute/w3/setaside/cases/b.py': False}
+        for path, closed in paths.items():
+            with self.subTest(path=path):
+                self.assertIs(never_opened(str(EVIDENCE / path)), closed)
+
+    def test_bytecode_counts_as_read_only_when_compiled_from_a_read_source(self):
+        # corpus_scan reads no bytecode: a cached .pyc of a case tree (two in round 5g's) is binary, never unread, only
+        # when its header records the mtime and size of a source the scan reads; built here in a temporary directory
+        import py_compile
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / 'builder.py'
+            source.write_text("CASE = 'A synthetic sentence written for this test.'\n", encoding='utf-8')
+            cached = Path(directory) / '__pycache__' / 'builder.cpython-312.pyc'
+            py_compile.compile(str(source), cfile=str(cached), doraise=True,
+                               invalidation_mode=py_compile.PycInvalidationMode.TIMESTAMP)
+            data = cached.read_bytes()
+            with self.assertRaises(UnicodeDecodeError):
+                data.decode('utf-8')  # what corpus_scan meets: no text
+            self.assertTrue(bytecode_of_a_read_source(str(cached), data, {str(source), str(cached)}))
+            # the controls: its source not among the files read; another source size; a hash-based header; not cached
+            self.assertFalse(bytecode_of_a_read_source(str(cached), data, {str(cached)}))
+            self.assertFalse(bytecode_of_a_read_source(str(cached), data[:12] + struct.pack('<I', 1) + data[16:],
+                                                       {str(source), str(cached)}))
+            self.assertFalse(bytecode_of_a_read_source(str(cached), data[:4] + struct.pack('<I', 1) + data[8:],
+                                                       {str(source), str(cached)}))
+            moved = Path(directory) / 'builder.cpython-312.pyc'
+            self.assertFalse(bytecode_of_a_read_source(str(moved), data, {str(source), str(moved)}))
+
+    def test_a_link_into_a_never_opened_directory_or_out_of_the_evidence_is_never_opened(self):
+        # never_opened resolves links (reading no file): a case tree's link into a sealed directory, or out of the
+        # evidence directory, is never opened, and a plain case file is; built in temporary directories, one taken as
+        # EVIDENCE
+        import tempfile
+        with tempfile.TemporaryDirectory() as root, tempfile.TemporaryDirectory() as elsewhere:
+            evidence = Path(root)
+            cases, sealed = evidence / 'round' / 'lens' / 'cases', evidence / 'sealed-set'
+            cases.mkdir(parents=True)
+            sealed.mkdir()
+            (cases / 'case.json').write_text('{}', encoding='utf-8')
+            (sealed / 'document.txt').write_text('A synthetic sentence.', encoding='utf-8')
+            (Path(elsewhere) / 'document.txt').write_text('A synthetic sentence.', encoding='utf-8')
+            (cases / 'into-sealed.txt').symlink_to(sealed / 'document.txt')
+            (cases / 'out-of-evidence.txt').symlink_to(Path(elsewhere) / 'document.txt')
+            with mock.patch.object(sys.modules[__name__], 'EVIDENCE', evidence):
+                self.assertFalse(never_opened(str(cases / 'case.json')))
+                self.assertTrue(never_opened(str(cases / 'into-sealed.txt')))
+                self.assertTrue(never_opened(str(cases / 'out-of-evidence.txt')))
+                self.assertTrue(never_opened(str(sealed / 'document.txt')))
 
     def test_no_quoted_example_of_2_1_or_2_2(self):
         # FINAL-V2 2.3: the examples quoted in 2.1's clauses and 2.2's table fall under the same scan
@@ -760,9 +907,9 @@ class ScanTests(SimpleTestCase):
     # nothing fails the read pin below, never skips the whole scan
     @skipUnless(EVIDENCE.is_dir(), "the session's evidence (CPT_STUDIO_DESIGN_EVIDENCE) is not in this environment")
     def test_no_phrase_of_a_development_document(self):
-        # FINAL-V2 2.3: no phrase of the U32 registry or the refutation case files (and FRESH's inputs with them), every
-        # file and every text inside one checked against the acceptance set's exclusion list before it is used
-        # (corpus_scan). Only the corpora CORPORA names are read (triage 2a#8 is open: see CORPORA).
+        # FINAL-V2 2.3: no phrase of the U32 registry or of any refutation round's case files (and FRESH's inputs with
+        # them), every file and every text inside one checked against the acceptance set's exclusion list before it is
+        # used (corpus_scan). The earlier rounds' case files joined in step 1b3 (DECISIONS D215, triage 2a#8).
         excluded = excluded_hashes()
         instruction = words(xp.INSTRUCTIONS_2)
         scanned = corpus_scan(instruction, excluded)
@@ -770,21 +917,51 @@ class ScanTests(SimpleTestCase):
         # than it did (a file type it no longer parses, texts it drops), and the scan would pass over what it skipped
         self.assertEqual({name: (read.files, read.texts, read.words) for name, read in scanned.items()},
                          {'FRESH-1 and FRESH-2 inputs': (103, 103, 36882), 'the U32 registry': (1374, 1374, 681103),
-                          'refutation round 6': (127, 93994, 228139)})
-        self.assertEqual(sum(read.refused for read in scanned.values()), 0)  # no development text is an acceptance one
-        self.assertEqual(sorted(set().union(*(read.hits for read in scanned.values()))), [])
+                          'refutation round 6': (127, 93994, 228139),
+                          'refutation round 5f': (3, 21355, 38688), 'refutation round 5g': (41, 596465, 1163989),
+                          'refutation round 5h': (77, 433582, 1094924), 'refutation round w3': (22, 4551, 77692),
+                          'refutation round w4': (14, 2150, 48939), 'refutation round w5': (13, 1731, 49618)})
+        # the earlier rounds' corpora hold every file of those rounds' cases/ trees, 170 as the step's reviewer counted
+        earlier = sorted(path for pattern in EARLIER_TREES
+                         for path in glob.glob(str(EVIDENCE / pattern), recursive=True) if os.path.isfile(path))
+        self.assertEqual(len(earlier), 170)
+        self.assertEqual(sum(scanned[name].files for name in EARLIER_ROUNDS), len(earlier))
+        self.assertEqual(sorted(path for name in EARLIER_ROUNDS for path in glob.glob(
+            str(EVIDENCE / CORPORA[name]), recursive=True) if os.path.isfile(path)), earlier)
+        # nothing refused (no development text is an acceptance one), nothing sealed, nothing unread; the only files not
+        # read are round 5g's two cached bytecode files, each compiled from a case builder the scan reads as source
+        for counter in ('refused', 'sealed', 'unread'):
+            with self.subTest(counter=counter):
+                self.assertEqual(sum(getattr(read, counter) for read in scanned.values()), 0)
+        self.assertEqual({name: read.binary for name, read in scanned.items() if read.binary},
+                         {'refutation round 5g': 2})
+        # the runs shared today are exactly the reviewed ones, corpus by corpus, and the scan finds nothing else
+        self.assertEqual({name: sorted(read.hits) for name, read in scanned.items() if read.hits},
+                         {'refutation round 5h': sorted(CORPUS_SHARED_RUNS)})
+        for run, (reason, corpora) in CORPUS_SHARED_RUNS.items():
+            with self.subTest(run=run):
+                self.assertEqual(len(run.split()), CORPUS_NGRAM)
+                self.assertTrue(holds_phrase(instruction, tuple(run.split())) and reason)
+                self.assertEqual(sorted(corpora), sorted(name for name, read in scanned.items() if run in read.hits))
+        self.assertEqual(unreviewed(scanned), [])  # the scan
         # the positive controls: five consecutive words of the instruction, planted in a document, are a shared run; and
-        # each corpus's own run of five words (the triage's planted run, for every corpus CORPORA holds or will hold),
-        # planted in the instruction, is found in that corpus by the same scan (a failure names the corpus only).
+        # each corpus's own run of five words - its last read text's last run, never a text's first (the refutation of
+        # 2a's second repair, finding 1) - planted in the MIDDLE of the instruction, is found in that corpus by the same
+        # scan, and makes the scan's assertion fail (a failure names the corpus only, never its words)
         grams = {tuple(instruction[at:at + CORPUS_NGRAM]) for at in range(len(instruction) - CORPUS_NGRAM + 1)}
         planted = words('Synthetic note. ' + ' '.join(instruction[40:40 + CORPUS_NGRAM]) + ' end.')
         self.assertTrue({tuple(planted[at:at + CORPUS_NGRAM]) for at in range(len(planted) - CORPUS_NGRAM + 1)} & grams)
         plants = {name: read.plant for name, read in scanned.items()}
         self.assertEqual([name for name, plant in plants.items() if plant is None], [])  # each corpus gave a run
-        again = corpus_scan(instruction + [word for plant in plants.values() for word in plant], excluded)
+        self.assertEqual([name for name, plant in plants.items() if ' '.join(plant) in CORPUS_SHARED_RUNS], [])
+        middle = len(instruction) // 2
+        again = corpus_scan(instruction[:middle] + [word for plant in plants.values() for word in plant]
+                            + instruction[middle:], excluded)
+        failed = unreviewed(again)
         for name, plant in plants.items():
             with self.subTest(corpus=name):
                 self.assertTrue(' '.join(plant) in again[name].hits, "the corpus's own planted run was not found")
+                self.assertTrue(' '.join(plant) in failed, 'the planted run does not fail the scan')
 
     def test_no_code_case_date_or_measure(self):
         tokens = re.findall(r'[A-Za-z0-9_]+', xp.INSTRUCTIONS_2)
@@ -1122,7 +1299,9 @@ class PinTests(SimpleTestCase):
         self.assertEqual(jsonschema.sha256_of(xs.LOCAL_SCHEMA_2), LOCAL_SHA256)
         self.assertEqual(jsonschema.sha256_of(xs.RESPONSE_SCHEMA_2), RESPONSE_SHA256)
         self.assertEqual(jsonschema.sha256_of(segment.rule_constants()), SEGMENTATION_SHA256)
-        # step 0b's placeholder until the integration owner writes the pin after the wave's repairs (DECISIONS D202)
+        # step 0b's placeholder until the integration owner writes the pin after the wave's repairs (DECISIONS D202), then
+        # the measured value. A step that moves a pinned object hands the new value on as a request, and this assertion
+        # fails until the integration owner writes it (step 1b3's INSTRUCTIONS_SHA256_V2: the waves 3-4 pin change)
         for name, value in PINS.items():
             with self.subTest(pin=name):
                 self.assertIn(getattr(interpretation, name), ('', value))
@@ -1157,8 +1336,8 @@ class LeanTests(SimpleTestCase):
         # provider's promptTokenCount, before anything is compacted; nothing is compacted here.
         from studio.interpretation import prompt as v1_prompt
         mine, v1 = len(xp.INSTRUCTIONS_2), len(v1_prompt.INSTRUCTIONS)
-        self.assertEqual((mine, v1), (28486, 10920))
-        self.assertEqual((mine // 4, v1 // 4), (28486 // 4, 2730))
+        self.assertEqual((mine, v1), (28843, 10920))  # step 1b3's definitions of D209 and D214 add 357 characters
+        self.assertEqual((mine // 4, v1 // 4), (28843 // 4, 2730))
         self.assertLess(mine, 3 * v1)  # a growth guard: the instruction stays under three times v1's
 
     def test_pass_1_is_asked_to_stay_lean(self):

@@ -330,7 +330,10 @@ ENUMERATIONS: tuple[type[Enum], ...] = (
 )
 
 # The pinned OUTPUT table of 5.7 NoWordLists: one line per value list, describing meanings, never surface forms (2.3).
-# Step 2a renders it into INSTRUCTIONS_2; nothing compares it with document text.
+# Step 2a renders it into INSTRUCTIONS_2 (and step 2c the act kinds' line into pass 2's instruction); nothing compares it
+# with document text. The integration owner's rulings define, as sentences: pressure_measurement as the sphincter of
+# Oddi's and manometry as every other manometry study, so neither label is true of the other kind (DECISIONS D209); and
+# motility and anorectal as disjoint session kinds, anorectal testing never motility (D214).
 DEFINITIONS: Mapping[type[Enum], str] = MappingProxyType({
     DateState: 'The date of service: stated (the document gives one date for this encounter), several (it gives more '
                'than one; each is listed as an option with its own sources, and the value is left empty) or not_stated '
@@ -374,11 +377,12 @@ DEFINITIONS: Mapping[type[Enum], str] = MappingProxyType({
     SessionKind: 'What a session is: office_em (an office or outpatient evaluation and management visit), egd (an upper '
                  'endoscopy), enteroscopy (a small-bowel enteroscopy), colonoscopy, flex_sig (a flexible '
                  'sigmoidoscopy), eus (an endoscopic ultrasound), ercp (an endoscopic retrograde '
-                 'cholangiopancreatography), capsule (a capsule endoscopy), motility (a motility or manometry study), '
-                 'reflux (a pH or impedance monitoring study), anorectal (anorectal testing), feeding_tube (a '
-                 'feeding-tube procedure), sedation (moderate sedation by the clinician who performs the procedure), '
-                 'em_other (an evaluation and management service other than an office or outpatient visit), other_gi '
-                 '(another gastrointestinal service) or not_gi (a service outside gastroenterology).',
+                 'cholangiopancreatography), capsule (a capsule endoscopy), motility (a motility or manometry study of '
+                 'the esophagus, the stomach, the small bowel or the colon, never anorectal testing), reflux (a pH or '
+                 'impedance monitoring study), anorectal (anorectal testing, anorectal manometry included), '
+                 'feeding_tube (a feeding-tube procedure), sedation (moderate sedation by the clinician who performs '
+                 'the procedure), em_other (an evaluation and management service other than an office or outpatient '
+                 'visit), other_gi (another gastrointestinal service) or not_gi (a service outside gastroenterology).',
     EncounterRelation: "Whether a session is part of this document's encounter: this_encounter or separate_encounter (a "
                        'separate encounter, which may be on the same date).',
     Tract: 'The part of the digestive tract a session examined: upper, lower or pancreatobiliary.',
@@ -419,10 +423,12 @@ DEFINITIONS: Mapping[type[Enum], str] = MappingProxyType({
           'placed during an examination, other than a gastrostomy), tube_replacement (a feeding tube replaced or '
           'exchanged), peg (a percutaneous endoscopic gastrostomy placed), myotomy, fundoplication, fna (fine-needle '
           'aspiration or biopsy), drainage, cannulation (cannulation of a duct), sphincterotomy, stone_extraction, '
-          'lithotripsy, cholangioscopy, pressure_measurement, capsule_study, manometry, ph_monitoring, rectal_sensation '
-          '(rectal sensation, tone or compliance testing), balloon_expulsion (a balloon expulsion test), '
-          'moderate_sedation, intervention (only for a statement about interventions of every kind) or other (any '
-          'other act).',
+          'lithotripsy, cholangioscopy, pressure_measurement (a pressure measurement of the sphincter of Oddi), '
+          'capsule_study, manometry (any manometry study other than one of the sphincter of Oddi, that is '
+          'esophageal, gastric, duodenal or small-bowel, colonic or anorectal manometry, and an esophageal balloon '
+          'distension study), ph_monitoring, rectal_sensation (rectal sensation, tone or compliance testing), '
+          'balloon_expulsion (a balloon expulsion test), moderate_sedation, intervention (only for a statement about '
+          'interventions of every kind) or other (any other act).',
     OtherClass: 'The class of an act of kind other: procedure, test, order, imaging, laboratory, counseling, evaluation, '
                 'medication or other.',
     Status: "An act's status: performed (done), attempted_not_completed (begun and not completed) or planned (planned, "

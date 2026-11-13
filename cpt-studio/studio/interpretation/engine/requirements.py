@@ -24,10 +24,10 @@ they read these tables.
   for an established failure (F: 4.3's "established otherwise ->"), each at RANK's row. A contradicted fact of any
   requirement asks rank 1 (conflict:<kind>) and a doubt on status rank 2, whatever the requirement: RANK says so once.
   The paths are what 3.2.3's control generator reads (claims.CONTROLS, step 2c): lesion.multiplicity is read on the
-  READY path and session.part_of_session on the hold path (DECISIONS D196), and the kind of an act of moderate sedation
-  or of kind other, which has no sibling, only on the hold path (D194). The kinds are what CLAIMED must cover (D195,
-  P-READSET per kind): a code-specific row reads the code's supporting act, never an umbrella act (4.3 row 1), and
-  4.5's target row the lesion and places of an act whose kind has a target.
+  READY path and session.part_of_session on the hold path (DECISIONS D196), and the kind of an act of kind other, which
+  has no sibling, only on the hold path (D194; moderate sedation's on the READY path since D213). The kinds are what
+  CLAIMED must cover (D195, P-READSET per kind): a code-specific row reads the code's supporting act, never an umbrella
+  act (4.3 row 1), and 4.5's target row the lesion and places of an act whose kind has a target.
 - **RANK** is 4.8's table, exactly its 23 ranks, pinned (tests/v2/test_requirements.py); service_date stays unranked.
 - **CLAIMED** is 3.2.1's table, per object class: the attributes claimed, the act kinds each is claimed for, and the
   condition under which it is, as DECISIONS D194 (the umbrellas are codable) and D195 (every attribute a rule reads is
@@ -307,9 +307,10 @@ _ADJUNCT_KINDS = frozenset({Kind.BLEEDING_CONTROL, Kind.ABLATION, Kind.CLIP, Kin
 _DUCT_KINDS = frozenset({Kind.SPHINCTEROTOMY, Kind.DILATION})
 _WHOLE_LESION_KINDS = frozenset({*catalogue.REMOVAL_MEMBERS, Kind.DRAINAGE})
 _STRICTURE_KINDS = frozenset({Kind.DILATION})  # D118: one stricture, by same lesion or places not disjoint
-# DECISIONS D194: moderate sedation and kind other get no sibling (claims.KIND_SIBLINGS, step 2c), so the kind of an act
-# of either is read on the hold path only; a rule that reads any act's kind reads every other kind where it reads it.
-_NO_SIBLING_KINDS = frozenset({Kind.MODERATE_SEDATION, Kind.OTHER})
+# DECISIONS D194: kind other gets no sibling (claims.KIND_SIBLINGS, step 2c), so the kind of an act of kind other is
+# read on the hold path only; moderate sedation has one since D213 (the same-day rule's READY path and base_included
+# read every act's kind); a rule that reads any act's kind reads every other kind where it reads it.
+_NO_SIBLING_KINDS = frozenset({Kind.OTHER})
 _SIBLING_KINDS = frozenset(kind for kind in Kind if kind not in _NO_SIBLING_KINDS)
 # The kinds of an act that can support a code: a positive umbrella (removal, intervention) never supports a
 # method-specific code (4.3 row 1), and every catalogue code is one. So a code-specific row (a Tag), met on the code's

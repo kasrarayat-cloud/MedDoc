@@ -141,6 +141,10 @@ const EVENT_FACTS = {
   act_target: 'The lesion or site the act was done on', technique: 'The technique used',
   statement_scope: 'Whether a statement applies to the act', act_method: 'The method the lesion was removed by',
   procedure: 'The procedure the act was done in',
+  // design v2's five new facts (FINAL-V2 4.8; DECISIONS D181)
+  event_entry: 'The entry the act is told in', exam_stations: 'The parts of the upper tract examined',
+  act_yield: 'What the extraction retrieved', act_cause: 'What caused the bleeding the act treated',
+  act_part: 'Whether the act was part of another act',
 };
 const FINDING_FACTS = { service_date: 'Date of service', performed_status: 'Performed at this encounter', extent: 'Extent reached', target: 'Structure examined', cannulation: 'Cannulation outcome', em_basis: 'Basis for the visit level (total time or medical decision making)', ...EVENT_FACTS };
 // An event's attributes in the order the interpretation section lists them (the contract's 4.2 record), each with its

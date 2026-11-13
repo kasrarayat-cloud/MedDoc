@@ -7,7 +7,9 @@ What is proved, item by item against the done-when of 8.1 step 2c:
 - what 2.3 forbids is absent (ScanTests): no statement that some claims are controls, no provider or product name, no
   CPT code or case name, no quoted surface form; no phrase of survey 4's failure cases, of the design's quoted examples
   or of a development document (FRESH's inputs, the U32 registry, refutation round 6's case files, each checked against
-  the acceptance set's DEV-EXCLUSION list before use), in the instruction and in every fixed table claims.py renders;
+  the acceptance set's DEV-EXCLUSION list before use), in the instruction and in every fixed table claims.py renders -
+  the development documents read by step 2a's own reader, with a read pin per corpus and each corpus's own planted run
+  found in every target, the scan skipped only where the evidence directory is absent (2a-2's R4, integration O8);
 - the user turn carries the same framed document pass 1 reads - framed by step 2a's own function, not a copy (the
   arbiter's 2c#15) - then the cards and the claims (FramingTests);
 - the request is a pure function of its inputs: a byte-identical body for identical inputs, in any process, no member
@@ -31,6 +33,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock, skipUnless
 
 from django.test import SimpleTestCase
@@ -44,6 +47,7 @@ from studio.interpretation.contract.types import (Attached, CardType, FactState,
 from studio.providers.base import canonical_body, request_sha256
 from studio.types import PageSpan
 from tests.v2 import test_claims as fixtures
+from tests.v2 import test_extract_prompt as pass_1_scan  # step 2a's reader of the development corpora: one reader
 from tests.v2.test_types import measure_4
 
 APP = Path(__file__).resolve().parents[2]
@@ -54,15 +58,24 @@ DEV_EXCLUSION = APP / 'docs' / 'gemini-migration' / 'acceptance-a1' / 'DEV-EXCLU
 EVIDENCE = Path(os.environ.get('CPT_STUDIO_DESIGN_EVIDENCE', '/home/claude/cpt-studio-completion-20261106'))
 SURVEY_4 = EVIDENCE / 'gemini-migration' / 'design-v2' / 'survey' / 'failures.md'
 SURVEY_4_SHA256 = '196c8c8f38a9d8c9a48f4f7541bb6c022a0c88d02e4a2227e9e3633970d279e9'
-CORPORA = {  # the development documents of FINAL-V2 9.6, as globs under EVIDENCE
+# The development documents of FINAL-V2 9.6 this step's scan reads, as globs under EVIDENCE. The earlier refutation
+# rounds' case files (round5*, refute/w3-w5) join step 2a's scan of pass 1's instruction (DECISIONS D215, step 1b3);
+# D215 lets only that step read them, so they are not read here (NOTES: a request to the integration owner).
+CORPORA = {
     'FRESH-1 and FRESH-2 inputs': 'gemini-migration/fresh/inputs/[ABC]/*',
     'the U32 registry': 'design-r3/registry/inputs/*',
     'refutation round 6': 'gemini-migration/refute6/*/cases/*',
 }
+# What the scan reads of each corpus (files, texts, words): step 2a's reader, so the same counts its read pin gives
+# these three corpora (tests/v2/test_extract_prompt.py's test_no_phrase_of_a_development_document)
+CORPUS_READ = {'FRESH-1 and FRESH-2 inputs': (103, 103, 36882), 'the U32 registry': (1374, 1374, 681103),
+               'refutation round 6': (127, 93994, 228139)}
 
 # The shas this step hands the integration owner for studio/interpretation/__init__.py (FINAL-V2 2.5, 8.0; the
-# arbiter's INT-5). The instruction's (UTF-8); the others are each computed again in their own test module.
-INSTRUCTIONS_SHA256 = '2259b699306d13d174a4e815beba40cbcf9bbedd0c14e21699ebdcebfdc081b0'
+# arbiter's INT-5). The instruction's (UTF-8); the others are each computed again in their own test module. The
+# instruction renders step 1b's act kinds' line verbatim, so step 1b3's definitions of DECISIONS D209's two kinds move
+# it (1b3's request R3): INT-5's 2259b699... is superseded; the integration owner writes it in the waves 3-4 pin change.
+INSTRUCTIONS_SHA256 = '892d696beaa9261875d7e4dfba5836b5445ce5f045c297ad668e3303f480292d'
 PINS = {
     'APPRAISAL_INSTRUCTIONS_SHA256': INSTRUCTIONS_SHA256,
     'APPRAISAL_LOCAL_SCHEMA_SHA256': '526dd4e4116c07ed3e1431759a47ac79d4a4d3e7aba81c3133933abe5da46cbf',
@@ -220,47 +233,62 @@ def fixed_tables():
     return texts
 
 
-def excluded_hashes():
-    with open(DEV_EXCLUSION, encoding='ascii') as handle:
-        hashes = {line.strip() for line in handle if line.strip()}
-    assert hashes and all(len(value) == 64 for value in hashes), 'the exclusion list is unreadable'
-    return hashes
+def grams_of(text_words):
+    """Every run of CORPUS_NGRAM consecutive words."""
+    return {tuple(text_words[at:at + CORPUS_NGRAM]) for at in range(len(text_words) - CORPUS_NGRAM + 1)}
 
 
-def is_excluded(data, excluded):
-    """Whether a development document hashes, as written or stripped of surrounding whitespace, to the list."""
-    stripped = data.decode('utf-8', 'surrogatepass').strip().encode('utf-8', 'surrogatepass')
-    return hashlib.sha256(data).hexdigest() in excluded or hashlib.sha256(stripped).hexdigest() in excluded
-
-
-def case_texts(path):
-    """The texts of one development file (step 2a's rule): a document's text; a case builder's string constants but its
-    docstrings; a JSON or JSON-lines case file's string values."""
-    raw = Path(path).read_text(encoding='utf-8')
-    if path.endswith('.py'):
-        tree = ast.parse(raw)
-        docstrings = {id(node.body[0].value) for node in ast.walk(tree)
-                      if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
-                      and node.body and isinstance(node.body[0], ast.Expr)
-                      and isinstance(node.body[0].value, ast.Constant) and isinstance(node.body[0].value.value, str)}
-        return [node.value for node in ast.walk(tree)
-                if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in docstrings]
-
-    def strings(value):
-        if isinstance(value, str):
-            yield value
-        elif isinstance(value, dict):
-            for item in value.values():
-                yield from strings(item)
-        elif isinstance(value, list):
-            for item in value:
-                yield from strings(item)
-
-    if path.endswith('.jsonl'):
-        return [text for line in raw.splitlines() if line.strip() for text in strings(json.loads(line))]
-    if path.endswith('.json'):
-        return list(strings(json.loads(raw)))
-    return [raw]
+def corpus_scan(targets, excluded):
+    """What each corpus of CORPORA shares with each target (name: its words), read by step 2a's reader - one reader of
+    the development corpora (tests/v2/test_extract_prompt.py: never_opened, is_excluded, case_texts,
+    bytecode_of_a_read_source). A path under a directory no scan opens is counted (sealed) and never read; every other
+    file, and every text inside one, is checked against the acceptance set's exclusion list BEFORE it is used, and one
+    that hashes to it is refused and never read for phrases; a file that is no UTF-8 text is read for nothing (binary
+    when it is a read case builder's cached bytecode, else unread). Per corpus: files (as globbed), texts and words (as
+    read), refused, sealed, binary, unread; hits, the runs of CORPUS_NGRAM words it shares with each target (by the
+    target's name); and plant, the last CORPUS_NGRAM words of the last text read that has more (never a text's first
+    run), which the positive control plants in the middle of every target."""
+    owners = {}
+    for name, target_words in targets.items():
+        for gram in grams_of(target_words):
+            owners.setdefault(gram, set()).add(name)
+    scanned = {}
+    for corpus, pattern in CORPORA.items():
+        paths = sorted(path for path in glob.glob(str(EVIDENCE / pattern), recursive=True) if os.path.isfile(path))
+        members = set(paths)
+        read = SimpleNamespace(files=len(paths), texts=0, words=0, refused=0, sealed=0, binary=0, unread=0, hits={},
+                               plant=None)
+        for path in paths:
+            if pass_1_scan.never_opened(path):
+                read.sealed += 1
+                continue
+            data = Path(path).read_bytes()
+            if pass_1_scan.is_excluded(data, excluded):
+                read.refused += 1
+                continue
+            try:
+                data.decode('utf-8')
+            except UnicodeDecodeError:
+                if pass_1_scan.bytecode_of_a_read_source(path, data, members):
+                    read.binary += 1
+                else:
+                    read.unread += 1
+                continue
+            for text in pass_1_scan.case_texts(path):
+                if pass_1_scan.is_excluded(text.encode('utf-8', 'surrogatepass'), excluded):
+                    read.refused += 1
+                    continue
+                text_words = words(text)
+                read.texts += 1
+                read.words += len(text_words)
+                if len(text_words) > CORPUS_NGRAM:
+                    read.plant = tuple(text_words[-CORPUS_NGRAM:])
+                for at in range(len(text_words) - CORPUS_NGRAM + 1):
+                    gram = tuple(text_words[at:at + CORPUS_NGRAM])
+                    for name in owners.get(gram, ()):
+                        read.hits.setdefault(name, set()).add(' '.join(gram))
+        scanned[corpus] = read
+    return scanned
 
 
 VENDORS = re.compile(r'gemini|google|corti\b|astra|fable|claude|anthropic|openai|gpt|quillmd|cpt\s*studio|\bcpt\b',
@@ -332,37 +360,36 @@ class ScanTests(SimpleTestCase):
         long = max(phrases, key=len)  # the control: five words from the middle of a long phrase, planted, are found
         self.assertTrue(phrase_hits(words(appraise_prompt.INSTRUCTIONS + ' ' + ' '.join(long[2:7])), phrases))
 
-    @skipUnless(all(glob.glob(str(EVIDENCE / pattern)) for pattern in CORPORA.values()),
-                'the development corpora (FINAL-V2 9.6) are not in this environment')
+    # skipped only where the session's evidence is absent (as in CI): where it is present, a corpus whose glob finds
+    # nothing, or a reader that reads less, fails the read pin below, never skips the whole scan (2a-2's R4, O8)
+    @skipUnless(EVIDENCE.is_dir(), "the session's evidence (CPT_STUDIO_DESIGN_EVIDENCE) is not in this environment")
     def test_no_phrase_of_a_development_document(self):
-        excluded = excluded_hashes()
-        targets = {'instruction': appraise_prompt.INSTRUCTIONS, **fixed_tables()}
-        grams = {name: {tuple(text_words[at:at + CORPUS_NGRAM]) for at in range(len(text_words) - CORPUS_NGRAM + 1)}
-                 for name, text_words in ((name, words(text)) for name, text in targets.items())}
-        every = set().union(*grams.values())
-        counts, hits, refused = {}, set(), 0
-        for name, pattern in CORPORA.items():
-            paths = sorted(path for path in glob.glob(str(EVIDENCE / pattern)) if os.path.isfile(path))
-            counts[name] = len(paths)
-            for path in paths:
-                if is_excluded(Path(path).read_bytes(), excluded):
-                    refused += 1
-                    continue
-                for text in case_texts(path):
-                    if is_excluded(text.encode('utf-8', 'surrogatepass'), excluded):
-                        refused += 1
-                        continue
-                    text_words = words(text)
-                    for at in range(len(text_words) - CORPUS_NGRAM + 1):
-                        gram = tuple(text_words[at:at + CORPUS_NGRAM])
-                        if gram in every:
-                            hits.add(' '.join(gram))
-        self.assertEqual(counts, {'FRESH-1 and FRESH-2 inputs': 103, 'the U32 registry': 1374, 'refutation round 6': 127})
-        self.assertEqual(refused, 0)  # no development text is an acceptance document
-        self.assertEqual(sorted(hits), [])
-        planted = words('Synthetic note. ' + ' '.join(words(appraise_prompt.INSTRUCTIONS)[30:35]) + ' end.')
-        self.assertTrue({tuple(planted[at:at + CORPUS_NGRAM]) for at in range(len(planted) - CORPUS_NGRAM + 1)}
-                        & grams['instruction'])
+        excluded = pass_1_scan.excluded_hashes()
+        targets = {name: words(text) for name, text in {'instruction': appraise_prompt.INSTRUCTIONS,
+                                                         **fixed_tables()}.items()}
+        scanned = corpus_scan(targets, excluded)
+        # what was read of each corpus: the files alone would not show a reader that reads less than it did
+        self.assertEqual({name: (read.files, read.texts, read.words) for name, read in scanned.items()}, CORPUS_READ)
+        for counter in ('refused', 'sealed', 'binary', 'unread'):  # no development text is an acceptance one
+            with self.subTest(counter=counter):
+                self.assertEqual(sum(getattr(read, counter) for read in scanned.values()), 0)
+        self.assertEqual({name: read.hits for name, read in scanned.items() if read.hits}, {})  # the scan
+        # the positive controls: five consecutive words of the instruction, planted in a document, are a shared run; and
+        # each corpus's own run of five words (its last read text's last run, never a text's first), planted in the
+        # MIDDLE of every target - the instruction and each fixed table - is found in that corpus for that target by the
+        # same scan, so it would fail the scan's assertion (a failure names the corpus and the target, never the words)
+        instruction = targets['instruction']
+        self.assertTrue(grams_of(words('Synthetic note. ' + ' '.join(instruction[30:35]) + ' end.'))
+                        & grams_of(instruction))
+        plants = {name: read.plant for name, read in scanned.items()}
+        self.assertEqual([name for name, plant in plants.items() if plant is None], [])  # each corpus gave a run
+        planted = {name: target[:len(target) // 2] + [word for plant in plants.values() for word in plant]
+                   + target[len(target) // 2:] for name, target in targets.items()}
+        again = corpus_scan(planted, excluded)
+        for corpus, plant in plants.items():
+            missed = [name for name in targets if ' '.join(plant) not in again[corpus].hits.get(name, set())]
+            with self.subTest(corpus=corpus):
+                self.assertEqual(missed, [], "the corpus's own planted run was not found in these targets")
 
 
 def fixtures_case_names():

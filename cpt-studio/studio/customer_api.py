@@ -19,6 +19,7 @@ encounter_progress and progress.checks_summary. This module only words them for 
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 
 from django.conf import settings
 
@@ -35,6 +36,8 @@ STATE_LABELS = {
     'processing': 'Processing', 'action_needed': 'Action needed', 'awaiting_detail': 'A few details needed',
     'ready': 'Ready for review', 'reviewed': 'Reviewed', 'no_codes': 'No codes suggested', 'stopped': 'Stopped',
     'failed': 'Could not finish', 'being_confirmed': 'Being confirmed',
+    # FINAL-V2 amendment 1, 5.1 (step 3c): the customer state while the codes are updated after a save
+    'updating': 'Updating codes',
 }
 # The stored (derived) encounter state -> the customer's. A state this table does not know reads as processing.
 STORED_STATES = {
@@ -94,8 +97,17 @@ EVENTS_READING = ('The procedures documented were read by an automated interpret
 # A server-composed customer string is refused when it carries any of these (the regex net of R4 6.6(3)): a label
 # built from the document's own words that matches falls back to CPT Studio's fixed sentence. The readers' own words
 # (routing, reader, cue, own passage: the engine's support details carry them) are machinery too.
+# FINAL-V2 4.12 [R:MO-2]: a provider name is bounded by letters and digits, never by \b - '_' is a word character, so
+# \bgemini\b let gemini_unknown and reading_gemini_x through - and so it is never matched inside a clinical word that
+# begins with a name (corticosteroid, cortical). PROVIDER_JOINED (step 3c's fail-closed reading of "joined forms",
+# recorded as a question): a capitalized name joined to a word by its case alone (GeminiTimeout, readingGemini), which
+# the letter-and-digit boundary cannot see; matched case-sensitively, so it never matches Corticosteroid or CORTICAL.
+PROVIDER_NAMES = 'corti|astra|fable|openai|anthropic|claude|gemini|google'
+PROVIDER_JOINED = 'Corti|Astra|Fable|Openai|OpenAI|Anthropic|Claude|Gemini|Google'
 FORBIDDEN = re.compile(
-    r'(?i)\b(?:corti|astra|fable|openai|anthropic|claude|gemini|google)\b|\bgpt-\d|\bclaude-[a-z]|\bgemini-\d'
+    rf'(?i)(?<![a-z0-9])(?:{PROVIDER_NAMES})(?![a-z0-9])'
+    rf'|(?-i:(?:{PROVIDER_JOINED})(?=[A-Z])|(?<=[a-z])(?:{PROVIDER_JOINED}))'
+    r'|\bgpt-\d|\bclaude-[a-z]|\bgemini-\d'
     r'|@cptstudio-|\bcpt-studio:[a-z]'
     r'|(?<![0-9a-f])[0-9a-f]{32,}(?![0-9a-f])|\b(?:participants?|peer[ -]reviews?|vendors?|tokens?|credits?|traces?'
     r'|sha256|tool calls?|request ids?|replay|providers?|routing|readers?|cues?|own passages?)\b'
@@ -135,6 +147,423 @@ def _act_label(kind):
 def _code(value) -> str:
     """A code as the customer is shown it: only in a code's shape (letters and digits, at most 10), else ''."""
     return value if isinstance(value, str) and re.fullmatch(r'[0-9A-Z]{4,10}', value) else ''
+
+
+# --- design v2: the appraise stage, the held facts, and amendment 1's customer texts (step 3c) ----------------------
+#
+# FINAL-V2 4.12: progress names functions, never vendors - pass 2's step detail and its slow message, for
+# progress.DETAILS['appraise'] and SLOW_MESSAGES (step 5b; progress.py must read this module inside a function, or
+# hold equal literals pinned by a test: this module imports progress at its top). FINAL-V2 4.8 and 4.12 [R:MO-2]: a reviewer sees each held fact only as CPT
+# Studio's fixed sentence for its fact key (held_fact_words), never its cause.
+#
+# FINAL-V2 amendment 1 (DECISIONS D208; its sections 1.4, 3.9, 5.1-5.4, 6.2, 7.1-7.3): every customer text of the
+# automatic update, as constants - the TEXTS and their keys only. The functions that read an update's state for the page
+# (encounter_json's update keys, what_changed, decision_history, readiness by update state) are step 5d's, which uses
+# these and never re-words them. Where the amendment gives a text verbatim it is here verbatim (tests/v2/
+# test_update_customer.py finds each in AMENDMENT-1.md). The derived forms follow 7.1's three rules, each written out
+# and checked by the test against the rule applied to the base text: CASE C (update.kind 'documentation': no restore
+# clause; "from before your change" reads "from before the documentation was added"; the too-long and the
+# could-not-be-prepared texts end "Upload the document again, shorter or split, to have it read."), NO RESTORE
+# (update.restorable false within one revision: every restore clause dropped; the too-long text ends "Shorten the
+# document and upload it again."), and CHECK (update.kind 'check', A21: no "Your change is saved"; "from before your
+# change" and "from before your latest change" read "from before this update"; "after your change" dropped; no restore
+# clause). Every one names no provider or model and carries no held-fact cause.
+
+APPRAISE_DETAIL = 'Checking the reading against the document'  # FINAL-V2 4.12, verbatim
+APPRAISE_SLOW = 'Checking the reading against the document is taking longer than usual for this document.'
+
+# FINAL-V2 4.4: the causes a held fact can carry (operator data). No customer string carries one (tests: the scan).
+HELD_FACT_CAUSES = ('reading_unknown', 'reading_contradicted', 'unestablished:', 'appraisal:', 'relation:', 'unlisted',
+                    'coding_rule:', 'context_missing', 'date_unknown')
+
+
+def held_fact_words(fact) -> str:
+    """CPT Studio's fixed sentence for a held fact's key (FINAL-V2 4.8: support.held_facts is shown to the reviewer
+    "only as CPT Studio's fixed sentence per fact key, never a cause" [R:MO-2]): BLOCKER_TEMPLATES' open-clarification
+    sentence over FACT_WORDS (which carries wording.MISSING, the five new facts of D181 among them), and for a conflict
+    (conflict:<kind>) the statement about that act - the act's label only when <kind> is one of the contract's act kinds.
+    It takes the key alone, so no cause can reach it; a key it does not know reads the encounter's generic detail."""
+    from .interpretation.contract.types import Kind  # local import: the contract's kinds, for a conflict's act label
+    text = fact if isinstance(fact, str) else ''
+    if text.startswith('conflict:'):
+        kind = text.split(':', 1)[1]
+        known = kind in {member.value for member in Kind}
+        return f'A detail is needed: {questions.missing("conflict:", _act_label(kind) if known else "act")}.'
+    return f'A detail is needed: {FACT_WORDS.get(text, "a detail of the encounter")}.'
+
+
+# 5.1: the progress panel's title while an update is pending, and for kind 'check' (A21, nothing saved): the state label
+UPDATE_TITLE = 'Changes saved—updating codes'
+UPDATE_TITLE_CHECK = 'Updating codes'
+# 5.1: what was saved, from the update block (the saved values in the member's words: answers.CHOICE_LABELS)
+CHANGE_SERVICE_DATE = 'Date of service: {date}'
+CHANGE_SERVICE_DATE_REMOVED = 'Date of service removed'
+CHANGE_SETTING = 'Place of service: {value}'
+CHANGE_PATIENT_STATUS = 'Patient: {value}'
+CHANGE_BILLING_CONTEXT = 'Claim: {value}'
+CHANGE_DOCUMENTATION = 'Documentation added (revision {n})'
+CHANGE_SAVED_BY = 'Saved by {member}, {time}'
+# 5.1 [R3:binding-R3B-6]: the one fixed line shown in place of an empty saved-changes list, by why the codes are updated
+SAVED_CHANGES_UNFINISHED = ('The codes from before your change were not finished; they are being finished for these '
+                            'details.')
+SAVED_CHANGES_SAME_DETAILS = ('These are the details of the codes from before your change; the codes are made again '
+                              'because your answers, or an earlier check, changed since those codes were made.')
+SAVED_CHANGES_CHECK = 'An earlier check was settled, so the document is being read again with the current reading.'
+SAVED_CHANGES_EMPTY = {'unfinished': SAVED_CHANGES_UNFINISHED, 'same_details': SAVED_CHANGES_SAME_DETAILS,
+                       'check': SAVED_CHANGES_CHECK}
+# 5.1: the earlier codes' section, true in every update state [R:truth-T4]
+EARLIER_CODES_HEADING = 'Codes from before your change'
+EARLIER_CODES_HEADING_CHECK = 'Codes from before this update'
+EARLIER_CODES_MADE = ('Made {time}, with date of service {date}. They cannot be approved or exported: they are from '
+                      'before your latest change.')
+EARLIER_CODES_MADE_CHECK = ('Made {time}, with date of service {date}. They cannot be approved or exported: they are '
+                            'from before this update.')
+# 5.1: a detail row that takes "Not documented" or "Cannot confirm" while an update is pending (no control is drawn)
+ANSWER_AFTER_UPDATE = 'You can answer this once the codes are updated.'
+# 5.1: UPDATE_EXPORT_NOTE, by the update's state [R:truth-T4]: 'updating', and every other ('failed', 'stopped',
+# 'paused', 'being_confirmed')
+UPDATE_EXPORT_NOTE = {
+    'updating': ('Your change is saved and the codes are being updated. Exports are available again once the update '
+                 'finishes.'),
+    'other': ('Your change is saved, but the codes have not been updated yet; the panel above says why. The codes from '
+              'before your change cannot be exported as current.'),
+}
+UPDATE_EXPORT_NOTE_CHECK = {
+    'updating': 'The codes are being updated. Exports are available again once the update finishes.',
+    'other': ('The codes have not been updated yet; the panel above says why. The codes from before this update cannot '
+              'be exported as current.'),
+}
+# 5.1 [R:truth-T5][R2:truth-RT8]: the results section and the review bar's tally while an update is pending
+RESULTS_UPDATING = ('The updated codes appear here when the update finishes. The codes from before your change are shown '
+                    'below.')
+RESULTS_NOT_UPDATED = ('The codes have not been updated after your change yet; the panel above says why. The codes from '
+                       'before your change are shown below.')
+RESULTS_EARLIER_SHOWN = 'The codes from before your change are shown below.'
+RESULTS_NO_EARLIER_CODE = 'No code was suggested before your change.'  # in place of RESULTS_EARLIER_SHOWN
+TALLY_BEFORE = 'Before your change: '
+TALLY_NO_EARLIER_CODE = 'Before your change: no code suggested'
+RESULTS_UPDATING_CHECK = ('The updated codes appear here when the update finishes. The codes from before this update '
+                          'are shown below.')
+RESULTS_NOT_UPDATED_CHECK = ('The codes have not been updated yet; the panel above says why. The codes from before this '
+                             'update are shown below.')
+RESULTS_EARLIER_SHOWN_CHECK = 'The codes from before this update are shown below.'
+# The three below have no check form in 7.1's rules (none says "from before your change"); worded by the rule that no
+# check text names a change of the member's (recorded as a question)
+RESULTS_NO_EARLIER_CODE_CHECK = 'No code was suggested before this update.'
+TALLY_BEFORE_CHECK = 'Before this update: '
+TALLY_NO_EARLIER_CODE_CHECK = 'Before this update: no code suggested'
+# 2.5 [R:truth-T13]: the toast of a save that restored the earlier codes
+RESTORED_TOAST = 'Saved. The codes from before your change are current again.'
+
+# 5.3: the server-side refusals while an update is pending (internal = customer), and the readiness blocker
+UPDATE_DECISION = ('These codes are from before your latest change and cannot be decided on. Decide on the codes once '
+                   'they are updated.')
+UPDATE_DECISION_CHECK = ('These codes are from before this update and cannot be decided on. Decide on the codes once '
+                         'they are updated.')
+UPDATE_EXPORT = ('These codes are from before your latest change and cannot be exported as current. Exports are '
+                 'available again once the codes are updated; earlier downloads stay available, marked as earlier.')
+UPDATE_EXPORT_CHECK = ('These codes are from before this update and cannot be exported as current. Exports are '
+                       'available again once the codes are updated; earlier downloads stay available, marked as '
+                       'earlier.')
+UPDATE_ANSWER_WITHDRAW = 'You can change your answers once the codes are updated.'
+UPDATE_BLOCKER = 'The codes are from before the latest change; the update has not finished'  # review.readiness's (5b)
+# The blocker's customer words by the update's state and kind (customer_api.readiness, step 5d, chooses): while
+# 'updating', and in every other state. BLOCKER_EXACT holds the check kind's 'other' form, the one true in every state
+# and every kind: it never says "being updated" while nothing runs, nor names a change of the member's (A21).
+UPDATE_BLOCKER_WORDS = {
+    ('updating', 'details'): 'The codes are being updated after your change.',
+    ('other', 'details'): 'The codes have not been updated after your change yet.',
+    ('updating', 'check'): 'The codes are being updated.',
+    ('other', 'check'): 'The codes have not been updated yet.',
+}
+
+# 1.4 (A12, A19): the save and addendum refusals; 3.9 (A13): the duplicate addendum (a KNOWN_TEMPLATES entry)
+SAVE_TOO_LONG = ('This document is too long to be read in one piece, so its details cannot be changed here. The codes '
+                 'shown stay as they are.')
+SAVE_UNPREPARED = ('This document could not be prepared for reading, so its details cannot be changed here. The codes '
+                   'shown stay as they are. Upload it again to change them.')
+ADDENDUM_TOO_LONG = ('With this documentation the document would be too long to be read in one piece, so it was not '
+                     'added.')
+ADDENDUM_UNPREPARED = 'This documentation could not be prepared for reading, so it was not added.'
+ADDENDUM_DOCUMENT_TOO_LONG = ('This document is too long to be read in one piece, so documentation cannot be added to it '
+                              'here. Upload it again, shorter or split, with the documentation included.')
+ADDENDUM_DOCUMENT_UNPREPARED = ('This document cannot be prepared for reading as it stands, so documentation cannot be '
+                                'added to it here. Upload it again with the documentation included, without bracketed '
+                                'markers such as [S2].')
+ADDENDUM_DUPLICATE = 'This documentation was already added as revision {n}.'
+RESTORE_REFUSED = ('The codes from before your change cannot be used again as they were, so their details cannot be '
+                   'restored until the update has finished.')
+
+# 7.2: retry_update's refusals (jobs.RETRY_BUSY and jobs.RETRY_UNKNOWN unchanged), and 7.1's action labels
+RETRY_UPDATE_NOTHING = 'There is no failed update to try again.'
+RETRY_UPDATE_HELD = ('Updating the codes is paused on this installation; resume once the coding service is available '
+                     'again.')
+RETRY_UPDATE_READING = 'This update failed while reading the document; use Try reading again.'
+RETRY_UPDATE_REFUSED_BEFORE = 'The coding service refused this same request before, so it is not sent again.'
+UPDATE_ACTION_LABELS = {'retry_reading': 'Try reading again', 'retry_update': 'Try updating again'}
+
+# 7.1 [R2:truth-RT6][R3:truth-R3T-7]: a FIRST processing paused under the coding service's hold (progress.
+# provider_paused, step 5b), while the hold stands; once released the stage reads STOPPED_BY_SYSTEM
+PROVIDER_PAUSED = ('The coding service is paused on this installation, so this document\'s codes are not checked yet. '
+                   'Nothing more is sent to it until it is available again; resume once it is.')
+
+
+_WORKER_PAUSED = ('Processing is paused: the processing service is not responding right now. Your document is saved, '
+                  'and this page shows the next step once the service is back.')  # progress.MESSAGES['paused']
+
+
+@dataclass(frozen=True)
+class UpdateText:
+    """One row of amendment 7.1's table in its four forms (each a complete customer sentence): ``details`` for kind
+    'details' with update.restorable; ``no_restore`` for kind 'details' without it; ``documentation`` for kind
+    'documentation' (case C); ``check`` for kind 'check' (A21). ``phase`` and ``action`` are the row's; a 'resume'
+    is offered only where review.can_resume holds (7.1: "resume when can_resume")."""
+    details: str
+    no_restore: str
+    documentation: str
+    check: str
+    phase: str
+    action: str
+
+
+def _update_row(details, no_restore, documentation, check, phase, action) -> UpdateText:
+    return UpdateText(details, no_restore, documentation, check, phase, action)
+
+
+# 7.1's rows, by situation (progress.UPDATE_ERRORS' keys, step 5b, read these texts): the forms are written out, never
+# computed, so each can be read and grepped; the test re-derives each form from ``details`` by 7.1's rules.
+UPDATE_TEXTS = {
+    'reading_failed': _update_row(
+        'Your change is saved, but the codes could not be updated: reading the documented procedures could not be '
+        'completed. The codes shown are from before your change and cannot be approved or exported until the update '
+        'finishes.',
+        'Your change is saved, but the codes could not be updated: reading the documented procedures could not be '
+        'completed. The codes shown are from before your change and cannot be approved or exported until the update '
+        'finishes.',
+        'Your change is saved, but the codes could not be updated: reading the documented procedures could not be '
+        'completed. The codes shown are from before the documentation was added and cannot be approved or exported '
+        'until the update finishes.',
+        'The codes could not be updated: reading the documented procedures could not be completed. The codes shown are '
+        'from before this update and cannot be approved or exported until the update finishes.',
+        'failed', 'retry_reading'),
+    'appraisal_failed': _update_row(
+        'Your change is saved, but the codes could not be updated: checking the reading against the document could not '
+        'be completed. The codes shown are from before your change and cannot be approved or exported until the update '
+        'finishes.',
+        'Your change is saved, but the codes could not be updated: checking the reading against the document could not '
+        'be completed. The codes shown are from before your change and cannot be approved or exported until the update '
+        'finishes.',
+        'Your change is saved, but the codes could not be updated: checking the reading against the document could not '
+        'be completed. The codes shown are from before the documentation was added and cannot be approved or exported '
+        'until the update finishes.',
+        'The codes could not be updated: checking the reading against the document could not be completed. The codes '
+        'shown are from before this update and cannot be approved or exported until the update finishes.',
+        'failed', 'retry_reading'),
+    'too_long': _update_row(
+        'Your change is saved, but the codes could not be updated: this document is too long to be read in one piece. '
+        'The codes shown are from before your change and cannot be approved or exported. Restore the earlier details '
+        'to use them again, or shorten the document and upload it again.',
+        'Your change is saved, but the codes could not be updated: this document is too long to be read in one piece. '
+        'The codes shown are from before your change and cannot be approved or exported. Shorten the document and '
+        'upload it again.',
+        'Your change is saved, but the codes could not be updated: this document is too long to be read in one piece. '
+        'The codes shown are from before the documentation was added and cannot be approved or exported. Upload the '
+        'document again, shorter or split, to have it read.',
+        'The codes could not be updated: this document is too long to be read in one piece. The codes shown are from '
+        'before this update and cannot be approved or exported. Shorten the document and upload it again.',
+        'failed', 'none'),
+    'review_failed': _update_row(
+        'Your change is saved, but the codes could not be updated: the coding service could not complete its review. '
+        'The codes shown are from before your change and cannot be approved or exported until the update finishes.',
+        'Your change is saved, but the codes could not be updated: the coding service could not complete its review. '
+        'The codes shown are from before your change and cannot be approved or exported until the update finishes.',
+        'Your change is saved, but the codes could not be updated: the coding service could not complete its review. '
+        'The codes shown are from before the documentation was added and cannot be approved or exported until the '
+        'update finishes.',
+        'The codes could not be updated: the coding service could not complete its review. The codes shown are from '
+        'before this update and cannot be approved or exported until the update finishes.',
+        'failed', 'retry_update'),
+    'review_not_sent': _update_row(
+        'Your change is saved, but the codes could not be updated: the coding service could not be used just now, and '
+        'the document was not sent to it. The codes shown are from before your change and cannot be approved or '
+        'exported until the update finishes.',
+        'Your change is saved, but the codes could not be updated: the coding service could not be used just now, and '
+        'the document was not sent to it. The codes shown are from before your change and cannot be approved or '
+        'exported until the update finishes.',
+        'Your change is saved, but the codes could not be updated: the coding service could not be used just now, and '
+        'the document was not sent to it. The codes shown are from before the documentation was added and cannot be '
+        'approved or exported until the update finishes.',
+        'The codes could not be updated: the coding service could not be used just now, and the document was not sent '
+        'to it. The codes shown are from before this update and cannot be approved or exported until the update '
+        'finishes.',
+        'failed', 'retry_update'),
+    'review_held': _update_row(
+        'Your change is saved. Updating the codes is paused on this installation: the coding service refused its '
+        'requests, and nothing more is sent to it until it is available again. The codes shown are from before your '
+        'change and cannot be approved or exported until the update finishes. You can restore the earlier details to '
+        'use them again.',
+        'Your change is saved. Updating the codes is paused on this installation: the coding service refused its '
+        'requests, and nothing more is sent to it until it is available again. The codes shown are from before your '
+        'change and cannot be approved or exported until the update finishes.',
+        'Your change is saved. Updating the codes is paused on this installation: the coding service refused its '
+        'requests, and nothing more is sent to it until it is available again. The codes shown are from before the '
+        'documentation was added and cannot be approved or exported until the update finishes.',
+        'Updating the codes is paused on this installation: the coding service refused its requests, and nothing more '
+        'is sent to it until it is available again. The codes shown are from before this update and cannot be approved '
+        'or exported until the update finishes.',
+        'paused', 'resume'),
+    'review_refused_before': _update_row(
+        'Your change is saved, but the codes could not be updated: the coding service refused this same request '
+        'before, and it is not sent again. The codes shown are from before your change and cannot be approved or '
+        'exported. Restore the earlier details to use them again.',
+        'Your change is saved, but the codes could not be updated: the coding service refused this same request '
+        'before, and it is not sent again. The codes shown are from before your change and cannot be approved or '
+        'exported.',
+        'Your change is saved, but the codes could not be updated: the coding service refused this same request '
+        'before, and it is not sent again. The codes shown are from before the documentation was added and cannot be '
+        'approved or exported.',
+        'The codes could not be updated: the coding service refused this same request before, and it is not sent '
+        'again. The codes shown are from before this update and cannot be approved or exported.',
+        'failed', 'none'),
+    'review_unbuilt': _update_row(
+        'Your change is saved, but the codes could not be updated: the document could not be prepared for the coding '
+        'service, and nothing was sent. The codes shown are from before your change. Restore the earlier details to '
+        'use them again.',
+        'Your change is saved, but the codes could not be updated: the document could not be prepared for the coding '
+        'service, and nothing was sent. The codes shown are from before your change.',
+        'Your change is saved, but the codes could not be updated: the document could not be prepared for the coding '
+        'service, and nothing was sent. The codes shown are from before the documentation was added. Upload the '
+        'document again, shorter or split, to have it read.',
+        'The codes could not be updated: the document could not be prepared for the coding service, and nothing was '
+        'sent. The codes shown are from before this update.',
+        'failed', 'none'),
+    'processing_failed': _update_row(
+        'Your change is saved, but the codes could not be updated: processing could not be completed, and nothing was '
+        'sent. The codes shown are from before your change and cannot be approved or exported until the update '
+        'finishes.',
+        'Your change is saved, but the codes could not be updated: processing could not be completed, and nothing was '
+        'sent. The codes shown are from before your change and cannot be approved or exported until the update '
+        'finishes.',
+        'Your change is saved, but the codes could not be updated: processing could not be completed, and nothing was '
+        'sent. The codes shown are from before the documentation was added and cannot be approved or exported until '
+        'the update finishes.',
+        'The codes could not be updated: processing could not be completed, and nothing was sent. The codes shown are '
+        'from before this update and cannot be approved or exported until the update finishes.',
+        'failed', 'retry_update'),
+    'interpreter_paused': _update_row(
+        'Your change is saved. Updating the codes is paused on this installation, and nothing was sent. The codes shown '
+        'are from before your change and cannot be approved or exported until the update finishes. You can restore the '
+        'earlier details to use them again.',
+        'Your change is saved. Updating the codes is paused on this installation, and nothing was sent. The codes shown '
+        'are from before your change and cannot be approved or exported until the update finishes.',
+        'Your change is saved. Updating the codes is paused on this installation, and nothing was sent. The codes shown '
+        'are from before the documentation was added and cannot be approved or exported until the update finishes.',
+        'Updating the codes is paused on this installation, and nothing was sent. The codes shown are from before this '
+        'update and cannot be approved or exported until the update finishes.',
+        'paused', 'resume'),
+    'review_disabled': _update_row(
+        'Your change is saved. The coding service is not available on this installation right now, so the codes are '
+        'not updated yet, and nothing was sent. The codes shown are from before your change. Resume once it is '
+        'available, or restore the earlier details.',
+        'Your change is saved. The coding service is not available on this installation right now, so the codes are '
+        'not updated yet, and nothing was sent. The codes shown are from before your change. Resume once it is '
+        'available.',
+        'Your change is saved. The coding service is not available on this installation right now, so the codes are '
+        'not updated yet, and nothing was sent. The codes shown are from before the documentation was added. Resume '
+        'once it is available.',
+        'The coding service is not available on this installation right now, so the codes are not updated yet, and '
+        'nothing was sent. The codes shown are from before this update. Resume once it is available.',
+        'paused', 'resume'),
+    'being_confirmed': _update_row(
+        'Your change is saved. We are confirming whether an earlier check completed; the codes are updated once that '
+        'is settled, and nothing is sent again until then.',
+        'Your change is saved. We are confirming whether an earlier check completed; the codes are updated once that '
+        'is settled, and nothing is sent again until then.',
+        'Your change is saved. We are confirming whether an earlier check completed; the codes are updated once that '
+        'is settled, and nothing is sent again until then.',
+        'We are confirming whether an earlier check completed; the codes are updated once that is settled, and nothing '
+        'is sent again until then.',
+        'being_confirmed', 'none'),
+    'stopped_by_member': _update_row(
+        'Updating the codes was stopped. The codes shown are from before your change and cannot be approved or '
+        'exported until the update finishes. Resume to finish it, or restore the earlier details.',
+        'Updating the codes was stopped. The codes shown are from before your change and cannot be approved or '
+        'exported until the update finishes. Resume to finish it.',
+        'Updating the codes was stopped. The codes shown are from before the documentation was added and cannot be '
+        'approved or exported until the update finishes. Resume to finish it.',
+        'Updating the codes was stopped. The codes shown are from before this update and cannot be approved or exported '
+        'until the update finishes. Resume to finish it.',
+        'stopped', 'resume'),
+    'stopped_by_system': _update_row(
+        'Updating the codes paused before it finished. The codes shown are from before your change. Resume to finish '
+        'it.',
+        'Updating the codes paused before it finished. The codes shown are from before your change. Resume to finish '
+        'it.',
+        'Updating the codes paused before it finished. The codes shown are from before the documentation was added. '
+        'Resume to finish it.',
+        'Updating the codes paused before it finished. The codes shown are from before this update. Resume to finish '
+        'it.',
+        'stopped', 'resume'),
+    # 7.1's last row: the worker not responding reads progress.MESSAGES['paused'], unchanged, in every form - copied as
+    # a literal (pinned equal by test), so this table reads no attribute of progress while modules are imported
+    'worker_paused': _update_row(*(_WORKER_PAUSED,) * 4, 'paused', 'none'),
+}
+UPDATE_KINDS = ('details', 'documentation', 'check')
+
+
+def update_text(situation, kind, restorable) -> str:
+    """7.1's text of ``situation`` for an update of ``kind`` (update.kind) with ``restorable`` (update.restorable): the
+    case-C form for 'documentation', the check form for 'check', else the restore form only when ``restorable`` is
+    True. KeyError for a situation or kind 7.1 does not name: never a text of another row."""
+    row = UPDATE_TEXTS[situation]
+    if kind not in UPDATE_KINDS:
+        raise KeyError(kind)
+    if kind == 'documentation':
+        return row.documentation
+    if kind == 'check':
+        return row.check
+    return row.details if restorable is True else row.no_restore
+
+
+# 6.2: "What changed", from stored rows (customer_api.what_changed, step 5d), in these words
+WHAT_CHANGED_COMPARED = 'Compared with the codes as suggested on {time}, before any answer or decision'
+WHAT_CHANGED_SINCE = 'since the codes as suggested on {time}'  # 6.2: after an answer's recompute (see the question)
+WHAT_CHANGED_DETAIL_LABELS = {'service_date': 'Date of service', 'setting': 'Place of service',
+                              'patient_status': 'Patient', 'billing_context': 'Claim'}  # 5.1's labels
+WHAT_CHANGED_DETAIL = '{label}: {before} → {after}'  # step 2: the field's label with both values
+WHAT_CHANGED_NOT_DOCUMENTED = 'not documented'
+WHAT_CHANGED_TWO_DATES = 'two dates to choose from'
+WHAT_CHANGED_DOCUMENTATION = 'Documentation added (revision {n})'
+WHAT_CHANGED_READ_AGAIN = 'The document was read again with the current reading.'
+WHAT_CHANGED_STATUS = {'ready': 'Ready for review', 'needs_detail': 'Needs a detail',
+                       'excluded': 'Excluded by a documentation check',
+                       'answered_away': 'Excluded: a needed detail is not documented'}
+WHAT_CHANGED_ADDED = '{code} is now suggested ({status})'
+WHAT_CHANGED_REMOVED = '{code} is no longer suggested'
+WHAT_CHANGED_REMOVED_REASON = '{code} is no longer suggested. {reason}'  # with the other-codes list's reason
+WHAT_CHANGED_ALTERNATIVE = 'Listed as an alternative only; not suggested for approval.'  # code_rows' own words
+WHAT_CHANGED_NOT_SUGGESTED = 'Not suggested: {reason}'  # code_rows' own form, _exclusion_reason lower-cased
+WHAT_CHANGED_STATUS_CHANGED = '{code}: {before} → {after}'
+WHAT_CHANGED_UNITS = '{code}: {before} → {after} units'
+WHAT_CHANGED_ITEM = '{code}: the detail needed changed: "{before}" → "{after}"'
+WHAT_CHANGED_UNCHANGED = '{n} codes unchanged'
+WHAT_CHANGED_UNCHANGED_ONE = '1 code unchanged'
+WHAT_CHANGED_DECISION_NOUNS = {Decision.APPROVE: 'Approval', Decision.REJECT: 'Rejection',
+                               Decision.REINSTATE: 'Reinstatement', Decision.CONFIRM: 'Confirmed exclusion'}
+WHAT_CHANGED_KEPT = '{action} of {code} kept: the code is unchanged.'
+WHAT_CHANGED_KEPT_THEN_CLEARED = ('{action} of {code} was kept by the update, then cleared when the codes were checked '
+                                  'again with the same details.')
+WHAT_CHANGED_KEPT_THEN_CHANGED = '{action} of {code} was kept by the update, then changed by a reviewer.'
+WHAT_CHANGED_ANSWERS = ('Some answers you gave before this change are not applied to the updated codes; they are listed '
+                        'under Earlier answers, not applied.')
+# 5.4: why an earlier decision no longer applies (first match wins), and 6.2 step 4's 'cleared' outcome
+CLEARED_BY_REVISION = 'Cleared when documentation was added (revision {n}).'
+CLEARED_NEW_READING = ('Made on the earlier reading of the document; the current codes come from a new reading, so it '
+                       'does not carry. Decide the current codes.')
+CLEARED_SAME_DETAILS = 'Cleared when the codes were checked again with the same details: the code it was made on changed.'
+CLEARED_DETAILS_CHANGED = 'Cleared when the details changed: the code it was made on changed.'
+# 5.4: an earlier download, listed and linked (it downloads with the banner, step 5d)
+EARLIER_DOWNLOAD = 'Earlier — made on revision {n}; it may not show the current codes'
 
 
 # --- errors -------------------------------------------------------------------------------------------------------
@@ -231,6 +660,24 @@ KNOWN_ERRORS = {
     answers.BUSY: None,
     answers.STALE: None,
     answers.ALREADY_WITHDRAWN: None,
+    # FINAL-V2 amendment 1 (step 3c): the refusals while an update is pending (5.3; the check forms of A21), the save
+    # and addendum refusals (1.4) and retry_update's own (7.2) - each already the member's words, naming no provider
+    UPDATE_DECISION: None,
+    UPDATE_DECISION_CHECK: None,
+    UPDATE_EXPORT: None,
+    UPDATE_EXPORT_CHECK: None,
+    UPDATE_ANSWER_WITHDRAW: None,
+    SAVE_TOO_LONG: None,
+    SAVE_UNPREPARED: None,
+    ADDENDUM_TOO_LONG: None,
+    ADDENDUM_UNPREPARED: None,
+    ADDENDUM_DOCUMENT_TOO_LONG: None,
+    ADDENDUM_DOCUMENT_UNPREPARED: None,
+    RESTORE_REFUSED: None,
+    RETRY_UPDATE_NOTHING: None,
+    RETRY_UPDATE_HELD: None,
+    RETRY_UPDATE_READING: None,
+    RETRY_UPDATE_REFUSED_BEFORE: None,
 }
 KNOWN_TEMPLATES = (
     re.compile(r'(?:Approve|Reject|Reinstate for review|Revoke decision|Confirm exclusion) is not available for '
@@ -247,6 +694,8 @@ KNOWN_TEMPLATES = (
                r'document, so it was not read and nothing was sent\. Shorten it or split it, then upload it again\.'),
     re.compile(r'The attestation must read exactly: I read this passage in the source document; it documents [^\n]{1,80} '
                r'for this encounter\.'),
+    # FINAL-V2 amendment 1, 3.9 (A13): ADDENDUM_DUPLICATE, its revision number filled in
+    re.compile(r'This documentation was already added as revision [1-9][0-9]{0,5}\.'),
 )
 
 
@@ -290,6 +739,9 @@ BLOCKER_EXACT = {
     'The provider request failed': 'The coding service could not finish for this document.',
     'The provider response was not used': "The coding service's answer could not be used.",
     review.UNREADABLE_EVENTS_BLOCKER: 'This document must be checked again before its codes can be approved or exported.',
+    # FINAL-V2 amendment 1, 5.3: UPDATE_BLOCKER in the form true in every update state and kind; customer_api.readiness
+    # (step 5d) says it by the update's state and kind from UPDATE_BLOCKER_WORDS
+    UPDATE_BLOCKER: UPDATE_BLOCKER_WORDS[('other', 'check')],
 }
 BLOCKER_TEMPLATES = (
     (re.compile(r'Revision \d+ has not been assessed yet'), lambda m: 'The latest version of the document has not been '

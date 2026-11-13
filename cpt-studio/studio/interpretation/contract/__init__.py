@@ -6,7 +6,7 @@ character classes (segment), quote location (geometry, fold), the transcription 
 own words (date_literals, read by consistency's L1 alone) and revision binding. Its modules, by the step of 8.1 that
 owns each: types and jsonschema (0b); segment (1a); extract_schema and extract_read (1b); geometry, fold and
 date_literals (1c); extract_prompt (2a); consistency (2b); claims, appraise_schema, appraise_prompt and appraise_read
-(2c); settle (3a).
+(2c); settle and checks (3a).
 
 It executes no v1 code: no module here imports one of the 17 retired v1 modules (5.0), and what it copies from them
 (jsonschema's generator, fold, the date parsers) is proved equal to v1's by test. The static rules of FINAL-V2 5.7

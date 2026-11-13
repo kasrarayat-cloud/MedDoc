@@ -9,15 +9,17 @@ module never reads a response body. It adds only the rows of FINAL 11.1 that are
 that is not known, nothing sent, an answer whose READING was refused - and a hold records exactly what the adapter's
 classification says: its reason, HTTP status, vendor status and violations.
 
-THE TABLE (FINAL 11.1, as P-3, P-4, P-5 and C5 amend it). An interpretation run's outcome has exactly one effect:
+THE TABLE (FINAL 11.1, as P-3, P-4, P-5 and C5 amend it, and FINAL-V2 amendment 1's A11). An interpretation run's
+outcome has exactly one effect:
 
 | the outcome                                                                     | effect     | what follows          |
 |---------------------------------------------------------------------------------|------------|-----------------------|
 | adapter.classify says HOLD - auth (401; API_KEY_INVALID, API_KEY_EXPIRED,        | HOLD       | an operator's release |
 | UNAUTHENTICATED), permission (403; API_KEY_SERVICE_BLOCKED, SERVICE_DISABLED,   |            | (interpreter_hold     |
-| PERMISSION_DENIED, FAILED_PRECONDITION), quota (BILLING_DISABLED; a 429 whose   |            | --release), then      |
-| QuotaFailure names a daily, zero, free-tier or unnamed window, or a 429 with no |            | members Resume        |
-| QuotaFailure at all - D39) or model (a 200 naming another model, or none: P-5)  |            |                       |
+| PERMISSION_DENIED, FAILED_PRECONDITION), quota (BILLING_DISABLED; 402, a        |            | --release), then      |
+| payment failure, A11; a 429 whose QuotaFailure names a daily, zero, free-tier   |            | members Resume        |
+| or unnamed window, or a 429 with no QuotaFailure at all - D39: a spending cap   |            |                       |
+| answers so) or model (a 200 naming another model, or none: P-5)                 |            |                       |
 | adapter.classify says FAILED - a 429 whose every violation is a per-minute     | FAILED     | the recorded retry    |
 | paid-tier limit above 0, a 5xx, a 400 without the names above, any other       |            | (FINAL 11.3)          |
 | refusal of the request, or an                                                   |            |                       |
@@ -47,6 +49,16 @@ TWO SCOPES. A hold is stored, so every process sees the same holds. The mode is 
 (settings.GEMINI_MODE): the worker's decides for the worker, and a one-shot runs with the interpreter disabled unless it is
 given a mode (FINAL 13), so what a one-shot reads of its own mode says nothing of the worker's. ``state`` names the two
 apart, and the installer reads the worker's configured mode from the worker itself.
+
+DESIGN V2 (docs/gemini-migration/FINAL-V2.md 7.4 and 7.5, AMENDMENT-1.md 7.3; step 3b of its 8.1): the purpose
+``appraisal``. Design v2's second Gemini call, the appraisal (pass 2, ProviderRun.purpose interpretation.
+APPRAISAL_PURPOSE), is a run of this table too, by the same one classifier (adapter.classify), so a HOLD set by either
+pass's answer - auth, permission, quota (a bare 429 and a 402 included) or a substituted model - stops every request of
+BOTH passes, installation-wide (``paused_reason`` names no purpose), and one release ends it. What differs is only
+where a refused reading is recorded (FINAL-V2 7.5): pass 1's in its EventInventory row, 'refused'; pass 2's on its own
+run, with no inventory row - its answer refused by contract/appraise_read, or an appraisal settle refuses as unhealthy
+(3.2.6) - so ``classify_run`` and ``settle`` take it as ``refused``. Either is a definite failure with the recorded
+retry door; neither changes a hold, a failure or a cut-off answer (MAX_TOKENS: TOO_LONG, never re-sent for a member).
 """
 from __future__ import annotations
 
@@ -67,9 +79,12 @@ REASONS = (AUTH, PERMISSION, QUOTA, MODEL)  # P-5 adds 'model'; adapter.HOLD_REA
 REASON_TEXT = {
     AUTH: 'the key was refused',
     PERMISSION: 'the key may not use the model or the service',
-    QUOTA: 'a quota or spending limit is exhausted (daily, zero, unbilled or not named), or billing is not enabled',
+    QUOTA: ('a quota or spending limit is exhausted (daily, zero, unbilled or not named), billing is not enabled, or a '
+            'payment is required'),
     MODEL: 'an answer named a model other than the one asked for, and was not read',
 }
+# The runs this table classifies (ProviderRun.purpose): pass 1, and design v2's pass 2 (FINAL-V2 7.4: one classifier).
+PURPOSES = (interpretation.PURPOSE, interpretation.APPRAISAL_PURPOSE)
 
 ANSWERED, FAILED, TOO_LONG, HOLD, UNKNOWN, NONE = 'answered', 'failed', 'too_long', 'hold', 'unknown', 'none'
 EFFECTS = (ANSWERED, FAILED, TOO_LONG, HOLD, UNKNOWN, NONE)
@@ -84,6 +99,7 @@ PAUSED_MESSAGE = ('Reading documented procedures is paused on this installation.
 DISABLED = 'disabled'  # the settings.GEMINI_MODE that sends nothing
 UNKNOWN_WHY = 'Whether the request reached the interpreter is not known; it is reconciled, never sent again unasked.'
 REFUSED_WHY = 'The interpretation was not used: its answer could not be read.'
+APPRAISAL_REFUSED_WHY = 'The appraisal was not used: its answer could not be read.'  # design v2's pass 2
 
 MAX_NOTE_CHARS = 2000
 _UNSTORABLE = re.compile('[\x00\ud800-\udfff]')  # PostgreSQL text holds no NUL; a lone surrogate cannot be encoded
@@ -119,11 +135,17 @@ class Outcome:
         return self.effect == FAILED
 
 
-def classify(state: str, http_status=None, response_bytes=b'', *, refused=None) -> Outcome:
+def classify(state: str, http_status=None, response_bytes=b'', *, refused=None,
+             purpose: str = interpretation.PURPOSE) -> Outcome:
     """The effect of an interpretation run that ended in ``state`` (ProviderRun.state), with its HTTP status and its
-    response bytes as stored. A definite outcome is adapter.classify's, exactly. ``refused``: the answer's reading was
-    refused - a read.Refusal, or the run's EventInventory in state 'refused' - which makes a usable envelope a definite
-    failure of the attempt; it never changes a hold, a failure or a cut-off answer."""
+    response bytes as stored. A definite outcome is adapter.classify's, exactly - the same for both passes, since the
+    classifier reads the response alone. ``refused``: the answer's reading was refused - a read.Refusal, contract/
+    extract_read's or contract/appraise_read's Refusal, an appraisal settle refused as unhealthy, or the run's
+    EventInventory in state 'refused' - which makes a usable envelope a definite failure of the attempt; it never
+    changes a hold, a failure or a cut-off answer. ``purpose``: the run's (PURPOSES), which names the pass in the
+    failure's sentence when the refusal gives none of its own."""
+    if purpose not in PURPOSES:
+        raise ValueError(f'Only a run of {", ".join(PURPOSES)} is classified here.')
     if state == ProviderRun.UNKNOWN:
         return Outcome(UNKNOWN, why=UNKNOWN_WHY)
     verdict = adapter.classify(state, http_status, response_bytes)
@@ -133,28 +155,37 @@ def classify(state: str, http_status=None, response_bytes=b'', *, refused=None) 
     if effect is None:
         raise ValueError(f'The adapter classified an outcome as {verdict.kind!r}, which this table does not know.')
     if effect == ANSWERED and refused is not None:
-        return Outcome(FAILED, verdict, _refusal_why(refused))
+        return Outcome(FAILED, verdict, _refusal_why(refused, purpose))
     return Outcome(effect, verdict, verdict.why)
 
 
-def classify_run(run, *, inventory=None) -> Outcome:
-    """classify() of a stored interpretation run. ``inventory``: the EventInventory its answer was read into, if any (its
-    run must be ``run``)."""
+def classify_run(run, *, inventory=None, refused=None) -> Outcome:
+    """classify() of a stored run of either pass (PURPOSES). ``inventory``: the EventInventory its answer was read into,
+    if any - for a pass-1 run, the row whose provider run it is; for design v2's appraisal, the row whose appraisal run
+    it is (a refused row binds none, FINAL-V2 6.3) - and a 'refused' row makes the answer a definite failure.
+    ``refused``: a refused reading recorded elsewhere - the appraisal's, which has no inventory row (FINAL-V2 7.5):
+    contract/appraise_read's Refusal, or settle's refusal of an unhealthy appraisal (3.2.6) - anything whose ``reason``
+    is CPT Studio's sentence; given, it is the refusal read."""
     _check_run(run)
-    if inventory is not None and str(inventory.provider_run_id) != str(run.pk):  # an id given as text is the same id
-        raise ValueError('The inventory given was not read from this run.')
-    refused = inventory if inventory is not None and inventory.state == EventInventory.REFUSED else None
-    return classify(run.state, run.http_status, bytes(run.response_bytes or b''), refused=refused)
+    if inventory is not None:
+        bound = (inventory.appraisal_run_id if run.purpose == interpretation.APPRAISAL_PURPOSE
+                 else inventory.provider_run_id)
+        if str(bound) != str(run.pk):  # an id given as text is the same id
+            raise ValueError('The inventory given was not read from this run.')
+    if refused is None and inventory is not None and inventory.state == EventInventory.REFUSED:
+        refused = inventory
+    return classify(run.state, run.http_status, bytes(run.response_bytes or b''), refused=refused,
+                    purpose=run.purpose)
 
 
 def _check_run(run):
-    if run.provider != interpretation.PROVIDER or run.purpose != interpretation.PURPOSE:
-        raise ValueError('Only an interpretation run is classified here.')
+    if run.provider != interpretation.PROVIDER or run.purpose not in PURPOSES:
+        raise ValueError('Only an interpretation or an appraisal run is classified here.')
 
 
-def _refusal_why(refused) -> str:
-    """The refusal's own sentence (read.Refusal.reason, or the refused inventory's first recorded problem: both CPT
-    Studio's words), else REFUSED_WHY."""
+def _refusal_why(refused, purpose: str = interpretation.PURPOSE) -> str:
+    """The refusal's own sentence (a Refusal's reason, or the refused inventory's first recorded problem: both CPT
+    Studio's words), else REFUSED_WHY - APPRAISAL_REFUSED_WHY for design v2's appraisal."""
     reason = getattr(refused, 'reason', None)
     if isinstance(reason, str) and reason.strip():
         return reason
@@ -162,7 +193,7 @@ def _refusal_why(refused) -> str:
     problems = verification.get('problems') if isinstance(verification, dict) else None
     if isinstance(problems, list) and problems and isinstance(problems[0], str) and problems[0].strip():
         return problems[0]
-    return REFUSED_WHY
+    return APPRAISAL_REFUSED_WHY if purpose == interpretation.APPRAISAL_PURPOSE else REFUSED_WHY
 
 
 # --- the hold --------------------------------------------------------------------------------------------------------------
@@ -177,7 +208,8 @@ def record(run, outcome: Outcome) -> Optional[InterpreterHold]:
       release of a hold is not undone by re-reading the answer that set it;
     - a run that was not sent sets no hold of its own (it paid nothing; the answer's hold, if any, was its origin's), and
       returns None when its origin set none.
-    Concurrent settlements of one answer are serialized on the origin run's row."""
+    Concurrent settlements of one answer are serialized on the origin run's row. A run of either pass sets the same
+    installation-wide hold, which stops every request of both passes (``paused_reason``)."""
     if outcome.effect != HOLD:
         raise ValueError('Only a hold outcome records a hold.')
     _check_run(run)
@@ -194,12 +226,12 @@ def record(run, outcome: Outcome) -> Optional[InterpreterHold]:
             violations=[dict(item) for item in verdict.violations], run=run)
 
 
-def settle(run, *, inventory=None) -> tuple:
-    """(outcome, hold): classify_run(run), and the STANDING hold its answer set - None when the outcome is not a hold,
-    when that hold was released, or for an unsent copy of an answer whose origin set none. A HOLD outcome with no
-    standing hold is still an answer that is never read (P-5: a substituted model), so the caller must not read it; only
-    the installation is not paused by it any more."""
-    outcome = classify_run(run, inventory=inventory)
+def settle(run, *, inventory=None, refused=None) -> tuple:
+    """(outcome, hold): classify_run(run) - with ``inventory`` and ``refused`` as it takes them - and the STANDING hold
+    its answer set - None when the outcome is not a hold, when that hold was released, or for an unsent copy of an
+    answer whose origin set none. A HOLD outcome with no standing hold is still an answer that is never read (P-5: a
+    substituted model), so the caller must not read it; only the installation is not paused by it any more."""
+    outcome = classify_run(run, inventory=inventory, refused=refused)
     if outcome.effect != HOLD:
         return outcome, None
     hold = record(run, outcome)

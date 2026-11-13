@@ -58,7 +58,7 @@ REQUIREMENTS_PINS = {
     'cpt-requirements@1': {
         'table': '1b0f0d18e5d3328d923f43bd033b75559e439c849dafae259ddd6e64b89820e5',
         'rank': '4c0c972d7c8f05b48bc4cebfaa1628c8e7d772ebb3dbcd4146a0eb80da3c26c1',
-        'rules': '7ddb068b0b25d2d8b1dc832df959ce7409ce22ae005bcbb43730e4583ce369bb',
+        'rules': '72970ffb5ed848e16d97bea385bc7f3f1f9aa3f16deb081463d97d9e7887309f',
         'claimed': '8c95246d6ff8a260b344bb5a52e25f51ac744343ed8ebe5887764ad7e5cd7b81',
     },
 }
@@ -595,9 +595,10 @@ class ReadSetTests(SimpleTestCase):
         self.assertIn(('lesion', 'multiplicity'), ready)  # an established group un-bundles the biopsy (4.7, C-2)
         self.assertNotIn(('session', 'part_of_session'), ready)
 
-    def test_the_kind_of_moderate_sedation_and_other_is_read_on_the_hold_path_only(self):
-        # D194: neither has a sibling, so no READY or exclusion path reads their kind; every other kind a rule reads on
-        # one keeps it
+    def test_the_kind_of_other_is_read_on_the_hold_path_only_and_moderate_sedations_on_the_ready_path(self):
+        # D194: kind other has no sibling, so no READY or exclusion path reads its kind. D213: the same-day rule's READY
+        # path and base_included read moderate sedation's kind (a sibling false of sedation controls it, step 2c3);
+        # every other kind a rule reads on one keeps it, and the whole of a bundling is read on the hold path only
         found = defaultdict(set)
         for code in [str(code) for code in CODES] + ['46221']:
             template = R.spec(code).template
@@ -609,7 +610,8 @@ class ReadSetTests(SimpleTestCase):
         self.assertTrue(found)
         for key, paths in found.items():
             with self.subTest(read=key):
-                self.assertEqual(paths, {R.Path.HOLD})
+                ready = key[2] is Kind.MODERATE_SEDATION and key[1] is not Role.WHOLE
+                self.assertEqual(paths, {R.Path.READY} if ready else {R.Path.HOLD})
         self.assertEqual({key[:2] for key in found}, {(Tag.C3_SEP, Role.SAME_DAY_ACT),
                                                       (Requirement.COMBINATION, Role.SESSION_ACT),
                                                       (Requirement.BUNDLING, Role.WHOLE)})

@@ -218,6 +218,16 @@ class EncounterContext(ImmutableModel):
     # release inserts leaves it NULL (ops/install.py migration_verdict: "nullable").
     event_inventory = models.ForeignKey('EventInventory', null=True, blank=True, on_delete=models.PROTECT,
                                         related_name='+')
+    # FINAL-V2 amendment 1 (docs/gemini-migration/AMENDMENT-1.md 4.5, A5; adopted as DECISIONS D208): the earlier codes,
+    # the Assessment the member was shown before the save or addendum this context was made for. It names them while
+    # the update runs and is the base of "what changed" afterwards. Set at insert (jobs.record_derived_context's
+    # ``earlier``, from analyze and from a context save), never after (the row is immutable), and outside ``sha256``.
+    # NULL for an upload, for a first processing with nothing shown yet, for every context made before it existed, and
+    # for any context an older release writes after a switch-back (it knows no such column). Nullable with no default of
+    # any kind (migration 0015), so a context an older release inserts leaves it NULL (ops/install.py
+    # migration_verdict: "nullable"). No reverse accessor ('+'): Assessment gains no attribute for it.
+    earlier_assessment = models.ForeignKey('Assessment', null=True, blank=True, on_delete=models.PROTECT,
+                                           related_name='+')
 
 
 class RoutingRun(ImmutableModel):
@@ -640,6 +650,41 @@ class InterpreterHoldRelease(ImmutableModel):
     the hold row stays. Members then Resume."""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     hold = models.OneToOneField(InterpreterHold, on_delete=models.PROTECT, related_name='release')
+    released_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name='+')
+    note = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class ProviderHold(ImmutableModel):
+    """FINAL-V2 amendment 1 (docs/gemini-migration/AMENDMENT-1.md 7.3, A16 and A20; adopted as DECISIONS D208): the
+    installation-wide hold of one provider - Corti, Astra or Fable - set when a refusal of that provider means further
+    requests would be refused until an operator acts: an authentication, permission, payment or quota refusal, by A20's
+    one classification (studio.provider_holds reads the run's recorded HTTP status and ``sent``, never its error text).
+    While a hold of a provider stands no request of that provider is sent by any encounter; a stored answer is still
+    reused. Installation-wide, so it names no workspace and no encounter. Shaped like InterpreterHold: append-only, and
+    standing until a ProviderHoldRelease names it. ``provider`` and ``reason`` are plain columns with no choices: the
+    classification owns their values, so a new one needs no migration (the installer's gate refuses AlterField). One run
+    sets at most one hold and a reuse of a run sets none; the classification's ``record`` keeps both, as
+    interpretation.holds.record does for InterpreterHold."""
+    AUTH, PERMISSION, QUOTA, REFUSED = 'auth', 'permission', 'quota', 'refused'  # REFUSED: a participant's other 4xx
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    provider = models.CharField(max_length=20)  # the ProviderRun.provider of the run that set it
+    reason = models.CharField(max_length=20)
+    http_status = models.PositiveIntegerField(null=True, blank=True)  # the refusal's status, as the run recorded it
+    # the run whose recorded refusal set the hold (for Corti's token endpoint, the run recorded not sent)
+    run = models.ForeignKey(ProviderRun, on_delete=models.PROTECT, related_name='provider_holds')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+
+class ProviderHoldRelease(ImmutableModel):
+    """The end of one ProviderHold, recorded by the ``provider_hold --release <provider>`` management command
+    (AMENDMENT-1.md 7.3: an operator, holding an operator grant, as for ``interpreter_hold``); the hold row stays.
+    Shaped like InterpreterHoldRelease. After it the next member act sends the held request once."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    hold = models.OneToOneField(ProviderHold, on_delete=models.PROTECT, related_name='release')
     released_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name='+')
     note = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)

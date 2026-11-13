@@ -66,12 +66,13 @@ APPRAISE_JOB_KIND = 'appraise'  # Job.kind of pass 2's stage (8 of 10 characters
 # The sha256 of each pinned object, checked when a request is built and when an answer is read (v1's prompt.check_pins
 # and read.check_pin pattern); an empty pin refuses both. The integration owner writes them in one commit after the
 # wave's repairs, each computed by its step's own function on the merged tree and checked by that step's pin test
-# (DECISIONS D202, arbiter triage INT-5: written after build waves 1 and 2). The health thresholds' pin stays empty
-# until step 8 sets them from D3. Until the first recording under a label a changed object needs only its pin
-# recomputed; after it, a changed byte of a pass-1 object needs gemini-events@3, of a pass-2 object gemini-appraisal@2.
+# (DECISIONS D202, arbiter triage INT-5: written after build waves 1 and 2, and the four that D209-D214's builds moved
+# re-measured after waves 3 and 4). The health thresholds' pin stays empty until step 8 sets them from D3. Until the
+# first recording under a label a changed object needs only its pin recomputed; after it, a changed byte of a pass-1
+# object needs gemini-events@3, of a pass-2 object gemini-appraisal@2.
 # pass 1 (INTERPRETATION_VERSION_V2):
 # contract/extract_prompt.INSTRUCTIONS_2 (UTF-8): step 2a
-INSTRUCTIONS_SHA256_V2 = '244858ab0e2f57c98d4d2f0e7ad8d5360e88e9d90bff543b4f489831c7c7ae54'
+INSTRUCTIONS_SHA256_V2 = '462631172d4741a35418ef99bc6befd8ac3dcef95e46649fa5f4f260e98c98f9'
 # canonical bytes of contract/extract_schema.LOCAL_SCHEMA_2 (step 1b): step 2a
 LOCAL_SCHEMA_SHA256_V2 = '7cd387041de317825f371415070bcee1703be0d9022c92bf77580f59dda3d04c'
 # canonical bytes of contract/extract_schema.RESPONSE_SCHEMA_2 (step 1b): step 2a
@@ -80,18 +81,18 @@ RESPONSE_SCHEMA_SHA256_V2 = 'bcb7fce8f1fa0b28c5fb8ea7514ba22f14ce06f18d1f557b16b
 SEGMENTATION_SHA256 = '41d2245ada69f2a573d0354486323d9f30e00fef7091f531e2e0541a11af8e78'
 # pass 2 (APPRAISAL_VERSION):
 # contract/appraise_prompt's instruction (UTF-8): step 2c
-APPRAISAL_INSTRUCTIONS_SHA256 = '2259b699306d13d174a4e815beba40cbcf9bbedd0c14e21699ebdcebfdc081b0'
+APPRAISAL_INSTRUCTIONS_SHA256 = '892d696beaa9261875d7e4dfba5836b5445ce5f045c297ad668e3303f480292d'
 # canonical bytes of contract/appraise_schema's LOCAL schema: step 2c
 APPRAISAL_LOCAL_SCHEMA_SHA256 = '526dd4e4116c07ed3e1431759a47ac79d4a4d3e7aba81c3133933abe5da46cbf'
 # canonical bytes of contract/appraise_schema's RESPONSE schema: step 2c
 APPRAISAL_RESPONSE_SCHEMA_SHA256 = 'fc83346270c6bc165baba78ed8a731132c7e90f172ad22853b100d085ffbd275'
 # claims.TEMPLATES: step 2c
-TEMPLATES_SHA256 = '9efd3e1d2d1fd8124f3bb4c54169e5ede90dc5a4d7bdd7a7f0496927264a7ce0'
+TEMPLATES_SHA256 = '5422597831b871e03a0d79f308daba5c3077f4057192b0e6c74637a55d771b14'
 # claims.STATEMENT_TEMPLATES: step 2c
 STATEMENT_TEMPLATES_SHA256 = '3880e4af3eefbdbccf0c5bb8e4a099df1d50268b485e991f46db7b8f3a19e162'
 # the claims.CONTROLS generator with its tables (KIND_SIBLINGS, SESSION_SIBLINGS, CONTRAST_PLACES, the pair-control
 # and completeness rules, UNCONTROLLED): step 2c
-CONTROLS_SHA256 = '19fbf9621e4f3569170e0ed27a460fd4b172b7596b8d689c1a9c0d0c021db144'
+CONTROLS_SHA256 = '95d1ee8b42f8aaac05fbe17cd1ba34c0ebd4c5d47928cceee1bbb969178a1d05'
 # engine/requirements.CLAIMED, its sha computed by step 1f: step 2c hands it with its pins
 CLAIMED_SHA256 = '8c95246d6ff8a260b344bb5a52e25f51ac744343ed8ebe5887764ad7e5cd7b81'
 HEALTH_THRESHOLDS_SHA256 = ''  # the health thresholds of 3.2.6 (contract/settle.py, step 3a), set from D3: step 8
