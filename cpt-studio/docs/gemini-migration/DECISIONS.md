@@ -14961,3 +14961,173 @@ p11-lead.out). The rest are decided below or handed to waves 3-6. Two follow-up 
   - O1 goes to 6a. O15 goes to 5b and 5c. O16's hand-offs go to the steps they name.
   - O14 (FAMILY_KINDS rows for EM_OTHER and NOT_GI) needs no change: the readers take FAMILY_KINDS.get(family,
     frozenset()), so a missing row is the empty set (fail-closed).
+
+## Build waves 3 and 4 integrated: the integration owner's rulings on the refutations' findings (2026-11-13, session 68197eb1)
+
+Waves 3 and 4 are integrated as bf587d89a; the merge gate passed on its tree. The last refutation of steps 4b and 4c was
+blocking, and the refutations of 3a, 3c, 3d and 4a raised critical and high design questions. Before ruling, the lead
+re-ran every critical and high finding's own probe on the integrated tree (4a p10, p12b, p14, p15; 4b q1, q2, q3, q6;
+4c p02, p04, p06): each output is identical to the refuter's log and shows the wrong result it claims. The rulings below
+choose each reading in this order: never a false READY or a wrong exclusion; never a hold the design does not ask for on
+a common input; where the design's principles and the installed release's reading conflict on a common input, the
+installed reading is kept and the exception is named in 6a's property tests and in the final report; otherwise the
+fail-closed reading with one focused question. The repairs are built as steps of the waves 5-6 run (r2c, r2d, r3a,
+r3b, r3c, r3d, r4a, r4b, r4c, r4d), each owning the files its waves 3-4 step owned (r2d owns engine/facts.py).
+
+- **D216 An absence condition reads an unlisted act as possibly performed (4a P1, critical).**
+  - The defect: XCHG reads filed events only. "The existing biliary stent was removed. A new 10 Fr plastic stent was
+    placed.", with pass 1 filing only the placement and pass 2 reporting the removal as an unlisted act, leaves 43274
+    READY (4a p10). Filed, doubted or with its duct unknown, the same removal holds 43274.
+  - The ruling: 3.2.6 rule 3's synthetic doubted act (an unlisted act of a kind, in its session) is a possibly performed
+    act of that kind in that session for every rule whose condition is the ABSENCE of a possibly performed act, XCHG's
+    "no possibly-performed counterpart" first. The rules where an act's presence holds a code already consume it
+    (3.2.6's five). The repair lists every absence condition in evaluate.py, coverage.py, classes.py and combination.py
+    in its notes, each with whether it reads the synthetic act; one that does not is a defect.
+  - On p10, 43274 is held with one item; it is never READY.
+
+- **D217 The deeper enteroscopy class reads its completion as a disqualifier (4c A3 critical, UNRES, DQ4 and Q2,
+  SILENT-EXAM, SEQ).**
+  - 4.3's "for the deeper classes, completion not incomplete" reads:
+    - established complete: satisfied;
+    - a SILENT completion slot (nothing stated, no doubt naming the slot): satisfied. Silence states no incompleteness
+      (D108 and D56; 4c's Q2 option (b)). The installed release reads it so, so no capability is lost and nothing goes
+      to the owner;
+    - established incomplete or terminated: F, in the incomplete form (Q5 as built);
+    - anything else is U with one completion question: unresolved in any form (hedged, reported, detached by pass 2),
+      doubted (a doubt naming the completion or its empty slot, whatever its readings), or contradicted (whatever value
+      the claim keeps; rank 1, as requirements.py asks for any contradicted fact).
+  - D72 reads examinations: the deeper class is F only when every examination of the session is established
+    attempted_not_completed. An attempted examination beside an examination of the same session established performed
+    (pass 1's filing of a failed attempt followed by success) does not count against the class; the completion reading
+    above decides. An attempted examination whose session slot is silent, unresolved, doubted or contradicted, with this
+    session possible, makes the class U with a question on its session (SILENT-EXAM).
+  - On 4c's probes: A3's contradicted and doubted completions give ILEAL U with a question; SEQ's sequence with the
+    completion stated complete gives T, with no explanation and no incomplete form.
+
+- **D218 The jejunal class's points beyond it, and the small bowel (4c Q1, DQ2-EXT).**
+  - A point beyond the jejunal class is every point the oral route reaches only through the ileum: the ileum's points,
+    the ileocecal valve, the cecum, the appendiceal orifice and every colon point. A supported such point makes JEJUNAL
+    F on an oral enteroscopy (the installed release's furthest landmark fits no jejunal class there).
+  - A member that names only a region containing both the jejunal reach and the ileum (the small bowel) is not a beyond
+    point. [small_bowel, jejunum] fits JEJUNAL (4.3's literal row; the installed extent is jejunum). The small bowel
+    alone fits no class, as installed.
+  - 9.4's deleted-member weakening releases a jejunal code when the deleted member was the beyond point. This release is
+    accepted and named: 6a's P-MONO test names it as the one release this reading allows (4c's R6), and the final report
+    lists it as a residual. Requiring a stated non-reach instead (Q1 option (c)) would hold every push enteroscopy.
+
+- **D219 The pouch class accepts a pouch entered transanally (4c DQ1, Q3 option (b)).** 1b's approach definition makes
+  transanal a faithful filing of a pouchoscopy. POUCH fits with approach through_pouch, or with approach transanal when
+  `through` names an established ileal_pouch entry. It never fits a gastric pouch or a Roux limb (4.3).
+
+- **D220 apart_by_place and apart_by_lesion read every pair control between the two objects (3d PMONO, 4b F5).**
+  - The defect: both predicates read only the controls that ask about the other object's CURRENT members. Under 9.4's
+    deleted-member weakening (controls left as they were), U turns T: 33 of 18,974 weakenings in 4b's search, every one
+    a deleted place member.
+  - The ruling: "apart" needs every pair control between the two objects rejected, whatever place or lesion it asks
+    about, and every current member of the other covered by a rejected control. On FactSets that settle produces, the
+    controls come from the full lists, so 4.2's reading is unchanged; under the weakening, the deleted member's
+    unrejected control keeps the pair together. engine/facts.py (2d's file) is repaired by r2d, which runs 4b's
+    q4_mono_lists search and 3d's SC-B case to show no violation.
+
+- **D221 The procedural-adjunct arm asks only where the two acts may name the same lesion (4b F1).**
+  - Two different supported lesion ids that no same_as can join are different findings (P5: one id per distinct finding,
+    never merged). The arm is then F, and the ablation's or the bleeding control's code proceeds on its own rows. The
+    installed D30 bundled only the removal's same verified lesion, and 4.7 asks no question here.
+  - With the same lesion id, the arm reads part_relation and cause as 4.7 says. A same_as between the two lesions that is
+    not rejected (unresolved, doubted or contradicted) gives U, with one question naming both.
+  - Mutant RQ1's reach gets a test.
+
+- **D222 The control audit extends from genus to overlap (2c3 P2-P6).**
+  - D209's test is extended: a sibling control must be false of every act the claim's kind admits under pass 1's
+    definition. That includes an act done by one of the sibling's methods (a bleed treated with clips is a
+    bleeding_control), an act containing the sibling as a step (a drainage told with its needle aspiration), and a
+    device whose physics includes the sibling's (argon plasma coagulation delivers high-frequency current).
+  - Each failing pair gets a contrary that the claim's kind never is. r2c chooses it by D209's contrary test and records
+    the reason per pair: bleeding_control/clip (P4), drainage/fna (P2), argon_plasma/radiofrequency (P5) and
+    moderate_sedation's sibling (P6, which must be true of every procedure on the patient, the examination included).
+  - P3: the narrowed stent_removal and tube_placement labels are reworded so that the parts filing reads plainly true,
+    for example "a stent removal (the removal alone, even where a new stent is then placed)" (option (a)).
+  - The pins move in the integration's pin change (D202: no version bump before the first recording).
+
+- **D223 Each act that a shared sentence covers gets its own claim, and a segment's controls ask its whole range (3a
+  Q-A, 3d R4, w34 O6 and O14).**
+  - Q-A: claims.py gives the breadth and each excepted act of an exceptive sentence its own claim, each with its own
+    covers-form control. Each fact then has one appraisal (1.7), and the store's one-fact-per-claim rule holds (3a's R4,
+    first option; settle needs no change). "No other polyps were removed." then sets its excepted snare apart (BF17).
+  - R4 and O14: a segment statement's pair controls ask each place of the other object against the segment's whole range
+    (D196's whole range, now for pair controls too). "No biopsies were taken from the cecum to the hepatic flexure."
+    beside a biopsy only in the sigmoid colon then pairs INDEPENDENT once its controls are rejected.
+  - O6's third item: part_relation gets its own claim wherever a READY path or a bundling explanation reads it.
+  - O8: CLAIM_BOUND stays 640 until D2 measures it (D211). r2c reports the claim counts its changes add on the stress
+    shapes.
+
+- **D224 Pass 2's approximate never lowers a supported claim (3a Q-C, Q-D, Q-B).**
+  - D186's demotion does not read the qualifier approximate (1.3: approximate is recorded and never lowers). "The
+    sigmoidoscope was advanced to approximately 40 cm." settles supported, with the qualifier recorded. The other
+    qualifiers are unchanged.
+  - Q-D: D201's coupling table names 3.2.3's row 7 (cards_indistinct).
+  - Q-B stays as built (option (b): the SC-D case is held with event_entry a question) until D3 measures how often an
+    act told in a nursing part is restated in the clinician's section. A measured case reopens it with option (c).
+
+- **D225 Every customer sentence is true for its state (3c P2; 4a P5, P6, P7, P10, P11).**
+  - 3c's three fixed saved-changes lines get a form for each state the update can be in: an updating form, and a form
+    for when nothing runs (failed, stopped, paused, being_confirmed), as UPDATE_EXPORT_NOTE already has. 5d chooses
+    the form by state.
+  - The engine's items name the act and the fact that is actually unknown:
+    - LOWER's approach hold asks the approach (RANK row 8) with an approach sentence, never R6's extent sentence when
+      the reach is supported (P5);
+    - XCHG's duct question names the act whose duct is unknown, in 3c's two-act DUCT form (P6);
+    - a contradicted attribute other than the status is worded as a conflict about that attribute, quoting each side's
+      own sentence, never "performed and not performed" (P7);
+    - another-structure names the place the rule read (P10);
+    - rule 2's rank-2 item names the unlisted entry's kind and quotes its own unit (P11).
+  - New sentences are message ids in wording.py (3c's file, r3c). questions.py (r4a, built on r3c) uses them.
+
+- **D226 TRACT reads an EUS filed pancreatobiliary as upper (3c P9).** 1b's tract definition admits pancreatobiliary
+  for an EUS of the pancreas or the bile duct from the stomach or the duodenum. For an EUS session filed that way, the
+  TRACT row of every upper EUS code fits: the endoscope's route is the upper tract. The code's other rows (STATIONS,
+  LIMITED) are unchanged, and the lower EUS codes still need lower.
+
+- **D227 One "session done", D3 through read-under, and the procedure day (4b F2, F3, F4, F8; w34 O18; 4d R2-1 to
+  R2-3).**
+  - "Session done" has one derivation. 4d's session_done is the reference: E13's digital examination (device supported
+    manual) is excepted (D69). 4b's done_examinations, possible_examinations and session event give the same answer on
+    every FactSet, and a cross-module test in r4b asserts it (it imports combination read only).
+  - F3: a contradicted act is never read under another service. It is listed in doubt with its conflict question (D3;
+    4.8 rank 1).
+  - F4: READ_UNDER reads no list's completeness (P3). An act is read under another service only when the completeness of
+    its place list is established (a completeness claim or rejected pair controls); otherwise it is listed, as 4d
+    already reads it. A listed act asks a coverage question and holds no code.
+  - F8: an act whose own session is not established reads every family only when no session it may be in admits its
+    kind (FAMILY_KINDS). Otherwise it reads its possible sessions' families.
+  - 4d R2-1: a procedure day is established only by an act whose kind is established and is not an E/M kind. A weakening
+    that gives an E/M event another possible kind establishes none.
+  - 4d R2-2: a session id that the FactSet does not hold reads as possibly any session for membership (fail-closed, as
+    its family read is).
+  - 4d R2-3 stays as built (the builder's option (C)). An established procedure day beside a documented separately
+    identifiable statement releases the E/M code even beside an undatable act: 4.7's unchanged rule, as installed.
+    ADJUDICATION C-3's "never READY" does not apply when another act establishes the procedure day.
+
+- **D228 3d's possible statements and the rank of an unlisted pair (3d DQ1, DQ3).**
+  - DQ1: an act-filed possible statement is set apart by target without pair controls when both targets are established
+    and differ (4.5's HO-3 paragraph).
+  - DQ3: an unlisted pair asks performed_status (4.8 RANK row 2), not statement_scope.
+  - DQ2 stays as built (3d's Q4).
+
+- **D229 Items routed without a new ruling.**
+  - 3b P1: a stored pass-1 answer that the reader refuses gets a refused effect of its own, never unbuilt (7.5's
+    retry door) (r3b).
+  - 3b P2: adapter.py's call-time v1 imports stand until 5b switches the pipeline. 6a's RETIRED gate asserts that no
+    new-path call reaches them. Deleting the v1 surface waits for the retirement of the v1 rows after the install, and
+    the final report lists it as a residual.
+  - 3a F1: settle.absorbing fails closed instead of raising (r3a).
+  - The defects and test gaps 4a P2, P3, P4, P8, P9; 4b F6, F7; 3d PT, T1, T2; and 2c3 P1 are fixed by the owning
+    repair step.
+  - 4c G: D72's EXAMINATION reads join Tag.ENT's read-set in requirements.py (1f's file). The integration applies it,
+    mechanical and required by this ruling.
+  - O4 and O5 (ClaimRole and the report records into contract/types.py; store.py closes _V2Json; SHAPE_PINS) are done
+    by the waves 5-6 integration owner as one change across settle.py, store.py, types.py and test_store, before the
+    first install (hand-offs 1d#2 and 1d#6).
+  - O3 (HEALTH_THRESHOLDS_SHA256) stays unwritten until step 8 sets it from D3 (INT-5).
+  - O17 (one Truth and cause derivation across classes, coverage and evaluate) is not a defect today. It is recorded for
+    the finished-diff refutation.
