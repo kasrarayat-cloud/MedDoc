@@ -14851,3 +14851,113 @@ evidence, and such an argument comes back to the owner of these decisions.
       - A21's install count (expected 0).
   - **Still unmeasured, carried:** the vendors' refusal statuses (Corti's 402 and 429, both participants'). A20's
     fail-closed reading stands until they are measured.
+
+## Build waves 1 and 2 integrated: the integration owner's rulings on the open requests (2026-11-13, session 68197eb1)
+
+The waves 1-2 integration (wf_4e4d46a2-f71, committed as 34eb4e856) passed its merge gate. Its notes
+(build-v2/int-w12/final/NOTES.md, section 2) leave seventeen requests open (O1-O17). Step 2c's second refutation
+still blocks, on problem A alone. A and B were reproduced first-hand on 34eb4e856 (scratchpad int-w12/p07-lead.out and
+p11-lead.out). The rest are decided below or handed to waves 3-6. Two follow-up steps, 1b3 (1b's and 2a's files) and
+2c3 (2c's files), build these rulings in the waves 3-4 workflow, each refuted like every step.
+
+- **D209 Sibling labels are contraries: manometry and pressure_measurement are narrowed both ways (refute-2c-r2 A,
+  high; 2c-2 R4; integration O11).**
+  - The defect: the manometry act's kind control "This act is a pressure measurement." is true of every manometry. A
+    faithful pass 2 therefore supports it, the pair is control_incoherent, and act.kind stays unresolved. Every
+    manometry code (91010, 91013, 91020, 91022, 91040, 91117, 91122) is then held on a correct reading, a hold the
+    design does not ask for (3.2.3 means a sibling as a contrary; D207's accepted 2c:dev10). The reverse direction does
+    the same to 43263.
+  - The ruling:
+    - pressure_measurement names the sphincter of Oddi (it serves only 43263);
+    - manometry names every manometry study other than the sphincter of Oddi's: esophageal, gastric, duodenal or
+      small-bowel, colonic and anorectal manometry, and esophageal balloon distension studies.
+    - Both pass 1 (1b's kind definitions, today names only) and pass 2 (2c's KIND_LABELS) say so.
+    - Each kind claim stays true of every act of its kind. Each control is false of it.
+  - The general rule, built by 2c3: every pair in KIND_SIBLINGS and SESSION_SIBLINGS is audited for this defect, a
+    sibling label that names a genus of the claim's kind. Each pair is listed in the step's notes with the reason its
+    control is false of the claim's kind, and a test asserts that for each manometry code's act and for 43263.
+  - The pins move: TEMPLATES, CONTROLS, and pass 1's LOCAL/RESPONSE/INSTRUCTIONS where 1b's text changes. They are
+    re-measured in the waves 3-4 integration's one pin change (D202: no version bump before the first recording).
+
+- **D210 An all_of_kind breadth's control lists only acts that may lie in the statement's own session (refute-2c-r2
+  B, medium, and F, low).**
+  - The defect: a colonoscopy statement "No biopsies were taken during the colonoscopy." beside an upper endoscopy's
+    gastric biopsy gets the control "This statement denies only tissue samplings with forceps other than acts A2."
+    A2 is the gastric biopsy, so the control is literally true. The broad denial then cannot exclude a wrongly proposed
+    45380, which is held instead of EXCLUDED.
+  - The ruling: the "other than acts" control lists the reported acts whose session is the statement's own, or is not
+    established (fail-closed). An act established in another session is neither listed nor makes the breadth
+    unclaimable.
+  - Round 2 dropped the reported act's valid-anchor condition (F). In the statement's own session, an act whose
+    anchor is invalid, or whose status or kind is contradicted, makes the breadth Unclaimable.CONTROL (2c#7's
+    fail-closed reading). Across sessions it has no effect.
+  - Tests pin both rules, and the step's notes state the change.
+
+- **D211 Pair controls only for the kind pairs a bundling-identity rule reads together; the claim bound stays and is
+  measured (refute-2c-r2 C, medium; 2c-2 R2; integration O10).**
+  - The defect: pair controls are generated for every pair of acts of one session whose kinds any place-identity rule
+    reads, the same kind included. 17 separately filed snares give 625 claims (524 pair controls), and 16-17 snares
+    cross CLAIM_BOUND 640. Past the bound the request is never sent (TOO_LONG), so every code is held.
+  - The ruling: D196's pair controls are generated, in both directions, only for the (kind, kind) pairs some bundling
+    identity-by-place rule reads together, as 1f's read-sets give them. A same-kind pair gets one only where a rule
+    reads a same-kind identity.
+  - CLAIM_BOUND stays 640. 2c3 measures the claim count for one session with N separately filed snares and M
+    biopsies (N + M up to 30) and for every development document it may open. If a realistic shape (up to 20 acts in
+    one session) still exceeds the bound, it is reported to the integration owner with the count, never raised
+    silently. Beyond the bound, TOO_LONG stays the hold, and D3 counts it.
+
+- **D212 A lesion's places get a template and 3.2.3's contrast control (2c:F5; refute-2c-r2 D, medium; 1f-2 Q3 =
+  2c-2 R3; integration O5).**
+  - The defect: D195 puts (lesion, places) in CLAIMED for SITE's lesion arm, but 2c has no template, so the arm can
+    never be met. A code whose act lacks places while its lesion has them is held.
+  - The ruling: the template is "Lesion {lesion} is in the {place}.". Its control is CONTRAST_PLACES': the first
+    candidate disjoint from every place of the lesion and from a segment statement's whole range (D196). It is
+    claimed wherever a READY or exclusion path reads a lesion's places. P-CONTROLLED covers it, and the pins are
+    re-measured.
+
+- **D213 The remaining P-CONTROLLED gaps on READY paths get controls (2c F-2, F-3; 1f F2; refute-2c-r2 E).** 9.4
+  P-CONTROLLED requires a control for every claim a READY or exclusion path reads, so that one biased "supports"
+  cannot decide a code.
+  - **An act's device** (4.5's technique row reads any established device). The control names the device's sibling
+    in its family, for example cold snare and hot snare, or forceps and hot forceps. Without a sibling, it names
+    another device the same row would treat as different. It is built per (kind, device value) a READY path reads.
+  - **A targeted breadth** (single, listed, segment; 4.6 condition 3 reads "breadth established and not exceptive").
+    The control is the exceptive breadth over the same targets ("... other than {targets}"), which a faithful reading
+    of a targeted denial rejects.
+  - **moderate_sedation's kind.** The same-day rule's READY path and base_included read every act's kind, so D194's
+    premise that no READY path reads it does not hold (1f's F2). The kind claim gets a sibling control false of
+    sedation and true of a procedure on the patient, chosen by D209's contrary test, and 1f's read-sets mark the
+    read. The defect it closes: a banding misfiled as moderate_sedation, plus one biased "supports", leaves no
+    procedure that day, and 99213 would go READY without separate_em.
+  - **The segment control's candidate order** (nearest disjoint landmark from the first place, then from the last,
+    then the far ones) is pinned by a test, so CONTROLS_SHA256 moves when the order changes (refute-2c-r2 E, mutant
+    MY1).
+
+- **D214 Pass 1's motility and anorectal session definitions are made disjoint (2c-2 R5; integration O12).**
+  - The defect: pass 1 defines motility as "a motility or manometry study" and anorectal as "anorectal testing", so an
+    anorectal manometry may be filed either way. Pass 2's labels are already disjoint: motility is "... of the
+    esophagus, the stomach, the small bowel or the colon, not an anorectal test". A session filed as motility is then
+    contradicted on a correct document.
+  - The ruling: pass 1 defines motility as a motility or manometry study of the esophagus, the stomach, the small
+    bowel or the colon, never anorectal testing. Anorectal testing, anorectal manometry included, is always anorectal.
+    This is built before the first recording (D202). The pins move in the waves 3-4 integration's pin change.
+
+- **D215 2a#8: the earlier refutation rounds' case files join the prompt's phrase scan (2a-2 R2; integration O6).**
+  - The step that owns tests/v2/test_extract_prompt.py (1b3) may read the case files 9.6 names, under
+    gemini-migration/round5*/ and refute/w3-w5 (none sealed). It may do so only to add them to CORPORA with read pins
+    and a reviewed list of shared generic five-word runs, each run with its reason: the three runs the reviewer
+    measured ("on the date of service", "was done on the date", "done on the date of").
+  - INSTRUCTIONS_2 does not change for them. A planted run from each new corpus must fail the scan.
+
+- **Hand-offs recorded, no ruling needed:**
+  - O7 (1b's test_extract_schema exempt) goes to 1b3. O8 (2c's per-corpus read pins in test_appraise_prompt) goes to
+    2c3.
+  - O3 (SectionPlace.closers carried with INT-4), O4 (engine/facts.py:223's docstring) and t0's note 7 (the
+    engine/types.py docstrings) go to w3int.
+  - O2 (checks.py builds geometry.Event; D198's 3a half), O9 (family_admits through FAMILY_KINDS.get), O13 (the
+    date of service's checks.integrity and checks.literal), and 2c-2's Unclaimable.CONTROL and PARTNER settling
+    unappraised go to 3a. So does the observation that D200's object-less doubt reaches claims only through D206's
+    Checked.
+  - O1 goes to 6a. O15 goes to 5b and 5c. O16's hand-offs go to the steps they name.
+  - O14 (FAMILY_KINDS rows for EM_OTHER and NOT_GI) needs no change: the readers take FAMILY_KINDS.get(family,
+    frozenset()), so a missing row is the empty set (fail-closed).
