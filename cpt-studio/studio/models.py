@@ -302,6 +302,13 @@ class EventInventory(ImmutableModel):
     encounter = models.ForeignKey(Encounter, on_delete=models.PROTECT, related_name='event_inventories')
     revision = models.ForeignKey(SourceRevision, on_delete=models.PROTECT, related_name='event_inventories')
     provider_run = models.ForeignKey(ProviderRun, on_delete=models.PROTECT, related_name='event_inventories')
+    # Design v2 (docs/gemini-migration/FINAL-V2.md 6.3, migration 0015): the appraisal ProviderRun (pass 2, purpose
+    # 'appraisal') whose verdicts a gemini-events@2 inventory settled; provider_run stays pass 1's. NULL on every v1 row
+    # and on a v2 row that records a refused pass-1 answer (no pass 2 ran); a refused or unhealthy pass-2 answer is
+    # recorded on its ProviderRun and the stage, never as a row, so the unique key below is unchanged. Nullable with no
+    # default of any kind, so a row an older release inserts leaves it NULL (ops/install.py migration_verdict:
+    # "nullable"). interpretation.store.BINDINGS_V2 names it, so a v2 row's sha256 binds both runs.
+    appraisal_run = models.ForeignKey(ProviderRun, on_delete=models.PROTECT, null=True, related_name='+')
     interpretation_version = models.CharField(max_length=40)  # gemini-events@1: the prompt, schema and read rules
     inventory_version = models.CharField(max_length=40)  # gemini-inventory@1: normalization, verification, lexicons
     text_sha256 = models.CharField(max_length=64)  # the revision text the request was built from (checked on read)

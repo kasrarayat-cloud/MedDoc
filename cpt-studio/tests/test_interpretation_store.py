@@ -304,7 +304,9 @@ class RowTests(SimpleTestCase):
 class ModelTests(SimpleTestCase):
     def test_the_fields_are_the_models_columns(self):
         columns = {item.attname: item for item in EventInventory._meta.concrete_fields}
-        self.assertEqual(set(store.FIELDS), set(columns) - {'id', 'created_at'})  # FINAL 4.1: all but id, created_at
+        # FINAL 4.1: all but id, created_at; and FINAL-V2 6.3's appraisal_run_id, a column of design v2 rows only
+        # (store.FIELDS_V2), which a v1 row leaves NULL and never hashes
+        self.assertEqual(set(store.FIELDS), set(columns) - {'id', 'created_at', 'appraisal_run_id'})
         self.assertEqual((EventInventory.READ, EventInventory.REFUSED), (store.READ, store.REFUSED))
         fields = read_row()
         for name in ('interpretation_version', 'inventory_version', 'text_sha256', 'request_sha256', 'response_sha256',

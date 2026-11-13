@@ -5,13 +5,18 @@ of studio.gi.context: the module itself never imports it); the copied legacy not
 date (D2); "use the document date"; and the record read off a normalized inventory. Nothing is sent."""
 from __future__ import annotations
 
+import ast
+import inspect
 import json
+import subprocess
 import sys
+from pathlib import Path
 
 from django.test import SimpleTestCase
 
 from studio import context_facts
 from studio.interpretation import dates, normalize
+from studio.interpretation.contract import date_literals
 from tests.test_interpretation_identity import accepted, answer, normalized
 
 WORDS = {'start': 17, 'end': 27, 'text': '11/09/2026', 'match': 'exact'}
@@ -334,3 +339,45 @@ class FromAnInventory(SimpleTestCase):
 
 if __name__ == '__main__':  # pragma: no cover
     sys.exit('Run with manage.py test.')
+
+
+class ContractDateLiterals(SimpleTestCase):
+    """Design v2 (docs/gemini-migration/FINAL-V2.md 5.0, 5.7; step 2d of its 8.1): this kept module's one date parser,
+    iso_date, is read from contract/date_literals.py - v1's function copied, AST-equal and equal by value
+    (tests/v2/test_date_literals.py) - so importing and running the member precedence loads no retired module. The
+    rows above run unchanged over it."""
+
+    def test_dates_imports_the_contracts_date_literals_and_no_retired_module(self):
+        tree = ast.parse(inspect.getsource(dates))
+        imported = {f'{node.module}.{alias.name}' for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)
+                    for alias in node.names}
+        self.assertIn('studio.interpretation.contract.date_literals', imported)
+        self.assertFalse([name for name in imported if name.startswith('studio.interpretation.')
+                          and name.split('.')[2] in ('literals', 'lexicon', 'schema', 'read', 'normalize', 'verify')])
+        self.assertIs(dates.date_literals.iso_date, date_literals.iso_date)
+        self.assertFalse(hasattr(dates, 'literals'))
+
+    def test_a_fresh_interpreter_loads_no_retired_module_for_it(self):
+        app = Path(__file__).resolve().parents[1]
+        code = ('import sys\n'
+                'import studio.interpretation.dates\n'
+                'print(",".join(sorted(m for m in sys.modules if m.startswith("studio"))))\n')
+        result = subprocess.run([sys.executable, '-I', '-B', '-c', f'import sys; sys.path.insert(0, {str(app)!r})\n'
+                                 + code], capture_output=True, text=True, timeout=60, cwd=app)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip().split(','), [
+            'studio', 'studio.context_facts', 'studio.interpretation', 'studio.interpretation.contract',
+            'studio.interpretation.contract.date_literals', 'studio.interpretation.contract.types',
+            'studio.interpretation.dates'])
+
+    def test_a_member_value_is_judged_by_the_copied_parser_exactly_as_by_v1s(self):
+        from studio.interpretation import literals  # test-only: the retired original, for its values
+
+        for value in ('2026-11-09', '2026-02-29', '2028-02-29', '2026-13-01', '0000-01-01', '2026-1-09', '20261109',
+                      '2026-11-09 ', '２０２６-11-09', '2026-W45-1', ''):
+            with self.subTest(value=value):
+                self.assertEqual(date_literals.iso_date(value), literals.iso_date(value))
+                if value.strip() and literals.iso_date(value.strip()) is None:
+                    with self.assertRaises(ValueError):
+                        dates.member_date_state(STATED, value)
+

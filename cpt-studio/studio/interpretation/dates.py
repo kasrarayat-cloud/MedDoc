@@ -47,6 +47,14 @@ neither, no date. A held state sends nothing. "Use the document date" is offered
 stated and verified.
 
 Pure and Django-free; imports nothing from studio.gi (FINAL 3.1).
+
+Design v2 (docs/gemini-migration/FINAL-V2.md 5.0, 5.7; step 2d of its 8.1): this kept module reads its one date parser,
+``iso_date``, from contract/date_literals.py - v1's function copied, AST-equal and equal by value (tests/v2/
+test_date_literals.py) - and no longer imports the retired literals module, so the member precedence executes no retired
+code. ``member_date_state`` also takes ``quote``: engine/derive.py builds its date record from the settled inventory's
+facts, whose spans are offsets with no text (the engine never reads text), and hands the caller's display slice of the
+revision; each quoted span's text is then ``quote(start, end)``. Without it - every v1 caller - a span's own text is
+read exactly as before.
 """
 from __future__ import annotations
 
@@ -55,7 +63,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from studio.context_facts import DOCUMENT_CONFLICT_NOTE, USER_BIRTH_NOTE, USER_CONFLICT_NOTE, USER_ELSEWHERE_NOTE
-from studio.interpretation import literals
+from studio.interpretation.contract import date_literals
 
 NO_MEMBER_VALUE = 'no_member_value'
 AGREES = 'agrees'
@@ -111,19 +119,22 @@ class MemberDate:
                 'offer_document_date': self.offer_document_date, 'corti_date': self.corti_date}
 
 
-def _span(span: Mapping) -> dict:
+def _span(span: Mapping, quote=None) -> dict:
+    """A quoted span: its offsets, and its own text - or, given ``quote`` (design v2), quote(start, end)."""
+    if quote is not None:
+        return {'start': span['start'], 'end': span['end'], 'text': quote(span['start'], span['end'])}
     return {'start': span['start'], 'end': span['end'], 'text': span['text']}
 
 
-def _own_spans(date_of_service: Mapping, passages) -> list:
+def _own_spans(date_of_service: Mapping, passages, quote=None) -> list:
     """The date's own spans: its words, else the first place of each of its located passages."""
     if date_of_service.get('words'):
-        return [_span(date_of_service['words'])]
+        return [_span(date_of_service['words'], quote)]
     places = []
     for pid in date_of_service.get('passages') or ():
         record = passages.get(pid)
         if record and record.get('state') != 'unlocated' and record.get('spans'):
-            places.append(_span(record['spans'][0]))
+            places.append(_span(record['spans'][0], quote))
     return places
 
 
@@ -144,12 +155,13 @@ def _passage_map(passages) -> dict:
     return {record['id']: record for record in passages or ()}
 
 
-def member_date_state(date_of_service: Mapping, member_value, passages=()) -> MemberDate:
+def member_date_state(date_of_service: Mapping, member_value, passages=(), *, quote=None) -> MemberDate:
     """The member_date_state row (module docstring) of the inventory's ``date_of_service`` (encounter_facts, contract
     8.1) and the member's entered date (a YYYY-MM-DD string; None or blank for none). ``passages`` are the inventory's
     passages (a list of records, or {id: record}), read only to quote the date's own located passages: they change the
     evidence and the note, never the row. TypeError for a member value that is no string, ValueError for one that is no
-    date (as merge_user_values refuses it)."""
+    date (as merge_user_values refuses it). ``quote``: design v2's display slice for spans given without their text
+    (module docstring); None reads each span's own text."""
     if member_value is not None and not isinstance(member_value, str):
         raise TypeError('A member value is a string.')
     member = (member_value or '').strip()
@@ -157,7 +169,7 @@ def member_date_state(date_of_service: Mapping, member_value, passages=()) -> Me
     verified = date_of_service['value'] if (state == 'stated' and date_of_service['verified']
                                            and date_of_service['value']) else None
     candidates = list(date_of_service.get('candidates') or ())
-    own = _own_spans(date_of_service, _passage_map(passages))
+    own = _own_spans(date_of_service, _passage_map(passages), quote)
 
     def row(name: str, *, effective=None, origin: str, note: str = '', evidence=()) -> MemberDate:
         held = name in HELD
@@ -172,18 +184,18 @@ def member_date_state(date_of_service: Mapping, member_value, passages=()) -> Me
             return row(NO_MEMBER_VALUE, origin=CONFLICT, evidence=own,
                        note=DOCUMENT_CONFLICT_NOTE + ', '.join(candidates) + '.')
         return row(NO_MEMBER_VALUE, origin=MISSING, evidence=own, note=MISSING_NOTE if state == 'not_stated' else '')
-    if literals.iso_date(member) is None:
+    if date_literals.iso_date(member) is None:
         raise ValueError('A member value for the date of service is a YYYY-MM-DD date.')
     if verified and member == verified:
         return row(AGREES, effective=verified, origin=DOCUMENT, evidence=own)
     births = _verified_others(date_of_service, ('birth',), member)
     if births:
-        spans = [_span(entry['words']) for entry in births]
+        spans = [_span(entry['words'], quote) for entry in births]
         return row(CONFLICT_BIRTH, origin=CONFLICT, evidence=own + spans,
                    note=USER_BIRTH_NOTE.format(user=member, document=quoted(spans)))
     elsewhere = _verified_others(date_of_service, ELSEWHERE_ROLES, member)
     if elsewhere:
-        spans = [_span(entry['words']) for entry in elsewhere]
+        spans = [_span(entry['words'], quote) for entry in elsewhere]
         return row(CONFLICT_ELSEWHERE, origin=CONFLICT, evidence=own + spans,
                    note=USER_ELSEWHERE_NOTE.format(user=member, document=quoted(spans)))
     if verified:

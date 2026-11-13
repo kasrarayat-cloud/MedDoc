@@ -348,7 +348,9 @@ class EventInventoryRowTests(TestCase):
         foreign = {tuple(item['columns']): item['foreign_key'] for item in found.values() if item['foreign_key']}
         self.assertEqual(foreign, {('encounter_id',): ('studio_encounter', 'id'),
                                    ('revision_id',): ('studio_sourcerevision', 'id'),
-                                   ('provider_run_id',): ('studio_providerrun', 'id')})
+                                   ('provider_run_id',): ('studio_providerrun', 'id'),
+                                   # FINAL-V2 6.3, migration 0015: a v2 row's appraisal run (nullable)
+                                   ('appraisal_run_id',): ('studio_providerrun', 'id')})
 
     def test_a_referenced_inventory_cannot_be_deleted_even_past_the_immutable_manager(self):
         inv = inventory(self.enc, self.rev, self.run)

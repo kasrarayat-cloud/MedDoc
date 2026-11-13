@@ -446,7 +446,8 @@ class MigrationReceiptTests(TemporaryDirectoryTest):
                                                                 '0009_cux_review', '0010_cux_operator', '0011_cux_flow',
                                                                 '0012_cux_worker_beat',
                                                                 '0013_completion_answer_binding',
-                                                                '0014_event_inventory'])
+                                                                '0014_event_inventory',
+                                                                '0015_inventory_appraisal'])
         self.assertEqual(migrations['after_baseline'][MIGRATION_0008], {'safe': True, 'why': WHY_0008})
         self.assertEqual(migrations['after_baseline']['0013_completion_answer_binding'],
                          {'safe': True, 'why': ['memberanswer.question: NOT NULL with a database default (db_default)',
@@ -460,6 +461,9 @@ class MigrationReceiptTests(TemporaryDirectoryTest):
                                                 'assessment.interpretation: nullable',
                                                 'InterpreterHold: a new table no older revision reads',
                                                 'InterpreterHoldRelease: a new table no older revision reads']})
+        # design v2 (FINAL-V2 6.3, 2026-11-12): 0015 adds EventInventory.appraisal_run, nullable, read safe
+        self.assertEqual(migrations['after_baseline']['0015_inventory_appraisal'],
+                         {'safe': True, 'why': ['eventinventory.appraisal_run: nullable']})
         self.assertTrue(all(verdict['safe'] for verdict in migrations['after_baseline'].values()))
 
     def test_0008_adds_no_column_to_an_existing_table(self):

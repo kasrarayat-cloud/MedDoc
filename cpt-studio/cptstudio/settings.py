@@ -205,6 +205,17 @@ INTERPRETER_SEND_DEADLINE_SECONDS = 510  # D49
 # D49: the interpreter's own read timeout - a unary answer arrives whole, so it bounds the generation (adapter.py); the
 # participants' 300 s is too short for a cut-off answer of 32,768 tokens at the slowest measured rate (about 398 s).
 INTERPRETER_READ_TIMEOUT_SECONDS = 480
+# The appraiser's one exchange (design v2's second call, docs/gemini-migration/FINAL-V2.md 7.4 [R:MO-3]) takes D49's
+# settings, as the interpreter's above: connect as the participants', within this send deadline, which no caller's
+# deadline stretches. Its stage (JOB_DEADLINE_SECONDS['appraise'] below) covers it, the 15 s kept for recording its
+# outcome (jobs.LOOP_RECORDING_SECONDS) and the stage's own work, and ends well before STALE_RUNNING_SECONDS.
+APPRAISER_SEND_DEADLINE_SECONDS = 510  # D49
+# D49: the appraiser's own read timeout - a unary answer arrives whole, so it bounds the generation. A cut-off answer of
+# 32,768 tokens at the slowest measured rate (82.4 tokens per second) needs about 398 s, inside it, so it is recorded
+# TOO_LONG, never UNKNOWN; the largest modelled appraisal with the largest measured thinking (about 29,400 tokens) needs
+# about 356 s. At the participants' 300 s it would be UNKNOWN - a reconcile, an encounter-wide block, a paid resend and
+# an unrecorded usage - which is D49's defect, repeated on the second call.
+APPRAISER_READ_TIMEOUT_SECONDS = 480
 # The size bound (D4, FINAL C9 as DECISIONS D25 sets it from the S16 measurement): a revision longer than this, or with
 # more pages, is not sent to the interpreter, and its stage says so plainly. Measured on the 179 FRESH answers of
 # 2026-11-10: output tokens = 2,173 + 1.081 x input characters (residual p99 3,593); the 14 runs at 19,398-19,460
@@ -222,9 +233,12 @@ INTERPRET_MAX_PAGES = 40
 # (jobs.LOOP_RECORDING_SECONDS), with 25 s for the stage's own work before the loop - a stage that has used more
 # reserves and sends nothing and is queued again (jobs._check_loop_time) - and it ends 20 s before
 # STALE_RUNNING_SECONDS (600), where the stale-stage sweep takes a stage for dead, so a live stage is never swept. The
-# worker's stop timeout (ops/install.py, 600 s) outlasts it.
+# worker's stop timeout (ops/install.py, 600 s) outlasts it. The appraise stage (design v2's second call, FINAL-V2 7.4)
+# has the interpret stage's 560 s (D49): its 510 s send and the 15 s recording, ending 40 s before
+# STALE_RUNNING_SECONDS.
 JOB_DEADLINE_SECONDS = {'extract': 300, 'analyze': 60, 'predict': 180, 'assess': 120, 'review2': 180,
-                        'astra': 580, 'fable': 580, 'astra_peer': 580, 'fable_peer': 580, 'interpret': 560}
+                        'astra': 580, 'fable': 580, 'astra_peer': 580, 'fable_peer': 580, 'interpret': 560,
+                        'appraise': 560}
 # Routing and context extraction run in a forked child under these (studio/bounded.py): the stage's deadline
 # above, this growth of address space past what the worker already uses, and a shorter wall clock when a
 # member's context change runs the extraction inside a web request.
