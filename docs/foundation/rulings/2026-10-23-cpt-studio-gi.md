@@ -3325,3 +3325,47 @@ payment failures are the installation-wide hold (D39): no repeated requests, a t
 - actual exports, refused while pending and correct after.
 
 The behaviour is designed and refuted as FINAL-V2 amendment 1 before it is built.
+
+## Owner directive, 2026-11-13 — the interpreter's model swapped from gemini-4-argon to gemini-4-carbon at maximum reasoning, with no separate qualification
+
+Received 2026-11-13 in session 68197eb1, after the session explained that a model swap reuses the whole build and needs
+only a re-run of the measurement. Verbatim:
+
+> I found tthat Google has Carbon much betetr than Aragon i want you to swap Aragon to Carbon max reasening i dont need any test or qualification just a simpel swap i approved since aragon was good it should carbon paly better so dont waste token and time on testing jsuta simpel swap
+
+### Session interpretation, 2026-11-13 (68197eb1, on receipt) — recorded, not owner-ruled
+
+(a) **The swap.** Google's documentation, read 2026-11-13 at aistudio.google.com (ai.google.dev redirects there):
+- the model ID is `gemini-4-carbon`, listed as stable (docs/models/gemini-4-carbon), with structured outputs, thinking
+  levels low, medium (the default) and high, and a 65,536-token synchronous output limit;
+- "maximum reasoning depth on gemini-4-carbon" is the thinking level `high` (docs/thinking);
+- "upgrading to gemini-4-carbon requires no request schema changes": change the model ID; thinking tokens count toward
+  the output limit; temperature, top_p and top_k are ignored, not rejected (docs/whats-new-gemini-4-carbon);
+- prices are identical to gemini-4-argon: $2.00 input and $10.00 output (thinking included) per million tokens through
+  2026-11-30, $4.00 and $20.00 from 2026-12-01 (docs/pricing).
+
+So the interpreter's MODEL becomes `gemini-4-carbon`. Both passes request thinking level high, and maxOutputTokens rises
+from 32,768 to 65,536, so the longer reasoning cannot truncate an answer. The price table names the new model at the same
+rates.
+
+(b) **"No test or qualification."** No separate qualification of Carbon is run, and no Carbon-specific measurement batch.
+The migration's own steps stay as the owner's earlier directives require them: the D1-D3 recordings, the frozen acceptance
+and the installed walk. They were planned before this message, and none had yet sent anything to any model, so they now
+measure Carbon, at no extra cost. The code's own unit tests and merge gate run as for any change. They make no provider call.
+
+(c) **Evidence stays true.** The recorded and frozen Argon answers (tests/fixtures/interpretation: the FRESH recordings
+and their variance re-runs) stay labelled gemini-4-argon, and the tests that replay them read them as Argon's recordings.
+Earlier reports keep the model they measured.
+
+(d) **Customers.** The customer denylist gains the full ID `gemini-4-carbon`, never the bare word "carbon", which is
+clinical vocabulary (a carbon-particle tattoo).
+
+(e) **Latency and cost.** The HTTP timeouts are kept until D1 measures the latency at high reasoning (Google's migration
+note asks that they allow for longer reasoning). The per-token prices are unchanged, but high reasoning spends more output
+tokens per document, so the cost per document rises; every send's usage and cost is recorded as before. The monthly
+spending cap of about $300 (owner message 2026-11-11) may be reached by the remaining recordings and the exam. A cap hit
+is a hold that is never retried (D39), and the cap is the owner's decision (class d).
+
+(f) **When.** No Gemini call happens before step 8's first recording. The code change lands right after the running build
+(wf_0d97cbf6-b97) integrates, before that recording, because the build's steps are editing the same files now. DECISIONS
+D230 records it.

@@ -15131,3 +15131,20 @@ r3b, r3c, r3d, r4a, r4b, r4c, r4d), each owning the files its waves 3-4 step own
   - O3 (HEALTH_THRESHOLDS_SHA256) stays unwritten until step 8 sets it from D3 (INT-5).
   - O17 (one Truth and cause derivation across classes, coverage and evaluate) is not a defect today. It is recorded for
     the finished-diff refutation.
+
+## Owner directive: the interpreter's model becomes gemini-4-carbon at maximum reasoning (2026-11-13, session 68197eb1)
+
+- **D230 The interpreter's model is gemini-4-carbon, thinking level high, with no separate qualification (owner
+  directive 2026-11-13, verbatim in docs/foundation/rulings/2026-10-23-cpt-studio-gi.md).**
+  - MODEL (studio/interpretation/__init__.py, D13) becomes `gemini-4-carbon`. Both passes' generationConfig gains
+    thinkingConfig.thinkingLevel `high`, the documented maximum for Carbon, and maxOutputTokens rises from 32,768 to
+    65,536, Carbon's synchronous output limit. Thinking tokens count toward that limit. Temperature stays in the request:
+    Carbon ignores it and does not reject it. The price table names gemini-4-carbon at argon's rates (identical through
+    2026-11-30 and from 2026-12-01; Google's pricing page read 2026-11-13).
+  - The customer denylist adds the full ID `gemini-4-carbon`, never the bare word "carbon" (clinical vocabulary).
+  - The recorded Argon answers in tests/fixtures/interpretation stay labelled gemini-4-argon, and are replayed as Argon's.
+  - The request bytes change before the first recording, so no inventory version bump is needed (D202). G-SIZE is
+    measured at D2 against the 65,536 limit, with thinking tokens counted. The HTTP timeouts are kept until D1 measures
+    the latency at high reasoning.
+  - No separate qualification is run. The planned D1-D3 recordings, the frozen acceptance and the installed walk measure
+    Carbon. The code change lands right after wf_0d97cbf6-b97 integrates, before step 8's first send.
