@@ -5,6 +5,7 @@ import importlib.util
 import io
 import json
 import logging
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -14,8 +15,8 @@ from django.test import SimpleTestCase
 
 from studio.reference import passages
 
-_SPEC = importlib.util.spec_from_file_location('cpt_verify_passages',
-                                               Path(__file__).resolve().parents[1] / 'ops' / 'verify_passages.py')
+SCRIPT = Path(__file__).resolve().parents[1] / 'ops' / 'verify_passages.py'
+_SPEC = importlib.util.spec_from_file_location('cpt_verify_passages', SCRIPT)
 verify = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(verify)
 
@@ -185,6 +186,31 @@ class VerifyPassagesTests(SimpleTestCase):
         self.assertIn('passages  cannot check: the PDF goes past a limit', output)
         # control: at the limit every page is read
         self.assertEqual(len(verify.page_texts(shapes.past_the_limit('annotation', entries=shapes.LIMIT))), 1)
+
+    def test_a_stream_named_again_past_the_limit_cannot_be_checked(self):
+        # pypdf-r6 C1: one /XRefStm of 1,000,001 entries named by two trailers. #4269 counts it at each read
+        # (2,000,002), and pypdf 6.21.4 leaves the second read out and reads on; the check is never run on that reading.
+        from tests.support import pypdf_limits as shapes
+
+        pypdf_log = logging.getLogger('pypdf')  # pypdf logs the read it leaves out
+        self.addCleanup(pypdf_log.setLevel, pypdf_log.level)
+        pypdf_log.setLevel(logging.CRITICAL)
+        c1 = self.tmp / 'c1.pdf'
+        c1.write_bytes(shapes.repeated(1_000_001, 2))
+        with self.assertRaises(verify.CannotCheck) as raised:
+            verify.page_texts(c1.read_bytes())
+        self.assertEqual(str(raised.exception), verify.LIMIT_REACHED)
+        named = self.write(dict(data_for(self.pdf_bytes), source=dict(
+            data_for(self.pdf_bytes)['source'], sha256=hashlib.sha256(c1.read_bytes()).hexdigest())), 'c1.json')
+        status, output = self.run_verify((named, c1))
+        self.assertEqual(status, 2, output)
+        self.assertIn('passages  cannot check: the PDF goes past a limit', output)
+        done = subprocess.run([sys.executable, '-I', '-B', str(SCRIPT), '--data', str(named), '--pdf', str(c1)],
+                              capture_output=True, text=True, timeout=300, check=False)
+        self.assertEqual(done.returncode, 2, done.stdout + done.stderr)  # the command itself exits 2
+        self.assertIn('0 passed, 0 failed, 1 could not be checked', done.stdout)
+        # control: 1,000,000 entries named twice is the limit itself, and every page is read
+        self.assertEqual(len(verify.page_texts(shapes.repeated(1_000_000, 2))), 1)
 
     def test_data_and_pdf_must_come_in_pairs(self):
         out = io.StringIO()

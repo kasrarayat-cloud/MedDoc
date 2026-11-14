@@ -69,7 +69,10 @@ What a page shows is read, or the result says what was not read:
   (studio.ingest.pdfcontent).
 
 A document is never truncated: too many pages or too much text fails the
-whole document.
+whole document. Nor is it read past a limit pypdf 6.21.4 added as an advisory
+fix (#4269: 2,000,000 cross-reference stream entries, counted at every read
+of a stream, so a stream named again counts again; #4290: page entries): it
+fails with LIMIT_REACHED, never read with a section left out (advisory_limit).
 """
 from __future__ import annotations
 
@@ -322,8 +325,11 @@ def _open(data: bytes) -> tuple[pypdf.PdfReader | None, str]:
     try:
         # pypdf reads the file as it ends at that revision's marker: the padding carries no PDF data.
         reader.__init__(io.BytesIO(data[:end + len(b'%%EOF')]))
-        # Before anything else reads an object: past the limit a section was left out, and each object it held
-        # would cost a search of the whole file (pypdf-r6 L1), or an /ID it held would read as a password (L3).
+        # As soon as the constructor returns, before the password test and the first page: past the limit a section
+        # was left out, each object it held would cost a search of the whole file (pypdf-r6 L1), and an /ID it held
+        # could fail the password test (L3). The constructor has read only the cross-reference sections and, for an
+        # encrypted file, the trailer's /ID and /Encrypt and what the encryption dictionary refers to, each searched
+        # for through the whole file when only the left-out section listed it (pypdf-r9 FC9-W1: 27 at most, measured).
         # Only read() counts, so the count is final here.
         if advisory_limit(None, reader):
             return None, LIMIT_REACHED
@@ -340,8 +346,14 @@ def _open(data: bytes) -> tuple[pypdf.PdfReader | None, str]:
 
 def advisory_limit(exc, reader) -> bool:
     """Whether pypdf stopped at one of ADVISORY_LIMITS: raised (``exc`` or one of its causes), or met while reading
-    a cross-reference stream it then left out (pypdf only logs that the section could not be read). ``reader`` may
-    be one whose constructor raised. ops/verify_passages.py asks the same question."""
+    a cross-reference stream it then left out (pypdf only logs that the section could not be read): #4269's counter
+    is past its limit. pypdf 6.21.4 counts a cross-reference stream's entries at every read of it, so a stream that
+    an older trailer or the /Prev or startxref chain names again counts again, and a document whose reads add up past
+    2,000,000 entries is refused (LIMIT_REACHED) whatever its distinct entries: the named class S-limit. pypdf 6.21.2
+    read such a file; plain 6.21.4 leaves out the section whose read passed the limit and reads on, so a distinct
+    section can be missing at status ok (pypdf-r6 V3). The refusal keeps a reading from ever being partial.
+    ``reader`` may be one whose constructor raised. ops/verify_passages.py asks the same question (CannotCheck,
+    exit 2)."""
     for _ in range(16):
         if exc is None:
             break

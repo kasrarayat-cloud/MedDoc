@@ -18,28 +18,31 @@ build a PdfReader: every upload is read by the child.
   inspect.getsource gives), never through inspect, tokenize or linecache, which keep a copy of each whole file in the
   process (pypdf-r6 F3: about 1.1 MiB of the extraction child's address-space limit).
 - the advisory fixes the reader depends on and the layer does not replace (#4269: PdfReader.__init__,
-  _read_xref_tables_and_trailers, _read_pdf15_xref_stream; #4290: PdfDocCommon._flatten, _flatten_leaf_page) are
-  checked the same way, never patched (_CHECKED).
+  _read_xref_tables_and_trailers, _read_xref, _read_pdf15_xref_stream; #4290: PdfDocCommon._flatten,
+  _flatten_leaf_page) are checked the same way, never patched (_CHECKED).
 - each replacement is that source with the listed edits, each found exactly once, and its sha256 is checked. Seven
   replacements are, byte for byte, pypdf 6.21.2's function; two are 6.21.4's with 6.21.2's lines put back and
-  6.21.4's MemoryError lines kept; three are 6.21.4's with an edit to an advisory fix's lines, below.
+  6.21.4's MemoryError lines kept; two are 6.21.4's with an edit to an advisory fix's lines, below.
 - every binding of a replaced function is rebound (its module or class attribute, and each module that imported it
   by name, all listed in _BINDINGS); afterwards nothing may still reach the replaced function (it must be
   collected).
-- three edits of an advisory fix's lines, each keeping the fix:
+- two edits of an advisory fix's lines, each keeping the fix:
   * #4265: where pypdf 6.21.4 turns a MemoryError inside a dictionary into a read error,
     DictionaryObject.read_from_stream raises the MemoryError itself, so the reader names it as it names every memory
     failure; its RecursionError, message and warning changes stay 6.21.4's. It is an edit, never a wrapper: a wrapper
     adds a Python frame to every nested dictionary, so a dictionary nested a few hundred levels deep, which pypdf
     6.21.2 and 6.21.4 both read, would meet the recursion limit (pypdf-r6 reconcile).
-  * #4269 (PdfReader._read_xref): a cross-reference stream (/XRefStm) that one read of the sections has already read,
-    named again by an older trailer (at its offset, or at another one before its object header), is neither read nor
-    counted again. pypdf 6.21.2's second read added no entry, but 6.21.4 counted every read toward its
-    2,000,000-entry limit, so one stream of 1,000,001 entries named twice was refused, and a distinct section after
-    it was dropped (pypdf-r6 L4, L5). Every distinct stream still counts.
   * #4269 (PdfReader._sanitize_pdf15_xref_stream_index_pairs): a negative /Index count takes part in the clamp's
     arithmetic as in 6.21.2 (pypdf-r6 F1: 6.21.4's count of 0 changed which entries an update shadows), and is passed
     on as 0, so it reads no entry and counts no entry toward the limit.
+- #4269's count is pypdf 6.21.4's, unchanged: a cross-reference stream's entries count at every read of it, so a
+  stream that an older trailer's /XRefStm or the /Prev or startxref chain names again is read and counted again. A
+  document whose reads add up past 2,000,000 entries is refused whatever its distinct entries: studio/ingest/pdf.py
+  names it LIMIT_REACHED (advisory_limit), and ops/verify_passages.py cannot check it (CannotCheck, exit 2). That
+  refusal is the named class S-limit. pypdf 6.21.2 read such a file (a re-read added no entry); plain 6.21.4, past the
+  limit, leaves out the section whose read passed it and reads on, so a distinct section can be missing at status ok
+  (pypdf-r6 V3). The refusal keeps a reading from ever being partial. The count is not deduplicated: reproducing
+  6.21.2's re-reads needs re-reading, and re-reading without counting would reopen #4269's bound (pypdf-r7, -r8).
 
 What the checks are for: they catch a pypdf that is not the proven one by accident (another version, a changed,
 missing or extra file, a stale or foreign .pyc for a replaced or checked function, a binding the layer does not know).
@@ -308,55 +311,6 @@ _PATCHES = (
                 '                raise PdfReadError("Error reading PDF file.") from exc\n'),
            ),
            'aa37af7c1452a6b01899feb9e45c47250229c1745e3ac820ffb60c2674a4e389'),
-    # Not a restore: #4269 (CVE-2026-119209) counts the entries of every cross-reference stream it reads toward its
-    # 2,000,000-entry limit, and so did a second read of one stream named by two trailers, which pypdf 6.21.2 made
-    # without adding an entry (each was used_before): a document of 1,000,001 entries was refused, and a distinct
-    # section read after the repeat was left out (pypdf-r6 L4, L5). A stream this read of the sections has read (or
-    # counted, then left out at the limit) is neither read nor counted again, whether an older trailer names it at the
-    # same offset or at another one before its header (whitespace, a comment); a read that failed before it counted
-    # anything is tried again, as 6.21.2 tried it. Two offsets that parse to different headers are two reads, as they
-    # were on 6.21.2. The set is the pass's: a new read() makes a new self.xref.
-    _Patch('pypdf._reader:PdfReader._read_xref', ('_reader.py @@ -1266,6 +1287,8 @@',),
-           (1274, 1301), '2def5dbdfdc44a8cff68b5247e0ff4015e05382612a65224216d58e8f0676ac5',
-           (
-               ('            stream.seek(cast(int, new_trailer["/XRefStm"]) + 1, 0)\n'
-                '            try:\n'
-                '                self._read_pdf15_xref_stream(stream)\n'
-                '            except MemoryError:  # pragma: no cover  # TODO: BLE001\n'
-                '                raise\n'
-                '            except Exception:\n'
-                '                logger_warning(\n',
-                '            stream.seek(cast(int, new_trailer["/XRefStm"]) + 1, 0)\n'
-                '            # pypdf_compat: a cross-reference stream this read of the sections has read is not read or\n'
-                '            # counted again, however an older trailer names it (pypdf 6.21.2 added no entry from it; #4269\n'
-                '            # counts each distinct stream once). A stream is its object header: number, generation and\n'
-                '            # where its dictionary starts, as the read below parses them from this offset.\n'
-                '            read_here = self.__dict__.get("_pypdf_compat_xref_streams")\n'
-                '            if read_here is None or read_here[0] is not self.xref:  # a new read of the sections\n'
-                '                read_here = self._pypdf_compat_xref_streams = (self.xref, set())\n'
-                '            start = stream.tell()\n'
-                '            try:\n'
-                '                stream.seek(-1, 1)\n'
-                '                section = (*self.read_object_header(stream), stream.tell())\n'
-                '            except MemoryError:  # pragma: no cover  # TODO: BLE001\n'
-                '                raise\n'
-                '            except Exception:  # the read below fails the same way, before it counts anything\n'
-                '                section = None\n'
-                '            stream.seek(start, 0)\n'
-                '            counted = self._xref_stream_entry_count\n'
-                '            try:\n'
-                '                if section is None or section not in read_here[1]:\n'
-                '                    self._read_pdf15_xref_stream(stream)\n'
-                '                    if section is not None:\n'
-                '                        read_here[1].add(section)\n'
-                '            except MemoryError:  # pragma: no cover  # TODO: BLE001\n'
-                '                raise\n'
-                '            except Exception:\n'
-                '                if section is not None and self._xref_stream_entry_count != counted:  # counted, left out\n'
-                '                    read_here[1].add(section)\n'
-                '                logger_warning(\n'),
-           ),
-           'c0ae14c66da0179adfb1ab6c6f895d787499d6539f0855355d3a19c3196c8bfd'),
     # Not a restore: #4269 (CVE-2026-119209) also turned a negative /Index count into 0 before the clamp to the
     # stream's size, which changes the clamp's running total, so the counts after it, and so which entries an update
     # shadows: a small update read a superseded definition's text on 6.21.2 and the current one on 6.21.4 (pypdf-r6
@@ -384,6 +338,8 @@ _CHECKED = (
              '1e90b0f398c8165a98acac19304febd0a51607dc16bd680b21ac92b4bb6f2189'),
     _Checked('pypdf._reader:PdfReader._read_xref_tables_and_trailers', '#4269 (the counter reset once per read)',
              (1204, 1257), 'a2891c413587db9347d277f10486af121d23bb2afe5f5adc3935d81544df8505'),
+    _Checked('pypdf._reader:PdfReader._read_xref', '#4269 (every /XRefStm naming read; one past the limit logged)',
+             (1274, 1301), '2def5dbdfdc44a8cff68b5247e0ff4015e05382612a65224216d58e8f0676ac5'),
     _Checked('pypdf._reader:PdfReader._read_pdf15_xref_stream', '#4269 (the entries counted, the limit raised)',
              (1399, 1451), '4cc029555150139c32bd4cf3798c94985a7dcfd07279eb147c24d56e6cfedf6b'),
     _Checked('pypdf._doc_common:PdfDocCommon._flatten', '#4290 (the page entries allowed)', (1356, 1434),

@@ -33,12 +33,12 @@ TARGETS = ('pypdf._cmap:_parse_encoding', 'pypdf._cmap:_glyph_name_to_unicode', 
            'pypdf.generic._font:Font._collect_cid_character_widths', 'pypdf._encryption:Encryption.read',
            'pypdf.filters:FlateDecode.decode', 'pypdf.filters:CCITTFaxDecode._get_parameters',
            'pypdf.filters:decode_stream_data', 'pypdf._page:PageObject._extract_text',
-           'pypdf.generic._data_structures:DictionaryObject.read_from_stream', 'pypdf._reader:PdfReader._read_xref',
+           'pypdf.generic._data_structures:DictionaryObject.read_from_stream',
            'pypdf._reader:PdfReader._sanitize_pdf15_xref_stream_index_pairs')
 # The advisory fixes the reader depends on that the layer keeps unpatched, and checks as loaded (pypdf-r6 FC-2).
 CHECKED = ('pypdf._reader:PdfReader.__init__', 'pypdf._reader:PdfReader._read_xref_tables_and_trailers',
-           'pypdf._reader:PdfReader._read_pdf15_xref_stream', 'pypdf._doc_common:PdfDocCommon._flatten',
-           'pypdf._doc_common:PdfDocCommon._flatten_leaf_page')
+           'pypdf._reader:PdfReader._read_xref', 'pypdf._reader:PdfReader._read_pdf15_xref_stream',
+           'pypdf._doc_common:PdfDocCommon._flatten', 'pypdf._doc_common:PdfDocCommon._flatten_leaf_page')
 
 
 def _stream(data: bytes, extra: str = '') -> bytes:
@@ -280,46 +280,55 @@ def _read(data: bytes):
     return extract_document(data, 'synthetic.pdf', 'application/pdf', ocr=None)
 
 
-class CrossReferenceStreamReadOnceTests(unittest.TestCase):
-    """#4269 counts the entries of every cross-reference stream pypdf reads; a stream named again by an older trailer
-    is neither read nor counted again (pypdf-r6 L4, L5, F2), as pypdf 6.21.2's second read added no entry."""
+class CountedAtEveryReadTests(unittest.TestCase):
+    """#4269 counts a cross-reference stream's entries at every read of it, as pypdf 6.21.4 counts them: a stream that
+    an older trailer names again is read and counted again. A document whose reads add up past 2,000,000 entries is
+    refused (LIMIT_REACHED) whatever its distinct entries: the named class S-limit (pypdf-r6 C1, C2, V3, L4, F2, L5;
+    pypdf-r7 RG-1, FC7-1, RG-2; pypdf-r8 RG8-K). pypdf 6.21.2 read these files (a re-read added no entry); plain 6.21.4
+    leaves out the section whose read passed the limit and reads on (V3), so the refusal is what keeps a reading from
+    ever being partial."""
 
-    def counted(self, data: bytes, limit: int):
-        found = pypdf.PdfReader(io.BytesIO(data), xref_stream_maximum_entries=limit)
-        return found._xref_stream_entry_count, found
-
-    def test_a_repeated_stream_is_counted_once(self):
+    def test_a_stream_named_again_is_read_and_counted_again(self):
         for alias in (False, True):  # named again at its offset, or one byte early (the line break before its header)
-            with self.subTest(alias=alias):
-                entries, found = self.counted(shapes.repeated(6_000, 3, alias=alias), 10_000)  # 6,000 x 3 trailers
-                self.assertEqual(entries, 6_000)
+            with self.subTest(alias=alias), self.assertLogs('pypdf', 'WARNING') as logged:
+                found = pypdf.PdfReader(io.BytesIO(shapes.repeated(6_000, 3, alias=alias)),
+                                        xref_stream_maximum_entries=20_000)
+                self.assertEqual(found._xref_stream_entry_count, 18_000)  # 6,000 x 3 namings, as plain 6.21.4
+                # each re-read caches X again, as pypdf 6.21.2's re-reads did
+                self.assertEqual(' '.join(logged.output).count('Overwriting cache for 0 8'), 2)
                 self.assertFalse(reader.advisory_limit(None, found))
                 self.assertEqual(found.get_object(9)['/Contents'], shapes.ANNOTATION)
 
-    def test_a_distinct_stream_after_a_repeat_is_read_and_counted(self):
-        entries, found = self.counted(shapes.repeated_then_distinct(3_000, 4_000), 10_000)  # X X Y
-        self.assertEqual(entries, 7_000)
-        self.assertEqual(found.get_object(9)['/Contents'], shapes.ANNOTATION)  # listed by Y alone
+    def test_two_namings_past_the_limit_are_refused(self):  # pypdf-r6 C1: 1,000,001 distinct entries, named twice
+        result = _read(shapes.repeated(1_000_001, 2))
+        self.assertEqual((result.status, result.messages), ('failed', (reader.LIMIT_REACHED,)))
+        at = _read(shapes.repeated(1_000_000, 2))  # control: 1,000,000 x 2 is the limit itself, read as 6.21.2 reads it
+        self.assertEqual(at.status, 'ok', at.messages)
+        self.assertIn(shapes.ANNOTATION, at.text)
 
-    def test_distinct_streams_past_the_limit_are_still_counted(self):  # #4269 kept
+    def test_a_distinct_section_is_never_left_out(self):  # pypdf-r6 V3: X, X again, then Y
+        data = shapes.repeated_then_distinct(600_000, 700_001)  # 1,300,001 distinct entries, counted 2,000,002
+        result = _read(data)
+        self.assertEqual((result.status, result.messages), ('failed', (reader.LIMIT_REACHED,)))
+        # what the refusal prevents: pypdf 6.21.4 reads on with Y, the annotation's only listing, left out
         with self.assertLogs('pypdf', 'WARNING') as logged:
-            entries, found = self.counted(shapes.repeated_then_distinct(6_000, 5_000, repeat=False), 10_000)
-        self.assertEqual(entries, 11_000)
-        self.assertTrue(reader.advisory_limit(None, found))
-        self.assertIn('can not be read, some object may be missing', ' '.join(logged.output))  # the stream left out
+            found = pypdf.PdfReader(io.BytesIO(data))
+        self.assertNotIn(9, found.xref_objStm)
+        self.assertIn('can not be read, some object may be missing', ' '.join(logged.output))
+        once = _read(shapes.repeated_then_distinct(600_000, 700_001, repeat=False))  # control: X is not named again
+        self.assertEqual(once.status, 'ok', once.messages)
+        self.assertIn(shapes.ANNOTATION, once.text)
 
-    def test_through_the_child_a_repeat_reads_as_6_21_2(self):
-        for data in (shapes.repeated(1_000_001, 2), shapes.repeated(1_000_001, 2, alias=True),
-                     shapes.repeated_then_distinct(600_000, 700_001)):
-            result = _read(data)
-            self.assertEqual(result.status, 'ok', result.messages)
-            self.assertIn(shapes.ANNOTATION, result.text)
-        past = _read(shapes.repeated_then_distinct(1_000_000, 1_000_001, repeat=False))  # control: 2,000,001 distinct
-        self.assertEqual((past.status, past.messages), ('failed', (reader.LIMIT_REACHED,)))
+    def test_a_page_tree_too_deep_is_named_at_the_limit_first(self):  # pypdf-r6 C2: C1 with a page-tree depth of 101
+        result = _read(shapes.repeated(1_000_001, 2, depth=101))
+        self.assertEqual((result.status, result.messages), ('failed', (reader.LIMIT_REACHED,)))
+        once = _read(shapes.repeated(1_000_001, 1, depth=101))  # control: named once, pypdf's page-tree depth limit
+        self.assertEqual((once.status, once.messages), ('failed', (reader.DAMAGED,)))
 
 
 class PastTheLimitTests(unittest.TestCase):
-    """A file past #4269's limit is named before anything else reads it (pypdf-r6 L1-L3); at the limit it reads."""
+    """A file past #4269's limit is named as soon as pypdf's constructor returns, before the password test and the
+    first page (pypdf-r6 L1-L3); at the limit it reads."""
 
     def test_named_before_the_password_test_and_when_the_constructor_raises(self):
         for hidden in ('password', 'encrypt', 'annotation', 'kids'):

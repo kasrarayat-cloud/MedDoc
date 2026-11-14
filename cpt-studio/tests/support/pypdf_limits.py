@@ -1,6 +1,7 @@
-"""Synthetic PDFs at pypdf 6.21.4's #4269 cross-reference stream limit (2,000,000 entries) and its negative /Index
-count, for tests/test_pypdf_compat.py and tests/test_passages_verify.py: each is a shape round 6's refutation measured
-(pypdf-r6 L1-L7, F1, F2). Raw PDF syntax only (no pypdf writer), fictional text. Importable without Django."""
+"""Synthetic PDFs at pypdf 6.21.4's #4269 cross-reference stream limit (2,000,000 entries, counted at every read of a
+stream) and its negative /Index count, for tests/test_pypdf_compat.py and tests/test_passages_verify.py: each is a
+shape round 6's refutation measured (pypdf-r6 L1-L7, F1, F2, C1, C2, V3). Raw PDF syntax only (no pypdf writer),
+fictional text. Importable without Django."""
 from __future__ import annotations
 
 import zlib
@@ -77,15 +78,23 @@ class _Writer:
         return at
 
 
-def _page(writer: _Writer, annotated: bool, extra: bytes = b'') -> None:
+def _page(writer: _Writer, annotated: bool, extra: bytes = b'', depth: int = 0) -> tuple:
+    """The catalog, the page tree and its one page (objects 1-5); with ``depth``, the page hangs below that many
+    nested /Pages nodes (objects 200 on), whose numbers are returned."""
+    nodes = tuple(range(200, 200 + depth))
     writer.add(1, b'<< /Type /Catalog /Pages 2 0 R >>')
-    writer.add(2, b'<< /Type /Pages /Kids [3 0 R] /Count 1 >>')
-    writer.add(3, b'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> '
-                  b'/Contents 5 0 R' + (b' /Annots [9 0 R]' if annotated else b'') + extra + b' >>')
+    writer.add(2, b'<< /Type /Pages /Kids [%d 0 R] /Count 1 >>' % (nodes[0] if nodes else 3))
+    for index, number in enumerate(nodes):
+        writer.add(number, b'<< /Type /Pages /Parent %d 0 R /Kids [%d 0 R] /Count 1 >>'
+                   % (nodes[index - 1] if index else 2, nodes[index + 1] if index + 1 < depth else 3))
+    writer.add(3, b'<< /Type /Page /Parent %d 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> '
+                  b'/Contents 5 0 R' % (nodes[-1] if nodes else 2) + (b' /Annots [9 0 R]' if annotated else b'')
+                  + extra + b' >>')
     writer.add(4, HELVETICA)
     writer.add(5, stream(b'', f'BT /F1 11 Tf 72 720 Td ({PAGE_TEXT}) Tj ET\n'
                               'BT /F1 11 Tf 72 700 Td (Procedure: Colonoscopy to the cecum.) Tj ET\n'.encode(),
                          flate=False))
+    return nodes
 
 
 def _annotation() -> bytes:
@@ -93,19 +102,21 @@ def _annotation() -> bytes:
             % ANNOTATION.encode())
 
 
-def repeated(entries: int, trailers: int, alias: bool = False) -> bytes:
+def repeated(entries: int, trailers: int, alias: bool = False, depth: int = 0) -> bytes:
     """One /XRefStm X of ``entries`` entries, the only listing of the page's FreeText annotation (object 9, in object
     stream 6), named by the first revision's trailer and repeated by ``trailers`` - 1 later ones, as a writer that
-    copies the trailer forward does (pypdf-r6 L4: C1 is 1,000,001 x 2; the judge's V1 200,001 x 10). ``alias``: the
-    later trailers name X one byte early, at the line break before its object header (the same stream)."""
+    copies the trailer forward does (pypdf-r6 L4: C1 is 1,000,001 x 2; the judge's V1 200,001 x 10). pypdf 6.21.4
+    reads and counts X at each naming, so #4269 counts ``entries`` x ``trailers``. ``alias``: the later trailers name
+    X one byte early, at the line break before its object header (the same stream). ``depth``: the page hangs below
+    that many nested /Pages nodes (pypdf-r6 C2: 101, one past pypdf's page-tree depth limit of 100)."""
     writer = _Writer()
-    _page(writer, annotated=True)
+    nodes = _page(writer, annotated=True, depth=depth)
     writer.add(6, object_stream([(9, _annotation())]))
     x = writer.add(8, xref_stream(entries, {9: (2, 6, 0)}))
     assert writer.out[x - 1:x] == b'\n'
     trailer = b'/Size %d /Root 1 0 R /XRefStm %d' % (entries, x)
     later = b'/Size %d /Root 1 0 R /XRefStm %d' % (entries, x - 1 if alias else x)
-    previous = writer.section((1, 2, 3, 4, 5, 6), trailer)
+    previous = writer.section((1, 2, 3, 4, 5, 6) + nodes, trailer)
     for revision in range(2, trailers + 1):
         writer.add(10, b'<< /Producer (synthetic writer that copies the trailer) /ModDate (D:20261112%06d) >>'
                    % revision)
