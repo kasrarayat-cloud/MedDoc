@@ -15148,3 +15148,293 @@ r3b, r3c, r3d, r4a, r4b, r4c, r4d), each owning the files its waves 3-4 step own
     the latency at high reasoning.
   - No separate qualification is run. The planned D1-D3 recordings, the frozen acceptance and the installed walk measure
     Carbon. The code change lands right after wf_0d97cbf6-b97 integrates, before step 8's first send.
+
+## Build waves 5 and 6 integrated: the integration owner's rulings on the refutations' findings (2026-11-14, session e3f8a1b9)
+
+w56r (wf_0d97cbf6-b97) died with its session on 2026-11-14 after 56 of its 59 agents. Its fix:r4b had died on
+2026-11-13 at its start ("Not logged in") and the script fell through to r4b's first patch. The continuation
+(wf_9e869c30-227, build-v2/scripts/w56r-cont.js) re-ran r4b's fix round and second refutation, 6a's second refutation
+on the repaired r4b, 6b's fix round and second refutation, and the integration. Before ruling, the lead re-ran every
+critical and high finding of the finished last refutations with the refuter's own probe on the refuted tree
+(build-v2/lead-verify-w56r/VERIFY.md): every output equals the refuter's record and shows the wrong result it claims.
+Step 7's three fixed findings were re-attacked with the refuter's own tests against the fixed tools: fixed. The order
+of readings is D216's: never a false READY or a wrong exclusion; never a hold the design does not ask for on a common
+input; where the design's principles and the installed release's reading conflict on a common input, the installed
+reading is kept and the exception is named in 6a's property tests and in the final report; otherwise the fail-closed
+reading with one focused question.
+
+- **D231 D216 reaches every absence condition in combination.py, and 4b's derivation moves with it (4d RFR4D-DQ1,
+  critical; r4d Q2-Q6 and REQ1).**
+  - The defect: an EGD X1 with 43235 counted beside an upper EUS X2 whose only act is an unlisted FNA carded X2:
+    session_possibly_done(X2) is False, X1 has no whole, and 43235 carries no combination hold. Filed as a doubted
+    event, the same FNA makes the whole possible and holds 43235 with a base_within question (lead's run of
+    refute-r4d-r1's p4_checks, identical on ffb2d0837 and on r4d's tree). The same class as 4a P1 (D216).
+  - The ruling: 3.2.6's "five rules" list the rules that consumed the unlisted entry when 3.2.6 was written; D216
+    governs every rule whose RELEASE depends on the absence of a possibly performed act. r4d's audit rows 1-5 read
+    rule 3's synthetic act:
+    - row 1, session_done's act-only arm: only in an act-only session (D232's reading);
+    - row 2, D70's possible whole: session_possibly_done reads an unlisted act with card S (or no card, S possible)
+      as making S possibly done, and 4b's _part_of_session reads the same in the same commit (D227's one derivation);
+    - row 3, D119's PEG arm of base_included: adds the unlisted acts of kind PEG or none whose card may be the
+      feeding tube's session;
+    - row 4, _defining_extras and _stricture_claims: open on an unlisted act of a defining kind (or none) whose card
+      may be of the code's family;
+    - row 5, competition over the act: an unlisted act with a card that two counted codes' kinds both admit (a silent
+      kind admits every kind) makes those codes compete, both held competing_codes, as the filed doubted form does.
+      Built without a new claim form for 5a where possible; a change 5a must read is a REQUEST.
+  - Rule 3's synthetic act here is an unlisted ACT or an unlisted DOUBT: a doubt is a possibly performed act too
+    (refute-r4a-r1 F1). D232 governs only which hold such a doubt raises in evaluate's row 7.
+  - The same reading reaches coverage's C1-C3 (r4a's audit: bundling's possible whole in `_compute_bundles`, the
+    session's possible examinations, D70's possible whole in `_part_of_session`) and classes.py's
+    `unlisted_of_group` and `unlisted_examinations`, which read acts only today, so the four modules read one set (O17).
+  - Each row gets the unlisted-versus-filed-doubted pair as a test. r4d owns combination.py, r4b coverage.py, r4c
+    classes.py.
+
+- **D232 Row 7 beside the session's own done examination (4a N1, high; r4a Q2 option (b)).**
+  - The defect (introduced by r4a's F1 repair): one unlisted DOUBT of kind examination, carded to a colonoscopy whose
+    examination is established done, or with no card, holds 45385 (the first patch: READY); with no card beside an
+    EGD it also holds 43239 and says "The document leaves the upper endoscopy in doubt", untrue of a sentence about
+    another examination (lead's run of refute-r4a-r2's p41).
+  - The ruling: beside an examination established done, a synthetic examination adds nothing; row 7 reads it only in
+    an act-only session. The base code keeps rule 3's base_included hold (key-bound). An unlisted doubt keeps 3.2.6
+    rule 4 (statement_scope with the possibly positive acts of the kinds it covers) and never names a session's
+    examination as left in doubt unless its card names that session. F1's reading of a removal doubt (XCHG, 43274
+    and 43276) stays. r4a owns evaluate.py and questions.py.
+
+- **D233 Ablation's sibling control is the treatment of bleeding present at this encounter (2c G1, critical; option
+  (b)).**
+  - The defect (introduced by r2c): with KIND_SIBLINGS ABLATION: CLIP, "An oozing angioectasia in the gastric antrum
+    was treated with argon plasma coagulation.", filed ablation with purpose hemostasis, settles the kind supported
+    and 43270 READY; pristine held 43270 and 43255 with one question (lead's run of p02, both trees). D222's own
+    example and v0's audit row code a treatment of bleeding as the control of bleeding.
+  - The ruling: ABLATION's sibling is BLEEDING_CONTROL again, its label narrowed to the hemostasis purpose's own
+    wording, "a treatment of bleeding present at this encounter". RF3's vascular ectasia (no bleeding stated at this
+    encounter) rejects it and reaches 43270; the oozing lesion supports it and stays held. The same for 45388, 44369,
+    45346 and 43229. The pins move by their owning functions (D202). r2c owns claims.py.
+
+- **D234 Each listed target gets a control of its own (2c G2, high).**
+  - The defect (pre-existing): every member of a listed-targets denial reads the same lesion control, so the second
+    member is never appraised, the pair stays unresolved and 45385 is not met on a faithful reading (p01, p04).
+  - The ruling: the place preference ("taken") extends to lesions: each member's control names a lesion no other
+    member's control takes, Unclaimable.CONTROL when none is left. NOTES Q6 states the real scope. r2c.
+
+- **D235 The lesion arm reads only the controls between the two objects (2d RL1, high).**
+  - The defect (introduced by r2d): apart_by_lesion scans every lesion control, so one unclear control made for
+    (E4, E5) holds the biopsy E4 against the snare E3, which is established apart by lesion: E4 U and 45380 held
+    (lead's run of lesion_arm; pristine sets them apart). Reach on multi-polyp scenes: 0.9-6.4% of forceps acts.
+  - The ruling: target.lesion is single-valued and no 9.4 weakening changes it, so apart_by_lesion reads the lesion
+    pair controls between the two objects as their target lesions name them, (a, lb) and (b, la): 4.2's lesion
+    reading and D220's "between". The every-control scan stays for multi-valued sets (place lists, pairing's listed
+    lesion set). test_facts.py:1072 changes to match; the refuter measured 0 releases under this reading. r2d.
+
+- **D236 The place arm keeps the every-control scan, named, with a measurement gate (2d RF1, high; Q1 option (a)).**
+  - As built. 6a's P-MONO names the hold class (a pair held through another pair's unrejected place control) and the
+    final report lists it. At D1-D3 the lead counts the codes this class holds; if it holds any code that would
+    otherwise be READY, R3 (carry each pair control's other objects through settle, store and the FactSet; Q1 option
+    (b)) is built before acceptance run A counts.
+
+- **D237 D224's store half is the integration's (3a P1, high).**
+  - The defect: store.row_v2 refuses (UnknownShape) every supported fact whose appraisal names approximate (q01; 381
+    of 400 random pass-2 answers): after 5b's switch the whole document fails at the store.
+  - The ruling: request R-A (store.py:1212, its two docstrings and test_store's test) is mechanical and required by
+    D224; the integration lands it, and ApproximateTests' established rows call stored(). Applied by the waves 5-6
+    integration as its A2 (w56r/final/NOTES section 3).
+
+- **D238 D228's arm reads the pair controls that exist (3d D1, high; option (ii)).**
+  - The defect: a doubted snare filed [rectum] with its transverse-colon place omitted is set apart by target without
+    controls and 45385 is READY; filed in full it is held (p3_end_to_end).
+  - The ruling: the arm reads the pair controls that exist; an unrejected one holds; a missing one is not required
+    (DQ1's outcome, with no controls under D211, is kept). r3d.
+
+- **D239 D228's arm never sets apart a lesion that may be the act's own (3d D2, high).**
+  - The defect: an established snare of L1 and a doubted snare whose lesion is supported L1 but placed in a disjoint
+    place are set apart by place: 45385 READY (p3_end_to_end).
+  - The ruling: in D228's arm, a supported equal lesion, or a lesion possibly equal (_possibly_same, or a lesion claim
+    not established whose value or options name the act's lesion), is never set apart by place. r3d.
+
+- **D240 D29's site fit decides a site code's support (6c B, high).**
+  - The defect: "The distal esophageal stricture was dilated with a balloon. The duodenal bulb stricture was dilated
+    with a balloon.", 43249 and 43245 proposed: both held (act_target naming the other site's act, and
+    competing_codes); gate 6 asserts the competing reading (probe_ho8b_fit, probe_site_fit).
+  - The ruling: the installed reading is kept (D29: "A verified target outside the class does not support").
+    evaluate's code rows read only the supporting acts within the code's SITE class, and combination's claims carry
+    D29's site fit: 43249 READY on the esophageal act, 43245 READY on the duodenal one. Gate 6's CORPUS entry changes
+    with it. r4a (evaluate.py), r4d (combination.py), 6c (test_gate6 and CORPUS).
+
+- **D241 A fixture's documented outcome is the documented outcome (6c A, high).**
+  - The defect: CK-note8 (i) and RF-CO2d assert 45381 held on the owner's GI Note #8, a false hold the owner's report
+    lists among the installed reader's ten. A faithful filing reaches READY: the tattoo placed in the descending colon
+    ("~4 cm distal to the splenic flexure"), or the tattoo on lesion L2 with the bed denial on L1 (probe_note8_tattoo).
+  - The ruling: (i) builds a faithful filing and expects 45381 READY. The no-place filing is kept only as variant
+    (iii), recorded as a residual, never as a pass. Every 6c fixture that expects a hold where an owner-documented
+    outcome is READY is re-checked the same way. 6c.
+
+- **D242 The batch cap may be passed by one send's worst case (7 R7-10).** Kept as built: the project-level stop
+  counts every send's worst case, so the site's reserve holds; the batch cap is a budget, and the plan prints
+  largest_send_worst_case_usd.
+
+- **D243 Rows of the v1 chain at read time (5c Q-02 = refute-5c-r2 R2-01, 59 of the merge gate's 71 ids).**
+  - 6.5 governs: read time reads event coding @2 only. No v1 reading enters a kept module. Option (b) is refused: a
+    transitional v1 reading puts a retired import in overlay.py or readers.py (against 5.7 measures 1 and 4), and
+    production would read rows the design blocks.
+  - Class B, 19 subtests in five retired-module suites (test_interpretation_r3_integration_d87 12, r5c_egd 3,
+    r5c_currency 2, r5_egd 1, r5d_currency 1). They pin the overlay's @1 reading, which 6.5 retires, so they retire with
+    it, as D223 retired the tests that pinned the shared claims. Each is removed by a counted edit that names its id,
+    and the module docstring cites D243. 8.0's ban on editing a retired module's tests yields to 6.5 for exactly these
+    ids. 5c's own tests gain one case per suite: the same kind of @1 record, asserting 6.5's refusal.
+  - Class C, 40 ids (test_readers_dispatch 20, test_pipeline_assess_events 2, test_pipeline_api 1,
+    test_cux_queue_recheck 2, test_cux_r3_progress 1, test_harness2_r2_parity 1, test_harness2_r4_conf 1,
+    test_harness2_r5_row 2, test_repairs_7c8_p1reports 2, test_repairs_ec5_reportruns 3, test_repairs_gi2_reports 3,
+    test_repairs_r3_pipeline 1, tests.v2 test_update_api u10). Each keeps its assertion about the product (approve,
+    reject, reinstate, member answers, a re-check, the reports), with its rows built by the v2 path in replay (5b's
+    factories), never by the v1 chain. A test whose behaviour exists only on @1 rows is named in the step's NOTES and
+    asserts 6.5's block instead. The v1 chain stays for the suites that never read through the product.
+  - Owner: step q02 (the class B and class C test files; test_update_api's u10 by agreement with 5d).
+
+- **D244 Known design defects stay red until repaired, and their repairs are routed (6c Q-GREEN, P1-P7, Q-N8).**
+  - KnownDefectTests keep asserting the design (option (a)), never expectedFailure: an expected failure would let the
+    gate read green while a known false READY stands.
+  - R-N3 (critical, 45330 READY): r4d holds a part session's base code beside an ESTABLISHED whole (C3), whatever its
+    counted codes include (6c's mutation MB).
+  - Q-N1 (critical, 43235 READY): option (b). A session fact that K3 demotes (session_unreachable) is possibly any
+    session whose reach holds the act's place, not its claimed session alone (r2d, facts.possibly).
+  - R-ANAT (high, 45386 held on extent): a pair control shared by reached and reached_anatomy appraises both facts
+    (r3a, settle.py).
+  - R-K8 (medium): a contradicted reach (the K8 pair) asks RANK 1 conflict:examination, as evaluate's LOWER row does
+    (5a).
+  - Q-S4: option (a), the installed reading. When completion pass 2 did not establish completion, the code is READY with
+    the 52|53 consideration (5a's considerations).
+  - Q-N8 (GI Note #8's denial of an upper endoscopy in a colonoscopy note): option (b). 2a's pass-1 instructions file
+    a denied procedure of another kind as the examination of a session of its own kind, never with its session empty.
+    At D2-D3 the lead counts denials of another procedure filed with an empty session. Any such filing that holds a
+    code in A's documents is a named residual.
+  - Q-N8b (a tattoo denial at the bed of a saline lift reads as a contradiction under 4.5's one injection kind):
+    option (a), as built and named. At D2-D3 the lead counts it. If any acceptance document meets it, option (b) (a
+    material row) is ruled before A counts.
+
+- **D245 6a's four red-by-design tests and its other findings (6a Q1-Q3; refute-6a-r2b P1-P5).**
+  - r2d-2 Q2: option (a). A deleted place member that overlaps the other object's place, with every between-control
+    rejected, releases U to T. It is named in 6a's P-MONO, as D218 names the jejunal release: the remaining controls
+    reject the deleted place, so this is not a false READY.
+  - r2d-2 Q3: option (b). 9.4's deletion weakens an established member only. Deleting a member that was not
+    established removes a doubt, and the release that follows is that doubt's own. 6a's generator and PairingTests'
+    R2D_Q3 follow.
+  - r3d Q1: D238 (option (ii)). P-UNKNOWN-TARGET's case (a) and P-MONO's case (c) close when r3d builds the arm that
+    reads the controls that exist. P-MONO's case (b), where no control was generated (D211), is a named release
+    accepted under D228 and D238.
+  - 6a's `_open_question` names these rulings. A release no ruling names still fails.
+  - P1: fixtures (or a generator) hold a pair control NOT rejected beside the member a weakening deletes (D220's case,
+    4b-F5, r2d-2 R2), so a D220-class release on any path turns PMonoTests red (mutants A and F killed).
+  - P2: the five forms are refused, each with a planted control: a literal's split, `__contains__` on a literal
+    receiver, an enclosing function's binding, a class attribute, an aliased revision.text. `==` against a string
+    constant in engine/ is refused too (measure 4's intent).
+  - P3: a twice-weakened release is named by the weakening that released it. P4: the encounter's, people's and
+    sections' facts are weakened too, and the harness never re-dates a weakened FactSet.
+
+- **D246 One renderer contract; every item the engine makes is worded (lead's L1 and L2; 5c Q-06, R2-02, R2-03 and
+  Q-05; r4a Q4 and R4).**
+  - The defect (L1, critical): on the integrated tree the v2 renderer (jobs._render_code, _clarification_of) words an
+    item from the Slots of its Fill alone. For 9 message ids wording refuses: the code's assessment raises, and the
+    document fails. On test_assess's own scenes this covers one balloon dilation (43249, 43233 competing; 43235
+    base_explained) and an office visit beside a same-day sigmoidoscopy (99213 separate_em). Over the scenes of six
+    engine test modules, 2,415 of 6,591 items are refused (build-v2/lead-verify-w56r/VERIFY.md). No test drives an
+    engine-made item through the renderer.
+  - The defect (L2, high): the renderer's completeness label (jobs._session_label) and read time's
+    (overlay.session_label) differ for sedation, em_other, other_gi, not_gi and a kind not established. Read time then
+    cannot reproduce the stored reason, and the whole assessment is blocked (R2-02).
+  - The ruling, 5c's R1 contract in full:
+    - The renderer words each held code's ONE item as read time does: wording.build(Message,
+      overlay.item_slots(item, key, Assessment.combination, R) or the Slots of its Fill, text). The date item is at
+      encounter scope.
+    - support.held_facts is recorded. Completeness's label is overlay.session_label, the one function
+      (jobs._session_label goes). MemberContext is overlay.member_context, and the date of service is
+      jobs.context_service_date.
+    - _render_code receives the Assessment's combination and the FactSet.
+  - 4a's questions.fill gives every slot that wording asks of 4a's own items: whole_words (the whole's anchor units)
+    for PART and BUNDLING_TARGET, bundling for BUNDLED, and enteroscopy_class for ENTEROSCOPY_APPROACH and
+    ENTEROSCOPY_CLASS (701 of the 842 refusals left under 5c's contract).
+  - 3c's wording gains:
+    - BASE_INCLUDED's codes form when no act is in doubt; 4a maps a within hold to BASE_WITHIN (5c's R8).
+    - SEPARATE_EM's form that names the same-day codes when the procedure day has no act to list (R2-03; the
+      remaining 111).
+    - DOUBT, SAME_DUCT and STATEMENT_SCOPE naming an act with no units, without a quote (r4a Q4 option (a); D160 (3)).
+    - A rank-2 performed_status message for a synthetic act that names its kind and quotes its unit (r4a R4 (a)),
+      which 4a maps the synthetic act's witness to: DOUBT's "leaves ... in doubt" is untrue of an act the document
+      states.
+  - Read time's label for the five kinds with no SESSION_SERVICES entry must read well in the completeness sentence.
+    5c's builder prints the 17 sentences in its NOTES.
+  - P-WORDED (6a, tests/v2/test_properties.py, a merge-gate property):
+    - Every item the engine makes is worded by the renderer without a refusal. This covers every fixture scene of
+      test_assess, test_combination, test_evaluate, test_refutation_cases, test_gate6 and test_failure_classes, and
+      P-MONO's random settled FactSets.
+    - For a TEXT_FREE item, read time words it identically.
+    - The renderer never raises on an engine item. A wording refusal is a defect, and the property names its message
+      id.
+  - Owners: 5b (the renderer in jobs.py), 4a (questions.fill), 3c (wording.py), 5c (overlay.session_label,
+    item_slots), 6a (P-WORDED).
+
+- **D247 6b's findings (refute-6b-r2 F1-F6, DQ1) and the integration's O22.**
+  - F1 (high, a member's saved change lost and the earlier codes approvable). Before any message that leaves this
+    revision's pair to serve again, the installer puts the set-back saves back (REAPPLY_REVERTED), as kept_serving
+    does. This covers phase_rollback_app's post-close hazard and its removal failure's "to keep this revision". When the
+    put-back cannot run, the message names the encounters whose saves were set back (context.rollback_reverted) and
+    says they were not put back.
+  - DQ1: option (a). The put-back re-queues the first reading stage the update owes, at most once (the save's own
+    request key), when the serving worker runs that stage. Otherwise the update reads paused, and its texts say so.
+  - F2: every sentence says what is so. No retry is promised where none is offered.
+  - F3: a half-way test per path whose close answers REVERTED_CLOSE asserts that no REAPPLY_REVERTED runs, so mutants
+    MX1 and MX5 are killed. The paths are undo_switch_back with the vhost still naming the previous web, and
+    return_to_old_web with nginx not proven.
+  - F4: undo_switch_s4 and rollback_from_keep carry the switch-back's clause naming the context.rollback_reverted rows
+    since the close started.
+  - F5: a B5 undo whose nginx_may_have_read is true says the earlier web may have served until the settle.
+  - F6: provider_hold --status says "no installation-wide hold", without the general claim.
+  - O22: 6b builds serializers.py's what_changed_rows block (what_changed.py exits 2 without it) and owns that block in
+    this round.
+
+- **D248 r4b's second refutation (refute-r4b-r2 G1-G7).**
+  - G1 (medium, a false complete): "read by no counted code" is read per session (no counted code's events possibly in
+    it), for the unestablished count and the R5 gate alike. A second session of a coded family stays incomplete.
+  - G2: option (b). D221's F applies only when both lesion facts are supported. A lesion fact that is not supported
+    (unresolved, contradicted or doubted) gives U with the lesion question (4.11: an unknown identity never sets two
+    acts apart in the adjunct rule).
+  - G3 and G4 are fixed.
+  - G5: the same_as walk runs once per part (memoized), and its cost at 1.8's bounds is measured back under round 1's
+    6.4 s.
+  - G6 and G7 are pinned by tests that fail under their mutants.
+
+- **D249 5c's other findings and read-time answers (refute-5c-r2 R2-04; 5a Q2; 6a F2).**
+  - R2-04: a CountsTests case, and a reinstatement in a V2World, with a member's answer read at assess (mutant MR3
+    killed).
+  - 5a Q2: at read time, a member's answer that a rival is not documented removes the rival from the competition. The
+    remaining code's competing hold is released when no rival is left (5c's R7).
+  - 6a's F2: test_interpretation_overlay runs strict(retired=True) (6a's R8 to 5c).
+  - Q-10 stays as built: the V1 branch reads no v1 inventory.
+
+- **D250 The one wall-clock bound under load.**
+  - The test is test_completion_corroboration.BoundTests.test_many_act_mentions_in_one_clause_cost_their_length_once, a
+    v1 bound that v2 does not touch. It failed at 0.899 s against 0.890 s under the gate's load. It passed in gate 1, on
+    the base and alone.
+  - When this id alone fails a gate, it is re-run alone on the same tree, both runs are recorded, and it counts as
+    passed when the lone run passes. Any other failing id fails the gate.
+
+- **D251 The integration's open requests (w56r/final/NOTES section 3, O1-O25).**
+  - O1 is not built: an owner option that no ruling requires. O2 belongs to steps 7 and 8.
+  - O3: claims.py never raises on a supported '' value. It reads it as not supported, and the Basis from Checked
+    (w34 O2) is carried (r2c).
+  - O4 is D245. O5: r2d Q1 is D236 and r4a Q4 is D246; the rest is optional. O6 stays a known limit (never established;
+    integrity failed; the I2 reason stored).
+  - O8 is D231: coverage C1-C3, classes, and combination rows 1-5.
+  - O9: BASE_INCLUDED's codes form and the synthetic act's message are D246. The ADDON, identity and read-under ids
+    stay open.
+  - O12 is D246. O14 stays as built. O17 is D243. O20's R8 is D249 and its R9 is D243. O22 is D247.
+  - O23: the lead runs the D15 rollback run and the owner's counts at step 8. O24 is D244. O25 is this round.
+  - O7, O10, O11, O13, O15, O16, O18, O19 and O21 are not built in this round.
+
+- **D252 The integration's seam check (lead's L1).**
+  - Each step's refutation reads its own step, and the waves 5-6 gate never drove an engine-made item through the
+    renderer.
+  - From this round, the integration owner runs a seam check before the gate. Every fixture scene's FactSets go end to
+    end: assess, render, persist, store, read time, the customer surface and the report. Each refusal, exception, or
+    disagreement between assess and read time is a finding.
+  - P-WORDED makes the renderer's half a merge-gate property.
