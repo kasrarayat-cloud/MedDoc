@@ -191,7 +191,13 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   revision label, user 10150, the baked release, English OCR data, a working
   `pdftoppm`, `manage check`, and that the WSGI application loads as the
   image's own user on a read-only root (this is what catches unreadable static
-  files, which `manage check` does not).
+  files, which `manage check` does not). The same way, the image reads one
+  synthetic guard PDF (`tests/support/pypdf_guards.py`, "a /BaseEncoding
+  array") through its own extraction child, and its reading must be installed
+  pypdf 6.21.2's (`PDF_GATE_*` in `ops/install.py`): a pypdf the compatibility
+  layer (`studio/ingest/pypdf_compat.py`) refuses would fail every PDF upload,
+  and nothing else in the image phase starts the child. The refusal's reason
+  is in the error (the result's `engine['pypdf_compat']`).
 - **db** is idempotent; an existing container must be ours, on the pinned
   image, loopback-only, `unless-stopped`.
 - **app** (live mode) first loads the Corti credentials with the

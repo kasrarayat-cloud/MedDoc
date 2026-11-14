@@ -50,6 +50,15 @@ KIND_METHODS = {'pdf': {'pdf-text', 'pdf-ocr', 'pdf-mixed'}, 'docx': {'docx'}, '
 PASTE_NOUNS = {'paste': 'pasted text', 'addendum': 'addendum'}
 
 AS_LIMIT_BYTES = 1536 * MIB
+# The PDF child also holds the pypdf compatibility layer (studio.ingest.pypdf_compat: its module and replacement code),
+# which the reader on pypdf 6.21.2 did not; that address space is given back, so a document has the limit it had
+# (pypdf-r6 F3). It is measured through the real child, as tests/test_pypdf_compat.py AddressSpaceTests measures it
+# and fails above this: the smallest limit at which the child reads a guard PDF, with the layer and with it stubbed
+# out. It moves with the layout of the source compiled before it, not only with the layer: from 176 to 516 KiB as only
+# comments in this file changed (Python 3.12.3, the same with every hash seed tried). The largest, rounded up to the
+# next 256 KiB, is given back, so that layout alone does not fail the test; the 1.1 MiB that inspect.getsource kept
+# (pypdf-r6) still would.
+PDF_LAYER_AS_BYTES = 768 * 1024
 FILE_SIZE_FLOOR_BYTES = 256 * MIB  # the document copy plus one rendered page at a time
 NPROC_HEADROOM = 64  # tasks beyond the uid's current count: the child, pdftoppm, tesseract, slack for peers
 CPU_GRACE_S = 5  # SIGXCPU at the soft limit, SIGKILL this much later
@@ -112,7 +121,7 @@ def extract_document(data: bytes, filename: str, media_type: str, *, limits: Lim
     try:
         header = {'kind': kind, 'size': len(data), 'budget_s': _child_budget(limits.timeout_s), 'workdir': workdir,
                   'limits': asdict(limits), 'ocr': asdict(tools) if tools else None}
-        run = _run_child(json.dumps(header).encode('utf-8') + b'\n' + data, limits)
+        run = _run_child(json.dumps(header).encode('utf-8') + b'\n' + data, limits, kind)
     finally:
         shutil.rmtree(workdir, ignore_errors=True)  # the child is gone: _run_child reaped its group
     return _result(run, kind, method, limits, engine)
@@ -168,13 +177,13 @@ class _ChildRun:
     error: str = ''
 
 
-def _run_child(payload: bytes, limits: Limits) -> _ChildRun:
-    """Run CHILD_ARGV with ``payload`` on stdin; never leaves a process behind."""
+def _run_child(payload: bytes, limits: Limits, kind: str | None = None) -> _ChildRun:
+    """Run CHILD_ARGV with ``payload`` (a ``kind`` document) on stdin; never leaves a process behind."""
     deadline = time.monotonic() + limits.timeout_s
     try:
         proc = subprocess.Popen(CHILD_ARGV, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                 cwd=SERVICE_DIR, env=_child_env(), start_new_session=True,
-                                preexec_fn=functools.partial(_apply_rlimits, _rlimits(limits)))
+                                preexec_fn=functools.partial(_apply_rlimits, _rlimits(limits, kind)))
     except (OSError, subprocess.SubprocessError) as exc:
         return _ChildRun('not_started', error=_reason(exc))
     try:
@@ -200,12 +209,13 @@ def _child_env() -> dict[str, str]:
     return tool_env() | {'PYTHONDONTWRITEBYTECODE': '1', 'PYTHONNOUSERSITE': '1', 'PYTHONUTF8': '1'}
 
 
-def _rlimits(limits: Limits) -> tuple[tuple[int, int, int], ...]:
-    """(resource, soft, hard) for the child, computed before fork."""
+def _rlimits(limits: Limits, kind: str | None = None) -> tuple[tuple[int, int, int], ...]:
+    """(resource, soft, hard) for the child of a ``kind`` document, computed before fork."""
     cpu_s = math.ceil(limits.timeout_s) + 1  # a backstop: the wall-clock kill comes first
     file_bytes = max(FILE_SIZE_FLOOR_BYTES, 2 * limits.max_bytes)
     tasks = _user_task_count() + NPROC_HEADROOM
-    wanted = ((resource.RLIMIT_AS, AS_LIMIT_BYTES, AS_LIMIT_BYTES),
+    address_space = AS_LIMIT_BYTES + (PDF_LAYER_AS_BYTES if kind == 'pdf' else 0)
+    wanted = ((resource.RLIMIT_AS, address_space, address_space),
               (resource.RLIMIT_CPU, cpu_s, cpu_s + CPU_GRACE_S),
               (resource.RLIMIT_FSIZE, file_bytes, file_bytes),
               (resource.RLIMIT_NPROC, tasks, tasks),

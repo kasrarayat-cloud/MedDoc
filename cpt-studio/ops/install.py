@@ -4177,6 +4177,51 @@ def extract_archive(data: bytes, destination: Path):
         os.chmod(directory, 0o755)
 
 
+# The image gate for the PDF reader (pypdf-r6 FC-4): the image reads one synthetic PDF through its own extraction child,
+# as the worker reads every upload, and the install is refused unless it reads as installed pypdf 6.21.2 reads it. The
+# PDF is the in-image guard for the layer's first patch (tests/support/pypdf_guards.py, 'a /BaseEncoding array'):
+# unpatched pypdf 6.21.4 reads its last line as U+FFFD at status ok, and a refusal of the layer
+# (studio/ingest/pypdf_compat.py) fails it with the refusal's reason in the result's engine. The other image gates
+# (manage check, the WSGI import) never start the child, so without this one a refusal would first show as the
+# worker's first PDF failing after the switch. Pinned: the guard's bytes and the reading measured on installed
+# 6.21.2 (c2e53f8e) and on this layer through the real child (pypdf-r7 repair).
+PDF_GATE_GUARD = 'a /BaseEncoding array'
+PDF_GATE_PDF_SHA256 = '940628eda1b0cfdbab1fa7bbd50b7b150620ae5cd0c4de450a25333e9e0cc48b'
+PDF_GATE_READING = {'status': 'ok', 'text_sha256': '1eaa26cb4899629de5e4965dc55c902f0d63aa4a0b66402e52324ef32bbf10c8'}
+PDF_GATE_SCRIPT = (
+    'import hashlib, importlib.util, json\n'
+    'from studio.ingest import Limits, extract_document\n'
+    "spec = importlib.util.spec_from_file_location('pypdf_guards', 'tests/support/pypdf_guards.py')\n"
+    'guards = importlib.util.module_from_spec(spec)\n'
+    'spec.loader.exec_module(guards)\n'
+    f'data = guards.GUARDS[{PDF_GATE_GUARD!r}][1]\n'
+    "result = extract_document(data, 'guard.pdf', 'application/pdf', ocr=None, limits=Limits(timeout_s=60))\n"
+    "print(json.dumps({'pdf_sha256': hashlib.sha256(data).hexdigest(), 'status': result.status,\n"
+    "                  'text_sha256': hashlib.sha256(result.text.encode('utf-8')).hexdigest(),\n"
+    "                  'messages': list(result.messages), 'engine': result.engine}))\n")
+
+
+def pdf_reading_gate(smoke, image_id) -> dict:
+    """The image's reading of the guard PDF (PDF_GATE_*), run with the other image gates' ``smoke`` options: as the
+    image's own user, on its read-only root, without a network. Refuses the install unless it is installed 6.21.2's."""
+    done = docker(*smoke, '--entrypoint', 'python', image_id, '-c', PDF_GATE_SCRIPT, check=False, timeout=120)
+    try:
+        reading = json.loads(done.stdout.decode('utf-8', 'replace').strip().splitlines()[-1])
+        if not isinstance(reading, dict):
+            raise ValueError('not an object')
+    except (ValueError, IndexError) as exc:
+        raise InstallError(f'The image could not read the guard PDF through its extraction child (exit '
+                           f'{done.returncode}, {type(exc).__name__}); its PDF reader would fail every upload.',
+                           output=(done.stdout + done.stderr)[-8192:]) from None
+    found = {'pdf_sha256': reading.get('pdf_sha256'), 'status': reading.get('status'),
+             'text_sha256': reading.get('text_sha256')}
+    if done.returncode or found != {'pdf_sha256': PDF_GATE_PDF_SHA256, **PDF_GATE_READING}:
+        raise InstallError('The image does not read the guard PDF as the PDF reader was checked to read it (pypdf '
+                           f'6.21.2\'s reading): measured {found}, messages {reading.get("messages")}, engine '
+                           f'{reading.get("engine")}.', details={'pdf_reading': reading})
+    return reading
+
+
 def phase_image(ctx) -> dict:
     archive = run(['git', '-C', str(ROOT), 'archive', '--format=tar', ctx.revision, APP], timeout=120).stdout
     build_root = Path(tempfile.mkdtemp(prefix=f'build-{ctx.revision[:12]}-', dir=ctx.receipts))
@@ -4224,10 +4269,12 @@ def phase_image(ctx) -> dict:
         raise InstallError('The image lacks English OCR data, fails Django system checks, or cannot load the '
                            'web application as its own user.',
                            output=(check.stdout + check.stderr + wsgi.stdout + wsgi.stderr)[-8192:])
+    pdf_reading = pdf_reading_gate(smoke, image['Id'])
     return {'image_id': image['Id'], 'tag': tag, 'base': base, 'size_bytes': image.get('Size'),
             'source_archive_sha256': sha256(archive), 'build_log': build_log, 'tesseract': tesseract,
             'tesseract_languages': [item for item in languages if item in ('eng', 'osd')],
             'pdftoppm': (pdftoppm.stdout + pdftoppm.stderr).decode().splitlines()[0],
+            'pdf_reading': pdf_reading,
             'migrations': {'baseline': f'{ROLLING_BASELINE:04d}', 'after_baseline': migrations},
             'summary': f'built {tag} = {image["Id"][:19]}'}
 

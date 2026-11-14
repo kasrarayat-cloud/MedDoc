@@ -22,6 +22,12 @@ from studio.types import ExtractionResult, to_jsonable
 
 MAX_HEADER_BYTES = 64 * 1024
 PR_SET_DUMPABLE = 4
+# What the user is told when the PDF layer (studio.ingest.pypdf_compat) refuses: the library is not the one the reader
+# was checked with, whatever the refusal's cause (a version, a file, a binding, its loaded code). The cause itself is
+# for operators: engine['pypdf_compat'] on that result only (pypdf-r6 FC-3), so no successful read records it.
+PDF_UNAVAILABLE = ('The PDF could not be read on this server: its PDF library is not the one the PDF reader was '
+                   'checked with.')
+PDF_UNAVAILABLE_REASON_CHARS = 200
 
 
 class StartupError(Exception):
@@ -49,6 +55,15 @@ def read_request(stream) -> tuple[dict, bytes]:
 def parse(data: bytes, kind: str, limits: Limits, tools: OcrTools | None, deadline: float,
           workdir: str) -> ExtractionResult:
     if kind == 'pdf':
+        # pypdf 6.21.4 read as 6.21.2 reads, before anything imports the reader (studio.ingest.pypdf_compat); a
+        # pypdf this layer was not proven against reads nothing.
+        from studio.ingest.pypdf_compat import PypdfCompatError, apply
+        try:
+            apply()
+        except PypdfCompatError as exc:
+            return failed(METHOD_FOR_KIND[kind], {'ingest': INGEST_VERSION,
+                                                  'pypdf_compat': str(exc)[:PDF_UNAVAILABLE_REASON_CHARS]},
+                          PDF_UNAVAILABLE)
         from studio.ingest.pdf import extract_pdf
         return extract_pdf(data, limits, tools, deadline, workdir)
     if kind == 'docx':
