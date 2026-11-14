@@ -15438,3 +15438,219 @@ reading with one focused question.
     end: assess, render, persist, store, read time, the customer surface and the report. Each refusal, exception, or
     disagreement between assess and read time is a finding.
   - P-WORDED makes the renderer's half a merge-gate property.
+
+## Repair round w7r integrated: the integration owner's rulings on the refutations' findings (2026-11-14, session e3f8a1b9)
+
+w7r (wf_35df83ac-748, build-v2/scripts/w7r-build.js) finished with 49 of 49 agents and none failed (journal: 49
+started, 49 results, 0 failed). Sixteen of its 17 steps ended on a clear last refutation; r4a's second refutation is
+blocking (A1, A2). The integration's merge gate fails on one id, q02's door test (its unruled Q1). The seam check
+(D252) took 10,193 fixture scenes end to end with one open finding.
+
+Before ruling, the lead rebuilt the final tree from 22dcf0c97 and w7r/final/final.diff (sha256 442011db...). It is
+byte-equal to the integration's work tree, apart from the .hypothesis cache. On that tree the lead re-ran:
+- every critical and high finding of the last refutations, with the refuter's own probe;
+- the renderer sweep through the renderer's own call, `jobs.word_item`: 6,603 items, 0 refused;
+- the gate's red id.
+The record is build-v2/lead-verify-w7r/VERIFY.md. The order of readings is D216's:
+1. never a false READY or a wrong exclusion;
+2. never a hold the design does not ask for on a common input;
+3. where the design's principles and the installed release's reading conflict on a common input, the installed reading
+   is kept, and the exception is named in 6a's property tests and in the final report;
+4. otherwise the fail-closed reading, with one focused question.
+
+- **D253 Row 7's `done` excepts the digital examination (refute-r4a-r2 A2, critical; A3; r4a QE13, QX).**
+  - The defect: a colonoscopy X1 with:
+    - its cold snare E2;
+    - a digital rectal examination filed as X1's examination E1 (device manual, done);
+    - "Colonoscopy in 2019 was normal." filed as an examination E3 of X1 with its date earlier (or a planned repeat
+      colonoscopy filed in X1).
+    The result is 45385 READY, with or without an unlisted examination entry. Without the DRE line it is held, and
+    combination.session_done(X1) is False. Lead's run of the refuter's a2 and a2c probes on the final tree: READY in
+    every DRE variant, held in every variant without it.
+  - The ruling: row 7's `done` excepts `_digital` as `act_only` does (r4a, evaluate.py). Row 7's two readings of "the
+    session's examination" then agree with D227's session_done. A fact E13 says never counts can never release a
+    code.
+  - QE13: option (a). The claimed-manual reading (monotone) holds in evaluate and in combination alike. r4d adopts it in
+    session_done (r4a's R2, open request O3).
+  - A3: a test reaches the for-else's EXTENT fallback with PROCEDURE-keyed class holds first, and mutant MX5NOEXTENT is
+    killed.
+  - QX (ii): a route part whose only unknown is the anatomy passed through is asked by the route's own question. It is
+    never asked "In which procedure was the enteroscopy done?" (r4a; 3c adds the form if none exists).
+
+- **D254 The renderer's sentences are total: every slot an item can carry has a true form for its absence (refute-r4a-r2
+  A1, critical; refute-r3c-r1 R3C1-01 and R3C1-03; refute-5b-r1 F1; refute-r4d-r2 P4, r4d Q-UNNAMED; r3c Q6; 5b Q2).**
+  - The defect class: a held code whose one item names an act that no kind names, or names nothing at all, is refused
+    by wording. jobs.word_item then raises, and the whole document fails to assess (L1's mechanism). The lead reproduced
+    six shapes on the final tree:
+    - A1: the enteroscopy approach established only by a denial. 44360, 44376, 44361 and 44380 are refused with
+      "enteroscopy_approach needs the slot approach".
+    - R3C1-01: an act of contradicted kind. 45378 base_included is refused, and 45330 beside 99213 the same.
+    - 5b F1: an upper EUS act of kind other. 43259 alone, and 43259 with 64530, are refused base_explained.
+    - r4d S1 and S2c: a kindless unlisted act carded to a session. 43235 and 45378 base_included are refused.
+    No fixture scene reaches any of them: the sweep found 0 refusals in 6,603 items. Sampling engine output finds one
+    shape at a time; this ruling closes the class by construction.
+  - The ruling:
+    1. Every wording builder (3c, wording.py) words every Slots value that overlay.item_slots or an item's Fill can
+       give. A builder may require only the slots every item of its message carries by construction. These are listed
+       per message in wording.py, such as the held code and its family. Every other slot has a form for its absence.
+       That form is true for its state and names nothing CPT Studio does not know.
+    2. An act no kind names (Kind.OTHER, or a kind not established) has one label everywhere, "another act", with its
+       article. This applies in item_slots and in every slot that `_kinds` fills (5c), and in the Fill (r4a). I2's
+       Kind.OTHER reading extends from SEPARATE_EM to all of them. R3C1-03's "from act" is gone.
+    3. ENTEROSCOPY_APPROACH without `approach` (a denied or unstated route) words the class without naming a route
+       (3c). BASE_INCLUDED, BASE_EXPLAINED and SEPARATE_EM with nothing to name use their absence forms (rule 1).
+    4. A property test (6a, in tests/v2/test_properties beside P-WORDED) covers every Message and every combination of
+       present and absent optional slots, with values drawn from the slots' own types. wording.build returns a
+       sentence for each. The six shapes above are regression cases through jobs.word_item. P-WORDED keeps its
+       engine-output half.
+    5. 5b Q2: a refusal in production still raises, so the document fails visibly. After rule 1, a refusal can only be
+       a programming error, and rule 4's property catches it at the gate.
+
+- **D255 An add-on code never includes another code under the base rules (refute-r3c-r1 R3C1-02; 4d DQ2; r3c Q3).**
+  - The defect: an office visit with prolonged time, 99215 (or 99205, 99245) with 99417. 99215 is held base_included
+    with "99417 is also proposed ...; 99215 is normally not reported separately from it". That is the inverse of
+    engine/assess.ADDON_PRIMARIES, where 99417 is reported with 99215. The ERCP pair 43260 with 43273 is held
+    base_explained, "has interventions that 43273 account for", the same inversion. Rejecting 99215, as the sentence
+    steers, leaves 99417 READY and approvable alone (O14). The input is common. Lead's run of the refuter's p02 and p08
+    on the final tree: as recorded.
+  - The ruling: an add-on code (a key of ADDON_PRIMARIES: 43273, 91013, 99153, 99417) is never a code that includes
+    another under rule (a) (base_included, base_explained, base_within). It never causes such a hold, and it is never
+    named in those items' codes. An add-on and its primaries are governed by the ADDON rule alone (r4d, combination.py;
+    3c restates its codes-form tests).
+  - Effects:
+    - 99215 beside 99417 is READY.
+    - 99213 beside 99417 is not held under rule (a); 99417 is held by its ADDON rule (no primary proposed).
+    - 43260 beside 43273 alone is READY.
+    - 43260 beside 43262 and 43273 stays held, naming 43262 only.
+    - r3c Q3's codes form stays for the remaining pairs.
+
+- **D256 An unlisted entry with no card (refute-r4d-r2 P1, critical; P2, high; r4d Q-CARD, Q-F7; Q-UNNAMED's
+  one-session half).**
+  - P1, the defect: one colonoscopy X1 with 45378 alone, and pass 2 lists an unlisted biopsy, snare or PEG (act or
+    doubt) with an empty card. The result is 45378 READY. The same entry carded X1 holds it with a worded question. The
+    same happens for one EGD with 43235. Lead's run of the refuter's q_card probe: READY in every no-card row.
+  - P1, the ruling: Q-CARD option (c).
+    - An entry with no card that names a kind holds the base code of every session whose family may hold that kind
+      and in which coverage.doubted_in would list its filed doubted form. It is worded as the carded form is.
+    - A kindless entry with no card holds the base code when the document tells one session, worded with D254's label.
+      In a document of more than one session it stays out: a named residual (Q-UNNAMED), measured at D2-D3.
+    - The two pinned subtests change (test_combination.py:397 and :2379).
+  - P2, the defect: an EGD X1 (43235) beside an upper EUS X2 established planned, or established done on an earlier
+    date. Any entry with no card makes X2 possibly done and holds 43235 base_within. Examples are an office visit act, a
+    pH capsule placement act, or a biopsy doubt. The reason, "the endoscopic portion of the endoscopic ultrasound", is
+    untrue of an EUS not done today. Lead's run of the refuter's planned_eus probe: as recorded.
+  - P2, the ruling:
+    - An entry with no card never makes possibly done a session whose examination is established, and established not
+      done on the date of service (planned, or done on another date).
+    - A filed act whose session slot is silent and whose date is not established reads the same. This is D227's one
+      derivation: combination's session_possibly_done (r4d) and 4b's _part_of_session (r4b).
+    - An entry with no card that names a kind makes possibly done only sessions whose family holds that kind (K2).
+
+- **D257 BASE_WITHIN names the whole that is there (refute-r4d-r2 P5; r4d Q-N3W; r4a QW).**
+  - The defect: 45330 in a colonoscopy whose 45378 is counted (part_of_session supported) is worded "Is 45330 reported
+    separately from the endoscopic ultrasound for this examination?". There is no EUS. A whole that is only possibly
+    done is worded as established.
+  - The ruling:
+    - `within` names the stated whole's counted codes, whatever they include, as D244 holds the code beside the stated
+      whole (r4d).
+    - BASE_WITHIN names the whole by its own family. A whole that is possibly done, but not established, is stated as
+      possibly performed on the date of service, its performance not established (3c; r4a passes the slots).
+
+- **D258 A statement that names no session is asked about the held session's performance, never about the statement
+  (r4a QP2, high; r4a QD; r4c Q1).**
+  - The defect: a no-card unlisted doubt, "It is not known whether she had a colonoscopy before.", beside a colonoscopy
+    whose examination is established done. The question is "Confirm whether the examination (“…”) was done on the date
+    of service.". The truthful answer about the quoted statement is "not documented", and it excludes 45378.
+    - QD: a no-card unlisted denial is worded "The document leaves the colonoscopy in doubt: “<denial>”", which is
+      untrue of a denial.
+    - r4c Q1: "The document leaves the enteroscopy in doubt: …" is true only if the doubt is about X1's examination.
+  - The ruling: rule 4's no-card pair keeps its performed_status item and rank 2. So does an entry whose card names a
+    session the FactSet does not hold, whether a doubt or a denial. It is worded by a new 3c message, UNLISTED_SCOPE:
+    - The question names the held session's examination by its service, and asks whether that examination is
+      documented as done on the date of service.
+    - The reason quotes the statement and says it names no procedure session. It never says that the document leaves
+      that examination in doubt or denies it.
+    - A member's "documented" releases, and "not documented" excludes, as today.
+    - r4a maps the hold to it, and MessageId mirrors it (the Mirrors pin).
+
+- **D259 One fingerprint binds a member's answer on design v2 (q02 Q1; the gate's red id; refute-q02-r2 Q02R2-1 and
+  Q02R2-2).**
+  - The defect: TWO_PROCEDURES v2, with 45385 held on the extent and "Not documented" saved through answers.save_details.
+    The door records the rendered-text fingerprint (cpt-studio-question@1). engine/assess binds by its text-free
+    fingerprint (cpt-studio-question@2). So the AGAIN recompute stores 45385 `selected needs_clarification`, while read
+    time shows it excluded. The lead ran the AgainTests class on the final tree: that one id fails, as recorded.
+  - The ruling: option (a).
+    - For a proposal of an events@2 assessment whose support carries the item's question, the door records the item's
+      stored fingerprint (engine/assess.question_fingerprint), and read time binds it (5b, review.py: q02's request
+      R1). engine/assess binds the same.
+    - FINAL-V2 6.5's "rendered question text still enters the question fingerprint" is read as the Fill the text is
+      built from (P1: the engine reads no text).
+    - q02's door test then passes unchanged (q02's positive control P6) and stays in the gate. No v1 binding changes.
+
+- **D260 Assess and read time read a rival answered not documented alike (the seam check's open finding; 5c Q2;
+  D249).**
+  - The finding: test_assess scene 677, an EGD with one dilation, technique unstated, 43249 and 43248 proposed, and a
+    member's "Not documented" on 43249's technique read at assess. Assess keeps 43248's competing hold; read time
+    releases it with no decision.
+  - The ruling: option (b). engine/assess removes from the competition a rival that a member answered not documented,
+    as read time does (5a). The stored record and read time then agree, and scene 677 becomes a pin.
+
+- **D261 A provider quote that ends with its stop (q02 Q3, high; refute-q02-r2 Q02R2-3; 6a's Q8).**
+  - The defect: the denial "No polyp was removed today." quoted by the provider with its stop is read by C-10's geometry
+    as a partial cover. The result is 45385 statement_scope and 45378 base_included, where the same quote without its
+    stop excludes 45385 and leaves 45378 READY. Every v1 fixture quote ends with its stop, so the input is common.
+  - The ruling: option (b).
+    - Assess passes the kept evidence's letter-or-digit runs as kept_words (5a). A quote that reaches past the
+      statement only by punctuation then covers it.
+    - q02 restores v1's DENIED_CODES quote. Its pin test is restated to say that no quote differs from v1.
+
+- **D262 The other findings, questions and open requests of the round.**
+  - Closed on the final tree:
+    - 5c DQ-1 and Q4 are closed by I1.
+    - 5c DQ-2 and Q1: "Cannot confirm" on the rival leaves 43249 READY (lead's run of p09), so neither reproduces.
+    - r4d P3: base_within items are worded on the final tree (lead's run of row2_render).
+    - refute-r4a-r2 A4 is closed by I3.
+  - The integration's choices are confirmed as built:
+    - I1, SEPARATE_EM's codes only when the day has no act to list;
+    - I2, extended by D254 rule 2;
+    - I3, evaluate's decided record read through its private names;
+    - A9.
+  - 5b F2: one scene with a False procedural mark goes through `_render_code` (99213 alone), and mutant ME is killed
+    (5b).
+  - As built:
+    - r2c Q1 (D251), Q3; r2d R2D-K3, R2D-K3P; 2a Q-2A-1;
+    - r3a Q-STORE, Q-ONCE, Q-ARM (named in D201's table);
+    - r3c Q1, Q2, Q4, Q5 (Q3 with D255, Q6 by D254);
+    - r3d R3D-LC, R3D-PE;
+    - r4a QR, QP4, QB, QE;
+    - r4b QF3, QF1; r4c Q2, Q5;
+    - r4d Q-F8, Q-RULE5, Q-N3, Q-UMBRELLA;
+    - 5a Q-K8a, Q-K8b, Q-K8c, Q-S4a, Q-S4b, Q-S4c;
+    - 5b Q1, Q3; 5c Q3, Q5;
+    - 6a Q2-Q5; 6b Q1-Q5;
+    - 6c Q-D241-FILING, Q-NAMED, Q-ANAST, Q-D240-CORPUS, Q-N8-SCOPE;
+    - q02 Q2.
+  - Named releases that 6a's P-MONO accepts:
+    - D228_STATUS: r3d R3D-ST option (a) and 6a Q1. An inherited act whose status is weakened to unresolved moves into
+      D228's arm.
+    - r4a QM: D240's site fit under weakening, 12 releases and no false READY. This is r4a's request R7 to 6a.
+    - r3d R3D-NC: D238's production shape, a named release measured at D1-D3.
+  - r2c Q2 (D233's cost): D233 stands. At D1-D3 the lead counts 43255 holds on a treated non-bleeding vessel.
+  - The open requests (w7r/final/NOTES section 2):
+    - O2 is D259, O3 is D253, O6 is QM above, O14 and O15 are D254 and D257, O16 goes to the integration with D256.
+    - O1, O4, O5, O7-O13, O17 and O18 are not built in this round.
+
+- **D263 Repair round w8r: nine steps, then the integration with the seam check and the gate.**
+  - The steps:
+    - r3c (wording.py): D254 rules 1 and 3, D257's sentences, D258's UNLISTED_SCOPE, and D255's tests.
+    - 5c (overlay.py): D254 rule 2.
+    - r4a (evaluate.py, questions.py): D253; D254 rule 2 in the Fill and rule 3's mapping; D257's slots; D258's mapping;
+      QX (ii).
+    - r4d (combination.py): D255; D256; D257's `within`; QE13's reading.
+    - r4b (coverage.py): D256's `_part_of_session` half.
+    - 5a (assess.py): D260, D261.
+    - 5b (review.py, jobs.py): D259 (R1), and 5b F2's test.
+    - 6a (property tests): D254 rule 4, and D262's named releases.
+    - q02 (tests/v2_documents.py and its pin): D261's fixture.
+  - Each step is built as a patch, refuted, given one fix round, and refuted again where needed, as in w7r. The
+    integration runs the seam check (D252) and adds D254's six shapes to it. The gate must be green; D250 stays.
