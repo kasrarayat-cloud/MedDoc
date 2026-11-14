@@ -15654,3 +15654,13 @@ The record is build-v2/lead-verify-w7r/VERIFY.md. The order of readings is D216'
     - q02 (tests/v2_documents.py and its pin): D261's fixture.
   - Each step is built as a patch, refuted, given one fix round, and refuted again where needed, as in w7r. The
     integration runs the seam check (D252) and adds D254's six shapes to it. The gate must be green; D250 stays.
+
+- **D261 note (2026-11-14, same session): who builds D261's kept_words.** engine/assess already passes
+  `selection.evidence.runs` to evaluate as kept_words. They are None in production only because
+  jobs._Integrity.word_runs is None until contract/geometry.py provides the function (step 5a's earlier R2). So in
+  round w8r, step 5b builds D261:
+  - it adds `word_runs` to contract/geometry.py (a SingleCharacterGeometry function, the letter-or-digit runs of a kept
+    span; this file is 5b's in this round only);
+  - jobs._Integrity.word_runs returns it.
+  assess.py does not change for D261. D263's step list moves D261 from 5a to 5b. q02's fixture is built on 5b's first
+  patch.
