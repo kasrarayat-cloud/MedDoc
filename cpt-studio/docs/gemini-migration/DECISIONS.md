@@ -16314,3 +16314,47 @@ engine, read time and member answers serve the Fable reading unchanged (A2:19-23
   take the test's recorded spend past $100, the sends stop and the owner is asked, so at least about $100 stays for the
   site's reader. The probes of 2026-11-15 ($42.17 by the harness's upper bound) were sent on the same account before
   the answer.
+
+## The hold-cause fixes ruled (2026-11-15, session 31dfc45d)
+
+The hold-cause analysis of the Fable 5.2 ten-note probe (build-v2/holds/, workflow wf_15179ec7-ad0) finished: five
+traces (12 rows: 6 rule too cautious, 3 reader-caused, 2 instruction gaps, 1 expectation wrong), a synthesis under D276,
+four refutation lenses (false READY, design, reproduction, generality: 40 findings, 6 critical), a judge
+(HOLDS-ANALYSIS.md's FINAL FIX LIST, HOLDS-REFUTATIONS.md). Its replays are free; nothing was sent.
+
+- **D292 The hold-cause fixes (HOLDS-ANALYSIS.md, THE FINAL FIX LIST; D276).**
+  - Built, engine (each a rule for a class, with its G2 inputs and tests as the list states):
+    - E1j, a biopsy elsewhere than every removal's places (its target.places with its target lesion's established
+      places), each removal asked by a rejected place pair control: biopsy_of_removed_lesion is F (FINAL-V2 4.7, 4.11,
+      5.1 row 10). Owner files engine/coverage.py and engine/requirements.py; the BUNDLING read-set gains the lesion's
+      places. Deliberate test changes: r2d-2 Q2's three pins re-pinned READY on D245's own reasoning, D245_Q2's named
+      release removed, REQUIREMENTS_VERSION moved with the read-set.
+    - E5j, electrocautery covers the devices that deliver high-frequency current (hot snare, hot forceps, argon plasma,
+      radiofrequency; D222); a thermal probe and a sphincterotome may be electrosurgical and keep the technique row
+      unresolved, never covered and never excluded by a negated electrocautery. Owner file engine/pairing.py; the
+      v1-parity pin amended to v2's table with the departure named.
+  - Built, tools and measurement: FX-R1 (the replay harness uses the pipeline's own R1); FX-SCORE widened (a READY act
+    counts by a line that retells it, with measure @2's restatements); FX-EXP-COMPETE narrowed, applied as a general rule
+    to every expectation set the test reads (two or more office visit codes whose expected acts are one visit are
+    expected HELD, D40); FX-DEV-MEMBER (a development input).
+  - Built, instruction and contract (unmeasurable by replay; D277's pairs are their recordings): U1 (a doubted kind's
+    statements in kind-neutral forms; contract/claims.py), U2 as amended (a point the endoscope itself never reached is
+    device_reached; an unclear reach also files a doubt about reached), U3 (reached_anatomy: the instruction, the claim
+    wording, D244's shared control restated and re-pinned, contract/geometry.py's EXTENT_ATTRIBUTES; FINAL-V2's text by
+    the integration owner), U4, U7, U8, U9. Each is a general principle with a generic example; none echoes a note.
+  - Rejected: E2 (D34 is the never-installed v1 path's; it releases with no pair control inside D228/D238's own arm;
+    critical FR-1 to FR-3), E3, E4 (it puts D196's uncontrolled one-entry passage on a READY path), U6 (no level fact
+    exists, so a 99215 at low decision making would go READY), the E1 adjacency guard, fixA-fixD.
+  - Decided by the standing rulings, not raised with the owner: FX-CAT is not built - a lone office visit code of the
+    other published category stays READY as the installed release makes it (D216's third reading), named; the pairs
+    enter no member values. D40's two-code hold stays; only the development expectation changes, and D277 runs no
+    acceptance set. E1j's junction residual (two reading errors: a lesion that reaches a junction filed at one segment,
+    sampled on both sides, with pass 2 rejecting the removal-place control) is accepted as named, under FINAL-V2 4.13,
+    which dropped D58/D77's adjacency because it would hold common neighbouring-segment biopsies.
+  - Design items, specified and not built in this round: Q2 (claim an act's target.anatomy; place an anastomosis by its
+    appraised entry's subtype and joins), Q10 (a lesion place pair control), level facts for office visits (U6's
+    precondition). Each is built when a pair's evidence calls for it (D277's failure path).
+  - Measured, free replay of the final set: the ten notes READY recall 5/17 -> 8/16, unnecessary holds 11/17 -> 8/16,
+    wrong READY 1 -> 0 (the restatement artifact), wrong exclusions 0 (F3all 8/9 and 1/9; the two 19 KB notes 0/7); the
+    held-out batches 6/17 -> 10/16, 9/17 -> 6/16, wrong READY 2 -> 0, wrong exclusions 0. tests.v2: 2,496 tests, five
+    named deliberate failures (the re-pins above).
