@@ -23,7 +23,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import install  # noqa: E402
-from test_install import FakeOwnership, TemporaryDirectoryTest, guard_host, release_host, run_body  # noqa: E402
+from test_install import (FakeOwnership, TemporaryDirectoryTest, guard_host, pre_switch_answer,  # noqa: E402
+                          release_host, run_body)
 
 
 def setUpModule():
@@ -223,6 +224,13 @@ class StopTimeoutTests(unittest.TestCase):
         self.assertGreater(install.STOP_SECONDS['worker'], settings_value('JOB_DEADLINE_SECONDS')['interpret'])
         self.assertGreater(settings_value('JOB_DEADLINE_SECONDS')['interpret'],
                            settings_value('INTERPRETER_SEND_DEADLINE_SECONDS'))
+        # design v2 (FINAL-V2 7.4 [R:MO-3]; triage hand-off 0b:R5): pass 2's appraise stage takes D49's deadlines too -
+        # its 510 s send inside its 560 s stage - and ends before the worker's 600 s stop, beside pass 1's
+        self.assertEqual((settings_value('APPRAISER_SEND_DEADLINE_SECONDS'),
+                          settings_value('JOB_DEADLINE_SECONDS')['appraise']), (510, 560))
+        self.assertGreater(install.STOP_SECONDS['worker'], settings_value('JOB_DEADLINE_SECONDS')['appraise'])
+        self.assertGreater(settings_value('JOB_DEADLINE_SECONDS')['appraise'],
+                           settings_value('APPRAISER_SEND_DEADLINE_SECONDS'))
 
     def test_the_worker_outlasts_a_whole_tool_loop_and_stops_at_the_stale_sweeps_bound(self):
         # harness@2 (HARNESS.md 11.2): one participant phase is a loop of at most PARTICIPANT_MAX_EXCHANGES exchanges
@@ -595,6 +603,8 @@ class AppWorld:
 
     def app_script(self, image_id, env_bytes, body, params, **kwargs):
         self.timeline.append(('script', body))
+        if pre_switch_answer(body) is not None:  # design v2's reads before the switch (step 6b)
+            return self.answers.get(('script', body)) or pre_switch_answer(body)
         if body == install.UNRUNNABLE_STAGES:
             return {'known': ['analyze', 'assess', 'astra', 'extract', 'fable', 'predict', 'review2'], 'stuck': 0,
                     'kinds': []}

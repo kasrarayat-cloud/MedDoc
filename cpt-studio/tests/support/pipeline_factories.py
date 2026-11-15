@@ -158,14 +158,22 @@ def facts(text=GI_NOTE, **overrides):
 
 
 def context(enc, rev, *, fact_values=None, user_values=None, make_current=True):
+    """A context of ``rev``, made current unless ``make_current`` is False. Given ``user_values``, the context made
+    current carries them as a member's save stores them: the encounter's saved values become the same (FINAL-V2
+    amendment 1, 4.1: an assessment is recorded only on the current context AND the saved values)."""
     data = fact_values if fact_values is not None else facts(rev.text)
+    saved = user_values is not None
     user_values = dict(user_values or {})
     ctx = models.EncounterContext.objects.create(
         encounter=enc, revision=rev, facts=data, user_values=user_values, version=CONTEXT_VERSION,
         sha256=sha256_json({'facts': data, 'user_values': user_values, 'revision': str(rev.pk)}))
     if make_current:
         enc.current_context = ctx
-        enc.save(update_fields=['current_context', 'updated_at'])
+        fields = ['current_context', 'updated_at']
+        if saved:
+            enc.user_values = dict(user_values)
+            fields.append('user_values')
+        enc.save(update_fields=fields)
     return ctx
 
 

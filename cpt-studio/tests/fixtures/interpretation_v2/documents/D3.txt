@@ -1,0 +1,9 @@
+SYNTHETIC COLONOSCOPY REPORT
+Date of service: 03/14/2031
+Endoscopist: Corvin Ashdale, MD (fictional)
+
+Findings: The colonoscope was advanced to the cecum.
+Once, a 22 mm polyp was found in the ascending colon.
+It was removed piecemeal with a cold snare in four pieces.
+During this procedure, cold forceps biopsies of the polyp were taken.
+No biopsies were taken.

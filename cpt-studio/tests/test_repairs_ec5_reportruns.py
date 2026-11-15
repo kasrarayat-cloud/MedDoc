@@ -33,6 +33,7 @@ from studio.types import RawExchange
 from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
+from tests import v2_documents, v2_replay
 from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider, RecordedInterpretation, drain
 from tests.test_repairs_pipeline import INTERPRETATIONS
 from tests.test_services_second_review import TwoPassProvider, ask
@@ -171,8 +172,10 @@ class Pipeline(OperatorReads, TestCase):
     def runs(self, encounter_id):
         """The encounter's runs of Corti's requests (the primary and the second review), oldest first: the runs these
         tests assert about. On the production chain the interpretation's own run stands beside them (design/FINAL.md
-        6.3); a class on the legacy chain has none, so its runs are all of them, as before."""
-        return list(models.ProviderRun.objects.filter(encounter_id=encounter_id).exclude(purpose=interpretation.PURPOSE)
+        6.3) - on design v2's, pass 1's and the appraisal's (FINAL-V2 7.4; DECISIONS D243); a class on the legacy chain
+        has none, so its runs are all of them, as before."""
+        return list(models.ProviderRun.objects.filter(encounter_id=encounter_id)
+                    .exclude(purpose__in=(interpretation.PURPOSE, interpretation.APPRAISAL_PURPOSE))
                     .order_by('created_at', 'pk'))
 
     def approve(self, encounter_id, code):
@@ -194,7 +197,11 @@ class HeldRunReadsAsHeldTests(RecordedInterpretation, Pipeline):
 
     On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads OFFICE_NOTE from its recorded synthetic
     interpretation, and the runs these tests assert about are Corti's (Pipeline.runs, usage_lines), which the
-    interpretation's own run now stands beside."""
+    interpretation's own run now stands beside.
+
+    DECISIONS D243 class C: each test reads the stored state through the product (readiness, the reports, the page), so
+    its rows are design v2's, in replay (tests/v2_replay.py), never the v1 chain's: Gemini reads the office note with its
+    clinician named (tests/v2_documents.OFFICE_NOTE), beside which pass 1's and the appraisal's runs stand."""
 
     def assert_held(self, encounter_id):
         (held,) = [run for run in self.runs(encounter_id) if run.scope.get('held')]
@@ -216,16 +223,18 @@ class HeldRunReadsAsHeldTests(RecordedInterpretation, Pipeline):
         self.assertNotIn('failed', shown)
         return draft
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_a_member_date_held_at_upload_is_held_not_failed(self):
         self.use(FakeProvider(selections=[VISIT]))
-        encounter_id = self.create(OFFICE_NOTE, service_date='1998-01-01')
+        encounter_id = self.create(v2_documents.OFFICE_NOTE, service_date='1998-01-01')
         drain()
         self.assertEqual(self.provider.sent, [])  # nothing was ever requested
         self.assert_held(encounter_id)
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_a_member_date_held_after_a_finished_request_is_held_not_failed(self):
         self.use(FakeProvider(selections=[VISIT]))
-        encounter_id = self.create(OFFICE_NOTE)
+        encounter_id = self.create(v2_documents.OFFICE_NOTE)
         drain()
         reply = self.post(f'/api/encounters/{encounter_id}/context', {'service_date': '2026-10-22'})
         self.assertEqual(reply.status_code, 201, reply.content)
@@ -235,10 +244,11 @@ class HeldRunReadsAsHeldTests(RecordedInterpretation, Pipeline):
         first, held = usage_lines(draft)
         self.assertNotIn('by this assessment', first)  # the earlier run is not the one this assessment read
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_control_a_request_that_could_not_be_built_still_reads_failed(self):
         """The generic not-sent run (no held reason) keeps its wording (tests/test_review.py pins it)."""
         self.use(UnbuildableProvider(selections=[VISIT]))
-        encounter_id = self.create(OFFICE_NOTE)
+        encounter_id = self.create(v2_documents.OFFICE_NOTE)
         drain()
         (run,) = self.runs(encounter_id)
         self.assertEqual((run.state, run.scope), (models.ProviderRun.NOT_SENT, {}))
@@ -684,14 +694,19 @@ class FailedCardNamesTheRunTheStateReadsTests(RecordedInterpretation, Pipeline):
         drain()
         reply = self.post(f'/api/encounters/{encounter_id}/context', {'service_date': '2026-10-22'})
         self.assertEqual(reply.status_code, 201, reply.content)
+        # FINAL-V2 amendment 1 (A6, 7.2): during an update a document review that failed ends the predict FAILED and
+        # queues nothing, so no assess is ever queued for that run (before the amendment this test made queueing it
+        # fail to reach the same state); a queued assess would fail the stage here
         queue = jobs.enqueue
 
         def no_assess(kind, **values):
             if kind == models.Job.ASSESS:
                 raise RuntimeError('the assess could not be queued (synthetic)')
             return queue(kind, **values)
-        with mock.patch('studio.jobs.enqueue', no_assess), self.assertLogs('studio.jobs', 'ERROR'):
+        with mock.patch('studio.jobs.enqueue', no_assess):
             drain()
+        self.assertFalse(models.Job.objects.filter(encounter_id=encounter_id, error__contains='could not be queued')
+                         .exists())
         answered, failed = self.runs(encounter_id)
         self.assertEqual((answered.state, failed.state), (models.ProviderRun.SUCCEEDED, models.ProviderRun.FAILED))
         self.assertEqual(models.Encounter.objects.get(pk=encounter_id).current_assessment.provider_run_id, answered.pk)

@@ -250,8 +250,10 @@ def _routing_json(encounter):
             'facts': finding.get('facts', []), 'missing': finding.get('missing', []),
         })
     # the Gemini migration (design/FINAL.md 4.3, 8.3): a gemini-routing@1 run is no reading - a stand-in derived from the
-    # event inventory (its families and statuses), which the console labels as such and names its inventory
-    derived = run.version == interpretation.ROUTING_VERSION
+    # event inventory (its families and statuses), which the console labels as such and names its inventory; design v2's
+    # gemini-routing@2 (engine/derive.routing_stand_in, written by jobs._route_by_stand_in) is one too (step 6b's request,
+    # refutation 6b-r1 P1: unlabelled, the walk's stand-in check failed every v2 encounter)
+    derived = run.version in (interpretation.ROUTING_VERSION, interpretation.ROUTING_VERSION_V2)
     return {'version': run.version, 'document_kind': run.result.get('document_kind'), 'families': families,
             'derived': derived, **({'derived_from': 'the event inventory', 'inventory': run.result.get('inventory'),
                                     'inventory_sha256': run.result.get('inventory_sha256')} if derived else {})}
@@ -1166,6 +1168,87 @@ def _step_outcome(job):
     return None if job.state in (models.Job.QUEUED, models.Job.RUNNING) else progress._step_outcome(job)
 
 
+# --- what_changed_rows: the stored rows of "what changed" (AMENDMENT-1 6.2 and 11.3; DECISIONS D247 O22) ----------------
+#
+# Step 6b's block (D251 O22: 6b owns it in this round). The operator view serves, beside the encounter, the stored rows
+# 6.2 reads, so the differential check (ops/verification/what_changed.py, written from 6.2 without reading
+# customer_api.what_changed) computes "what changed" from them and compares it with the page's: Assessment, Proposal,
+# Clarification, EncounterContext, Decision, DecisionInvalidation, SourceRevision, MemberAnswer and its revocation, read
+# as stored - never the review overlay, a reader, the clock or the configuration. Two product values are served beside
+# the rows, never derived by the check: ``fresh`` (review.fresh, 6.2's precondition) and each proposal's
+# ``other_reason`` (6.2 step 3: the other-codes list's reason, in customer_api's own words for it - the alternative's
+# sentence, or "Not suggested: " and customer_api._exclusion_reason read from the stored checks). Every id is a string;
+# every moment ISO 8601. Nothing is written.
+
+WHAT_CHANGED_ROWS = 'cpt-studio-what-changed-rows@1'  # ops/verification/what_changed.py's ROWS_SCHEMA
+
+
+def what_changed_rows(encounter):
+    """The rows of 6.2 for ``encounter`` (schema WHAT_CHANGED_ROWS): ``fresh``, ``current_assessment`` and
+    ``current_context``; ``assessments`` (each with its proposals and clarifications, by id), ``contexts`` and
+    ``revisions`` (by id); ``decisions`` (by sequence), ``invalidations`` and ``member_answers`` (each with ``standing``:
+    no revocation withdrew it)."""
+    from . import customer_api  # local import: customer_api imports this module's peers
+    from .validation import questions
+
+    def iso(value):
+        return value.isoformat() if value is not None else None
+
+    def pk(value):
+        return str(value) if value is not None else None
+
+    def answers_of(proposal):
+        marker = (proposal.support or {}).get(questions.ANSWERED_SUPPORT) if isinstance(proposal.support, dict) else None
+        return [str(item) for item in (marker.get('answers') or ())] if isinstance(marker, dict) else []
+
+    def other_reason(proposal):
+        if proposal.bucket == models.Proposal.ALTERNATIVE:
+            return customer_api.WHAT_CHANGED_ALTERNATIVE
+        if proposal.bucket == models.Proposal.EXCLUDED:
+            return customer_api.WHAT_CHANGED_NOT_SUGGESTED.format(
+                reason=customer_api._lower_first(customer_api._exclusion_reason(proposal)))
+        return None
+
+    assessments = {}
+    for assessment in encounter.assessments.order_by('created_at', 'pk'):
+        assessments[str(assessment.pk)] = {
+            'created_at': iso(assessment.created_at), 'revision': str(assessment.revision_id),
+            'context': pk(assessment.context_id), 'engine_version': assessment.engine_version,
+            'proposals': [{'id': str(item.pk), 'code': item.code, 'bucket': item.bucket, 'status': item.status,
+                           'units': item.units, 'position': item.position, 'reinstatable': item.reinstatable,
+                           'family': item.family or '', 'answered_away': questions.answered_away(item),
+                           'answers': answers_of(item), 'other_reason': other_reason(item)}
+                          for item in assessment.proposals.order_by('position', 'pk')],
+            'clarifications': [{'id': str(item.pk), 'created_at': iso(item.created_at), 'proposal': pk(item.proposal_id),
+                                'scope': item.scope, 'family': item.family or '', 'fact': item.fact,
+                                'answer': pk(item.answer_id)}
+                               for item in assessment.clarifications.order_by('created_at', 'pk')]}
+    revoked = set(models.MemberAnswerRevocation.objects.filter(answer__encounter=encounter)
+                  .values_list('answer_id', flat=True))
+    return {
+        'schema': WHAT_CHANGED_ROWS, 'fresh': review.fresh(encounter),
+        'current_assessment': pk(encounter.current_assessment_id), 'current_context': pk(encounter.current_context_id),
+        'assessments': assessments,
+        'contexts': {str(item.pk): {'created_at': iso(item.created_at), 'revision': str(item.revision_id),
+                                    'version': item.version, 'facts': item.facts if isinstance(item.facts, dict) else {},
+                                    'earlier_assessment': pk(item.earlier_assessment_id)}
+                     for item in encounter.contexts.order_by('created_at', 'pk')},
+        'revisions': {str(item.pk): {'number': item.number} for item in encounter.revisions.order_by('number', 'pk')},
+        'decisions': [{'id': str(item.pk), 'assessment': str(item.assessment_id), 'proposal': str(item.proposal_id),
+                       'code': item.proposal.code, 'action': item.action, 'carried_from': pk(item.carried_from_id),
+                       'sequence': item.sequence}
+                      for item in encounter.decisions.select_related('proposal').order_by('sequence')],
+        'invalidations': [{'decision': str(item.decision_id), 'by_context': pk(item.by_context_id),
+                           'by_revision': pk(item.by_revision_id)}
+                          for item in models.DecisionInvalidation.objects.filter(decision__encounter=encounter)
+                          .order_by('created_at', 'pk')],
+        'member_answers': [{'id': str(item.pk), 'revision': str(item.revision_id), 'answered_at': iso(item.answered_at),
+                            'standing': item.pk not in revoked}
+                           for item in models.MemberAnswer.objects.filter(encounter=encounter)
+                           .order_by('answered_at', 'pk')],
+    }
+
+
 def encounter_detail(encounter, membership):
     from .jobs import busy, second_review_status  # local import: jobs imports this module's peers
 
@@ -1220,6 +1303,8 @@ def encounter_detail(encounter, membership):
         # kept as audit rows and never part of the encounter's activity
         'activity': [_activity_json(e) for e in encounter.audit_events.exclude(event=OPERATOR_VIEWED)
                      .select_related('actor').order_by('created_at')],
+        # AMENDMENT-1 11.3 (DECISIONS D247 O22): the stored rows the differential check of "what changed" reads
+        'what_changed_rows': what_changed_rows(encounter),
     }
 
 

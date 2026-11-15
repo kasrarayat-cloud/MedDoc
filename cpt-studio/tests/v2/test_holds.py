@@ -13,22 +13,28 @@ What is proved:
   retry door and never changes a hold or a cut-off answer; an inventory is bound by the run's pass
   (AppraisalRefusalTests);
 - only a Gemini run of one of the two passes is classified or holds; one answer sets at most one hold for an appraisal
-  as for pass 1 (RunTests).
+  as for pass 1 (RunTests);
+- pass 1's stored answer that the reader refuses when pass 2 is built (adapter.NotBuilt, effect REFUSED: DECISIONS
+  D229), recorded as adapter.NotBuilt says step 5b records it - pass 1's refused row, its effect by settle - is a
+  definite failure of that run with the retry door (FINAL-V2 7.5), never 'unbuilt'; a cut-off answer stays TOO_LONG
+  and a substituted model holds (RefusedStoredReadingTests).
 """
 from __future__ import annotations
 
 import hashlib
 from types import SimpleNamespace
+from unittest import mock
 
 from django.test import TestCase, override_settings
 
-from studio import interpretation, models, operator
-from studio.interpretation import adapter, holds
+from studio import interpretation, jobs, models, operator
+from studio.interpretation import adapter, holds, store
 from studio.interpretation.contract import extract_read
-from studio.types import sha256_json
+from studio.types import ProviderRequest, sha256_json
 from tests.support import factories as f
 from tests.test_interpretation_adapter import (PER_DAY, PER_MINUTE, TRIAL_429, encoded, envelope, error_body,
                                                error_info, quota_failure, violation, with_parts)
+from tests.v2.test_adapter import measured_pins
 
 TEXT = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n'
         'Date of service: 2031-06-02\n'
@@ -41,7 +47,7 @@ CUT_OFF = encoded(with_parts({'text': '{'}, finish='MAX_TOKENS'))
 
 
 def substituted() -> bytes:
-    return encoded(envelope(modelVersion='gemini-4-argon-preview'))
+    return encoded(envelope(modelVersion=f'{interpretation.MODEL}-preview'))
 
 
 # (label, state, http_status, body, effect, reason): FINAL 11.1 as P-3, P-4, P-5, C5 and A11 amend it
@@ -241,3 +247,84 @@ class RunTests(TestCase):
         self.assertEqual(holds.settle(sent)[1], None)  # released: settling the same answer again stands none
         self.assertEqual(holds.record(copy, outcome), first)
         self.assertEqual(models.InterpreterHold.objects.count(), 1)
+
+
+class RefusedStoredReadingTests(TestCase):
+    """adapter.NotBuilt's REFUSED effect (DECISIONS D229; FINAL-V2 7.5's "answer refused by the reader"): pass 1's
+    stored answer, read when pass 2 is built and refused by the reader, recorded exactly as NotBuilt's docstring says
+    step 5b records it - pass 1's refused row (store.refused_row_v2 of the NotBuilt's refusal, for the pass-1 run whose
+    request and bytes were given; appraisal_run NULL) and that run's effect from holds.settle with the row."""
+
+    def setUp(self):
+        self.enterContext(mock.patch.multiple(interpretation, **measured_pins()))
+        self.enc, self.rev = scene()
+
+    def pass_1_run(self, body: bytes) -> models.ProviderRun:
+        """A sent pass-1 run of this revision's own pass-1 request, ``body`` its stored answer, read back from the
+        database as the stage reads it."""
+        request = adapter.build_extraction_request(self.rev.text, (), 'paste')
+        run = models.ProviderRun.objects.create(
+            encounter=self.enc, revision=self.rev, provider=interpretation.PROVIDER,
+            adapter_version=request.adapter_version, purpose=interpretation.PURPOSE,
+            request_sha256=request.canonical_sha256, request_body=request.body, contexts=list(request.contexts),
+            state='succeeded', sent=True, http_status=200, response_bytes=body,
+            response_sha256=hashlib.sha256(body).hexdigest())
+        return models.ProviderRun.objects.get(pk=run.pk)
+
+    def recorded(self, run: models.ProviderRun) -> tuple:
+        """(the NotBuilt, the refused row, settle's outcome, settle's hold): building pass 2 from the stored run, then
+        recording what NotBuilt names for REFUSED."""
+        stored = ProviderRequest(provider=run.provider, adapter_version=run.adapter_version, body=run.request_body,
+                                 canonical_sha256=run.request_sha256, contexts=tuple(run.contexts or ()))
+        with self.assertRaises(adapter.NotBuilt) as caught:
+            adapter.build_appraisal_request(self.rev.text, (), 'paste', stored, bytes(run.response_bytes),
+                                            check=lambda text, pages, answer: {})
+        refused = caught.exception
+        self.assertEqual((refused.reason, refused.effect), (adapter.STORED, adapter.REFUSED))
+        fields = store.refused_row_v2(refused.refusal, encounter_id=self.enc.pk, revision_id=self.rev.pk,
+                                      provider_run_id=run.pk, text_sha256=self.rev.text_sha256,
+                                      request_sha256=run.request_sha256, response_sha256=run.response_sha256)
+        created = models.EventInventory.objects.create(**{name: fields[name] for name in store.FIELDS_V2})
+        row = models.EventInventory.objects.get(pk=created.pk)  # as a later stage reads it
+        outcome, hold = holds.settle(run, inventory=row)
+        return refused, row, outcome, hold
+
+    def test_a_refused_reading_of_a_usable_answer_fails_the_run_with_the_retry_door(self):
+        for name, text, stage in (('not JSON inside', '{"x": ', 'json'), ('outside the schema', '{}', 'schema')):
+            with self.subTest(name):
+                run = self.pass_1_run(encoded(envelope(text)))
+                # without the refused row the answer reads as answered: a stage would reuse it (the refutation's P1)
+                self.assertEqual(holds.classify_run(run).effect, holds.ANSWERED)
+                refused, row, outcome, hold = self.recorded(run)
+                self.assertEqual((row.state, row.appraisal_run_id, row.provider_run_id, row.revision_id),
+                                 (refused.effect, None, run.pk, self.rev.pk))
+                self.assertEqual((row.interpretation_version, row.inventory_version),
+                                 (interpretation.INTERPRETATION_PAIR, interpretation.INVENTORY_VERSION_V2))
+                self.assertEqual((row.verification['stage'], row.verification['problems']),
+                                 (stage, [refused.refusal.reason]))
+                self.assertEqual((outcome.effect, outcome.retry, outcome.why, hold),
+                                 (holds.FAILED, True, refused.refusal.reason, None))
+                self.assertNotIn(adapter.UNBUILT, (outcome.effect, row.state, refused.effect))
+                self.assertEqual(holds.classify_run(run, inventory=row), outcome)  # read again: the same effect
+                # recorded on the run's scope as jobs._mark_effect records an effect, it is the effect jobs reads
+                # first: the retry door releases the run (and the stored-answer door, which reuses only an
+                # answered run, never reuses it). Since 5b, jobs reads the refused row at the current (v2) versions
+                # (_answer_refusal reads current_versions(): 5b's R1, applied by the integration), so it fails already
+                self.assertEqual(jobs.interpretation_effect(run), holds.FAILED)
+                models.ProviderRun.objects.filter(pk=run.pk).update(scope={**(run.scope or {}),
+                                                                          'effect': outcome.effect})
+                run.refresh_from_db()
+                self.assertEqual(jobs.interpretation_effect(run), holds.FAILED)
+                self.assertEqual(jobs.retry_target(self.rev), (run, run))
+
+    def test_a_cut_off_answer_stays_too_long_and_a_substituted_model_holds(self):
+        refused, row, outcome, hold = self.recorded(self.pass_1_run(CUT_OFF))
+        self.assertEqual((refused.refusal.stage, row.state), ('envelope', 'refused'))
+        self.assertEqual((outcome.effect, outcome.retry, hold), (holds.TOO_LONG, False, None))  # C5: never re-sent
+        run = self.pass_1_run(substituted())
+        refused, row, outcome, hold = self.recorded(run)
+        self.assertEqual((refused.refusal.stage, row.state), ('envelope', 'refused'))
+        self.assertEqual((outcome.effect, outcome.reason, outcome.retry), (holds.HOLD, holds.MODEL, False))
+        self.assertEqual((hold.reason, hold.run_id), (holds.MODEL, run.pk))
+        with override_settings(GEMINI_MODE='live'):
+            self.assertEqual(holds.paused_reason(), holds.HELD_HOLD)  # every request of both passes waits on it

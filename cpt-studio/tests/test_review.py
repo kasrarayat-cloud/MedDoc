@@ -80,7 +80,7 @@ class PersistAssessmentTests(ReviewCase):
     def test_refuses_a_revision_that_is_no_longer_current(self):
         old_context, old_revision = self.s.context, self.s.revision
         pf.addendum(self.s.encounter, self.s.reviewer, 'Setting confirmed.')
-        with self.assertRaisesRegex(ValueError, 'no longer the current revision'):
+        with self.assertRaisesRegex(review.Superseded, review.SUPERSEDED_REVISION):  # FINAL-V2 amendment 1, 4.1
             review.persist_assessment(encounter=self.s.encounter, revision=old_revision, context=old_context,
                                       routing_run=pf.routing(old_revision), provider_run=None,
                                       result=pf.standard_result())
@@ -89,7 +89,7 @@ class PersistAssessmentTests(ReviewCase):
     def test_refuses_a_context_that_was_replaced(self):
         stale = self.s.context
         self.new_context(setting='office')
-        with self.assertRaisesRegex(ValueError, 'context changed'):
+        with self.assertRaisesRegex(review.Superseded, review.SUPERSEDED_CONTEXT):  # FINAL-V2 amendment 1, 4.1
             review.persist_assessment(encounter=self.s.encounter, revision=self.s.revision, context=stale,
                                       routing_run=pf.routing(self.s.revision), provider_run=None,
                                       result=pf.standard_result())
@@ -228,7 +228,8 @@ class DecisionTests(ReviewCase):
     def test_nothing_can_be_decided_while_a_new_revision_awaits_assessment(self):
         pf.addendum(self.s.encounter, self.s.reviewer, 'Setting confirmed.')
         self.assertEqual(self.actions('sel:0', assessment=self.first), [])
-        with self.assertRaisesRegex(ValidationError, 'not part of the current review'):
+        # FINAL-V2 amendment 1, 5.3: the addendum's update is pending - the earlier codes are never decided on
+        with self.assertRaisesRegex(ValidationError, review.UPDATE_DECISION):
             self.s.decide('sel:0', 'reject', assessment=self.first)
 
     def test_alternatives_can_never_be_decided(self):
@@ -461,11 +462,11 @@ class ReadinessTests(ReviewCase):
         self.assertEqual(self.ready()['blockers'], ['The provider was not run'])
 
     def test_pending_processing_and_replaced_context_block(self):
-        pf.job(self.s.encounter, self.s.revision, 'assess', 'queued')
+        pf.job(self.s.encounter, self.s.revision, 'assess', 'queued', context=self.encounter().current_context)  # a target job (4.3)
         self.assertIn('Processing has not finished', self.ready()['blockers'])
         models.Job.objects.update(state='succeeded')
         self.new_context(setting='office')
-        self.assertIn('The encounter context changed; re-assessment has not finished', self.ready()['blockers'])
+        self.assertIn(review.UPDATE_BLOCKER, self.ready()['blockers'])  # FINAL-V2 amendment 1, 5.3
 
     def test_no_assessment_means_no_report(self):
         other = pf.scenario(workspace_name='Other synthetic workspace')
@@ -486,13 +487,14 @@ class StateTests(ReviewCase):
     def test_processing_while_any_stage_is_active(self):
         for job_state in ('queued', 'running'):
             with self.subTest(job_state):
-                job = pf.job(self.s.encounter, self.s.revision, 'assess', job_state)
+                # a stage of the current context (FINAL-V2 amendment 1, 4.3: the target jobs decide the state)
+                job = pf.job(self.s.encounter, self.s.revision, 'assess', job_state, context=self.encounter().current_context)
                 self.assertEqual(self.state(), 'processing')
                 job.state = 'succeeded'
                 job.save(update_fields=['state'])
 
     def test_stopped_when_the_latest_stage_was_cancelled(self):
-        pf.job(self.s.encounter, self.s.revision, 'predict', 'cancelled')
+        pf.job(self.s.encounter, self.s.revision, 'predict', 'cancelled', context=self.encounter().current_context)  # a target job (4.3)
         self.assertEqual(self.state(), 'stopped')
 
     def test_extraction_failed(self):
@@ -520,7 +522,8 @@ class StateTests(ReviewCase):
         self.assertEqual(self.state(), 'provider_not_run')
 
     def test_failed_predict_stage(self):
-        job = pf.job(self.s.encounter, self.s.revision, 'predict', 'failed', error='Live calls are not authorized.')
+        job = pf.job(self.s.encounter, self.s.revision, 'predict', 'failed', error='Live calls are not authorized.',
+                     context=self.encounter().current_context)  # a target job (FINAL-V2 amendment 1, 4.3)
         self.assertEqual(self.state(), 'provider_not_run')
         run = pf.provider_run(self.s.encounter, self.s.revision, state='sending')
         self.assertEqual(self.state(), 'provider_unknown')
@@ -532,10 +535,14 @@ class StateTests(ReviewCase):
         self.assertEqual(self.state(), 'provider_unknown')
 
     def test_failed_analyze_or_assess_stage_is_processing_failed(self):
-        for kind in ('analyze', 'assess'):
+        # FINAL-V2 amendment 1, 4.3: the target jobs decide - an assess of the current context; a context-free stage
+        # (analyze) after fresh codes serves nothing, so the codes' state stands
+        for kind, expected in (('analyze', 'ready_for_review'), ('assess', 'processing_failed')):
             with self.subTest(kind):
-                pf.job(self.s.encounter, self.s.revision, kind, 'failed')
-                self.assertEqual(self.state(), 'processing_failed')
+                models.Job.objects.filter(encounter=self.s.encounter).delete()
+                pf.job(self.s.encounter, self.s.revision, kind, 'failed',
+                       **({} if kind == 'analyze' else {'context': self.encounter().current_context}))
+                self.assertEqual(self.state(), expected)
 
     def test_blocked_prediction_behind_an_unknown_outcome(self):
         unknown = pf.provider_run(self.s.encounter, self.s.revision, state='unknown')
@@ -544,7 +551,8 @@ class StateTests(ReviewCase):
         self.assertEqual(self.state(), 'provider_unknown')
         unknown.reconciled_at = unknown.created_at
         unknown.save(update_fields=['reconciled_at'])
-        self.assertEqual(self.state(), 'processing')
+        # FINAL-V2 amendment 1, 5.2 (idle-owed): an update nothing serves reads stopped, with Resume
+        self.assertEqual(self.state(), 'stopped')
 
     def test_review_states(self):
         self.assertEqual(self.state(), 'ready_for_review')

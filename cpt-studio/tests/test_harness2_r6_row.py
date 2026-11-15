@@ -191,8 +191,11 @@ class StaleRowTests(RecordedInterpretation, StaleMixin, ColonCase):
                 self.assert_counted(detail)
                 counted.append(job.kind)
         # the interpret stage, the production chain's own, is one more stage before the first assessment
-        self.assertEqual(unassessed, ['extract', 'interpret', 'analyze', 'predict', 'astra', 'fable'])
-        self.assertEqual(counted, ['assess', 'astra_peer', 'fable_peer', 'assess'])
+        # FINAL-V2 amendment 1, A17: the addendum's update records its assess #1 (owing peer stages) and never makes it
+        # current, so the revision has no live assessment until its final one
+        self.assertEqual(unassessed, ['extract', 'interpret', 'analyze', 'predict', 'astra', 'fable', 'assess',
+                                      'astra_peer', 'fable_peer'])
+        self.assertEqual(counted, ['assess'])
 
 
 @override_settings(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')

@@ -19,7 +19,9 @@ import importlib
 import json
 import logging
 import uuid
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from typing import Any
 
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
@@ -35,6 +37,9 @@ from .models import (Assessment, Clarification, Decision, DecisionInvalidation, 
                      ToolCall)
 from .types import sha256_json, to_jsonable
 from .validation import questions
+# FINAL 7.1's one allowlisted checks.py constant (sentinel.CHECKS_ALLOWLIST_CONSTANTS): the not-verified rows every
+# proposal carries; named here, where the consumer rule reads FINAL 7.1's names, for jobs' design v2 renderer
+from .validation.checks import NOT_CONNECTED_CHECKS  # noqa: E402 - beside the validation imports above
 
 log = logging.getLogger(__name__)
 
@@ -168,7 +173,7 @@ def exact_evidence(evidence, text):
     return spans
 
 
-def live_assessment(encounter):
+def live_assessment(encounter: Any) -> Any:
     """The current assessment when it was made on the current revision, else None."""
     if encounter.current_assessment_id is None:
         return None
@@ -221,9 +226,9 @@ def _is_reviewer(membership, encounter):
 
 # --- current decisions and allowed actions ---------------------------------------
 
-def current_decisions(assessment):
+def current_decisions(assessment: Any) -> dict[Any, Any]:
     """proposal id -> its current Decision on ``assessment`` (approve, reject or reinstate)."""
-    latest = {}
+    latest: dict[Any, Any] = {}
     for decision in assessment.decisions.select_related('reviewer').order_by('sequence'):
         latest[decision.proposal_id] = decision
     invalidated = set(DecisionInvalidation.objects.filter(
@@ -247,16 +252,20 @@ def _current_decision(proposal):
 # completeness, the encounter state, the operator API, the report snapshot, the customer API and the approved export.
 
 DETAIL_UNAVAILABLE = 'detail_unavailable'  # review_view.DETAIL_UNAVAILABLE
+# DECISIONS D270 (refute-5b-r1 P3): the completeness key under which jobs._render_v2 records a design v2 assessment's
+# service questions, each with its engine fingerprint and the answers that closed it (stored_service_questions)
+SERVICE_QUESTIONS = 'service_questions'
 
 
-def _standing(assessment):
+def _standing(assessment: Any) -> list[Any]:
     """The standing member answers of ``assessment``'s revision (MemberAnswer rows no MemberAnswerRevocation withdrew),
     oldest first."""
     return list(MemberAnswer.objects.filter(revision_id=assessment.revision_id, revocation__isnull=True)
                 .select_related('answered_by').order_by('answered_at', 'pk'))
 
 
-def _overlay_inputs(assessment, current):
+def _overlay_inputs(assessment: Any, current: Mapping[Any, Any]
+                    ) -> tuple[list[Any], list[Any], dict[str, Any], dict[str, Any]]:
     """(proposals, stored rows, decided, keyword arguments) the review overlay reads ``assessment`` with: its stored
     rows as they are. A code the engine excluded by a member's answer (questions.answered_away) reads as stored until
     the recompute an answer's withdrawal queued has run, whatever surface reads it - one source of truth (refutation
@@ -270,27 +279,30 @@ def _overlay_inputs(assessment, current):
     from .interpretation import readers  # the one dispatch of read time (FINAL 8.2)
     from .jobs import context_service_date  # local import: jobs imports this module
 
+    service_date: Callable[[Any], Any] = context_service_date  # jobs.py is untyped: called through a typed name
     proposals = list(assessment.proposals.all())
-    rows = {}
+    rows: dict[Any, list[Any]] = {}
     for clarification in assessment.clarifications.all():  # every state: the open ones are the questions shown
         if clarification.proposal_id:
             rows.setdefault(clarification.proposal_id, []).append(clarification)
     stored, decided, kwargs = readers.for_assessment(assessment).overlay_inputs(
-        assessment, proposals, rows, current, context_service_date(assessment.context))
+        assessment, proposals, rows, current, service_date(assessment.context))
     return proposals, stored, decided, kwargs
 
 
-def question_pairs(assessment, proposals, views):
+def question_pairs(assessment: Any, proposals: Iterable[Any], views: Mapping[str, Any]
+                   ) -> list[tuple[tuple[str, str, str], dict[str, Any]]]:
     """(member key, questions.instance) of every open question ``assessment`` asks as ``views`` leave it - each
     proposal's (its view's questions: the stored ones as the decisions leave them and the ones the overlay adds), with
     the passages its stored support and evidence give (questions.passages, re-checked against the revision's text),
     then each documented service's open question (with its service's passages: questions.service_passages) and the
     encounter's (none). The one reading of "the question a member is asked": the details rows (studio/answers.py)
     record it with an answer (asked_fingerprints), and answer_states binds by it, exactly as the engine binds an answer
-    to the questions it asks (engine._MemberAnswers)."""
+    to the questions it asks (engine._MemberAnswers) - through bound_fingerprints, which on a design v2 assessment binds
+    a proposal's item by the fingerprint engine/assess stored for it (DECISIONS D259)."""
     text = assessment.revision.text
     acts = questions.acts_of(assessment.services)
-    pairs = []
+    pairs: list[tuple[tuple[str, str, str], dict[str, Any]]] = []
     for proposal in sorted(proposals, key=lambda item: item.position):
         view = views.get(proposal.key)
         for item in (view.questions if view is not None else ()):
@@ -309,18 +321,107 @@ def question_pairs(assessment, proposals, views):
     return pairs
 
 
-def answer_states(assessment, current=None, inputs=None):
+def stored_questions(assessment: Any, proposals: Iterable[Any]) -> dict[tuple[str, str, str], str]:
+    """{member key (code, family, fact): fingerprint} of the one item each proposal of a design v2 assessment
+    (cpt-studio-events@2) carries as engine/assess stored it - DECISIONS D259, step q02's request R1: the proposal's
+    ``support['question']``, engine/assess.question_fingerprint of the code's one item (cpt-studio-question@2, text-free:
+    FINAL-V2 6.5's "rendered question text" read as the Fill the text is built from), the one fingerprint engine/assess
+    binds a member's answer by - keyed by the proposal's code, its family and the item's fact key
+    (``support['item']['fact']``), exactly as engine/assess keys it (_apply_answers). A key two proposals carry is bound
+    by the first in stored order, as engine/assess binds an answer to every proposal of a key by the first one's
+    question (its proposals keep the engine's order: persist_assessment's positions). A proposal whose support carries
+    no question (a code with no item, an alternative) names nothing. {} for any other assessment: v1's binding, and the
+    legacy engine's, are unchanged."""
+    if getattr(assessment, 'engine_version', None) != interpretation_labels.ENGINE_VERSION_V2:
+        return {}
+    found: dict[tuple[str, str, str], str] = {}
+    for proposal in sorted(proposals, key=lambda item: item.position):
+        support = proposal.support if isinstance(proposal.support, dict) else {}
+        question, item = support.get('question'), support.get('item')
+        fact = item.get('fact') if isinstance(item, dict) else None
+        if (proposal.bucket != Proposal.ALTERNATIVE and isinstance(question, str) and question
+                and isinstance(fact, str) and fact):
+            found.setdefault(questions.member_key(proposal.code, proposal.family, fact), question)
+    return found
+
+
+def stored_service_questions(assessment: Any) -> dict[tuple[str, str, str], str]:
+    """{member key ('', family, fact): fingerprint} of each service question a design v2 assessment (cpt-studio-events@2)
+    asks, as its renderer recorded it - DECISIONS D270 (refute-5b-r1 P3: D259 extended to service questions): the
+    service question's engine fingerprint (engine/assess.service_fingerprint, cpt-studio-question@2, text-free), which
+    jobs._render_v2 records in ``completeness['service_questions']`` ([{family, fact, question, closed}], in the order of
+    the assessment's service clarifications) and engine/assess._close_services binds a service answer by. A key two
+    service questions carry is bound by the first in stored order (D259's rule for a key two proposals carry; the
+    details row answers both with one answer, and engine/assess closes only the questions that carry that fingerprint:
+    repair round w9r's 5b NOTES, question Q1). An entry that does not name a family, a fact and a fingerprint as strings
+    names nothing. {} for any other assessment, and for a design v2 assessment whose completeness records no such list
+    (made before D270): questions.group's binding."""
+    if getattr(assessment, 'engine_version', None) != interpretation_labels.ENGINE_VERSION_V2:
+        return {}
+    completeness = getattr(assessment, 'completeness', None)
+    recorded = completeness.get(SERVICE_QUESTIONS) if isinstance(completeness, dict) else None
+    found: dict[tuple[str, str, str], str] = {}
+    for entry in (recorded if isinstance(recorded, list) else ()):
+        family, fact, question = ((entry.get('family'), entry.get('fact'), entry.get('question'))
+                                  if isinstance(entry, dict) else (None, None, None))
+        if isinstance(family, str) and isinstance(fact, str) and fact and isinstance(question, str) and question:
+            found.setdefault(questions.member_key('', family, fact), question)
+    return found
+
+
+def bound_fingerprints(assessment: Any, proposals: Iterable[Any],
+                       pairs: Iterable[tuple[tuple[str, str, str], dict[str, Any]]]
+                       ) -> dict[tuple[str, str, str], str]:
+    """{member key: fingerprint} of ``pairs`` ((member key, questions.instance), as question_pairs and _closed_pairs give
+    them): questions.group's, but a key a design v2 proposal's stored item names is bound by that item's stored
+    fingerprint (stored_questions; DECISIONS D259), and a key a design v2 service question names by the engine
+    fingerprint its renderer recorded (stored_service_questions; DECISIONS D270) - so what a member's answer is recorded
+    with (asked_fingerprints, the details door) and what read time binds it by (answer_states) are the fingerprint
+    engine/assess binds it by. Only a key ``pairs`` asks is named: a stored item no question asks now binds nothing."""
+    grouped = questions.group(pairs)
+    stored = {**stored_service_questions(assessment), **stored_questions(assessment, proposals)}
+    return {key: stored.get(key, fingerprint) for key, fingerprint in grouped.items()}
+
+
+def answered_items(assessment: Any, proposals: Iterable[Any] | None = None) -> list[tuple[Any, str, frozenset[str]]]:
+    """[(proposal, fact, answer ids)] of each proposal of a design v2 assessment (cpt-studio-events@2) that engine/assess
+    excluded by a member's answer, in stored order - DECISIONS D270 (refute-5b-r1 P1, TRIAGE G1-01 option (b)): its
+    ``support['answered']`` ({fact, value, answers}: questions.answered_away, which jobs._render_code records for
+    engine/assess's Answered) is the record of the answers the assessment applied and of the question they closed (the
+    item's fact key, ``fact``), as an ANSWERED Clarification row is the installed release's record - the design v2
+    renderer writes no clarification for an excluded code. ``proposals``: the assessment's, when the caller has them
+    (read otherwise). [] for any other assessment: v1's record and the legacy engine's are their Clarification rows."""
+    if getattr(assessment, 'engine_version', None) != interpretation_labels.ENGINE_VERSION_V2:
+        return []
+    rows = list(assessment.proposals.all()) if proposals is None else list(proposals)
+    out: list[tuple[Any, str, frozenset[str]]] = []
+    for proposal in sorted(rows, key=lambda item: item.position):
+        if not questions.answered_away(proposal):
+            continue
+        marker = proposal.support[questions.ANSWERED_SUPPORT]
+        out.append((proposal, str(marker['fact']), frozenset(str(item) for item in marker.get('answers') or ())))
+    return out
+
+
+def answer_states(assessment: Any, current: Mapping[Any, Any] | None = None,
+                  inputs: tuple[list[Any], list[Any], dict[str, Any], dict[str, Any]] | None = None
+                  ) -> tuple[list[Any], list[Any], list[tuple[Any, str]]]:
     """(applied, bound, earlier) of the standing member answers of ``assessment``'s revision (completion repair
-    2026-11-06, U11): ``applied``, those the assessment itself read (each closes a stored question of its,
-    Clarification.answer: engine._MemberAnswers excluded the code it answers); ``bound``, those that answer a question
-    the assessment asks - the same (code, family, fact) with the same fingerprint, or by that key alone for an answer
-    recorded in the earlier form (questions.bind; refutation cycle 2, answers W2 and W4) - read against the questions
-    the overlay asks open with the current decisions alone, which the review overlay applies at read time (an
-    assessment made before the answer, until its recompute), and then against the questions the assessment closed with
-    another member's answer that no longer stands (_closed_pairs: a value superseded since, which the overlay leaves as
-    stored until the recompute that reads the new one has run); ``earlier``, (answer, why) of every other one: kept,
-    shown as an earlier answer and never applied (answered to a question no longer asked, or asked differently).
-    ([], [], []) for none. ``inputs``: _overlay_inputs(assessment, current), when the caller has them."""
+    2026-11-06, U11): ``applied``, those the assessment itself read - each closes a stored question of its
+    (Clarification.answer: engine._MemberAnswers excluded the code it answers), or, on a design v2 assessment, a proposal
+    records it in its support['answered'] (answered_items: engine/assess excluded that code by it; DECISIONS D270,
+    refute-5b-r1 P1 - the design v2 renderer writes no clarification for an excluded code, so the record is the
+    proposal's); ``bound``, those that answer a question the assessment asks - the same (code, family, fact) with the
+    same fingerprint, or by that key alone for an answer recorded in the earlier form (questions.bind; refutation cycle
+    2, answers W2 and W4) - read against the questions the overlay asks open with the current decisions alone, which the
+    review overlay applies at read time (an assessment made before the answer, until its recompute), and then against
+    the questions the assessment closed with another member's answer that no longer stands (_closed_pairs: a value
+    superseded since, which the overlay leaves as stored until the recompute that reads the new one has run);
+    ``earlier``, (answer, why) of every other one: kept, shown as an earlier answer and never applied (answered to a
+    question no longer asked, or asked differently). ([], [], []) for none. ``inputs``: _overlay_inputs(assessment,
+    current), when the caller has them. On a design v2 assessment both readings bind a proposal's item by the
+    fingerprint engine/assess stored for it, and a service question by the engine fingerprint its renderer recorded
+    (bound_fingerprints; DECISIONS D259, D270), so read time and the recompute apply a member's answer alike."""
     from .interpretation import readers  # the one dispatch of read time (FINAL 8.2)
 
     if assessment is None or not getattr(assessment, 'pk', None):
@@ -329,22 +430,26 @@ def answer_states(assessment, current=None, inputs=None):
     if not standing:
         return [], [], []
     current = current_decisions(assessment) if current is None else current
-    read = set(assessment.clarifications.filter(state=Clarification.ANSWERED, answer__isnull=False)
-               .values_list('answer_id', flat=True))
-    applied = [answer for answer in standing if answer.pk in read]
-    rest = [answer for answer in standing if answer.pk not in read]
+    read = {str(pk) for pk in assessment.clarifications.filter(state=Clarification.ANSWERED, answer__isnull=False)
+            .values_list('answer_id', flat=True)}
+    read |= {answer_id for _, _, ids in answered_items(assessment, inputs[0] if inputs is not None else None)
+             for answer_id in ids}
+    applied = [answer for answer in standing if str(answer.pk) in read]
+    rest = [answer for answer in standing if str(answer.pk) not in read]
     if not rest:
         return applied, [], []
     proposals, stored, decided, kwargs = _overlay_inputs(assessment, current) if inputs is None else inputs
     views = readers.for_assessment(assessment).views(assessment, stored, decided, kwargs, answers=())
-    bound, earlier = questions.bind(rest, questions.group(question_pairs(assessment, proposals, views)))
+    bound, earlier = questions.bind(rest, bound_fingerprints(assessment, proposals,
+                                                             question_pairs(assessment, proposals, views)))
     unasked = [answer for answer, why in earlier if why == questions.NO_LONGER_ASKED]
     if unasked:
         # refutation cycle 2 (answers W6; cycle 1's F5): an answer to a question the assessment closed with another
         # member's answer that no longer stands - its value superseded, the recompute that reads the new one queued or
         # stopped - answers a question the stored assessment asks: never "no longer asked". Nothing is re-asked; the
         # code reads as stored (its stored exclusion stands) until that recompute has run.
-        superseding, _ = questions.bind(unasked, questions.group(_closed_pairs(assessment, proposals)))
+        superseding, _ = questions.bind(unasked, bound_fingerprints(assessment, proposals,
+                                                                    _closed_pairs(assessment, proposals)))
         if superseding:
             ids = {answer.pk for answer in superseding}
             bound += superseding
@@ -352,15 +457,25 @@ def answer_states(assessment, current=None, inputs=None):
     return applied, bound, earlier
 
 
-def _closed_pairs(assessment, proposals):
+def _closed_pairs(assessment: Any, proposals: Sequence[Any]) -> list[tuple[tuple[str, str, str], dict[str, Any]]]:
     """(member key, questions.instance) of every question ``assessment`` closed with a member's answer it read
     (Clarification ANSWERED with ``answer``: engine._MemberAnswers), worded and with its passages exactly as
-    question_pairs reads an open one, so its fingerprint is the one the engine bound that answer by. Read for an answer
-    saved to such a question since (answer_states). One query."""
+    question_pairs reads an open one, so its fingerprint is the one the engine bound that answer by - on a design v2
+    assessment through bound_fingerprints, which binds a proposal's item by its stored fingerprint (DECISIONS D259) and a
+    service question by its recorded engine fingerprint (D270). On a design v2 assessment also the item of each code
+    engine/assess excluded by a member's answer (answered_items, DECISIONS D270: the record is the proposal's
+    support['answered'], no Clarification row), keyed by its code, family and the item's fact key and bound by the item's
+    stored fingerprint - named only where stored_questions names that key, so no other fingerprint ever binds it. Read for
+    an answer saved to such a question since (answer_states). One query (two on a design v2 assessment)."""
     text = assessment.revision.text
     acts = questions.acts_of(assessment.services)
     by_pk = {proposal.pk: proposal for proposal in proposals}
-    pairs = []
+    pairs: list[tuple[tuple[str, str, str], dict[str, Any]]] = []
+    stored = stored_questions(assessment, proposals)
+    for proposal, fact, _ in answered_items(assessment, proposals):
+        key = questions.member_key(proposal.code, proposal.family, fact)
+        if key in stored:
+            pairs.append((key, questions.instance('proposal', proposal.family, fact, proposal.code, '', '', ())))
     for row in assessment.clarifications.filter(state=Clarification.ANSWERED, answer__isnull=False) \
             .order_by('created_at', 'pk'):
         proposal = by_pk.get(row.proposal_id) if row.proposal_id else None
@@ -379,9 +494,12 @@ def _closed_pairs(assessment, proposals):
     return pairs
 
 
-def asked_fingerprints(assessment, current=None) -> dict:
+def asked_fingerprints(assessment: Any, current: Mapping[Any, Any] | None = None) -> dict[tuple[str, str, str], str]:
     """{member key (code, family, fact): fingerprint} of every question ``assessment`` asks open, as the overlay asks
-    it with the current decisions alone (question_pairs): what a member's answer saved now binds to (answers.py)."""
+    it with the current decisions alone (question_pairs): what a member's answer saved now binds to (answers.py). On a
+    design v2 assessment a proposal's item is recorded with the fingerprint engine/assess stored for it, and a service
+    question with the engine fingerprint its renderer recorded (bound_fingerprints; DECISIONS D259, D270), the one the
+    recompute the save queues binds the answer by."""
     from .interpretation import readers  # the one dispatch of read time (FINAL 8.2)
 
     if assessment is None or not getattr(assessment, 'pk', None):
@@ -389,7 +507,7 @@ def asked_fingerprints(assessment, current=None) -> dict:
     current = current_decisions(assessment) if current is None else current
     proposals, stored, decided, kwargs = _overlay_inputs(assessment, current)
     views = readers.for_assessment(assessment).views(assessment, stored, decided, kwargs, answers=())
-    return questions.group(question_pairs(assessment, proposals, views))
+    return bound_fingerprints(assessment, proposals, question_pairs(assessment, proposals, views))
 
 
 def _answer_effect(answer) -> dict:
@@ -665,6 +783,8 @@ def _allowed(proposal, assessment, membership, encounter, views=None):
     if (encounter.current_assessment_id != assessment.pk
             or assessment.revision_id != encounter.current_revision_id or not is_final(assessment)):
         return []
+    if not fresh(encounter):
+        return []  # FINAL-V2 amendment 1, A7 and 4.3: codes from before the latest change are never decided on
     view = (effective_view(assessment) if views is None else views).get(proposal.key)
     actions = _actions(proposal, _current_decision(proposal), assessment.revision.text,
                        view.same_day_held if view is not None else _same_day_held(proposal, assessment), view)
@@ -680,7 +800,8 @@ def _allowed(proposal, assessment, membership, encounter, views=None):
 def allowed_actions(proposal, assessment, membership, views=None):
     """The actions this member may record on ``proposal`` now; the only source of truth for the UI. ``views``: the
     assessment's effective_view when the caller has it."""
-    encounter = Encounter.objects.only('workspace', 'current_assessment', 'current_revision').get(
+    # amendment 1, 4.3: the context and the saved values too (``fresh``), so the whole row is read
+    encounter = Encounter.objects.select_related('current_assessment', 'current_context').get(
         pk=assessment.encounter_id)
     return _allowed(proposal, assessment, membership, encounter, views)
 
@@ -734,6 +855,10 @@ def _record_decision(*, encounter, proposal, action, user, membership, note, ack
         locked = _lock(encounter)
         if not (_is_reviewer(membership, locked) and membership.user_id == user.pk and user.is_active):
             raise PermissionDenied('Your role in this workspace cannot record review decisions.')
+        if update_pending(locked):
+            # FINAL-V2 amendment 1, A7 and 5.3: under the lock, so a save between the page's load and the click is seen
+            kind = update_kind(locked)
+            raise ValidationError(UPDATE_DECISION_CHECK if kind == UPDATE_CHECK else UPDATE_DECISION)
         assessment = live_assessment(locked)
         if assessment is None or proposal.assessment_id != assessment.pk:
             raise ValidationError('That proposal is not part of the current review.')
@@ -741,6 +866,8 @@ def _record_decision(*, encounter, proposal, action, user, membership, note, ack
             raise ValidationError('Unknown review action.')
         if not is_final(assessment):
             raise ValidationError(NOT_FINAL_DECISION)
+        if not fresh(locked):
+            raise ValidationError(UPDATE_DECISION)  # amendment 1, 4.3: not fresh and no update - never decided on
         views = effective_view(assessment)
         if action not in _allowed(proposal, assessment, membership, locked, views):
             raise ValidationError(f'{ACTION_LABELS[action]} is not available for {proposal.code} right now.')
@@ -804,14 +931,14 @@ def _check_inputs(encounter, revision, context, routing_run, provider_run):
     if revision.encounter_id != encounter.pk:
         raise ValueError('The revision belongs to another encounter.')
     if encounter.current_revision_id != revision.pk:
-        raise ValueError(f'Revision {revision.number} is no longer the current revision; '
-                         'its assessment was not recorded.')
+        raise Superseded(SUPERSEDED_REVISION)  # FINAL-V2 amendment 1, 4.1: a skip, never a failure
     if revision.extraction_status not in (SourceRevision.OK, SourceRevision.PARTIAL):
         raise ValueError(f'Revision {revision.number} has no extracted text to assess.')
     if context.encounter_id != encounter.pk or context.revision_id != revision.pk:
         raise ValueError('The encounter context was not taken from this revision.')
-    if encounter.current_context_id != context.pk:
-        raise ValueError('The encounter context changed while this assessment ran; it was not recorded.')
+    if encounter.current_context_id != context.pk or values(context) != values(encounter):
+        # amendment 1, 4.1: the context, and the saved values (new: a case-B save keeps the context and changes them)
+        raise Superseded(SUPERSEDED_CONTEXT)
     if routing_run.revision_id != revision.pk:
         raise ValueError('The routing was computed for another revision.')
     if provider_run is not None and (provider_run.encounter_id != encounter.pk
@@ -1158,7 +1285,11 @@ def _check_event_inputs(encounter, revision, context, routing_run, event_invento
         raise ValueError('The event inventory was not read whole, so nothing is assessed from it.')
     if context.event_inventory_id != event_inventory.pk:
         raise ValueError('The encounter context was not derived from this event inventory.')
-    if (routing_run.version != interpretation_labels.ROUTING_VERSION
+    # FINAL-V2 1.1: a design v2 inventory's stand-in is gemini-routing@2 (engine/derive), a v1 inventory's @1
+    expected = (interpretation_labels.ROUTING_VERSION_V2
+                if event_inventory.interpretation_version == interpretation_labels.INTERPRETATION_PAIR
+                else interpretation_labels.ROUTING_VERSION)
+    if (routing_run.version != expected
             or (routing_run.result or {}).get('inventory') != str(event_inventory.pk)):
         raise ValueError('The routing record is not the one derived from this event inventory.')
 
@@ -1203,6 +1334,7 @@ def persist_assessment(*, encounter, revision, context, routing_run, provider_ru
                             retrieval, event_inventory=event_inventory):
             encounter.state = refresh_state(locked)
             return previous
+        pending = update_pending(locked)  # amendment 1, A17: read under the same lock, before the insert
         _check_result(result, revision.text)
         assessment = Assessment.objects.create(
             encounter=locked, revision=revision, context=context, routing=routing_run, provider_run=provider_run,
@@ -1233,6 +1365,18 @@ def persist_assessment(*, encounter, revision, context, routing_run, provider_ru
         proposals = {row.key: row for row in rows}
         raised = _create_clarifications(locked, assessment, result, proposals)
         answered = _close_answered(locked, revision, result, raised)  # completion repair 2026-11-06 (U11)
+        if pending and not is_final(assessment):
+            # amendment 1, A17 [R:races-R3][R:legacy-L6][R:truth-T6]: while an update is pending an assessment that is
+            # not final (an assess #1 that owes peer stages) is recorded - its rows and its own questions closed - and
+            # never made current: the earlier codes stay the current assessment, with their open questions (no
+            # _withdraw_superseded), and nothing is carried or invalidated (only a final carries)
+            buckets = [item.bucket for item in result.proposals]
+            audit.record(locked.workspace, 'assessment.created', encounter=locked, assessment=str(assessment.pk),
+                         revision=revision.number, proposals=len(buckets), selected=buckets.count(SELECTED),
+                         alternatives=buckets.count(ALTERNATIVE), excluded=buckets.count(EXCLUDED),
+                         clarifications=len(raised), withdrawn=0, carried=0, invalidated=0, current=False)
+            encounter.state = refresh_state(locked)
+            return assessment
         withdrawn = _withdraw_superseded(locked, assessment, raised, answered)
         # Decisions carry between FINAL assessments only (HARNESS.md 12.1; refutation r1, Q1). An assess #1 whose peer
         # stages are owed neither carries nor invalidates one: it does not have the codes a peer review adds, so a code
@@ -1254,10 +1398,273 @@ def persist_assessment(*, encounter, revision, context, routing_run, provider_ru
     return assessment
 
 
+# --- FINAL-V2 amendment 1: the codes are updated automatically after a save (AMENDMENT-1.md, DECISIONS D208; step 5b) ---
+#
+# Every predicate below is a pure function of stored rows (the amendment's vocabulary), evaluated under the encounter's
+# row lock wherever it gates a write:
+# - values(x): the four coding-context values of an encounter or a context, normalized;
+# - fresh(encounter): the current assessment is final and made on the current revision, the current context and the
+#   saved values (and, while a reading is owed, its own document review is no unknown outcome an operator's
+#   reconciliation released: A21) - the codes on the page are the current codes;
+# - earlier(encounter): while not fresh, the assessment whose codes are the earlier codes;
+# - update_pending(encounter): not fresh and earlier codes exist;
+# - reading_owed(encounter): the stages that read or derive the document serve the encounter;
+# - target_jobs(encounter): the jobs that serve the saved state (3.4), which decide the derived state, readiness, Resume
+#   and Retry - never progress, which folds the progress jobs (progress.py).
+# A17: while an update is pending an assessment that is not final is recorded and never made current (persist_assessment).
+
+# 3.4's fixed reasons a superseded stage records (jobs._superseded; Superseded at a commit)
+SUPERSEDED_REVISION = 'a newer revision of the document exists; nothing was sent'
+SUPERSEDED_CONTEXT = 'the details changed after this step was queued; nothing was sent'
+SUPERSEDED_RESTORED = 'the details were restored to those of the current codes; nothing was sent'
+SUPERSEDED_DERIVED = 'the details were saved on this reading already'
+SUPERSEDED_REASONS = (SUPERSEDED_REVISION, SUPERSEDED_CONTEXT, SUPERSEDED_RESTORED, SUPERSEDED_DERIVED)
+# 5.3: the server-side refusals while an update is pending - customer_api's texts, held equal by tests/v2 (customer_api
+# imports this module, so it is never imported here)
+UPDATE_DECISION = ('These codes are from before your latest change and cannot be decided on. Decide on the codes once '
+                   'they are updated.')
+UPDATE_DECISION_CHECK = ('These codes are from before this update and cannot be decided on. Decide on the codes once '
+                         'they are updated.')
+UPDATE_BLOCKER = 'The codes are from before the latest change; the update has not finished'
+CONTEXT_FACT_NAMES = ('service_date', 'setting', 'billing_context', 'patient_status')  # studio.types.CONTEXT_FACTS
+READING_KINDS = (Job.EXTRACT, interpretation_labels.JOB_KIND, interpretation_labels.APPRAISE_JOB_KIND, Job.ANALYZE)
+UPDATE_DETAILS, UPDATE_DOCUMENTATION, UPDATE_CHECK = 'details', 'documentation', 'check'  # update.kind (5.1)
+
+
+class Superseded(ValueError):
+    """A result that no longer serves the saved state reached its commit (4.1, 4.2): nothing is written. A ValueError,
+    so a caller that knows only ValueError still records nothing; ``reason`` is one of SUPERSEDED_REASONS."""
+
+    def __init__(self, reason):
+        super().__init__(reason)
+        self.reason = reason
+
+
+def values(holder) -> dict:
+    """The coding-context values of an encounter or a context (vocabulary): values_of its user_values."""
+    return values_of(getattr(holder, 'user_values', None))
+
+
+def values_of(raw) -> dict:
+    """The coding-context values of a user_values mapping (vocabulary): only the four CONTEXT_FACTS, only non-empty
+    stripped strings, the service date as a canonical ISO date (a value that does not parse is kept as stripped, so it
+    equals no canonical date)."""
+    from datetime import date
+
+    out = {}
+    for name in CONTEXT_FACT_NAMES:
+        value = raw.get(name) if isinstance(raw, dict) else None
+        if not isinstance(value, str) or not value.strip():
+            continue
+        value = value.strip()
+        if name == 'service_date':
+            try:
+                value = date.fromisoformat(value).isoformat()
+            except ValueError:
+                pass
+        out[name] = value
+    return out
+
+
+def _current_assessment(encounter):
+    return encounter.current_assessment if encounter.current_assessment_id else None
+
+
+def _current_context(encounter):
+    return encounter.current_context if encounter.current_context_id else None
+
+
+def reconciled_unknown(run) -> bool:
+    """Whether ``run`` is an unknown outcome an operator's reconciliation released (state UNKNOWN, reconciled_at set): its
+    one released attempt is still owed (A19, A21)."""
+    return run is not None and run.state == ProviderRun.UNKNOWN and run.reconciled_at is not None
+
+
+def reading_owed(encounter) -> bool:
+    """Whether a reading is owed (vocabulary): the current context is missing, of another revision, not a gemini
+    context, names no inventory read at the current versions (jobs.current_versions), or its values are not the saved
+    ones. Only then do the stages that read or derive the document (interpret, appraise, analyze) serve the encounter.
+
+    Under the test-only legacy chain (jobs._legacy_reading_allowed, tests/legacy_chain.py), whose world is the one before
+    the migration, only a missing context, or one of another revision, owes the reading: there a legacy context of the
+    current revision is remade by the chain itself and nothing is read first (its jobs._new_path_owed is never), so a
+    context-less stage of an earlier run never serves the saved state as a reading would."""
+    from .jobs import _legacy_reading_allowed, current_versions  # local import: jobs imports this module
+
+    context = _current_context(encounter)
+    if context is None or context.revision_id != encounter.current_revision_id:
+        return True
+    if _legacy_reading_allowed():
+        return False
+    if not interpretation_labels.is_new_context(context) or not context.event_inventory_id:
+        return True
+    inventory = EventInventory.objects.filter(pk=context.event_inventory_id).only(
+        'state', 'interpretation_version', 'inventory_version').first()
+    if (inventory is None or inventory.state != EventInventory.READ
+            or (inventory.interpretation_version, inventory.inventory_version) != current_versions()):
+        return True
+    return values(context) != values(encounter)
+
+
+def fresh(encounter) -> bool:
+    """Whether the codes on the page are the current codes (vocabulary): the current assessment A exists, is final, and
+    was made on the current revision, the current context and the saved values; and, while a reading is owed, A's own
+    document review is no unknown outcome an operator's reconciliation released (A21: that reconciliation's one attempt
+    is then the reading, so those codes are being updated)."""
+    assessment = _current_assessment(encounter)
+    if assessment is None or assessment.revision_id != encounter.current_revision_id:
+        return False
+    if assessment.context_id is None or assessment.context_id != encounter.current_context_id:
+        return False
+    if values(assessment.context) != values(encounter) or not is_final(assessment):
+        return False
+    if reconciled_unknown(assessment.provider_run) and reading_owed(encounter):
+        return False
+    return True
+
+
+def earlier(encounter, *, is_fresh=None):
+    """The earlier codes while the encounter is not fresh (vocabulary; 4.5), else None: the current assessment A when it
+    is final; else, when A is not on the current context, the current context's recorded earlier_assessment (only off
+    the current context [R2:binding-R2B-3]); else A when it is not of the current revision, or not on the current
+    context, or not on the saved values (a save or an addendum after an unfinished assessment whose codes were shown:
+    T8, R3T-5); else None (a first processing, or a chain re-run on the current context: processing, never an
+    update)."""
+    if (fresh(encounter) if is_fresh is None else is_fresh):
+        return None
+    assessment = _current_assessment(encounter)
+    if assessment is not None and is_final(assessment):
+        return assessment
+    context = _current_context(encounter)
+    if (context is not None and context.earlier_assessment_id
+            and (assessment is None or assessment.context_id != context.pk)):
+        return context.earlier_assessment
+    if assessment is not None and (assessment.revision_id != encounter.current_revision_id
+                                   or assessment.context_id != encounter.current_context_id
+                                   or values(assessment.context) != values(encounter)):
+        return assessment
+    return None
+
+
+def update_pending(encounter) -> bool:
+    """Whether an update is pending (vocabulary): not fresh, and earlier codes exist."""
+    return earlier(encounter) is not None
+
+
+def _answers_recomputed(assessment) -> bool:
+    """A19's third condition [R3:binding-R3B-2]: every member answer of ``assessment``'s revision recorded after it was
+    made that still stands had a re-assessment of it queued after it (an assess on its context carrying
+    jobs.AGAIN_MARK)."""
+    from .jobs import AGAIN_MARK  # local import: jobs imports this module
+
+    later = [answer for answer in _standing(assessment) if answer.answered_at > assessment.created_at]
+    for answer in later:
+        if not Job.objects.filter(encounter_id=assessment.encounter_id, kind=Job.ASSESS,
+                                  context_id=assessment.context_id, idempotency_key__contains=AGAIN_MARK,
+                                  created_at__gte=answer.answered_at).exists():
+            return False
+    return True
+
+
+def can_stand(assessment) -> bool:
+    """A19: whether earlier codes ``assessment`` can be current again as they stand - it reads no member answer that no
+    longer stands, its document review is no unknown outcome a reconciliation released, and, on a gemini context, every
+    standing answer recorded after it was made had a re-assessment of it queued after it."""
+    if _reads_a_withdrawn_answer(assessment) or reconciled_unknown(assessment.provider_run):
+        return False
+    if interpretation_labels.is_new_context(assessment.context) and not _answers_recomputed(assessment):
+        return False
+    return True
+
+
+def restorable(encounter, *, base=None) -> bool:
+    """update.restorable (5.1; A19): whether a save of the earlier codes' own values would be 2.5's restore - within one
+    revision, the earlier codes B final and the current assessment, and B can be current again as it stands."""
+    found = earlier(encounter) if base is None else base
+    return (found is not None and found.revision_id == encounter.current_revision_id
+            and encounter.current_assessment_id == found.pk and is_final(found) and can_stand(found))
+
+
+def update_kind(encounter, *, base=None):
+    """update.kind (5.1): 'documentation' when the earlier codes are of another revision (case C); 'check' for A21's
+    update (the earlier codes' own document review is an unknown outcome a reconciliation released while a reading is
+    owed, and no context.changed or revision.addendum row was recorded after the later of their creation and the
+    newest restore); 'details' otherwise. None while no update is pending."""
+    found = earlier(encounter) if base is None else base
+    if found is None:
+        return None
+    if found.revision_id != encounter.current_revision_id:
+        return UPDATE_DOCUMENTATION
+    if reconciled_unknown(found.provider_run) and reading_owed(encounter) and not _saved_since(encounter, found):
+        return UPDATE_CHECK
+    return UPDATE_DETAILS
+
+
+def _saved_since(encounter, base) -> bool:
+    """Whether a context.changed or revision.addendum audit row of ``encounter`` was recorded after the later of
+    ``base``'s creation and the newest restore (5.1)."""
+    from .models import AuditEvent
+
+    rows = AuditEvent.objects.filter(encounter_id=encounter.pk, event__in=('context.changed', 'revision.addendum'))
+    since = base.created_at
+    restore = rows.filter(event='context.changed', data__has_key='restored').order_by('-created_at').first()
+    if restore is not None and restore.created_at > since:
+        since = restore.created_at
+    return rows.filter(created_at__gt=since).exclude(data__has_key='restored').exists()
+
+
+def _superseded_job(job) -> bool:
+    return isinstance(job.result, dict) and job.result.get('superseded') is True
+
+
+def target_jobs(encounter, *, is_fresh=None):
+    """The jobs that serve the saved state (vocabulary; 3.4), a queryset: when fresh, the jobs of the current revision
+    created after the current assessment whose context is the current context; when not fresh, the jobs of the
+    current revision whose context is the current context, plus, while a reading is owed, those that carry no context
+    (extract, interpret, appraise, analyze). A job whose result says superseded is never a target job."""
+    from django.db.models import Q
+
+    if encounter.current_revision_id is None:
+        return Job.objects.none()
+    jobs = (encounter.jobs.filter(revision_id=encounter.current_revision_id)
+            .exclude(result__contains={'superseded': True}))  # containment: a result without the key is kept
+    context_id = encounter.current_context_id
+    if fresh(encounter) if is_fresh is None else is_fresh:
+        assessment = encounter.current_assessment
+        return jobs.filter(created_at__gt=assessment.created_at, context_id=context_id)
+    wanted = Q(context_id=context_id) if context_id is not None else Q(pk__in=())
+    if reading_owed(encounter):
+        wanted |= Q(context__isnull=True, kind__in=READING_KINDS)
+    return jobs.filter(wanted)
+
+
+def busy_targets(encounter) -> bool:
+    """Whether a target job is queued or running (5.2: progress's busy, the derived state's processing)."""
+    return target_jobs(encounter).filter(state__in=ACTIVE_JOB_STATES).exists()
+
+
+def member_act_running(encounter) -> bool:
+    """A18 [R:races-R4][R:races-R5]: whether a member-act stage of the encounter on its current context is queued or
+    running - an answer's recompute or a re-assessment after a confirmation (an assess whose key carries
+    jobs.AGAIN_MARK), the bounded second review (review2) and the assess its follow-up queues (jobs.REVIEW2_MARK), and
+    an operator's reassess_retained (an AGAIN assess too)."""
+    from django.db.models import Q
+    from .jobs import AGAIN_MARK, REVIEW2_MARK  # local import: jobs imports this module
+
+    if encounter.current_context_id is None:
+        return False
+    acts = Q(kind=Job.REVIEW2) | Q(kind=Job.ASSESS, idempotency_key__contains=AGAIN_MARK) | Q(
+        kind=Job.ASSESS, idempotency_key__contains=REVIEW2_MARK)
+    return encounter.jobs.filter(acts, context_id=encounter.current_context_id,
+                                 state__in=ACTIVE_JOB_STATES).exists()
+
+
 # --- readiness and derived state -------------------------------------------------
 
 def _active_jobs(encounter):
-    return encounter.jobs.filter(state__in=ACTIVE_JOB_STATES).exists()
+    """Whether a TARGET job is queued or running (amendment 1, 4.3: a superseded stage, or one of an older context, never
+    holds the encounter in processing)."""
+    return busy_targets(encounter)
 
 
 def _orphaned_sending(encounter):
@@ -1590,6 +1997,9 @@ def readiness(encounter):
         blockers.append('Processing has not finished')
     if revision.extraction_status == SourceRevision.FAILED:
         blockers.append('No text was extracted')
+    if update_pending(encounter):
+        # amendment 1, 4.3 and 5.3: while an update is pending the earlier codes are neither reviewed nor draftable
+        return {'draft': False, 'reviewed': False, 'blockers': list(dict.fromkeys(blockers + [UPDATE_BLOCKER]))}
     assessment = live_assessment(encounter)
     if assessment is None:
         return {'draft': False, 'reviewed': False,
@@ -1604,9 +2014,13 @@ def _failed_stage_state(encounter, revision, job):
     provider_failed (else None); (None, None) when the assessment's own state stands."""
     if job.kind == Job.EXTRACT:
         return 'extraction_failed', None
-    from .interpretation import JOB_KIND, PURPOSE  # the Gemini migration's stage and its runs (labels only)
+    from .interpretation import APPRAISAL_PURPOSE, APPRAISE_JOB_KIND, JOB_KIND, PURPOSE  # labels only
 
-    if job.kind == JOB_KIND:
+    if job.kind in (JOB_KIND, APPRAISE_JOB_KIND):
+        # FINAL-V2 8.1 step 5b: an appraise stage (pass 2) reads as the interpret stage does, over its own runs (purpose
+        # 'appraisal'); its definite failure is provider_failed with that run, which the progress panel words as the
+        # check of the reading and offers the retry door (retry_reading re-sends pass 2 only, AMENDMENT-1 7.2)
+        purpose = APPRAISAL_PURPOSE if job.kind == APPRAISE_JOB_KIND else PURPOSE
         # design/FINAL.md 6.11: an interpret stage reads like a predict whose runs have purpose 'interpretation' - an
         # outcome still unknown is provider_unknown; a definite failure is provider_failed with the run that explains it
         # (the progress panel words it and offers the retry door, FINAL 11.3); one that recorded no run (the live gate
@@ -1615,7 +2029,7 @@ def _failed_stage_state(encounter, revision, job):
         # processing_failed, as a predict's does
         if job.state == Job.UNKNOWN:
             return 'provider_unknown', None
-        run = (encounter.provider_runs.filter(revision=revision, created_at__gte=job.created_at, purpose=PURPOSE)
+        run = (encounter.provider_runs.filter(revision=revision, created_at__gte=job.created_at, purpose=purpose)
                .order_by('-created_at', '-pk').first())
         if run is None:
             # a settled or after-reconcile stage settles the run its key names itself and records no run of its own
@@ -1724,10 +2138,10 @@ def reinstatement_for(decision):
 
 
 def latest_job(encounter):
-    """The most recently created job of the encounter's current revision, or None."""
+    """The most recently created TARGET job of the encounter (amendment 1, 4.3: target_jobs), or None."""
     if encounter.current_revision_id is None:
         return None
-    return encounter.jobs.filter(revision_id=encounter.current_revision_id).order_by('-created_at', '-pk').first()
+    return target_jobs(encounter).order_by('-created_at', '-pk').first()
 
 
 def can_resume(encounter):
@@ -1745,7 +2159,12 @@ def _state_and_run(encounter):
     picked by recency (ec5 skeptic, new:provider-failed-card-older-run: a request stopped or swept before sending is
     newer than the run in use). None for every other state."""
     revision = encounter.current_revision
-    if revision is None or _active_jobs(encounter):
+    if revision is None:
+        return 'processing', None
+    # FINAL-V2 amendment 1, 5.2: the TARGET jobs decide (a superseded stage, or one of an older context, never does)
+    is_fresh = fresh(encounter)
+    targets = target_jobs(encounter, is_fresh=is_fresh)
+    if targets.filter(state__in=ACTIVE_JOB_STATES).exists():
         return 'processing', None
     # Decision (k), HARNESS.md 2 (refutation r2, L5-1): an outcome still unknown - a run recorded unknown and not
     # reconciled, or one left 'sending' by a stage that no longer runs - blocks every further send, and the encounter
@@ -1761,7 +2180,7 @@ def _state_and_run(encounter):
 
     if revision.extraction_status == SourceRevision.FAILED:
         return failure('extraction_failed')
-    latest = encounter.jobs.filter(revision=revision).order_by('-created_at', '-pk').first()
+    latest = targets.order_by('-created_at', '-pk').first()
     if latest is not None and latest.state == Job.CANCELLED:
         return 'stopped', None
     if revision.extraction_status == SourceRevision.PENDING:
@@ -1770,9 +2189,13 @@ def _state_and_run(encounter):
         failed, run = _failed_stage_state(encounter, revision, latest)
         if failed is not None:
             return failure(failed, run)
+    if not is_fresh:
+        # amendment 1, 5.2's new line (idle-owed): nothing serves the saved state and the codes are not its codes - an
+        # outcome still unknown is being confirmed, anything else reads stopped, with Resume (3.6). (It used to read
+        # processing with nothing running, which never ends.) A first processing that is not finished and no target job
+        # serves - its last stage skipped - reads stopped too.
+        return ('provider_unknown' if unknown else 'stopped'), None
     assessment = live_assessment(encounter)
-    if assessment is None or assessment.context_id != encounter.current_context_id:
-        return ('provider_unknown' if unknown else 'processing'), None
     run = assessment.provider_run
     if run is None:
         return 'provider_not_run', None

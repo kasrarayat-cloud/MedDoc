@@ -88,7 +88,7 @@ class Fixtures(SimpleTestCase):
                 self.assertEqual((record['label'], record['name'], record['kind']), ('SYNTHETIC-SLIP', name, 'txt'))
                 self.assertIn(record['role'], ('slip', 'twin'))
                 self.assertIn('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT', record['text'])
-                self.assertEqual(record['response']['modelVersion'], adapter.MODEL)
+                self.assertEqual(record['response']['modelVersion'], adapter.ARGON)  # the slips are Argon's (DECISIONS D230, D272, D274)
             roles.setdefault(record['slip'], set()).add(record['role'])
         self.assertEqual(roles, {slip: {'slip', 'twin'} for slip in ('S1', 'S2', 'S3', 'S4')})
 

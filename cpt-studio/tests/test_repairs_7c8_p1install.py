@@ -40,7 +40,8 @@ from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
 from tests.test_pipeline_api import OFFICE_NOTE, RecordedInterpretation, drain, recorded_addendum
-from tests.test_repairs_r1_m import NEW_REVISION, OLD_REVISION, DockerWorld, install, run_app_script
+from tests.test_repairs_r1_m import (NEW_REVISION, OLD_REVISION, DockerWorld, install, pre_switch_answer,
+                                    run_app_script)
 from tests.test_services_second_review import LIVE, REPORT, REPORT_INTERPRETATIONS, TwoPassProvider, response
 
 VISIT = ('99213', 'Total time on the date of the encounter was 24 minutes.')
@@ -278,14 +279,20 @@ class UndoHazardsTests(Base):
         # the installed revision's save requests the member's date (its own rule: a first send, documented) - never
         # the documented date's request that failed (proven with its real code, round-7c8 probe d_member: D1)
         self.assertEqual(self.hazards(), {})
-        # answered with the documented date: the request is the one that failed, so this revision re-assesses with it
-        # and records nothing newer - the hold still stands newest, and the installed revision's save, now requesting
-        # its own reading of the document's date, would send that failed request again (probe d_member: D2)
+        # answered with the documented date: the request is the one that failed. Before FINAL-V2 amendment 1 this
+        # revision re-assessed with it and recorded nothing newer - the hold stood newest, and the installed revision's
+        # save, then requesting its own reading of the document's date, would have sent that failed request again
+        # (probe d_member: D2), so the undo named it. Now the update re-checks only with a run that succeeded or the
+        # earlier codes' own (A6): its predict meets the failed request at the send door and records a not-sent run
+        # of it, newer than the hold, and ends failed - and that newest run answers the request on both revisions,
+        # so nothing is left for the undo to name
         self.set_context(encounter_id, service_date='')
         self.assertEqual(self.sent(), 1)
-        self.assertEqual(self.runs(encounter_id)[-1].pk, hold.pk)
-        self.assertEqual(self.hazards(), {encounter_id: ['outcome']})
-        self.assertEqual(self.close(timezone.now())['hazards'], {encounter_id: ['outcome']})
+        newest = self.runs(encounter_id)[-1]
+        self.assertEqual((newest.state, newest.sent, newest.request_sha256),
+                         (models.ProviderRun.NOT_SENT, False, failed.request_sha256))
+        self.assertEqual(self.hazards(), {})
+        self.assertEqual(self.close(timezone.now())['hazards'], {})
         # an addendum makes a newer request, whose outcome then stands for the document
         reply = self.post(f'/api/encounters/{encounter_id}/addenda',
                           {'text': 'Addendum (synthetic): no change to the plan.', 'synthetic_attestation': 'yes'})
@@ -591,6 +598,9 @@ class AppPhaseRecomputesOnlyOverItsOwnPairTests(SimpleTestCase):
                 if isinstance(recompute, Exception):
                     raise recompute
                 return {'encounters': 2, 'changed': {'e1': ['reviewed', 'provider_unknown']}}
+            if pre_switch_answer(body) is not None:  # design v2 (step 6b): read before anything is replaced
+                calls.append('v1_rows' if body == install.V1_ROWS else 'install_counts')
+                return pre_switch_answer(body)
             raise AssertionError('an unexpected in-image script')
         return app_script
 
@@ -598,7 +608,7 @@ class AppPhaseRecomputesOnlyOverItsOwnPairTests(SimpleTestCase):
         calls = []
         details, replaced = app_phase(self.answers(calls), replace=lambda *a, **k: calls.append('replace') or {})
         self.assertIsInstance(details, dict, details)
-        self.assertEqual(calls, ['unrunnable', 'replace', 'recompute'])
+        self.assertEqual(calls, ['unrunnable', 'v1_rows', 'install_counts', 'replace', 'recompute'])
         self.assertEqual(details['states_recomputed']['changed'], {'e1': ['reviewed', 'provider_unknown']})
 
     def test_a_failed_replacement_recomputes_nothing(self):
@@ -609,14 +619,14 @@ class AppPhaseRecomputesOnlyOverItsOwnPairTests(SimpleTestCase):
             raise install.InstallError('worker did not become ready; the previous pair was restored')
         error, replaced = app_phase(self.answers(calls), replace=fail)
         self.assertIsInstance(error, install.InstallError)
-        self.assertEqual(calls, ['unrunnable', 'replace'])
+        self.assertEqual(calls, ['unrunnable', 'v1_rows', 'install_counts', 'replace'])
 
     def test_a_failed_recompute_says_the_pair_runs_and_to_rerun_the_phase(self):
         calls = []
         error, replaced = app_phase(self.answers(calls, recompute=install.InstallError('exit 1')),
                                     replace=lambda *a, **k: calls.append('replace') or {'started': {}})
         self.assertIsInstance(error, install.InstallError)
-        self.assertEqual(calls, ['unrunnable', 'replace', 'recompute'])
+        self.assertEqual(calls, ['unrunnable', 'v1_rows', 'install_counts', 'replace', 'recompute'])
         self.assertIn('web and worker running', str(error))
         self.assertIn('rerun --phase app', str(error))
 

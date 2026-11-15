@@ -2,7 +2,8 @@
 2.2; design/ADJUDICATION.md P-3, P-4 and P-5), in the participants' send-contract pattern (tests/test_participants_send):
 the exact call, the key in the x-goog-api-key header only and never in the endpoint, every outcome arm of the one send,
 the send deadline, a member's Stop before the send, the run of exactly one exchange, the envelope rules (modelVersion
-exactly gemini-4-argon and first, one candidate, finishReason STOP, MAX_TOKENS refused, thought parts excluded), the
+exactly a model the request named and first - MODEL, gemini-4-carbon since DECISIONS D230, or for a v1 request the
+gemini-4-argon its recordings name - one candidate, finishReason STOP, MAX_TOKENS refused, thought parts excluded), the
 usage, model and id the vendor describe hook records, the classification of every failure (401, 403, the P-3 names,
 quota and rate 429s, 5xx, a substituted model, a cut-off answer), replay by request sha256, the configured interpreter
 and its settings, and no legacy import.
@@ -60,7 +61,7 @@ NOTE = ('Synthetic colonoscopy note. Date of service: 03/14/2026.\n'
 BREAK = NOTE.index('Page two')
 PAGES = (PageSpan(page=1, start=0, end=BREAK), PageSpan(page=2, start=BREAK, end=len(NOTE)))
 OTHER_NOTE = 'Synthetic upper endoscopy note. The scope reached the second portion of the duodenum.\n'
-ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-4-argon:generateContent'
+ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-4-carbon:generateContent'  # D13, D230
 UNKNOWN = 'The outcome is unknown; reconcile it before any new attempt.'
 USAGE = {'promptTokenCount': 5355, 'candidatesTokenCount': 9183, 'totalTokenCount': 14538,
          'promptTokensDetails': [{'modality': 'TEXT', 'tokenCount': 5355}],
@@ -73,11 +74,12 @@ def gemini_env(**overrides) -> str:
 
 def envelope(text='{"synthetic": true}', **changes) -> dict:
     """A 200 generateContent answer in the shape the trial's seven answers had (2026-11-09): one candidate whose one text
-    part carries a thought signature, finishReason STOP, usageMetadata, modelVersion and responseId."""
+    part carries a thought signature, finishReason STOP, usageMetadata, modelVersion and responseId. A constructed
+    envelope names interpretation.MODEL, the model a request built now names (DECISIONS D230)."""
     value = {'candidates': [{'content': {'parts': [{'text': text, 'thoughtSignature': 'c3ludGhldGljLXNpZ25hdHVyZQ=='}],
                                          'role': 'model'},
                              'finishReason': 'STOP', 'index': 0}],
-             'usageMetadata': copy.deepcopy(USAGE), 'modelVersion': 'gemini-4-argon',
+             'usageMetadata': copy.deepcopy(USAGE), 'modelVersion': interpretation.MODEL,
              'responseId': 'synthetic-response-0001'}
     value.update(changes)
     return value
@@ -116,7 +118,7 @@ def violation(quota_id, metric=PAID_REQUESTS, *, limit='1000', **extra):
     string of digits ("1000"); proto3's JSON leaves a 0 out, so a limit of 0 has no quotaValue at all - the trial's
     recorded 429 says "limit: 0" four times and none of its violations carries one. ``limit=None`` leaves it out; a
     quotaValue given among ``extra`` is kept as given."""
-    found = {'quotaMetric': metric, 'quotaDimensions': {'location': 'global', 'model': 'gemini-4-argon'}, **extra}
+    found = {'quotaMetric': metric, 'quotaDimensions': {'location': 'global', 'model': interpretation.MODEL}, **extra}
     if quota_id is not None:
         found['quotaId'] = quota_id
     if limit is not None and 'quotaValue' not in extra:
@@ -179,7 +181,7 @@ class _Clocked(OfflineTestCase):
     def assertUnknown(self, exchange, expect='', http_status=None):
         self.assertEqual((exchange.outcome, exchange.sent, exchange.http_status, exchange.response_bytes,
                           exchange.response_sha256, exchange.endpoint, exchange.requested_model),
-                         ('unknown', True, http_status, None, '', ENDPOINT, 'gemini-4-argon'))
+                         ('unknown', True, http_status, None, '', ENDPOINT, interpretation.MODEL))
         self.assertIn('The request may have reached Google', exchange.error)
         self.assertIn(UNKNOWN, exchange.error)
         self.assertIn(expect, exchange.error)
@@ -270,7 +272,7 @@ class SendTests(_Clocked):
         # the describe hook: usageMetadata as reported, modelVersion and responseId (FINAL 5.4)
         self.assertEqual((exchange.usage, exchange.usage_basis), (USAGE, 'provider_reported_tokens'))
         self.assertEqual((exchange.endpoint, exchange.requested_model, exchange.returned_model, exchange.response_id),
-                         (ENDPOINT, 'gemini-4-argon', 'gemini-4-argon', 'synthetic-response-0001'))
+                         (ENDPOINT, interpretation.MODEL, interpretation.MODEL, 'synthetic-response-0001'))
         self.assertEqual((exchange.provider_request_id, exchange.error, exchange.latency_ms), ('', '', 0.0))
         self.assertEqual(len(session.calls), 1)
 
@@ -341,7 +343,7 @@ class SendTests(_Clocked):
                 write_file(self.credentials, change)
             with self.subTest(label):
                 exchange, session = self.send(self.ok())
-                self.assertNotSent(exchange, expect, requested_model='gemini-4-argon')
+                self.assertNotSent(exchange, expect, requested_model=interpretation.MODEL)
                 self.assertIn('No request was sent.', exchange.error)
                 self.assertNotIn(str(self.credentials), exchange.error)
                 self.assertEqual(session.calls, [])
@@ -406,7 +408,7 @@ class SendTests(_Clocked):
         interpreter = GeminiInterpreter(self.credentials, session_factory=slow_session)
         exchange = interpreter.send(interpreter.build_request(NOTE, PAGES, 'paste'), deadline_s=600)
         self.assertNotSent(exchange, 'The deadline passed before the request was sent; nothing was sent.',
-                           requested_model='gemini-4-argon')
+                           requested_model=interpretation.MODEL)
         self.assertEqual(session.calls, [])
         self.assertTrue(session.closed)
 
@@ -418,7 +420,7 @@ class SendTests(_Clocked):
         self.assertUnknown(exchange, 'the deadline passed while the response was being read', http_status=200)
 
     def test_a_connection_never_established_is_not_sent(self):
-        path = '/v1beta/models/gemini-4-argon:generateContent'
+        path = urlsplit(ENDPOINT).path
         never = (requests.exceptions.ConnectTimeout(MaxRetryError(None, path, ConnectTimeoutError('synthetic'))),
                  requests.exceptions.ConnectionError(MaxRetryError(None, path,
                                                                    NewConnectionError(None, 'synthetic refusal'))))
@@ -426,11 +428,11 @@ class SendTests(_Clocked):
             with self.subTest(failure=type(failure).__name__):
                 exchange, session = self.send(failure)
                 self.assertNotSent(exchange, f'Google could not be reached ({type(failure).__name__}); nothing was '
-                                             'sent.', requested_model='gemini-4-argon')
+                                             'sent.', requested_model=interpretation.MODEL)
                 self.assertEqual(len(session.calls), 1)
 
     def test_failures_after_the_request_may_have_left_are_unknown_and_never_retried(self):
-        path = '/v1beta/models/gemini-4-argon:generateContent'
+        path = urlsplit(ENDPOINT).path
         for failure in (requests.exceptions.ReadTimeout(ReadTimeoutError(None, path, 'Read timed out.')),
                         requests.exceptions.ConnectionError(ProtocolError('aborted', ConnectionResetError())),
                         requests.exceptions.ChunkedEncodingError('synthetic'), RuntimeError('synthetic')):
@@ -472,7 +474,7 @@ class SendTests(_Clocked):
             body = copy.deepcopy(good)
             change(body)
             bodies[label] = body
-        changed('a model field', lambda body: body.update(model='gemini-4-argon'))
+        changed('a model field', lambda body: body.update(model=interpretation.MODEL))
         changed('tools', lambda body: body.update(tools=[{'googleSearch': {}}]))
         changed('safety settings', lambda body: body.update(safetySettings=[]))
         changed('thinking configured', lambda body: body['generationConfig'].update(thinkingConfig={'thinkingBudget': 0}))
@@ -555,7 +557,7 @@ class DescribeHookTests(_Clocked):
 
     def test_the_participants_describe_reads_nothing_of_a_gemini_answer_which_is_why_the_hook_exists(self):
         self.assertEqual(participants_http.describe(self.raw), ({}, '', ''))
-        self.assertEqual(adapter.describe(self.raw), (USAGE, 'gemini-4-argon', 'synthetic-response-0001'))
+        self.assertEqual(adapter.describe(self.raw), (USAGE, interpretation.MODEL, 'synthetic-response-0001'))
         self.assertEqual(participants_http.described(adapter.VENDOR, self.raw), adapter.describe(self.raw))
 
     def test_a_vendor_with_no_hook_is_described_exactly_as_before(self):
@@ -636,7 +638,7 @@ class RunTests(_Clocked):
                           final.usage_basis, final.endpoint, final.requested_model, final.returned_model,
                           final.response_id, final.error),
                          ('succeeded', True, 200, self.raw, USAGE, 'provider_reported_tokens', ENDPOINT,
-                          'gemini-4-argon', 'gemini-4-argon', 'synthetic-response-0001', ''))
+                          interpretation.MODEL, interpretation.MODEL, 'synthetic-response-0001', ''))
         self.assertEqual(len(session.calls), 1)
 
     def test_a_failed_run_is_one_exchange_and_never_retried(self):
@@ -662,7 +664,7 @@ class RunTests(_Clocked):
                 outcome, session, made, recorded, _ = self.run_loop(self.ok(), should_stop=should_stop)
                 self.assertEqual((outcome.outcome, outcome.final.sent, outcome.stopped, outcome.exchanges, recorded),
                                  ('not_sent', False, True, (), []))
-                self.assertEqual((outcome.final.error, outcome.final.requested_model), (expect, 'gemini-4-argon'))
+                self.assertEqual((outcome.final.error, outcome.final.requested_model), (expect, interpretation.MODEL))
                 self.assertEqual((made, session.calls), ([], []))
         asked = mock.Mock(return_value=False)
         outcome, session, _, _, _ = self.run_loop(self.ok(), should_stop=asked)
@@ -724,7 +726,7 @@ class EnvelopeTests(SimpleTestCase):
         self.assertIsInstance(result, read.Refusal)
         self.assertEqual(result.stage, 'envelope')
         self.assertEqual(result.reason, f'{read.REFUSED}{expect}.')
-        for named in ('gemini', 'google', 'argon', MODEL_TEXT.lower()):
+        for named in ('gemini', 'google', 'argon', 'carbon', MODEL_TEXT.lower()):
             self.assertNotIn(named, result.reason.lower())
         return result
 
@@ -747,13 +749,30 @@ class EnvelopeTests(SimpleTestCase):
         self.assertIsInstance(parsed, dict)
         self.assertEqual(parsed, synthetic_answer())
 
+    def test_a_v1_answer_is_read_against_the_models_v1_requests_named(self):
+        # DECISIONS D230 and D272: the recordings of v1's requests (tests/fixtures/interpretation) are Argon's, the model
+        # every v1 request of record named by its URL, and stay readable as Argon's ([R:MO-5]); a v1 request built now
+        # names MODEL. Nothing else is read: a near-miss of either is refused (test_the_model_is_checked_before_...).
+        self.assertEqual(adapter.READ_MODELS[adapter.ADAPTER_VERSION], ('gemini-4-argon', 'gemini-4-carbon'))
+        self.assertEqual((adapter.ARGON, adapter.MODEL), ('gemini-4-argon', 'gemini-4-carbon'))
+        for model in ('gemini-4-argon', 'gemini-4-carbon'):
+            with self.subTest(model=model):
+                self.assertEqual(adapter.answer_text(self.request, encoded(envelope(modelVersion=model))),
+                                 '{"synthetic": true}')
+        # the classifier reads the response alone (FINAL-V2 7.4), so an Argon answer is a model hold since D230: what a
+        # request built now gets back from another model is never read and never paid for again
+        verdict = adapter.classify('succeeded', 200, encoded(envelope(modelVersion='gemini-4-argon')))
+        self.assertEqual((verdict.kind, verdict.hold), (adapter.HOLD, adapter.MODEL_HOLD))
+
     def test_the_model_is_checked_before_anything_else(self):
-        broken = with_parts({'functionCall': {'name': 'x'}}, finish='MAX_TOKENS', modelVersion='gemini-4-argon-001')
+        broken = with_parts({'functionCall': {'name': 'x'}}, finish='MAX_TOKENS',
+                            modelVersion=f'{interpretation.MODEL}-001')
         broken['candidates'].append(copy.deepcopy(broken['candidates'][0]))
         broken['promptFeedback'] = {'blockReason': 'SAFETY'}
         self.refused(broken, 'the response names a model other than the one requested')
         for model in ('Gemini-4-Argon', 'gemini-4-argon ', 'models/gemini-4-argon', 'gemini-4-argon-latest',
-                      'gemini-5-argon'):
+                      'gemini-5-argon', 'Gemini-4-Carbon', 'gemini-4-carbon ', 'models/gemini-4-carbon',
+                      'gemini-4-carbon-latest', 'gemini-5-carbon', 'carbon', 'gemini-4'):
             with self.subTest(model=model):
                 self.refused(envelope(modelVersion=model), 'the response names a model other than the one requested')
         absent = envelope()
@@ -818,10 +837,10 @@ class EnvelopeTests(SimpleTestCase):
 
     def test_a_response_that_is_not_strict_json_is_refused(self):
         cases = ((b'not json', 'the response is not valid JSON (Expecting value at character 0)'),
-                 (b'{"modelVersion":"gemini-4-argon","modelVersion":"gemini-4-argon"}',
+                 (f'{{"modelVersion":"{interpretation.MODEL}","modelVersion":"{interpretation.MODEL}"}}'.encode(),
                   'the response repeats a JSON object key, so its meaning is ambiguous'),
                  (b'\xff', 'the response is not valid UTF-8'), (b'[]', 'the response is not a JSON object'),
-                 (None, 'there are no response bytes'), ('{"modelVersion": "gemini-4-argon"}',
+                 (None, 'there are no response bytes'), (f'{{"modelVersion": "{interpretation.MODEL}"}}',
                                                          'there are no response bytes'))
         for raw, expect in cases:
             with self.subTest(raw=raw):
@@ -1053,7 +1072,8 @@ class ClassificationTests(SimpleTestCase):
         # P-5: an answer of another model, or naming none, is never read and holds the installation
         absent = envelope()
         del absent['modelVersion']
-        for value in (envelope(modelVersion='gemini-4-argon-001'), absent):
+        for value in (envelope(modelVersion=f'{interpretation.MODEL}-001'), absent,
+                      envelope(modelVersion='gemini-4-argon')):  # Argon, the model until D230: another model now
             with self.subTest(model=value.get('modelVersion')):
                 result = self.assertKind(adapter.classify('succeeded', 200, encoded(value)), adapter.HOLD,
                                          adapter.MODEL_HOLD)
@@ -1122,7 +1142,7 @@ class ReplayTests(OfflineTestCase):
                           exchange.response_sha256, exchange.usage, exchange.usage_basis, exchange.endpoint,
                           exchange.requested_model, exchange.returned_model, exchange.response_id),
                          ('succeeded', False, None, raw, hashlib.sha256(raw).hexdigest(), {},
-                          'historical_replay_not_new_usage', '', 'gemini-4-argon', 'gemini-4-argon',
+                          'historical_replay_not_new_usage', '', interpretation.MODEL, interpretation.MODEL,
                           'synthetic-response-0001'))
         self.assertEqual((self.replay.name, self.replay.adapter_version, self.replay.mode, self.replay.endpoint),
                          ('gemini', 'gemini-generate@cptstudio-1', 'replay', ''))
@@ -1143,7 +1163,7 @@ class ReplayTests(OfflineTestCase):
         request = self.replay.build_request(NOTE, PAGES, 'paste')
         exchange = self.replay.send(request, deadline_s=5)
         self.assertEqual((exchange.outcome, exchange.sent, exchange.error, exchange.requested_model),
-                         ('not_sent', False, 'No recorded response for this request.', 'gemini-4-argon'))
+                         ('not_sent', False, 'No recorded response for this request.', interpretation.MODEL))
         target = write_file(self.tmp / 'elsewhere.json', encoded(envelope()))
         (self.folder / f'{request.canonical_sha256}.json').symlink_to(target)
         self.assertEqual(self.replay.send(request, deadline_s=5).error,

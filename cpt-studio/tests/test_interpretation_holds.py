@@ -34,7 +34,7 @@ NOTE = 'Synthetic release: billing was restored on the synthetic project and the
 
 
 def substituted() -> bytes:
-    return encoded(envelope(modelVersion='gemini-4-argon-preview'))
+    return encoded(envelope(modelVersion=f'{interpretation.MODEL}-preview'))
 
 
 def unnamed() -> bytes:
@@ -56,6 +56,8 @@ TABLE = (
     ('a daily quota', 'failed', 429, error_body(429, 'RESOURCE_EXHAUSTED', quota_failure(violation(PER_DAY))),
      holds.HOLD, holds.QUOTA),
     ('another model answered (P-5)', 'succeeded', 200, substituted(), holds.HOLD, holds.MODEL),
+    ('gemini-4-argon answered, the model until DECISIONS D230 (P-5)', 'succeeded', 200,
+     encoded(envelope(modelVersion='gemini-4-argon')), holds.HOLD, holds.MODEL),
     ('no model named (P-5)', 'succeeded', 200, unnamed(), holds.HOLD, holds.MODEL),
     ('a per-minute rate limit', 'failed', 429,
      error_body(429, 'RESOURCE_EXHAUSTED', quota_failure(violation(PER_MINUTE, quotaValue='1000')), retry_info('17s')),
@@ -80,7 +82,7 @@ class ClassifyTableTests(SimpleTestCase):
                 outcome = holds.classify(state, status, body)
                 self.assertEqual((outcome.effect, outcome.reason), (effect, reason))
                 self.assertEqual(outcome.retry, effect == holds.FAILED)
-                for named in ('gemini', 'google', 'argon'):
+                for named in ('gemini', 'google', 'argon', 'carbon'):
                     self.assertNotIn(named, outcome.why.lower())
 
     def test_a_definite_outcome_is_the_adapters_classification_unchanged(self):

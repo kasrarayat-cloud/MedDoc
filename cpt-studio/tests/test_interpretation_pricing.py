@@ -1,9 +1,11 @@
-"""The interpreter's cost estimate (Gemini migration slice S06; design/FINAL.md 3.2): gemini-4-argon's Standard-tier rates,
-read 2026-11-09 - $2.00 per million input tokens and $10.00 per million output tokens, thinking included, through
-2026-11-30, and $4.00 and $20.00 from 2026-12-01 - priced at the rate of the day the request was sent, from the
-usageMetadata the response reported, in Decimal; prompt tokens served from a cache (Google's implicit caching reports
-them without being asked) priced at the full input rate, a stated upper bound; no estimate rather than a guessed one.
-The participants' estimates are unchanged (tests/test_participants_pricing.py, run beside this). Pure; no I/O."""
+"""The interpreter's cost estimate (Gemini migration slice S06; design/FINAL.md 3.2): gemini-4-carbon's Standard-tier
+rates (the interpreter's model since DECISIONS D230), read 2026-11-13 - $2.00 per million input tokens and $10.00 per
+million output tokens, thinking included, through 2026-11-30, and $4.00 and $20.00 from 2026-12-01, the rates of
+gemini-4-argon, read 2026-11-09, which still price the runs whose requests named it (the trial's seven answers among
+them) - priced at the rate of the day the request was sent, from the usageMetadata the response reported, in Decimal;
+prompt tokens served from a cache (Google's implicit caching reports them without being asked) priced at the full input
+rate, a stated upper bound; no estimate rather than a guessed one. The participants' estimates are unchanged
+(tests/test_participants_pricing.py, run beside this). Pure; no I/O."""
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
@@ -14,9 +16,14 @@ from django.test import SimpleTestCase
 from studio import interpretation
 from studio.participants import pricing
 
-GEMINI = 'gemini-4-argon'
-BASIS = ('estimated from published rates as of 2026-11-09; prompt tokens served from a cache are priced at the full '
+GEMINI = 'gemini-4-carbon'  # the interpreter's model (DECISIONS D230)
+BASIS = ('estimated from published rates as of 2026-11-13; prompt tokens served from a cache are priced at the full '
          'input rate, so an estimate that reports any is an upper bound; not reconciled to an invoice')
+ARGON = 'gemini-4-argon'  # the interpreter's model until D230: the model the trial's requests named
+ARGON_BASIS = ('estimated from published rates as of 2026-11-09; prompt tokens served from a cache are priced at the '
+               'full input rate, so an estimate that reports any is an upper bound; not reconciled to an invoice')
+PERIODS = ((None, date(2026, 11, 30), {'input': Decimal('2.00'), 'output': Decimal('10.00')}),
+           (date(2026, 12, 1), None, {'input': Decimal('4.00'), 'output': Decimal('20.00')}))
 TRIAL_DAY = date(2026, 11, 9)
 # gemini-trial REPORT.md section D: the seven answers of 2026-11-09, (input tokens, output tokens, the report's estimate
 # rounded to a ten-thousandth of a dollar). No thinking tokens were reported.
@@ -37,40 +44,70 @@ def usage(prompt, candidates, thoughts=None, **extra):
 
 
 class GeminiPricingTests(SimpleTestCase):
-    def usd(self, reported, on=TRIAL_DAY):
-        result = pricing.estimate(GEMINI, reported, on=on)
+    def usd(self, reported, on=TRIAL_DAY, model=GEMINI):
+        result = pricing.estimate(model, reported, on=on)
         self.assertIsNotNone(result, reported)
         self.assertEqual(set(result), {'estimated_usd', 'rates', 'basis'})
-        self.assertEqual(result['basis'], BASIS)
+        self.assertEqual(result['basis'], BASIS if model == GEMINI else ARGON_BASIS)
         return result['estimated_usd']
 
-    def test_the_rates_are_the_published_ones_read_2026_11_09(self):
+    def test_the_rates_are_the_published_ones_read_2026_11_13(self):
+        # DECISIONS D230: gemini-4-carbon at gemini-4-argon's rates, through 2026-11-30 and from 2026-12-01 alike
         self.assertEqual(pricing.GEMINI, interpretation.MODEL)
-        self.assertEqual(pricing.GEMINI_RATES_AS_OF, '2026-11-09')
+        self.assertEqual(pricing.GEMINI, 'gemini-4-carbon')
+        self.assertEqual(pricing.GEMINI_RATES_AS_OF, '2026-11-13')
         self.assertEqual(pricing.GEMINI_BASIS, BASIS)
-        self.assertEqual(pricing.GEMINI_PERIODS, (
-            (None, date(2026, 11, 30), {'input': Decimal('2.00'), 'output': Decimal('10.00')}),
-            (date(2026, 12, 1), None, {'input': Decimal('4.00'), 'output': Decimal('20.00')})))
+        self.assertEqual(pricing.GEMINI_PERIODS, PERIODS)
+        for stated in ("Google's Gemini API pricing page, read 2026-11-13", 'gemini-4-carbon', 'Standard tier',
+                       '$2.00', '$10.00', 'thinking included', '2026-11-30', '$4.00', '$20.00', '2026-12-01',
+                       'the rates of gemini-4-argon'):
+            with self.subTest(stated=stated):
+                self.assertIn(stated, pricing.GEMINI_SOURCE)
+        result = pricing.estimate(GEMINI, usage(5355, 9183), on=date(2026, 11, 20))
+        self.assertEqual(result['estimated_usd'], '0.102540')  # 5,355 x $2 + 9,183 x $10, per million: argon's rates
+        self.assertEqual(result['rates'], {
+            'model': GEMINI, 'as_of': '2026-11-13', 'usd_per_million_tokens': {'input': '2.00', 'output': '10.00'},
+            'priced_tokens': {'input': 5355, 'output': 9183}, 'priced_on': '2026-11-20', 'effective': 'through 2026-11-30',
+            'source': pricing.GEMINI_SOURCE, 'thinking_tokens': 0, 'cached_tokens': 0})
+
+    def test_a_run_whose_request_named_gemini_4_argon_keeps_argons_rates_and_source(self):
+        # the interpreter's model until D230: its runs are priced by the model their request named, at its rates as
+        # read 2026-11-09 - the same rates as GEMINI's, with their own date, basis and source
+        self.assertEqual((pricing.GEMINI_ARGON, pricing.GEMINI_ARGON_RATES_AS_OF, pricing.GEMINI_ARGON_BASIS),
+                         (ARGON, '2026-11-09', ARGON_BASIS))
+        self.assertEqual(pricing.GEMINI_MODELS, {
+            GEMINI: ('2026-11-13', BASIS, pricing.GEMINI_SOURCE),
+            ARGON: ('2026-11-09', ARGON_BASIS, pricing.GEMINI_ARGON_SOURCE)})
         for stated in ('gemini-4-argon', 'Standard tier', '$2.00', '$10.00', 'thinking included', '2026-11-30', '$4.00',
                        '$20.00', '2026-12-01', 'read 2026-11-09'):
             with self.subTest(stated=stated):
-                self.assertIn(stated, pricing.GEMINI_SOURCE)
+                self.assertIn(stated, pricing.GEMINI_ARGON_SOURCE)
+        for on in (date(2026, 11, 9), date(2026, 12, 3)):
+            with self.subTest(on=on):
+                argon, carbon = (pricing.estimate(model, usage(1000, 500, thoughts=250), on=on) for model in (ARGON, GEMINI))
+                self.assertEqual(argon['estimated_usd'], carbon['estimated_usd'])
+                self.assertEqual((argon['rates']['model'], argon['rates']['as_of'], argon['rates']['source'],
+                                  argon['basis']), (ARGON, '2026-11-09', pricing.GEMINI_ARGON_SOURCE, ARGON_BASIS))
+                loop = pricing.estimate_loop(ARGON, [usage(1000, 500, thoughts=250), usage(10, 5)], on=on)
+                self.assertEqual((loop['rates']['thinking_tokens'], loop['rates']['cached_tokens'], loop['basis']),
+                                 (250, 0, ARGON_BASIS))
 
     def test_the_trials_seven_answers_price_as_the_report_states(self):
+        # the trial's requests named gemini-4-argon (2026-11-09), so its answers are priced as Argon's
         total = Decimal(0)
         for case, (prompt, candidates, reported) in TRIAL.items():
             with self.subTest(case=case):
-                estimated = Decimal(self.usd(usage(prompt, candidates)))
+                estimated = Decimal(self.usd(usage(prompt, candidates), model=ARGON))
                 self.assertEqual(estimated, (prompt * 2 + candidates * 10) / Decimal(1_000_000))
                 self.assertEqual(f'{estimated.quantize(Decimal("0.0001"), rounding="ROUND_HALF_UP")}', reported)
                 total += estimated
         self.assertEqual(total, Decimal('0.184814'))  # REPORT.md D: $0.185
-        result = pricing.estimate(GEMINI, usage(5355, 9183), on=TRIAL_DAY)
+        result = pricing.estimate(ARGON, usage(5355, 9183), on=TRIAL_DAY)
         self.assertEqual(result['estimated_usd'], '0.102540')
         self.assertEqual(result['rates'], {
-            'model': GEMINI, 'as_of': '2026-11-09', 'usd_per_million_tokens': {'input': '2.00', 'output': '10.00'},
+            'model': ARGON, 'as_of': '2026-11-09', 'usd_per_million_tokens': {'input': '2.00', 'output': '10.00'},
             'priced_tokens': {'input': 5355, 'output': 9183}, 'priced_on': '2026-11-09', 'effective': 'through 2026-11-30',
-            'source': pricing.GEMINI_SOURCE, 'thinking_tokens': 0, 'cached_tokens': 0})
+            'source': pricing.GEMINI_ARGON_SOURCE, 'thinking_tokens': 0, 'cached_tokens': 0})
 
     def test_thinking_is_priced_as_output(self):
         result = pricing.estimate(GEMINI, usage(1000, 500, thoughts=1500), on=TRIAL_DAY)
@@ -158,11 +195,17 @@ class GeminiPricingTests(SimpleTestCase):
         # tool-use prompt tokens stay unpriced: no tool is offered, and no rate is recorded for them
         self.assertIsNone(pricing.estimate(GEMINI, dict(reported, toolUsePromptTokenCount=1), on=day))
 
-    def test_only_this_model_is_priced_at_these_rates(self):
+    def test_only_these_models_are_priced_at_these_rates(self):
         reported = usage(1000, 100)
-        for model in ('gemini-4-argon-001', 'Gemini-4-Argon', 'gemini-4', '', None, 'gpt-6-astra', 'claude-fable-5-1'):
+        for model in ('gemini-4-argon-001', 'Gemini-4-Argon', 'gemini-4', '', None, 'gpt-6-astra', 'claude-fable-5-1',
+                      'gemini-4-carbon-001', 'Gemini-4-Carbon', 'gemini-4-carbon ', 'carbon', 'argon', 7,
+                      ('gemini-4-carbon',)):
             with self.subTest(model=model):
                 self.assertIsNone(pricing.estimate(model, reported, on=TRIAL_DAY))
+                self.assertIsNone(pricing.estimate_loop(model, [reported, reported], on=TRIAL_DAY))
+        for model in (GEMINI, ARGON):  # the control: each priced model, exactly
+            with self.subTest(model=model):
+                self.assertIsNotNone(pricing.estimate(model, reported, on=TRIAL_DAY))
 
     def test_one_exchange_is_estimate_exactly_and_a_loop_prices_each_exchange(self):
         first, second = usage(1000, 100, thoughts=50), usage(2000, 200)

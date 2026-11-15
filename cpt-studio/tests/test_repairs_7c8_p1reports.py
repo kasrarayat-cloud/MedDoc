@@ -16,6 +16,7 @@ from django.test import Client, SimpleTestCase, TestCase, override_settings
 
 from studio import interpretation, models, reports
 from studio.types import RawExchange
+from tests import v2_documents, v2_replay
 from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
@@ -428,7 +429,7 @@ class VisitNotCountedSaysWhyTruthfullyTests(SimpleTestCase):
 
 STILL_NEEDS = "each still needs a reviewer's decision"
 DECIDED = "Every documented service has a proposal with a reviewer's decision, but the review is not complete."
-CONTEXT_PENDING = 'The encounter context changed; re-assessment has not finished.'
+CONTEXT_PENDING = 'The codes are from before the latest change; the update has not finished.'  # amendment 1, 5.3
 
 
 class PendingReviewSaysWhatIsMissingTests(RecordedInterpretation, Harness):
@@ -439,12 +440,16 @@ class PendingReviewSaysWhatIsMissingTests(RecordedInterpretation, Harness):
     readiness counts them); when every proposal is decided it says what readiness still waits for."""
     # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
     # recorded synthetic interpretation.
+    # DECISIONS D243 class C: a test that approves through the product, which reads event_coding@2 only (FINAL-V2 6.5),
+    # builds its rows by design v2's path in replay (tests/v2_replay.py) from the colonoscopy report with its endoscopist
+    # named (tests/v2_documents.COLONOSCOPY) - never the v1 chain's.
     interpretations = COLONOSCOPY_INTERPRETATIONS
+    v2_interpretations = ((v2_documents.COLONOSCOPY, v2_documents.colonoscopy_answer),)
 
     def approved(self, *codes):
         from tests.test_pipeline_api import FakeProvider
         self.use(FakeProvider(selections=[SNARE, BIOPSY]))
-        encounter_id = self.create(COLONOSCOPY)
+        encounter_id = self.create(v2_documents.COLONOSCOPY if v2_replay.marked(self) else COLONOSCOPY)
         drain()
         for code in codes:
             self.decide(encounter_id, code, 'approve')
@@ -454,6 +459,7 @@ class PendingReviewSaysWhatIsMissingTests(RecordedInterpretation, Harness):
         (row,) = [line for line in self.csv_text(encounter_id).split('\r\n') if '"coding_completeness"' in line]
         return row
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_every_proposal_decided_is_never_told_it_needs_a_decision(self):
         encounter_id = self.approved('45385', '45380')
         self.assertEqual(self.detail(encounter_id)['coding']['state'], 'reviewed')
@@ -481,6 +487,7 @@ class PendingReviewSaysWhatIsMissingTests(RecordedInterpretation, Harness):
         drain()
         self.assertEqual(self.detail(encounter_id)['coding']['state'], 'reviewed')  # the approvals carried unchanged
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_a_partly_decided_set_counts_what_still_needs_a_decision(self):
         coding = self.detail(self.approved('45385'))['coding']
         self.assertEqual(coding['state'], 'pending_review')

@@ -15,21 +15,21 @@ from __future__ import annotations
 import contextlib
 import dataclasses
 import hashlib
+import json
 import logging
 import sys
 import time
 import uuid
 from datetime import date, timedelta
+from typing import TYPE_CHECKING
 
 from django.conf import settings
 from django.db import connection, transaction
 from django.db.models import JSONField, Q, Value
 from django.utils import timezone
 
-from . import audit, bounded, interpretation, models, participants, review
+from . import audit, bounded, interpretation, models, participants, provider_holds, review
 from .interpretation import adapter as interpretation_adapter
-from .interpretation import assess as events_engine
-from .interpretation import facts as interpretation_facts
 from .interpretation import holds as interpretation_holds
 from .interpretation import report as interpretation_report
 from .interpretation import sentinel
@@ -49,11 +49,23 @@ from .reference import passages as reference_passages
 from .reference import tools as reference_tools
 from .reference.store import prefetched_lookup, selected_codes
 from .storage import ALLOWED_SUFFIXES, OriginalCorrupted, read_original
-from .types import (ConfirmedFinding, EvidenceSpan, Fact, NormalizedResponse, PageSpan, ParticipantInput, ProviderCode,
-                    ProviderRequest, RawExchange, RoutingResult, from_jsonable, sha256_json, to_jsonable)
+from .types import (AssessmentResult, Check, ClarificationSpec, ConfirmedFinding, EvidenceSpan, Fact, NormalizedResponse,
+                    PageSpan, ParticipantInput, ProposalAssessment, ProviderCode, ProviderRequest, RawExchange,
+                    RoutingResult, from_jsonable, sha256_json, to_jsonable)
 from .validation import checks as validation_checks
 from .validation.engine import assess as run_assessment
 from .validation.questions import MemberAnswerInput
+
+if TYPE_CHECKING:  # the renderer's typed seam with the engine and read time (D246); imported where used at run time
+    from collections.abc import Callable, Mapping, Sequence
+    from typing import Any
+
+    from .interpretation.engine.assess import (Assessed as _Assessed, Assessment as _EngineAssessment,
+                                               ServiceQuestion as _ServiceQuestion)
+    from .interpretation.engine.combination import Combination as _Combination
+    from .interpretation.engine.questions import Fill as _Fill, Item as _Item
+    from .interpretation.engine.types import FactSet as _FactSet, Span as _Span
+    from .interpretation.wording import Slots as _Slots
 
 log = logging.getLogger(__name__)
 
@@ -93,7 +105,45 @@ Job = models.Job
 INTERPRET = interpretation.JOB_KIND
 INTERPRETATION = interpretation.PURPOSE
 READABLE = (models.SourceRevision.OK, models.SourceRevision.PARTIAL)
-_CURRENT_VERSIONS = (interpretation.INTERPRETATION_VERSION, interpretation.INVENTORY_VERSION)
+# Design v2 (docs/gemini-migration/FINAL-V2.md 7.4; step 5b of its 8.1, the switch): pass 2, the appraisal - Job.kind
+# 'appraise', ProviderRun.purpose 'appraisal' - and the version pairs an EventInventory is read at. This image reads at
+# V2_VERSIONS; v1's pair is read only by the test-only v1 chain (_v1_chain), as tests/legacy_chain.py reaches the legacy
+# reader: no production switch exists.
+APPRAISE = interpretation.APPRAISE_JOB_KIND
+APPRAISAL = interpretation.APPRAISAL_PURPOSE
+READING_PURPOSES = (INTERPRETATION, APPRAISAL)
+READING_KINDS = (INTERPRET, APPRAISE)
+V1_VERSIONS = (interpretation.INTERPRETATION_VERSION, interpretation.INVENTORY_VERSION)
+V2_VERSIONS = (interpretation.INTERPRETATION_PAIR, interpretation.INVENTORY_VERSION_V2)
+
+
+def _v1_chain() -> bool:
+    """Whether the v1 chain reads revisions (design/FINAL.md's one-pass interpretation, gemini-events@1): never on this
+    image - the v2 chain does (FINAL-V2 7.4: interpret, appraise, analyze). Replaced by the test-only v1 chain
+    (tests/v1_chain.py), which is the only way the mechanics suites that record v1 interpretations still drive the
+    pipeline; no production switch exists (a setting, a variable or a file never reaches it)."""
+    return False
+
+
+def current_versions():
+    """The (interpretation_version, inventory_version) an EventInventory is read at now: design v2's pair
+    (gemini-events@2/appraisal@1, gemini-inventory@2), or v1's under the test-only v1 chain."""
+    return V1_VERSIONS if _v1_chain() else V2_VERSIONS
+
+
+def _v1_rows_only():
+    """Where a branch reads a v1 row through a retired v1 module (a v1 inventory's derivation, stand-in or assessment:
+    interpretation.facts, interpretation.assess), it runs only under the test-only v1 chain (_v1_chain). In production
+    such a row - none exists on any installation; analyze and assess already end a stage over an inventory of other
+    versions - fails closed here, resumable (a Resume has the revision read at the current versions), before any retired
+    module is imported (refutation 5b-r1, X8; FINAL-V2 5.7: jobs.py's facts and events imports are rewired)."""
+    if not _v1_chain():
+        raise StageCancelled(EARLIER_READING_MESSAGE)
+
+
+def _pass1_version():
+    """The pass-1 version an interpret stage's key names: gemini-events@2 (v1's gemini-events@1 under the v1 chain)."""
+    return interpretation.INTERPRETATION_VERSION if _v1_chain() else interpretation.INTERPRETATION_VERSION_V2
 
 
 class StageFailure(Exception):
@@ -106,6 +156,16 @@ class Requeue(Exception):
 
 class Refused(Exception):
     """A member action was refused; the message says why (the API answers 409)."""
+
+
+class StageSuperseded(Exception):
+    """FINAL-V2 amendment 1, 3.4: the stage no longer serves the saved state. It ends SUCCEEDED with {'skipped': <why>,
+    'superseded': true} (run_job), never CANCELLED (which reads stopped) and never FAILED; nothing more is sent, written
+    or queued. ``reason`` is one of review.SUPERSEDED_REASONS."""
+
+    def __init__(self, reason):
+        super().__init__(reason)
+        self.reason = reason
 
 
 STALE_SWEEP_SECONDS = 60  # how often a running worker settles stages a dead worker left 'running'
@@ -319,7 +379,17 @@ def _records(assessment):
 
 
 def _newest_assessment(revision):
-    return models.Assessment.objects.filter(revision=revision).order_by('-created_at', '-pk').first()
+    """The revision's newest assessment by creation that is its encounter's current assessment or is on its current
+    context (FINAL-V2 amendment 1, 4.1): an update's unfinished assessment that a restore or a later save abandoned
+    (recorded, never current, its context no longer current) is left out, so every act on the restored codes (an
+    answer's recompute, reassess_retained, the AGAIN and second-review basis checks) reads them, never ASSESS_MOVED.
+    While an update runs its own assess #1 is on the current context and stays the newest; in a first processing
+    nothing changes."""
+    current = (models.Encounter.objects.filter(pk=revision.encounter_id)
+               .values('current_assessment_id', 'current_context_id').first() or {})
+    return (models.Assessment.objects.filter(revision=revision)
+            .filter(Q(pk=current.get('current_assessment_id')) | Q(context_id=current.get('current_context_id')))
+            .order_by('-created_at', '-pk').first())
 
 
 def _first_assessment(job):
@@ -647,11 +717,48 @@ def _failed_before(encounter, provider, request):
     as it was each re-sent one byte-identical). Each send door asks it after reusing a retained answer to the same
     request and after the unknown-outcome block, and before anything that sends: the predict records a not-sent run
     carrying the request (_not_resent_run) and re-assesses with it, the second review sends nothing and is refused when
-    asked for. Another encounter's runs are not read: an upload is a member's new request."""
-    return (models.ProviderRun.objects.filter(
+    asked for. Another encounter's runs are not read: an upload is a member's new request.
+
+    FINAL-V2 amendment 1 (A10, A16, A20): a run that set a provider hold - a run a ProviderHold row names, never one read
+    by its status alone [R2:truth-RT2] - is never held against its own request: while the hold stands the hold keeps
+    the request unsent, and after the operator's release the next member act sends it once. And a Corti run (purpose
+    primary) a member's retry released - a job keyed ':retry-release:<run>' exists (jobs.retry_update) - is skipped: one
+    release is one attempt, so the attempt's own new failure is held again. A refusal recorded before the install, which
+    no hold row names, is still held here, against its identical request, as before."""
+    runs = (models.ProviderRun.objects.filter(
         encounter=encounter, provider=provider.name, adapter_version=provider.adapter_version,
         request_sha256=request.canonical_sha256, state=models.ProviderRun.FAILED, sent=True)
-        .order_by('-created_at').first())
+        .exclude(provider_holds__isnull=False).order_by('-created_at'))
+    for run in runs:
+        if run.purpose == models.ProviderRun.PRIMARY and Job.objects.filter(
+                kind=Job.PREDICT, encounter_id=encounter.pk,
+                idempotency_key__contains=f':{RETRY_RELEASE}:{run.pk}').exists():
+            continue
+        return run
+    return None
+
+
+def _marked_sent_before(encounter, provider, request):
+    """This encounter's newest run of ``request`` (provider, adapter version and body hash; any revision, whatever it was
+    made for) that an adapter recorded NOT SENT while marking it sent (sent=True): an outcome that may have reached the
+    provider, so it is never trusted as one that never left (repair gi2, R1 and L1). None when there is none.
+
+    FINAL-V2 amendment 1 queues the predict where a save used to re-check with such a run - during an update a re-check
+    needs a run that succeeded or the earlier codes' own (A6) - so the predict's send door holds it as the failed-before
+    door holds a request that failed: never sent again behind a save, a Resume or a reconciliation's released attempt.
+    As for a failure with no status, a member's retry_update releases it once (a job keyed ':retry-release:<run>' exists
+    for a primary run: skipped, as _failed_before skips one)."""
+    runs = (models.ProviderRun.objects.filter(
+        encounter=encounter, provider=provider.name, adapter_version=provider.adapter_version,
+        request_sha256=request.canonical_sha256, state=models.ProviderRun.NOT_SENT, sent=True)
+        .exclude(provider_holds__isnull=False).order_by('-created_at'))
+    for run in runs:
+        if run.purpose == models.ProviderRun.PRIMARY and Job.objects.filter(
+                kind=Job.PREDICT, encounter_id=encounter.pk,
+                idempotency_key__contains=f':{RETRY_RELEASE}:{run.pk}').exists():
+            continue
+        return run
+    return None
 
 
 MAX_CONTINUED_RUNS = 8  # runs one continuation chain may hold (each adds an exchange; max_exchanges bounds it too)
@@ -749,6 +856,72 @@ def _retained_second_review(encounter, provider, request):
         purpose=models.ProviderRun.SECOND_REVIEW).order_by('created_at').first()
 
 
+# --- supersession (FINAL-V2 amendment 1, 3.4) ------------------------------------------------------------------------
+#
+# A newer save is accepted while an update is pending (A1), and the stage it no longer serves supersedes itself: the
+# predicate below is asked at the start of every stage (before any door that can send or write), immediately before
+# the reservation in _send, before a successor is queued, and - as review.Superseded - at the commit of analyze and of
+# persist_assessment. It reads the encounter afresh under its row lock: a save holds that lock while it decides whether
+# to coalesce with a queued reading stage (_save_awaiting_reading), so a stage's decision and a save's are serialized.
+# The lock is held for the read only, never across a send. A superseded stage ends SUCCEEDED with {'skipped': <why>,
+# 'superseded': true} and is never a target job (review.target_jobs).
+
+SUPERSEDED_KEY = 'superseded'
+
+
+def _superseded(job) -> str:
+    """'' while ``job`` serves the saved state, else the fixed reason it no longer does (3.4, in order): the revision is
+    not the current one (an extract never: a child addendum needs its parent's text); for a stage that carries a
+    context, the context is not the current one or its values are not the saved ones; for a context-free stage
+    (interpret, appraise, analyze), the encounter is fresh (the details were restored to the current codes' own - an
+    operator's reconciliation of the codes' own unknown document review is never so: review.fresh, A21), and for
+    analyze also when no reading is owed (a save already derived the context on this inventory with these values)."""
+    if job.kind == Job.EXTRACT:
+        return ''
+    with transaction.atomic():
+        locked = (models.Encounter.objects.select_for_update(of=('self',)).select_related('current_assessment', 'current_context')
+                  .get(pk=job.encounter_id))
+        return superseded_on(job, locked)
+
+
+def superseded_on(job, encounter) -> str:
+    """_superseded's predicate over ``encounter`` as given (read by the caller: under the row lock for a stage's
+    decision; as read, with no lock, for the progress panel, which writes and locks nothing)."""
+    if job.kind == Job.EXTRACT:
+        return ''
+    if job.revision_id != encounter.current_revision_id:
+        return review.SUPERSEDED_REVISION
+    if job.context_id is not None:
+        context = models.EncounterContext.objects.get(pk=job.context_id)
+        if job.context_id != encounter.current_context_id or review.values(context) != review.values(encounter):
+            return review.SUPERSEDED_CONTEXT
+        return ''
+    if job.kind in (INTERPRET, APPRAISE, Job.ANALYZE):
+        if review.fresh(encounter):
+            return review.SUPERSEDED_RESTORED
+        if job.kind == Job.ANALYZE and not review.reading_owed(encounter):
+            return review.SUPERSEDED_DERIVED
+    return ''
+
+
+def _superseded_result(reason) -> dict:
+    return {'skipped': reason, SUPERSEDED_KEY: True}
+
+
+def _start_check(job):
+    """3.4's start check: raises StageSuperseded when ``job`` no longer serves the saved state (run_job records it
+    SUCCEEDED with nothing sent, written or queued)."""
+    reason = _superseded(job)
+    if reason:
+        raise StageSuperseded(reason)
+
+
+def _successor_allowed(job) -> bool:
+    """3.4's successor gate: whether ``job`` still serves the saved state, so the stage it would queue is queued. When it
+    does not, nothing is queued; what the stage stored (its run, its inventory) stays stored for reuse."""
+    return not _superseded(job)
+
+
 # --- stages ------------------------------------------------------------------
 
 def stage_extract(job):
@@ -840,82 +1013,176 @@ def _gate(entry, encounter):
         raise StageFailure(str(exc)) from None
 
 
+def _is_v2_inventory(inventory) -> bool:
+    """Whether ``inventory`` is a design v2 row (its pair is one store.READ_VERSIONS reads), else v1's."""
+    return (inventory.interpretation_version, inventory.inventory_version) in inventory_store.READ_VERSIONS
+
+
 def _stored_inventory(inventory, revision):
-    """The EventInventory row ``inventory`` as interpretation.store.load reads and checks it, against ``revision``'s text
-    sha256 and the sha256 of its run's stored response bytes as computed now (P6: every new-path consumer reads the
-    stored row, never the text). A row the store cannot read fails the stage with the store's own sentence."""
+    """The EventInventory row ``inventory`` as interpretation.store reads and checks it, against ``revision``'s text
+    sha256 and the sha256 of its runs' stored response bytes as computed now (P6: every new-path consumer reads the
+    stored row, never the text): a v2 row through store.load_v2 (both runs: pass 1's and the appraisal's), a v1 row
+    through v1's store.load (the test-only v1 chain). A row the store cannot read fails the stage with the store's own
+    sentence."""
     data = bytes(inventory.provider_run.response_bytes or b'')
     try:
+        if _is_v2_inventory(inventory):
+            appraisal = models.ProviderRun.objects.filter(pk=inventory.appraisal_run_id).first()
+            appraised = (hashlib.sha256(bytes(appraisal.response_bytes or b'')).hexdigest()
+                         if appraisal is not None else None)
+            return inventory_store.load_v2(inventory_store.fields_of_v2(inventory), text_sha256=revision.text_sha256,
+                                           response_sha256=hashlib.sha256(data).hexdigest(),
+                                           appraisal_response_sha256=appraised)
         return inventory_store.load(inventory_store.fields_of(inventory), text_sha256=revision.text_sha256,
                                     response_sha256=hashlib.sha256(data).hexdigest())
     except inventory_store.StoreError as exc:
         raise StageFailure(f'The stored interpretation could not be read: {exc}') from None
 
 
-def derived_facts(encounter, inventory, stored):
-    """interpretation.facts.derive over the FROZEN inventory ``stored`` (its row ``inventory``) with ``encounter``'s
-    member values: what a gemini-context@1 row records. Pure. A member value the derivation refuses (an unknown name, a
-    value not valid for its fact) fails the stage, as the legacy merge refused it."""
+def _quote_of(revision):
+    """The display slice engine/derive's quoted evidence and notes are made with (FINAL-V2 4.1: wording's role, after the
+    decision): the revision's own text at the given offsets."""
+    text = revision.text or ''
+
+    def quote(start, end):
+        return text[start:end]
+    return quote
+
+
+def derived_facts(encounter, inventory, stored, revision=None):
+    """The context derivation over the FROZEN inventory ``stored`` (its row ``inventory``) with ``encounter``'s member
+    values: engine/derive.derive over store.textfree_v2's view for a v2 row (hand-off 2d:R6: the quote is the revision's
+    slice; D188's text-free view first), v1's facts.derive for a v1 row (the test-only v1 chain). Pure. A member value
+    the derivation refuses (an unknown name, a value not valid for its fact) fails the stage, as the legacy merge
+    refused it."""
     try:
+        if _is_v2_inventory(inventory):
+            from .interpretation.engine import derive as engine_derive
+
+            revision = revision if revision is not None else inventory.revision
+            return engine_derive.derive(inventory_store.textfree_v2(stored), dict(encounter.user_values or {}),
+                                        quote=_quote_of(revision))
+        _v1_rows_only()
+        from .interpretation import facts as interpretation_facts  # v1's, retired: the v1 chain only
+
         return interpretation_facts.derive(stored, dict(encounter.user_values or {}))
     except (TypeError, ValueError) as exc:
         raise StageFailure(f'The encounter context could not be derived from the interpretation: {exc}') from None
 
 
-def record_derived_context(encounter, revision, inventory, derived, *, created_by=None):
-    """The EncounterContext row of ``derived`` (derived_facts) for ``revision``: version gemini-context@1, bound to its
-    EventInventory (FINAL 4.2-4.3, D6), the facts in the legacy Fact shape with service_date's ``state``, the member
-    values, and document_date in the shape answers.py reads. Its sha256 also names the inventory it was derived from.
-    The caller asks the write gate first (analyze; a context save)."""
+def record_derived_context(encounter, revision, inventory, derived, *, created_by=None, earlier=None):
+    """The EncounterContext row of ``derived`` (derived_facts) for ``revision``: version gemini-context@2 for a v2
+    inventory (gemini-context@1 for v1's), bound to its EventInventory (FINAL 4.2-4.3, D6), the facts in the legacy Fact
+    shape with service_date's ``state``, the member values, and document_date in the shape answers.py reads. Its
+    sha256 also names the inventory it was derived from. ``earlier``: FINAL-V2 amendment 1, 4.5 (A5) - the assessment
+    whose codes are the earlier codes while the update this context serves runs (earlier_for_new_context), recorded at
+    insert and outside the sha256, like document_date. The caller asks the write gate first (analyze; a context save)."""
     user_values = dict(encounter.user_values or {})
     facts = derived.facts
+    version = interpretation.CONTEXT_VERSION_V2 if _is_v2_inventory(inventory) else interpretation.CONTEXT_VERSION
     return models.EncounterContext.objects.create(
-        encounter=encounter, revision=revision, facts=facts, user_values=user_values,
-        version=interpretation.CONTEXT_VERSION, created_by=created_by, document_date=derived.document_date,
-        event_inventory=inventory,
+        encounter=encounter, revision=revision, facts=facts, user_values=user_values, version=version,
+        created_by=created_by, document_date=derived.document_date, event_inventory=inventory,
+        earlier_assessment=earlier,
         sha256=sha256_json({'facts': facts, 'user_values': user_values, 'revision': str(revision.pk),
                             'event_inventory': str(inventory.pk)}))
 
 
+def earlier_for_new_context(locked):
+    """FINAL-V2 amendment 1, 4.5: the earlier assessment a context recorded now names, from the encounter ``locked`` (read
+    under its row lock): its current assessment when that is final (the codes the member saw); else, only when the
+    current assessment is not on the current context, the current context's own earlier assessment
+    [R2:binding-R2B-3]; else the current assessment (the codes the page shows, of this revision or the one an addendum
+    follows: T8, R3T-5); else None (a first processing with nothing shown yet)."""
+    assessment = locked.current_assessment if locked.current_assessment_id else None
+    if assessment is not None and review.is_final(assessment):
+        return assessment
+    context = locked.current_context if locked.current_context_id else None
+    if (context is not None and context.earlier_assessment_id
+            and (assessment is None or assessment.context_id != context.pk)):
+        return context.earlier_assessment
+    return assessment
+
+
 def _stand_in(revision, inventory, stored, service_date):
-    """The gemini-routing@1 stand-in record for ``service_date`` (FINAL 4.3, 6.5): pure, no mention and no cue."""
+    """The routing stand-in record for ``service_date`` (FINAL 4.3, 6.5): gemini-routing@2 (engine/derive) for a v2
+    inventory, gemini-routing@1 for v1's; pure, no mention and no cue."""
+    if _is_v2_inventory(inventory):
+        from .interpretation.engine import derive as engine_derive
+
+        return engine_derive.routing_stand_in(inventory_store.textfree_v2(stored), service_date,
+                                              inventory_id=str(inventory.pk), inventory_sha256=inventory.sha256)
+    _v1_rows_only()
+    from .interpretation import facts as interpretation_facts  # v1's, retired: the v1 chain only
+
     return interpretation_facts.routing_stand_in(stored, service_date, inventory_id=str(inventory.pk),
                                                  inventory_sha256=inventory.sha256)
 
 
+def _routing_version(inventory):
+    return interpretation.ROUTING_VERSION_V2 if _is_v2_inventory(inventory) else interpretation.ROUTING_VERSION
+
+
+class _AnalyzeGateClosed(Exception):
+    """The new_path write gate would refuse analyze's write; raised inside its transaction so nothing of it is written,
+    and asked again outside it (_gate), so the refusal's audit row is kept."""
+
+
 def stage_analyze(job):
-    """Derive only (FINAL 6.4): the inventory the key names (same revision, the current versions, state read), its
-    derived context and stand-in recorded under the new_path gate, the context made current under the row lock, and the
-    predict queued as before. A key of the legacy shape - a stage queued before the install - or an inventory of other
-    versions ends resumable: a Resume has the revision read again (FINAL 9)."""
+    """Derive only (FINAL 6.4; FINAL-V2 7.4, engine/derive): the inventory the key names (same revision, the current
+    versions, state read), its derived context and stand-in recorded under the new_path gate, the context made current,
+    and the predict queued as before. A key of the legacy shape - a stage queued before the install - or an inventory of
+    other versions ends resumable: a Resume has the revision read again (FINAL 9).
+
+    FINAL-V2 amendment 1, 4.2 (analyze's compare-and-set): the derivation and the commit happen UNDER the encounter's
+    row lock - superseded when the revision is no longer current, when the encounter is fresh (the details were restored
+    to the current codes'), or when no reading is owed (a save already derived a context on this inventory with these
+    values) - and read the values saved at the commit (locked.user_values), so a save that lands while analyze waits is
+    in the context it records; the context records its earlier assessment (4.5)."""
     revision, encounter = job.revision, job.encounter
     pk = _analyze_inventory_id(job)
     if pk is None:
         raise StageCancelled(EARLIER_READING_MESSAGE)
+    _start_check(job)
     revision.refresh_from_db()
     inventory = (models.EventInventory.objects.filter(pk=pk, encounter_id=encounter.pk, revision_id=revision.pk)
                  .select_related('provider_run').first())
-    if inventory is not None and (inventory.interpretation_version, inventory.inventory_version) != _CURRENT_VERSIONS:
+    if inventory is not None and (inventory.interpretation_version,
+                                  inventory.inventory_version) != current_versions():
         raise StageCancelled(EARLIER_READING_MESSAGE)
     if inventory is None or inventory.state != models.EventInventory.READ:
         raise StageFailure(INVENTORY_NOT_READ_MESSAGE)
     stored = _stored_inventory(inventory, revision)
-    encounter.refresh_from_db()
-    derived = derived_facts(encounter, inventory, stored)
-    service_date = date.fromisoformat(derived.effective) if derived.effective else None
-    data = _stand_in(revision, inventory, stored, service_date)
-    _gate('analyze', encounter)
-    context = record_derived_context(encounter, revision, inventory, derived)
-    if context_service_date(context) != service_date:  # one date: the context's, its stand-in's and the request's
-        raise StageFailure(CONTEXT_DATE_MESSAGE)
-    routing = _record_routing(revision, data, service_date)
-    with transaction.atomic():
-        locked = models.Encounter.objects.select_for_update().get(pk=encounter.pk)
-        if locked.current_revision_id == revision.pk:
+    _gate('analyze', encounter)  # the new_path write gate, asked before the write (and again at its commit, below)
+    try:
+        with transaction.atomic():
+            locked = (models.Encounter.objects.select_for_update(of=('self',))
+                      .select_related('current_assessment', 'current_context').get(pk=encounter.pk))
+            if locked.current_revision_id != revision.pk:
+                raise StageSuperseded(review.SUPERSEDED_REVISION)
+            if review.fresh(locked):
+                raise StageSuperseded(review.SUPERSEDED_RESTORED)
+            if not review.reading_owed(locked):
+                raise StageSuperseded(review.SUPERSEDED_DERIVED)
+            derived = derived_facts(locked, inventory, stored, revision)
+            service_date = date.fromisoformat(derived.effective) if derived.effective else None
+            data = _stand_in(revision, inventory, stored, service_date)
+            if sentinel.refusal() is not None:
+                raise _AnalyzeGateClosed()
+            context = record_derived_context(locked, revision, inventory, derived,
+                                             earlier=earlier_for_new_context(locked))
+            if context_service_date(context) != service_date:  # one date: the context's, its stand-in's and the request's
+                raise StageFailure(CONTEXT_DATE_MESSAGE)
+            routing = _record_routing(revision, data, service_date)
             locked.current_context = context
             locked.save(update_fields=['current_context', 'updated_at'])
+    except _AnalyzeGateClosed:
+        _gate('analyze', encounter)  # records the trip and fails the stage, outside the rolled-back transaction
+        raise StageFailure(sentinel.MESSAGES['unavailable']) from None  # never reached: a refusal never lifts
     # FINAL 6.4 step 4: _queue_predict unchanged - a held member date records the not-sent hold run and queues the
     # assess, exactly as for a legacy context, since the held rows carry the legacy note (dates.member_date_state)
+    # (4.2: queued unless the compare-and-set above found the stage superseded; a save landing after the commit makes a
+    # newer context, and this predict's own start check then supersedes it)
     _queue_predict(encounter, revision, context, key=f'predict:{context.pk}', requested_by=job.requested_by)
     return {'context': str(context.pk), 'routing': str(routing.pk), 'inventory': str(inventory.pk),
             'member_date_state': derived.member_date.state}
@@ -1062,7 +1329,7 @@ def _route_by_stand_in(job, context, service_date):
     if inventory is None:
         raise StageFailure('The context names no event inventory, so nothing can be routed or sent for it.')
     if models.RoutingRun.objects.filter(revision_id=context.revision_id, service_date=service_date,
-                                        version=interpretation.ROUTING_VERSION,
+                                        version=_routing_version(inventory),
                                         result__inventory=str(inventory.pk)).exists():
         return
     stored = _stored_inventory(inventory, job.revision)
@@ -1071,14 +1338,74 @@ def _route_by_stand_in(job, context, service_date):
     _record_routing(job.revision, data, service_date)
 
 
+PROVIDER_PAUSED_MESSAGE = ('Nothing was sent: the coding service is held on this installation after it refused a '
+                           'request (authentication, permission, payment or quota); nothing is sent to it until an '
+                           'operator releases the hold, then Resume sends the request once.')
+PROVIDER_DISABLED_MESSAGE = ('Nothing was sent: the coding service is not available on this installation, and the '
+                             'request this context makes has no recorded answer. Resume once it is available.')
+UPDATE_REVIEW_FAILED = ('The document review did not complete for the update; the codes from before the change stay as '
+                        'they are (nothing replaces them with codes that have no review).')
+
+
+def _provider_hold_run(job, provider, request, service_date, *, purpose=models.ProviderRun.PRIMARY, scope=None,
+                       identity=None):
+    """FINAL-V2 amendment 1, A16 (7.3): the not-sent run a send door records while ``provider``'s hold stands -
+    scope.held 'provider_hold', so _run_in_use and _unsent_attempt leave it out (it is never the outcome of a request):
+    it carries the request built (for the reuse door's lookup), its start recorded (it went through the send doors)."""
+    now = timezone.now()
+    return models.ProviderRun.objects.create(
+        encounter=job.encounter, revision=job.revision, provider=provider.name,
+        adapter_version=provider.adapter_version,
+        request_sha256=request.canonical_sha256 if request is not None else '',
+        request_body=request.body if request is not None else {},
+        contexts=list(request.contexts) if request is not None else [], state=models.ProviderRun.NOT_SENT, sent=False,
+        error=PROVIDER_PAUSED_MESSAGE, authorization_ref=settings.AUTHORIZATION_REF, requested_by=job.requested_by,
+        service_date=service_date, purpose=purpose, scope={**(scope or {}), 'held': provider_holds.HELD},
+        started_at=now, finished_at=now, **(identity or {}))
+
+
+def _update_base(encounter):
+    """The earlier codes E while an update is pending (review.earlier, read afresh), else None (a first processing)."""
+    fresh_row = (models.Encounter.objects.select_related('current_assessment', 'current_context')
+                 .get(pk=encounter.pk))
+    return review.earlier(fresh_row)
+
+
+def _unbuilt_like_base(run, base) -> bool:
+    """7.2's 'a request that cannot be built when E's own run is also one that could not build one, for the same
+    revision text': ``run`` carries no request, and E's own run carried none either, for a revision of the same text."""
+    own = base.provider_run if base is not None else None
+    if run is None or run.request_sha256 or own is None or own.request_sha256:
+        return False
+    return own.state == models.ProviderRun.NOT_SENT and own.revision.text_sha256 == run.revision.text_sha256
+
+
 def stage_predict(job):
+    """The document review (Corti's prediction) of the current revision and context.
+
+    FINAL-V2 amendment 1: the start check first (3.4); Corti's provider hold read at the send door, after the reuse door
+    (a stored answer is still reused) and before the send (A16): while it stands, a not-sent run with scope.held
+    'provider_hold' and the stage ends CANCELLED with the paused text (resumable), for every encounter; a run whose own
+    refusal sets the hold (A20) ends the stage the same way, never FAILED - in a first processing as during an update
+    [R2:truth-RT6]. While an update is pending (7.2's exhaustive list): a run that SUCCEEDED or was reused, and the member
+    date conflict's hold, go on; so does E's own outcome (the request is byte-identical to the one E's run carried, or
+    neither could be built from the same revision text: A6 [R:legacy-L4]); an UNKNOWN run queues nothing (the
+    encounter reads provider_unknown); the coding service disabled goes on only with the run in use that carries this
+    very request and whose outcome is an answer, E's own, or unknown (the rules above read it), and ends the stage paused
+    (resumable) for every other request - one the run in use does not carry, or whose outcome there is no answer and not
+    E's - so a final with no document review never replaces the earlier codes (A6; refutation 5b-r1, X1); every other
+    outcome - a FAILED run, a not-resent run of a request that is not E's, a
+    NOT_SENT run carrying its request for a local reason, a run that carries no request when E's could be built - ends
+    the stage FAILED, queueing nothing, so a transient failure of the review never replaces the earlier codes with an
+    assessment that has none, and never clears their approvals [R:legacy-L5]."""
     revision, encounter, context = job.revision, job.encounter, job.context
+    _start_check(job)
     encounter.refresh_from_db()
     if encounter.current_revision_id != revision.pk:
-        return {'skipped': 'a newer revision exists; nothing was sent'}
+        return _superseded_result(review.SUPERSEDED_REVISION)
     if context is None or context.revision_id != revision.pk or encounter.current_context_id != context.pk:
         # Provider input is only ever the current revision's text with that revision's current context.
-        return {'skipped': 'the context is not the current one for this revision; nothing was sent'}
+        return _superseded_result(review.SUPERSEDED_CONTEXT)
     remade = _earlier_reading(job)  # FINAL 6.5: a context that is not a gemini context is never remade on this image
     if remade is not None:
         return remade
@@ -1089,43 +1416,71 @@ def stage_predict(job):
         # never called), recorded before anything is built, sent or held, so every later stage finds it for the date
         _route_by_stand_in(job, context, service_date)
     assess_key = f'assess:{context.pk}'
+    base = _update_base(encounter)
 
     def next_assess(run):
-        # the assess, or with a harness participant configured its chain (HARNESS.md 2), which goes on to the assess
+        # the assess, or with a harness participant configured its chain (HARNESS.md 2), which goes on to the assess -
+        # unless the stage no longer serves the saved state (3.4's successor gate)
+        if not _successor_allowed(job):
+            return
         _after_predict(encounter, revision, context, run, key=f'{assess_key}:{run.pk if run else "no-provider"}',
                        origin=str(job.pk), requested_by=job.requested_by,
                        upgrade=job.idempotency_key == _upgrade_predict_key(context))
 
+    def settled(run, outcome):
+        """7.2: what this stage does with ``run`` (its outcome), during an update and in a first processing."""
+        if _hold_setting(run):
+            # A20: the run whose own refusal set Corti's hold pauses the document, never a final made with it
+            raise StageCancelled(PROVIDER_PAUSED_MESSAGE)
+        if base is None or run.state == models.ProviderRun.SUCCEEDED or run.reused_from_id:
+            next_assess(run)
+            return {'provider': outcome, 'run': str(run.pk)}
+        if (run.scope or {}).get('held') == models.ProviderRun.HELD_MEMBER_DATE_CONFLICT:
+            next_assess(run)
+            return {'provider': outcome, 'run': str(run.pk)}
+        if run.state == models.ProviderRun.UNKNOWN:
+            return {'provider': run.state, 'run': str(run.pk)}  # the unknown-outcome block holds the encounter
+        if _own_review(run, base) or _unbuilt_like_base(run, base):
+            next_assess(run)  # A6: E's own outcome - the review's input is unchanged since E
+            return {'provider': outcome, 'run': str(run.pk), 'own_review': True}
+        raise StageFailure(f'{UPDATE_REVIEW_FAILED} {run.error}'.strip())
+
     if provider is None and job.idempotency_key == _upgrade_predict_key(context) and _recorded_in_use(revision):
         # gi3 (STATE2-1; the narrow release's refutation, STATE-N1 and STATE-N2): with sending disabled, the predict an
-        # upgrade's remake queued never replaces what is recorded for this revision with 'provider not run'. An outcome
-        # still unknown blocks it, as it blocks every send, and the encounter reads 'provider_unknown'; any other
-        # recorded request (succeeded or failed) stops it, and that record stays as it is until a member's Resume once
-        # sending is enabled. With no request recorded it runs as before (ec5 skeptic:1).
+        # upgrade's remake queued never replaces what is recorded for this revision with 'provider not run'.
         if _unreconciled_unknown(encounter):
             return {'blocked': 'a previous request has an unknown outcome; reconcile it before sending again'}
         raise StageCancelled(REMADE_DISABLED_MESSAGE)
     if provider is None:
+        if base is not None:
+            # 7.2 during an update, read with A6 (refutation 5b-r1, X1): with the coding service disabled nothing can be
+            # sent, so the update goes on only with an outcome the run in use already records for this very request -
+            # its answer, E's own outcome, or an unknown outcome the unknown-outcome block holds - and is paused
+            # (resumable) otherwise. Never a final made with no document review replacing the earlier codes.
+            in_use = _run_in_use(revision)
+            if (in_use is not None and _run_answers(in_use, revision, context)
+                    and (in_use.state in (models.ProviderRun.SUCCEEDED, models.ProviderRun.UNKNOWN)
+                         or in_use.reused_from_id or _own_review(in_use, base))):
+                # recorded with that run's own outcome, as a reuse is (progress reads an answer as used); a run that
+                # set Corti's hold pauses here, as everywhere (A20)
+                return {**settled(in_use, in_use.state), 'provider_disabled': True}
+            raise StageCancelled(PROVIDER_DISABLED_MESSAGE)
         next_assess(None)
         return {'provider': 'disabled'}
     if gi_context.is_member_conflict((context.facts or {}).get('service_date')):
         # Session interpretation 19: a member-entered service date that differs from the document's is a conflict with
         # both sides kept (interpretation 11), so the request has no date it can carry. Nothing is built, reused or
-        # sent while it stands - a dateless request would be paid for and discarded once the date is settled - and the
-        # encounter asks the date question. Correcting or clearing the metadata starts the request for its date. Every
-        # path that queues a predict records this hold itself (_queue_predict); this holds one queued any other way. No
-        # harness participant is sent to while it stands either: the assess follows the hold directly.
+        # sent while it stands. Every path that queues a predict records this hold itself (_queue_predict); this holds
+        # one queued any other way. No harness participant is sent to while it stands either.
         run = _member_date_hold(encounter, revision, provider, job.requested_by)
-        enqueue(Job.ASSESS, encounter=encounter, revision=revision, context=context, provider_run=run,
-                key=_assess_key(f'{assess_key}:{run.pk}', revision), requested_by=job.requested_by)
+        if _successor_allowed(job):
+            enqueue(Job.ASSESS, encounter=encounter, revision=revision, context=context, provider_run=run,
+                    key=_assess_key(f'{assess_key}:{run.pk}', revision), requested_by=job.requested_by)
         return {'provider': 'not_sent', 'reason': 'member-entered service date conflicts with the document'}
     if (not interpretation.is_new_context(context)
             and not models.RoutingRun.objects.filter(revision=revision, service_date=service_date).exists()):
-        # Nothing is sent for a date this revision was never routed for (round 6 pipeline:0): after a date change the
-        # new date is routed first, in one bounded child under the analyze deadline, so a document that cannot be read
-        # for that date fails here with the plain message and no request is built, reused or sent. A context that is not
-        # a gemini context reaches here only through the test-only legacy chain (tests/legacy_chain.py): on this image
-        # _earlier_reading ends such a stage before anything else (FINAL 6.5).
+        # Nothing is sent for a date this revision was never routed for (round 6 pipeline:0): a context that is not a
+        # gemini context reaches here only through the test-only legacy chain (tests/legacy_chain.py).
         data = _bounded(_route_child, revision.text, service_date, seconds=settings.JOB_DEADLINE_SECONDS['analyze'])
         _record_routing(revision, data, service_date)
     try:
@@ -1136,8 +1491,7 @@ def stage_predict(job):
             request_sha256='', request_body={}, contexts=[], state=models.ProviderRun.NOT_SENT, error=str(exc),
             authorization_ref=settings.AUTHORIZATION_REF, requested_by=job.requested_by, service_date=service_date,
             finished_at=timezone.now())
-        next_assess(run)
-        return {'provider': 'not_sent'}
+        return settled(run, 'not_sent')
 
     # Reuse a retained result for the identical request instead of paying twice - whatever the run was made for: a
     # second review's excerpt pasted as a note of its own is the same question (refutation r1: it was resent).
@@ -1161,18 +1515,19 @@ def stage_predict(job):
     if _unreconciled_unknown(encounter):
         return {'blocked': 'a previous request has an unknown outcome; reconcile it before sending again'}
 
-    failed = _failed_before(encounter, provider, request)
+    if provider_holds.held(provider.name):
+        # A16 (7.3): Corti's installation-wide hold - a not-sent run, nothing sent, the stage paused (resumable)
+        _provider_hold_run(job, provider, request, service_date)
+        raise StageCancelled(PROVIDER_PAUSED_MESSAGE)
+
+    failed = _failed_before(encounter, provider, request) or _marked_sent_before(encounter, provider, request)
     if failed is not None:
         # Refutation p1, sends-0 and sends-2: this request was sent before and FAILED, so it is never sent again - not
-        # after a date round trip or a cleared date, and not as a reconciliation's released attempt. The stage ends as
-        # that request did (provider_failed), with a run of its own, as a predict that reuses, sends or cannot build
-        # its request ends: re-assessing with the OLDER failed run left a newer one as the revision's newest finished
-        # run, which is the run in use for every later save here (a member date never sent was then never attempted
-        # again) and for the installed revision after a rollback (its setting save re-sent the failed request; round
-        # 7c8 skeptic, sk:2 and sk:3).
+        # after a date round trip or a cleared date, and not as a reconciliation's released attempt (a retry_update
+        # releases it once, A10). The stage ends as that request did, with a run of its own. So does one an adapter
+        # recorded not sent while marking it sent (_marked_sent_before: it may have reached the provider).
         run = _not_resent_run(job, encounter, revision, provider, request, service_date, failed)
-        next_assess(run)
-        return {'provider': 'not_resent', 'run': str(run.pk)}
+        return settled(run, 'not_resent')
 
     _live_gate(job, provider, revision, encounter)
     if job.idempotency_key == _upgrade_predict_key(context):
@@ -1181,8 +1536,7 @@ def stage_predict(job):
         raise StageCancelled(_remade_request_message(revision, request))
 
     run = _send(job, provider, request, service_date=service_date)
-    next_assess(run)
-    return {'provider': run.state, 'run': str(run.pk)}
+    return settled(run, run.state)
 
 
 def _send(job, provider, request, *, service_date, purpose=models.ProviderRun.PRIMARY, scope=None, original_bytes=None,
@@ -1225,6 +1579,11 @@ def _send(job, provider, request, *, service_date, purpose=models.ProviderRun.PR
         if not cursor.fetchone()[0]:
             raise Requeue('another provider request is in flight')
     try:
+        # FINAL-V2 amendment 1, 3.4: immediately before the reservation (after _check_loop_time and the advisory lock):
+        # a stage a newer save superseded sends nothing from here on; the lock is released in the finally below
+        reason = _superseded(job)
+        if reason:
+            raise StageSuperseded(reason)
         run = models.ProviderRun.objects.create(
             encounter=encounter, revision=revision, provider=provider.name, adapter_version=provider.adapter_version,
             request_sha256=request.canonical_sha256, request_body=request.body, contexts=list(request.contexts),
@@ -1257,8 +1616,10 @@ def _send(job, provider, request, *, service_date, purpose=models.ProviderRun.PR
                         if continues is not None else {}))
         outcome = None
         if independent:
-            if purpose == INTERPRETATION:
-                tools, deadline = _no_interpretation_tool, settings.INTERPRETER_SEND_DEADLINE_SECONDS
+            if purpose in READING_PURPOSES:  # FINAL-V2 7.4 [R:MO-3]: pass 2 takes D49's deadlines too
+                tools = _no_interpretation_tool
+                deadline = (settings.APPRAISER_SEND_DEADLINE_SECONDS if purpose == APPRAISAL
+                            else settings.INTERPRETER_SEND_DEADLINE_SECONDS)
             else:
                 tools = execute_tool or reference_tools.executor(encounter.workspace)
                 deadline = settings.PARTICIPANT_LOOP_DEADLINE_SECONDS
@@ -1268,7 +1629,12 @@ def _send(job, provider, request, *, service_date, purpose=models.ProviderRun.PR
         else:
             exchange = provider.send(request, deadline_s=settings.PROVIDER_READ_TIMEOUT_SECONDS + 30)
             try:
-                _finish_run(run, exchange)
+                # FINAL-V2 amendment 1, A20 [R2:binding-R2B-1]: a refusal the provider hold's classification holds is
+                # recorded with its hold, in the transaction that records the status: no such status is committed
+                # without its hold, whatever the stage does next (a superseded stage, a worker killed right after)
+                with transaction.atomic():
+                    _finish_run(run, exchange)
+                    provider_holds.record(run)
             except Exception:  # noqa: BLE001 - logged; the run records why, never the internals
                 # Decision (k) (2026-11-03; R6 4.6): the answer arrived and its outcome could not be recorded. The run
                 # is never left 'sending' - a failed job is not swept, so nothing would block an identical send - but
@@ -1282,7 +1648,7 @@ def _send(job, provider, request, *, service_date, purpose=models.ProviderRun.PR
                      state=run.state, http_status=run.http_status, usage=run.usage, latency_ms=run.latency_ms,
                      purpose=purpose, **({'provider': provider.name} if independent else {}))
         if outcome is not None and outcome.stopped:
-            raise StageCancelled(STOPPED_BEFORE_SEND_MESSAGE if purpose == INTERPRETATION else STOPPED_IN_LOOP_MESSAGE)
+            raise StageCancelled(STOPPED_BEFORE_SEND_MESSAGE if purpose in READING_PURPOSES else STOPPED_IN_LOOP_MESSAGE)
     finally:
         with connection.cursor() as cursor:
             cursor.execute('SELECT pg_advisory_unlock(%s)', [PROVIDER_LOCK_KEY])
@@ -1322,15 +1688,28 @@ def _settle_unrecorded(run, exchange):
     """Decision (k): ``run`` (still 'sending') recorded unknown - or not sent, where its exchange provably sent nothing -
     with only small fields written, since writing the whole outcome just failed. A failure here is logged and leaves
     the run 'sending', which every send door still reads as an unknown outcome (review._orphaned_sending) and the stale
-    sweep settles (mark_stale)."""
-    unsent = exchange.outcome == 'not_sent' and not exchange.sent
+    sweep settles (mark_stale).
+
+    FINAL-V2 amendment 1, A20 [R3:binding-R3B-1]: its HTTP status is among the small fields; an exchange whose status
+    the provider hold's classification holds (a coding-service refusal, or a token-endpoint 4xx on a not-sent
+    exchange) is recorded UNKNOWN whatever ``sent`` says - so the unknown-outcome block holds its encounter and no
+    member's Retry is offered - and its hold is recorded right after, in a transaction of its own, so every other
+    encounter is held whatever that second write does."""
+    refusal = provider_holds.classify(run.provider, exchange.http_status, bool(exchange.sent))
+    unsent = exchange.outcome == 'not_sent' and not exchange.sent and refusal is None
     try:
         models.ProviderRun.objects.filter(pk=run.pk, state=models.ProviderRun.SENDING).update(
             state=models.ProviderRun.NOT_SENT if unsent else models.ProviderRun.UNKNOWN, sent=bool(exchange.sent),
+            http_status=exchange.http_status,
             error='Nothing was sent; its record could not be written (logged).' if unsent else UNRECORDED_OUTCOME_MESSAGE,
             finished_at=timezone.now())
     except Exception:  # noqa: BLE001 - logged; the run stays 'sending', which blocks every send door
         log.exception('provider run %s could not be settled after its outcome failed to record', run.pk)
+    if refusal is not None:
+        try:
+            provider_holds.record(run, refusal)
+        except Exception:  # noqa: BLE001 - logged; the run's own encounter is blocked by its unknown outcome
+            log.exception('the provider hold of run %s could not be recorded', run.pk)
 
 
 def _stop_requested(job, encounter):
@@ -1342,7 +1721,7 @@ def _stop_requested(job, encounter):
 
 PARTICIPANT_PURPOSES = (models.ProviderRun.INDEPENDENT, models.ProviderRun.PEER_REVIEW)
 # The purposes _send runs as one loop (FINAL 6.3): the participants' and the interpreter's (whose loop is one exchange).
-LOOPED_PURPOSES = PARTICIPANT_PURPOSES + (INTERPRETATION,)
+LOOPED_PURPOSES = PARTICIPANT_PURPOSES + (INTERPRETATION, interpretation.APPRAISAL_PURPOSE)  # FINAL-V2 7.4: pass 2
 STOPPED_IN_LOOP_MESSAGE = ('Stopped by a workspace member while the tool loop ran: what was sent is recorded, and '
                            'nothing more was sent.')
 STOPPED_BEFORE_SEND_MESSAGE = 'Stopped by a workspace member before the request was sent; nothing was sent.'
@@ -1368,7 +1747,8 @@ def _check_loop_time(job, purpose=None):
         return
     budget = min(settings.JOB_DEADLINE_SECONDS.get(job.kind, settings.STALE_RUNNING_SECONDS),
                  settings.STALE_RUNNING_SECONDS)
-    loop = (settings.INTERPRETER_SEND_DEADLINE_SECONDS if purpose == INTERPRETATION
+    loop = (settings.APPRAISER_SEND_DEADLINE_SECONDS if purpose == interpretation.APPRAISAL_PURPOSE
+            else settings.INTERPRETER_SEND_DEADLINE_SECONDS if purpose == INTERPRETATION
             else settings.PARTICIPANT_LOOP_DEADLINE_SECONDS)
     used = (timezone.now() - job.started_at).total_seconds()
     if used + loop + LOOP_RECORDING_SECONDS > budget:
@@ -1474,6 +1854,7 @@ def _finish_loop(run, outcome):
             _finish_run(run, outcome.final)
             recorded = set(run.exchanges.values_list('turn', flat=True))
             _record_exchanges(run, [record for record in outcome.exchanges if record.turn not in recorded])
+            provider_holds.record(run)  # A20: with the exchanges it records (a participant's; Gemini's sets none)
     except Exception as exc:  # noqa: BLE001 - logged; the run records why, never the internals
         log.exception('the loop outcome of participant run %s could not be recorded', run.pk)
         label = _loop_label(run.provider)
@@ -1485,6 +1866,15 @@ def _finish_loop(run, outcome):
         _finish_run(run, RawExchange(
             outcome='not_sent' if unsent else 'unknown', sent=called and not unsent, endpoint=outcome.final.endpoint,
             requested_model=outcome.final.requested_model, error=error))
+        # A20 [R3:binding-R3B-1]: the hold of an exchange that refused, from the outcome held in memory, in a
+        # transaction of its own (provider_holds.record)
+        refusal = next((found for found in (provider_holds.classify_exchange(run.provider, record)
+                                            for record in outcome.exchanges) if found is not None), None)
+        if refusal is not None:
+            try:
+                provider_holds.record(run, refusal)
+            except Exception:  # noqa: BLE001 - logged
+                log.exception('the provider hold of run %s could not be recorded', run.pk)
 
 
 def _record_exchange(run, record):
@@ -1496,6 +1886,11 @@ def _record_exchange(run, record):
     try:
         with transaction.atomic():
             _record_exchanges(run, (record,))
+            # FINAL-V2 amendment 1, A20 [R2:binding-R2B-1]: a participant exchange's refusal (any 4xx but 413) sets
+            # the participant's hold with the exchange's record
+            refusal = provider_holds.classify_exchange(run.provider, record)
+            if refusal is not None:
+                provider_holds.record(run, refusal)
     except Exception:  # noqa: BLE001 - logged; the loop goes on, and _finish_loop records what is still missing
         log.exception('exchange %s of participant run %s could not be recorded as it ended', record.turn, run.pk)
 
@@ -1614,8 +2009,11 @@ def _participant_not_sent(job, name, adapter, request, error, *, mode, held='', 
 
 
 def _participant_done(job, run, outcome=None):
-    """The participant stage's result once ``run`` records its outcome; the chain goes on (_queue_after_participant)."""
-    _queue_after_participant(job)
+    """The participant stage's result once ``run`` records its outcome; the chain goes on (_queue_after_participant) -
+    unless the stage no longer serves the saved state (FINAL-V2 amendment 1, 3.4's successor gate): nothing is queued,
+    and the run stays stored for reuse."""
+    if _successor_allowed(job):
+        _queue_after_participant(job)
     return {'participant': job.kind, 'state': outcome or run.state, 'run': str(run.pk)}
 
 
@@ -1693,11 +2091,12 @@ def stage_participant(job):
     12.1). Every outcome is a run of its own, and the chain goes on to the next configured participant or the assess: a
     participant that is unavailable, refused by the live gate or failing blocks only itself (I10)."""
     name, revision, encounter, context = job.kind, job.revision, job.encounter, job.context
+    _start_check(job)  # FINAL-V2 amendment 1, 3.4
     encounter.refresh_from_db()
     if encounter.current_revision_id != revision.pk:
-        return {'skipped': 'a newer revision exists; nothing was sent'}
+        return _superseded_result(review.SUPERSEDED_REVISION)
     if context is None or context.revision_id != revision.pk or encounter.current_context_id != context.pk:
-        return {'skipped': 'the context is not the current one for this revision; nothing was sent'}
+        return _superseded_result(review.SUPERSEDED_CONTEXT)
     _refuse_legacy_context(job)  # FINAL 6.6 and 9: nothing is sent on a context that is not a gemini context
     try:
         participant = participants.get_participant(name)
@@ -1730,6 +2129,12 @@ def stage_participant(job):
         held = _participant_not_sent(job, name, participant, request, PARTICIPANT_BLOCKED_MESSAGE,
                                      mode=participant.mode, held=UNKNOWN_OUTCOME_HELD)
         return _participant_done(job, held, 'blocked')
+    if provider_holds.held(name):
+        # FINAL-V2 amendment 1, A16 (7.3): the participant's installation-wide hold - a held not-sent run, nothing
+        # sent, and the chain goes on without it (HARNESS I10): the update completes partial
+        held = _participant_not_sent(job, name, participant, request, PROVIDER_PAUSED_MESSAGE, mode=participant.mode,
+                                     held=provider_holds.HELD)
+        return _participant_done(job, held, 'held')
     # F-STOP: a member's Stop paused this request's loop between exchanges; its Resume continues it from the next
     # exchange (a run of its own, linked to the stopped one), never sending an exchange again
     stopped = _stopped_attempt(encounter, participant, request, models.ProviderRun.INDEPENDENT)
@@ -1796,6 +2201,24 @@ STORED_ANSWER_CHANGED = 'The stored answer no longer matches its recorded hash; 
 READ_OVERRUN_MESSAGE = 'The stored answer could not be read within the {reason} limit; nothing from it was used.'
 READ_FAILED_MESSAGE = ('The stored answer could not be read: the reader stopped with an unexpected error (logged), so '
                        'nothing from it was used.')
+# Design v2's pass 2 (FINAL-V2 7.4, 7.5): CPT Studio's sentences for the appraise stage's outcomes (operator-facing;
+# the member reads progress.UPDATE_ERRORS and progress.INTERPRETATION_ERRORS, which name no provider)
+APPRAISE_NOT_READ_MESSAGE = ('The first reading this check reads is not a usable answer of this revision at the current '
+                             'versions; nothing was sent.')
+APPRAISE_UNBUILT_MESSAGE = 'The check of the reading could not be prepared; nothing was sent.'
+APPRAISE_TOO_LONG_MESSAGE = ('The check of the reading would carry more claims than one request may carry; nothing was '
+                             'sent, and it is not sent for this document.')
+APPRAISE_FAILED_MESSAGE = 'The check of the reading did not succeed and was not used.'
+APPRAISE_CUT_OFF_MESSAGE = ('The check of the reading was cut off at its output limit: the document is too long to be '
+                            'read in one piece, and the identical request is not sent again.')
+APPRAISE_NOT_RESENT_MESSAGE = ('Nothing was sent: this document\'s check of the reading was sent before and did not '
+                               'succeed, and the identical request is sent again only for a recorded retry.')
+APPRAISE_SETTLED_MESSAGE = ('Nothing was sent: the stage that sent the check of this document\'s reading stopped before '
+                            'its answer was used, and no stored answer answers the request made now. Resume to have it '
+                            'checked.')
+APPRAISE_UNHEALTHY_MESSAGE = ('The check of the reading was not used: its verdicts did not meet the health thresholds '
+                              '({measures}).')
+APPRAISE_MOVED = 'the claim set changed since this stage was queued; the stage for the current one is queued'
 RETRY_RELEASE_NOTE = 'released for one retry'  # FINAL 11.3: the note a retry writes on the run it releases - its
 # record of who released it and when, never read as the release (DECISIONS D85: an operator writes that column too)
 # DECISIONS D60, D85: the key mark of a retry stage that RELEASED a run - the only release released_for_retry reads; a
@@ -1805,17 +2228,49 @@ RETRY, RETRY_RELEASE = 'retry', 'retry-release'
 # the live gate, a sentinel that cannot vouch for the write the answer would need (NOT_RUN: no request could be made)
 SIZE, UNBUILT, FAILED_BEFORE, LIVE_GATE, SENTINEL = 'size', 'unbuilt', 'failed_before', 'live_gate', 'sentinel'
 SETTLED = 'settled'  # ... and the stale sweep's settled path, which never sends (FINAL 6.9; D11: no automatic retry)
+CLAIMS = 'claims'  # ... and pass 2's claim set over its per-request bound (FINAL-V2 7.4 door 0: TOO_LONG)
 NOT_RUN = (LIVE_GATE, SENTINEL)
 SETTLED_FROM_EXCHANGE = 'settled_from_exchange'  # scope key of a run P-6 settled from its recorded exchange
+# scope['refused'] of an appraisal answer whose reading was refused, or an appraisal settle refused whole (FINAL-V2 7.5:
+# recorded on the appraisal run, no inventory row, the retry door)
+READING_REFUSED, UNHEALTHY = 'reading', 'unhealthy'
+
+
+def _purpose_of(job):
+    """The purpose of the runs a reading stage records: 'interpretation' (pass 1) or 'appraisal' (pass 2)."""
+    return APPRAISAL if job.kind == APPRAISE else INTERPRETATION
 
 
 def _interpret_key(revision, suffix=''):
-    """The interpret stage's key (FINAL 6.1): 'interpret:<revision>:<INTERPRETATION_VERSION>', plus ':<suffix>' -
-    'retry:<run>', 'retry-release:<run>' (DECISIONS D60), 'after-reconcile:<run>' or 'settled:<run>' - always on the
-    base, so suffixes never chain (a Resume adds its own, which resume keeps to one). At most 115 characters before a
-    Resume's 44, inside the 200 the column holds."""
-    base = f'{INTERPRET}:{revision.pk}:{interpretation.INTERPRETATION_VERSION}'
+    """The interpret stage's key (FINAL 6.1; FINAL-V2 7.4): 'interpret:<revision>:<pass-1 version>' - gemini-events@2
+    (gemini-events@1 under the test-only v1 chain) - plus ':<suffix>' - 'retry:<run>', 'retry-release:<run>' (DECISIONS
+    D60), 'after-reconcile:<run>', 'settled:<run>' or 'after-save:<uuid>' - always on the base, so suffixes never chain
+    (a Resume adds its own, which resume keeps to one). At most 115 characters before a Resume's 44, inside the 200 the
+    column holds."""
+    base = f'{INTERPRET}:{revision.pk}:{_pass1_version()}'
     return f'{base}:{suffix}' if suffix else base
+
+
+def _appraise_key(revision, extraction, tail, suffix=''):
+    """The appraise stage's key (FINAL-V2 7.4 [R:MO-5]): 'appraise:<revision>:<extraction run>:<the first 16 hex of the
+    appraisal request's sha256>' - ``tail``; a claim set that could not be built names its reason there instead
+    (adapter.NotBuilt.reason), so its stage's door 0 records it - plus the same suffixes as the interpret stage's. The
+    request's sha covers the claim set, so a changed check, version or claim set is a new key, never a reuse. 99
+    characters; with ':after-reconcile:<run>' and ':resume:<uuid>', 196 of the column's 200."""
+    base = f'{APPRAISE}:{revision.pk}:{extraction.pk}:{tail}'
+    return f'{base}:{suffix}' if suffix else base
+
+
+def _appraise_parts(job):
+    """(the extraction run id, the tail) an appraise stage's key names (its base, a suffix and a Resume aside), or
+    (None, '') for a key of another shape."""
+    parts = job.idempotency_key.split(':resume:', 1)[0].split(':')
+    if len(parts) < 4 or parts[0] != APPRAISE or parts[1] != str(job.revision_id):
+        return None, ''
+    try:
+        return uuid.UUID(parts[2]), parts[3]
+    except ValueError:
+        return None, ''
 
 
 def _keyed_run(job, mark):
@@ -1825,27 +2280,29 @@ def _keyed_run(job, mark):
     if not found:
         return None
     try:
-        pk = uuid.UUID(tail)
+        pk = uuid.UUID(tail.split(':', 1)[0])
     except ValueError:
         return None
     return models.ProviderRun.objects.filter(pk=pk, encounter_id=job.encounter_id).first()
 
 
 def keyed_interpretation_run(job):
-    """The interpretation run of ``job``'s revision that its key names - ':settled:<run>' (the stale sweep, FINAL 6.9) or
-    ':after-reconcile:<run>' (a reconciliation) - or None. Such a stage settles that run itself when it holds the answer
-    to the request (_settled_answer) and records no run of its own, so that run's outcome is the stage's own (the reading
+    """The run of ``job``'s revision that its key names - ':settled:<run>' (the stale sweep, FINAL 6.9) or
+    ':after-reconcile:<run>' (a reconciliation) - of the stage's own purpose (an interpret stage's 'interpretation', an
+    appraise stage's 'appraisal'), or None. Such a stage settles that run itself when it holds the answer to the request
+    (_settled_answer) and records no run of its own, so that run's outcome is the stage's own (the reading
     review._failed_stage_state makes of a failed one)."""
+    purpose = _purpose_of(job)
     for mark in ('settled', 'after-reconcile'):
         run = _keyed_run(job, mark)
         if run is not None:
-            return run if run.purpose == INTERPRETATION and run.revision_id == job.revision_id else None
+            return run if run.purpose == purpose and run.revision_id == job.revision_id else None
     return None
 
 
 def _settled_path(job) -> bool:
-    """Whether ``job`` is the stale sweep's settled path itself ('interpret:...:settled:<run>'), never a member's Resume
-    of it: the one interpret stage that sends nothing, whatever it finds (FINAL 6.9; D11: no automatic retry)."""
+    """Whether ``job`` is the stale sweep's settled path itself ('...:settled:<run>'), never a member's Resume of it: the
+    one reading stage that sends nothing, whatever it finds (FINAL 6.9; D11: no automatic retry)."""
     base, resumed, _ = job.idempotency_key.partition(':resume:')
     return not resumed and ':settled:' in base
 
@@ -1860,28 +2317,35 @@ def _size_bound(revision):
     return ''
 
 
-def _interpretation_not_sent(job, error, *, mode, interpreter=None, request=None, started=False, **scope):
-    """An interpretation run that sent nothing, with why (FINAL 6.3 steps 2-4, the failed-request door): it carries
-    ``request`` when one was built; ``started`` when it went through the send doors (as a reuse or a not-resent run does),
-    so no reader takes it for a reservation the stale sweep settled unsent. ``scope``: what it adds to its mode - 'held'
-    for a pause (FINAL 11.2), 'refused' and 'effect' for a run the stage kept from sending."""
+def _reading_adapter_version():
+    return interpretation.ADAPTER_VERSION if _v1_chain() else interpretation.ADAPTER_VERSION_V2
+
+
+def _interpretation_not_sent(job, error, *, mode, interpreter=None, request=None, started=False, purpose=None,
+                             **scope):
+    """A reading run that sent nothing, with why (FINAL 6.3 steps 2-4, the failed-request door; FINAL-V2 7.4's doors for
+    pass 2): it carries ``request`` when one was built; ``started`` when it went through the send doors (as a reuse or
+    a not-resent run does), so no reader takes it for a reservation the stale sweep settled unsent. ``purpose``: the
+    stage's (pass 1 by default). ``scope``: what it adds to its mode - 'held' for a pause (FINAL 11.2), 'refused' and
+    'effect' for a run the stage kept from sending."""
     now = timezone.now()
     identity = (_participant_identity(interpreter) if interpreter is not None
                 else {'endpoint': '', 'requested_model': interpretation.MODEL})
     return models.ProviderRun.objects.create(
         encounter=job.encounter, revision=job.revision, provider=interpretation.PROVIDER,
-        adapter_version=interpretation.ADAPTER_VERSION,
+        adapter_version=interpreter.adapter_version if interpreter is not None else _reading_adapter_version(),
         request_sha256=request.canonical_sha256 if request is not None else '',
         request_body=request.body if request is not None else {},
         contexts=list(request.contexts) if request is not None else [], state=models.ProviderRun.NOT_SENT, sent=False,
         error=error, authorization_ref=settings.AUTHORIZATION_REF, requested_by=job.requested_by, service_date=None,
-        purpose=INTERPRETATION, scope={'mode': mode, **{key: value for key, value in scope.items() if value}},
+        purpose=purpose or INTERPRETATION, scope={'mode': mode, **{key: value for key, value in scope.items() if value}},
         started_at=now if started else None, finished_at=now, **identity)
 
 
-def _mark_effect(run, effect):
-    """Record on ``run``'s scope what its outcome means (interpretation.holds' effects), as the stage settled it."""
-    scope = {**(run.scope or {}), 'effect': effect}
+def _mark_effect(run, effect, **extra):
+    """Record on ``run``'s scope what its outcome means (interpretation.holds' effects), as the stage settled it, and
+    ``extra`` beside it (an appraisal's refused reading or health: FINAL-V2 7.5, recorded on the appraisal run)."""
+    scope = {**(run.scope or {}), **extra, 'effect': effect}
     models.ProviderRun.objects.filter(pk=run.pk).update(scope=scope)
     run.scope = scope
 
@@ -1895,13 +2359,17 @@ def _answer_runs(run):
 
 
 def _answer_refusal(run):
-    """The EventInventory, at the current versions, in which a reading of ``run``'s answer was refused (on the run or on
-    any run carrying the same answer), or None."""
+    """The EventInventory, at the current versions (current_versions: design v2's pair; v1's under the v1 chain), in
+    which a reading of ``run``'s answer was refused (on the run or on any run carrying the same answer), or None. Only a
+    pass-1 answer has one: a refused pass-2 answer is recorded on its own run (FINAL-V2 6.3, 7.5)."""
+    if run.purpose != INTERPRETATION:
+        return None
     origin = run.reused_from_id or run.pk
+    interpretation_version, inventory_version = current_versions()
     return (models.EventInventory.objects.filter(
         Q(provider_run_id=origin) | Q(provider_run__reused_from_id=origin), state=models.EventInventory.REFUSED,
-        interpretation_version=interpretation.INTERPRETATION_VERSION,
-        inventory_version=interpretation.INVENTORY_VERSION).order_by('created_at', 'pk').first())
+        interpretation_version=interpretation_version, inventory_version=inventory_version)
+        .order_by('created_at', 'pk').first())
 
 
 def _recorded_effect(run):
@@ -1920,71 +2388,97 @@ def _recorded_effect(run):
 
 
 def interpretation_effect(run) -> str:
-    """What interpretation run ``run``'s outcome means (interpretation.holds' table, FINAL 11.1): as the stage recorded it
-    (scope 'effect', while it still describes the run: _recorded_effect), else classified now from the run as stored -
-    for a stored answer, with the refusal of any reading of that answer (_answer_refusal). 'none' for a run that sent
-    nothing or has no outcome yet."""
+    """What reading run ``run``'s outcome means - pass 1's or pass 2's (interpretation.holds' table, FINAL 11.1;
+    FINAL-V2 7.5) - as the stage recorded it (scope 'effect', while it still describes the run: _recorded_effect), else
+    classified now from the run as stored - for a stored pass-1 answer, with the refusal of any reading of that answer
+    (_answer_refusal). 'none' for a run that sent nothing or has no outcome yet."""
     stored = _recorded_effect(run)
     if stored is not None:
         return stored
     if run.state in (models.ProviderRun.SUCCEEDED, models.ProviderRun.FAILED):
         return interpretation_holds.classify(run.state, run.http_status, bytes(run.response_bytes or b''),
-                                             refused=_answer_refusal(run)).effect
-    return interpretation_holds.classify(run.state).effect
+                                             refused=_answer_refusal(run), purpose=run.purpose).effect
+    return interpretation_holds.classify(run.state, purpose=run.purpose).effect
 
 
 def released_for_retry(run) -> bool:
     """Whether ``run``'s answer was released for one retry (FINAL 11.3: a member's or an operator's recorded act): on
     the run or on any run carrying the same answer. The release is the retry stage retry_reading queues for the run it
-    releases, in the same transaction, keyed 'retry-release:<run>' (DECISIONS D52, D60, D85) - a key only the system
-    writes, and the only mark read here. DECISIONS D85 (refutation round 3, finding 16): a run's reconciliation note is
-    never read as a release, whatever its text - an operator writes that column too, and a note reading exactly
-    RETRY_RELEASE_NOTE once made a usable stored answer pass for released, so it was paid for again; the note a retry
-    writes on a run nobody had reconciled is its record of who released it and when, never the release. A retry that
-    released nothing (an answer still unread, which the retry reads again with nothing sent) is keyed 'retry:<run>' and
-    is never a release, so the stored-answer door still reuses that answer (D60)."""
+    releases, in the same transaction, keyed '...:retry-release:<run>' (DECISIONS D52, D60, D85) - an interpret stage
+    for a pass-1 run, an appraise stage for a pass-2 run (FINAL-V2 7.5: a retry of pass 2 re-sends pass 2 only) - a key
+    only the system writes, and the only mark read here. DECISIONS D85 (refutation round 3, finding 16): a run's
+    reconciliation note is never read as a release, whatever its text. A retry that released nothing (an answer still
+    unread, which the retry reads again with nothing sent) is keyed 'retry:<run>' and is never a release, so the
+    stored-answer door still reuses that answer (D60)."""
+    kind = APPRAISE if run.purpose == APPRAISAL else INTERPRET
     runs = models.ProviderRun.objects.filter(_answer_runs(run), state__in=(models.ProviderRun.FAILED,
                                                                            models.ProviderRun.SUCCEEDED))
-    return any(Job.objects.filter(
-        kind=INTERPRET, revision_id=item.revision_id,
-        idempotency_key__startswith=_interpret_key(item.revision, f'{RETRY_RELEASE}:{item.pk}')).exists()
-        for item in runs.select_related('revision').only('pk', 'revision_id', 'revision'))
+    return any(Job.objects.filter(kind=kind, revision_id=item.revision_id,
+                                  idempotency_key__contains=f':{RETRY_RELEASE}:{item.pk}').exists()
+               for item in runs.only('pk', 'revision_id'))
 
 
 def _read_inventory(revision, mode=None):
     """The newest EventInventory read for ``revision`` at the current versions (in ``mode`` when given: a replayed answer
     never stands in for a live one), or None."""
+    interpretation_version, inventory_version = current_versions()
     rows = models.EventInventory.objects.filter(
-        revision=revision, state=models.EventInventory.READ,
-        interpretation_version=interpretation.INTERPRETATION_VERSION,
-        inventory_version=interpretation.INVENTORY_VERSION)
+        revision=revision, state=models.EventInventory.READ, interpretation_version=interpretation_version,
+        inventory_version=inventory_version)
     if mode is not None:
         rows = rows.filter(provider_run__scope__mode=mode)
     return rows.select_related('provider_run').order_by('-created_at', '-pk').first()
 
 
+def _read_extraction(revision, mode=None, request=None):
+    """Design v2 (FINAL-V2 7.4, 3.6): the newest pass-1 run of ``revision`` whose answer was read at the current pass-1
+    version - SUCCEEDED, recorded by this adapter version, its effect recorded ANSWERED by the stage that read it (the
+    answer read, checked and claimed), not released for retry - in ``mode`` when given, and answering ``request`` when
+    given; None when there is none. The extraction an appraise stage reads; its existence decides whether a Resume
+    queues interpret or appraise."""
+    runs = models.ProviderRun.objects.filter(
+        revision=revision, provider=interpretation.PROVIDER, adapter_version=interpretation.ADAPTER_VERSION_V2,
+        purpose=INTERPRETATION, state=models.ProviderRun.SUCCEEDED, scope__effect=interpretation_holds.ANSWERED)
+    if mode is not None:
+        runs = runs.filter(scope__mode=mode)
+    if request is not None:
+        runs = runs.filter(request_sha256=request.canonical_sha256)
+    for run in runs.order_by('-created_at', '-pk'):
+        if not released_for_retry(run):
+            return run
+    return None
+
+
 def _new_path_owed(revision, context=None) -> bool:
-    """Whether a member's explicit act on ``revision`` (a Resume, a reconciliation) must have it interpreted first (FINAL
-    6.9 and 9; 16.2): it has no EventInventory read at the current versions, or ``context`` - the context the act would
-    use - is not a gemini context. Replaced by the test-only legacy chain (tests/legacy_chain.py)."""
-    if context is not None and not interpretation.is_new_context(context):
-        return True
+    """Whether a member's explicit act on ``revision`` (a Resume, a reconciliation) must have it read first (FINAL 6.9
+    and 9; 16.2; FINAL-V2 7.4): it has no EventInventory read at the current versions, or ``context`` - the context the
+    act would use - is not a gemini context or names an inventory that is not of the current versions. Replaced by the
+    test-only legacy chain (tests/legacy_chain.py)."""
+    if context is not None:
+        if not interpretation.is_new_context(context):
+            return True
+        named = (models.EventInventory.objects.filter(pk=context.event_inventory_id)
+                 .values_list('interpretation_version', 'inventory_version').first()
+                 if context.event_inventory_id else None)
+        if named is None or tuple(named) != current_versions():
+            return True
     return _read_inventory(revision) is None
 
 
-def _retained_interpretation(encounter, interpreter, request):
-    """FINAL 6.3's second door, as ADJUDICATION P-2 amends it: the workspace's oldest stored SUCCEEDED answer to the
-    identical request - provider, adapter version, request sha256 and mode, the original run (never a reuse of one),
-    which recorded its exchange as _retained_answer requires - whose answer is a usable one (interpretation_effect:
-    answered, so never one whose reading at the current versions was refused, nor a hold, nor a cut-off answer) and was
-    not released for retry. None when there is none: nothing is reused."""
+def _retained_interpretation(encounter, interpreter, request, purpose=None):
+    """FINAL 6.3's second door, as ADJUDICATION P-2 amends it (FINAL-V2 7.4 door 2 for pass 2): the workspace's oldest
+    stored SUCCEEDED answer to the identical request - provider, adapter version, request sha256, purpose and mode, the
+    original run (never a reuse of one), which recorded its exchange as _retained_answer requires - whose answer is a
+    usable one (interpretation_effect: answered, so never one whose reading at the current versions was refused, nor a
+    hold, nor a cut-off answer, nor an appraisal settle refused) and was not released for retry. The reuse never
+    crosses a workspace (tenant isolation). None when there is none: nothing is reused."""
     from django.db.models import Exists, OuterRef
 
     priors = models.ProviderRun.objects.filter(
         Exists(models.ProviderExchange.objects.filter(run=OuterRef('pk'))),
         encounter__workspace=encounter.workspace, provider=interpreter.name,
         adapter_version=interpreter.adapter_version, request_sha256=request.canonical_sha256,
-        state=models.ProviderRun.SUCCEEDED, reused_from__isnull=True, purpose=INTERPRETATION,
+        state=models.ProviderRun.SUCCEEDED, reused_from__isnull=True, purpose=purpose or INTERPRETATION,
         scope__mode=interpreter.mode).order_by('created_at', 'pk')
     for prior in priors:
         if interpretation_effect(prior) == interpretation_holds.ANSWERED and not released_for_retry(prior):
@@ -1992,14 +2486,15 @@ def _retained_interpretation(encounter, interpreter, request):
     return None
 
 
-def _interpretation_failed_before(encounter, interpreter, request):
-    """FINAL 6.3's failed-before door (as _failed_before, for the interpreter): this encounter's newest attempt of the
-    identical request that was SENT and did not succeed - failed, a reading refused, or cut off (effects failed and
-    too_long); never a hold, which an operator's release ends, and never an unknown outcome, which is reconciled - or
-    None. A run released for one retry (FINAL 11.3) does not block: its retry is the one attempt it was released for."""
+def _interpretation_failed_before(encounter, interpreter, request, purpose=None):
+    """FINAL 6.3's failed-before door (as _failed_before, for the interpreter; FINAL-V2 7.4 door 4 for pass 2): this
+    encounter's newest attempt of the identical request that was SENT and did not succeed - failed, a reading refused,
+    cut off, or an appraisal settle refused (effects failed and too_long); never a hold, which an operator's release
+    ends, and never an unknown outcome, which is reconciled - or None. A run released for one retry (FINAL 11.3) does
+    not block: its retry is the one attempt it was released for."""
     attempts = models.ProviderRun.objects.filter(
         encounter=encounter, provider=interpreter.name, adapter_version=interpreter.adapter_version,
-        request_sha256=request.canonical_sha256, purpose=INTERPRETATION, sent=True,
+        request_sha256=request.canonical_sha256, purpose=purpose or INTERPRETATION, sent=True,
         state__in=(models.ProviderRun.FAILED, models.ProviderRun.SUCCEEDED)).order_by('-created_at', '-pk')
     for run in attempts:
         if interpretation_effect(run) not in (interpretation_holds.FAILED, interpretation_holds.TOO_LONG):
@@ -2009,9 +2504,9 @@ def _interpretation_failed_before(encounter, interpreter, request):
 
 
 def _turn_one_exchange(run):
-    """The one exchange of interpretation run ``run`` as ADJUDICATION P-6 reads it: the run's only exchange, turn 1,
-    whose response bytes are there and whose sha256 checks against the exchange's record, answering the run's own
-    request - or None. Its state and HTTP status are its reader's to judge: P-6 settles only a 200 answer from it
+    """The one exchange of reading run ``run`` as ADJUDICATION P-6 reads it: the run's only exchange, turn 1, whose
+    response bytes are there and whose sha256 checks against the exchange's record, answering the run's own request -
+    or None. Its state and HTTP status are its reader's to judge: P-6 settles only a 200 answer from it
     (_settle_from_exchange), and DECISIONS D53b records the hold any answer in it sets (_record_unsettled_holds)."""
     exchanges = list(run.exchanges.order_by('turn')[:2])
     if len(exchanges) != 1:
@@ -2025,13 +2520,14 @@ def _turn_one_exchange(run):
 
 
 def _settle_from_exchange(run) -> bool:
-    """ADJUDICATION P-6: an interpretation run left 'sending' by a dead worker or by a stage that no longer runs, or
-    recorded unknown and reconciled, whose one exchange (turn 1) was recorded succeeded with HTTP 200 and response bytes
-    whose sha256 checks (_turn_one_exchange), is settled SUCCEEDED from that exchange - the answer it holds - and its
-    settled path reads it, or records its hold, or fails its refused reading (_settled_answer, _settle_interpretation):
-    nothing is sent. The effect a stage recorded on it ('unknown') is dropped, since it described the run as it was and
-    never its answer (refutation of S09, finding 1). Every other run is left as it is (False)."""
-    if (run.provider != interpretation.PROVIDER or run.purpose != INTERPRETATION
+    """ADJUDICATION P-6: a reading run (pass 1 or pass 2) left 'sending' by a dead worker or by a stage that no longer
+    runs, or recorded unknown and reconciled, whose one exchange (turn 1) was recorded succeeded with HTTP 200 and
+    response bytes whose sha256 checks (_turn_one_exchange), is settled SUCCEEDED from that exchange - the answer it
+    holds - and its settled path reads it, or records its hold, or fails its refused reading (_settled_answer,
+    _settle_interpretation, _settle_appraisal): nothing is sent. The effect a stage recorded on it ('unknown') is
+    dropped, since it described the run as it was and never its answer (refutation of S09, finding 1). Every other run
+    is left as it is (False)."""
+    if (run.provider != interpretation.PROVIDER or run.purpose not in READING_PURPOSES
             or run.state not in (models.ProviderRun.SENDING, models.ProviderRun.UNKNOWN)):
         return False
     exchange = _turn_one_exchange(run)
@@ -2058,8 +2554,8 @@ def _settled_answer(job, interpreter, request):
     refutation of S09, findings 1 and 2): its keyed run (keyed_interpretation_run) when that run SUCCEEDED - the stale
     sweep's, or one P-6 settled from its recorded exchange - holds the answer to the identical request (provider,
     adapter version, request sha256 and mode, as the stored-answer door matches them) and no stage has settled its
-    outcome yet (no effect recorded that still describes it). _settle_interpretation then reads it, records its hold
-    (P-5: an answer naming another model is never read and never paid for again) or fails its refused or cut-off reading,
+    outcome yet (no effect recorded that still describes it). The stage's settle then reads it, records its hold (P-5:
+    an answer naming another model is never read and never paid for again) or fails its refused or cut-off reading,
     exactly as the stage that sent it would have: nothing is sent (D11). None otherwise - a run already settled, or one
     that answers another request - and the doors decide."""
     run = keyed_interpretation_run(job)
@@ -2071,10 +2567,31 @@ def _settled_answer(job, interpreter, request):
 
 
 def _queue_analyze(job, inventory):
-    """FINAL 6.1: 'analyze:<revision>:<inventory>' for an inventory read (one analyze per inventory)."""
+    """FINAL 6.1: 'analyze:<revision>:<inventory>' for an inventory read (one analyze per inventory) - unless ``job`` no
+    longer serves the saved state (FINAL-V2 amendment 1, 3.4's successor gate): nothing is queued, and the inventory
+    stays stored for reuse."""
+    if not _successor_allowed(job):
+        return None
     return enqueue(Job.ANALYZE, encounter=job.encounter, revision=job.revision,
                    key=f'{Job.ANALYZE}:{job.revision_id}:{inventory.pk}', requested_by=job.requested_by)
 
+
+def _queue_appraise(job, extraction, tail):
+    """FINAL-V2 7.4: the appraise stage for pass 1's read answer ``extraction``, keyed by the appraisal request's sha
+    (``tail``: its first 16 hex, or the reason it could not be built) - unless ``job`` no longer serves the saved state
+    (3.4's successor gate). An existing stage of the key is returned, so one extraction run and claim set make one
+    appraise stage."""
+    if not _successor_allowed(job):
+        return None
+    return enqueue(APPRAISE, encounter=job.encounter, revision=job.revision,
+                   key=_appraise_key(job.revision, extraction, tail), requested_by=job.requested_by)
+
+
+# --- the v1 chain's reading (gemini-events@1; tests only) -----------------------------------------------------------
+#
+# The one-pass reading of design/FINAL.md 6.3, kept for the test-only v1 chain (_v1_chain): the retired v1 modules it
+# reads (interpretation.read, normalize, facts, assess) are imported where it calls them, never at load, so no new-path
+# code reaches one (FINAL-V2 5.0; 6a's RETIRED gate proves it).
 
 def _interpretation_child(request, response_bytes, text):
     """The reading of one stored answer (FINAL 6.3, Read), DB-free in a forked child under a wall clock (bounded): the
@@ -2092,15 +2609,19 @@ def _interpretation_child(request, response_bytes, text):
     return 'read', normalize.normalize(parsed, text).content()
 
 
+def _request_of(run):
+    return ProviderRequest(provider=run.provider, adapter_version=run.adapter_version, body=run.request_body,
+                           canonical_sha256=run.request_sha256, contexts=tuple(run.contexts or ()))
+
+
 def _read_answer(job, run):
-    """The EventInventory of succeeded run ``run``'s stored answer at the current versions: the one recorded for it, or
-    one recorded now (FINAL 6.3, Read) - the stored bytes' sha256 re-checked, the reading run in a forked child counted
-    against the stage's scope (sentinel.run_counted), the row written through interpretation.store's one write path
-    (store.row with the revision text, store.refused_row for a refusal) and gated. A read that cannot be completed fails
-    the stage and writes no row: stored bytes that no longer match their sha256 are a definite failure of the answer
-    (its effect 'failed': the retry door); a child that overran or failed, a row the store refused or a write gate that
-    refused is this server's failure, never the answer's, so the answer stays reusable - read again, with nothing sent,
-    by the stored-answer door of a later stage (a new upload of the same text included)."""
+    """The v1 chain's EventInventory of succeeded run ``run``'s stored answer at the current versions: the one recorded
+    for it, or one recorded now (FINAL 6.3, Read) - the stored bytes' sha256 re-checked, the reading run in a forked
+    child counted against the stage's scope (sentinel.run_counted), the row written through interpretation.store's one
+    write path (store.row with the revision text, store.refused_row for a refusal) and gated. A read that cannot be
+    completed fails the stage and writes no row: stored bytes that no longer match their sha256 are a definite failure
+    of the answer (its effect 'failed': the retry door); a child that overran or failed, a row the store refused or a
+    write gate that refused is this server's failure, never the answer's, so the answer stays reusable."""
     existing = models.EventInventory.objects.filter(
         provider_run=run, interpretation_version=interpretation.INTERPRETATION_VERSION,
         inventory_version=interpretation.INVENTORY_VERSION).first()
@@ -2111,10 +2632,8 @@ def _read_answer(job, run):
     if hashlib.sha256(data).hexdigest() != run.response_sha256:
         _mark_effect(run, interpretation_holds.FAILED)
         raise StageFailure(STORED_ANSWER_CHANGED)
-    request = ProviderRequest(provider=run.provider, adapter_version=run.adapter_version, body=run.request_body,
-                              canonical_sha256=run.request_sha256, contexts=tuple(run.contexts or ()))
     try:
-        result = sentinel.run_counted(_interpretation_child, request, data, revision.text,
+        result = sentinel.run_counted(_interpretation_child, _request_of(run), data, revision.text,
                                       seconds=settings.JOB_DEADLINE_SECONDS['analyze'],
                                       memory_bytes=settings.BOUNDED_MEMORY_BYTES)
     except bounded.Overrun as exc:
@@ -2138,57 +2657,260 @@ def _read_answer(job, run):
     return models.EventInventory.objects.create(**{name: fields[name] for name in inventory_store.FIELDS})
 
 
+# --- design v2's reading: pass 1's extract-read, check and claim; pass 2's read and settle (FINAL-V2 7.4, 7.5) ---------
+
+def _document_of(revision):
+    """(text, pages, kind) of what design v2's two requests frame: the revision text, its pages tiled as a participant's
+    are (_participant_pages: hand-off 1a#4, never the raw extraction spans) and its kind."""
+    kind, _, _ = _participant_document(revision)
+    return revision.text, _participant_pages(revision), kind
+
+
+def _not_built(exc):
+    """What a forked child returns for adapter.NotBuilt: its sentence, reason, effect, unframed reason, claim count and
+    the refusal's stage and reason (picklable values only)."""
+    refusal = exc.refusal
+    return ('not_built', {'message': str(exc), 'reason': exc.reason, 'effect': exc.effect, 'unframed': exc.unframed,
+                          'claims': exc.claims, 'stage': getattr(refusal, 'stage', None),
+                          'refusal': getattr(refusal, 'reason', None)})
+
+
+def _checked_findings(holder):
+    """The check adapter.build_appraisal_request is given (DECISIONS D206): contract/checks.check of the revision and the
+    answer, its findings handed to the claims, the whole Checked kept in ``holder`` for settle."""
+    def check(text, pages, answer):
+        from .interpretation.contract import checks as contract_checks
+
+        holder['checked'] = contract_checks.check(text, pages, answer)
+        return holder['checked'].findings
+    return check
+
+
+def _extraction_child(text, pages, kind, request, response_bytes):
+    """Pass 1's extract-read, check and claim (FINAL-V2 8.1 step 5b), DB-free in a forked child: the appraisal request
+    built from the revision and pass 1's stored answer (adapter.build_appraisal_request: the stored request rebuilt and
+    compared, the answer read by contract/extract_read, the checks of 3.1, the claim set and the bound). ('built',
+    the appraisal request's canonical sha256, its claim count) or _not_built's tuple."""
+    try:
+        built = interpretation_adapter.build_appraisal_request(text, pages, kind, request, response_bytes,
+                                                               check=_checked_findings({}))
+    except interpretation_adapter.NotBuilt as exc:
+        return _not_built(exc)
+    return 'built', built.request.canonical_sha256, len(built.built.claim_set.claims)
+
+
+def _usage_of(run):
+    from .interpretation.contract import settle as contract_settle
+
+    return contract_settle.usage_of(dict(run.usage or {}) if not run.reused_from_id else {})
+
+
+def _appraisal_child(text, pages, kind, extraction_request, extraction_bytes, appraisal_request, appraisal_bytes,
+                     usages, bindings):
+    """Pass 2's read and settle (FINAL-V2 3.2-3.3, 7.4), DB-free in a forked child: the appraisal request built again
+    from the revision and pass 1's stored answer (pure) and compared with the request the appraisal run recorded, the
+    answer read against that claim set (adapter.read_appraisal), settle over pass 1's answer, the checks, the claim set
+    and pass 2's answer, and the row written as store.row_v2 writes it (checked by store.load_v2 before it is
+    returned). ('read', the row's FIELDS_V2), ('unhealthy', the health measures), ('refused', stage, reason) for an
+    answer the reader refused, ('moved', reason) when the appraisal run answers another request, or _not_built's
+    tuple."""
+    from .interpretation.contract import settle as contract_settle
+
+    holder = {}
+    try:
+        built = interpretation_adapter.build_appraisal_request(text, pages, kind, extraction_request, extraction_bytes,
+                                                               check=_checked_findings(holder))
+    except interpretation_adapter.NotBuilt as exc:
+        return _not_built(exc)
+    if built.request.canonical_sha256 != appraisal_request.canonical_sha256:
+        return 'moved', APPRAISE_MOVED
+    read = interpretation_adapter.read_appraisal(built, appraisal_request, appraisal_bytes)
+    if not hasattr(read, 'verdicts'):  # a Refusal: the envelope, the JSON, the schema, the bounds or the claims
+        return 'refused', read.stage, read.reason
+    settled = contract_settle.settle(built.answer, holder['checked'], built.built.claim_set, built.built.indistinct,
+                                     read, contract_settle.Usages(*usages))
+    if isinstance(settled, contract_settle.Unhealthy):
+        health = settled.health
+        return 'unhealthy', {'pairs': health.pairs, 'not_rejected': health.not_rejected, 'claims': health.claims,
+                             'established': health.established, 'verdicts': health.verdicts, 'missing': health.missing,
+                             'refused': [item.value for item in health.refused]}
+    fields = inventory_store.row_v2(revision_text=text, events=settled.events, verification=settled.verification,
+                                    **bindings)
+    return 'read', fields
+
+
+def _run_reading_child(fn, *args):
+    """``fn(*args)`` in a forked child counted against the stage's scope (sentinel.run_counted), under the analyze
+    deadline and the bounded memory: StageFailure for an overrun or a child that failed - this server's failure, never
+    the answer's, so the answer stays reusable."""
+    try:
+        return sentinel.run_counted(fn, *args, seconds=settings.JOB_DEADLINE_SECONDS['analyze'],
+                                    memory_bytes=settings.BOUNDED_MEMORY_BYTES)
+    except bounded.Overrun as exc:
+        raise StageFailure(READ_OVERRUN_MESSAGE.format(reason=exc.reason)) from None
+    except RuntimeError:
+        raise StageFailure(READ_FAILED_MESSAGE) from None
+
+
+def _refused_extraction_row(job, run, built):
+    """The NotBuilt REFUSED record (adapter.NotBuilt's docstring; r3b's R1; FINAL-V2 7.5's answer refused by the
+    reader): pass 1's refused row - the one EventInventory of ``run`` at the current versions (an existing one is
+    used) - written through store.refused_row_v2 and gated."""
+    interpretation_version, inventory_version = current_versions()
+    existing = models.EventInventory.objects.filter(
+        provider_run=run, interpretation_version=interpretation_version, inventory_version=inventory_version).first()
+    if existing is not None:
+        return existing
+    from types import SimpleNamespace
+
+    revision = job.revision
+    try:
+        fields = inventory_store.refused_row_v2(
+            SimpleNamespace(stage=built['stage'], reason=built['refusal']), encounter_id=job.encounter_id,
+            revision_id=revision.pk, provider_run_id=run.pk, text_sha256=revision.text_sha256,
+            request_sha256=run.request_sha256, response_sha256=run.response_sha256)
+    except (inventory_store.StoreError, TypeError, ValueError):
+        log.exception('the refused reading of interpretation run %s could not be stored', run.pk)
+        raise StageFailure(READ_FAILED_MESSAGE) from None
+    _gate('interpret', job.encounter)
+    return models.EventInventory.objects.create(**{name: fields[name] for name in inventory_store.FIELDS_V2})
+
+
+def _settle_outcome(run, outcome, hold, *, failed_message, cut_off_message):
+    """What a reading stage does with a definite outcome other than a read answer (interpretation.holds' table): a
+    standing hold ends the stage paused; a cut-off answer TOO_LONG; anything else a definite failure, with the recorded
+    retry door (FINAL 11.3; FINAL-V2 7.5)."""
+    if outcome.effect == interpretation_holds.HOLD and hold is not None:
+        raise StageCancelled(interpretation_holds.PAUSED_MESSAGE)
+    if outcome.effect == interpretation_holds.TOO_LONG:
+        raise StageFailure(cut_off_message)
+    if outcome.effect == interpretation_holds.HOLD:  # an answer that is never read, whose hold was released (or unsent)
+        raise StageFailure(failed_message)
+    raise StageFailure(f'{failed_message} {outcome.why}'.strip())
+
+
 def _settle_interpretation(job, run, *, reused=False):
-    """What the stage does with ``run``'s outcome (FINAL 6.3 and 11.1; interpretation.holds' table), recording its effect
-    on the run: an answer read - its inventory recorded 'read' - queues the analyze; an outcome still unknown is left to
-    the reconcile flow, the encounter blocked on it; a hold (holds.settle records it, one per answer) ends the stage
-    paused; anything else - a refused reading (recorded 'refused'), a cut-off answer, a definite failure, a request not
-    sent - ends it failed, with the recorded retry door (FINAL 11.3) where it applies. Never a retry, never a fallback,
-    never the legacy reader."""
+    """What the interpret stage does with ``run``'s outcome (FINAL 6.3 and 11.1; FINAL-V2 7.4, 7.5;
+    interpretation.holds' table), recording its effect on the run: an answer read queues the next stage; an outcome
+    still unknown is left to the reconcile flow, the encounter blocked on it; a hold (holds.settle records it, one per
+    answer) ends the stage paused; anything else - a refused reading (recorded 'refused'), a cut-off answer, a definite
+    failure, a request not sent - ends it failed, with the recorded retry door (FINAL 11.3) where it applies. Never a
+    retry, never a fallback, never the legacy reader.
+
+    Design v2: an answer of pass 1 is read, checked and claimed (_extraction_child) and the appraise stage is queued
+    under the appraisal request's sha (FINAL-V2 7.4 [R:MO-5]): NO inventory is written from pass 1 alone. A reading the
+    reader refuses is pass 1's refused row and the retry door (adapter.NotBuilt REFUSED, D229). A claim set that cannot
+    be built or is over its bound is the appraise stage's door 0 (queued under the reason)."""
     if run.state == models.ProviderRun.UNKNOWN:
         _mark_effect(run, interpretation_holds.UNKNOWN)
         return {'provider': models.ProviderRun.UNKNOWN, 'run': str(run.pk)}
     if run.state not in (models.ProviderRun.SUCCEEDED, models.ProviderRun.FAILED):
         _mark_effect(run, interpretation_holds.NONE)
         raise StageFailure(INTERPRET_NOT_SENT_MESSAGE)
-    inventory = _read_answer(job, run) if run.state == models.ProviderRun.SUCCEEDED else None
-    outcome, hold = interpretation_holds.settle(run, inventory=inventory)
-    _mark_effect(run, outcome.effect)
-    if outcome.effect == interpretation_holds.ANSWERED:
-        _queue_analyze(job, inventory)
-        return {'provider': 'reused' if reused else run.state, 'run': str(run.pk), 'inventory': str(inventory.pk)}
-    if outcome.effect == interpretation_holds.HOLD and hold is not None:
+    if _v1_chain():
+        inventory = _read_answer(job, run) if run.state == models.ProviderRun.SUCCEEDED else None
+        outcome, hold = interpretation_holds.settle(run, inventory=inventory)
+        _mark_effect(run, outcome.effect)
+        if outcome.effect == interpretation_holds.ANSWERED:
+            _queue_analyze(job, inventory)
+            return {'provider': 'reused' if reused else run.state, 'run': str(run.pk), 'inventory': str(inventory.pk)}
+        _settle_outcome(run, outcome, hold, failed_message=INTERPRET_FAILED_MESSAGE,
+                        cut_off_message=INTERPRET_CUT_OFF_MESSAGE)
+    outcome, hold = interpretation_holds.settle(run)
+    if outcome.effect != interpretation_holds.ANSWERED:
+        _mark_effect(run, outcome.effect)
+        _settle_outcome(run, outcome, hold, failed_message=INTERPRET_FAILED_MESSAGE,
+                        cut_off_message=INTERPRET_CUT_OFF_MESSAGE)
+    data = bytes(run.response_bytes or b'')
+    if hashlib.sha256(data).hexdigest() != run.response_sha256:
+        _mark_effect(run, interpretation_holds.FAILED)
+        raise StageFailure(STORED_ANSWER_CHANGED)
+    text, pages, kind = _document_of(job.revision)
+    built = _run_reading_child(_extraction_child, text, pages, kind, _request_of(run), data)
+    if built[0] == 'not_built' and built[1]['effect'] == interpretation_adapter.REFUSED:
+        row = _refused_extraction_row(job, run, built[1])
+        outcome, hold = interpretation_holds.settle(run, inventory=row)
+        _mark_effect(run, outcome.effect)
+        _settle_outcome(run, outcome, hold, failed_message=INTERPRET_FAILED_MESSAGE,
+                        cut_off_message=INTERPRET_CUT_OFF_MESSAGE)
+    _mark_effect(run, interpretation_holds.ANSWERED)
+    tail = built[1][:16] if built[0] == 'built' else built[1]['reason']
+    queued = _queue_appraise(job, run, tail)
+    out = {'provider': 'reused' if reused else run.state, 'run': str(run.pk)}
+    if queued is not None:
+        out['appraise'] = str(queued.pk)
+    return out
+
+
+def _interpreter_or_pause(job, purpose=None):
+    """The configured interpreter, or the not-sent run of a pause (FINAL 11.2; FINAL-V2 7.4 door 6): the interpreter's
+    mode 'disabled' - or an interpreter that cannot be configured - or the installation-wide hold records a not-sent
+    run with scope.held and ends the stage CANCELLED (paused, resumable). The v1 chain's interpreter under it."""
+    paused, interpreter, why = interpretation_holds.paused_reason(), None, interpretation_holds.PAUSED_MESSAGE
+    if paused is None:
+        try:
+            interpreter = (interpretation_adapter.get_interpreter() if _v1_chain()
+                           else interpretation_adapter.get_interpreter_v2())
+        except ProviderUnavailable as exc:  # misconfigured: as disabled until an operator configures it
+            paused, why = interpretation_holds.HELD_DISABLED, str(exc)
+        else:
+            paused = interpretation_holds.HELD_DISABLED if interpreter is None else None
+    if paused is not None:
+        _interpretation_not_sent(job, why, mode=interpretation_holds.mode(), held=paused, purpose=purpose)
         raise StageCancelled(interpretation_holds.PAUSED_MESSAGE)
-    if outcome.effect == interpretation_holds.TOO_LONG:
-        raise StageFailure(INTERPRET_CUT_OFF_MESSAGE)
-    if outcome.effect == interpretation_holds.HOLD:  # an answer that is never read, whose hold was released (or unsent)
-        raise StageFailure(INTERPRET_FAILED_MESSAGE)
-    raise StageFailure(f'{INTERPRET_FAILED_MESSAGE} {outcome.why}'.strip())
+    return interpreter
+
+
+def _send_gates(job, interpreter, request, purpose):
+    """The live gate and the write gate, asked before the send (each refusal a not-sent run: every outcome is a run),
+    then D53's last ask: a hold an answer no stage settled sets is recorded now, and a standing hold pauses the stage."""
+    revision, encounter = job.revision, job.encounter
+    for refused, check in ((LIVE_GATE, lambda: _live_gate(job, interpreter, revision, encounter)),
+                           # the inventory write is gated after the read; asked here first too, so an answer this
+                           # process could not record is never paid for
+                           (SENTINEL, lambda: _gate('interpret.send', encounter))):
+        try:
+            check()
+        except StageFailure as exc:
+            _interpretation_not_sent(job, f'Nothing was sent: {exc}', mode=interpreter.mode, interpreter=interpreter,
+                                     request=request, started=True, refused=refused, effect=interpretation_holds.NONE,
+                                     purpose=purpose)
+            raise
+    _record_unsettled_holds()
+    if interpretation_holds.is_held():
+        _interpretation_not_sent(job, interpretation_holds.PAUSED_MESSAGE, mode=interpreter.mode,
+                                 held=interpretation_holds.HELD_HOLD, purpose=purpose)
+        raise StageCancelled(interpretation_holds.PAUSED_MESSAGE)
 
 
 def stage_interpret(job):
-    """The revision's interpretation (FINAL 6.3): Gemini reads the documented clinical events once, and the answer read
-    is the EventInventory every later stage reads.
+    """The revision's interpretation (FINAL 6.3; FINAL-V2 7.4's pass 1): Gemini reads the documented clinical events
+    once; design v2 then reads, checks and claims the answer and queues pass 2, the appraisal.
 
-    Before anything is built: the current revision only, with its text extracted; the size bound (over it, a not-sent
-    run and a failed stage that says so plainly); the interpreter's mode and the installation-wide hold (disabled or
-    held - or an interpreter that cannot be configured - a not-sent run with scope.held, and the stage ends CANCELLED:
-    paused, resumable; FINAL 11.2); then the request, built purely from the text, its page framing and the
-    instructions (one that cannot be framed: a not-sent run, failed). Before the doors, a reconciliation's stage settles
-    the run it was released for from its recorded exchange when it can (ADJUDICATION P-6). The doors, in predict's
-    order: an inventory already read for this revision and versions (no send: analyze); the run a settled or
-    after-reconcile key names, settled itself when it holds the answer to the identical request and no stage settled it
-    yet (_settled_answer: read, its hold recorded, or its refused or cut-off reading failed - nothing sent); a stored
-    answer to the identical request (reused, nothing sent; P-2); the encounter-wide unknown-outcome block; the
-    failed-before door (skipping a run released for one retry); the stale sweep's settled path stops here, recording
-    that nothing was sent, resumable (FINAL 6.9: it never sends - only a member's Resume of it may); the live gate and
-    the write gate asked before the send (each refusal a not-sent run: every outcome is a run); then one send (_send,
-    purpose 'interpretation'), and its outcome settled (_settle_interpretation)."""
+    Before anything is built: a reconciliation's stage settles the run it was released for from its recorded exchange
+    when it can (ADJUDICATION P-6; it never sends); then the start check (FINAL-V2 amendment 1, 3.4: superseded when
+    the revision is no longer current, or when the details were restored to the current codes'); the revision's text
+    extracted; the size bound (over it, a not-sent run and a failed stage that says so plainly); the interpreter's mode
+    and the installation-wide hold (disabled or held - or an interpreter that cannot be configured - a not-sent run with
+    scope.held, and the stage ends CANCELLED: paused, resumable; FINAL 11.2); then the request, built purely from the
+    text, its page framing and the instructions (one that cannot be framed: a not-sent run, failed). The doors, in
+    predict's order: an inventory already read for this revision and versions (no send: analyze); design v2: an
+    extraction already read for the identical request (no send: appraise); the run a settled or after-reconcile key
+    names, settled itself when it holds the answer to the identical request and no stage settled it yet
+    (_settled_answer); a stored answer to the identical request (reused, nothing sent; P-2); the encounter-wide
+    unknown-outcome block; the failed-before door (skipping a run released for one retry); the stale sweep's settled
+    path stops here, recording that nothing was sent, resumable (FINAL 6.9); the live gate and the write gate asked
+    before the send; then one send (_send, purpose 'interpretation'), and its outcome settled
+    (_settle_interpretation)."""
     revision, encounter = job.revision, job.encounter
+    reconciled = _keyed_run(job, 'after-reconcile')
+    if reconciled is not None:
+        _settle_from_exchange(reconciled)  # P-6: an answer the unknown run already holds is read, never paid for again
+    _start_check(job)
     encounter.refresh_from_db()
     revision.refresh_from_db()
     if encounter.current_revision_id != revision.pk:
-        return {'skipped': 'a newer revision exists; nothing was sent'}
+        return _superseded_result(review.SUPERSEDED_REVISION)
     if revision.extraction_status not in READABLE:
         return {'skipped': 'the revision has no extracted text; nothing was sent'}
     bound = _size_bound(revision)
@@ -2196,32 +2918,24 @@ def stage_interpret(job):
         _interpretation_not_sent(job, INTERPRET_TOO_LONG_MESSAGE, mode=interpretation_holds.mode(), refused=SIZE,
                                  bound=bound, effect=interpretation_holds.TOO_LONG)
         raise StageFailure(INTERPRET_TOO_LONG_MESSAGE)
-    paused, interpreter, why = interpretation_holds.paused_reason(), None, interpretation_holds.PAUSED_MESSAGE
-    if paused is None:
-        try:
-            interpreter = interpretation_adapter.get_interpreter()
-        except ProviderUnavailable as exc:  # misconfigured: as disabled until an operator configures it
-            paused, why = interpretation_holds.HELD_DISABLED, str(exc)
-        else:
-            paused = interpretation_holds.HELD_DISABLED if interpreter is None else None
-    if paused is not None:
-        _interpretation_not_sent(job, why, mode=interpretation_holds.mode(), held=paused)
-        raise StageCancelled(interpretation_holds.PAUSED_MESSAGE)
-    kind, _, _ = _participant_document(revision)
+    interpreter = _interpreter_or_pause(job)
+    text, pages, kind = _document_of(revision)
     try:
-        request = interpreter.build_request(revision.text, _participant_pages(revision), kind)
+        request = (interpreter.build_request(text, pages, kind) if _v1_chain()
+                   else interpreter.build_extraction_request(text, pages, kind))
     except ProviderUnavailable as exc:
         _interpretation_not_sent(job, str(exc), mode=interpreter.mode, interpreter=interpreter, refused=UNBUILT,
-                                 effect=interpretation_holds.NONE)
+                                 effect=interpretation_holds.NONE, unframed=getattr(exc, 'unframed', ''))
         raise StageFailure(INTERPRET_UNBUILT_MESSAGE) from None
 
-    reconciled = _keyed_run(job, 'after-reconcile')
-    if reconciled is not None:
-        _settle_from_exchange(reconciled)  # P-6: an answer the unknown run already holds is read, never paid for again
     existing = _read_inventory(revision, interpreter.mode)
     if existing is not None:
         _queue_analyze(job, existing)
         return {'provider': 'read_before', 'run': str(existing.provider_run_id), 'inventory': str(existing.pk)}
+    if not _v1_chain():
+        read_before = _read_extraction(revision, interpreter.mode, request)
+        if read_before is not None:  # FINAL-V2 7.4: pass 1's answer was read; pass 2 is what is owed
+            return _settle_interpretation(job, read_before, reused=True) | {'provider': 'read_before'}
     settled = _settled_answer(job, interpreter, request)
     if settled is not None:
         # FINAL 6.9 and P-6: the answer the keyed run holds is settled as the stage that sent it would have settled it -
@@ -2245,27 +2959,215 @@ def stage_interpret(job):
         _interpretation_not_sent(job, INTERPRET_SETTLED_MESSAGE, mode=interpreter.mode, interpreter=interpreter,
                                  request=request, started=True, refused=SETTLED, effect=interpretation_holds.NONE)
         raise StageCancelled(INTERPRET_SETTLED_MESSAGE)
-    for refused, check in ((LIVE_GATE, lambda: _live_gate(job, interpreter, revision, encounter)),
-                           # the inventory write is gated after the read (_read_answer); asked here first too, so an
-                           # answer this process could not record - its sentinel not installed and proven, or a denied
-                           # execution already counted - is never paid for
-                           (SENTINEL, lambda: _gate('interpret.send', encounter))):
-        try:
-            check()
-        except StageFailure as exc:
-            _interpretation_not_sent(job, f'Nothing was sent: {exc}', mode=interpreter.mode, interpreter=interpreter,
-                                     request=request, started=True, refused=refused, effect=interpretation_holds.NONE)
-            raise
-    # D53: the last ask before a request leaves - a hold an answer no stage settled sets is recorded now (D53b: one kept
-    # only in an unknown or sending run's exchange too), and then stops this send as any standing hold does (every door
-    # above sends nothing, so none of them is stopped by it)
-    _record_unsettled_holds()
-    if interpretation_holds.is_held():
-        _interpretation_not_sent(job, interpretation_holds.PAUSED_MESSAGE, mode=interpreter.mode,
-                                 held=interpretation_holds.HELD_HOLD)
-        raise StageCancelled(interpretation_holds.PAUSED_MESSAGE)
+    _send_gates(job, interpreter, request, INTERPRETATION)
     run = _send(job, interpreter, request, service_date=None, purpose=INTERPRETATION, scope={'mode': interpreter.mode})
     return _settle_interpretation(job, run)
+
+
+def _extraction_of(job):
+    """The pass-1 run an appraise stage's key names: this revision's, purpose 'interpretation', SUCCEEDED, recorded by
+    design v2's adapter, its answer read (effect ANSWERED) - else None."""
+    pk, _ = _appraise_parts(job)
+    if pk is None:
+        return None
+    run = models.ProviderRun.objects.filter(pk=pk, encounter_id=job.encounter_id, revision_id=job.revision_id,
+                                            purpose=INTERPRETATION).first()
+    if (run is None or run.state != models.ProviderRun.SUCCEEDED
+            or run.adapter_version != interpretation.ADAPTER_VERSION_V2
+            or _recorded_effect(run) != interpretation_holds.ANSWERED):
+        return None
+    return run
+
+
+def _appraisal_not_sent(job, error, *, mode, interpreter=None, request=None, started=False, **scope):
+    return _interpretation_not_sent(job, error, mode=mode, interpreter=interpreter, request=request, started=started,
+                                    purpose=APPRAISAL, **scope)
+
+
+def _appraisal_request_of(job, extraction):
+    """Door 0 (FINAL-V2 7.4): pass 2's request built again from the revision and the stored extraction (pure, in a
+    forked child): (the ProviderRequest, its claim count). A claim set over the per-request bound records a not-sent
+    run whose effect is TOO_LONG and fails the stage (never re-sent for a member, C5); one that cannot be built records
+    a not-sent run, refused unbuilt, and fails it; a stored first reading the reader refuses is pass 1's refused row
+    (as the interpret stage records it)."""
+    text, pages, kind = _document_of(job.revision)
+    data = bytes(extraction.response_bytes or b'')
+    built = _run_reading_child(_appraisal_request_child, text, pages, kind, _request_of(extraction), data)
+    if built[0] == 'built':
+        return built[1], built[2]
+    info = built[1]
+    mode = interpretation_holds.mode()
+    if info['effect'] == interpretation_adapter.TOO_LONG:
+        _appraisal_not_sent(job, info['message'], mode=mode, refused=CLAIMS, claims=info['claims'],
+                            effect=interpretation_holds.TOO_LONG, extraction=str(extraction.pk))
+        raise StageFailure(APPRAISE_TOO_LONG_MESSAGE)
+    if info['effect'] == interpretation_adapter.REFUSED:  # not reached after pass 1 read it: recorded as pass 1's
+        row = _refused_extraction_row(job, extraction, info)
+        outcome, hold = interpretation_holds.settle(extraction, inventory=row)
+        _mark_effect(extraction, outcome.effect)
+        _settle_outcome(extraction, outcome, hold, failed_message=INTERPRET_FAILED_MESSAGE,
+                        cut_off_message=INTERPRET_CUT_OFF_MESSAGE)
+    _appraisal_not_sent(job, info['message'], mode=mode, refused=UNBUILT, unframed=info['unframed'],
+                        effect=interpretation_holds.NONE, extraction=str(extraction.pk))
+    raise StageFailure(APPRAISE_UNBUILT_MESSAGE)
+
+
+def _appraisal_request_child(text, pages, kind, request, response_bytes):
+    """Door 0's build in a forked child: ('built', the appraisal ProviderRequest, its claim count) or _not_built's
+    tuple."""
+    try:
+        built = interpretation_adapter.build_appraisal_request(text, pages, kind, request, response_bytes,
+                                                               check=_checked_findings({}))
+    except interpretation_adapter.NotBuilt as exc:
+        return _not_built(exc)
+    return 'built', built.request, len(built.built.claim_set.claims)
+
+
+def _appraised_inventory(extraction, mode=None):
+    """Door 1 (FINAL-V2 7.4): an inventory already read for ``extraction`` (its pass-1 run) at the current versions, in
+    ``mode`` when given, or None."""
+    interpretation_version, inventory_version = current_versions()
+    rows = models.EventInventory.objects.filter(
+        provider_run=extraction, state=models.EventInventory.READ, interpretation_version=interpretation_version,
+        inventory_version=inventory_version)
+    if mode is not None:
+        rows = rows.filter(provider_run__scope__mode=mode)
+    return rows.order_by('-created_at', '-pk').first()
+
+
+def _settle_appraisal(job, run, extraction, *, reused=False):
+    """What the appraise stage does with pass 2's ``run`` (FINAL-V2 7.4, 7.5; interpretation.holds' table, recording its
+    effect on the run): an outcome still unknown is left to the reconcile flow; a hold pauses; a cut-off answer is
+    TOO_LONG; a definite failure fails with the retry door (a retry re-sends pass 2 only); an answer is read and settled
+    in a forked child (_appraisal_child) - an answer the reader refuses, or an appraisal settle refuses whole as
+    unhealthy (3.2.6), is recorded ON THE APPRAISAL RUN (no inventory row) and fails the stage with the retry door; a
+    settled inventory is written 'read', bound to both runs (store.row_v2), gated, and the analyze queued."""
+    if run.state == models.ProviderRun.UNKNOWN:
+        _mark_effect(run, interpretation_holds.UNKNOWN)
+        return {'provider': models.ProviderRun.UNKNOWN, 'run': str(run.pk)}
+    if run.state not in (models.ProviderRun.SUCCEEDED, models.ProviderRun.FAILED):
+        _mark_effect(run, interpretation_holds.NONE)
+        raise StageFailure(INTERPRET_NOT_SENT_MESSAGE)
+    outcome, hold = interpretation_holds.settle(run)
+    if outcome.effect != interpretation_holds.ANSWERED:
+        _mark_effect(run, outcome.effect)
+        _settle_outcome(run, outcome, hold, failed_message=APPRAISE_FAILED_MESSAGE,
+                        cut_off_message=APPRAISE_CUT_OFF_MESSAGE)
+    existing = _appraised_inventory(extraction)
+    if existing is not None and existing.appraisal_run_id in (run.pk, run.reused_from_id):
+        _mark_effect(run, interpretation_holds.ANSWERED)
+        _queue_analyze(job, existing)
+        return {'provider': 'read_before', 'run': str(run.pk), 'inventory': str(existing.pk)}
+    data, first = bytes(run.response_bytes or b''), bytes(extraction.response_bytes or b'')
+    if hashlib.sha256(data).hexdigest() != run.response_sha256:
+        _mark_effect(run, interpretation_holds.FAILED)
+        raise StageFailure(STORED_ANSWER_CHANGED)
+    revision = job.revision
+    text, pages, kind = _document_of(revision)
+    bindings = {'encounter_id': job.encounter_id, 'revision_id': revision.pk, 'provider_run_id': extraction.pk,
+                'appraisal_run_id': run.pk, 'text_sha256': revision.text_sha256,
+                'request_sha256': extraction.request_sha256, 'response_sha256': extraction.response_sha256,
+                'appraisal_request_sha256': run.request_sha256, 'appraisal_response_sha256': run.response_sha256}
+    try:
+        result = _run_reading_child(_appraisal_child, text, pages, kind, _request_of(extraction), first,
+                                    _request_of(run), data, (_usage_of(extraction), _usage_of(run)), bindings)
+    except StageFailure:
+        raise
+    if result[0] == 'refused':
+        from types import SimpleNamespace
+
+        refused = SimpleNamespace(stage=result[1], reason=result[2])
+        outcome, _ = interpretation_holds.settle(run, refused=refused)
+        _mark_effect(run, outcome.effect, refused=READING_REFUSED, stage=result[1])
+        raise StageFailure(f'{APPRAISE_FAILED_MESSAGE} {outcome.why}'.strip())
+    if result[0] == 'unhealthy':
+        from types import SimpleNamespace
+
+        measures = ', '.join(result[1]['refused']) or 'health'
+        refused = SimpleNamespace(stage='health', reason=APPRAISE_UNHEALTHY_MESSAGE.format(measures=measures))
+        outcome, _ = interpretation_holds.settle(run, refused=refused)
+        _mark_effect(run, outcome.effect, refused=UNHEALTHY, health=result[1])
+        raise StageFailure(refused.reason)
+    if result[0] != 'read':  # the claim set moved, or could not be built again: nothing settled from it
+        raise StageFailure(APPRAISE_UNBUILT_MESSAGE)
+    fields = result[1]
+    _gate('appraise', job.encounter)
+    inventory = models.EventInventory.objects.create(**{name: fields[name] for name in inventory_store.FIELDS_V2})
+    _mark_effect(run, interpretation_holds.ANSWERED)
+    _queue_analyze(job, inventory)
+    return {'provider': 'reused' if reused else run.state, 'run': str(run.pk), 'inventory': str(inventory.pk)}
+
+
+def stage_appraise(job):
+    """Pass 2, the appraisal (FINAL-V2 7.4): a second Gemini call judges each claim CPT Studio made of pass 1's answer
+    against the document, and settle makes the ONE EventInventory row every later stage reads.
+
+    The start check (FINAL-V2 amendment 1, 3.4) comes first, after a reconciliation's P-6 settle; then the extraction
+    the key names must be this revision's read pass-1 answer. The doors, in predict's order (7.4): 0. the request
+    built again from the revision and the stored extraction (pure): over the claim bound, TOO_LONG, not sent; one the
+    key does not name (a changed check, version or claim set) queues the stage of the current key and ends; 1. an
+    inventory already read for this extraction run and these versions: analyze; the settled or after-reconcile key's
+    own run; 2. a stored SUCCEEDED appraisal answer to the identical request in the same workspace: reused; 3. the
+    encounter-wide unknown-outcome block; 4. the failed-before door, except a run released for one recorded retry; the
+    stale sweep's settled path stops here (it never sends); 5. the live gate and the write gate; 6. the interpreter's
+    mode and the installation-wide hold: a not-sent run with scope.held, CANCELLED (resumable); 7. one send (_send,
+    purpose 'appraisal'), and its outcome settled (_settle_appraisal)."""
+    revision, encounter = job.revision, job.encounter
+    reconciled = _keyed_run(job, 'after-reconcile')
+    if reconciled is not None:
+        _settle_from_exchange(reconciled)
+    _start_check(job)
+    encounter.refresh_from_db()
+    revision.refresh_from_db()
+    if encounter.current_revision_id != revision.pk:
+        return _superseded_result(review.SUPERSEDED_REVISION)
+    extraction = _extraction_of(job)
+    if extraction is None:
+        raise StageFailure(APPRAISE_NOT_READ_MESSAGE)
+    request, claims = _appraisal_request_of(job, extraction)
+    _, tail = _appraise_parts(job)
+    if tail != request.canonical_sha256[:16]:
+        queued = _queue_appraise(job, extraction, request.canonical_sha256[:16])
+        return {'skipped': APPRAISE_MOVED, 'appraise': str(queued.pk) if queued is not None else None}
+    mode = interpretation_holds.mode()
+    existing = _appraised_inventory(extraction, mode)
+    if existing is not None:
+        _queue_analyze(job, existing)
+        return {'provider': 'read_before', 'run': str(existing.appraisal_run_id), 'inventory': str(existing.pk)}
+    interpreter = None
+    if interpretation_holds.paused_reason() != interpretation_holds.HELD_DISABLED:
+        try:
+            interpreter = interpretation_adapter.get_interpreter_v2()
+        except ProviderUnavailable:
+            interpreter = None
+    if interpreter is not None:
+        settled = _settled_answer(job, interpreter, request)
+        if settled is not None:
+            return _settle_appraisal(job, settled, extraction, reused=settled.reused_from_id is not None)
+        prior = _retained_interpretation(encounter, interpreter, request, APPRAISAL)
+        if prior is not None:
+            return _settle_appraisal(job, _reused_participant_run(job, prior, APPRAISAL,
+                                                                  {'extraction': str(extraction.pk)}),
+                                     extraction, reused=True)
+    if _unreconciled_unknown(encounter):
+        return {'blocked': INTERPRET_BLOCKED}
+    if interpreter is not None:
+        failed = _interpretation_failed_before(encounter, interpreter, request, APPRAISAL)
+        if failed is not None:
+            _appraisal_not_sent(job, APPRAISE_NOT_RESENT_MESSAGE, mode=interpreter.mode, interpreter=interpreter,
+                                request=request, started=True, refused=FAILED_BEFORE, failed=str(failed.pk),
+                                effect=interpretation_holds.NONE, extraction=str(extraction.pk))
+            raise StageFailure(APPRAISE_NOT_RESENT_MESSAGE)
+        if _settled_path(job):
+            _appraisal_not_sent(job, APPRAISE_SETTLED_MESSAGE, mode=interpreter.mode, interpreter=interpreter,
+                                request=request, started=True, refused=SETTLED, effect=interpretation_holds.NONE,
+                                extraction=str(extraction.pk))
+            raise StageCancelled(APPRAISE_SETTLED_MESSAGE)
+    interpreter = _interpreter_or_pause(job, APPRAISAL)  # door 6: disabled, misconfigured or held
+    _send_gates(job, interpreter, request, APPRAISAL)
+    run = _send(job, interpreter, request, service_date=None, purpose=APPRAISAL,
+                scope={'mode': interpreter.mode, 'claims': claims, 'extraction': str(extraction.pk)})
+    return _settle_appraisal(job, run, extraction)
 
 
 # --- the peer-review stages (HARNESS.md 11.1, 12.1, 12.4) -------------------------------------------------------------
@@ -2304,11 +3206,12 @@ def stage_peer(job):
     'peer_review', its scope naming assess #1), and the chain goes on to the next owed peer stage or assess #2: a
     participant that is unavailable, refused by the live gate or failing blocks only itself (I10)."""
     name, revision, encounter, context = PEER_OF[job.kind], job.revision, job.encounter, job.context
+    _start_check(job)  # FINAL-V2 amendment 1, 3.4
     encounter.refresh_from_db()
     if encounter.current_revision_id != revision.pk:
-        return {'skipped': 'a newer revision exists; nothing was sent'}
+        return _superseded_result(review.SUPERSEDED_REVISION)
     if context is None or context.revision_id != revision.pk or encounter.current_context_id != context.pk:
-        return {'skipped': 'the context is not the current one for this revision; nothing was sent'}
+        return _superseded_result(review.SUPERSEDED_CONTEXT)
     _refuse_legacy_context(job)  # FINAL 6.6 and 9: nothing is sent on a context that is not a gemini context
     first = _first_assessment(job)
     if first is None or first.context_id != context.pk:
@@ -2367,6 +3270,10 @@ def stage_peer(job):
         held = _peer_not_sent(job, first, name, participant, request, PARTICIPANT_BLOCKED_MESSAGE,
                               mode=participant.mode, held=UNKNOWN_OUTCOME_HELD)
         return _peer_done(job, first, held, 'blocked')
+    if provider_holds.held(name):  # A16: as the first reading's door
+        held = _peer_not_sent(job, first, name, participant, request, PROVIDER_PAUSED_MESSAGE, mode=participant.mode,
+                              held=provider_holds.HELD)
+        return _peer_done(job, first, held, 'held')
     stopped = _stopped_attempt(encounter, participant, request, models.ProviderRun.PEER_REVIEW)  # F-STOP, as above
     failed = None if stopped is not None else _failed_before(encounter, participant, request)
     if failed is not None:
@@ -2410,8 +3317,10 @@ def _phase1_settled(revision, name):
 
 def _peer_done(job, first, run, outcome=None):
     """The peer stage's result once ``run`` (None: it recorded none) states its outcome; the chain goes on to the next
-    owed peer stage or assess #2 (_queue_peers), carrying an upgrade's mark as phase 1 does."""
-    _queue_peers(job, first, after=PEER_OF[job.kind], upgrade=job.idempotency_key.endswith(UPGRADE_MARK))
+    owed peer stage or assess #2 (_queue_peers), carrying an upgrade's mark as phase 1 does - unless the stage no longer
+    serves the saved state (FINAL-V2 amendment 1, 3.4's successor gate)."""
+    if _successor_allowed(job):
+        _queue_peers(job, first, after=PEER_OF[job.kind], upgrade=job.idempotency_key.endswith(UPGRADE_MARK))
     return {'peer': job.kind, 'state': outcome or run.state, 'run': _pk(run)}
 
 
@@ -3048,7 +3957,10 @@ def _assess_child_events(stored, context, normalized, reference, provider_status
     held keeps the acts its hold names as claims, so a rival code that competed with it for the same act keeps its
     competing_codes hold (D146: 43264 for a stone extraction told only under a nursing heading is held, and 43265 for
     the same clearance is held competing_codes beside it, as c2e53f8e holds both with its participants; with none
-    configured it READYs both) (studio/interpretation/assess.py; events.another_role_hold)."""
+    configured it READYs both) (studio/interpretation/assess.py; events.another_role_hold). The v1 chain's (tests only):
+    the retired engine is imported here, never at load (FINAL-V2 5.0)."""
+    from .interpretation import assess as events_engine
+
     return events_engine.assess(
         inventory=stored, context=context, normalized=normalized, provider_status=provider_status, reference=reference,
         text=text, pages=pages, extraction_status=extraction_status, extraction_messages=extraction_messages,
@@ -3065,19 +3977,29 @@ def _events_inventory(job):
                  if context.event_inventory_id else None)
     if inventory is None or inventory.revision_id != revision.pk or context.revision_id != revision.pk:
         raise StageFailure(CONTEXT_INVENTORY_MESSAGE)
-    if (inventory.interpretation_version, inventory.inventory_version) != _CURRENT_VERSIONS:
+    if (inventory.interpretation_version, inventory.inventory_version) != current_versions():
         raise StageCancelled(EARLIER_READING_MESSAGE)
     if inventory.state != models.EventInventory.READ:
         raise StageFailure(INVENTORY_NOT_READ_MESSAGE)
     return inventory, _stored_inventory(inventory, revision)
 
 
-def _member_date_state(context, stored):
+def _member_date_state(context, stored, inventory=None, revision=None):
     """The contract 8.2 member_date_state row the gemini ``context``'s date came from (Assessment.interpretation's
-    member_date_state): derived again, purely, from the inventory and the member values the context recorded - and only
-    when that derivation gives the context's own date state, so the record never describes another derivation."""
+    member_date_state): derived again, purely, from the inventory and the member values the context recorded (engine/
+    derive for a v2 inventory, v1's facts.derive under the v1 chain) - and only when that derivation gives the context's
+    own date state, so the record never describes another derivation."""
     try:
-        derived = interpretation_facts.derive(stored, dict(context.user_values or {}))
+        if inventory is not None and _is_v2_inventory(inventory):
+            from .interpretation.engine import derive as engine_derive
+
+            derived = engine_derive.derive(inventory_store.textfree_v2(stored), dict(context.user_values or {}),
+                                           quote=_quote_of(revision))
+        else:
+            _v1_rows_only()
+            from .interpretation import facts as interpretation_facts  # v1's, retired: the v1 chain only
+
+            derived = interpretation_facts.derive(stored, dict(context.user_values or {}))
     except (TypeError, ValueError):
         raise StageFailure(CONTEXT_DERIVATION_MESSAGE) from None
     if derived.member_date.state != ((context.facts or {}).get('service_date') or {}).get('state'):
@@ -3089,7 +4011,7 @@ def _events_stand_in(revision, inventory, service_date):
     """The RoutingRun an events assessment records (FINAL 6.7 step 5): the gemini-routing@1 stand-in derived from
     ``inventory`` for ``service_date``, as analyze, predict or a context save recorded it - looked up, never
     recomputed here. None when there is none."""
-    return (models.RoutingRun.objects.filter(revision=revision, version=interpretation.ROUTING_VERSION,
+    return (models.RoutingRun.objects.filter(revision=revision, version=_routing_version(inventory),
                                              service_date=service_date, result__inventory=str(inventory.pk))
             .order_by('-created_at', '-pk').first())
 
@@ -3105,6 +4027,9 @@ def _assess_events(job):
     inventory, stored = _events_inventory(job)
     if run is not None and run_service_date(run) != context_service_date(context):
         raise StageFailure(PROVIDER_DATE_MESSAGE)
+    v2 = _is_v2_inventory(inventory)
+    if not v2:
+        _v1_rows_only()  # the v1 chain's events engine reads a v1 row; nothing else may (X8)
     held = (run is not None and run.state == models.ProviderRun.NOT_SENT
             and (run.scope or {}).get('held') == models.ProviderRun.HELD_MEMBER_DATE_CONFLICT)
     names = participants.configured()
@@ -3129,21 +4054,39 @@ def _assess_events(job):
     proposed |= {code.code for item in inputs if item.peer is not None for code in item.peer.additional_codes}
     provider_codes = tuple(sorted(set(selected_codes(normalized)) | set(selected_codes(second_normalized))))
     # every code the engine may look up, prefetched for the child, which has no database: a superset, never one missed
-    looked_up = set(events_engine.codes_to_look_up(normalized, second_normalized, inputs)) | set(provider_codes)
+    if v2:
+        looked_up = set(_codes_to_look_up(normalized, second_normalized, inputs)) | set(provider_codes)
+    else:
+        from .interpretation import assess as events_engine  # v1's, retired: the v1 chain only
+
+        looked_up = set(events_engine.codes_to_look_up(normalized, second_normalized, inputs)) | set(provider_codes)
     reference = prefetched_lookup(tuple(sorted(looked_up | proposed)))
     service_date = context_service_date(context)
     routing_run = _events_stand_in(revision, inventory, service_date)
     if routing_run is None:
         raise StageFailure(STAND_IN_MISSING_MESSAGE)
-    member_date_state = _member_date_state(context, stored)
+    member_date_state = _member_date_state(context, stored, inventory, revision)
     release_routing_caches()  # FINAL 6.7 step 2: no cached legacy result answers for code (the scope clears too)
     seconds = settings.JOB_DEADLINE_SECONDS['assess']
+    pages = tuple(PageSpan(**p) for p in revision.pages)
     try:
-        result = sentinel.run_counted(
-            _assess_child_events, stored, dict(context.facts or {}), normalized, reference, provider_status,
-            revision.text, tuple(PageSpan(**p) for p in revision.pages), revision.extraction_status,
-            tuple(revision.messages), second_normalized, dict(second.scope) if second is not None else None, inputs,
-            member_answers_of(revision), seconds=seconds, memory_bytes=settings.ASSESS_MEMORY_BYTES)
+        if v2:
+            from .interpretation import overlay
+
+            # the member context read time reads (D246: overlay.member_context over the context's facts, D3's
+            # user-origin values), so assess and read time read the same values
+            member = overlay.member_context(context.facts)
+            result = sentinel.run_counted(
+                _assess_child_v2, inventory_store.textfree_v2(stored), service_date, revision.text, pages,
+                provider_status, normalized, reference, member, inputs, second_normalized, member_answers_of(revision),
+                context_facts(context), revision.extraction_status, tuple(revision.messages), seconds=seconds,
+                memory_bytes=settings.ASSESS_MEMORY_BYTES)
+        else:
+            result = sentinel.run_counted(
+                _assess_child_events, stored, dict(context.facts or {}), normalized, reference, provider_status,
+                revision.text, pages, revision.extraction_status, tuple(revision.messages), second_normalized,
+                dict(second.scope) if second is not None else None, inputs, member_answers_of(revision),
+                seconds=seconds, memory_bytes=settings.ASSESS_MEMORY_BYTES)
     except bounded.Overrun as exc:
         raise StageFailure(OVERRUN_MESSAGES[exc.reason].format(seconds=seconds)) from None
     retrieval = _retrieval(result, service_date, reference, provider_codes)  # a decidable code's only (r7, r8, r9)
@@ -3156,6 +4099,9 @@ def _assess_events(job):
         record = interpretation_report.interpretation_record(
             inventory=inventory, context=context, member_date_state=member_date_state,
             sentinel_record=sentinel.record(name=ASSESS_SCOPE))
+        if v2:  # the D22 record names the engine that made it and both runs (FINAL-V2 1.7; request to 5c's report.py)
+            record = {**record, 'engine_version': interpretation.ENGINE_VERSION_V2,
+                      'appraisal_run': str(inventory.appraisal_run_id)}
         assessment = review.persist_assessment(
             encounter=encounter, revision=revision, context=context, routing_run=routing_run, provider_run=run,
             result=result, second_run=second, retrieval=retrieval,
@@ -3163,6 +4109,8 @@ def _assess_events(job):
             event_inventory=inventory, interpretation=record)
     except sentinel.Tripped as exc:  # the write gate refused: nothing recorded, the trip audited (FINAL 10.3)
         raise StageFailure(str(exc)) from None
+    except review.Superseded as exc:  # FINAL-V2 amendment 1, 4.1: a late finisher writes nothing
+        return _superseded_result(exc.reason)
     except ValueError as exc:
         raise StageFailure(f'The assessment was not recorded: {exc}') from exc
     out = {'assessment': str(assessment.pk), 'provider_status': provider_status, 'inventory': str(inventory.pk),
@@ -3172,16 +4120,22 @@ def _assess_events(job):
     if names and mode == FIRST and owed_peer_stages(assessment):
         # HARNESS.md 12.1, unchanged: assess #1 queues the first owed peer stage when a configured participant's first
         # reading was read; otherwise it is the final assessment. Nothing is sent while a member date conflict holds it.
-        queued = _queue_peers(job, assessment, upgrade=_chain_upgrade(job))
-        out['peer_review'] = queued.kind
+        queued = _queue_peers(job, assessment, upgrade=_chain_upgrade(job)) if _successor_allowed(job) else None
+        if queued is not None:
+            out['peer_review'] = queued.kind
     return out
 
 
 def stage_assess(job):
+    """The assess stage (FINAL 6.7; FINAL-V2 4): the start check first (FINAL-V2 amendment 1, 3.4: on a gemini context
+    too, where it used to run the bounded child and let only persist_assessment refuse), then the events engine over the
+    context's inventory - design v2's engine for a v2 inventory (_assess_events) - and persist_assessment's
+    compare-and-set (4.1): a late finisher writes nothing."""
     revision, encounter, context, run = job.revision, job.encounter, job.context, job.provider_run
+    _start_check(job)
     encounter.refresh_from_db()
     if encounter.current_revision_id != revision.pk:
-        return {'skipped': 'a newer revision exists'}
+        return _superseded_result(review.SUPERSEDED_REVISION)
     if context is not None and interpretation.is_new_context(context):
         return _assess_events(job)  # FINAL 6.7: the events engine, over the context's event inventory
     _refuse_legacy_context(job)  # FINAL 6.7 and 9: never the legacy child on this image (StageCancelled, resumable)
@@ -3242,6 +4196,8 @@ def stage_assess(job):
             encounter=encounter, revision=revision, context=context, routing_run=routing_run, provider_run=run,
             result=result, second_run=second, retrieval=retrieval,
             participants=[records.get(name) or not_configured_record(name) for name in participants.PARTICIPANTS])
+    except review.Superseded as exc:  # FINAL-V2 amendment 1, 4.1: a late finisher writes nothing
+        return _superseded_result(exc.reason)
     except ValueError as exc:
         raise StageFailure(f'The assessment was not recorded: {exc}') from exc
     # The bounded second review is never queued here: a workspace owner or reviewer asks for it
@@ -3252,9 +4208,474 @@ def stage_assess(job):
     if names and mode == FIRST and owed_peer_stages(assessment):
         # HARNESS.md 12.1: assess #1 queues the first owed peer stage when a configured participant's first reading was
         # read; otherwise it is the final assessment. Nothing is sent while a member date conflict holds the encounter.
-        queued = _queue_peers(job, assessment, upgrade=_chain_upgrade(job))
-        out['peer_review'] = queued.kind
+        queued = _queue_peers(job, assessment, upgrade=_chain_upgrade(job)) if _successor_allowed(job) else None
+        if queued is not None:
+            out['peer_review'] = queued.kind
     return out
+
+
+# --- design v2's assess (FINAL-V2 4, engine/assess.py; step 5b's switch) ---------------------------------------------
+#
+# A gemini-context@2 context is assessed by engine/assess over the frozen settled inventory its context names
+# (store.textfree_v2's view, read through facts.effective against the context's effective date), in one bounded child
+# counted against the stage's new_path scope. engine/assess returns a typed, text-free Assessment (step 5a); what
+# review.persist_assessment records is an AssessmentResult, so the child renders one from it (_render_v2: step 5a's
+# request R1, built here as its option (b), "jobs.py renders"). The rendering decides nothing: every status, exclusion,
+# held fact and item is the engine's; the renderer words each item, quotes the kept evidence and runs the FINAL 7.1
+# checks the reference rows need (checks' allowlist). A code the engine left READY is ready, one it held is
+# needs_clarification with its one item, one it excluded is excluded.
+#
+# ONE renderer contract with read time (DECISIONS D246, step 5c's request R1 in full; the lead's seam findings L1 and
+# L2): the child builds the FactSet as read time does (overlay.reading: facts.effective against the context's date of
+# service, jobs.context_service_date) and hands it, with the Assessment's combination, to the renderer; each held code's
+# ONE item is worded by word_item - wording.build over overlay.item_slots(item, key, combination, R), else the Slots of
+# its Fill - so a TEXT_FREE item is worded with the very slots read time words it with; the date of service's item is
+# the encounter's one question, which no code carries; completeness names a session not listed with
+# overlay.session_label (the one label: read time reproduces the stored reason with it) and the member context is
+# overlay.member_context over the context's facts; the support record carries what overlay.read_record reads
+# (held_facts as engine/assess.jsonable writes a HeldFact, kept_words, procedural, origin, competes, the reinstatement
+# waits and the member-answer marker).
+
+V2_CHECK_SOURCE = f'cpt-studio:{interpretation.ENGINE_VERSION_V2}'
+V2_STATUS_DETAIL = {'ready': 'Every fact this code requires is established in the document.',
+                    'needs_clarification': 'A fact this code requires is not established; the item says which.',
+                    'excluded': 'The code is excluded: the reason is recorded with it.'}
+V2_EXCLUDED_BY_ANSWER = 'Excluded: a needed detail is not documented (a member\'s answer).'
+V2_EXCLUDED_BY_STATEMENT = 'Excluded by a documentation check: the document states it was not done: {quote}'
+V2_EXCLUDED_NO_EVIDENCE = 'Excluded: no exact source evidence for this code in the document.'
+V2_ALTERNATIVE = 'Listed as an alternative only; not suggested for approval.'
+
+
+class _Integrity:
+    """R1 for engine/assess (its Integrity protocol; 4.1, 5.6): the FINAL 7.1 allowlist's code_scope and exact_evidence,
+    the participants' code_shaped, and ``word_runs`` - contract/geometry.word_runs, the letter-or-digit runs of a kept
+    span (DECISIONS D261 and its note: step 5a's R2, built by step 5b), which engine/assess passes to C-10 as kept_words,
+    so a provider's quote that reaches past a statement only by its stop covers it."""
+
+    @property
+    def word_runs(self) -> Callable[[str, _Span], tuple[_Span, ...]]:
+        from .interpretation.contract import geometry  # contract's SingleCharacterGeometry module (5.6, 5.7 measure 4)
+
+        return geometry.word_runs
+
+    def code_scope(self, code):
+        return validation_checks.code_scope(code)
+
+    def exact_evidence(self, spans, text, pages):
+        return validation_checks.exact_evidence(spans, text, pages)
+
+    def code_shaped(self, value):
+        return participant_peer.code_shaped(value)
+
+
+def _plain(value):
+    """``value`` as the JSON data a stored record holds: an Enum as its value, an engine Id as pass 1's form ('E3'), a
+    Span as [start, end], an IsoDate or a date as ISO, a dataclass as its fields, a mapping as an object (its keys made
+    strings the same way), a set sorted, a tuple a list. engine/assess.jsonable writes a mapping as sorted pairs (its
+    digest's form); the records review and the readers read are objects, so this keeps them so."""
+    from enum import Enum
+
+    from .interpretation.engine.types import Id, IsoDate, Span
+
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, Enum):
+        return _plain(value.value)
+    if isinstance(value, Id):
+        return str(value)
+    if isinstance(value, Span):
+        return [value.start, value.end]
+    if isinstance(value, IsoDate):
+        return value.iso
+    if isinstance(value, date):
+        return value.isoformat()
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        return {field.name: _plain(getattr(value, field.name)) for field in dataclasses.fields(value)}
+    if isinstance(value, dict) or hasattr(value, 'items'):
+        return {(key if isinstance(key, str) else '|'.join(map(str, key)) if isinstance(key, tuple)
+                 else str(_plain(key))): _plain(item) for key, item in value.items()}
+    if isinstance(value, (set, frozenset)):
+        return sorted((_plain(item) for item in value), key=lambda item: json.dumps(item, sort_keys=True))
+    if isinstance(value, (list, tuple)):
+        return [_plain(item) for item in value]
+    raise TypeError(f'{type(value).__name__} is not record data.')
+
+
+def _slots_of(fill: _Fill) -> _Slots:
+    """wording.Slots of an item's engine Fill (field for field; the Bundling by value, as questions.Fill's docstring
+    says)."""
+    from .interpretation import wording
+
+    values = {field.name: getattr(fill, field.name) for field in dataclasses.fields(fill)}
+    if values.get('bundling') is not None:
+        values['bundling'] = wording.Bundling(values['bundling'].value)
+    return wording.Slots(**values)
+
+
+def _is_date_item(item: _Item) -> bool:
+    """The item is the date of service's (engine/questions.MessageId.SERVICE_DATE): the encounter's one question
+    (FINAL-V2 4.8, "service_date | encounter scope"), which assess counts once and no code carries."""
+    from .interpretation.engine import questions as engine_questions
+
+    return item.message is engine_questions.MessageId.SERVICE_DATE
+
+
+def word_item(item: _Item, key: str, combination: _Combination, R: _FactSet, text: str, *,
+              family: str = '') -> ClarificationSpec:
+    """The ClarificationSpec of a held code's ONE item (D182), worded as read time words it (DECISIONS D246, step 5c's
+    request R1): wording.build of its message over overlay.item_slots(item, key, combination, R) - the slots read time
+    words a TEXT_FREE item with, its codes and acts read from the combination's own records (``combination``: the
+    Assessment's, ``R``: the FactSet it was assessed over) - or, when item_slots gives none (any other item), the Slots
+    of the item's Fill; ``text`` is the revision's, for the spans an item quotes (a TEXT_FREE sentence reads none, so
+    read time's words are these).
+
+    The date of service's item is the encounter's own question: an encounter-scope spec naming no proposal (FINAL-V2
+    4.8), which _render_code attaches to no code. Any other item is a proposal-scope spec of ``key``; ``family`` is the
+    proposal's gi.profiles slug (the renderer passes it: a member's answer binds by code, family and fact).
+
+    A wording refusal is raised (wording.build's ValueError, naming the message id), never worded with a fallback: an
+    engine item the renderer cannot word is a defect (D246's P-WORDED calls this function on every engine item)."""
+    from .interpretation import overlay, wording
+
+    slots = overlay.item_slots(item, key, combination, R)
+    if slots is None:
+        slots = _slots_of(item.fill)
+    worded = wording.build(wording.Message(item.message.value), slots, text)
+    if _is_date_item(item):
+        return ClarificationSpec(scope='encounter', fact=worded.fact, question=worded.question, reason=worded.reason)
+    return ClarificationSpec(scope='proposal', fact=worded.fact, question=worded.question, reason=worded.reason,
+                             family=family, proposal_key=key)
+
+
+def held_fact_messages(found: _Assessed) -> dict[str, list[str | None]]:
+    """The support record's optional ``held_fact_messages`` of one engine Assessed (DECISIONS D267's record half, step 5b;
+    refute-r3c-r1 F7, D253 QX (ii)): beside ``support['held_facts']`` - in its order, one entry per held fact - the
+    message id of the item that holds each procedure-keyed held fact, and None for every other held fact: the code's own
+    item's message (``found.item.message``) for the held fact that item rests on, and for any other procedure-keyed held
+    fact the message engine/questions.message_of gives the item it makes (by its fact key, kind and cause, over the
+    code's own facts: engine/evaluate.code_facts, as evaluate's item reads them) - ENTEROSCOPY_THROUGH, ENTEROSCOPY_ROUTE
+    or EXAMINATION_ROUTE where the route or the anatomy passed through is what is asked and the procedure is known.
+    customer_api.held_fact_words reads that message (step r3c), and keeps v1's sentence for a held fact with no message.
+    {} - the field left out - when no held fact is procedure-keyed (and for a code R1 refused, which holds nothing).
+    Recorded beside the held facts, never inside them: overlay.read_record reads each stored held fact by exactly the
+    keys engine/assess.jsonable writes (any other key makes the record unreadable at read time)."""
+    from .interpretation.engine import evaluate as engine_evaluate
+    from .interpretation.engine import questions as engine_questions
+    from .interpretation.engine import requirements as engine_requirements
+
+    procedure = engine_requirements.fact_key(engine_requirements.FactKey.PROCEDURE)
+    if found.evaluation is None or not any(held.fact == procedure for held in found.held_facts):
+        return {}
+    code = engine_evaluate.code_facts(found.code)
+    item = found.item
+    messages: list[str | None] = []
+    for held in found.held_facts:
+        if held.fact != procedure:
+            messages.append(None)
+        elif item is not None and held == item.held:
+            messages.append(item.message.value)
+        else:
+            messages.append(engine_questions.message_of(held, code).value)
+    return {'held_fact_messages': messages}
+
+
+def service_question_records(service_questions: Sequence[_ServiceQuestion]) -> list[dict[str, object]]:
+    """DECISIONS D270 (refute-5b-r1 P3: D259 extended to service questions): each service question engine/assess asks
+    (Assessment.service_questions, in their order - the order of the service clarifications _render_v2 makes, so the
+    i-th service row persist_assessment raises is the i-th entry), as ``completeness['service_questions']`` records it
+    where read time reads it: its family (the gi.profiles slug, '' for none: the service clarification's own family),
+    its fact key, its engine fingerprint (engine/assess.service_fingerprint, ServiceQuestion.question) - which the
+    details door records with a member's answer and read time binds it by (review.stored_service_questions), as
+    engine/assess._close_services binds it - and the answers engine/assess closed it with (``closed``, the engine's own
+    record of which answer closed which question)."""
+    from .interpretation.engine import assess as engine_assess
+
+    return [{'family': engine_assess.family_slug(found.item.family) if found.item.family is not None else '',
+             'fact': found.item.item.fact, 'question': found.question, 'closed': list(found.closed)}
+            for found in service_questions]
+
+
+def _kept_spans(evidence, text, pages):
+    """The kept evidence of R1 as the stored EvidenceSpan records (exact, context 0, the revision's own text, its page)."""
+    out = []
+    for span in evidence.kept:
+        page = review._page_of(pages, span.start) if pages else None  # the page holding it (checks.page_for's rule)
+        out.append(EvidenceSpan(0, span.start, span.end, text[span.start:span.end], True, page))
+    return tuple(out)
+
+
+def _render_code(found: _Assessed, *, combination: Any, R: Any, text: str, pages: Any, context_values: Any,
+                 refs: Mapping[str, Any], sources: Any, day: date | None, active: Any,
+                 provider: str) -> ProposalAssessment:
+    """One engine Assessed as the ProposalAssessment persist_assessment records (the section's comment): ``combination``
+    is the Assessment's and ``R`` the FactSet it was assessed over (D246: the held code's one item is worded by
+    word_item, as read time words it; the date of service's item is the encounter's question, carried by no code)."""
+    from types import SimpleNamespace
+
+    from .gi.profiles import PROFILES
+    from .interpretation import wording
+    from .interpretation.engine import assess as engine_assess
+
+    family = engine_assess.family_slug(found.family)
+    profile = PROFILES.get(family)
+    key, code, status = found.key, found.code, found.status.value
+    evidence = _kept_spans(found.evidence, text, pages)  # type: ignore[no-untyped-call]
+    checks = [validation_checks.scope_check(found.evidence.code_kind or 'invalid', found.evidence.scope_reason)]
+    if not found.evidence.scope_reason:
+        checks.extend(validation_checks.evidence_checks(evidence, found.evidence.dropped))
+    clarifications = []
+    reason = ''
+    if found.evaluation is not None:
+        checks.append(Check('service.status', 'Required facts of the code', {'ready': 'pass', 'needs_clarification':
+                            'warn', 'excluded': 'fail'}[status], V2_STATUS_DETAIL[status], V2_CHECK_SOURCE))
+        if found.item is not None and status == 'needs_clarification':
+            spec = word_item(found.item, key, combination, R, text, family=family)
+            if spec.scope == 'proposal':  # the date item is the encounter's one question (_render_v2 asks it)
+                clarifications.append(spec)
+        ref = refs.get(code)
+        if ref is not None:
+            checks.append(validation_checks.pfs_check(code, ref, sources, day))
+            checks.append(validation_checks.mue_check(code, found.units, ref, sources, day))
+            if (profile is not None and profile.procedure) or (ref.pfs and ref.pfs.get('endo_base')):
+                checks.append(validation_checks.endoscopic_check(code, ref, active, sources, day))
+        # FINAL 7.1's allowlisted constant, as review names it (imported there, not re-exported: mypy's attr-defined)
+        checks.extend(review.NOT_CONNECTED_CHECKS)  # type: ignore[attr-defined]
+        if found.units > 1:
+            checks.append(validation_checks.duplicate_check(code, found.units))
+    if status == 'excluded':
+        if found.answered is not None:
+            reason = V2_EXCLUDED_BY_ANSWER
+        elif found.evaluation is not None and found.evaluation.exclusion is not None:
+            reason = V2_EXCLUDED_BY_STATEMENT.format(quote=wording.quote_span(text, found.evaluation.exclusion.anchor))
+        else:
+            reason = found.evidence.scope_reason or V2_EXCLUDED_NO_EVIDENCE
+    # the stored v2 record overlay.read_record reads (step 5c's request R1; FINAL-V2 4.8): every held fact, ranked, as
+    # engine/assess.jsonable writes a HeldFact (operator data, never shown as a customer string: 4.8 [R:MO-2]); R1's
+    # kept runs (C-10's: None reads every offset of a kept span, fail-closed); whether assess counted it a procedure
+    # (engine/assess.procedural over its own PFS row, so read time's combination reads what assess's read)
+    support = {'origin': found.origin.value, 'proposed_by': list(found.proposed_by), 'family': family,
+               'session': found.session, 'event_reading': interpretation.ENGINE_VERSION_V2,
+               'acts': [{'id': act} for act in (found.evaluation.supporting if found.evaluation is not None else ())],
+               'held_facts': engine_assess.jsonable(found.held_facts),
+               **held_fact_messages(found),
+               'kept_words': (engine_assess.jsonable(found.evidence.runs) if found.evidence.runs is not None
+                              else None),
+               'procedural': engine_assess.procedural(SimpleNamespace(family=found.family,  # type: ignore[arg-type]
+                                                                      evaluation=found.evaluation), found.pfs),
+               'item': ({'message': found.item.message.value, 'fact': found.item.held.fact,
+                         'kind': found.item.held.kind.value} if found.item is not None else None),
+               'question': found.question}
+    if status == 'excluded' and found.reinstatable:
+        # what a reviewer's reinstatement would wait for (refutation 5b-r1, X5): the installed release's gate - the
+        # review.reinstatement check, which review and the overlay read (fail-closed without a passing one) - and its
+        # structured waits, each worded as CPT Studio's fixed sentence for its fact key (4.8 [R:MO-2], never a cause)
+        gate, waits = _reinstatement_gate(found, family, key, day)  # type: ignore[no-untyped-call]
+        checks.append(gate)
+        if waits:
+            support['reinstatement_waits'] = waits
+    if found.competes:
+        support['competes'] = list(found.competes)
+    if found.answered is not None:
+        support[questions_module().ANSWERED_SUPPORT] = {'fact': found.answered.fact,  # type: ignore[no-untyped-call]
+                                                        'value': found.answered.value.value,
+                                                        'answers': list(found.answered.answers)}
+    if found.evaluation is not None and found.evaluation.exclusion is not None:
+        exclusion = found.evaluation.exclusion
+        support['exclusion'] = {'event': exclusion.event, 'attribute': exclusion.fact.value,
+                                'cover': exclusion.cover.value if hasattr(exclusion.cover, 'value') else str(
+                                    exclusion.cover)}
+    rationale = (f'{provider or "The proposal provider"} proposed {code}; CPT Studio\'s reading of the documented '
+                 f'events {"supports it" if status == "ready" else "holds it" if status == "needs_clarification" else "excludes it"}.')
+    considerations = [item.value for item in found.considerations]
+    ref = refs.get(code)
+    if status != 'excluded' and ref is not None:
+        # FINAL-V2 4.4's PC/TC consideration, worded from the PFS row by the renderer as engine/assess leaves it
+        # (Consideration's docstring; refutation 5b-r1, X4): the installed release's sentence (checks.pctc_consideration)
+        pctc = validation_checks.pctc_consideration(code, ref.pfs, _pfs_release(sources, day),  # type: ignore[no-untyped-call]
+                                                    _billing_words(context_values))  # type: ignore[no-untyped-call]
+        if pctc:
+            considerations.append(pctc)
+    return ProposalAssessment(
+        key=key, bucket=found.bucket.value, code=code, code_kind=found.evidence.code_kind or 'invalid', family=family,
+        profile_version=profile.version if profile is not None else '', status=status, exclusion_reason=reason,
+        reinstatable=bool(found.reinstatable), provider_display=code, evidence=evidence, rationale=rationale,
+        checks=tuple(checks), modifier_considerations=tuple(considerations),
+        units=found.units, fingerprint=found.fingerprint, clarifications=tuple(clarifications),
+        support=_plain(support))  # type: ignore[no-untyped-call]
+
+
+REINSTATEMENT_DATE_WAIT = 'the date of service is not established for this encounter.'  # the installed release's words
+DOCUMENTED_ORIGINS = ('document', 'user')  # a context fact's origins that state a value (checks.DOCUMENTED's)
+
+
+def _reinstatement_gate(found, family, key, day):
+    """(the review.reinstatement Check, the structured reinstatement_waits) of an excluded, reinstatable engine code: what
+    its approval would still wait for if a reviewer reinstated it (engine/assess's ``waits``, ranked), as the installed
+    release records them (checks.reinstatement_check; support['reinstatement_waits'] = [{fact, question}], FINAL 7.11).
+    Each wait is worded as CPT Studio's fixed sentence for its fact key (customer_api.held_fact_words: 4.8 [R:MO-2], never
+    a cause), each fact once, in the engine's order; the date of service's wait (R7: no effective date) is the
+    encounter's own question, recorded first with the installed release's words and not asked again by the readers."""
+    from .customer_api import held_fact_words
+    from .interpretation.engine import requirements as engine_requirements
+
+    date_key = engine_requirements.fact_key(engine_requirements.FactKey.SERVICE_DATE)
+    date_unknown = day is None or any(held.fact == date_key for held in found.waits)
+    holds, seen = [], set()
+    for held in found.waits:
+        if held.fact == date_key or held.fact in seen:
+            continue
+        seen.add(held.fact)
+        words = held_fact_words(held.fact)
+        holds.append(ClarificationSpec(scope='proposal', fact=held.fact, question=words, reason=words, family=family,
+                                       proposal_key=key))
+    waits = [{'fact': spec.fact, 'question': spec.question} for spec in holds]
+    if date_unknown:
+        waits.insert(0, {'fact': date_key, 'question': REINSTATEMENT_DATE_WAIT})
+    return validation_checks.reinstatement_check(holds, date_unknown=date_unknown), waits
+
+
+def _pfs_release(sources, day):
+    """The release of the one CMS PFS source covering ``day`` ('' when none, or more than one, does): the release the
+    installed release's PC/TC consideration names."""
+    from .reference.store import PFS, applied_sources
+
+    source = applied_sources(sources, day).get(PFS)
+    return source.release if source is not None else ''
+
+
+def _billing_words(facts):
+    """The billing context as stored, as the installed release's PC/TC consideration words it (engine._billing): a
+    conflict as one, a member's value as a member's, a documented value as it is, else 'not documented'."""
+    fact = (facts or {}).get('billing_context')
+    if fact is not None and fact.origin == 'conflict':
+        return ('in conflict: member-entered encounter metadata differs from the document'
+                if gi_context.is_member_conflict(fact) else 'conflicting documented values')
+    documented = fact is not None and fact.origin in DOCUMENTED_ORIGINS and fact.value not in (None, '')
+    if documented and fact.origin == 'user':
+        return f'{fact.value}, entered by a workspace member as encounter metadata'
+    return str(fact.value) if documented else 'not documented'
+
+
+def questions_module():
+    from .validation import questions
+
+    return questions
+
+
+def _render_alternative(found, *, text, pages):
+    from .gi.profiles import PROFILES
+    from .interpretation.engine import assess as engine_assess
+
+    family = engine_assess.family_slug(found.family)
+    profile = PROFILES.get(family)
+    evidence = _kept_spans(found.evidence, text, pages)
+    return ProposalAssessment(
+        key=found.key, bucket='alternative', code=found.code, code_kind=found.evidence.code_kind or 'invalid',
+        family=family, profile_version=profile.version if profile is not None else '', status='informational',
+        exclusion_reason='', reinstatable=False, provider_display=found.code, evidence=evidence,
+        rationale=V2_ALTERNATIVE, checks=(validation_checks.scope_check(found.evidence.code_kind or 'invalid',
+                                                                        found.evidence.scope_reason),),
+        modifier_considerations=(), units=1,
+        fingerprint=hashlib.sha256(f'alternative|{found.key}|{found.code}|{found.why.value}'.encode()).hexdigest(),
+        support=_plain({'origin': found.origin.value, 'proposed_by': list(found.proposed_by), 'family': family,
+                        'not_added': found.why.value, 'event_reading': interpretation.ENGINE_VERSION_V2}))
+
+
+def _render_v2(found: _EngineAssessment, *, R: Any, text: str, pages: Any, context: Any, provider_status: str,
+               normalized: Any, reference: Any, service_date: date | None, extraction_status: Any,
+               extraction_messages: Any) -> AssessmentResult:
+    """The AssessmentResult persist_assessment records for engine/assess's Assessment ``found`` over the FactSet ``R``
+    (the section's comment): the proposals (selected, excluded, then alternatives, each in the engine's key order; each
+    held code's item worded over ``found.combination`` and ``R`` by word_item), the encounter checks (provider,
+    extraction, the date of service), the encounter clarifications (the date of service - the one question a code's
+    date item is - and the service questions' items), the reference sources applied, completeness (the engine's, with
+    event_coding@2, the member answers in the record review._close_answered reads, and INVENTORY_PROBLEMS) and services
+    (SERVICES_STUB)."""
+    from .gi.profiles import PROFILES_VERSION
+    from .interpretation.engine import assess as engine_assess
+
+    sources = tuple(reference.sources())
+    day = service_date
+    refs = {item.code: reference.lookup(item.code, day) for item in found.codes
+            if item.evaluation is not None and item.status.value != 'excluded'}
+    active = {code: ref.pfs for code, ref in refs.items() if ref.pfs}
+    provider = normalized.provider if normalized is not None else ''
+    proposals = [_render_code(item, combination=found.combination, R=R, text=text, pages=pages, context_values=context,
+                              refs=refs, sources=sources, day=day, active=active, provider=provider)
+                 for item in found.codes]
+    proposals += [_render_alternative(item, text=text, pages=pages) for item in found.alternatives]  # type: ignore[no-untyped-call]
+    date_state = validation_checks.service_date_state(context, day)
+    encounter_checks = [*validation_checks.provider_checks(provider_status, normalized),
+                        validation_checks.extraction_check(extraction_status, extraction_messages),
+                        validation_checks.service_date_check(date_state)]
+    clarification = validation_checks.service_date_clarification(date_state)
+    clarifications = [clarification] if clarification is not None else []
+    from .customer_api import held_fact_words  # CPT Studio's fixed sentence per fact key, never a cause (4.8)
+
+    for question in found.service_questions:
+        service = question.item
+        words = held_fact_words(service.item.fact)
+        clarifications.append(ClarificationSpec(
+            scope='service', fact=service.item.fact, question=words, reason=words,
+            family=engine_assess.family_slug(service.family) if service.family is not None else ''))
+    completeness = _plain(dict(found.completeness))  # type: ignore[no-untyped-call]
+    completeness['event_coding'] = _plain(dict(found.event_coding))  # type: ignore[no-untyped-call]
+    completeness['inventory_problems'] = list(engine_assess.INVENTORY_PROBLEMS)
+    completeness['member_answers'] = {
+        'applied': [{'answer': item.answer, 'scope': item.scope.value, 'code': item.code, 'family': item.family,
+                     'fact': item.fact, 'value': item.value.value, 'proposals': list(item.proposals)}
+                    for item in found.answers],
+        'earlier': [{'answer': item.answer, 'code': item.code, 'family': item.family, 'fact': item.fact,
+                     'value': item.value.value, 'why': item.why.value} for item in found.earlier_answers]}
+    completeness['versions'] = dict(found.versions)
+    completeness[review.SERVICE_QUESTIONS] = service_question_records(found.service_questions)  # D270 (5b P3)
+    selected = [item for item in proposals if item.bucket == 'selected']
+    summary = {'engine_version': interpretation.ENGINE_VERSION_V2, 'provider_status': provider_status,
+               'proposals': len(proposals), 'selected': len(selected),
+               'ready': sum(1 for item in selected if item.status == 'ready'),
+               'needs_clarification': sum(1 for item in selected if item.status == 'needs_clarification'),
+               'service_date': day.isoformat() if day is not None else None}
+    return AssessmentResult(
+        profiles_version=PROFILES_VERSION, engine_version=interpretation.ENGINE_VERSION_V2, proposals=tuple(proposals),
+        encounter_checks=tuple(encounter_checks), clarifications=tuple(clarifications), unsupported=(),
+        reference_sources=validation_checks.reference_source_entries(sources, day), summary=summary,
+        services=_plain(dict(found.services)), completeness=completeness)  # type: ignore[no-untyped-call]
+
+
+def _assess_child_v2(view, service_date, text, pages, provider_status, normalized, reference, member, inputs, second,
+                     answers, context, extraction_status, extraction_messages):
+    """Design v2's assessment of one revision in one bounded child (DB-free; its denied executions counted by
+    sentinel.run_counted): engine/assess over the text-free view, then the rendering (_render_v2). The FactSet is read
+    time's (overlay.reading: engine/facts.effective against ``service_date``, jobs.context_service_date's - exactly
+    engine/assess.assess's own), built once and handed to engine/assess.assess_facts and to the renderer, so the items
+    are worded over the FactSet the engine decided them on; completeness names a session not listed with
+    overlay.session_label, the one label read time reproduces the stored reason with (D246)."""
+    from .interpretation import overlay
+    from .interpretation.engine import assess as engine_assess
+
+    R = overlay.reading(view, service_date)
+    found = engine_assess.assess_facts(R, date_of_service=service_date, text=text, pages=pages,
+                                       integrity=_Integrity(), provider_status=provider_status, proposals=normalized,
+                                       reference=reference, member=member, label=overlay.session_label,
+                                       participants=inputs, second=second, answers=answers)
+    return _render_v2(found, R=R, text=text, pages=pages, context=context, provider_status=provider_status,
+                      normalized=normalized, reference=reference, service_date=service_date,
+                      extraction_status=extraction_status, extraction_messages=extraction_messages)
+
+
+def _codes_to_look_up(normalized, second, inputs):
+    """Every code the engine may look up, prefetched for the child (a superset: every code a provider listed, in any
+    role, and every code a participant proposed)."""
+    found = set()
+    for response in (normalized, second):
+        if response is not None:
+            found |= {item.code for item in response.codes if isinstance(item.code, str)}
+    for item in inputs:
+        if item.reading is not None:
+            found |= {code.code for code in item.reading.codes}
+        if item.peer is not None:
+            found |= {code.code for code in item.peer.additional_codes}
+    return tuple(sorted(code for code in found if code))
 
 
 # --- the bounded second review (ARCHITECTURE 5.11) ------------------------------------------------------------------
@@ -3274,6 +4695,11 @@ SECOND_REVIEW_EARLIER_CONTEXT = ('This document was read under earlier context r
 # longer offered, no answer was recomputed and no decision could be recorded (S10 review round 2, finding 1).
 SECOND_REVIEW_NOT_FINAL = ('The peer reviews of this document have not finished: resume processing to finish them, '
                            'then ask for a second review.')
+# FINAL-V2 amendment 1, 7.3 (A16): the offer refused while Corti's provider hold stands - true whatever the encounter's
+# state, since the update-pending refusal is asked first (refutation 5b-r1, X6: RETRY_UPDATE_HELD said "Updating the
+# codes is paused ... resume" to a fresh encounter, where nothing is updating and nothing is left to resume)
+SECOND_REVIEW_HELD = ('The coding service is held on this installation after it refused a request, so no second review '
+                      'is sent until an operator releases the hold.')
 
 
 def _second_review_items(assessment):
@@ -3293,7 +4719,10 @@ def _second_review_items(assessment):
         service = services.get(item.get('service')) or {}
         if service.get('scope_end', 0) > service.get('scope_start', 0):
             spans.append((service['scope_start'], service['scope_end']))
-        spans += [(ev['start'], ev['end']) for ev in item.get('evidence', [])]
+        # a legacy or v1 completeness records each evidence span as {'start', 'end'}, a design v2 one (engine/coverage
+        # completeness) as [start, end] (request of step 6a: the second review offered on a v2 encounter)
+        spans += [(ev['start'], ev['end']) if isinstance(ev, dict) else (ev[0], ev[1])
+                  for ev in item.get('evidence', [])]
     if not spans:
         return items, None
     return items, (min(a for a, _ in spans), max(b for _, b in spans))
@@ -3396,6 +4825,12 @@ def _second_review_bounds(encounter, revision, context, assessment):
     stage_review2 checks them again when it runs. Cheap checks first: the encounter view reads this on every refresh."""
     if busy(encounter):
         return 'Wait for processing to finish (or stop it) before asking for a second review.'
+    if review.update_pending(encounter):
+        # FINAL-V2 amendment 1, 5.3 [R:truth-T15]: never offered on the earlier codes - a case-B save keeps the
+        # context and changes the values, so the context comparison below alone would offer it
+        return _customer_text('UPDATE_DECISION')
+    if provider_holds.held(provider_holds.CORTI):
+        return SECOND_REVIEW_HELD  # A16 (7.3): the offer is refused while Corti's hold stands
     if (assessment is None or revision is None or context is None or assessment.revision_id != revision.pk
             or assessment.context_id != context.pk):
         return 'There is no current assessment to review again.'
@@ -3514,11 +4949,12 @@ def request_second_review(encounter, user):
 
 def stage_review2(job):
     revision, encounter, context, primary = job.revision, job.encounter, job.context, job.provider_run
+    _start_check(job)  # FINAL-V2 amendment 1, 3.4
     encounter.refresh_from_db()
     if encounter.current_revision_id != revision.pk:
-        return {'skipped': 'a newer revision exists; nothing was sent'}
+        return _superseded_result(review.SUPERSEDED_REVISION)
     if context is None or encounter.current_context_id != context.pk or context.version in EARLIER_CONTEXT_VERSIONS:
-        return {'skipped': 'the context changed; nothing was sent'}
+        return {'skipped': 'the context changed; nothing was sent', 'superseded': True}
     _refuse_legacy_context(job)  # FINAL 6.8 and 9: nothing is sent on a context that is not a gemini context
     assessment = encounter.current_assessment
     if (assessment is None or assessment.revision_id != revision.pk or assessment.context_id != context.pk
@@ -3538,6 +4974,8 @@ def stage_review2(job):
              'items': [item.get('label', '') for item in items][:8]}
 
     def next_assess(run):
+        if not _successor_allowed(job):  # FINAL-V2 amendment 1, 3.4's successor gate
+            return
         enqueue(Job.ASSESS, encounter=encounter, revision=revision, context=context, provider_run=primary,
                 key=_assess_key(f'assess:{context.pk}:{primary.pk}:review2:{run.pk}', revision),
                 requested_by=job.requested_by)
@@ -3576,6 +5014,10 @@ def stage_review2(job):
         return {'second_review': 'reused', 'run': str(run.pk)}
     if _unreconciled_unknown(encounter):
         return {'blocked': 'a previous request has an unknown outcome; reconcile it before sending again'}
+    if provider_holds.held(provider.name):
+        # FINAL-V2 amendment 1, A16 (7.3): Corti's hold keeps the second review unsent too; the assessment stands
+        _provider_hold_run(job, provider, request, service_date, purpose=models.ProviderRun.SECOND_REVIEW, scope=scope)
+        raise StageCancelled(PROVIDER_PAUSED_MESSAGE)
     if _failed_before(encounter, provider, request) is not None:
         # Refutation p1, sends-1: an addendum that left the excerpt as it was made a new revision, whose own bound let
         # the identical FAILED request be sent again. Nothing changed, so the assessment stands as it is.
@@ -3590,12 +5032,13 @@ def stage_review2(job):
 
 STAGES = {Job.EXTRACT: stage_extract, Job.ANALYZE: stage_analyze, Job.PREDICT: stage_predict, Job.ASSESS: stage_assess,
           Job.REVIEW2: stage_review2, Job.ASTRA: stage_participant, Job.FABLE: stage_participant,
-          Job.ASTRA_PEER: stage_peer, Job.FABLE_PEER: stage_peer, INTERPRET: stage_interpret}
+          Job.ASTRA_PEER: stage_peer, Job.FABLE_PEER: stage_peer, INTERPRET: stage_interpret,
+          APPRAISE: stage_appraise}  # FINAL-V2 7.4: pass 2
 # The stages that send, and the purpose of the runs they record (the stale sweep settles them by those runs).
 SENDING_PURPOSES = {Job.PREDICT: models.ProviderRun.PRIMARY, Job.REVIEW2: models.ProviderRun.SECOND_REVIEW,
                     **{kind: models.ProviderRun.INDEPENDENT for kind in Job.PARTICIPANT_KINDS},
                     **{kind: models.ProviderRun.PEER_REVIEW for kind in Job.PEER_KINDS},
-                    INTERPRET: INTERPRETATION}
+                    INTERPRET: INTERPRETATION, APPRAISE: APPRAISAL}
 
 
 # --- worker ------------------------------------------------------------------
@@ -3624,7 +5067,7 @@ def claim_next():
 def _new_path_stage(job) -> bool:
     """FINAL 10.3: whether ``job`` is new-path work - an interpret stage, an analyze stage of the derive-only shape, or a
     stage whose context is a gemini context - which runs wholly under a new_path sentinel scope (run_job)."""
-    if job.kind == INTERPRET:
+    if job.kind in READING_KINDS:  # FINAL-V2 7.4: pass 1 and pass 2
         return True
     if job.kind == Job.ANALYZE:
         return _analyze_inventory_id(job) is not None
@@ -3653,6 +5096,9 @@ def run_job(job):
         job.state, job.started_at = Job.QUEUED, None
         job.attempts = max(job.attempts - 1, 0)
         job.result = {'requeued': str(exc)}
+    except StageSuperseded as exc:
+        # FINAL-V2 amendment 1, 3.4: superseded is never a failure and never a stop - SUCCEEDED, saying why
+        job.state, job.error, job.result = Job.SUCCEEDED, '', _superseded_result(exc.reason)
     except StageCancelled as exc:
         job.state, job.error = Job.CANCELLED, str(exc)
     except StageFailure as exc:
@@ -3703,14 +5149,14 @@ def _record_unsettled_holds():
     status, is classified from its outcome, status and bytes (adapter.classify, through holds.classify), and a HOLD is
     recorded against the run. A run left sending counts as sent by may_have_reached_vendor's rule - the one the stale
     sweep settles it by - for the hold only. Nothing else changes: the run is neither settled, marked nor written."""
-    runs = models.ProviderRun.objects.filter(provider=interpretation.PROVIDER, purpose=INTERPRETATION, sent=True,
+    runs = models.ProviderRun.objects.filter(provider=interpretation.PROVIDER, purpose__in=READING_PURPOSES, sent=True,
                                              state__in=(models.ProviderRun.SUCCEEDED, models.ProviderRun.FAILED)
                                              ).exclude(scope__has_key='effect')
     for run in runs:
         outcome = interpretation_holds.classify_run(run)
         if outcome.effect == interpretation_holds.HOLD:
             interpretation_holds.record(run, outcome)
-    unsettled = models.ProviderRun.objects.filter(provider=interpretation.PROVIDER, purpose=INTERPRETATION)
+    unsettled = models.ProviderRun.objects.filter(provider=interpretation.PROVIDER, purpose__in=READING_PURPOSES)
     for kept in (unsettled.filter(state=models.ProviderRun.UNKNOWN, sent=True),
                  may_have_reached_vendor(unsettled.filter(state=models.ProviderRun.SENDING))):
         for run in kept:
@@ -3734,8 +5180,17 @@ def _stale_interpretation(job, run):
     ends as its stage did - paused when it was a pause, failed otherwise."""
     result = {'provider': run.state, 'run': str(run.pk), 'settled': STALE_INTERPRETATION}
     if run.state == models.ProviderRun.SUCCEEDED:
-        enqueue(INTERPRET, encounter=job.encounter, revision=job.revision,
-                key=_interpret_key(job.revision, f'settled:{run.pk}'), requested_by=job.requested_by)
+        if _successor_allowed(job):  # FINAL-V2 amendment 1, 3.7: a successor only for a stage that still serves
+            if job.kind == APPRAISE:
+                pk, tail = _appraise_parts(job)
+                extraction = models.ProviderRun.objects.filter(pk=pk).first() if pk is not None else None
+                if extraction is not None:
+                    enqueue(APPRAISE, encounter=job.encounter, revision=job.revision,
+                            key=_appraise_key(job.revision, extraction, tail, f'settled:{run.pk}'),
+                            requested_by=job.requested_by)
+            else:
+                enqueue(INTERPRET, encounter=job.encounter, revision=job.revision,
+                        key=_interpret_key(job.revision, f'settled:{run.pk}'), requested_by=job.requested_by)
         return Job.SUCCEEDED, '', result
     if run.state == models.ProviderRun.UNKNOWN:
         _mark_effect(run, interpretation_holds.UNKNOWN)
@@ -3751,6 +5206,27 @@ def _stale_interpretation(job, run):
     return Job.FAILED, run.error or INTERPRET_NOT_SENT_MESSAGE, result
 
 
+def _stale_predict(job, run):
+    """FINAL-V2 amendment 1, 3.7 [R2:binding-R2B-6]: (job state, error) for a predict a dead worker left after ``run``
+    recorded its outcome, when the stage would NOT have queued the assess - or None when it would have (a success, a
+    reuse, the member date conflict's hold, E's own outcome during an update, and any outcome in a first processing
+    but the provider hold's), whose successor mark_stale queues as before. A run that set Corti's hold, or one the hold
+    kept unsent, ends the job CANCELLED with the paused text, resumable, in a first processing as during an update;
+    during an update, a FAILED run, a not-resent run of a request that is not E's, a NOT_SENT run carrying its request
+    for a local reason, or a run that carries no request when E's could be built ends it FAILED. Nothing is queued
+    for either."""
+    if _hold_setting(run) or (run.scope or {}).get('held') == provider_holds.HELD:
+        return Job.CANCELLED, PROVIDER_PAUSED_MESSAGE
+    base = _update_base(job.encounter)
+    if base is not None and run.state == models.ProviderRun.UNKNOWN:
+        return Job.SUCCEEDED, ''  # 7.2: an unknown outcome queues nothing; the unknown-outcome block holds the encounter
+    if (base is None or run.state == models.ProviderRun.SUCCEEDED or run.reused_from_id
+            or (run.scope or {}).get('held') == models.ProviderRun.HELD_MEMBER_DATE_CONFLICT
+            or _own_review(run, base) or _unbuilt_like_base(run, base)):
+        return None
+    return Job.FAILED, f'{UPDATE_REVIEW_FAILED} {run.error}'.strip()
+
+
 def mark_stale():
     """Settle jobs a dead worker left 'running'. A send in flight becomes UNKNOWN, never resent."""
     cutoff = timezone.now() - timedelta(seconds=settings.STALE_RUNNING_SECONDS)
@@ -3761,15 +5237,15 @@ def mark_stale():
             # never re-send an identical request that already failed. Read before reserved runs are settled below.
             finished = None
             sends = job.kind in SENDING_PURPOSES  # a harness participant's stage sends too (HARNESS.md 2)
-            if job.kind == INTERPRET:
-                # ADJUDICATION P-6: an interpretation its dead worker left sending, whose one exchange was recorded
-                # answered (HTTP 200, a sha256 that checks), is settled SUCCEEDED from that exchange - nothing is sent
+            if job.kind in READING_KINDS:
+                # ADJUDICATION P-6: a reading run (pass 1 or pass 2) its dead worker left sending, whose one exchange
+                # was recorded answered (HTTP 200, a sha256 that checks), is settled SUCCEEDED from that exchange
                 for run in models.ProviderRun.objects.filter(
                         revision=job.revision, created_at__gte=job.started_at, state=models.ProviderRun.SENDING,
-                        provider=interpretation.PROVIDER, purpose=INTERPRETATION):
+                        provider=interpretation.PROVIDER, purpose=SENDING_PURPOSES[job.kind]):
                     _settle_from_exchange(run)
-            # FINAL 6.9: an interpret stage carries no context, and its finished run is the interpreter's
-            if sends and (job.context_id or job.kind == INTERPRET):
+            # FINAL 6.9: a reading stage carries no context, and its finished run is the interpreter's
+            if sends and (job.context_id or job.kind in READING_KINDS):
                 runs = models.ProviderRun.objects.filter(
                     revision=job.revision, created_at__gte=job.started_at, purpose=SENDING_PURPOSES[job.kind],
                     state__in=(models.ProviderRun.SUCCEEDED, models.ProviderRun.FAILED, models.ProviderRun.UNKNOWN,
@@ -3785,7 +5261,7 @@ def mark_stale():
                     runs = runs.filter(provider=job.kind)  # its own run: both participants' runs are 'independent'
                 elif job.kind in Job.PEER_KINDS:
                     runs = runs.filter(provider=PEER_OF[job.kind])  # and both peer reviews are 'peer_review'
-                elif job.kind == INTERPRET:
+                elif job.kind in READING_KINDS:
                     runs = runs.filter(provider=interpretation.PROVIDER)
                 finished = runs.order_by('-created_at').first()
             sending = models.ProviderRun.objects.filter(revision=job.revision, state=models.ProviderRun.SENDING)
@@ -3805,13 +5281,26 @@ def mark_stale():
                 run.state, run.error, run.finished_at = (models.ProviderRun.NOT_SENT,
                                                          'The worker stopped before sending.', timezone.now())
                 run.save(update_fields=['state', 'error', 'finished_at'])
-            if finished is not None and not unknown and job.kind == INTERPRET:
+            stale_predict = (_stale_predict(job, finished) if finished is not None and not unknown
+                             and job.kind == Job.PREDICT else None)
+            if finished is not None and not unknown and job.kind in READING_KINDS:
                 # FINAL 6.9: settled as the stage would have settled it, sending nothing (_stale_interpretation)
                 job.state, job.error, job.result = _stale_interpretation(job, finished)
+            elif stale_predict is not None:
+                # FINAL-V2 amendment 1, 3.7 [R2:binding-R2B-6]: a predict's finished run settled exactly as the stage
+                # would settle it - 7.2's list while an update is pending, and Corti's provider hold - queueing nothing
+                job.state, job.error = stale_predict
+                job.result = {'provider': finished.state, 'run': str(finished.pk),
+                              'settled': 'the worker stopped after the provider outcome was recorded'}
+            elif finished is not None and not unknown and _superseded(job):
+                # 3.7: a stage that no longer serves the saved state queues no successor; it is recorded superseded
+                job.state, job.error, job.result = Job.SUCCEEDED, '', _superseded_result(_superseded(job))
             elif finished is not None and not unknown:
                 # the stage the settled one would have queued, under the key it would have used
-                if job.kind == Job.PREDICT and (finished.scope or {}).get('held'):
-                    # a member date conflict's hold: no participant chain, as stage_predict queues none
+                if job.kind == Job.PREDICT and ((finished.scope or {}).get('held')
+                                                == models.ProviderRun.HELD_MEMBER_DATE_CONFLICT):
+                    # a member date conflict's hold (3.7: the held branch narrowed to it): no participant chain, as
+                    # stage_predict queues none
                     key = _assess_key(f'assess:{job.context_id}:{finished.pk}', job.revision)
                     enqueue(Job.ASSESS, encounter=job.encounter, revision=job.revision, context=job.context,
                             provider_run=finished, key=key, requested_by=job.requested_by)
@@ -3998,69 +5487,115 @@ def stop_encounter(encounter, user):
     return stopped
 
 
+def _owed_resume(encounter, revision):
+    """FINAL-V2 amendment 1, 3.6, step 1 (FINAL-V2 7.4's Resume rule), while a reading is owed: (kind, base key,
+    provider run, context) of the first stage the saved state owes - interpret when no pass-1 extraction is read at the
+    current version; else appraise when no inventory is read at the current versions (its own stopped stage's key when
+    one is the latest target job, else interpret, whose door finds the read extraction and queues the appraise under
+    its request's sha); else analyze over that inventory ('analyze:<revision>:<inventory>:resume:<uuid>': a legacy update
+    stopped between the reading and the derivation). The v1 chain's: interpret, else analyze."""
+    inventory = _read_inventory(revision)
+    if inventory is not None:
+        return Job.ANALYZE, f'{Job.ANALYZE}:{revision.pk}:{inventory.pk}', None, None
+    last = review.latest_job(encounter)
+    if last is not None and last.kind in READING_KINDS:
+        base = last.idempotency_key.split(':resume:', 1)[0]
+        if not _v1_chain() and last.kind == APPRAISE and _read_extraction(revision) is not None:
+            return APPRAISE, base, None, None
+        if last.kind == INTERPRET:
+            return INTERPRET, base, None, None
+    return INTERPRET, _interpret_key(revision), None, None
+
+
 def resume(encounter, user):
-    """Re-enqueue the stage a Stop cancelled, under a fresh key."""
+    """Re-enqueue the stage the saved state owes, under a fresh key (FINAL-V2 amendment 1, 3.6).
+
+    Allowed when the derived state is 'stopped' (review.can_resume: a Stop, the stale sweep, a queue expiry, and the
+    idle-owed state - an update pending with nothing serving it); refused while any job of the encounter is queued or
+    running (busy: conservative, since a superseded stage may still be sending). It queues the first stage the saved
+    state owes, computed from rows: while a reading is owed, interpret, appraise or analyze (_owed_resume); otherwise
+    today's rule over the latest TARGET job (an assess whose context changed re-runs from predict; any other kind re-runs
+    under its own key plus ':resume:<uuid>'); with no target job at all, a predict for the current context, whose doors
+    reuse every stored answer. A Resume while a hold stands queues the stage, which records a held not-sent run and
+    pauses again, sending nothing (7.3)."""
     with transaction.atomic():
         encounter = _locked(encounter)
         if busy(encounter):
             raise Refused('Wait for processing to finish (or stop it) before resuming.')
-        # The same rule as the API's can_resume: only the current revision's LATEST stage, when it was
-        # cancelled (a Stop, the stale-stage sweep or a queue expiry), runs again - never an older one.
         if not review.can_resume(encounter):
             return None
-        last = review.latest_job(encounter)
-        context = encounter.current_context if last.kind in {Job.PREDICT, Job.ASSESS} else last.context
-        base = last.idempotency_key.split(':resume:', 1)[0]
-        readable = last.revision.extraction_status in READABLE
-        if readable and (last.kind == INTERPRET or _new_path_owed(
-                last.revision, context if last.kind in {Job.PREDICT, Job.ASSESS} else None)):
-            # FINAL 6.9 and 9: a revision with no inventory read at the current versions - or a stage on a context that
-            # is not a gemini context - is interpreted first, by this explicit act; a stopped or paused interpret runs
-            # again under its own key (a retry's or a reconciliation's suffix kept)
-            kind, provider_run, context = INTERPRET, None, None
-            base = base if last.kind == INTERPRET else _interpret_key(last.revision)
-        elif last.kind == Job.ASSESS and context is not None and last.context_id != context.pk:
-            kind, provider_run = Job.PREDICT, None  # the context changed while stopped: re-run from predict
-        elif last.kind == Job.EXTRACT and last.revision.extraction_status in {models.SourceRevision.OK,
-                                                                               models.SourceRevision.PARTIAL}:
-            kind, provider_run = Job.ANALYZE, None  # the text was recorded before the stage was cut short
+        revision = encounter.current_revision
+        readable = revision is not None and revision.extraction_status in READABLE
+        last = review.latest_job(encounter)  # the newest TARGET job (4.3)
+        context = encounter.current_context if encounter.current_context_id else None
+        provider_run = None
+        if last is None:
+            if readable and review.reading_owed(encounter) and not _legacy_reading_allowed():
+                kind, base, provider_run, context = _owed_resume(encounter, revision)
+            elif context is not None:
+                kind, base = Job.PREDICT, f'predict:{context.pk}'  # its doors reuse every stored answer
+            else:
+                return None
         else:
-            kind, provider_run = last.kind, last.provider_run
+            context = encounter.current_context if last.kind in {Job.PREDICT, Job.ASSESS} else last.context
+            base = last.idempotency_key.split(':resume:', 1)[0]
+            if readable and (last.kind in READING_KINDS or _new_path_owed(
+                    last.revision, context if last.kind in {Job.PREDICT, Job.ASSESS} else None)):
+                # FINAL 6.9 and 9; FINAL-V2 7.4 and amendment 1, 3.6: a revision with no inventory read at the current
+                # versions - or a stage on a context that is not a gemini context - is read first, by this explicit
+                # act: the first stage the reading owes (a stopped reading stage runs again under its own key, a
+                # retry's or a reconciliation's suffix kept)
+                kind, base, provider_run, context = _owed_resume(encounter, revision)
+            elif last.kind == Job.ASSESS and context is not None and last.context_id != context.pk:
+                kind, provider_run = Job.PREDICT, None  # the context changed while stopped: re-run from predict
+            elif last.kind == Job.EXTRACT and readable:
+                kind, provider_run = Job.ANALYZE, None  # the text was recorded before the stage was cut short
+            else:
+                kind, provider_run = last.kind, last.provider_run
         clear_stop(encounter)
-        # One fresh suffix on the stage's own key, never a chain: each Resume used to append ':resume:<uuid>' (44
-        # characters) to the previous Resume's key, so the third or fourth Resume in a row overflowed the 200-character
-        # key column (an HTTP 500, nothing recorded; refutation gi2, sends known limit 'third Resume'). Nothing parses
-        # the suffix; the stage's own key stays the prefix (_upgrade_predict_key compares the whole key, so a resumed
-        # upgrade predict still sends, as before).
+        # One fresh suffix on the stage's own key, never a chain (refutation gi2: a chain of Resumes overflowed the
+        # 200-character key column). Nothing parses the suffix; the stage's own key stays the prefix.
         key = f'{base}:resume:{uuid.uuid4()}'
         if kind == Job.PREDICT:
-            job = _queue_predict(encounter, last.revision, context, key=key, requested_by=user)
+            job = _queue_predict(encounter, revision, context, key=key, requested_by=user)
         else:
-            job = enqueue(kind, encounter=encounter, revision=last.revision, context=context,
+            job = enqueue(kind, encounter=encounter, revision=revision,
+                          context=context if kind not in (INTERPRET, APPRAISE, Job.ANALYZE) else None,
                           provider_run=provider_run, key=key, requested_by=user)
-        audit.record(encounter.workspace, 'pipeline.resumed', encounter=encounter, actor=user, stage=last.kind)
+        audit.record(encounter.workspace, 'pipeline.resumed', encounter=encounter, actor=user,
+                     stage=last.kind if last is not None else kind)
         review.refresh_state(encounter)
     return job
+
+
+def _reading_reconciled(run, revision):
+    """The stage a reconciled reading run releases (FINAL 6.9; FINAL-V2 7.4): pass 1's interpret stage
+    ('interpret:...:after-reconcile:<run>'), or for a pass-2 run its appraise stage of the extraction it appraised
+    (its scope names it), ':after-reconcile:<run>' - each settles the run from its recorded exchange first (P-6),
+    sending nothing."""
+    if run.purpose == APPRAISAL:
+        extraction = models.ProviderRun.objects.filter(pk=(run.scope or {}).get('extraction'),
+                                                       revision=revision).first()
+        if extraction is not None and run.request_sha256:
+            return APPRAISE, _appraise_key(revision, extraction, run.request_sha256[:16], f'after-reconcile:{run.pk}')
+    return INTERPRET, _interpret_key(revision, f'after-reconcile:{run.pk}')
 
 
 def reconcile(encounter, run, user, note):
     """Record a member's reconciliation of an UNKNOWN outcome and allow one new attempt.
 
     True when recorded, None when ``run`` is not an unreconciled unknown outcome.
-    The one attempt is a predict for the current revision's current context; when
-    the current revision has no context (its extraction failed) nothing is queued.
+    The one attempt is for the saved state (FINAL-V2 amendment 1, 7.4: the current context and values, so a
+    reconciliation during an update continues the update): a reconciled reading run, or any reconciliation while a
+    reading is owed, queues the reading stage (_reading_reconciled), never a predict - and when it releases the
+    current codes' own unknown document review, those codes are no longer fresh (A21: review.fresh), so that reading is
+    a target job of an update of them; else a predict for the current context. When the current revision has no
+    context (its extraction failed) nothing is queued.
 
     A harness participant's run (refutation round 1, sends-1): when nothing else blocks a send and Corti's run in use
     answers the request the context makes, the participants' chain starts from that run, as a context change that
-    keeps the request does - so Corti's request, sent or recorded not sent, is never attempted again behind another
-    run's reconciliation, and only the participant released here is sent again. Otherwise a predict, as before: also
-    for a context an earlier version recorded, which the predict remakes under the current rules before anything is
-    sent (_remade_context), since those rules may hold the encounter where the earlier ones did not.
-
-    The Gemini migration (design/FINAL.md 6.9 and 9): a reconciled interpretation run, or any reconciliation on a
-    revision with no inventory read at the current versions, queues the interpret stage
-    ('interpret:...:after-reconcile:<run>') and never a predict; that stage settles the run from its recorded exchange
-    before it would send (ADJUDICATION P-6).
+    keeps the request does - never when a ProviderHold row names that run (FINAL-V2 amendment 1 [R3:binding-R3B-5]:
+    the predict is queued instead, which the hold pauses again or, after the release, sends once).
     """
     with transaction.atomic():
         encounter = _locked(encounter)
@@ -4074,20 +5609,17 @@ def reconcile(encounter, run, user, note):
         revision, context = encounter.current_revision, encounter.current_context
         clear_stop(encounter)
         if (revision is not None and revision.extraction_status in READABLE
-                and (run.purpose == INTERPRETATION or _new_path_owed(
+                and (run.purpose in READING_PURPOSES or _new_path_owed(
                     revision, context if context is not None and context.revision_id == revision.pk else None))):
-            # FINAL 6.9 and 9: a reconciled interpretation run queues the interpret stage, never a predict - which,
-            # before it would send, settles the run from its recorded exchange when it holds an answer (P-6) - and so
-            # does any reconciliation on a revision with no inventory read at the current versions: its first
-            # interpretation is this explicit act's
-            enqueue(INTERPRET, encounter=encounter, revision=revision,
-                    key=_interpret_key(revision, f'after-reconcile:{run.pk}'), requested_by=user)
+            kind, key = (_reading_reconciled(run, revision) if run.purpose in READING_PURPOSES
+                         else (INTERPRET, _interpret_key(revision, f'after-reconcile:{run.pk}')))
+            enqueue(kind, encounter=encounter, revision=revision, key=key, requested_by=user)
         elif context is not None and revision is not None and context.revision_id == revision.pk:
             corti = _run_in_use(revision)
             if (run.purpose in PARTICIPANT_PURPOSES and participants.configured()
                     and context.version not in EARLIER_CONTEXT_VERSIONS and not _unreconciled_unknown(encounter)
                     and not gi_context.is_member_conflict((context.facts or {}).get('service_date'))
-                    and _run_answers(corti, revision, context)):
+                    and _run_answers(corti, revision, context) and not _hold_setting(corti)):
                 _after_predict(encounter, revision, context, corti, key=f'assess:{context.pk}:{corti.pk}',
                                origin=f'reconcile:{run.pk}', requested_by=user)
             else:
@@ -4111,17 +5643,18 @@ RETRY_TOO_LONG = ('This document is too long to be read in one piece, so the sam
 RETRY_UNBUILT = 'This document could not be prepared for reading; upload it again.'
 
 
-def retry_target(revision):
-    """(the attempt a retry of ``revision``'s reading answers, the run it would release or None) - FINAL 11.3 - or
-    (None, None) when there is no attempt. The attempt is the revision's newest interpretation run that is not a pause
-    (scope.held). The run released is the newest attempt that was SENT and did not succeed - failed, or an answer whose
-    reading was refused or cut off (interpretation_effect failed or too_long) - which the failed-before door would
-    otherwise hold against the request: the attempt itself, or, for a run that door kept unsent, the attempt it names.
-    A request that never left, or an answer still unread, needs no release: the retry tries it again, or reads it again
-    with nothing sent."""
+def retry_target(revision, purpose=None):
+    """(the attempt a retry of ``revision``'s reading answers, the run it would release or None) - FINAL 11.3; FINAL-V2
+    7.5 and amendment 1, 7.2 (5b extends it to the appraisal runs: a retry of pass 2 re-sends pass 2 only) - or (None,
+    None) when there is no attempt. The attempt is the revision's newest reading run (of ``purpose`` when given, else of
+    either pass) that is not a pause (scope.held). The run released is the newest attempt that was SENT and did not
+    succeed - failed, or an answer whose reading was refused, cut off or whose appraisal settle was refused
+    (interpretation_effect failed or too_long) - which the failed-before door would otherwise hold against the request:
+    the attempt itself, or, for a run that door kept unsent, the attempt it names. A request that never left, or an
+    answer still unread, needs no release: the retry tries it again, or reads it again with nothing sent."""
     newest = (models.ProviderRun.objects.filter(revision=revision, provider=interpretation.PROVIDER,
-                                                purpose=INTERPRETATION).exclude(scope__has_key='held')
-              .order_by('-created_at', '-pk').first())
+                                                purpose__in=(purpose,) if purpose else READING_PURPOSES)
+              .exclude(scope__has_key='held').order_by('-created_at', '-pk').first())
     if newest is None:
         return None, None
     blocking = newest
@@ -4134,27 +5667,36 @@ def retry_target(revision):
     return newest, released
 
 
+def _retry_key(revision, run, mark):
+    """The key of the retry stage of reading run ``run``: the interpret stage's for a pass-1 run, the appraise stage's of
+    the extraction it appraised for a pass-2 run (its scope names it) - each ':<mark>:<run>'."""
+    if run.purpose == APPRAISAL:
+        extraction = models.ProviderRun.objects.filter(pk=(run.scope or {}).get('extraction'),
+                                                       revision=revision).first()
+        if extraction is not None and run.request_sha256:
+            return APPRAISE, _appraise_key(revision, extraction, run.request_sha256[:16], f'{mark}:{run.pk}')
+    return INTERPRET, _interpret_key(revision, f'{mark}:{run.pk}')
+
+
 def retry_reading(encounter, user, *, override=False):
-    """The recorded retry (FINAL 11.3; D11): one more attempt at the current revision's reading. The run the
-    failed-before door would hold against it (retry_target) is released for that one attempt: the release is the stage
-    queued for it, 'interpret:...:retry-release:<run>' (DECISIONS D52, D60, D85), the only mark the failed-before door
-    and the stored-answer door read (released_for_retry), audited 'interpretation.retry'. A run nobody had reconciled
-    also records who released it and when on its reconciled_by, reconciled_at and reconciliation_note
-    (RETRY_RELEASE_NOTE) - a record, never read as the release (D85: an operator writes that column too); a run an
-    operator had reconciled keeps that record (D52). A retry that releases nothing (a request that never left, an
-    answer still unread, or a run already released by its own stage) is keyed 'retry:<run>', which is never read as a
-    release, so the stored-answer door reads an unread answer again with nothing sent. Refused (Refused) while a stage
-    runs or an outcome is unknown, when the revision was read or was never attempted, while a hold stands (an
-    operator's release and a Resume end that), for a document over the size bound or that cannot be prepared, and for
-    an answer cut off at its output limit (C5: the member is told the document is too long to be read in one piece)
-    unless ``override`` - an operator's recorded override, which the caller (the API's retry-reading door, slice S11)
-    grants only to an operator. Returns the queued job."""
+    """The recorded retry (FINAL 11.3; D11; FINAL-V2 7.5 and amendment 1, 7.2): one more attempt at the current
+    revision's reading - pass 1, or pass 2 alone when its attempt is the appraisal (a retry of pass 2 re-sends pass 2
+    only). The run the failed-before door would hold against it (retry_target) is released for that one attempt: the
+    release is the stage queued for it, '...:retry-release:<run>' (DECISIONS D52, D60, D85), the only mark the
+    failed-before door and the stored-answer door read (released_for_retry), audited 'interpretation.retry'. A retry
+    that releases nothing is keyed 'retry:<run>', which is never read as a release. Refused (Refused) while a stage
+    runs or an outcome is unknown, when the encounter is fresh (nothing is owed: RETRY_NOTHING, amendment 1), when the
+    revision was read or was never attempted, while a hold stands, for a document over the size bound or that cannot be
+    prepared, for a claim set over pass 2's bound, and for an answer cut off at its output limit (C5) unless
+    ``override`` - an operator's recorded override. Returns the queued job."""
     with transaction.atomic():
         encounter = _locked(encounter)
         if busy(encounter):
             raise Refused(RETRY_BUSY)
         revision = encounter.current_revision
         if revision is None or revision.extraction_status not in READABLE:
+            raise Refused(RETRY_NOTHING)
+        if review.fresh(encounter):
             raise Refused(RETRY_NOTHING)
         if _read_inventory(revision) is not None:
             raise Refused(RETRY_READ)
@@ -4164,7 +5706,7 @@ def retry_reading(encounter, user, *, override=False):
         if newest is None:
             raise Refused(RETRY_NOTHING)
         refused = (newest.scope or {}).get('refused')
-        if refused == SIZE:
+        if refused in (SIZE, CLAIMS):
             raise Refused(RETRY_TOO_LONG)
         if refused == UNBUILT:
             raise Refused(RETRY_UNBUILT)
@@ -4176,26 +5718,101 @@ def retry_reading(encounter, user, *, override=False):
         mark = RETRY
         if released is not None and not released_for_retry(released):
             locked = models.ProviderRun.objects.select_for_update().get(pk=released.pk)
-            # DECISIONS D52 (the S17 refutation, finding 0): a run an operator reconciled (an unknown outcome P-6 then
-            # settled from its exchange) keeps that record - who, when and the note are its only copy, and the audit
-            # trail keeps no note text by design. On a run nobody reconciled, who released it and when are written
-            # there, as a record only
             if locked.reconciled_at is None:
                 locked.reconciled_by, locked.reconciled_at = user, timezone.now()
                 locked.reconciliation_note = RETRY_RELEASE_NOTE
                 locked.save(update_fields=['reconciled_by', 'reconciled_at', 'reconciliation_note'])
-            # D85 (refutation round 3, finding 16): every release is the retry stage queued below, under a mark only
-            # this code writes ('retry-release:<run>', D60) - the only key released_for_retry reads - so no note an
-            # operator types is ever read as a release
             mark = RETRY_RELEASE
         clear_stop(encounter)
-        key = _interpret_key(revision, f'{mark}:{(released or newest).pk}')
+        kind, key = _retry_key(revision, released or newest, mark)
         if Job.objects.filter(idempotency_key=key).exists():  # asked again for the same attempt: a stage of its own
             key = f'{key}:resume:{uuid.uuid4()}'
-        job = enqueue(INTERPRET, encounter=encounter, revision=revision, key=key, requested_by=user)
+        job = enqueue(kind, encounter=encounter, revision=revision, key=key, requested_by=user)
         audit.record(encounter.workspace, 'interpretation.retry', encounter=encounter, actor=user,
                      run=str((released or newest).pk), released=released is not None, effect=effect,
                      override=bool(override))
+        review.refresh_state(encounter)
+    return job
+
+
+def _predict_run_of(encounter, job):
+    """The newest primary run of ``job``'s revision recorded since it was queued (the run a FAILED predict ended on)."""
+    return (models.ProviderRun.objects.filter(encounter=encounter, revision_id=job.revision_id,
+                                              purpose=models.ProviderRun.PRIMARY, created_at__gte=job.created_at)
+            .exclude(scope__has_key='held').order_by('-created_at', '-pk').first())
+
+
+def retry_update(encounter, user):
+    """FINAL-V2 amendment 1, 7.2 (A10): the recorded retry of a failed update's document review, or of a failed stage
+    that sends nothing; ``POST /api/encounters/<id>/retry-update`` (owners and reviewers). Under the row lock; refused
+    while busy (RETRY_BUSY), when no update is pending or the latest target job did not fail (RETRY_UPDATE_NOTHING), while
+    an outcome is unknown and not reconciled (RETRY_UNKNOWN), for a failed reading (RETRY_UPDATE_READING: retry_reading
+    serves it) and, for a document review the hold paused or that failed, while Corti's provider hold stands
+    (RETRY_UPDATE_HELD, read before the update's own state: a paused review is not a failed one, and never retried).
+
+    - A FAILED predict whose run - or, for a not-resent run, the failed run _failed_before finds for the same request -
+      was sent and failed with an HTTP status other than 401, 402, 403 or 429 (a 5xx, another 4xx, or no status) and no
+      release of it exists: a predict for the current context under 'predict:<context>:retry-release:<run>', which
+      _failed_before skips (one release, one attempt). Such a run refused with 401, 402, 403 or 429 - read by its STATUS,
+      whether or not a ProviderHold row names it (a refusal recorded before the install) - is never retried by a member:
+      RETRY_UPDATE_REFUSED_BEFORE [R3:binding-R3B-4].
+    - A FAILED predict whose run is NOT_SENT carrying its request for a local reason (7.1's not-sent row): a predict
+      under 'predict:<context>:retry:<run>' - nothing reached the vendor, so no release is needed.
+    - A FAILED stage that sends nothing (analyze, assess): the same stage, context and run under its own key plus
+      ':resume:<uuid>'. Each audited 'update.retry'. Returns the queued job."""
+    with transaction.atomic():
+        encounter = _locked(encounter)
+        if busy(encounter):
+            raise Refused(RETRY_BUSY)
+        if not review.update_pending(encounter):
+            raise Refused(_customer_text('RETRY_UPDATE_NOTHING'))
+        if _unreconciled_unknown(encounter):
+            raise Refused(RETRY_UNKNOWN)
+        latest = review.latest_job(encounter)
+        if (latest is not None and latest.kind == Job.PREDICT and latest.state in (Job.FAILED, Job.CANCELLED)
+                and provider_holds.held(provider_holds.CORTI)):
+            # 7.2 [R:races-R2]: while Corti's hold stands a document review is never retried - the predict its refusal
+            # paused (CANCELLED) or one that failed before it was set; the operator's release, then Resume, sends once
+            raise Refused(_customer_text('RETRY_UPDATE_HELD'))
+        if latest is None or latest.state != Job.FAILED:
+            raise Refused(_customer_text('RETRY_UPDATE_NOTHING'))
+        if latest.kind in READING_KINDS:
+            raise Refused(_customer_text('RETRY_UPDATE_READING'))
+        revision, context = encounter.current_revision, encounter.current_context
+        released = None
+        if latest.kind == Job.PREDICT:
+            run = _predict_run_of(encounter, latest)
+            if run is None:
+                raise Refused(_customer_text('RETRY_UPDATE_NOTHING'))
+            blocking = run
+            if run.state == models.ProviderRun.NOT_SENT and run.error.startswith(FAILED_BEFORE_MESSAGE):
+                # the run the not-resent run stands for: the newest sent attempt of its request that did not succeed -
+                # one that FAILED, or one an adapter recorded not sent while marking it sent (_marked_sent_before)
+                blocking = (models.ProviderRun.objects.filter(
+                    encounter=encounter, provider=run.provider, adapter_version=run.adapter_version,
+                    request_sha256=run.request_sha256, sent=True,
+                    state__in=(models.ProviderRun.FAILED, models.ProviderRun.NOT_SENT))
+                    .order_by('-created_at').first()) or run
+            if provider_holds.retry_refused(blocking):
+                raise Refused(_customer_text('RETRY_UPDATE_REFUSED_BEFORE'))
+            if blocking.sent and blocking.state in (models.ProviderRun.FAILED, models.ProviderRun.NOT_SENT):
+                key, released = f'predict:{context.pk}:{RETRY_RELEASE}:{blocking.pk}', blocking
+            elif run.state == models.ProviderRun.NOT_SENT and run.request_sha256 and not run.sent:
+                key = f'predict:{context.pk}:{RETRY}:{run.pk}'
+            else:
+                raise Refused(_customer_text('RETRY_UPDATE_NOTHING'))
+            if Job.objects.filter(idempotency_key=key).exists():
+                raise Refused(RETRY_BUSY)  # asked again for the same attempt
+            clear_stop(encounter)
+            job = _queue_predict(encounter, revision, context, key=key, requested_by=user)
+        else:
+            clear_stop(encounter)
+            job = enqueue(latest.kind, encounter=encounter, revision=latest.revision, context=latest.context,
+                          provider_run=latest.provider_run,
+                          key=f'{latest.idempotency_key.split(":resume:", 1)[0]}:resume:{uuid.uuid4()}',
+                          requested_by=user)
+        audit.record(encounter.workspace, 'update.retry', encounter=encounter, actor=user, stage=latest.kind,
+                     **({'run': str(released.pk)} if released is not None else {}))
         review.refresh_state(encounter)
     return job
 
@@ -4318,12 +5935,13 @@ def _settles_member_conflict(previous, context):
 
 
 CONTEXT_SAVE = 'context.save'  # a save on an event inventory: its sentinel scope's entry and write gate (FINAL 10.3)
-AFTER_SAVE = 'after-save'  # an interpret stage's key mark: a member's context save had the revision read (FINAL 9)
+AFTER_SAVE = 'after-save'  # a reading stage's key mark: a member's context save had the revision read (FINAL 9)
 CONTEXT_UNREAD_MESSAGE = ("This document's reading ended without a result and nothing is left to resume, so its "
                           'context cannot be changed and nothing is sent for it. Ask for it to be read again, or '
                           'upload it again.')
 CONTEXT_NONE_MESSAGE = ('This document has not been read yet, so it has no context to change. Resume processing to '
                         'have it read.')
+CONTEXT_BUSY_MESSAGE = 'Wait for processing to finish (or stop it) before changing context.'
 
 
 class _SaveGateClosed(Exception):
@@ -4340,34 +5958,43 @@ class _SaveGateClosed(Exception):
         self.scope = scope
 
 
-def change_context(encounter, user, values, *, confirmation=None):
-    """Apply member-supplied metadata, snapshot a new context and re-assess.
+@dataclasses.dataclass(frozen=True)
+class ContextSave:
+    """What a context save did (FINAL-V2 amendment 1, 1.3 and 2.7): ``context``, the encounter's current context after
+    it (the new one a case-A save made, the kept one of a case-B save, the earlier codes' own after a restore - None
+    when the encounter has none yet); ``changed``, the coding-context fields whose saved value changed; ``updating``,
+    whether an update is pending after it; ``restored``, whether it made the earlier codes current again (2.5);
+    ``unchanged``, whether it changed nothing and so wrote nothing (1.2). ``pk`` is the context's id, as the callers that
+    read the returned context read it (api.context, answers._save_details)."""
+    context: object
+    changed: tuple = ()
+    updating: bool = False
+    restored: bool = False
+    unchanged: bool = False
 
-    Re-assesses with the run already in use only when that run answers exactly the
-    request the new context would send - and, for a save that settles a held member
-    date conflict, is not a primary attempt that conclusively never reached the
-    provider (_attempt_owed: the request the hold deferred is made); otherwise
-    re-predicts (an identical retained result is still reused for free by the predict
-    stage, and a date the revision was never routed for is routed first).
+    @property
+    def pk(self):
+        return self.context.pk if self.context is not None else None
+
+
+def change_context(encounter, user, values, *, confirmation=None):
+    """Apply member-supplied metadata - FINAL-V2 amendment 1: the codes are updated automatically after a save.
+
+    Under the encounter's row lock, before anything is written (1.3): the saved values are compared with the values
+    after the merge (review.values: the four coding-context fields, normalized), never with the page; a save that
+    changes nothing writes nothing, not even an audit row, and returns ContextSave(unchanged=True). Otherwise, in order:
+    A18's member-act refusal (a member-act stage on the current context queued or running: the busy sentence); the
+    restore (2.5: the earlier codes' own values while they can stand as they are, A19 - they become current again,
+    nothing queued; a case-B save of them that cannot be a restore is refused, RESTORE_REFUSED); A12's refusals on a
+    revision with no inventory at the current versions (over the size bound: SAVE_TOO_LONG; a text that cannot be
+    framed: SAVE_UNPREPARED); then the update - case A, a revision with an inventory read at the current versions
+    (_save_on_inventory: a new context derived over the frozen inventory, the decision of 2.2), or case B (any other:
+    _save_awaiting_reading, the values stored and the first stage the reading owes queued, coalesced with a QUEUED one).
+    No busy refusal otherwise (A1): a newer save supersedes the older one's pending stages (3.4).
 
     ``confirmation``: the FindingConfirmation of a service date a reviewer confirmed (HARNESS.md 11.3, 12.5;
     review.confirm_finding), which enters here as the member's date, exactly as a member's save: its context.changed
-    audit row names the confirmation. None for a member's own save, whose row is as before.
-
-    The Gemini migration (design/FINAL.md 6.10, 9 and 16.3-16.4; D8):
-    - a revision with an event inventory read at the current versions - the current gemini context's own, else the
-      revision's - is saved ON THAT FROZEN INVENTORY (_save_on_inventory): interpretation.facts.derive with the new
-      values is recorded as a new gemini-context@1 row bound to it, here under the row lock (pure: no text read for
-      meaning, no network, nothing sent to the interpreter), its routing stand-in recorded for a changed effective date,
-      under a new_path sentinel scope whose write gate refuses the save (Refused; its trip audited once the save rolled
-      back - kept only when no transaction of the caller's is open, and carried on the Refused as ``trip`` for a
-      caller that holds one: _SaveGateClosed) when it counted a legacy execution or cannot vouch for itself; then the
-      decision is exactly as before (_decide_after_save);
-    - any other revision (the legacy reader's, or one never read at the current versions) stores the values and has
-      the revision read, its first interpretation, in the worker (_save_before_reading): no context is made here, and
-      the current one is returned. Refused when its reading ended failed with nothing to resume
-      (CONTEXT_UNREAD_MESSAGE): the recorded retry or a new upload is the way, never a save.
-    The legacy flow below them runs only under the test-only legacy chain (_legacy_reading_allowed)."""
+    audit row names the confirmation. Returns ContextSave."""
     try:
         return _change_context(encounter, user, values, confirmation)
     except _SaveGateClosed as closed:
@@ -4382,51 +6009,59 @@ def change_context(encounter, user, values, *, confirmation=None):
         raise Refused(sentinel.MESSAGES['unavailable']) from None  # never reached: a refusal never lifts
 
 
-def _merge_values(encounter, values):
-    """The member's values merged into the encounter's (an empty value clears one), and saved."""
-    merged = dict(encounter.user_values or {})
+def _merged_values(current, values):
+    """_merge_values' rule applied to a copy: the member's values merged into ``current`` (an empty value clears one)."""
+    merged = dict(current or {})
     for key, value in values.items():
         if value:
             merged[key] = value
         else:
             merged.pop(key, None)
-    encounter.user_values = merged
+    return merged
+
+
+def _merge_values(encounter, values):
+    """The member's values merged into the encounter's (an empty value clears one), and saved."""
+    encounter.user_values = _merged_values(encounter.user_values, values)
     encounter.save(update_fields=['user_values', 'updated_at'])
 
 
 def _saved_inventory(revision, previous):
-    """The EventInventory a context save re-derives from (FINAL 6.10, D8): the one the current gemini context of this
-    revision names, when it was read at the current versions; else the revision's newest inventory read at them (its
-    analyze did not finish, or a legacy context is current); None when there is none - the revision is read first."""
+    """The EventInventory a context save re-derives from (FINAL 6.10, D8; FINAL-V2 amendment 1, 2.2): the one the current
+    gemini context of this revision names, when it was read at the current versions; else the revision's newest
+    inventory read at them (its analyze did not finish, or a legacy context is current); None when there is none - the
+    revision is read first (case B, 2.3)."""
+    interpretation_version, inventory_version = current_versions()
     if (previous is not None and previous.revision_id == revision.pk and interpretation.is_new_context(previous)
             and previous.event_inventory_id):
         own = (models.EventInventory.objects.select_related('provider_run')
                .filter(pk=previous.event_inventory_id, revision=revision, state=models.EventInventory.READ,
-                       interpretation_version=interpretation.INTERPRETATION_VERSION,
-                       inventory_version=interpretation.INVENTORY_VERSION).first())
+                       interpretation_version=interpretation_version, inventory_version=inventory_version).first())
         if own is not None:
             return own
     return _read_inventory(revision)
 
 
 def _save_on_inventory(encounter, user, revision, previous, inventory, values, confirmation):
-    """A context save on ``inventory``, frozen (change_context; FINAL 6.10): the values stored, the gemini-context@1 row
-    derived from the inventory with them (the same derivation analyze records), its stand-in for its effective date when
-    none is stored yet, the context made current, the audit row, and the decision exactly as before. All of it in one
-    new_path sentinel scope; the gate is asked after the derivation and before the first row is written (_SaveGateClosed
-    rolls the whole save back). Nothing is read, built or sent for the interpreter. Returns the new context."""
+    """Case A (FINAL-V2 amendment 1, 2.2; FINAL 6.10): a context save on ``inventory``, frozen: the values stored, the
+    gemini context derived from the inventory with them (the derivation analyze records), its earlier assessment
+    recorded (4.5), its stand-in for its effective date when none is stored yet, the context made current, the audit
+    row, and the decision of _decide_after_save. All of it in one new_path sentinel scope; the gate is asked after the
+    derivation and before the first row is written (_SaveGateClosed rolls the whole save back). Nothing is read, built
+    or sent for the interpreter. Returns the new context."""
     with sentinel.scope(sentinel.NEW_PATH, entry=CONTEXT_SAVE) as scope:
+        earlier = earlier_for_new_context(encounter)  # read before this save replaces the context (4.5)
         _merge_values(encounter, values)
         try:
             stored = _stored_inventory(inventory, revision)
-            derived = derived_facts(encounter, inventory, stored)
-        except StageFailure as exc:
+            derived = derived_facts(encounter, inventory, stored, revision)
+        except (StageFailure, StageCancelled) as exc:
             raise Refused(str(exc)) from None
         service_date = date.fromisoformat(derived.effective) if derived.effective else None
         data = _stand_in(revision, inventory, stored, service_date)
         if sentinel.refusal(scope) is not None:
             raise _SaveGateClosed(scope)
-        context = record_derived_context(encounter, revision, inventory, derived, created_by=user)
+        context = record_derived_context(encounter, revision, inventory, derived, created_by=user, earlier=earlier)
         if context_service_date(context) != service_date:  # one date: the context's and its stand-in's
             raise Refused(CONTEXT_DATE_MESSAGE)
         if _events_stand_in(revision, inventory, service_date) is None:
@@ -4440,43 +6075,138 @@ def _save_on_inventory(encounter, user, revision, previous, inventory, values, c
     return context
 
 
-def _save_before_reading(encounter, user, revision, values, confirmation):
-    """A context save on a revision with no event inventory read at the current versions (change_context; FINAL 6.10 and
-    9): the values are stored and the revision's interpretation is queued - its first, for a revision the legacy reader
-    read - keyed '<interpret key>:after-save:<uuid>', so a stage of its own runs whatever ran before; analyze then
-    derives the context with these values. No context is made here: the current one is returned - the legacy reader's,
-    or an earlier revision's - never taken for one this save made. Refused when the revision's reading ended FAILED with
-    nothing to resume (CONTEXT_UNREAD_MESSAGE: the recorded retry or a new upload is the way), and when the encounter has
-    no context at all (CONTEXT_NONE_MESSAGE: a Resume has it read; as before the migration, a document never read to the
-    end took no context save)."""
-    latest = review.latest_job(encounter)
-    if latest is not None and latest.kind == INTERPRET and latest.state == Job.FAILED:
-        raise Refused(CONTEXT_UNREAD_MESSAGE)
-    if encounter.current_context_id is None:
-        raise Refused(CONTEXT_NONE_MESSAGE)
+def _reading_active(encounter, revision):
+    """Whether a reading stage of ``revision`` (extract, interpret, appraise) is queued or running."""
+    return encounter.jobs.filter(revision=revision, kind__in=(Job.EXTRACT, INTERPRET, APPRAISE),
+                                 state__in=(Job.QUEUED, Job.RUNNING)).exists()
+
+
+def _owed_reading(revision):
+    """The first stage the reading of ``revision`` owes (FINAL-V2 7.4's Resume rule): interpret when no pass-1
+    extraction is read at the current pass-1 version, else appraise (the v1 chain's reading is interpret alone)."""
+    if _v1_chain() or _read_extraction(revision) is None:
+        return INTERPRET
+    return APPRAISE
+
+
+def _reading_failed(revision, kind):
+    """Whether the newest attempt of the owed stage ``kind`` is a sent attempt that failed or was cut off, which no
+    recorded retry released (retry_target's second value; released_for_retry): the failed-before door would hold the
+    identical request, so a save queues nothing (2.3) - the failure stands, with its Retry or its too-long text."""
+    _, released = retry_target(revision, APPRAISAL if kind == APPRAISE else INTERPRETATION)
+    return released is not None and not released_for_retry(released)
+
+
+def _owed_key(revision, kind, extraction=None):
+    """The base key of the owed reading stage: the interpret stage's base key; an appraise stage's base key is its own
+    stage's, read from the newest appraise job of the read extraction (the request sha it names), else None (the
+    interpret stage is queued instead: its door finds the read extraction and queues the appraise under its sha)."""
+    if kind == INTERPRET:
+        return _interpret_key(revision)
+    job = (Job.objects.filter(revision=revision, kind=APPRAISE,
+                              idempotency_key__startswith=f'{APPRAISE}:{revision.pk}:{extraction.pk}:')
+           .order_by('-created_at', '-pk').first()) if extraction is not None else None
+    if job is None:
+        return None
+    pk, tail = _appraise_parts(job)
+    return _appraise_key(revision, extraction, tail) if pk is not None else None
+
+
+def _coalesce(encounter, revision):
+    """2.3's coalescing, a compare-and-set under the row lock [R2:binding-R2B-7]: the QUEUED reading stage of this
+    revision (extract, interpret or appraise; never the stale sweep's settled path, which sends nothing whatever it
+    finds, and never a RUNNING one [R:races-R6]) whose queue deadline this save renews (UPDATE ... WHERE state = QUEUED);
+    None when no such stage is left queued (claim_next claimed or expired it meanwhile)."""
+    queued = (encounter.jobs.filter(revision=revision, kind__in=(Job.EXTRACT, INTERPRET, APPRAISE), state=Job.QUEUED)
+              .order_by('-created_at', '-pk'))
+    for job in queued:
+        if _settled_path(job):
+            continue
+        if Job.objects.filter(pk=job.pk, state=Job.QUEUED).update(deadline_at=timezone.now() + QUEUE_DEADLINE):
+            return job
+    return None
+
+
+def _save_awaiting_reading(encounter, user, revision, values, confirmation):
+    """Case B (FINAL-V2 amendment 1, 2.3; it replaces _save_before_reading): a context save on a revision with no
+    inventory read at the current versions - the installed release's (the legacy reader's), one of an earlier v2
+    version, or one whose reading did not finish. The values are stored, a Stop is lifted, and no context is made (the
+    current one is kept). Then the first stage the reading owes, unless one is QUEUED (coalesced, its deadline renewed
+    by a compare-and-set: the analyze that follows derives with the values saved at its own commit, 4.2): a reading
+    stage RUNNING is never coalesced with - the owed stage is queued beside it under ':after-save:<uuid>', whose doors
+    reuse what the running one stores; a reading that failed queues nothing (its Retry, or its too-long text, stands);
+    otherwise the owed stage under its base key, or the base key plus ':after-save:<uuid>' when a job holds it. A stage
+    that would pause (a hold, the interpreter disabled) is queued as any other and pauses without sending.
+
+    Refused (kept, 1.4) when the encounter shows no codes and has no earlier codes: its reading ended FAILED with
+    nothing to resume (CONTEXT_UNREAD_MESSAGE, a first processing only), or it has no context and no reading stage is
+    queued or running (CONTEXT_NONE_MESSAGE). Returns the job queued or coalesced with, or None."""
+    has_codes = encounter.current_assessment_id is not None or review.earlier(encounter) is not None
+    active = _reading_active(encounter, revision)
+    if not has_codes and not active:
+        latest = review.latest_job(encounter)
+        if latest is not None and latest.kind in READING_KINDS and latest.state == Job.FAILED:
+            raise Refused(CONTEXT_UNREAD_MESSAGE)
+        if encounter.current_context_id is None:
+            raise Refused(CONTEXT_NONE_MESSAGE)
     _merge_values(encounter, values)
     clear_stop(encounter)
-    job = enqueue(INTERPRET, encounter=encounter, revision=revision,
-                  key=_interpret_key(revision, f'{AFTER_SAVE}:{uuid.uuid4()}'), requested_by=user)
+    job = _coalesce(encounter, revision)
+    if job is None:
+        kind = _owed_reading(revision)
+        extraction = _read_extraction(revision) if kind == APPRAISE else None
+        base = _owed_key(revision, kind, extraction)
+        if base is None:  # no appraise stage of the read extraction is known: interpret's door queues it
+            kind, base = INTERPRET, _interpret_key(revision)
+        if not _reading_failed(revision, kind):
+            key = base if not Job.objects.filter(idempotency_key=base).exists() else f'{base}:{AFTER_SAVE}:{uuid.uuid4()}'
+            job = enqueue(kind, encounter=encounter, revision=revision, key=key, requested_by=user)
     audit.record(encounter.workspace, 'context.changed', encounter=encounter, actor=user, fields=sorted(values),
-                 reading=str(job.pk), **({'confirmation': str(confirmation.pk)} if confirmation is not None else {}))
-    return encounter.current_context
+                 **({'reading': str(job.pk)} if job is not None else {}),
+                 **({'confirmation': str(confirmation.pk)} if confirmation is not None else {}))
+    return job
+
+
+def _hold_setting(run) -> bool:
+    """Whether ``run`` set a provider hold (provider_holds.sets_hold: a ProviderHold row names it; never its status
+    alone)."""
+    return run is not None and provider_holds.sets_hold(run)
+
+
+def _own_review(run, base) -> bool:
+    """FINAL-V2 amendment 1, A6 [R:legacy-L4]: whether ``run`` is the earlier codes ``base``'s own document review - its
+    own run, or a run carrying the same request (provider, adapter version and request sha256) as it."""
+    own = base.provider_run if base is not None else None
+    if run is None or own is None:
+        return False
+    if run.pk == own.pk:
+        return True
+    return (bool(own.request_sha256) and (run.provider, run.adapter_version, run.request_sha256)
+            == (own.provider, own.adapter_version, own.request_sha256))
 
 
 def _decide_after_save(encounter, user, revision, previous, context):
-    """What a context save queues once its new ``context`` is current (``previous``: the one it replaced), the same for
-    every context (FINAL 6.10: "decide exactly as today"):
+    """What a context save queues once its new ``context`` is current (``previous``: the one it replaced; FINAL 6.10;
+    FINAL-V2 amendment 1, 2.2):
+
+    It re-checks with the run in use (an assess, or the participants' chain when one is owed) only when that run answers
+    the new context's request - and, while an update is pending (earlier codes E exist), only when that run SUCCEEDED or
+    is E's own run (_own_review: its request is unchanged, so the review does not rerun, A6 [R:legacy-L4]) - and, in a
+    first processing as during an update, never with a run a ProviderHold row names (a hold-setting run: the predict is
+    queued instead, which the hold pauses again or, after the release, sends once [R3:binding-R3B-5][R3:truth-R3T-4]).
+    Any other run in use queues the predict, whose doors decide; it never re-sends an identical request that failed
+    (_failed_before).
 
     Refutation p2 sends2-0 (repair gi2): a save that settles a held member date conflict makes the request the hold
-    deferred when the run in use is a primary attempt that conclusively never reached the provider. The settled context
-    asks for that attempt's own request, so re-checking with it left the hold's promise ("the request is made for the
-    agreed date") unkept and the encounter failed on a request never made. Only that save, once per such save: every
-    other save that leaves the request unchanged still re-checks (5.4; round 3 pipeline3:0), and the predict applies
-    every send rule (a retained answer reused, the unknown-outcome block, the failed-request door, single flight)."""
+    deferred when the run in use is a primary attempt that conclusively never reached the provider (_attempt_owed)."""
     last_run = _run_in_use(revision)
     clear_stop(encounter)
     owed = _settles_member_conflict(previous, context) and _attempt_owed(encounter, last_run)
-    if _run_answers(last_run, revision, context) and not owed:
+    recheck = _run_answers(last_run, revision, context) and not owed and not _hold_setting(last_run)
+    base = review.earlier(encounter)
+    if recheck and base is not None:
+        recheck = last_run.state == models.ProviderRun.SUCCEEDED or _own_review(last_run, base)
+    if recheck:
         if _participants_owed(revision, context):
             # A configured participant has no outcome for this revision - its stage was stopped, expired or swept
             # before it recorded one, or it was configured since: the chain runs before the assess, under every
@@ -4491,6 +6221,45 @@ def _decide_after_save(encounter, user, revision, previous, context):
         _queue_predict(encounter, revision, context, key=f'predict:{context.pk}', requested_by=user)
 
 
+def _customer_text(name):
+    """A customer sentence of customer_api (3c's): read where it is used, since customer_api imports this module's
+    neighbours at load."""
+    from . import customer_api
+
+    return getattr(customer_api, name)
+
+
+def _framing_refusal(revision):
+    """A12 (1.4): SAVE_TOO_LONG when the revision is over the size bound (_size_bound), SAVE_UNPREPARED when its text
+    fails the pure framing check (contract/extract_prompt.unframed, FINAL-V2 1.2 rule 8, run here without the adapter);
+    '' otherwise. The v1 chain reads no such refusal (its interpret stage records its own)."""
+    if _v1_chain():
+        return ''
+    if _size_bound(revision):
+        return _customer_text('SAVE_TOO_LONG')
+    from .interpretation.contract import extract_prompt
+
+    try:
+        reason = extract_prompt.unframed(revision.text or '', _participant_pages(revision))
+    except (TypeError, ValueError):
+        reason = True
+    return _customer_text('SAVE_UNPREPARED') if reason is not None else ''
+
+
+def _restore(encounter, user, values, base, changed, confirmation):
+    """2.5's restore: the values stored, the earlier codes ``base``'s own context current again (when it is not
+    already), the audit row naming the restore, nothing queued; the encounter is fresh at once."""
+    _merge_values(encounter, values)
+    clear_stop(encounter)
+    if encounter.current_context_id != base.context_id:
+        encounter.current_context = base.context
+        encounter.save(update_fields=['current_context', 'updated_at'])
+    audit.record(encounter.workspace, 'context.changed', encounter=encounter, actor=user, fields=sorted(values),
+                 context=str(base.context_id), restored=str(base.pk),
+                 **({'confirmation': str(confirmation.pk)} if confirmation is not None else {}))
+    return ContextSave(context=base.context, changed=changed, updating=False, restored=True)
+
+
 def _change_context(encounter, user, values, confirmation):
     with transaction.atomic():
         encounter = _locked(encounter)
@@ -4498,18 +6267,39 @@ def _change_context(encounter, user, values, confirmation):
         if revision is None or revision.extraction_status not in {models.SourceRevision.OK,
                                                                   models.SourceRevision.PARTIAL}:
             raise Refused('Context can be set once the document text has been extracted.')
-        if busy(encounter):
-            raise Refused('Wait for processing to finish (or stop it) before changing context.')
+        # 1.3: what changed, against the SAVED values, never the page
+        before = review.values(encounter)
+        after = review.values_of(_merged_values(encounter.user_values, values))
+        changed = tuple(name for name in review.CONTEXT_FACT_NAMES if before.get(name) != after.get(name))
+        if not changed:
+            return ContextSave(context=encounter.current_context if encounter.current_context_id else None,
+                               updating=review.update_pending(encounter), unchanged=True)
+        if review.member_act_running(encounter):  # A18 [R:races-R4][R:races-R5]
+            raise Refused(CONTEXT_BUSY_MESSAGE)
         previous = encounter.current_context  # read before this save replaces it (_settles_member_conflict)
         inventory = _saved_inventory(revision, previous)
+        base = review.earlier(encounter)
+        if (base is not None and review.is_final(base) and base.revision_id == revision.pk
+                and encounter.current_assessment_id == base.pk and after == review.values(base.context)):
+            # 2.5: a save of the earlier codes' own values, within one revision, while they are the current assessment
+            if review.can_stand(base):
+                context_save = _restore(encounter, user, values, base, changed, confirmation)
+                review.refresh_state(encounter)
+                return context_save
+            if inventory is None:  # A19: case B would keep the context and read fresh with every stage superseded
+                raise Refused(_customer_text('RESTORE_REFUSED'))
         if inventory is not None:
             context = _save_on_inventory(encounter, user, revision, previous, inventory, values, confirmation)
             review.refresh_state(encounter)
-            return context
+            return ContextSave(context=context, changed=changed, updating=review.update_pending(encounter))
         if not _legacy_reading_allowed():
-            context = _save_before_reading(encounter, user, revision, values, confirmation)
+            refusal = _framing_refusal(revision)  # A12: such an update could never finish
+            if refusal:
+                raise Refused(refusal)
+            _save_awaiting_reading(encounter, user, revision, values, confirmation)
             review.refresh_state(encounter)
-            return context
+            return ContextSave(context=encounter.current_context if encounter.current_context_id else None,
+                               changed=changed, updating=review.update_pending(encounter))
         # The legacy flow: only the test-only legacy chain reaches it (_legacy_reading_allowed).
         if not models.RoutingRun.objects.filter(revision=revision).exists() and not review.can_resume(encounter):
             # Its analysis overran or failed, so nothing may be sent for it, whatever the context says: the request
@@ -4520,6 +6310,8 @@ def _change_context(encounter, user, values, confirmation):
             # document's own.
             raise Refused('This document could not be read to the end, so its context cannot be changed and nothing '
                           'is sent for it. Upload it again, shorter or split.')
+        if busy(encounter):
+            raise Refused(CONTEXT_BUSY_MESSAGE)  # the legacy chain keeps its busy refusal (it supersedes nothing)
         _merge_values(encounter, values)
         context = make_context(encounter, revision, created_by=user, seconds=settings.CONTEXT_REQUEST_SECONDS,
                                refusal=Refused)
@@ -4530,7 +6322,7 @@ def _change_context(encounter, user, values, confirmation):
                      **({'confirmation': str(confirmation.pk)} if confirmation is not None else {}))
         _decide_after_save(encounter, user, revision, previous, context)
         review.refresh_state(encounter)
-    return context
+    return ContextSave(context=context, changed=changed, updating=review.update_pending(encounter))
 
 
 REASSESS_BUSY = 'Wait for processing to finish (or stop it) before the encounter is assessed again.'

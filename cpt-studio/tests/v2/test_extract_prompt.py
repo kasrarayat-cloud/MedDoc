@@ -5,8 +5,14 @@ What is proved here, item by item against the done-when of 8.1 step 2a:
 - each clause of 2.1 (P1-P24) is pinned by a grep test of its rule (ClauseTests); each borderline filing of 2.2 is
   stated as a rule (BorderlineTests); 1.4's value definitions are rendered in and every field of the answer is named
   (ValueTests);
+- DECISIONS D244's Q-N8 option (b) (DenialTests): its one sentence, DENIED_PROCEDURE, exactly, in DENIALS right after
+  the bullet that files a denied act, the only change since the waves 3-4 pin; and GI Note #8's denial of an upper
+  endoscopy filed as it says (the examination of an EGD session of its own, negated), taken through step 6c's offline
+  pipeline (reader, checks, claims, pass 2's faithful answer, settle, store, engine), holds none of 45385, 45386,
+  45390 and 45378 by 4.3's row 7, where the same denial filed with its session empty holds all four;
 - the body has exactly v1's three keys, computed from v1's prompt.py in the test, and carries nothing but the
-  instruction, the framed document and the generation settings (BodyTests);
+  instruction, the framed document and the generation settings - v1's, with DECISIONS D230's thinking configuration
+  (thinkingLevel high) and output limit (65536) in place of v1's 32768, the one thinking setting sent (BodyTests);
 - no member value can enter the body (BodyTests); the instruction holds no CPT code, no case, no expected answer, no
   phrase of survey 4's failure cases (loaded from the survey file in the test), no quoted example of 2.1 or 2.2, no
   phrase of a development document (the U32 registry, every refutation round's case files - round 6's, and the earlier
@@ -100,9 +106,13 @@ NEVER_OPENED_PREFIXES = ('sealed', 'acceptance')
 # The shas this step hands the integration owner for studio/interpretation/__init__.py (FINAL-V2 2.5, 8.0), written by
 # it after the wave's last repair (DECISIONS D202, INT-5). INSTRUCTIONS_SHA256_V2: the sha256 of INSTRUCTIONS_2 (UTF-8),
 # after 1b's rewording of the device and session-kind lines (triage 2a R5), 2a#1's anchor sentence and D185's id
-# sentence, and then step 1b3's definitions of D209's two act kinds and D214's two session kinds (48f64718...,
-# 59838c74... and INT-5's 244858ab... are superseded; the integration owner writes it in the waves 3-4 pin change)
-INSTRUCTIONS_SHA256 = '462631172d4741a35418ef99bc6befd8ac3dcef95e46649fa5f4f260e98c98f9'
+# sentence, step 1b3's definitions of D209's two act kinds and D214's two session kinds, and then the w7r round's
+# DENIED_PROCEDURE sentence (DECISIONS D244, Q-N8 option (b); 48f64718..., 59838c74..., INT-5's 244858ab... and the
+# waves 3-4 pin change's 462631172d... are superseded; this step writes the pin line in this round)
+INSTRUCTIONS_SHA256 = '543adde5d07822bc45c3eaffb52c19175ad5a8d30b842c1e2ebc8008707b9089'
+# The instruction's pin before D244's sentence (the waves 3-4 pin change): the instruction with that sentence's lines
+# taken out hashes to it, so the sentence is the only change of this round (DenialTests)
+INSTRUCTIONS_SHA256_BEFORE_D244 = '462631172d4741a35418ef99bc6befd8ac3dcef95e46649fa5f4f260e98c98f9'
 SEGMENTATION_SHA256 = '41d2245ada69f2a573d0354486323d9f30e00fef7091f531e2e0541a11af8e78'  # step 1a's rule constants
 PINS = {'INSTRUCTIONS_SHA256_V2': INSTRUCTIONS_SHA256, 'RESPONSE_SCHEMA_SHA256_V2': RESPONSE_SHA256,
         'LOCAL_SCHEMA_SHA256_V2': LOCAL_SHA256, 'SEGMENTATION_SHA256': SEGMENTATION_SHA256}
@@ -129,8 +139,10 @@ NOTE_BODY = ('[Page 1]\n'
              '[S6] Plan: Repeat in five years.\n')
 V1_SECOND_LINE = ('Its extracted text follows between the two marker lines. The [Page N] lines mark where each page begins '
                   'and are not part of the text.')
-# the sha256 of the whole body (providers.base.canonical_body) for NOTE as a PDF, under the pins above
-NOTE_PDF_REQUEST_SHA256 = '739e001c40caf300f257c2359019ef51a7077128c3ed4f63ee34a812ca1797f0'
+# the sha256 of the whole body (providers.base.canonical_body) for NOTE as a PDF, under the pins above, recomputed by
+# build_request for DECISIONS D230's generation settings (thinkingLevel high, maxOutputTokens 65536; step cb of round
+# w9r: dca8fc35... before them, 739e001c... before D244's sentence)
+NOTE_PDF_REQUEST_SHA256 = '7d91cdb67c35945297b6ae3b1a027248fd357f1c25b73ddd4ee410bcde65e8c6'
 
 WORD = re.compile(r"[a-z0-9_]+(?:'[a-z]+)?")  # a word: letters, digits and '_' (an enumeration value is one word)
 
@@ -165,6 +177,14 @@ ID_SHAPE = ('Every id, of an object or of a unit and wherever it is written, is 
 # I2's rule (the same rule for anchors and sources) and an anchor that fails I3 leaves every fact of its event unresolved
 ANCHOR_WORDS = ("kind_words and status_words are copied exactly from inside the anchor's units, which are consecutive "
                 'units of one paragraph, under the same citation rule as a source.')
+# DECISIONS D244, Q-N8 option (b) (the w7r round): a denied whole examination or procedure of a kind the document
+# tells no other session of on that date is the examination of a session of its own, of that kind, never filed with its
+# session empty - else 4.3's row 7 reads it as possibly the examination of the session it is told beside, not done
+# (GI Note #8's denial of an upper endoscopy in a colonoscopy note held 45385, 45386, 45390 and 45378 at RANK 4). Stated
+# in DENIALS, right after the bullet that says how a denied act is filed (DenialTests).
+DENIED_PROCEDURE = ('A statement that a whole examination or procedure of one kind was not done, where the document '
+                    'tells no other session of that kind on the date the statement concerns, is the examination event '
+                    'of a session of its own, of that kind, never an event whose session is left empty.')
 CLAUSE_RULES = {
     C.P1_SCOPE: (
         'Report only what the document states.',
@@ -314,6 +334,7 @@ CLAUSE_RULES = {
         'An organ the examination saw is not an anatomy entry.'),
     C.P22_DENIALS: (
         'A statement that an act was not done is an event whose status is performed, negated.',
+        DENIED_PROCEDURE,
         'single_target, one target',
         'listed_targets, the two or more lesions it lists',
         'all_of_kind, every act of its kind in its session',
@@ -458,6 +479,159 @@ class BorderlineTests(SimpleTestCase):
         for number, value in BORDERLINE_VALUES.items():
             with self.subTest(bf=number, value=value[:40]):
                 self.assertIn(value, xp.INSTRUCTIONS_2)
+
+
+# --- DECISIONS D244, Q-N8 option (b): a denied procedure of another kind is the examination of a session of its own --
+
+# GI Note #8 as the fixtures hold it (tests/fixtures/interpretation_v2/documents/CK-note8.txt, step 6c's): the
+# development document fresh/inputs/A/note8.txt of FINAL-V2 9.6, verbatim; its sha256 as written, checked against the
+# acceptance set's DEV-EXCLUSION list (as written and stripped) before it is used
+NOTE_8_SHA256 = '25ef61e4bf743b70a99fea032a83a429bc6e954c89564ff4b53aaddf9ef00a85'
+# the colonoscopy codes 4.3's row 7 held at RANK 4 when Note #8's denial was filed with its session empty (6c's Q-N8)
+ROW_7_CODES = ('45385', '45386', '45390', '45378')
+DENIED_ACT = '- A statement that an act was not done is an event whose status is performed, negated.'
+
+
+def bullets(part: str) -> list:
+    """The bullets of one part of the instruction (its title line dropped), each with the lines that continue it,
+    normalized."""
+    found: list = []
+    for line in part.split('\n')[1:]:
+        if line.startswith('- '):
+            found.append(line)
+        else:
+            found[-1] += ' ' + line
+    return [normalized(bullet) for bullet in found]
+
+
+def without_denied_procedure(instruction: str) -> tuple:
+    """``instruction`` with DENIED_PROCEDURE's bullet (its lines, however wrapped) taken out, and how many were."""
+    return re.subn(r'\s+'.join(map(re.escape, ('- ' + DENIED_PROCEDURE).split())) + '\n', '', instruction)
+
+
+def supported(value: str, units: list, words: str = '') -> dict:
+    """A supported fact of pass 1's answer (1.4), cited by ``units`` with link statement."""
+    return {'options': [], 'qualifiers': [], 'sources': [{'link': 'statement', 'units': list(units), 'words': words}],
+            'state': 'supported', 'value': value}
+
+
+def note_8_filings() -> SimpleNamespace:
+    """GI Note #8 and two pass-1 answers made from step 6c's faithful filing of it (CK-note8's correct answer) that
+    differ only in how its denial of an upper endoscopy on the date of service is filed - the one event of kind
+    examination whose status is performed, negated:
+    - empty: its session left empty and no session of its own (the filing DENIED_PROCEDURE forbids: 6c's
+      probe_note8_row7, the refutation's P11);
+    - instructed: as DENIED_PROCEDURE says, built here from the empty filing - the examination event of a session of its
+      own (the next session id), of the kind it denies (egd, cited by its own kind words), whose examination names it,
+      and its own session naming that session.
+    Also the case's data (proposals, date of service, member values, pass 2's faithful rule), the denial's id, its own
+    session's id and the colonoscopy session of this encounter (the one session of kind colonoscopy that no fact places
+    at a separate encounter)."""
+    from tests.v2 import test_failure_classes as fc  # step 6c's offline pipeline and fixtures (read, never edited)
+    data, text = fc.case('CK-note8'), fc.document('CK-note8')
+    correct = data['pass1']['correct']
+    denials = [event['id'] for event in correct['events'] if event['kind'] and event['kind']['value'] == 'examination'
+               and event['status']['state'] == 'negated' and event['status']['value'] == 'performed']
+    assert len(denials) == 1, denials
+    denial = denials[0]
+    empty = copy.deepcopy(correct)
+    empty['sessions'] = [session for session in empty['sessions']
+                         if all(fact['value'] != denial for fact in session['examination'])]
+    next(event for event in empty['events'] if event['id'] == denial)['session'] = []
+    instructed = copy.deepcopy(empty)
+    own = f"X{max(int(session['id'][1:]) for session in instructed['sessions']) + 1}"
+    event = next(event for event in instructed['events'] if event['id'] == denial)
+    units, kind_words = event['anchor']['units'], event['anchor']['kind_words']
+    session = {key: [] for key in correct['sessions'][0]}  # every slot silent but the three the sentence fills
+    session.update(id=own, kind=supported('egd', units, kind_words), examination=[supported(denial, units)])
+    instructed['sessions'].append(session)
+    event['session'] = [supported(own, units)]
+    colonoscopy = [item['id'] for item in correct['sessions'] if item['kind']['value'] == 'colonoscopy'
+                   and not any(fact['value'] == 'separate_encounter' for fact in item['encounter'])]
+    assert len(colonoscopy) == 1, colonoscopy
+    return SimpleNamespace(fc=fc, text=text, data=data, filings={'empty': empty, 'instructed': instructed},
+                           denial=denial, own=own, colonoscopy=colonoscopy[0])
+
+
+class DenialTests(SimpleTestCase):
+    def test_the_sentence_is_stated_where_a_denial_is_filed_and_is_the_only_change(self):
+        # D244: one sentence, in the part that says how a denied act is filed, right after that bullet; its exact text
+        found = bullets(xp.clause_text(C.P22_DENIALS))
+        self.assertEqual(found[0], DENIED_ACT)
+        self.assertEqual(found[1], '- ' + DENIED_PROCEDURE)
+        self.assertTrue(found[2].startswith('- scope.breadth: single_target, one target'))
+        self.assertEqual(normalized(xp.INSTRUCTIONS_2).count(normalized(DENIED_PROCEDURE)), 1)
+        # nothing else in the prompt changed: the instruction without the sentence's lines is the one pinned before
+        # D244 (the waves 3-4 pin change), and with them it is this step's pin
+        before, count = without_denied_procedure(xp.INSTRUCTIONS_2)
+        self.assertEqual(count, 1)
+        self.assertEqual(jsonschema.sha256_of(before), INSTRUCTIONS_SHA256_BEFORE_D244)
+        self.assertEqual(jsonschema.sha256_of(xp.INSTRUCTIONS_2), INSTRUCTIONS_SHA256)
+        self.assertEqual(len(xp.INSTRUCTIONS_2) - len(before), 281)
+        # the controls: the sentence taken out, or one word of it changed, is no longer found in its part
+        original = xp.INSTRUCTIONS_2
+        self.assertEqual(original.count('never an event whose session'), 1)
+        for name, changed in (('taken out', before),
+                              ('one word changed', original.replace('never an event whose session',
+                                                                    'or an event whose session'))):
+            with self.subTest(control=name), mock.patch.object(xp, 'INSTRUCTIONS_2', changed):
+                self.assertNotEqual(changed, original)
+                self.assertNotIn(normalized(DENIED_PROCEDURE), normalized(xp.clause_text(C.P22_DENIALS)))
+
+    def test_note_8s_denial_filed_as_the_sentence_says_holds_no_colonoscopy_code_by_row_7(self):
+        # D244's Q-N8 (b), taken through the reader, the checks, the claims, pass 2's faithful answer, settle, the store
+        # and the engine (step 6c's offline pipeline): Note #8's "no upper endoscopy on the date of service", filed as
+        # the examination of an EGD session of its own (its examination negated), is no possible examination of the
+        # colonoscopy, so row 7 holds none of its codes; filed with its session empty (the control), row 7 reads it as
+        # possibly the colonoscopy's examination, established not done, and holds every one of them at RANK 4
+        from studio.interpretation.engine import evaluate
+        from studio.interpretation.engine.types import Result
+        case = note_8_filings()
+        text = case.text
+        # the development document: GI Note #8 verbatim, on no line of the exclusion list (as written and stripped)
+        self.assertEqual(hashlib.sha256(text.encode('utf-8')).hexdigest(), NOTE_8_SHA256)
+        self.assertFalse(is_excluded(text.encode('utf-8'), excluded_hashes()))
+        # the sentence's condition holds: every other egd session the filing tells is of an earlier date
+        instructed = case.filings['instructed']
+        events = {event['id']: event for event in instructed['events']}
+        others = [session for session in instructed['sessions']
+                  if session['kind']['value'] == 'egd' and session['id'] != case.own]
+        self.assertTrue(others)
+        for session in others:
+            exam = events[session['examination'][0]['value']]
+            self.assertEqual([fact['value'] for fact in exam['date_relation']], ['earlier_date'])
+        self.assertEqual([fact['value'] for fact in events[case.denial]['date_relation']], ['on_date_of_service'])
+        runs = {name: case.fc.pipeline(text, answer, case.data['pass2']['i'], case.data)
+                for name, answer in case.filings.items()}
+        # the instructed filing reached the engine as filed: the denial an examination, negated, in its own session, and
+        # that session an upper endoscopy, each established; the session's examination slot names the denial as filed
+        # (unappraised, as every session's is: the engine reads an examination by the event's own kind and session,
+        # never by session.examination - engine/evaluate.examinations)
+        run = runs['instructed']
+        for name, result in ((f'kind@{case.denial}/0', Result.SUPPORTED), (f'status@{case.denial}/0', Result.NEGATED),
+                             (f'session@{case.denial}/0', Result.SUPPORTED), (f'kind@{case.own}/0', Result.SUPPORTED)):
+            with self.subTest(fact=name):
+                self.assertIs(case.fc.caught_result(run, name), result)
+        self.assertEqual(case.fc.settled_fact(run.settled.events, f'session@{case.denial}/0').claim.value, case.own)
+        self.assertEqual(case.fc.settled_fact(run.settled.events, f'kind@{case.own}/0').claim.value, 'egd')
+        self.assertEqual(case.fc.settled_fact(run.settled.events, f'examination@{case.own}/0').claim.value, case.denial)
+        for name, run in runs.items():
+            codes = {found.code: found for found in run.assessment.codes}
+            self.assertLessEqual(set(ROW_7_CODES), set(codes))
+            for code in ROW_7_CODES:
+                held = [(item.fact, item.rank) for item in codes[code].held_facts
+                        if item.subject is not None and str(item.subject) == case.denial]
+                with self.subTest(filing=name, code=code):
+                    if name == 'instructed':
+                        self.assertEqual(held, [])  # no hold names the denial: row 7 holds none of the four
+                    else:  # the control: row 7's witness of the denial, the colonoscopy's possible examination, RANK 4
+                        self.assertIn(('performed_status', 4), held)
+            # why: row 7 (engine/evaluate.examinations) reads the denial as a possible examination of the colonoscopy
+            # only when its session is left empty
+            colonoscopy = next(sid for sid in run.R.sessions if str(sid) == case.colonoscopy)
+            possible = {str(event) for event in evaluate.examinations(run.R, colonoscopy)}
+            with self.subTest(filing=name, reading='row 7'):
+                self.assertIs(case.denial in possible, name == 'empty')
 
 
 # --- 1.4: the value definitions, and every field named -----------------------------------------------------------------
@@ -1195,24 +1369,35 @@ class BodyTests(SimpleTestCase):
         self.assertEqual(xp.BODY_KEYS, v1_prompt.BODY_KEYS)
         self.assertEqual(self.body['systemInstruction'], {'parts': [{'text': xp.INSTRUCTIONS_2}]})
         self.assertEqual(self.body['contents'], [{'role': 'user', 'parts': [{'text': self.framed}]}])
-        self.assertEqual(self.body['generationConfig'], {'temperature': 0, 'maxOutputTokens': 32768,
+        self.assertEqual(self.body['generationConfig'], {'temperature': 0, 'maxOutputTokens': 65536,
+                                                         'thinkingConfig': {'thinkingLevel': 'high'},
                                                          'responseMimeType': 'application/json',
                                                          'responseSchema': xs.RESPONSE_SCHEMA_2})
         self.assertIs(type(self.body['generationConfig']['temperature']), int)
-        # the same generation settings as v1's body, the schema apart
+        self.assertIs(type(self.body['generationConfig']['maxOutputTokens']), int)
+        self.assertEqual((xp.MAX_OUTPUT_TOKENS, xp.THINKING_LEVEL), (65536, 'high'))  # DECISIONS D230
+        # v1's generation settings, the schema apart, with D230's thinking configuration and output limit in place of
+        # v1's 32768: v1's own body is unchanged (FINAL-V2 5.0), and its recordings keep their request sha256
         v1_body = v1_prompt.request_parts(v1_prompt.framed(NOTE, PAGES, 'pdf'))  # under v1's own pins
-        self.assertEqual({key: value for key, value in v1_body['generationConfig'].items() if key != 'responseSchema'},
-                         {key: value for key, value in self.body['generationConfig'].items() if key != 'responseSchema'})
+        v1_settings = {key: value for key, value in v1_body['generationConfig'].items() if key != 'responseSchema'}
+        self.assertEqual(v1_settings, {'temperature': 0, 'maxOutputTokens': 32768,
+                                       'responseMimeType': 'application/json'})
+        self.assertEqual({key: value for key, value in self.body['generationConfig'].items() if key != 'responseSchema'},
+                         dict(v1_settings, maxOutputTokens=65536, thinkingConfig={'thinkingLevel': 'high'}))
         self.assertEqual(xp.build_request(NOTE, PAGES, 'pdf'), xp.request_parts(self.framed))
 
     def test_it_carries_the_instruction_the_document_and_the_schema_only(self):
-        allowed = {xp.INSTRUCTIONS_2, self.framed, 'user', 'application/json'} | set(all_strings(xs.RESPONSE_SCHEMA_2))
+        # and D230's thinking level, the one string the generation settings add (DECISIONS D230)
+        allowed = ({xp.INSTRUCTIONS_2, self.framed, 'user', 'application/json', 'high'}
+                   | set(all_strings(xs.RESPONSE_SCHEMA_2)))
         self.assertLessEqual(set(all_strings(self.body)), allowed)
         outer = dict(self.body)
         outer['generationConfig'] = {key: value for key, value in outer['generationConfig'].items()
                                      if key != 'responseSchema'}
         self.assertEqual(set(all_keys(outer)), {'systemInstruction', 'contents', 'generationConfig', 'parts', 'text',
-                                                'role', 'temperature', 'maxOutputTokens', 'responseMimeType'})
+                                                'role', 'temperature', 'maxOutputTokens', 'thinkingConfig',
+                                                'thinkingLevel', 'responseMimeType'})
+        self.assertEqual(outer['generationConfig']['thinkingConfig'], {'thinkingLevel': 'high'})  # nothing else in it
 
     def test_no_member_value_filename_title_or_reading_can_enter_it(self):
         self.assertEqual(list(inspect.signature(xp.build_request).parameters), ['text', 'pages', 'kind'])
@@ -1301,7 +1486,8 @@ class PinTests(SimpleTestCase):
         self.assertEqual(jsonschema.sha256_of(segment.rule_constants()), SEGMENTATION_SHA256)
         # step 0b's placeholder until the integration owner writes the pin after the wave's repairs (DECISIONS D202), then
         # the measured value. A step that moves a pinned object hands the new value on as a request, and this assertion
-        # fails until the integration owner writes it (step 1b3's INSTRUCTIONS_SHA256_V2: the waves 3-4 pin change)
+        # fails until the integration owner writes it (step 1b3's INSTRUCTIONS_SHA256_V2: the waves 3-4 pin change); in
+        # the w7r round this step writes its own pin line for D244's sentence, as the round assigns it
         for name, value in PINS.items():
             with self.subTest(pin=name):
                 self.assertIn(getattr(interpretation, name), ('', value))
@@ -1336,8 +1522,9 @@ class LeanTests(SimpleTestCase):
         # provider's promptTokenCount, before anything is compacted; nothing is compacted here.
         from studio.interpretation import prompt as v1_prompt
         mine, v1 = len(xp.INSTRUCTIONS_2), len(v1_prompt.INSTRUCTIONS)
-        self.assertEqual((mine, v1), (28843, 10920))  # step 1b3's definitions of D209 and D214 add 357 characters
-        self.assertEqual((mine // 4, v1 // 4), (28843 // 4, 2730))
+        # step 1b3's definitions of D209 and D214 added 357 characters; D244's sentence (DENIED_PROCEDURE) adds 281
+        self.assertEqual((mine, v1), (29124, 10920))
+        self.assertEqual((mine // 4, v1 // 4), (29124 // 4, 2730))
         self.assertLess(mine, 3 * v1)  # a growth guard: the instruction stays under three times v1's
 
     def test_pass_1_is_asked_to_stay_lean(self):

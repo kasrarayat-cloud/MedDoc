@@ -442,9 +442,9 @@ class SendTests(OfflineTestCase):
         for secret in SECRETS:
             self.assertNotIn(secret, text)
 
-    def assertNotSent(self, exchange, expect=''):
+    def assertNotSent(self, exchange, expect='', http_status=None):
         self.assertEqual((exchange.outcome, exchange.sent, exchange.http_status, exchange.response_bytes,
-                          exchange.response_sha256, exchange.usage), ('not_sent', False, None, None, '', {}))
+                          exchange.response_sha256, exchange.usage), ('not_sent', False, http_status, None, '', {}))
         self.assertIn(expect, exchange.error)
 
     def assertUnknown(self, exchange, expect='', http_status=None):
@@ -498,7 +498,10 @@ class SendTests(OfflineTestCase):
     def test_token_refusal_is_not_sent(self):
         refusal = FakeResponse(401, b'{"error":"invalid_client","error_description":"synthetic"}')
         exchange, session = self.send(refusal)
-        self.assertNotSent(exchange, 'Corti authentication was refused (HTTP 401); no coding request was sent.')
+        # FINAL-V2 amendment 1, 7.3 (A20 [R2:truth-RT1]): the token endpoint's status is recorded on the not-sent
+        # exchange, so the provider hold reads a field (studio.provider_holds), never the sentence
+        self.assertNotSent(exchange, 'Corti authentication was refused (HTTP 401); no coding request was sent.',
+                           http_status=401)
         self.assertEqual(len(session.calls), 1)
 
     def test_token_transport_failures_are_not_sent(self):
@@ -528,7 +531,7 @@ class SendTests(OfflineTestCase):
 
     def test_token_redirect_is_not_followed(self):
         exchange, session = self.send(FakeResponse(302, b'', headers={'Location': 'https://elsewhere.invalid/'}))
-        self.assertNotSent(exchange, 'HTTP 302')
+        self.assertNotSent(exchange, 'HTTP 302', http_status=302)  # recorded; a redirect sets no hold (A20)
         self.assertEqual(len(session.calls), 1)
         self.assertIs(session.calls[0]['allow_redirects'], False)
 

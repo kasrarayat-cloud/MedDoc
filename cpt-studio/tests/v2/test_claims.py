@@ -35,8 +35,35 @@ D194-D196, D202, D206 and D207:
   for the kind pairs a rule of identity by place reads together, and the claim count of one session with many snares
   and biopsies (PairBoundTests, D211); a lesion's places with their template and contrast control (LesionPlaceTests,
   D212); an act's and a statement's device, a targeted breadth and moderate sedation's kind controlled, and the segment
-  control's candidate order pinned (RemainingGapTests, D213).
-The readings this step's builder made are recorded in DECISIONS D207, and step 2c3's in its NOTES.
+  control's candidate order pinned (RemainingGapTests, D213);
+- the integration owner's rulings on waves 3-4, built by repair r2c: the control audit extended from genus to overlap -
+  every pair of KIND_SIBLINGS, SESSION_SIBLINGS and the device contraries audited with its reason, each overlapping
+  pair given a contrary its kind never is (a bleed treated with clips, a drainage told with its needle step, an argon
+  plasma coagulation, moderate sedation's control true of every procedure, the four further overlaps the audit found),
+  and the parts of an exchange and a replacement reading plainly true (OverlapTests, D222); each fact one sentence tells
+  - an exceptive breadth and each act it excepts, a segment's two places, part_of and part_relation - its own claim of
+  that sentence with its own control, and a segment's pair controls asking its whole range (OneSentenceTests, D223);
+  the rulings' stated outcomes end to end through settle, the store and the engine's pairing (RulingOutcomeTests); and
+  D210's fail-closed arm for an act whose unestablished session names another session (ReportedActsTests, 2c3's P1);
+- refute-r2c-r1's findings, repaired by r2c-2: a pair control is never one claim with a contrary control - a contrary
+  prefers a place or a lesion no pair control asks the same object about, and a pair control's content key carries its
+  role - so a segment's place next to its range, a single target beside the place next to it, and two lesions each the
+  other's contrary are set apart end to end (PairRoleTests, RulingOutcomeTests; RF1, RF2); two place facts of one
+  object never share a control (ContrastTests, the repair's own finding of RF1's class); an ablation's control a clip
+  placement, never "a treatment of bleeding", true of an ablation of a lesion that bleeds (RF3; superseded by D233,
+  below); a whole-tract segment's two places unclaimed, never one control read by both (OneSentenceTests; RF6);
+- the integration owner's rulings on waves 5-6, built by repair r2c of round w7r: an ablation's control is the bleeding
+  control again, its label narrowed to the hemostasis purpose's own wording ("a treatment of bleeding present at this
+  encounter"), so an oozing lesion treated with argon plasma coagulation and filed as an ablation keeps its kind
+  unresolved and holds the ablation and the bleeding-control code with one question, and an ablation with no bleeding
+  stated at this encounter is established and its code READY, in every family with an ablation code (OverlapTests,
+  RulingOutcomeTests; D233, refute-r2c-r2 G1); each listed target of a denial appraised by a control of its own, a
+  lesion no other lesion fact of the statement takes, and unclaimed (control) when none is left, so the second listed
+  target is established and the removal of another polyp met (ListedTargetTests; D234, G2), and its claim count
+  before and after against the bound (PairBoundTests); and a supported value '' read as not supported, never raising,
+  settling unresolved end to end (EmptyValueTests; D251's O3).
+The readings this step's builder made are recorded in DECISIONS D207, step 2c3's in its NOTES, and repair r2c's,
+r2c-2's and w7r r2c's in their NOTES.
 """
 from __future__ import annotations
 
@@ -968,10 +995,12 @@ class ControlTests(SimpleTestCase):
         # the places of every kind are controlled, not only a dilation's and a stent's
         self.assertIsNone(claims.control_rule(OC.ACT, A.TARGET_PLACES, FactState.SUPPORTED, Landmark.RECTUM,
                                               Kind.BIOPSY).kinds)
-        # the five session siblings: with them, every family a code of which can be READY has one
+        # the five session siblings: with them, every family a code of which can be READY has one (reflux's motility
+        # was true in part of a pH study told with its manometric location of the sphincter: DECISIONS D222 gives it
+        # anorectal testing)
         self.assertEqual({key.value: value.value for key, value in claims.SESSION_SIBLINGS.items()
                           if key.value in ('office_em', 'motility', 'reflux', 'anorectal', 'feeding_tube')},
-                         {'office_em': 'em_other', 'motility': 'reflux', 'reflux': 'motility', 'anorectal': 'motility',
+                         {'office_em': 'em_other', 'motility': 'reflux', 'reflux': 'anorectal', 'anorectal': 'motility',
                           'feeding_tube': 'egd'})
         self.assertEqual(set(claims.SESSION_SIBLINGS), READY_FAMILIES)
 
@@ -1302,20 +1331,28 @@ def controls_of(claim_set, subject, attribute):
 class ContrastTests(SimpleTestCase):
     def test_a_segment_control_is_never_inside_its_range(self):
         # 2c#2: the first candidate compatible with nothing of the segment's whole range - its two places and every
-        # place LANDMARKS2's order puts between them (a container of some of them is compatible, so never chosen)
-        expected = {('descending_colon', 'rectum'): 'splenic flexure', ('sigmoid_colon', 'rectum'): 'descending colon',
-                    ('ascending_colon', 'sigmoid_colon'): 'cecum', ('cecum', 'rectum'): 'terminal ileum',
-                    ('rectum', 'descending_colon'): 'anal canal'}
-        for segment, place in expected.items():
+        # place LANDMARKS2's order puts between them (a container of some of them is compatible, so never chosen). Each
+        # place of the segment has its own claim and control since DECISIONS D223: the first place's control the first
+        # such candidate, the last place's the second
+        expected = {('descending_colon', 'rectum'): ('splenic flexure', 'transverse colon'),
+                    ('sigmoid_colon', 'rectum'): ('descending colon', 'splenic flexure'),
+                    ('ascending_colon', 'sigmoid_colon'): ('cecum', 'terminal ileum'),
+                    ('cecum', 'rectum'): ('terminal ileum', 'anal canal'),
+                    ('rectum', 'descending_colon'): ('anal canal', 'transverse colon')}
+        for segment, places in expected.items():
             with self.subTest(segment=segment):
                 claim_set = build(SEGMENT, segment_answer(segment))
-                (control,) = controls_of(claim_set, 'E2', A.SCOPE_SEGMENT)
-                self.assertEqual(sentence_of(claim_set, control.id),
-                                 'This statement is about tissue samplings with forceps (not hot forceps) in the '
-                                 f'{place}.')
+                members = sorted(appraised(claim_set, A.SCOPE_SEGMENT, 'E2'), key=lambda item: item.key.index)
+                self.assertEqual([item.value for item in members], list(segment))
+                self.assertEqual([sentence_of(claim_set, item.control) for item in members],
+                                 ['This statement is about tissue samplings with forceps (not hot forceps) in the '
+                                  f'{place}.' for place in places])
                 ends = [Landmark(value) for value in segment]
                 inside = claims.segment_range(*ends)
-                self.assertFalse([value for value in inside if anatomy.compatible(Landmark(control.value), value)])
+                for item in members:
+                    control = claim_set.claim(item.control)
+                    self.assertFalse([value for value in inside
+                                      if anatomy.compatible(Landmark(control.value), value)])
         self.assertEqual([place.value for place in claims.segment_range(Landmark.DESCENDING_COLON, Landmark.RECTUM)],
                          ['descending_colon', 'sigmoid_colon', 'rectosigmoid', 'rectum'])
         self.assertEqual(claims.segment_range(Landmark.RECTUM, Landmark.DESCENDING_COLON),
@@ -1325,17 +1362,17 @@ class ContrastTests(SimpleTestCase):
         # refute-2c-r1 problem 3: the second portion of the duodenum holds the ampulla, which LANDMARKS2 lists after the
         # fourth portion; a range keeping only the places that hold nothing left the second portion out, and its
         # control "in the duodenum (its second portion)" was inside the segment, true by construction
-        expected = {('duodenal_bulb', 'third_portion_duodenum'): 'antrum of the stomach',
-                    ('duodenal_bulb', 'fourth_portion_duodenum'): 'antrum of the stomach',
-                    ('third_portion_duodenum', 'duodenal_bulb'): 'duodenum (its fourth portion)',
-                    ('third_portion_duodenum', 'esophagus'): 'duodenum (its fourth portion)'}
-        for segment, place in expected.items():
+        expected = {('duodenal_bulb', 'third_portion_duodenum'): ('antrum of the stomach', 'body of the stomach'),
+                    ('duodenal_bulb', 'fourth_portion_duodenum'): ('antrum of the stomach', 'body of the stomach'),
+                    ('third_portion_duodenum', 'duodenal_bulb'): ('duodenum (its fourth portion)', 'jejunum'),
+                    ('third_portion_duodenum', 'esophagus'): ('duodenum (its fourth portion)', 'jejunum')}
+        for segment, places in expected.items():
             with self.subTest(segment=segment):
                 claim_set = build(DUODENAL, duodenal_answer(segment))
-                (control,) = controls_of(claim_set, 'E2', A.SCOPE_SEGMENT)
-                self.assertEqual(sentence_of(claim_set, control.id),
-                                 'This statement is about tissue samplings with forceps (not hot forceps) in the '
-                                 f'{place}.')
+                members = sorted(appraised(claim_set, A.SCOPE_SEGMENT, 'E2'), key=lambda item: item.key.index)
+                self.assertEqual([sentence_of(claim_set, item.control) for item in members],
+                                 ['This statement is about tissue samplings with forceps (not hot forceps) in the '
+                                  f'{place}.' for place in places])
         self.assertIn(Landmark.SECOND_PORTION_DUODENUM,
                       claims.segment_range(Landmark.DUODENAL_BULB, Landmark.THIRD_PORTION_DUODENUM))
 
@@ -1354,20 +1391,32 @@ class ContrastTests(SimpleTestCase):
             ('transverse_colon',), ('splenic_flexure',), ('descending_colon',), ('sigmoid_colon',), ('rectosigmoid',),
             ('rectum',), ('anal_canal',))]
         position = {place: index for index, group in enumerate(tract) for place in group}
-        checked = 0
+        checked, one_only = 0, set()
         for first, last in itertools.product(position, repeat=2):
             one, other = sorted((position[first], position[last]))
             between = [place for group in tract[one:other + 1] for place in group]
-            found = claims.contrast(claims.contrast_candidates([first, last]), claims.segment_range(first, last))
+            found = claims.contrasts(claims.contrast_candidates([first, last]), claims.segment_range(first, last))
             with self.subTest(segment=(first.value, last.value)):
-                self.assertIsNotNone(found)
-                self.assertFalse([place for place in between if anatomy.compatible(found, place)], found)
+                self.assertTrue(found)
+                self.assertIs(found[0], claims.contrast(claims.contrast_candidates([first, last]),
+                                                        claims.segment_range(first, last)))
+                # the first place's control and the last place's (DECISIONS D223: each its own), neither between
+                for place_found in found[:2]:
+                    self.assertFalse([place for place in between if anatomy.compatible(place_found, place)],
+                                     place_found)
+            if len(found) < 2:
+                one_only.add((first.value, last.value))
             checked += 1
         self.assertEqual(checked, 28 * 28)
+        # only a segment of the whole tract leaves its last place no contrast of its own: that place, and so the
+        # segment, is not claimed (Unclaimable.CONTROL, fail-closed)
+        self.assertEqual(one_only, {('proximal_esophagus', 'anal_canal'), ('anal_canal', 'proximal_esophagus')})
 
     def test_a_contrast_is_never_one_of_the_objects_own_places(self):
         # 2c#3: a dilation filed in the esophagus and the stomach; a denial of biopsies from the sigmoid colon and the
-        # rectum. Each place's control is a place compatible with neither, never the other place's own claim
+        # rectum. Each place's control is a place compatible with neither, never the other place's own claim - and,
+        # since repair r2c-2, never the other place's control either: the duodenum was both places' first contrast, one
+        # control read by two facts, which the store reads for the first alone (the stomach settled unappraised)
         data = rich_answer()
         data['events'][1]['target']['places'] = [fact('esophagus', src(['S7'], 'distal esophagus')),
                                                   fact('stomach', src(['S7'], 'distal esophagus'))]
@@ -1375,7 +1424,8 @@ class ContrastTests(SimpleTestCase):
                                                   fact('rectum', src(['S14'], 'No biopsies'))]
         claim_set = build(RICH, data)
         self.assertEqual({sentence_of(claim_set, claim.id) for claim in controls_of(claim_set, 'E2', A.TARGET_PLACES)},
-                         {'This act was done in the duodenum.'})
+                         {'This act was done in the duodenum.', 'This act was done in the jejunum.'})
+        no_claim_or_control_read_twice(self, claim_set)
         self.assertEqual({sentence_of(claim_set, claim.id) for claim in controls_of(claim_set, 'E8', A.TARGET_PLACES)},
                          {'This statement is about tissue samplings with forceps (not hot forceps) in the descending '
                           'colon.',
@@ -1413,6 +1463,33 @@ class ContrastTests(SimpleTestCase):
         self.assertEqual(set(not_claimed), {claims.Unclaimable.CONTROL})
         self.assertEqual(len(claimed) + len(not_claimed), len(everywhere))
         self.assertEqual([item.value for item in claimed], ['liver'])  # the gallbladder is compatible with none
+
+    def test_two_places_of_one_object_never_share_a_control(self):
+        # repair r2c-2 (refute-r2c-r1 RF1's class, found by the repair): an act's or a lesion's two places whose first
+        # contrasts are one place - the esophagus and the stomach (the duodenum), the rectum and the anal canal (the
+        # sigmoid colon): 30 of the 967 pairs of places that are not compatible - took one control for both facts, which
+        # the store reads for one fact only, so the second place settled unappraised. A candidate another place fact of
+        # the same object takes as its control now comes last among its candidates: in every such pair, for an act and
+        # for a lesion, each place fact has a control of its own
+        placed = list(claims.CONTRAST_PLACES)
+        checked = 0
+        for one, other in itertools.combinations(placed, 2):
+            if anatomy.compatible(one, other):
+                continue
+            places = [fact(place.value, src(['S5'], 'two named places')) for place in (one, other)]
+            data = frame_answer('colonoscopy', [
+                examination(words='colonoscope'),
+                event('E2', ['S5'], 'biopsies', 'were taken', 'biopsy', session=[fact('X1', src(['S5']))],
+                      target__lesion=[fact('L1', src(['S5'], 'A polyp'))], target__places=places)],
+                fact('E1', src(['S4'])), lesions=[lesion('L1', ['S5'], 'A polyp', places=copy.deepcopy(places))])
+            claim_set = build(TWO_PLACES, data)
+            for subject, attribute in (('E2', A.TARGET_PLACES), ('L1', A.PLACES)):
+                items = appraised(claim_set, attribute, subject)
+                with self.subTest(places=(one.value, other.value), subject=subject):
+                    self.assertEqual(len(items), 2)
+                    self.assertEqual(len({item.control for item in items} - {None}), 2)
+            checked += 1
+        self.assertEqual(checked, 967)
 
     def test_no_set_of_up_to_three_places_uses_up_a_list(self):
         # the fallback's six regions: a place's list runs out only when the object's places reach each of them, which
@@ -1470,15 +1547,19 @@ class ContrastTests(SimpleTestCase):
                           (A.SCOPE_BREADTH, claims.Unclaimable.PARTNER)})
         self.assertFalse([text for text in sentences(claim_set) if 'other than acts' in text or 'applies to' in text])
         self.assertEqual({item.claim for item in claim_set.appraised} & claim_set.controls, set())
-        # without the covered act, the exceptive breadth is claimed, its excepted act sharing its sentence
+        # without the covered act, the exceptive breadth is claimed and so is its excepted act, each its own claim of
+        # the one exceptive sentence (DECISIONS D223), the act's controlled by the covers form naming it
         data['events'][7]['scope']['covers'] = []
         claim_set = build(RICH, data)
         (breadth,) = appraised(claim_set, A.SCOPE_BREADTH, 'E8')
         (excepted,) = appraised(claim_set, A.SCOPE_EXCEPTS, 'E8')
-        self.assertEqual(breadth.claim, excepted.claim)
-        self.assertEqual(sentence_of(claim_set, breadth.claim),
-                         'This statement denies only tissue samplings with forceps (not hot forceps) other than acts '
-                         'A6.')
+        self.assertNotEqual(breadth.claim, excepted.claim)
+        for item in (breadth, excepted):
+            self.assertEqual(sentence_of(claim_set, item.claim),
+                             'This statement denies only tissue samplings with forceps (not hot forceps) other than '
+                             'acts A6.')
+        self.assertEqual((claim_set.claim(excepted.claim).value, sentence_of(claim_set, excepted.control)),
+                         ('E6', 'This statement applies to act A6.'))
         # refute-2c-r1 problem 7: with no session the exceptive breadth's control (the all_of_kind form names it) cannot
         # be written, so the breadth is not claimed - and its excepted act, whose claim is the breadth's sentence, goes
         # with it: the exceptive sentence is never claimed while the breadth is not
@@ -1646,9 +1727,14 @@ class PairControlTests(SimpleTestCase):
         kinds = claims.controls_document()['pair_controls']['pair_kinds']
         self.assertIn(['biopsy', 'biopsy'], kinds)
         self.assertIn(['biopsy', 'hot_biopsy'], kinds)
-        self.assertIn(['biopsy', 'fna'], kinds)  # an act whose sibling is the statement's kind
+        self.assertIn(['injection', 'fna'], kinds)  # an act whose sibling is the statement's kind (DECISIONS D222)
         self.assertIn(['removal', 'snare'], kinds)  # an umbrella and its member
         self.assertNotIn(['biopsy', 'snare'], kinds)
+        # a clip or an injection beside a bleeding control statement: the catalogue reads such an act as one when its
+        # purpose is hemostasis, and the pairing pairs them (the clip was the bleeding control's sibling until D222)
+        self.assertIn(['bleeding_control', 'clip'], kinds)
+        self.assertIn(['bleeding_control', 'injection'], kinds)
+        self.assertNotIn(['clip', 'bleeding_control'], kinds)
 
 
 def listed_answer(targets):
@@ -1757,34 +1843,65 @@ def study_answer(code):
                   events=[event('E1', ['S4'], study, 'was performed', kind.value, session=[fact('X1', src(['S4']))])])
 
 
-# DECISIONS D209's audit: every pair of KIND_SIBLINGS and SESSION_SIBLINGS, with the reason its control is false of the
-# claim's kind (the step's NOTES give the same table). "narrowed": the sibling's label named a genus of the claim's kind
-# (a faithful reading supported the control), so its label now sets the claim's kind apart (NARROWED).
+# DECISIONS D209's audit, extended by D222 from genus to overlap: every pair of KIND_SIBLINGS and SESSION_SIBLINGS, with
+# the reason its control is false of every act the claim's kind admits under pass 1's definition (the step's NOTES give
+# the same table). Each reason opens with its class:
+# - "narrowed": the sibling's label named a genus of the claim's kind (a faithful reading supported the control), so its
+#   label now sets the claim's kind apart (NARROWED);
+# - "replaced": D222's overlap - an act of the claim's kind done by the sibling's method, holding the sibling as a step
+#   its own code includes, or using a device whose physics includes the sibling's, made the control true of a correct
+#   filing; the pair takes a contrary the claim's kind never is (REPLACED gives the sibling it had);
+# - "a misfiling": the overlap is an act whose correct filing is the sibling, or the sibling and the claim's kind as
+#   parts (the sibling reported by a code of its own), so the control is meant to be true of it, and holds it;
+# - any other: no act of the claim's kind is the sibling, does it, or holds it.
 KIND_AUDIT = {
-    (Kind.SNARE, Kind.EMR): 'an endoscopic mucosal resection is its own technique; a removal filed as a snare is none',
+    (Kind.SNARE, Kind.EMR): ('a misfiling: an endoscopic mucosal resection is its own technique (a lift, then the '
+                             'resection); a snare removal told with a lift is one, and the control holds it'),
     (Kind.EMR, Kind.SNARE): 'narrowed: most resections are done with a snare, so "a removal with a snare" was a genus',
-    (Kind.ESD, Kind.EMR): 'a submucosal dissection is not a mucosal resection; they are two techniques',
+    (Kind.ESD, Kind.EMR): ('a submucosal dissection is not a mucosal resection, and one finished with a snare is still '
+                           'a dissection, which the label of a mucosal resection does not name'),
     (Kind.HOT_BIOPSY, Kind.BIOPSY): ('narrowed: hot forceps are forceps, so "a tissue sampling with forceps" was a '
                                      'genus'),
-    (Kind.BIOPSY, Kind.HOT_BIOPSY): 'a forceps biopsy filed as such was not done with hot forceps',
-    (Kind.CLIP, Kind.INJECTION): 'a clip placement injects nothing',
+    (Kind.BIOPSY, Kind.HOT_BIOPSY): ('a misfiling: a forceps biopsy filed as such was not done with hot forceps; one '
+                                     'that was is a hot biopsy, which the control holds'),
+    (Kind.CLIP, Kind.INJECTION): ('a clip placement injects nothing; an injection beside it is its own act and code, '
+                                  'never a step of placing a clip'),
     (Kind.INJECTION, Kind.CLIP): 'an injection places no clip',
-    (Kind.TATTOO, Kind.INJECTION): 'the sibling label says it does not mark a site, which a tattoo does',
-    (Kind.BLEEDING_CONTROL, Kind.CLIP): ('no genus: a bleeding treatment is not a kind of clip placement; a treatment '
-                                         'done with a clip is true of both (an overlap, the question in NOTES)'),
-    (Kind.ABLATION, Kind.BLEEDING_CONTROL): ('an ablation filed as such destroys tissue that is not bleeding here; one '
-                                             'that treats bleeding is a misfiled bleeding control, which it holds'),
-    (Kind.DILATION, Kind.STENT): 'a dilation leaves no stent in place',
-    (Kind.STENT, Kind.DILATION): 'a stent placement leaves a device in place; a dilation stretches and is its own act',
-    (Kind.BAND_LIGATION, Kind.INJECTION): 'a band ligation injects nothing',
-    (Kind.STONE_EXTRACTION, Kind.LITHOTRIPSY): 'an extraction removes stones; fragmenting them is its own act',
-    (Kind.LITHOTRIPSY, Kind.STONE_EXTRACTION): 'a lithotripsy fragments stones; removing them is its own act',
-    (Kind.STENT_REMOVAL, Kind.STENT): 'a stent removal places no stent',
+    (Kind.TATTOO, Kind.INJECTION): ('the sibling label says it does not mark a site, which a tattoo, a saline lift '
+                                    'before the ink included, does'),
+    (Kind.BLEEDING_CONTROL, Kind.DILATION): ('replaced (D222, P4): a bleed is treated with clips, injections, heat or '
+                                             'bands, so "a clip placement" was true of a bleed treated with clips; no '
+                                             'treatment of bleeding, by any method, dilates a narrowing'),
+    (Kind.ABLATION, Kind.BLEEDING_CONTROL): ('narrowed (D233, refute-r2c-r2 G1): an ablation of a lesion that bleeds '
+                                             'chronically (an antral vascular ectasia, radiation proctitis) with no '
+                                             'bleeding stated at this encounter is, in plain words, a treatment of '
+                                             'bleeding (refute-r2c-r1 RF3), so the label now names the hemostasis '
+                                             "purpose's own wording, bleeding present at this encounter; an ablation "
+                                             'of tissue bleeding at this encounter is a misfiling - a treatment of '
+                                             'bleeding present at this encounter is coded as the control of bleeding '
+                                             "(D222's own example) - which the control holds"),
+    (Kind.DILATION, Kind.STENT): 'a dilation leaves no stent in place; a stent placed after it is its own act and code',
+    (Kind.STENT, Kind.STENT_REMOVAL): ('replaced (D222, this audit): a stent placement includes its pre- and '
+                                       'post-dilation (its code says so), so "a dilation of a narrowing" was true of a '
+                                       'stent placed after dilating; a placement removes no stent, and the removal '
+                                       'label names the removal alone'),
+    (Kind.BAND_LIGATION, Kind.INJECTION): 'a band ligation injects nothing; an injection beside it is its own act',
+    (Kind.STONE_EXTRACTION, Kind.LITHOTRIPSY): ('a misfiling: an extraction removes stones; destroying them is '
+                                                "lithotripsy's own code, and an extraction told with it is a "
+                                                'lithotripsy, which the control holds'),
+    (Kind.LITHOTRIPSY, Kind.SPHINCTEROTOMY): ('replaced (D222, this audit): the destruction of calculi includes '
+                                              'removing the fragments (its code covers the extraction), so "an '
+                                              'extraction of stones" was true of stones fragmented and swept out; a '
+                                              'lithotripsy cuts no sphincter'),
+    (Kind.STENT_REMOVAL, Kind.STENT): ('a misfiling: a stent removal, the removal alone, places no stent; a removal '
+                                       'told with its replacement as one act is an exchange, which the control holds'),
     (Kind.STENT_EXCHANGE, Kind.STENT_REMOVAL): ('narrowed: every exchange removes a stent, so "a stent removal" was a '
-                                                'genus of it; the label names the removal itself, never a whole '
-                                                'exchange'),
-    (Kind.SPHINCTEROTOMY, Kind.DILATION): 'a sphincterotomy cuts; it is no dilation (SC-C: a sphincteroplasty is held)',
-    (Kind.CANNULATION, Kind.SPHINCTEROTOMY): 'a cannulation cuts nothing',
+                                                'genus of it; the label names the removal alone, never the whole '
+                                                'exchange (reworded by D222, P3, so the parts read plainly true)'),
+    (Kind.SPHINCTEROTOMY, Kind.DILATION): ('a misfiling: a sphincterotomy cuts; a balloon sphincteroplasty filed as '
+                                           "one is the control's catch (SC-C)"),
+    (Kind.CANNULATION, Kind.SPHINCTEROTOMY): ('a misfiling: a cannulation cuts nothing; a precut that gains it is a '
+                                              'sphincterotomy of its own code, which the control holds'),
     (Kind.CHOLANGIOSCOPY, Kind.CANNULATION): ('narrowed: a cholangioscope enters the duct, so "a cannulation of a '
                                               'duct" was true of it in part; the label sets the examination inside '
                                               'it apart'),
@@ -1792,57 +1909,85 @@ KIND_AUDIT = {
     (Kind.PEG, Kind.TUBE_PLACEMENT): 'the sibling label says other than a gastrostomy, which a PEG is',
     (Kind.TUBE_PLACEMENT, Kind.PEG): 'a tube placement filed as such is not a gastrostomy',
     (Kind.TUBE_REPLACEMENT, Kind.TUBE_PLACEMENT): ('narrowed: every replacement places a tube, so "a tube placement" '
-                                                   'was a genus of it; the label names the placement, never a '
-                                                   'replacement'),
-    (Kind.DECOMPRESSION, Kind.STENT): 'a decompression leaves no stent (a stent for an obstruction is filed a stent)',
+                                                   'was a genus of it; the label names the placement alone, never '
+                                                   'the whole replacement (reworded by D222, P3)'),
+    (Kind.DECOMPRESSION, Kind.STENT): 'a decompression leaves a tube, never a stent (a stent placed for it is a stent)',
     (Kind.MYOTOMY, Kind.DILATION): 'a myotomy cuts muscle; it stretches no narrowing',
     (Kind.FUNDOPLICATION, Kind.MYOTOMY): 'a fundoplication folds the stomach; it cuts no muscle',
-    (Kind.FNA, Kind.BIOPSY): 'a fine-needle aspiration or biopsy uses a needle, not forceps',
-    (Kind.DRAINAGE, Kind.FNA): 'a drainage empties a collection; it is not a sampling by a fine needle',
-    (Kind.CAPSULE_STUDY, Kind.EXAMINATION): ('narrowed: a capsule study is its session\'s examination, so "the '
+    (Kind.FNA, Kind.INJECTION): ('replaced (D222, this audit): a fine-needle biopsy may be taken with forceps passed '
+                                 'through the needle, so "a tissue sampling with forceps" was true of it; a '
+                                 'fine-needle aspiration or biopsy injects nothing into tissue'),
+    (Kind.DRAINAGE, Kind.BAND_LIGATION): ('replaced (D222, P2): a drainage holds its needle puncture and aspiration, '
+                                          'so "a fine-needle aspiration or biopsy" was true of it in part; no step of '
+                                          'a drainage (needle, wire, dilated tract, stent) ligates with a band'),
+    (Kind.CAPSULE_STUDY, Kind.EXAMINATION): ("narrowed: a capsule study is its session's examination, so \"the "
                                              'examination itself" was true of it; the label sets capsule studies '
                                              'apart'),
     (Kind.MANOMETRY, Kind.PRESSURE_MEASUREMENT): 'narrowed (D209): a manometry is a pressure measurement',
     (Kind.PRESSURE_MEASUREMENT, Kind.MANOMETRY): 'narrowed (D209): a sphincter of Oddi manometry is a manometry study',
-    (Kind.PH_MONITORING, Kind.MANOMETRY): 'a pH monitoring study measures acid, not pressure: it is no manometry study',
-    (Kind.RECTAL_SENSATION, Kind.BALLOON_EXPULSION): 'a sensation, tone or compliance test is no expulsion test',
-    (Kind.BALLOON_EXPULSION, Kind.RECTAL_SENSATION): 'an expulsion test is no sensation, tone or compliance test',
+    (Kind.PH_MONITORING, Kind.PRESSURE_MEASUREMENT): ('replaced (D222, this audit): a pH study may hold the manometric '
+                                                      'location of the sphincter its probe is placed by, so "a '
+                                                      'manometry study" was true of it in part; no pH study measures '
+                                                      'the pressure of the sphincter of Oddi'),
+    (Kind.RECTAL_SENSATION, Kind.BALLOON_EXPULSION): ('a sensation, tone or compliance test expels no balloon; an '
+                                                      'expulsion test is its own act'),
+    (Kind.BALLOON_EXPULSION, Kind.RECTAL_SENSATION): ('an expulsion test is no sensation, tone or compliance test; '
+                                                      'graded distension testing is a code of its own'),
     (Kind.REMOVAL, Kind.BIOPSY): 'D194: a removal of a lesion is not a sampling with forceps',
     (Kind.INTERVENTION, Kind.EXAMINATION): 'D194: an intervention is never the examination itself',
     (Kind.EM_PROLONGED, Kind.EM_VISIT): 'D194: prolonged time is time added to a visit, not a visit',
-    (Kind.MODERATE_SEDATION, Kind.INTERVENTION): ('narrowed (D213): "an intervention of any kind" could be read as '
-                                                  'sedation; the label says other than sedation, and stays true of any '
-                                                  'procedure on the patient'),
+    (Kind.MODERATE_SEDATION, Kind.INTERVENTION): ('narrowed (D213; D222, P6): in the form its control takes, the '
+                                                  'intervention label names the examination itself or an intervention '
+                                                  'of any kind other than sedation: true of every procedure on the '
+                                                  'patient, false of sedation'),
 }
 SESSION_AUDIT = {
-    (SessionKind.COLONOSCOPY, SessionKind.FLEX_SIG): ('a colonoscopy is no flexible sigmoidoscopy (52/53 for a short '
-                                                      'one)'),
+    (SessionKind.COLONOSCOPY, SessionKind.FLEX_SIG): ('a colonoscopy, complete or not, is no flexible sigmoidoscopy '
+                                                      '(52/53 for a short one)'),
     (SessionKind.FLEX_SIG, SessionKind.COLONOSCOPY): 'a flexible sigmoidoscopy is no colonoscopy',
-    (SessionKind.EGD, SessionKind.EUS): 'an upper endoscopy with no ultrasound is no ultrasound examination',
+    (SessionKind.EGD, SessionKind.EUS): ('a misfiling: an upper endoscopy with no ultrasound is no ultrasound '
+                                         'examination; an EGD session holding one is an EUS, which the control holds'),
     (SessionKind.EUS, SessionKind.EGD): 'narrowed: an upper EUS is an upper endoscopy with ultrasound, so a genus',
     (SessionKind.ERCP, SessionKind.EGD): 'narrowed: an ERCP passes a scope into the upper tract, so a genus',
     (SessionKind.ENTEROSCOPY, SessionKind.EGD): 'narrowed: a push enteroscopy is an upper endoscopy that goes on',
-    (SessionKind.CAPSULE, SessionKind.EGD): 'a capsule endoscopy passes no scope',
+    (SessionKind.CAPSULE, SessionKind.EGD): ('a misfiling: a capsule endoscopy passes no scope; an endoscopic '
+                                             'delivery of the capsule is an upper endoscopy of its own, which the '
+                                             'control holds when filed inside the capsule session'),
     (SessionKind.OFFICE_EM, SessionKind.EM_OTHER): 'the sibling label says in another setting',
-    (SessionKind.MOTILITY, SessionKind.REFLUX): ('a manometry study measures pressure; it is no pH or impedance '
-                                                 'monitoring'),
-    (SessionKind.REFLUX, SessionKind.MOTILITY): 'a pH or impedance monitoring study is no manometry study',
+    (SessionKind.MOTILITY, SessionKind.REFLUX): ('a manometry study measures pressure; impedance channels in it are '
+                                                 "the manometry's own, never a monitoring study"),
+    (SessionKind.REFLUX, SessionKind.ANORECTAL): ('replaced (D222, this audit): a pH or impedance study may hold the '
+                                                  'manometric location of the sphincter its probe is placed by, so '
+                                                  "motility's label was true of it in part; no reflux study is an "
+                                                  'anorectal test'),
     (SessionKind.ANORECTAL, SessionKind.MOTILITY): ('narrowed (refute-2c-r1 problem 2): the sibling label says not an '
                                                     'anorectal test'),
-    (SessionKind.FEEDING_TUBE, SessionKind.EGD): 'a feeding-tube procedure outside an endoscopy passes no scope',
+    (SessionKind.FEEDING_TUBE, SessionKind.EGD): ("a misfiling: the family's codes are tube procedures done without "
+                                                  "an endoscope; an endoscopic tube placement is an upper endoscopy's "
+                                                  'code, which the control holds'),
 }
+# The pairs D222's overlap replaced, and the sibling each had: P4, P2 and this step's audit (a stent placed after
+# dilating, stones fragmented and swept out, a fine-needle biopsy taken with forceps, a pH study placed by a manometric
+# location of its sphincter, and that study's session). refute-r2c-r1's RF3 replaced the ablation's sibling with the
+# clip placement; DECISIONS D233 returned it to the bleeding control with that label narrowed (NARROWED).
+REPLACED = {(Kind.BLEEDING_CONTROL, Kind.DILATION): Kind.CLIP, (Kind.DRAINAGE, Kind.BAND_LIGATION): Kind.FNA,
+            (Kind.STENT, Kind.STENT_REMOVAL): Kind.DILATION,
+            (Kind.LITHOTRIPSY, Kind.SPHINCTEROTOMY): Kind.STONE_EXTRACTION,
+            (Kind.FNA, Kind.INJECTION): Kind.BIOPSY, (Kind.PH_MONITORING, Kind.PRESSURE_MEASUREMENT): Kind.MANOMETRY}
+SESSION_REPLACED = {(SessionKind.REFLUX, SessionKind.ANORECTAL): SessionKind.MOTILITY}
 # The words each narrowed sibling's label holds that set the claim's kind apart, and each narrowed label's head: the
 # label it had before, which the kind's own claim keeps, so that claim stays true of every act of its own kind.
 NARROWED = {
     (Kind.EMR, Kind.SNARE): 'not an endoscopic mucosal resection',
     (Kind.HOT_BIOPSY, Kind.BIOPSY): 'other than hot forceps',
-    (Kind.STENT_EXCHANGE, Kind.STENT_REMOVAL): 'not a whole exchange of the stent for a new one',
-    (Kind.TUBE_REPLACEMENT, Kind.TUBE_PLACEMENT): 'not a whole replacement of a tube',
+    (Kind.STENT_EXCHANGE, Kind.STENT_REMOVAL): 'the removal alone',
+    (Kind.TUBE_REPLACEMENT, Kind.TUBE_PLACEMENT): 'the placement alone',
     (Kind.CAPSULE_STUDY, Kind.EXAMINATION): 'not a capsule study',
     (Kind.CHOLANGIOSCOPY, Kind.CANNULATION): 'not an examination inside the duct with a cholangioscope',
     (Kind.MANOMETRY, Kind.PRESSURE_MEASUREMENT): 'of the sphincter of Oddi',
     (Kind.PRESSURE_MEASUREMENT, Kind.MANOMETRY): 'other than one of the sphincter of Oddi',
-    (Kind.MODERATE_SEDATION, Kind.INTERVENTION): 'other than sedation'}
+    (Kind.MODERATE_SEDATION, Kind.INTERVENTION): 'other than sedation',
+    (Kind.ABLATION, Kind.BLEEDING_CONTROL): 'present at this encounter'}  # DECISIONS D233
 SESSION_NARROWED = {
     (SessionKind.EUS, SessionKind.EGD): 'not an endoscopic ultrasound examination',
     (SessionKind.ERCP, SessionKind.EGD): 'an endoscopic retrograde cholangiopancreatography',
@@ -1853,7 +1998,9 @@ HEADS = {Kind.SNARE: 'a removal with a snare', Kind.BIOPSY: 'a tissue sampling w
          Kind.EXAMINATION: 'the examination itself, not an act done during it',
          Kind.CANNULATION: 'a cannulation of a duct',
          Kind.PRESSURE_MEASUREMENT: 'a pressure measurement', Kind.MANOMETRY: 'a manometry study',
-         Kind.INTERVENTION: 'an intervention of any kind'}
+         # the form moderate sedation's control takes (D222, P6): its head names the examination too
+         Kind.INTERVENTION: 'the examination itself or an intervention of any kind',
+         Kind.BLEEDING_CONTROL: 'a treatment of bleeding'}  # D233: the label it had before
 
 
 class SiblingContraryTests(SimpleTestCase):
@@ -1906,11 +2053,24 @@ class SiblingContraryTests(SimpleTestCase):
         self.assertFalse({'manometry', 'motility'} & set(reflux.split()))  # and its control, reflux, names neither
 
     def test_every_sibling_pair_is_audited_and_none_names_a_genus_of_its_kind(self):
+        # D209's audit, extended from genus to overlap by DECISIONS D222: each pair's reason opens with its class
         self.assertEqual(set(KIND_AUDIT), set(claims.KIND_SIBLINGS.items()))
         self.assertEqual(set(SESSION_AUDIT), set(claims.SESSION_SIBLINGS.items()))
         for pair, reason in {**KIND_AUDIT, **SESSION_AUDIT}.items():
             self.assertTrue(reason, pair)
             self.assertEqual(reason.startswith('narrowed'), pair in NARROWED or pair in SESSION_NARROWED, pair)
+            self.assertEqual(reason.startswith('replaced (D222'), pair in REPLACED or pair in SESSION_REPLACED, pair)
+        # each replaced pair takes a contrary the claim's kind never is, never the sibling it had, and never one the
+        # claim's umbrella covers or that covers it
+        for (kind, sibling), had in {**REPLACED, **SESSION_REPLACED}.items():
+            with self.subTest(replaced=(kind.value, sibling.value)):
+                self.assertIsNot(sibling, had)
+                if isinstance(kind, Kind):
+                    self.assertIs(claims.KIND_SIBLINGS[kind], sibling)
+                    self.assertFalse(catalogue.covers(kind, sibling) or catalogue.covers(sibling, kind))
+                else:
+                    self.assertIs(claims.SESSION_SIBLINGS[kind], sibling)
+        self.assertEqual(len(REPLACED) + len(SESSION_REPLACED), 7)  # D233 took the ablation back to NARROWED
         for (kind, sibling), words in NARROWED.items():
             with self.subTest(pair=(kind.value, sibling.value)):
                 self.assertIn(words, claims.KIND_LABELS[sibling][1])
@@ -2021,6 +2181,31 @@ class ReportedActsTests(SimpleTestCase):
                                  'This statement denies only tissue samplings with forceps (not hot forceps) other '
                                  'than acts A5.')
 
+    def test_an_act_whose_unestablished_session_names_another_session_is_listed(self):
+        # refute-2c3-r1 P1: D210's fail-closed arm read with an act of ANOTHER session. E2, the upper endoscopy's
+        # gastric biopsy, with its session doubted (X1 or X2), contradicted (X1 against X2) or failing a check on X1:
+        # its session is not established, so it may lie in X2, the statement's own, and the control lists it (A2) - a
+        # reading that trusted the doubted, contradicted or failed value naming X1 would drop it and leave the breadth
+        # claim with no control
+        doubted = {'about': 'session', 'objects': ['E2'], 'units': ['S6'], 'basis': 'unclear', 'readings': ['X1', 'X2']}
+        both = {'session': [fact('', src(['S6'], 'Biopsies'), state='contradicted', options=[
+            {'value': 'X1', 'sources': [src(['S6'])]}, {'value': 'X2', 'sources': [src(['S9'])]}])]}
+        failed = {FactKey(F.EVENT, 'E2', A.SESSION, 0): (Reason.GEOMETRY_STATEMENT,)}
+        for name, data, findings in (('doubted', bidi_answer(doubts=(doubted,)), None),
+                                     ('contradicted', bidi_answer(gastric=both), None),
+                                     ('failing a check', bidi_answer(), failed)):
+            with self.subTest(session=name):
+                claim_set = build(BIDI, data, findings)
+                (breadth,) = appraised(claim_set, A.SCOPE_BREADTH, 'E4')
+                self.assertIsNotNone(breadth.control)  # never the breadth claimed with no control
+                self.assertEqual(sentence_of(claim_set, breadth.control),
+                                 'This statement denies only tissue samplings with forceps (not hot forceps) other '
+                                 'than acts A2.')
+                self.assertEqual(claim_set.objects['A2'], (F.EVENT, 'E2'))
+        # established in X1 (the control of the same input with no doubt, conflict or finding), it is never listed
+        (breadth,) = appraised(build(BIDI, bidi_answer()), A.SCOPE_BREADTH, 'E4')
+        self.assertIsNone(breadth.control)
+
     def test_an_act_of_its_own_session_that_cannot_be_listed_leaves_the_breadth_unclaimed(self):
         # refute-2c-r2 F: in the statement's own session, an act whose anchor is invalid, or whose status or kind is
         # contradicted, makes the breadth Unclaimable.CONTROL (2c#7's fail-closed reading), D210 pinned
@@ -2097,12 +2282,15 @@ class PairBoundTests(SimpleTestCase):
 
     def test_the_claim_count_of_one_session_with_many_snares_and_biopsies(self):
         # D211's measure (the whole grid, N + M up to 30, is in the step's NOTES). The p12 shape: under the bound up to
-        # 20 acts, the first total over it 21. Its realistic variant (each lesion's size and place, each act's device):
-        # 18 acts already pass it - reported to the integration owner with the counts (NOTES, a request), never raised
-        # here: past the bound the request is never built (TOO_LONG, 7.4 door 0), and D3 counts it
-        for (snares, biopsies, rich), count in {(17, 0, False): 268, (16, 0, False): 253, (12, 6, False): 513,
-                                                (10, 10, False): 623, (11, 10, False): 664, (9, 9, True): 652,
-                                                (10, 10, True): 743}.items():
+        # 19 acts, the first total over it 20 (8+12 = 645 to 10+10 = 653). Its realistic variant (each lesion's size and
+        # place, each act's device): 18 acts already pass it (6+12 = 641 to 9+9 = 679) - reported to the integration
+        # owner with the counts (NOTES, a request), never raised here: past the bound the request is never built
+        # (TOO_LONG, 7.4 door 0), and D3 counts it. Repair r2c-2 restored the pair controls a contrary control had
+        # absorbed (refute-r2c-r1 RF1, RF2): 12+6 513 -> 533, 10+10 623 -> 653 (p12's first total over moved from 21
+        # to 20), 9+9 652 -> 679 (rich)
+        for (snares, biopsies, rich), count in {(17, 0, False): 268, (16, 0, False): 253, (12, 6, False): 533,
+                                                (10, 10, False): 653, (11, 10, False): 695, (9, 9, True): 679,
+                                                (10, 10, True): 773}.items():
             with self.subTest(snares=snares, biopsies=biopsies, rich=rich):
                 claim_set = build(many_note(snares + biopsies), many_answer(snares, biopsies, rich))
                 self.assertEqual(len(claim_set.claims), count)
@@ -2113,7 +2301,46 @@ class PairBoundTests(SimpleTestCase):
                                                     if name != 'APPRAISAL_LOCAL_SCHEMA_SHA256'}):
             with self.assertRaises(appraise_prompt.OverBound) as caught:
                 appraise_prompt.build_request(many_note(18), (), 'txt', found, findings={})
-        self.assertEqual(caught.exception.count, 652)
+        self.assertEqual(caught.exception.count, 679)
+
+    def test_the_claim_count_with_a_listed_denial_before_and_after_d234(self):
+        # DECISIONS D234's cost, measured against the rule before it (no lesion taken, so every listed target read one
+        # control): the stress shape of rich snares and biopsies with two further polyps a denial lists. A listed
+        # target that shared the first one's control gets its own (one claim more); with one other lesion only, the
+        # second listed target is not claimed (one claim less); with none, nothing changes. The whole grid is in the
+        # step's NOTES (493 shapes +1, 2 shapes -1, 1 unchanged; none crosses CLAIM_BOUND, the first total over it 17
+        # acts before and after); the other stress shapes have no listed denial and do not move (the counts above)
+        for (snares, biopsies), (before, after) in {(9, 9): (718, 719), (15, 15): (1360, 1361), (12, 6): (689, 690),
+                                                    (8, 8): (625, 626), (1, 0): (48, 47), (0, 0): (24, 24)}.items():
+            with self.subTest(snares=snares, biopsies=biopsies):
+                text, data = many_listed(snares, biopsies)
+                claim_set = build(text, data)
+                with mock.patch.object(claims._Builder, 'lesions_taken', lambda self, subject: set()):
+                    earlier = build(text, data)
+                self.assertEqual((len(earlier.claims), len(claim_set.claims)), (before, after))
+                self.assertEqual((claims.over_bound(earlier), claims.over_bound(claim_set)),
+                                 (before > 640, after > 640))
+
+
+def many_listed(snares, biopsies):
+    """The 'listed' stress shape (the step's NOTES, D234): many_answer's rich shape, then two further polyps seen and
+    not removed, each its own lesion, and the denial of removing them (listed_targets)."""
+    count = snares + biopsies
+    text = many_note(count) + ('A further polyp was seen.\nAnother further polyp was seen.\n'
+                               'The two further polyps were not removed.\n')
+    data = many_answer(snares, biopsies, rich=True)
+    data['lesions'] += [lesion(f'L{count + 1}', [f'S{5 + count}'], 'A further polyp'),
+                        lesion(f'L{count + 2}', [f'S{6 + count}'], 'Another further polyp')]
+    unit = f'S{7 + count}'
+    data['events'].append(event(f'E{count + 4}', [unit], 'removed', 'were not removed', 'snare',
+                                neg('performed', src([unit], 'were not removed')), session=[fact('X1', src([unit]))],
+                                scope__breadth=[fact('listed_targets', src([unit], 'The two further polyps'))],
+                                scope__targets=[f'L{count + 1}', f'L{count + 2}']))
+    return text, data
+
+
+NOTES.update({f'MANY LISTED {snares}+{biopsies}': many_listed(snares, biopsies)[0]
+              for snares, biopsies in ((9, 9), (15, 15), (12, 6), (8, 8), (1, 0), (0, 0))})
 
 
 class LesionPlaceTests(SimpleTestCase):
@@ -2179,8 +2406,10 @@ class RemainingGapTests(SimpleTestCase):
         claim_set = build(NOTE, note_answer())
         (device,) = appraised(claim_set, A.TECHNIQUE_DEVICE, 'E2')
         self.assertEqual(sentence_of(claim_set, device.control), 'This act used a hot snare.')
+        # argon plasma coagulation delivers high-frequency current, so radiofrequency energy was true of it in part:
+        # its contrary is cryotherapy (DECISIONS D222, P5)
         for value, expected in (('snare', 'This act used a hot snare.'), ('clip', 'This act used a band.'),
-                                ('argon_plasma', 'This act used radiofrequency energy.')):
+                                ('argon_plasma', 'This act used cryotherapy.')):
             with self.subTest(device=value):
                 data = note_answer()
                 data['events'][1]['technique']['device'] = [fact(value, src(['S6'], 'cold snare'))]
@@ -2192,7 +2421,7 @@ class RemainingGapTests(SimpleTestCase):
         self.assertEqual(sentence_of(rich, balloon.control),
                          'The document states that a dilating balloon was not used for this act.')
         # a statement's device: its sibling in its family, else another device (4.5's technique row reads D's too)
-        for value, expected in (('hot_forceps', 'cold forceps'), ('argon_plasma', 'radiofrequency energy')):
+        for value, expected in (('hot_forceps', 'cold forceps'), ('argon_plasma', 'cryotherapy')):
             with self.subTest(statement_device=value):
                 data = note_answer()
                 data['events'][2]['technique']['device'] = [fact(value, src(['S7'], 'biopsies'))]
@@ -2227,12 +2456,13 @@ class RemainingGapTests(SimpleTestCase):
 
     def test_moderate_sedations_kind_has_a_sibling_false_of_sedation_and_true_of_a_procedure(self):
         # 1f's F2: a banding misfiled as moderate_sedation and one biased "supports" left no procedure that day, and
-        # 99213 went READY without separate_em. The sibling, intervention, is false of sedation and true of a procedure
+        # 99213 went READY without separate_em. The sibling, intervention, is false of sedation and, in the form its
+        # control takes, true of every procedure on the patient, the examination included (DECISIONS D222, P6)
         claim_set = build(SEDATION, sedation_answer())
         (kind,) = appraised(claim_set, A.KIND, 'E2')
         self.assertEqual((sentence_of(claim_set, kind.claim), sentence_of(claim_set, kind.control)),
-                         ('This act is moderate sedation.', 'This act is an intervention of any kind other than '
-                                                           'sedation.'))
+                         ('This act is moderate sedation.', 'This act is the examination itself or an intervention of '
+                                                           'any kind, other than sedation.'))
         self.assertNotIn(Kind.MODERATE_SEDATION, catalogue.INTERVENTION_MEMBERS)  # false of sedation, by definition
         procedures = {kind for profile in catalogue.CODES.values() for kind in profile.covers
                       if profile.family in catalogue.PROCEDURAL_FAMILIES} - {Kind.EXAMINATION, Kind.MODERATE_SEDATION}
@@ -2265,6 +2495,1214 @@ class RemainingGapTests(SimpleTestCase):
         before = jsonschema.sha256_of(claims.controls_document())
         with mock.patch.object(claims, 'contrast_candidates', my1):
             self.assertNotEqual(jsonschema.sha256_of(claims.controls_document()), before)
+
+
+# --- the integration owner's rulings on waves 3-4 (DECISIONS D222, D223; repair r2c) ----------------------------------
+
+# One act told in one sentence after the examination (S4: the part's label and the examination; S5: the act), for the
+# overlaps D222 names and this step's audit found. Each note is synthetic (written here) and is in NOTES, so the
+# exclusion test checks it.
+OVERLAP_NOTE = ('SYNTHETIC {kind} NOTE\n'
+                'Date of service: 06/02/2031\n'
+                'Endoscopist: Q. R. Vance, MD (fictional)\n'
+                '\n'
+                'Findings: {exam}\n'
+                '{act}\n')
+OVERLAPS = {
+    # name: (the note's kind and examination, the act's sentence, its kind, kind words, status words, session family,
+    # the act's other fields)
+    'P4 clips': (('COLONOSCOPY', 'The colonoscope was advanced to the cecum.'),
+                 'Bleeding at the polypectomy site was treated with two clips.', 'bleeding_control',
+                 'treated with two clips', 'was treated', 'colonoscopy',
+                 {'technique__device': [fact('clip', src(['S5'], 'clips'))],
+                  'purpose': [fact('hemostasis', src(['S5'], 'Bleeding'))]}),
+    'P2 needle': (('ULTRASOUND', 'An upper endoscopic ultrasound examination was performed.'),
+                  'The pancreatic fluid collection was punctured with a 19-gauge needle, fluid was aspirated, and it '
+                  'was drained across the gastric wall with a stent.', 'drainage',
+                  'drained across the gastric wall with a stent', 'was drained', 'eus',
+                  {'target__structure': [fact('pancreatic_fluid_collection',
+                                              src(['S5'], 'pancreatic fluid collection'))],
+                   'technique__route': [fact('eus_transmural', src(['S5'], 'across the gastric wall'))]}),
+    'P5 argon plasma': (('UPPER ENDOSCOPY', 'The gastroscope was advanced to the duodenum.'),
+                        'The antral vascular ectasia was ablated with argon plasma coagulation.', 'ablation', 'ablated',
+                        'was ablated', 'egd',
+                        {'technique__device': [fact('argon_plasma', src(['S5'], 'argon plasma coagulation'))]}),
+    'P6 sedation': (('COLONOSCOPY', 'The colonoscope was advanced to the cecum.'),
+                    'Moderate sedation was given by the endoscopist.', 'moderate_sedation', 'Moderate sedation',
+                    'was given', 'colonoscopy', {}),
+    'audit stent': (('UPPER ENDOSCOPY', 'The gastroscope was advanced to the duodenum.'),
+                    'The esophageal stricture was dilated with a balloon and a covered metal stent was placed across '
+                    'it.', 'stent', 'a covered metal stent was placed', 'was placed', 'egd', {}),
+    'audit lithotripsy': (('ERCP', 'The duodenoscope was advanced to the papilla.'),
+                          'The stones were fragmented with electrohydraulic lithotripsy and the fragments were swept '
+                          'out with a balloon.', 'lithotripsy', 'fragmented with electrohydraulic lithotripsy',
+                          'were fragmented', 'ercp', {}),
+    'audit microforceps': (('ULTRASOUND', 'An upper endoscopic ultrasound examination was performed.'),
+                           'The cyst wall was sampled with microforceps passed through a 19-gauge needle.', 'fna',
+                           'sampled with microforceps passed through a 19-gauge needle', 'was sampled', 'eus', {}),
+    'audit pH': (('REFLUX', 'The lower esophageal sphincter was located by manometry.'),
+                 'A pH catheter was placed above it for 24 hours of monitoring.', 'ph_monitoring', 'pH catheter',
+                 'was placed', 'reflux', {}),
+}
+EXCHANGE = OVERLAP_NOTE.format(kind='ERCP', exam='The duodenoscope was advanced to the papilla.',
+                               act='The existing biliary stent was removed and replaced with a new plastic stent.')
+TUBE = OVERLAP_NOTE.format(kind='UPPER ENDOSCOPY', exam='The gastroscope was advanced to the duodenum.',
+                           act='The nasojejunal feeding tube was removed and a new one was placed in the jejunum.')
+APC = OVERLAP_NOTE.format(kind='UPPER ENDOSCOPY', exam='The gastroscope was advanced to the duodenum.',
+                          act='The antral vascular ectasia was ablated with argon plasma coagulation.\n'
+                              'No radiofrequency ablation was performed.')
+UMBRELLA = OVERLAP_NOTE.format(kind='COLONOSCOPY', exam='The colonoscope was advanced to the cecum.',
+                               act='Interventions were performed as listed.')
+# D223's inputs: refute-3a-r2's p01 (BF17, "No other injection was given."), D223's own "No other polyps were
+# removed." beside two snares, refute-3d-r2's R4 ("No biopsies were taken from the cecum to the hepatic flexure." beside
+# a biopsy) and refute-3a-r2's p02 (a clip an adjunct done with a snare removal)
+INJECTION_BF17 = ('SYNTHETIC COLONOSCOPY NOTE\n'
+                  'Date of service: 06/02/2031\n'
+                  'Endoscopist: Q. R. Vance, MD (fictional)\n'
+                  '\n'
+                  'Findings: The colonoscope was advanced to the cecum.\n'
+                  'The sigmoid colon was tattooed with an injection of ink.\n'
+                  'No other injection was given.\n')
+POLYPS = ('SYNTHETIC COLONOSCOPY NOTE\n'
+          'Date of service: 06/02/2031\n'
+          'Endoscopist: Q. R. Vance, MD (fictional)\n'
+          '\n'
+          'Findings: The colonoscope was advanced to the cecum.\n'
+          'A 4 mm polyp in the rectum was removed with a cold snare.\n'
+          'A 3 mm polyp in the sigmoid colon was removed with a cold snare.\n'
+          'No other polyps were removed.\n')
+SEGMENT_RANGE = ('SYNTHETIC COLONOSCOPY NOTE\n'
+                 'Date of service: 06/02/2031\n'
+                 'Endoscopist: Q. R. Vance, MD (fictional)\n'
+                 '\n'
+                 'Findings: The colonoscope was advanced to the cecum.\n'
+                 'Biopsies were taken with cold forceps.\n'
+                 'No biopsies were taken from the cecum to the hepatic flexure.\n')
+ADJUNCT = ('SYNTHETIC COLONOSCOPY NOTE\n'
+           'Date of service: 06/02/2031\n'
+           'Endoscopist: Q. R. Vance, MD (fictional)\n'
+           '\n'
+           'Findings: The colonoscope was advanced to the cecum.\n'
+           'A 5 mm polyp in the cecum was removed with a cold snare.\n'
+           'A clip was placed on the polypectomy site.\n')
+NOTES.update({f'OVERLAP {name}': OVERLAP_NOTE.format(kind=kind, exam=exam, act=act)
+              for name, ((kind, exam), act, *_rest) in OVERLAPS.items()})
+NOTES.update({'EXCHANGE': EXCHANGE, 'TUBE': TUBE, 'APC': APC, 'UMBRELLA': UMBRELLA, 'INJECTION_BF17': INJECTION_BF17,
+              'POLYPS': POLYPS, 'SEGMENT_RANGE': SEGMENT_RANGE, 'ADJUNCT': ADJUNCT})
+# refute-r2c-r1's inputs (repair r2c-2): RF2's single target (a biopsy beside the denial of the place next to it) and
+# RF2's lesions (a polyp left in place beside another removed), the two places of one object (the repair's own
+# finding) and RF6's whole-tract segment
+SINGLE_PLACE = ('SYNTHETIC COLONOSCOPY NOTE\n'
+                'Date of service: 06/02/2031\n'
+                'Endoscopist: Q. R. Vance, MD (fictional)\n'
+                '\n'
+                'Findings: The colonoscope was advanced to the cecum.\n'
+                'Biopsies were taken from the sigmoid colon with cold forceps.\n'
+                'No biopsies were taken from the rectum.\n')
+POLYP_LEFT = ('SYNTHETIC COLONOSCOPY NOTE\n'
+              'Date of service: 06/02/2031\n'
+              'Endoscopist: Q. R. Vance, MD (fictional)\n'
+              '\n'
+              'Findings: The colonoscope was advanced to the cecum.\n'
+              'A 6 mm polyp was seen in the cecum.\n'
+              'A second polyp, 3 mm, in the sigmoid colon was removed with a cold snare.\n'
+              'The 6 mm cecal polyp was not removed.\n')
+POLYP_THIRD = POLYP_LEFT + 'A third polyp, in the rectum, was marked with a tattoo.\n'
+TWO_PLACES = ('SYNTHETIC COLONOSCOPY NOTE\n'
+              'Date of service: 06/02/2031\n'
+              'Endoscopist: Q. R. Vance, MD (fictional)\n'
+              '\n'
+              'Findings: The colonoscope was advanced to the cecum.\n'
+              'A polyp was found and biopsies were taken from the two named places.\n')
+WHOLE_TRACT = ('SYNTHETIC ENDOSCOPY NOTE\n'
+               'Date of service: 06/02/2031\n'
+               'Endoscopist: Q. R. Vance, MD (fictional)\n'
+               '\n'
+               'Findings: The colonoscope was advanced to the cecum.\n'
+               'No biopsies were taken from the proximal esophagus to the anal canal.\n')
+PART_OF_COLON = ('SYNTHETIC COLONOSCOPY NOTE\n'
+                 'Date of service: 06/02/2031\n'
+                 'Endoscopist: Q. R. Vance, MD (fictional)\n'
+                 '\n'
+                 'Findings: The colonoscope was advanced to the cecum.\n'
+                 'Biopsies were taken with cold forceps.\n'
+                 'No biopsies were taken from the named part of the colon.\n')
+NOTES.update({'SINGLE_PLACE': SINGLE_PLACE, 'POLYP_LEFT': POLYP_LEFT, 'POLYP_THIRD': POLYP_THIRD,
+              'TWO_PLACES': TWO_PLACES, 'WHOLE_TRACT': WHOLE_TRACT, 'PART_OF_COLON': PART_OF_COLON})
+RANGE_WORDS = 'from the cecum to the hepatic flexure'  # SEGMENT_RANGE's own words of its segment
+COLON = tuple(Landmark(value) for value in (
+    'cecum', 'appendiceal_orifice', 'ileocecal_valve', 'ascending_colon', 'hepatic_flexure', 'transverse_colon',
+    'splenic_flexure', 'descending_colon', 'sigmoid_colon', 'rectosigmoid', 'rectum', 'anal_canal'))
+
+
+def denial_answer(denied, biopsied, biopsy_words='Biopsies', denial_words='named part'):
+    """A biopsy E2 (S5) in the places ``biopsied`` beside the denial E3 (S6) of biopsies in ``denied``: a segment from
+    its first place to its last when it names two, else a single target (refute-r2c-r1's probes r02, r03, r04). The
+    words cite the note's own (the checks locate them, so a run through settle needs them true)."""
+    if len(denied) == 2:
+        target = dict(scope__breadth=[fact('segment', src(['S6'], denial_words))], scope__segment=list(denied))
+    else:
+        target = dict(scope__breadth=[fact('single_target', src(['S6'], denial_words))],
+                      target__places=[fact(denied[0], src(['S6'], denial_words))])
+    return frame_answer('colonoscopy', [
+        examination(words='colonoscope'),
+        event('E2', ['S5'], 'Biopsies', 'were taken', 'biopsy', session=[fact('X1', src(['S5']))],
+              target__places=[fact(place, src(['S5'], biopsy_words)) for place in biopsied]),
+        event('E3', ['S6'], 'biopsies', 'No biopsies were taken', 'biopsy',
+              neg('performed', src(['S6'], 'No biopsies were taken')), session=[fact('X1', src(['S6']))], **target)],
+        fact('E1', src(['S4'])))
+
+
+def polyp_left_answer():
+    """POLYP_LEFT's answer: the cecal polyp L1 and the sigmoid polyp L2 (distinct from L1), the cold-snare removal E2
+    of L2 and the denial E3 of removing L1 (single target): each lesion is the other's only contrary."""
+    return frame_answer('colonoscopy', [
+        examination(words='colonoscope'),
+        event('E2', ['S6'], 'removed with a cold snare', 'was removed', 'snare', session=[fact('X1', src(['S6']))],
+              target__lesion=[fact('L2', src(['S6'], 'A second polyp'))],
+              target__places=[fact('sigmoid_colon', src(['S6'], 'sigmoid colon'))],
+              technique__device=[fact('cold_snare', src(['S6'], 'cold snare'))]),
+        event('E3', ['S7'], 'removed', 'was not removed', 'snare', neg('performed', src(['S7'], 'was not removed')),
+              session=[fact('X1', src(['S7']))],
+              scope__breadth=[fact('single_target', src(['S7'], 'The 6 mm cecal polyp'))],
+              target__lesion=[fact('L1', src(['S7'], 'The 6 mm cecal polyp'))])],
+        fact('E1', src(['S4'])),
+        lesions=[lesion('L1', ['S5'], 'A 6 mm polyp', places=[fact('cecum', src(['S5'], 'cecum'))]),
+                 lesion('L2', ['S6'], 'A second polyp', places=[fact('sigmoid_colon', src(['S6'], 'sigmoid colon'))],
+                        distinct_from=[fact('L1', src(['S6'], 'A second polyp'))])])
+
+
+def merged(claim_set):
+    """The pair controls numbered into a contrary control (refute-r2c-r1 RF1, RF2): settle stores such a claim with role
+    control, and the engine's FactSet reads no pair control from it."""
+    controls = {item.control for item in claim_set.appraised if item.control is not None}
+    return [pair for pair in claim_set.pair_controls if pair.claim in controls]
+
+
+def frame_answer(family, events, examination=None, lesions=()):
+    """A one-part note's answer (the opening part N0 and a Findings part N1 at S4, today, the team) with one session X1
+    of ``family``, its kind told by the document frame."""
+    today = fact('on_date_of_service', src(['S2'], '', 'document_frame'))
+    return answer(sections=[section('N0', src([], '', 'section'), occasion=[today]),
+                            section('N1', src(['S4'], 'Findings:', 'section'), occasion=[today],
+                                    performer=[fact('documenting_team', src(['S3'], '', 'document_frame'))])],
+                  sessions=[session('X1', family, src(['S1'], '', 'document_frame'), examination)],
+                  events=list(events), lesions=list(lesions))
+
+
+def overlap(name):
+    """The note and the answer of one OVERLAPS case: its act E2 at S5, of its session X1."""
+    (kind_word, exam), act, kind, kind_words, status_words, family, over = OVERLAPS[name]
+    text = OVERLAP_NOTE.format(kind=kind_word, exam=exam, act=act)
+    return text, frame_answer(family, [event('E2', ['S5'], kind_words, status_words, kind,
+                                             session=[fact('X1', src(['S5']))], **over)])
+
+
+def examination(eid='E1', unit='S4', words='scope'):
+    return event(eid, [unit], words, 'was advanced', 'examination', session=[fact('X1', src([unit]))])
+
+
+def exchange_answer():
+    """EXCHANGE's answer: the ERCP's examination E1 and the exchange told as its parts, the removal E2 and the
+    placement E3, sharing the anchor S5 (2a's composite-act rule)."""
+    return frame_answer('ercp', [
+        examination(words='duodenoscope'),
+        event('E2', ['S5'], 'stent was removed', 'was removed', 'stent_removal', session=[fact('X1', src(['S5']))],
+              target__duct=[fact('biliary', src(['S5'], 'biliary'))]),
+        event('E3', ['S5'], 'replaced with a new plastic stent', 'replaced', 'stent',
+              session=[fact('X1', src(['S5']))], target__duct=[fact('biliary', src(['S5'], 'biliary'))])],
+        fact('E1', src(['S4'])))
+
+
+# Each device's contrary (DEVICE_CONTRARY, D213) with the reason its control is false of every act done with the
+# device (DECISIONS D222: never a device whose physics an act done with the device includes). "carried": the document
+# says neither way, so a faithful reading answers unclear and the device stays unresolved (2c3's question Q3, carried by
+# this step's NOTES: fail-closed, it can only hold).
+DEVICE_AUDIT = {
+    Device.COLD_SNARE: 'a cold snare cuts with no current', Device.HOT_SNARE: 'a hot snare cuts with current',
+    Device.SNARE: 'carried: the document calls the snare neither cold nor hot',
+    Device.COLD_FORCEPS: 'cold forceps take tissue with no current', Device.HOT_FORCEPS: 'hot forceps use current',
+    Device.FORCEPS: 'carried: the document calls the forceps neither cold nor hot',
+    Device.BALLOON: "3.2.3's pair, a statement's: a balloon is no bougie passed over a wire",
+    Device.WIRE_BOUGIE: "3.2.3's pair: bougies passed over a wire are no balloon",
+    Device.ENDOSCOPE: "an act done with the endoscope uses no capsule (a capsule's delivery is its own act)",
+    Device.CAPSULE: 'a capsule study passes no endoscope (an endoscopic delivery is its own session)',
+    Device.NEEDLE: 'a needle ligates nothing', Device.INJECTION: 'an injection ligates nothing',
+    Device.CLIP: 'a clip is no band', Device.BAND: 'a band is no clip', Device.BOUGIE: 'a bougie is no balloon',
+    Device.ARGON_PLASMA: ('replaced (D222, P5): argon plasma coagulation delivers high-frequency current, so '
+                          'radiofrequency energy was true of it; it never freezes'),
+    Device.RADIOFREQUENCY: 'radiofrequency energy is delivered by electrodes, never through ionised argon',
+    Device.CRYOTHERAPY: 'cryotherapy freezes; it delivers no argon plasma',
+    Device.THERMAL_PROBE: 'a thermal probe heats; it never freezes', Device.ELECTROCAUTERY: 'current heats; it never '
+                                                                                          'freezes',
+    Device.STENT: 'a stent ligates nothing', Device.BASKET: 'a basket cuts nothing',
+    Device.EXTRACTION_BALLOON: 'an extraction balloon cuts nothing', Device.SPHINCTEROTOME: 'a sphincterotome is no '
+                                                                                            'basket',
+    Device.LITHOTRIPTER: 'a lithotripter cuts nothing', Device.CHOLANGIOSCOPE: 'a cholangioscope cuts nothing',
+    Device.CATHETER: 'a catheter is no basket', Device.MANUAL: 'manual pressure places no clip',
+    Device.OTHER: 'a device of another kind is no band (a band is named)',
+}
+
+
+def roles_of(claim_set):
+    """What each claim of a request is (pass 2 never sees it): a real claim (claim or completeness), else a control."""
+    real = {item.claim for item in claim_set.appraised} | {complete.claim for complete in claim_set.completeness}
+    return {claim.id: claim.id in real for claim in claim_set.claims}
+
+
+def faithful_oracle(true_of=frozenset(), places=None):
+    """A faithful second reading of a well-filed answer: every real claim supported, every control contradicted, each
+    attached with its first unit as evidence - except a sentence in ``true_of`` (a sentence true of its act, which a
+    faithful reader supports, whatever it is), and a pair control, which ``places`` answers by the asked object's true
+    places (supported exactly when the place is one of them), where it is given."""
+    def oracle(claim, real, claim_set):
+        supports = real or claim_set.sentences[claim.id] in true_of
+        if places is not None:
+            for pair in claim_set.pair_controls:
+                if pair.claim == claim.id:
+                    supports = pair.value in places[pair.subject[1]]
+        return {'claim': claim.id, 'verdict': 'supports' if supports else 'contradicts', 'attached': 'yes',
+                'qualifiers': [], 'evidence': list(claim.units[:1])}
+    return oracle
+
+
+def settled(text, data, oracle=None):
+    """The rulings' outcomes end to end: pass 1's answer read, checked (contract/checks.check), claimed into the request
+    (appraise_prompt.build_request, under the pins this tree measures), appraised by ``oracle`` (faithful_oracle()),
+    read (appraise_read), settled (contract/settle, under its own health pin), stored and loaded (store.row_v2,
+    load_v2) and read into the engine's FactSet (engine/facts over store.textfree_v2). Returns the claim set, the
+    settled inventory and the FactSet."""
+    from studio.interpretation import store
+    from studio.interpretation.contract import appraise_read, checks, settle
+    from studio.interpretation.engine import facts as engine_facts
+    found = read(text, data)
+    checked = checks.check(text, (), found)
+    pins = {name: value for name, value in appraise_prompt.pins().items() if name != 'APPRAISAL_LOCAL_SCHEMA_SHA256'}
+    with mock.patch.multiple(interpretation, **pins):
+        request = appraise_prompt.build_request(text, (), 'txt', found, findings=checked.findings)
+    claim_set = request.claim_set
+    roles, answer_of = roles_of(claim_set), oracle or faithful_oracle()
+    verdicts = [answer_of(claim, roles[claim.id], claim_set) for claim in claim_set.claims]
+    appraisal = appraise_read.read(json.dumps({'verdicts': verdicts, 'unlisted': []}), claim_set,
+                                   len(appraise_prompt.segment.units(text)))
+    assert not isinstance(appraisal, extract_read.Refusal), appraisal
+    usage = settle.Usages(settle.usage_of({'promptTokenCount': 1800, 'candidatesTokenCount': 900}),
+                          settle.usage_of({'promptTokenCount': 2600, 'candidatesTokenCount': 480}))
+    with mock.patch.object(interpretation, 'HEALTH_THRESHOLDS_SHA256',
+                           jsonschema.sha256_of(settle.health_document())):
+        out = settle.settle(found, checked, claim_set, request.indistinct, appraisal, usage)
+    assert isinstance(out, settle.Settled), out
+    sha = hashlib.sha256(text.encode('utf-8')).hexdigest()
+    ids = ('4' * 32, '5' * 32, '6' * 32, '7' * 32)
+    fields = store.row_v2(encounter_id=ids[0], revision_id=ids[1], provider_run_id=ids[2], appraisal_run_id=ids[3],
+                          revision_text=text, text_sha256=sha, request_sha256='2' * 64, response_sha256='3' * 64,
+                          appraisal_request_sha256='8' * 64, appraisal_response_sha256='9' * 64, events=out.events,
+                          verification=out.verification)
+    loaded = store.load_v2(fields, text_sha256=sha, response_sha256='3' * 64, appraisal_response_sha256='9' * 64)
+    return claim_set, out.events, engine_facts.factset(store.textfree_v2(loaded))
+
+
+def at(events, name, attribute, *index):
+    """The settled fact of event ``name``'s ``attribute`` (a scope list's member at ``index``)."""
+    node = next(record for record in events['events'] if record['id'] == name)
+    for part in attribute.value.split('.'):
+        node = node[part]
+    return node[index[0]] if index else node
+
+
+def relation(factset, statement, act):
+    """engine/pairing's relation of a statement and an act (E<n> ids)."""
+    from studio.interpretation.engine import pairing
+    from studio.interpretation.engine.types import Id, IdFamily
+    return pairing.relation(factset, Id(IdFamily.EVENT, int(statement[1:])), Id(IdFamily.EVENT, int(act[1:])))
+
+
+class OverlapTests(SimpleTestCase):
+    """DECISIONS D222: the control audit extends from genus to overlap - a sibling control is false of every act the
+    claim's kind admits, the acts done by the sibling's method, holding it as a step and using a device whose physics
+    includes the sibling's included."""
+
+    def kind_of(self, name, subject='E2', attribute=A.KIND):
+        text, data = overlap(name)
+        claim_set = build(text, data)
+        (item,) = appraised(claim_set, attribute, subject)
+        return claim_set, sentence_of(claim_set, item.claim), sentence_of(claim_set, item.control)
+
+    def test_an_ablations_control_is_a_treatment_of_bleeding_present_at_this_encounter(self):
+        # DECISIONS D233 (refute-r2c-r2 G1): the clip placement refute-r2c-r1's RF3 gave an ablation is false of every
+        # ablation, so it let an oozing lesion's treatment filed as an ablation settle its kind supported (a false
+        # READY). The control is the bleeding control again, its label narrowed to the hemostasis purpose's own wording:
+        # false of RF3's vascular ectasia ablated (no bleeding stated at this encounter), true of a treatment of
+        # bleeding present at this encounter, which the control holds
+        claim_set, claim, control = self.kind_of('P5 argon plasma')
+        self.assertEqual((claim, control), ('This act is an ablation of tissue.',
+                                            'This act is a treatment of bleeding present at this encounter.'))
+        self.assertIs(claims.KIND_SIBLINGS[Kind.ABLATION], Kind.BLEEDING_CONTROL)
+        self.assertNotIn('This act is a clip placement.', sentences_of_controls(claim_set))
+        self.assertNotIn('This act is a treatment of bleeding.', sentences(claim_set))  # the unnarrowed label: gone
+        # the hemostasis purpose's own wording, the article's form; the bare and plural forms carry it in parentheses
+        self.assertEqual(claims.KIND_LABELS[Kind.BLEEDING_CONTROL],
+                         ('treatment of bleeding (present at this encounter)',
+                          'a ' + claims.LABELS[claims.Purpose.HEMOSTASIS],
+                          'treatments of bleeding (present at this encounter)'))
+        # the bleeding control's own claim reads the same label (the cost D233 accepts), and its control stays the
+        # dilation (D222, P4)
+        claim_set, claim, control = self.kind_of('P4 clips')
+        self.assertEqual((claim, control), ('This act is a treatment of bleeding present at this encounter.',
+                                            'This act is a dilation of a narrowing.'))
+        # the pair kinds follow the sibling (_compatible): an ablation and a bleeding control pair both ways, an
+        # ablation and a clip no longer
+        kinds = claims.controls_document()['pair_controls']['pair_kinds']
+        self.assertLessEqual([['ablation', 'bleeding_control'], ['bleeding_control', 'ablation']],
+                             [pair for pair in kinds if 'ablation' in pair and 'bleeding_control' in pair])
+        self.assertNotIn(['ablation', 'clip'], kinds)
+        self.assertNotIn(['clip', 'ablation'], kinds)
+
+    def test_each_overlap_the_refutation_named_takes_a_contrary_its_kind_never_is(self):
+        # P4: "a clip placement" was true of a bleed treated with clips (pass 1's "treatment of bleeding by any
+        # method"); P2: "a fine-needle aspiration or biopsy" true of a drainage's needle puncture and aspiration; P5:
+        # radiofrequency energy true of argon plasma coagulation's high-frequency current; P6: the sedation control was
+        # false of the examination, a procedure on the patient
+        expected = {
+            ('P4 clips', A.KIND): ('This act is a treatment of bleeding present at this encounter.',  # D233's label
+                                   'This act is a dilation of a narrowing.'),
+            ('P2 needle', A.KIND): ('This act is a drainage.', 'This act is a band ligation.'),
+            ('P5 argon plasma', A.TECHNIQUE_DEVICE): ('This act used argon plasma coagulation.',
+                                                      'This act used cryotherapy.'),
+            ('P6 sedation', A.KIND): ('This act is moderate sedation.', 'This act is the examination itself or an '
+                                                                        'intervention of any kind, other than '
+                                                                        'sedation.')}
+        gone = {'P4 clips': 'This act is a clip placement.', 'P2 needle': 'This act is a fine-needle aspiration or '
+                                                                           'biopsy.',
+                'P5 argon plasma': 'This act used radiofrequency energy.',
+                'P6 sedation': 'This act is an intervention of any kind other than sedation.'}
+        for (name, attribute), sentences in expected.items():
+            with self.subTest(overlap=name):
+                claim_set, claim, control = self.kind_of(name, attribute=attribute)
+                self.assertEqual((claim, control), sentences)
+                self.assertNotIn(gone[name], sentences_of_controls(claim_set))
+
+    def test_the_further_overlaps_the_audit_found(self):
+        # a stent placement includes its pre- and post-dilation; the destruction of calculi includes removing the
+        # fragments; a fine-needle biopsy may be taken with forceps through the needle; a pH study may hold the
+        # manometric location of its sphincter - each made the old control true of a correct filing
+        expected = {'audit stent': ('This act is a stent placement.', 'This act is a stent removal (the removal alone, '
+                                                                       'even where a new stent is then placed).'),
+                    'audit lithotripsy': ('This act is a lithotripsy.', 'This act is a sphincterotomy.'),
+                    'audit microforceps': ('This act is a fine-needle aspiration or biopsy.',
+                                           'This act is an injection that does not mark a site.'),
+                    'audit pH': ('This act is a pH monitoring study.',
+                                 'This act is a pressure measurement of the sphincter of Oddi.')}
+        for name, sentences in expected.items():
+            with self.subTest(overlap=name):
+                self.assertEqual(self.kind_of(name)[1:], sentences)
+        # and the pH study's session: anorectal testing, never motility, part of whose label it was
+        claim_set, claim, control = self.kind_of('audit pH', 'X1')
+        self.assertEqual((claim, control), ('Session X1 is a pH or impedance monitoring study.',
+                                            'Session X1 is an anorectal test.'))
+
+    def test_the_parts_of_an_exchange_and_a_replacement_read_plainly_true(self):
+        # P3 (option (a)): the removal part and the placement part, each told as its own act, read plainly true; the
+        # whole exchange and the whole replacement are false of their siblings' labels ("alone")
+        claim_set = build(EXCHANGE, exchange_answer())
+        by = {item.key.object: item for item in claim_set.appraised if item.key.attribute is A.KIND}
+        self.assertEqual(sentence_of(claim_set, by['E2'].claim),
+                         'This act is a stent removal (the removal alone, even where a new stent is then placed).')
+        self.assertEqual(sentence_of(claim_set, by['E3'].claim), 'This act is a stent placement.')
+        self.assertEqual(sentence_of(claim_set, by['E2'].control), 'This act is a stent placement.')
+        tube = frame_answer('egd', [examination(words='gastroscope'),
+                                    event('E2', ['S5'], 'a new one was placed in the jejunum', 'was placed',
+                                          'tube_placement', session=[fact('X1', src(['S5']))])],
+                            fact('E1', src(['S4'])))
+        claim_set = build(TUBE, tube)
+        (kind,) = appraised(claim_set, A.KIND, 'E2')
+        self.assertEqual(sentence_of(claim_set, kind.claim), 'This act is a tube placement other than a gastrostomy '
+                                                             '(the placement alone, even where it replaces an earlier '
+                                                             'tube).')
+        for whole, part in ((Kind.STENT_EXCHANGE, Kind.STENT_REMOVAL), (Kind.TUBE_REPLACEMENT, Kind.TUBE_PLACEMENT)):
+            self.assertIs(claims.KIND_SIBLINGS[whole], part)
+            self.assertIn('alone', claims.KIND_LABELS[part][1])
+
+    def test_moderate_sedations_control_names_every_procedure_and_is_never_a_real_claim(self):
+        # P6: true of every procedure on the patient, the examination included, and false of sedation; the form is
+        # moderate sedation's control alone, since K1 demotes the kind of an act filed as the intervention umbrella
+        article = claims.KIND_LABELS[Kind.INTERVENTION][1]
+        self.assertTrue(article.startswith('the examination itself'))  # the examination, as its own label begins
+        self.assertTrue(claims.KIND_LABELS[Kind.EXAMINATION][1].startswith('the examination itself'))
+        self.assertIn('an intervention of any kind', article)  # every member of the umbrella (catalogue)
+        self.assertTrue(article.endswith('other than sedation'))
+        self.assertEqual(claims.KIND_SIBLINGS[Kind.MODERATE_SEDATION], Kind.INTERVENTION)
+        # the statement forms keep the interventions a statement about interventions concerns
+        self.assertEqual(claims.KIND_LABELS[Kind.INTERVENTION][2], 'interventions of any kind (not sedation)')
+        from studio.interpretation.contract import checks
+        data = frame_answer('colonoscopy', [examination(words='colonoscope'),
+                                            event('E2', ['S5'], 'Interventions', 'were performed', 'intervention',
+                                                  session=[fact('X1', src(['S5']))])], fact('E1', src(['S4'])))
+        found = read(UMBRELLA, data)
+        findings = checks.check(UMBRELLA, (), found).findings
+        self.assertIn(Reason.STRUCTURE_UMBRELLA, findings[FactKey(F.EVENT, 'E2', A.KIND, 0)])
+        claim_set = build(UMBRELLA, data, findings)
+        self.assertEqual(appraised(claim_set, A.KIND, 'E2'), [])
+        self.assertNotIn(f'This act is {article}.', sentences(claim_set))
+
+    def test_every_device_contrary_is_audited(self):
+        self.assertEqual(set(DEVICE_AUDIT), set(claims.DEVICE_CONTRARY))
+        self.assertIs(claims.DEVICE_CONTRARY[Device.ARGON_PLASMA], Device.CRYOTHERAPY)
+        for device, reason in DEVICE_AUDIT.items():
+            with self.subTest(device=device.value):
+                self.assertTrue(reason)
+                self.assertEqual(reason.startswith('carried'), device in (Device.SNARE, Device.FORCEPS))
+                self.assertEqual(reason.startswith('replaced (D222'), device is Device.ARGON_PLASMA)
+
+
+def sentences_of_controls(claim_set):
+    return {claim_set.sentences[claim_id] for claim_id in claim_set.controls}
+
+
+class OneSentenceTests(SimpleTestCase):
+    """DECISIONS D223: each fact a shared sentence tells has its own claim of it, with its own control (so each fact has
+    one appraisal and the store reads every claim for one fact), and a segment's pair controls ask its whole range."""
+
+    def test_each_excepted_act_has_its_own_claim_and_covers_control(self):
+        # 3a's Q-A: the breadth and each excepted act of "No other polyps were removed." their own claims of the one
+        # exceptive sentence, each act's control the covers form naming it; the breadth keeps its all_of_kind control
+        data = frame_answer('colonoscopy', [
+            examination(words='colonoscope'),
+            event('E2', ['S5'], 'cold snare', 'was removed', 'snare', session=[fact('X1', src(['S5']))],
+                  target__places=[fact('rectum', src(['S5'], 'rectum'))]),
+            event('E3', ['S6'], 'cold snare', 'was removed', 'snare', session=[fact('X1', src(['S6']))],
+                  target__places=[fact('sigmoid_colon', src(['S6'], 'sigmoid colon'))]),
+            event('E4', ['S7'], 'removed', 'No other polyps were removed', 'removal',
+                  neg('performed', src(['S7'], 'No other polyps were removed')), session=[fact('X1', src(['S7']))],
+                  scope__breadth=[fact('exceptive', src(['S7'], 'No other polyps'))], scope__excepts=['E2', 'E3'])],
+            fact('E1', src(['S4'])))
+        claim_set = build(POLYPS, data)
+        (breadth,) = appraised(claim_set, A.SCOPE_BREADTH, 'E4')
+        excepted = sorted(appraised(claim_set, A.SCOPE_EXCEPTS, 'E4'), key=lambda item: item.key.index)
+        self.assertEqual([item.value for item in excepted], ['E2', 'E3'])
+        exceptive = 'This statement denies only removals by any method other than acts A2 and A3.'
+        self.assertEqual({sentence_of(claim_set, item.claim) for item in [breadth, *excepted]}, {exceptive})
+        self.assertEqual(len({item.claim for item in [breadth, *excepted]}), 3)
+        self.assertEqual([claim_set.claim(item.claim).value for item in [breadth, *excepted]],
+                         ['exceptive', 'E2', 'E3'])
+        self.assertEqual([sentence_of(claim_set, item.control) for item in excepted],
+                         ['This statement applies to act A2.', 'This statement applies to act A3.'])
+        self.assertEqual(sentence_of(claim_set, breadth.control),
+                         'This statement says no removal by any method at all was done in session X1.')
+        no_claim_or_control_read_twice(self, claim_set)
+
+    def test_each_place_of_a_segment_has_its_own_claim_and_control(self):
+        claim_set = build(SEGMENT, segment_answer(('descending_colon', 'rectum')))
+        members = sorted(appraised(claim_set, A.SCOPE_SEGMENT, 'E2'), key=lambda item: item.key.index)
+        self.assertEqual([claim_set.claim(item.claim).value for item in members], ['descending_colon', 'rectum'])
+        self.assertEqual({sentence_of(claim_set, item.claim) for item in members},
+                         {'This statement is about tissue samplings with forceps (not hot forceps) from the descending '
+                          'colon to the rectum.'})
+        self.assertEqual(len({item.claim for item in members}), 2)
+        self.assertEqual(len({item.control for item in members}), 2)
+        no_claim_or_control_read_twice(self, claim_set)
+
+    def test_a_whole_tract_segment_leaves_both_places_unclaimed(self):
+        # refute-r2c-r1 RF6: from the proximal esophagus to the anal canal one candidate only lies outside the whole
+        # range (the liver), so the segment's last place has no control of its own: it is not claimed (CONTROL), and its
+        # first place goes with it (PARTNER), their claims telling one sentence - never the last place with the first
+        # place's control, which two facts would then read
+        (only,) = claims.contrasts(claims.contrast_candidates([Landmark.PROXIMAL_ESOPHAGUS, Landmark.ANAL_CANAL]),
+                                   claims.segment_range(Landmark.PROXIMAL_ESOPHAGUS, Landmark.ANAL_CANAL))
+        self.assertIs(only, Landmark.LIVER)
+        claim_set = build(WHOLE_TRACT, segment_answer(('proximal_esophagus', 'anal_canal')))
+        self.assertEqual(appraised(claim_set, A.SCOPE_SEGMENT, 'E2'), [])
+        self.assertEqual(sorted((item.key.index, item.why) for item in claim_set.unclaimed
+                                if (item.key.object, item.key.attribute) == ('E2', A.SCOPE_SEGMENT)),
+                         [(0, claims.Unclaimable.PARTNER), (1, claims.Unclaimable.CONTROL)])
+        self.assertNotIn('This statement is about tissue samplings with forceps (not hot forceps) in the liver.',
+                         sentences(claim_set))
+        no_claim_or_control_read_twice(self, claim_set)
+
+    def test_a_segments_pair_controls_ask_its_whole_range(self):
+        # 3d's R4 (w34 O14): the biopsy is asked about every place of the range from the cecum to the hepatic flexure
+        # (its two ends and the three places between them), and the denial about the biopsy's place - not only about
+        # the range's two ends
+        data = frame_answer('colonoscopy', [
+            examination(words='colonoscope'),
+            event('E2', ['S5'], 'Biopsies', 'were taken', 'biopsy', session=[fact('X1', src(['S5']))],
+                  target__places=[fact('sigmoid_colon', src(['S5'], 'Biopsies'))]),
+            event('E3', ['S6'], 'biopsies', 'No biopsies were taken', 'biopsy',
+                  neg('performed', src(['S6'], 'No biopsies were taken')), session=[fact('X1', src(['S6']))],
+                  scope__breadth=[fact('segment', src(['S6'], 'from the cecum to the hepatic flexure'))],
+                  scope__segment=['cecum', 'hepatic_flexure'])], fact('E1', src(['S4'])))
+        claim_set = build(SEGMENT_RANGE, data)
+        asked = {(pair.subject[1], pair.value) for pair in claim_set.pair_controls}
+        whole = claims.segment_range(Landmark.CECUM, Landmark.HEPATIC_FLEXURE)
+        self.assertEqual(len(whole), 5)
+        self.assertEqual(asked, {('E2', place.value) for place in whole} | {('E3', 'sigmoid_colon')})
+        # a place the biopsy names inside the range is never asked of it (its own place)
+        data['events'][1]['target']['places'] = [fact('ascending_colon', src(['S5'], 'Biopsies'))]
+        asked = {(pair.subject[1], pair.value) for pair in build(SEGMENT_RANGE, data).pair_controls}
+        self.assertEqual(asked, {('E2', place.value) for place in whole if place is not Landmark.ASCENDING_COLON})
+
+    def test_no_claim_or_control_is_read_by_two_facts_in_any_note(self):
+        cases = {'NOTE': (NOTE, note_answer()), 'RICH': (RICH, rich_answer()), 'EUS': (EUS, eus_answer()),
+                 'PAIRS': (PAIRS, pairs_answer()), 'EXCHANGE': (EXCHANGE, exchange_answer()),
+                 'SEGMENT': (SEGMENT, segment_answer(('cecum', 'rectum'))),
+                 'LISTED': (LISTED, listed_answer(['L1'])),
+                 # D234: two listed targets, with a fourth polyp and without
+                 'LISTED_FOURTH': (LISTED_FOURTH, listed_polyps_answer(fourth=True)),
+                 'LISTED_TWO': (LISTED_TWO, listed_polyps_answer()),
+                 **{f'OVERLAP {name}': overlap(name) for name in OVERLAPS}}
+        # one collision stays, of another shape than D223's (the step's NOTES, a question): a statement that names one
+        # lesion both as its target lesion and as a listed target renders one sentence with one value for both facts,
+        # so one content key and one claim; the store reads it for one of them, and the other settles unappraised
+        # (fail-closed)
+        twice = build(LISTED, listed_answer(['L1', 'L2']))
+        groups = {}
+        for item in twice.appraised:
+            groups.setdefault(item.claim, []).append((item.key.attribute, item.key.index))
+        self.assertEqual([found for found in groups.values() if len(found) > 1],
+                         [[(A.TARGET_LESION, 0), (A.SCOPE_TARGETS, 1)]])
+        exceptive = rich_answer()
+        exceptive['events'][7]['scope']['breadth'] = [fact('exceptive', src(['S14'], 'No biopsies'))]
+        exceptive['events'][7]['scope']['excepts'] = ['E6']
+        cases['RICH exceptive'] = (RICH, exceptive)
+        adjunct = note_answer()
+        adjunct['events'][1]['part_of'] = [fact('E1', src(['S6'], 'was removed'))]
+        adjunct['events'][1]['part_relation'] = [fact('step_of', src(['S6'], 'was removed'))]
+        cases['NOTE part_of'] = (NOTE, adjunct)
+        for name, (text, data) in cases.items():
+            with self.subTest(note=name):
+                no_claim_or_control_read_twice(self, build(text, data))
+
+
+def no_claim_or_control_read_twice(case, claim_set):
+    """The store's rule (store._v2_verdicts_bound): no claim, and no control, is read by two facts."""
+    claim_ids = [item.claim for item in claim_set.appraised]
+    control_ids = [item.control for item in claim_set.appraised if item.control is not None]
+    case.assertEqual(len(claim_ids), len(set(claim_ids)))
+    case.assertEqual(len(control_ids), len(set(control_ids)))
+    case.assertFalse(set(claim_ids) & set(control_ids))
+
+
+class RulingOutcomeTests(SimpleTestCase):
+    """The outcomes D222 and D223 state, end to end: read, checks, claims, a pass 2 that reads the document, settle,
+    the store and the engine's FactSet (settled)."""
+
+    def test_an_excepted_act_is_set_apart_by_its_own_claim(self):
+        # D223 (3a Q-A, FINAL-V2 4.5's BF17): with the excepted act's own claim and covers control established it
+        # settles supported, and the pairing sets the denial apart from it (row breadth), for one excepted act and two
+        bf17 = frame_answer('colonoscopy', [
+            examination(words='colonoscope'),
+            event('E2', ['S5'], 'injection', 'was tattooed', 'injection', session=[fact('X1', src(['S5']))],
+                  target__places=[fact('sigmoid_colon', src(['S5'], 'sigmoid colon'))]),
+            event('E3', ['S6'], 'injection', 'No other injection was given', 'injection',
+                  neg('performed', src(['S6'], 'No other injection was given')), session=[fact('X1', src(['S6']))],
+                  scope__breadth=[fact('exceptive', src(['S6'], 'No other injection'))], scope__excepts=['E2'])],
+            fact('E1', src(['S4'])))
+        polyps = frame_answer('colonoscopy', [
+            examination(words='colonoscope'),
+            event('E2', ['S5'], 'cold snare', 'was removed', 'snare', session=[fact('X1', src(['S5']))],
+                  target__places=[fact('rectum', src(['S5'], 'rectum'))]),
+            event('E3', ['S6'], 'cold snare', 'was removed', 'snare', session=[fact('X1', src(['S6']))],
+                  target__places=[fact('sigmoid_colon', src(['S6'], 'sigmoid colon'))]),
+            event('E4', ['S7'], 'removed', 'No other polyps were removed', 'removal',
+                  neg('performed', src(['S7'], 'No other polyps were removed')), session=[fact('X1', src(['S7']))],
+                  scope__breadth=[fact('exceptive', src(['S7'], 'No other polyps'))], scope__excepts=['E2', 'E3'])],
+            fact('E1', src(['S4'])))
+        for name, text, data, denial, acts in (('BF17', INJECTION_BF17, bf17, 'E3', ('E2',)),
+                                               ('two snares', POLYPS, polyps, 'E4', ('E2', 'E3'))):
+            with self.subTest(note=name):
+                _claim_set, events, factset = settled(text, data)
+                self.assertEqual(at(events, denial, A.SCOPE_BREADTH).result.value, 'supported')
+                for index, act in enumerate(acts):
+                    member = at(events, denial, A.SCOPE_EXCEPTS, index)
+                    self.assertEqual((member.result.value, member.claim.value), ('supported', act))
+                    pair = relation(factset, denial, act)
+                    self.assertEqual((pair.relation.value, pair.row.value), ('independent', 'breadth'))
+
+    def test_a_segment_pairs_independent_once_its_whole_range_is_rejected(self):
+        # D223 (3d's R4): "No biopsies were taken from the cecum to the hepatic flexure." beside a biopsy truly and only
+        # in the sigmoid colon pairs INDEPENDENT once its controls are rejected; truly inside the range, the two
+        # conflict; and the short list (truly in the sigmoid and the ascending colon, filed with the sigmoid alone) is
+        # never set apart, since the biopsy's pair control about the ascending colon is supported
+        whole = {place.value for place in claims.segment_range(Landmark.CECUM, Landmark.HEPATIC_FLEXURE)}
+
+        def note(filed):
+            return frame_answer('colonoscopy', [
+                examination(words='colonoscope'),
+                event('E2', ['S5'], 'Biopsies', 'were taken', 'biopsy', session=[fact('X1', src(['S5']))],
+                      target__places=[fact(place, src(['S5'], 'Biopsies')) for place in filed]),
+                event('E3', ['S6'], 'biopsies', 'No biopsies were taken', 'biopsy',
+                      neg('performed', src(['S6'], 'No biopsies were taken')), session=[fact('X1', src(['S6']))],
+                      scope__breadth=[fact('segment', src(['S6'], 'from the cecum to the hepatic flexure'))],
+                      scope__segment=['cecum', 'hepatic_flexure'])], fact('E1', src(['S4'])))
+
+        for name, filed, truth, expected in (
+                ('outside the range', ['sigmoid_colon'], {'sigmoid_colon'}, ('independent', 'target')),
+                ('inside the range', ['ascending_colon'], {'ascending_colon'}, ('contradiction', None)),
+                ('a short list', ['sigmoid_colon'], {'sigmoid_colon', 'ascending_colon'}, ('unresolved', 'target'))):
+            with self.subTest(biopsy=name):
+                _claim_set, events, factset = settled(SEGMENT_RANGE, note(filed),
+                                                      faithful_oracle(places={'E2': truth, 'E3': whole}))
+                for index in (0, 1):
+                    self.assertEqual(at(events, 'E3', A.SCOPE_SEGMENT, index).result.value, 'supported')
+                pair = relation(factset, 'E3', 'E2')
+                self.assertEqual((pair.relation.value, pair.row.value if pair.row else None), expected)
+
+    def test_part_relation_is_established_by_its_own_claim(self):
+        # D223 (O6's third item): "A clip was placed on the polypectomy site." filed as an adjunct of the snare removal:
+        # part_relation is established, so a bundling explanation can read it
+        data = frame_answer('colonoscopy', [
+            examination(words='colonoscope'),
+            event('E2', ['S5'], 'cold snare', 'was removed', 'snare', session=[fact('X1', src(['S5']))],
+                  target__places=[fact('cecum', src(['S5'], 'cecum'))]),
+            event('E3', ['S6'], 'clip', 'was placed', 'clip', session=[fact('X1', src(['S6']))],
+                  part_of=[fact('E2', src(['S6'], 'polypectomy site'))],
+                  part_relation=[fact('adjunct_of', src(['S6'], 'placed on the polypectomy site'))])],
+            fact('E1', src(['S4'])))
+        _claim_set, events, _factset = settled(ADJUNCT, data)
+        self.assertEqual((at(events, 'E3', A.PART_OF).result.value, at(events, 'E3', A.PART_RELATION).result.value),
+                         ('supported', 'supported'))
+
+    def test_an_overlapping_act_is_established_by_a_reader_who_sees_the_overlap(self):
+        # D222: a pass 2 that supports what is true of each act - "a clip placement" of the bleed treated with clips,
+        # "a fine-needle aspiration or biopsy" of the drainage's needle step, "radiofrequency energy" of argon plasma
+        # coagulation - no longer meets it as a control, so each fact settles supported (it was control_incoherent)
+        for name, attribute, true_of in (
+                ('P4 clips', A.KIND, {'This act is a clip placement.'}),
+                ('P2 needle', A.KIND, {'This act is a fine-needle aspiration or biopsy.'}),
+                ('P5 argon plasma', A.TECHNIQUE_DEVICE, {'This act used radiofrequency energy.'})):
+            with self.subTest(overlap=name):
+                text, data = overlap(name)
+                _claim_set, events, _factset = settled(text, data, faithful_oracle(frozenset(true_of)))
+                self.assertEqual(at(events, 'E2', attribute).result.value, 'supported')
+        # and P5 in the pairing: the argon plasma ablation beside "No radiofrequency ablation was performed." is set
+        # apart by its technique
+        data = frame_answer('egd', [
+            examination(words='gastroscope'),
+            event('E2', ['S5'], 'ablated', 'was ablated', 'ablation', session=[fact('X1', src(['S5']))],
+                  target__places=[fact('gastric_antrum', src(['S5'], 'antral'))],
+                  technique__device=[fact('argon_plasma', src(['S5'], 'argon plasma coagulation'))]),
+            event('E3', ['S6'], 'radiofrequency ablation', 'No radiofrequency ablation was performed', 'ablation',
+                  neg('performed', src(['S6'], 'No radiofrequency ablation was performed')),
+                  session=[fact('X1', src(['S6']))],
+                  scope__breadth=[fact('all_of_kind', src(['S6'], 'No radiofrequency ablation'))],
+                  technique__device=[fact('radiofrequency', src(['S6'], 'radiofrequency'))])],
+            fact('E1', src(['S4'])))
+        _claim_set, events, factset = settled(APC, data, faithful_oracle(frozenset({'This act used radiofrequency '
+                                                                                    'energy.'})))
+        pair = relation(factset, 'E3', 'E2')
+        self.assertEqual((pair.relation.value, pair.row.value), ('independent', 'technique'))
+
+    def test_an_ablation_with_no_bleeding_stated_is_established_and_its_code_ready(self):
+        # DECISIONS D233 (refute-r2c-r1 RF3): "The antral vascular ectasia was ablated with argon plasma coagulation." -
+        # a reader who calls the ablation of a lesion that bleeds chronically, in plain words, "a treatment of
+        # bleeding" (RF3's reader, whose sentence no claim asks any more) rejects "a treatment of bleeding present at
+        # this encounter", since the document states no bleeding at this encounter: the kind settles supported and
+        # 43270 is READY; and so is each family's ablation code for an angioectasia ablated with no bleeding stated
+        rf3 = faithful_oracle(frozenset({'This act is a treatment of bleeding.'}))
+        cases = [('egd, RF3', *overlap('P5 argon plasma'), '43270')]
+        cases += [(name, *angioectasia(name, oozing=False), row[6]) for name, row in ANGIOECTASIA.items()]
+        self.assertEqual(sorted(code for *_rest, code in cases), ['43229', '43270', '43270', '44369', '45346', '45388'])
+        for name, text, data, code in cases:
+            with self.subTest(case=name):
+                claim_set, events, factset = settled(text, data, rf3)
+                status, evaluation = decided(code, factset)  # the outcome first, then how it was reached
+                self.assertEqual((at(events, 'E2', A.KIND).result.value, status,
+                                  [str(act) for act in evaluation.supporting]), ('supported', 'READY', ['E2']))
+                (kind,) = appraised(claim_set, A.KIND, 'E2')
+                self.assertEqual(sentence_of(claim_set, kind.control), BLEEDING_HERE)
+
+    def test_an_oozing_lesion_filed_as_an_ablation_is_held_with_one_question(self):
+        # DECISIONS D233 (refute-r2c-r2 G1, its probe p02): "An oozing angioectasia in the gastric antrum was treated
+        # with argon plasma coagulation." filed as an ablation, its purpose hemostasis (pass 1's ablation and its
+        # bleeding control both admit it). Its kind's control is the narrowed bleeding control, which a faithful reader
+        # supports of a treatment of bleeding present at this encounter: the kind stays unresolved (control_incoherent)
+        # and 43270 and 43255 are held by one question, the act's kind - where the clip placement's control let the
+        # kind settle supported and 43270 go READY. The same for 43229, 45388, 44369 and 45346 with their families'
+        # bleeding-control codes
+        from studio.interpretation.engine.types import Id, IdFamily, ItemKind
+        for name, row in ANGIOECTASIA.items():
+            ablation, bleeding = row[6], row[7]
+            with self.subTest(family=name):
+                text, data = angioectasia(name, oozing=True)
+                claim_set, events, factset = settled(text, data, faithful_oracle(frozenset({BLEEDING_HERE})))
+                # the outcome first: both codes held, and the act's kind unresolved
+                outcomes = {code: decided(code, factset) for code in (ablation, bleeding)}
+                found = at(events, 'E2', A.KIND)
+                statuses = {code: (status, evaluation.supporting) for code, (status, evaluation) in outcomes.items()}
+                self.assertEqual((statuses, found.result.value, [reason.value for reason in found.reasons]),
+                                 ({ablation: ('NEEDS_CLARIFICATION', ()), bleeding: ('NEEDS_CLARIFICATION', ())},
+                                  'unresolved', ['control_incoherent']))
+                # one question: both codes held by the one fact, the act's kind its control left in doubt
+                held = [evaluation.held_facts for _status, evaluation in outcomes.values()]
+                self.assertEqual(held[0], held[1])
+                (one,) = held[0]
+                self.assertEqual((one.fact, one.subject, one.kind, one.cause),
+                                 ('performed_status', Id(IdFamily.EVENT, 2), ItemKind.QUESTION,
+                                  'appraisal:control_incoherent'))
+                # how it was reached: the narrowed control, and the purpose supported
+                (kind,) = appraised(claim_set, A.KIND, 'E2')
+                self.assertEqual(sentence_of(claim_set, kind.control), BLEEDING_HERE)
+                self.assertEqual(at(events, 'E2', A.PURPOSE).result.value, 'supported')
+
+    def test_a_pair_is_set_apart_when_the_nearest_contrast_is_the_other_objects_place(self):
+        # refute-r2c-r1 RF1 and RF2, end to end under a faithful pass 2: a segment denial beside a biopsy next to its
+        # range (the transverse colon; the terminal ileum), a single target beside the place next to it, and a polyp
+        # left in place beside another removed. Each pair control was numbered into a contrary control of the same
+        # sentence, stored with role control, so the FactSet held it as no pair control and the pair was never set
+        # apart (UNRESOLVED, the code not met). Every pair control the claim set lists now reaches the FactSet
+        from studio.interpretation.engine import evaluate
+        from studio.interpretation.engine.types import Id, IdFamily
+        whole = {place.value for place in claims.segment_range(Landmark.CECUM, Landmark.HEPATIC_FLEXURE)}
+        for name, text, data, oracle, code, kind in (
+                ('segment, transverse colon', SEGMENT_RANGE,
+                 denial_answer(('cecum', 'hepatic_flexure'), ('transverse_colon',), denial_words=RANGE_WORDS),
+                 faithful_oracle(places={'E2': {'transverse_colon'}, 'E3': whole}), '45380', Kind.BIOPSY),
+                ('segment, terminal ileum', SEGMENT_RANGE,
+                 denial_answer(('cecum', 'hepatic_flexure'), ('terminal_ileum',), denial_words=RANGE_WORDS),
+                 faithful_oracle(places={'E2': {'terminal_ileum'}, 'E3': whole}), '45380', Kind.BIOPSY),
+                ('single target', SINGLE_PLACE,
+                 denial_answer(('rectum',), ('sigmoid_colon',), 'sigmoid colon', 'rectum'),
+                 faithful_oracle(places={'E2': {'sigmoid_colon'}, 'E3': {'rectum'}}), '45380', Kind.BIOPSY),
+                ('two lesions', POLYP_LEFT, polyp_left_answer(), faithful_oracle(), '45385', Kind.SNARE)):
+            with self.subTest(case=name):
+                claim_set, events, factset = settled(text, data, oracle)
+                self.assertEqual(merged(claim_set), [])
+                asked = {(pair.subject[1], pair.attribute, pair.value) for pair in claim_set.pair_controls}
+                self.assertTrue(asked)
+                self.assertEqual(len(factset.pair_controls), len(asked))
+                roles = {claim.id: claim.role.value for claim in events['claims']}
+                self.assertEqual({roles[pair.claim] for pair in claim_set.pair_controls}, {'pair_control'})
+                pair = relation(factset, 'E3', 'E2')
+                self.assertEqual((pair.relation.value, pair.row.value), ('independent', 'target'))
+                self.assertTrue(evaluate.support(code, (kind,), factset, Id(IdFamily.EVENT, 2)).met)
+
+
+class PairRoleTests(SimpleTestCase):
+    """refute-r2c-r1 RF1 and RF2 (repair r2c-2): a pair control is never one claim with a contrary control. settle
+    stores one role per claim and the engine reads a pair control by its role, so a pair control numbered into a
+    contrary control of the same sentence about the same object was lost, and the pair never set apart. A contrary now
+    prefers a place or a lesion no pair control asks the same object about, and a pair control's content key carries its
+    role, so where every candidate is one (two lesions, each the other's only contrary) the two are two claims."""
+
+    def test_no_pair_control_is_one_claim_with_a_contrary_control(self):
+        # RF1's and RF2's inputs at the claims level: every colon segment denial and every single-target colon denial
+        # beside a biopsy in each place outside it (626 inputs, 196 of which had a pair control merged), and the two
+        # lesions each the other's only contrary
+        checked = 0
+        for denied in [*itertools.combinations(COLON, 2), *((place,) for place in COLON)]:
+            whole = claims.segment_range(*denied) if len(denied) == 2 else denied
+            for place in (Landmark.TERMINAL_ILEUM, *COLON):
+                if any(anatomy.compatible(place, own) for own in whole):
+                    continue
+                claim_set = build(PART_OF_COLON, denial_answer([item.value for item in denied], (place.value,)))
+                with self.subTest(denied=[item.value for item in denied], biopsy=place.value):
+                    self.assertTrue(claim_set.pair_controls)
+                    self.assertEqual(merged(claim_set), [])
+                checked += 1
+        self.assertEqual(checked, 486 + 140)
+        self.assertEqual(merged(build(POLYP_LEFT, polyp_left_answer())), [])
+
+    def test_a_contrary_prefers_a_value_no_pair_control_asks(self):
+        # RF1: "No biopsies were taken from the cecum to the hepatic flexure." beside a biopsy in the transverse colon -
+        # the segment's last place took the transverse colon, its second contrast and the very place the pair control
+        # asks the denial about; it now takes the rectum. Beside a biopsy in the terminal ileum, the segment's first
+        # place took the terminal ileum, and the biopsy's control the cecum, a place of the range a pair control asks it
+        # about: the segment's places now take the transverse colon and the rectum, and the biopsy's the jejunum
+        def controls(claim_set, subject, attribute):
+            return sorted((item.key.index, sentence_of(claim_set, item.control))
+                          for item in appraised(claim_set, attribute, subject))
+
+        claim_set = build(SEGMENT_RANGE, denial_answer(('cecum', 'hepatic_flexure'), ('transverse_colon',),
+                                                       denial_words=RANGE_WORDS))
+        stem = 'This statement is about tissue samplings with forceps (not hot forceps) in the '
+        self.assertEqual(controls(claim_set, 'E3', A.SCOPE_SEGMENT),
+                         [(0, stem + 'terminal ileum.'), (1, stem + 'rectum.')])
+        self.assertEqual(controls(claim_set, 'E2', A.TARGET_PLACES), [(0, 'This act was done in the splenic flexure.')])
+        self.assertIn(('E3', 'transverse_colon'), {(pair.subject[1], pair.value) for pair in claim_set.pair_controls})
+        claim_set = build(SEGMENT_RANGE, denial_answer(('cecum', 'hepatic_flexure'), ('terminal_ileum',),
+                                                       denial_words=RANGE_WORDS))
+        self.assertEqual(controls(claim_set, 'E3', A.SCOPE_SEGMENT),
+                         [(0, stem + 'transverse colon.'), (1, stem + 'rectum.')])
+        self.assertEqual(controls(claim_set, 'E2', A.TARGET_PLACES), [(0, 'This act was done in the jejunum.')])
+        self.assertLessEqual({('E3', 'terminal_ileum'), ('E2', 'cecum')},
+                             {(pair.subject[1], pair.value) for pair in claim_set.pair_controls})
+        # RF2: "No biopsies were taken from the rectum." beside a biopsy in the sigmoid colon: each object's nearest
+        # contrast was the other's place, which the pair control asks it about
+        claim_set = build(SINGLE_PLACE, denial_answer(('rectum',), ('sigmoid_colon',), 'sigmoid colon', 'rectum'))
+        self.assertEqual(controls(claim_set, 'E3', A.TARGET_PLACES), [(0, stem + 'anal canal.')])
+        self.assertEqual(controls(claim_set, 'E2', A.TARGET_PLACES),
+                         [(0, 'This act was done in the descending colon.')])
+        self.assertEqual({(pair.subject[1], pair.value) for pair in claim_set.pair_controls},
+                         {('E3', 'sigmoid_colon'), ('E2', 'rectum')})
+        # with no pair control the contrast is D196's first candidate, as before
+        claim_set = build(SINGLE_PLACE, denial_answer(('rectum',), ('transverse_colon',), 'sigmoid colon', 'rectum'))
+        self.assertEqual(controls(claim_set, 'E3', A.TARGET_PLACES), [(0, stem + 'sigmoid colon.')])
+
+    def test_two_lesions_each_the_others_only_contrary_ask_one_sentence_twice(self):
+        # RF2's lesions: the polyp left in place (L1) beside the polyp removed (L2). The only other lesion of each
+        # object is the one the pair control asks it about, so the contrary stays 3.2.3's ("another lesion of the
+        # session" / "another lesion"), and the pair control asking the same sentence is a claim of its own: another
+        # content key, another id, stored with its own role
+        claim_set = build(POLYP_LEFT, polyp_left_answer())
+        for subject, other in (('E2', 'L1'), ('E3', 'L2')):
+            with self.subTest(subject=subject):
+                (lesion_fact,) = appraised(claim_set, A.TARGET_LESION, subject)
+                (pair,) = [pair for pair in claim_set.pair_controls
+                           if pair.subject[1] == subject and pair.attribute is A.TARGET_LESION]
+                self.assertEqual(pair.value, other)
+                self.assertEqual(claim_set.claim(lesion_fact.control).value, other)
+                self.assertEqual(sentence_of(claim_set, lesion_fact.control), sentence_of(claim_set, pair.claim))
+                self.assertNotEqual(lesion_fact.control, pair.claim)
+                self.assertNotEqual(claim_set.claim(lesion_fact.control).content, claim_set.claim(pair.claim).content)
+        # one line pass 2 reads twice (the card, the units and the sentence), each of the two lesion facts' control
+        # beside its pair control: only here, where no other candidate is left
+        lines = [(claim_set.about[claim.id], claim.units, claim_set.sentences[claim.id]) for claim in claim_set.claims]
+        self.assertEqual(len(lines) - len(set(lines)), 2)
+        # with a third lesion, done to by an act of the session that pairs with neither (a tattoo), each object's
+        # lesion contrary is that lesion, a question no pair control asks: no line is asked twice
+        data = polyp_left_answer()
+        data['lesions'].append(lesion('L3', ['S8'], 'A third polyp', places=[fact('rectum', src(['S8'], 'rectum'))]))
+        data['events'].append(event('E4', ['S8'], 'marked with a tattoo', 'was marked', 'tattoo',
+                                    session=[fact('X1', src(['S8']))],
+                                    target__lesion=[fact('L3', src(['S8'], 'A third polyp'))]))
+        claim_set = build(POLYP_THIRD, data)
+        for subject in ('E2', 'E3'):
+            with self.subTest(third=subject):
+                (lesion_fact,) = appraised(claim_set, A.TARGET_LESION, subject)
+                self.assertEqual(claim_set.claim(lesion_fact.control).value, 'L3')
+        self.assertEqual(merged(claim_set), [])
+        lines = [(claim_set.about[claim.id], claim.units, claim_set.sentences[claim.id]) for claim in claim_set.claims]
+        self.assertEqual(len(lines), len(set(lines)))
+        # and two pair controls asking one object one question stay one claim (the role is the same)
+        spec = claims._Spec(claims.TemplateId.ACT_TARGET_LESION, claims.Ref(F.EVENT, 'E2'), 'L1', ('S6',), (), (),
+                            claims._PAIR_ROLE)
+        self.assertEqual(spec.content(), claims._Spec(*(getattr(spec, name) for name in (
+            'template', 'subject', 'value', 'units', 'params', 'slots', 'role'))).content())
+        self.assertNotEqual(spec.content(), claims._Spec(spec.template, spec.subject, spec.value, spec.units,
+                                                         spec.params, spec.slots).content())
+
+
+# --- the integration owner's rulings on waves 5-6 (DECISIONS D233, D234, D251's O3; repair r2c of round w7r) ----------
+
+# D233 (refute-r2c-r2 G1): an angioectasia treated with argon plasma coagulation in each family with an ablation code -
+# oozing at this encounter (filed as an ablation, its purpose hemostasis: the refutation's probe p02, in the upper
+# endoscopy) or with no bleeding stated (refute-r2c-r1 RF3's shape). Each note is synthetic and is in NOTES.
+ANGIOECTASIA = {
+    # name: (the note's kind, its examination sentence, the scope's words, the session family, the act's place and its
+    # words, the family's ablation code, its bleeding-control code)
+    'egd, antrum': ('UPPER ENDOSCOPY', 'The gastroscope was advanced to the duodenum.', 'gastroscope', 'egd',
+                    'gastric_antrum', 'gastric antrum', '43270', '43255'),
+    'egd, esophagus': ('UPPER ENDOSCOPY', 'The gastroscope was advanced to the duodenum.', 'gastroscope', 'egd',
+                       'distal_esophagus', 'distal esophagus', '43229', '43227'),
+    'colonoscopy': ('COLONOSCOPY', 'The colonoscope was advanced to the cecum.', 'colonoscope', 'colonoscopy',
+                    'ascending_colon', 'ascending colon', '45388', '45382'),
+    'enteroscopy': ('ENTEROSCOPY', 'The enteroscope was advanced to the jejunum.', 'enteroscope', 'enteroscopy',
+                    'jejunum', 'jejunum', '44369', '44366'),
+    'flexible sigmoidoscopy': ('FLEXIBLE SIGMOIDOSCOPY', 'The sigmoidoscope was advanced to the descending colon.',
+                               'sigmoidoscope', 'flex_sig', 'sigmoid_colon', 'sigmoid colon', '45346', '45334'),
+}
+# what a faithful reader supports of a treatment of bleeding present at this encounter: D233's narrowed label
+BLEEDING_HERE = 'This act is a treatment of bleeding present at this encounter.'
+
+
+def angioectasia(name, oozing):
+    """The note and the answer of one ANGIOECTASIA case: the examination E1 (S4) and the act E2 (S5), filed as an
+    ablation with argon plasma in its place; an oozing one with its purpose hemostasis too (refute-r2c-r2's p02)."""
+    kind_word, exam, scope, family, place, words, _ablation, _bleeding = ANGIOECTASIA[name]
+    if oozing:
+        act = f'An oozing angioectasia in the {words} was treated with argon plasma coagulation.'
+        kind_words, status_words = 'treated with argon plasma coagulation', 'was treated'
+        over = {'purpose': [fact('hemostasis', src(['S5'], 'An oozing angioectasia'))]}
+    else:
+        act = f'The angioectasia in the {words} was ablated with argon plasma coagulation.'
+        kind_words, status_words, over = 'ablated', 'was ablated', {}
+    text = OVERLAP_NOTE.format(kind=kind_word, exam=exam, act=act)
+    return text, frame_answer(family, [
+        examination(words=scope),
+        event('E2', ['S5'], kind_words, status_words, 'ablation', session=[fact('X1', src(['S5']))],
+              technique__device=[fact('argon_plasma', src(['S5'], 'argon plasma coagulation'))],
+              target__places=[fact(place, src(['S5'], words))], **over)], fact('E1', src(['S4'])))
+
+
+def decided(code, factset, act='E2'):
+    """evaluate.decide for ``code`` with the act's anchor as its kept evidence (refute-r2c-r2's probes): READY when an
+    act supports it and nothing is held, EXCLUDED with an exclusion, else NEEDS_CLARIFICATION; and the evaluation."""
+    from studio.interpretation.engine import evaluate
+    from studio.interpretation.engine.types import Id, IdFamily
+    found = evaluate.decide(code, tuple(factset.anchors[Id(IdFamily.EVENT, int(act[1:]))].units), factset)
+    status = ('EXCLUDED' if found.exclusion is not None else
+              'READY' if found.supporting and not found.held_facts else 'NEEDS_CLARIFICATION')
+    return status, found
+
+
+# D234 (refute-r2c-r2 G2, its probes p01 and p04): a cold-snare removal of one polyp (L1) beside the denial of removing
+# two others it lists (L2 and L3, each a different polyp); the second note tells a fourth polyp (L4) too
+LISTED_TWO = ('SYNTHETIC COLONOSCOPY NOTE\n'
+              'Date of service: 06/02/2031\n'
+              'Endoscopist: Q. R. Vance, MD (fictional)\n'
+              '\n'
+              'Findings: The colonoscope was advanced to the cecum.\n'
+              'A 5 mm polyp in the transverse colon was removed with a cold snare.\n'
+              'A different 4 mm polyp was seen in the cecum.\n'
+              'A different 6 mm polyp was seen in the ascending colon.\n'
+              'The cecal polyp and the ascending colon polyp were not removed.\n')
+LISTED_FOURTH = LISTED_TWO.replace('The cecal polyp', 'A different 2 mm polyp was seen in the rectum.\nThe cecal polyp')
+# each object's true lesions and places, as a faithful pass 2 answers the pair controls
+LISTED_TRUTH = {'E2': {'L1', 'transverse_colon'}, 'E3': {'L2', 'L3', 'cecum', 'ascending_colon'}}
+
+
+def listed_polyps_answer(fourth=False):
+    """LISTED_TWO's answer (LISTED_FOURTH's with ``fourth``), as refute-r2c-r2's p01 builds it: the removal E2 of L1
+    (S5) and the denial E3 of removing L2 and L3 (listed_targets), each listed polyp distinct from L1."""
+    last = 'S9' if fourth else 'S8'
+    lesions = [lesion('L1', ['S5'], 'A 5 mm polyp', places=[fact('transverse_colon', src(['S5'], 'transverse colon'))]),
+               lesion('L2', ['S6'], 'A different 4 mm polyp', places=[fact('cecum', src(['S6'], 'cecum'))],
+                      distinct_from=[fact('L1', src(['S6'], 'A different 4 mm polyp'))]),
+               lesion('L3', ['S7'], 'A different 6 mm polyp',
+                      places=[fact('ascending_colon', src(['S7'], 'ascending colon'))],
+                      distinct_from=[fact('L1', src(['S7'], 'A different 6 mm polyp'))])]
+    if fourth:
+        lesions.append(lesion('L4', ['S8'], 'A different 2 mm polyp', places=[fact('rectum', src(['S8'], 'rectum'))],
+                              distinct_from=[fact('L1', src(['S8'], 'A different 2 mm polyp'))]))
+    return frame_answer('colonoscopy', [
+        examination(words='colonoscope'),
+        event('E2', ['S5'], 'removed with a cold snare', 'was removed', 'snare', session=[fact('X1', src(['S5']))],
+              target__lesion=[fact('L1', src(['S5'], 'A 5 mm polyp'))],
+              target__places=[fact('transverse_colon', src(['S5'], 'transverse colon'))],
+              technique__device=[fact('cold_snare', src(['S5'], 'cold snare'))]),
+        event('E3', [last], 'removed', 'were not removed', 'snare', neg('performed', src([last], 'were not removed')),
+              session=[fact('X1', src([last]))],
+              scope__breadth=[fact('listed_targets', src([last], 'The cecal polyp and the ascending colon polyp'))],
+              scope__targets=['L2', 'L3'])],
+        fact('E1', src(['S4'])), lesions=lesions)
+
+
+def listed_note(count):
+    """A colonoscopy telling ``count`` polyps, one sentence each (S5..), then a denial of removing some (D234's
+    sweep)."""
+    lines = ['SYNTHETIC COLONOSCOPY NOTE', 'Date of service: 06/02/2031', 'Endoscopist: Q. R. Vance, MD (fictional)',
+             '', 'Findings: The colonoscope was advanced to the cecum.']
+    return '\n'.join(lines + [f'Polyp {number} was seen.' for number in range(1, count + 1)]
+                     + ['The listed polyps were not removed.']) + '\n'
+
+
+def listed_answer_of(members, others, target=None):
+    """listed_note(members + others)'s answer: the polyps L1.. (S5..) and the denial E2 of removing the first
+    ``members`` of them (listed_targets), with ``target`` as its target lesion too when given; no act, so no pair
+    control asks the denial anything."""
+    count = members + others
+    last = f'S{5 + count}'
+    over = {} if target is None else {'target__lesion': [fact(target, src([last], 'polyps'))]}
+    return frame_answer('colonoscopy', [
+        examination(words='colonoscope'),
+        event('E2', [last], 'removed', 'were not removed', 'snare', neg('performed', src([last], 'were not removed')),
+              session=[fact('X1', src([last]))],
+              scope__breadth=[fact('listed_targets', src([last], 'The listed polyps'))],
+              scope__targets=[f'L{number}' for number in range(1, members + 1)], **over)],
+        fact('E1', src(['S4'])),
+        lesions=[lesion(f'L{number}', [f'S{4 + number}'], f'Polyp {number}') for number in range(1, count + 1)])
+
+
+NOTES.update({f'ANGIOECTASIA {name} {case}': angioectasia(name, case == 'oozing')[0] for name in ANGIOECTASIA
+              for case in ('oozing', 'no bleeding stated')})
+NOTES.update({'LISTED_TWO': LISTED_TWO, 'LISTED_FOURTH': LISTED_FOURTH,
+              **{f'LISTED SWEEP {count}': listed_note(count) for count in range(2, 9)}})
+
+
+class ListedTargetTests(SimpleTestCase):
+    """DECISIONS D234 (refute-r2c-r2 G2): every member of a listed-targets denial read the same lesion control (its
+    own lesions and the lesions the pair controls ask it about depend on the statement alone), so the store bound the
+    control to the first member and the second settled unappraised: no listed-targets denial ever set apart an act on
+    another lesion. The place preference ("taken") extends to lesions: each lesion fact of a statement takes a lesion no
+    other lesion fact of it takes, and is not claimed (control) when none is left."""
+
+    def test_each_listed_target_has_a_control_of_its_own(self):
+        # p01's variant (b): the first listed polyp takes L4 (no pair control asks the denial about it), the second
+        # L1 - the one lesion left, the very question the pair control asks, a claim of its own beside it
+        claim_set = build(LISTED_FOURTH, listed_polyps_answer(fourth=True))
+        members = sorted(appraised(claim_set, A.SCOPE_TARGETS, 'E3'), key=lambda item: item.key.index)
+        self.assertEqual([(item.value, claim_set.claim(item.control).value) for item in members],
+                         [('L2', 'L4'), ('L3', 'L1')])
+        stem = 'This statement is about removals with a snare (not endoscopic mucosal resections) of lesion '
+        self.assertEqual([sentence_of(claim_set, item.control) for item in members], [stem + 'L4.', stem + 'L1.'])
+        (asked,) = [pair for pair in claim_set.pair_controls if pair.subject[1] == 'E3'
+                    and pair.attribute is A.TARGET_LESION]
+        self.assertEqual(asked.value, 'L1')
+        self.assertNotEqual(members[1].control, asked.claim)
+        no_claim_or_control_read_twice(self, claim_set)
+        # p01's variant (a): no fourth polyp - the first listed polyp takes L1, and none is left for the second, which
+        # is not claimed (control): it settles unappraised, never read through the first one's control
+        claim_set = build(LISTED_TWO, listed_polyps_answer())
+        (member,) = appraised(claim_set, A.SCOPE_TARGETS, 'E3')
+        self.assertEqual((member.key.index, claim_set.claim(member.control).value), (0, 'L1'))
+        self.assertEqual([(item.key.index, item.why) for item in claim_set.unclaimed
+                          if (item.key.object, item.key.attribute) == ('E3', A.SCOPE_TARGETS)],
+                         [(1, claims.Unclaimable.CONTROL)])
+        no_claim_or_control_read_twice(self, claim_set)
+
+    def test_the_second_listed_target_is_appraised_by_its_own_control_and_45385_met(self):
+        # p01 (b) and p04, end to end under a faithful pass 2: the second listed polyp's own claim is supported and its
+        # own control rejected, so it settles supported; L2 and L3 are distinct from L1 and every pair control is
+        # rejected, so the denial is set apart from the removal (target) and 45385 is met. In (a) the second listed
+        # polyp has no control of its own (D234: none left), so the pair stays unresolved and 45385 is not met
+        from studio.interpretation.engine import evaluate
+        from studio.interpretation.engine.types import Id, IdFamily
+        for name, text, data, expected in (
+                ('a fourth polyp', LISTED_FOURTH, listed_polyps_answer(fourth=True),
+                 (['supported', 'supported'], ('independent', 'target'), True)),
+                ('no fourth polyp', LISTED_TWO, listed_polyps_answer(),
+                 (['supported', 'unresolved'], ('unresolved', 'target'), False))):
+            with self.subTest(note=name):
+                claim_set, events, factset = settled(text, data, faithful_oracle(places=LISTED_TRUTH))
+                results = [at(events, 'E3', A.SCOPE_TARGETS, index).result.value for index in (0, 1)]
+                pair = relation(factset, 'E3', 'E2')
+                met = evaluate.support('45385', (Kind.SNARE,), factset, Id(IdFamily.EVENT, 2)).met
+                self.assertEqual((results, (pair.relation.value, pair.row.value if pair.row else None), met), expected)
+                if name == 'no fourth polyp':
+                    self.assertEqual([reason.value for reason in at(events, 'E3', A.SCOPE_TARGETS, 1).reasons],
+                                     ['unappraised'])
+                no_claim_or_control_read_twice(self, claim_set)
+
+    def test_a_statements_lesion_facts_never_share_a_control_and_the_real_scope(self):
+        # NOTES Q6's real scope, swept: a denial listing m polyps (and, in the second form, its target lesion besides)
+        # in a note telling n other polyps. Each lesion fact takes the next other polyp in document order, so with
+        # n >= 1 the first n facts have controls of their own and the rest are not claimed (control); with n = 0 no
+        # other lesion exists, and none has a control (3.2.3: "of lesion {another lesion}", when one exists). Never a
+        # control read by two facts
+        for members, others, target in ((2, 0, None), (2, 1, None), (2, 2, None), (2, 3, None), (3, 1, None),
+                                        (3, 2, None), (3, 3, None), (3, 5, None), (2, 3, 'L3'), (2, 2, 'L4')):
+            with self.subTest(members=members, others=others, target=target):
+                claim_set = build(listed_note(members + others), listed_answer_of(members, others, target))
+                no_claim_or_control_read_twice(self, claim_set)
+                facts = [item for item in claim_set.appraised if item.key.object == 'E2'
+                         and item.key.attribute in (A.SCOPE_TARGETS, A.TARGET_LESION)]
+                left = [item for item in claim_set.unclaimed if item.key.object == 'E2'
+                        and item.key.attribute in (A.SCOPE_TARGETS, A.TARGET_LESION)]
+                own = {f'L{number}' for number in range(1, members + 1)} | ({target} if target else set())
+                candidates = [f'L{number}' for number in range(1, members + others + 1)
+                              if f'L{number}' not in own]
+                lesion_facts = members + (1 if target else 0)
+                if not candidates:
+                    self.assertEqual(([item.control for item in facts], left), ([None] * lesion_facts, []))
+                    continue
+                controls = [claim_set.claim(item.control).value for item in facts]
+                self.assertEqual(sorted(controls), sorted(candidates[:lesion_facts]))
+                self.assertEqual(len(facts), min(lesion_facts, len(candidates)))
+                self.assertEqual([item.why for item in left],
+                                 [claims.Unclaimable.CONTROL] * max(0, lesion_facts - len(candidates)))
+
+
+# DECISIONS D251, O3 (refute-3a-r2's p10 and p11; r3a's request R-C): a supported fact whose value is '' is S2's
+# item-level breach (shape_inconsistent), with which 1.8 keeps the answer. claims.py raised on it (Kind(''),
+# Extent(''), Station(''), AnatomyType('')), so the interpret stage failed at claim time and settle's fail-closed
+# reading was never reached. Each answer below is walked for its supported facts, and each is emptied in turn.
+EMPTY_CASES = {
+    'NOTE': (NOTE, note_answer),
+    'RICH': (RICH, rich_answer),
+    'EUS': (EUS, lambda: eus_answer(stations=[fact('stomach', src(['S4'], 'upper'))])),
+}
+
+
+def anatomy_answer():
+    """NOTE's answer with two anatomy entries a rule reads: a stoma the session passed through (Y1) and a surgically
+    absent organ whose organ holds the reached cecum (Y2), so the entries' type and organ are claimed."""
+    data = note_answer()
+    data['anatomy'] = [{'id': 'Y1', 'type': fact('stoma', src(['S5'], 'colonoscope')), 'organ': [], 'subtype': [],
+                        'joins': []},
+                       {'id': 'Y2', 'type': fact('surgically_absent', src(['S4'], 'Prior colonoscopy')),
+                        'organ': [fact('colon', src(['S4'], 'colonoscopy'))], 'subtype': [], 'joins': []}]
+    data['sessions'][0]['through'] = [fact('Y1', src(['S5'], 'colonoscope'))]
+    return data
+
+
+EMPTY_CASES['NOTE anatomy'] = (NOTE, anatomy_answer)
+
+
+def supported_paths(data):
+    """The path of every supported fact of pass 1's answer (refute-3a-r2's p11 walk)."""
+    found = []
+
+    def walk(node, path):
+        if isinstance(node, dict):
+            if {'state', 'value', 'sources', 'options', 'qualifiers'} <= set(node) and node['state'] == 'supported':
+                found.append(path)
+            for key, value in node.items():
+                walk(value, path + (key,))
+        elif isinstance(node, list):
+            for index, value in enumerate(node):
+                walk(value, path + (index,))
+
+    walk(data, ())
+    return found
+
+
+def emptied(data, path):
+    """A copy of ``data`` with the fact at ``path`` given the value ''."""
+    data = copy.deepcopy(data)
+    node = data
+    for part in path:
+        node = node[part]
+    node['value'] = ''
+    return data
+
+
+def settled_at(events, path):
+    """The settled fact standing where ``path`` stands in pass 1's answer (a slot's one fact settles as the fact)."""
+    node = events
+    for part in path:
+        if isinstance(part, int) and not isinstance(node, list):
+            continue  # a slot: its one fact
+        node = node[part]
+    return node
+
+
+class EmptyValueTests(SimpleTestCase):
+    """DECISIONS D251, O3: claims.py never raises on a supported value ''; it reads it as not supported, so the fact
+    is never claimed, no value is built from it, and settle reaches its fail-closed reading (unresolved,
+    shape_inconsistent)."""
+
+    def test_a_supported_empty_value_is_read_as_not_supported_and_never_raises(self):
+        checked = 0
+        for name, (text, answer_of) in EMPTY_CASES.items():
+            data = answer_of()
+            for path in supported_paths(data):
+                with self.subTest(note=name, path=path):
+                    claim_set = build(text, emptied(data, path))  # raised ValueError on ten of these
+                    self.assertNotIn('', [item.value for item in claim_set.appraised])
+                    no_claim_or_control_read_twice(self, claim_set)
+                checked += 1
+        self.assertGreater(checked, 100)
+        # the facts each one leaves unclaimed: an event whose kind is '' is not claimable at all (its card shows no
+        # claim), and a session's reach, a station, an anatomy entry's type or organ is never claimed or read
+        data = note_answer()
+        claim_set = build(NOTE, emptied(data, ('events', 1, 'kind')))
+        self.assertEqual([item for item in claim_set.appraised if item.key.object == 'E2'], [])
+        claim_set = build(NOTE, emptied(data, ('sessions', 0, 'reached', 0)))
+        self.assertEqual(appraised(claim_set, A.REACHED, 'X1'), [])
+        claim_set = build(EUS, emptied(eus_answer(stations=[fact('stomach', src(['S4'], 'upper'))]),
+                                       ('sessions', 0, 'stations', 0)))
+        self.assertEqual(appraised(claim_set, A.STATIONS, 'X1'), [])
+        data = anatomy_answer()
+        self.assertEqual({item.key.object for item in build(NOTE, data).appraised if item.key.family is F.ANATOMY},
+                         {'Y1', 'Y2'})
+        claim_set = build(NOTE, emptied(data, ('anatomy', 0, 'type')))
+        self.assertEqual(appraised(claim_set, A.TYPE, 'Y1'), [])
+        claim_set = build(NOTE, emptied(data, ('anatomy', 1, 'organ', 0)))
+        self.assertEqual([item for item in claim_set.appraised if item.key.object == 'Y2'], [])  # no longer read
+
+    def test_a_supported_empty_value_settles_not_supported_end_to_end(self):
+        # read, checks, claims, a faithful pass 2, settle, the store and the FactSet: the emptied fact settles
+        # unresolved (shape_inconsistent), never supported, and the document's row is written
+        for name, path in (('NOTE', ('events', 1, 'kind')), ('NOTE', ('sessions', 0, 'reached', 0)),
+                           ('NOTE', ('lesions', 0, 'places', 0)), ('NOTE', ('events', 1, 'technique', 'device', 0)),
+                           ('NOTE', ('events', 2, 'scope', 'breadth', 0)), ('EUS', ('sessions', 0, 'stations', 0)),
+                           ('NOTE anatomy', ('anatomy', 0, 'type')), ('NOTE anatomy', ('anatomy', 1, 'organ', 0))):
+            with self.subTest(note=name, path=path):
+                text, answer_of = EMPTY_CASES[name]
+                _claim_set, events, _factset = settled(text, emptied(answer_of(), path))
+                found = settled_at(events, path)
+                self.assertEqual((found.claim.value, found.result.value), ('', 'unresolved'))
+                self.assertIn(Reason.SHAPE_INCONSISTENT, found.reasons)
 
 
 # --- cards (2.4 [R:SC-C][R:CO-7]) --------------------------------------------------------------------------------------
@@ -2375,15 +3813,25 @@ class OrderTests(SimpleTestCase):
                         claims._Spec(spec.template, spec.subject, 'snare', ('S6',), ('N2',), ())):
             self.assertNotEqual(changed.content(), spec.content())
 
-    def test_shared_sentences_are_one_claim(self):
+    def test_facts_one_sentence_tells_each_have_their_own_claim(self):
+        # DECISIONS D223: part_of and part_relation are told by one sentence, and each has its own claim of it - its
+        # value the fact's own, so its own content key - so each fact has one appraisal and the store reads every claim
+        # for one fact; both are UNCONTROLLED (3.2.3)
         data = note_answer()
         data['events'][1]['part_of'] = [fact('E1', src(['S6'], 'was removed'))]
         data['events'][1]['part_relation'] = [fact('step_of', src(['S6'], 'was removed'))]
         claim_set = build(NOTE, data)
         (part_of,), (relation,) = appraised(claim_set, A.PART_OF, 'E2'), appraised(claim_set, A.PART_RELATION, 'E2')
-        self.assertEqual(part_of.claim, relation.claim)
-        self.assertEqual(sentence_of(claim_set, part_of.claim), 'This act was a step of act A2.')  # E1's card
-        self.assertIsNone(part_of.control)  # UNCONTROLLED
+        self.assertNotEqual(part_of.claim, relation.claim)
+        self.assertNotEqual(claim_set.claim(part_of.claim).content, claim_set.claim(relation.claim).content)
+        self.assertEqual((claim_set.claim(part_of.claim).value, claim_set.claim(relation.claim).value),
+                         ('E1', 'step_of'))
+        for item in (part_of, relation):
+            self.assertEqual(sentence_of(claim_set, item.claim), 'This act was a step of act A2.')  # E1's card
+            self.assertIsNone(item.control)  # UNCONTROLLED
+        # no claim is read by two facts anywhere in the set
+        ids = [item.claim for item in claim_set.appraised]
+        self.assertEqual(len(ids), len(set(ids)))
 
     def test_the_per_request_bound(self):
         self.assertEqual(claims.CLAIM_BOUND, 640)
@@ -2406,10 +3854,24 @@ class OrderTests(SimpleTestCase):
 # kind pairs, D212's lesion-places rule, D213's devices, targeted breadths and pinned segment order in CONTROLS):
 # INT-5's TEMPLATES 9efd3e1d... and CONTROLS 19fbf962... are superseded; STATEMENT_TEMPLATES, CLAIM_BOUND and CLAIMED
 # are measured unchanged. Until the first recording under gemini-appraisal@1 a changed object needs only its pin
-# recomputed, no version bump (D202): the integration owner writes them in the waves 3-4 pin change.
-TEMPLATES_SHA256 = '5422597831b871e03a0d79f308daba5c3077f4057192b0e6c74637a55d771b14'
+# recomputed, no version bump (D202): the integration owner writes them in the waves 3-4 pin change. Recomputed again
+# by repair r2c for DECISIONS D222 and D223 (the reworded stent removal and tube placement labels and the
+# intervention's control form in TEMPLATES; the replaced siblings, argon plasma's contrary, the segment place's own
+# contrast, the pair controls over a segment's whole range and the bleeding control's compatible acts in CONTROLS): the
+# waves 3-4 TEMPLATES 54225978... and CONTROLS 95d1ee8b... are superseded; STATEMENT_TEMPLATES, CLAIM_BOUND and CLAIMED
+# are measured unchanged. r2c writes the two moved pins in studio/interpretation/__init__.py itself (its task: D202,
+# no version bump before the first recording). Recomputed again by repair r2c-2 for refute-r2c-r1's findings (the
+# ablation's sibling, a contrary's preference for a value no pair control asks, the pair control's role in its content
+# key, and their rule texts in CONTROLS): r2c's CONTROLS 14ecfe86... is superseded; TEMPLATES, STATEMENT_TEMPLATES,
+# CLAIM_BOUND and CLAIMED are measured unchanged. r2c-2 writes the moved pin in __init__.py itself (D202). Recomputed
+# again by repair r2c of round w7r for DECISIONS D233 and D234 (the bleeding control's narrowed label in TEMPLATES;
+# ablation's sibling, the pair kinds that follow it and the lesion rule's text in CONTROLS): r2c-2's TEMPLATES
+# 8bd8c0c9... and CONTROLS 07db0fd1... are superseded; STATEMENT_TEMPLATES, CLAIM_BOUND and CLAIMED are measured
+# unchanged. The two moved pins are written in __init__.py by this repair (D202: no version bump before the first
+# recording).
+TEMPLATES_SHA256 = '8362112662c3172e6d375e713bb2ba5da7057e6f3c30085b68bc8359a50ef823'
 STATEMENT_TEMPLATES_SHA256 = '3880e4af3eefbdbccf0c5bb8e4a099df1d50268b485e991f46db7b8f3a19e162'
-CONTROLS_SHA256 = '95d1ee8b42f8aaac05fbe17cd1ba34c0ebd4c5d47928cceee1bbb969178a1d05'
+CONTROLS_SHA256 = 'e4a8a79250ed14135b3d9f613fc4c4f57094bbe588b5484a1be98cc591a31c32'
 CLAIM_BOUND_SHA256 = '58f544bee79e592b0a40c01e24884995f2e9dd4dd9ff4c16aeec104dcf691f02'
 CLAIMED_SHA256 = '8c95246d6ff8a260b344bb5a52e25f51ac744343ed8ebe5887764ad7e5cd7b81'  # step 1f's, handed on
 

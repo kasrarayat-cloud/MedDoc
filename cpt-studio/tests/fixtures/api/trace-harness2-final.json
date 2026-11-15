@@ -21,7 +21,7 @@
      "sent": true,
      "mode": "replay",
      "purpose": "primary",
-     "run_identity": "e2b00000-0000-4000-8000-000000000010",
+     "run_identity": "e2b00000-0000-4000-8000-000000000018",
      "authorization_ref": "",
      "requested_by": null,
      "adapter_version": "corti-coding-v2@cptstudio-1",
@@ -40,8 +40,8 @@
      "request_sha256": "935a870b884eeb1851bbe698a5935ba3c125f1ef01db0535790c7218c8c8a187",
      "response_sha256": "1f0b2dce498153f87d3fb10a3432af45063b0c4a7fad8e1ceaa78a6757775ad3",
      "response_bytes": 509,
-     "created_at": "2026-11-01T09:00:16Z",
-     "finished_at": "2026-11-01T09:00:15Z",
+     "created_at": "2026-11-01T09:00:22Z",
+     "finished_at": "2026-11-01T09:00:21Z",
      "error": "",
      "reused_from": null,
      "reconciled": false,
@@ -63,7 +63,7 @@
      "sent": true,
      "mode": "replay",
      "purpose": "independent",
-     "run_identity": "e2b00000-0000-4000-8000-000000000011",
+     "run_identity": "e2b00000-0000-4000-8000-000000000019",
      "authorization_ref": "",
      "requested_by": null,
      "adapter_version": "openai-responses@cptstudio-harness-2",
@@ -83,8 +83,8 @@
      "request_sha256": "b45465d9b07f7472d5572db97c4721563a379668a5426f096fe09c82abeeb59e",
      "response_sha256": "32f567395d3151914eff05ba1dd3b1df0a6ca1a95ed262b44658107586da41e2",
      "response_bytes": 2321,
-     "created_at": "2026-11-01T09:00:18Z",
-     "finished_at": "2026-11-01T09:00:17Z",
+     "created_at": "2026-11-01T09:00:24Z",
+     "finished_at": "2026-11-01T09:00:23Z",
      "error": "",
      "reused_from": null,
      "reconciled": false,
@@ -271,7 +271,7 @@
           "fact:cms-pfs-rvu26d:45385:mult_proc"
          ],
          "result_sha256": "2e367591914bd41c4d6abed6c12abb7bf050f9f21a61ee0d987eed7fd017897d",
-         "executed_at": "2026-11-01T09:00:17Z"
+         "executed_at": "2026-11-01T09:00:23Z"
         }
        ]
       },
@@ -299,7 +299,7 @@
      "sent": true,
      "mode": "replay",
      "purpose": "peer_review",
-     "run_identity": "e2b00000-0000-4000-8000-000000000012",
+     "run_identity": "e2b00000-0000-4000-8000-00000000001a",
      "authorization_ref": "",
      "requested_by": null,
      "adapter_version": "openai-responses@cptstudio-harness-2",
@@ -316,11 +316,11 @@
      },
      "usage_basis": "provider_reported_tokens_summed_over_exchanges",
      "estimated_cost_usd": "0.0300",
-     "request_sha256": "75e2d2e8dbb24f2000351ef7dea81fd065639d3fa716e0087319907468ee92e5",
-     "response_sha256": "8bb9c343fe034aa09618a745637622fd08e8b974374c88a3cbbc34f531f7113c",
+     "request_sha256": "fd094bb49e07305f42e519c0618480b5a558a7c0e19fef900119b8e3913cbdbd",
+     "response_sha256": "ca21431a8d57754a9e7d33db239eee3400557c2fc09f7c7025e26069393f38e9",
      "response_bytes": 1791,
-     "created_at": "2026-11-01T09:00:28Z",
-     "finished_at": "2026-11-01T09:00:17Z",
+     "created_at": "2026-11-01T09:00:38Z",
+     "finished_at": "2026-11-01T09:00:23Z",
      "error": "",
      "reused_from": null,
      "reconciled": false,
@@ -342,11 +342,11 @@
        ],
        [
         "cpt_studio",
-        "34f8acae1d094acf38a224f7fcb3b9dda56e1430bfc7b1719c1ed55d78b4d201"
+        "4e1d808c5bb0be68fded06347afa8faa75425f73b3279ff730704a1a2fdee639"
        ],
        [
         "fable",
-        "6db924e0a10de784a6fc501f54a1909c65dbf05e0d3a2fa6d1913ae4c9cc5514"
+        "546fcd0612b8fb5bca587cd0062d5cdc25870a5b71df01631c73f0456e420bdd"
        ],
        [
         "revision",
@@ -355,7 +355,7 @@
       ],
       "answers": [
        {
-        "question_id": "e2b00000-0000-4000-8000-000000000013",
+        "question_id": "e2b00000-0000-4000-8000-000000000014",
         "settled": true,
         "value": "cecum",
         "evidence": [
@@ -376,7 +376,7 @@
         ]
        },
        {
-        "question_id": "e2b00000-0000-4000-8000-000000000014",
+        "question_id": "e2b00000-0000-4000-8000-000000000017",
         "settled": true,
         "value": "2026-10-21",
         "evidence": [
@@ -487,7 +487,7 @@
         "input_tokens": 1000,
         "output_tokens": 100
        },
-       "request_sha256": "75e2d2e8dbb24f2000351ef7dea81fd065639d3fa716e0087319907468ee92e5",
+       "request_sha256": "fd094bb49e07305f42e519c0618480b5a558a7c0e19fef900119b8e3913cbdbd",
        "response_sha256": "54f05296d87ae9002112779b5f58493e5f292c84afba2573b534591cfe468c46",
        "provider_request_id": "req_astra_1",
        "response_id": "resp_astra_1",
@@ -506,7 +506,7 @@
           "ncci-2026-ch6-c-1"
          ],
          "result_sha256": "ef22715942573ac1c1518637d81b7cf41a57513f61a51be8c0cfb5a55940471b",
-         "executed_at": "2026-11-01T09:00:17Z"
+         "executed_at": "2026-11-01T09:00:23Z"
         }
        ]
       },
@@ -519,8 +519,8 @@
         "input_tokens": 1000,
         "output_tokens": 100
        },
-       "request_sha256": "75e2d2e8dbb24f2000351ef7dea81fd065639d3fa716e0087319907468ee92e5",
-       "response_sha256": "8bb9c343fe034aa09618a745637622fd08e8b974374c88a3cbbc34f531f7113c",
+       "request_sha256": "fd094bb49e07305f42e519c0618480b5a558a7c0e19fef900119b8e3913cbdbd",
+       "response_sha256": "ca21431a8d57754a9e7d33db239eee3400557c2fc09f7c7025e26069393f38e9",
        "provider_request_id": "req_astra_2",
        "response_id": "resp_astra_2",
        "error": "",
@@ -542,10 +542,10 @@
      "sent": true,
      "mode": "replay",
      "purpose": "independent",
-     "run_identity": "e2b00000-0000-4000-8000-000000000016",
+     "run_identity": "e2b00000-0000-4000-8000-00000000001b",
      "authorization_ref": "",
      "requested_by": null,
-     "adapter_version": "anthropic-messages@cptstudio-harness-3",
+     "adapter_version": "anthropic-messages@cptstudio-harness-4",
      "endpoint": "https://api.anthropic.com/v1/messages",
      "requested_model": "claude-fable-5-1",
      "returned_model": "claude-fable-5-1",
@@ -559,11 +559,11 @@
      },
      "usage_basis": "provider_reported_tokens_summed_over_exchanges",
      "estimated_cost_usd": null,
-     "request_sha256": "50877d66fea78492b77cae860e5940b845317e6f52f22e5cab12eea18752f42e",
+     "request_sha256": "5e5df8d1e8833327e4305273f45384c044855320ea121ce2e63afa5cfac1118a",
      "response_sha256": "3d73902525f8cf0ca032076a9db50082848a309271ecbcbe5de9ad5b3af165c9",
      "response_bytes": 1744,
-     "created_at": "2026-11-01T09:00:19Z",
-     "finished_at": "2026-11-01T09:00:17Z",
+     "created_at": "2026-11-01T09:00:25Z",
+     "finished_at": "2026-11-01T09:00:23Z",
      "error": "",
      "reused_from": null,
      "reconciled": false,
@@ -692,7 +692,7 @@
         "input_tokens": 1000,
         "output_tokens": 100
        },
-       "request_sha256": "50877d66fea78492b77cae860e5940b845317e6f52f22e5cab12eea18752f42e",
+       "request_sha256": "5e5df8d1e8833327e4305273f45384c044855320ea121ce2e63afa5cfac1118a",
        "response_sha256": "3d73902525f8cf0ca032076a9db50082848a309271ecbcbe5de9ad5b3af165c9",
        "provider_request_id": "req_fable_1",
        "response_id": "resp_fable_1",
@@ -707,10 +707,10 @@
      "sent": true,
      "mode": "replay",
      "purpose": "peer_review",
-     "run_identity": "e2b00000-0000-4000-8000-000000000017",
+     "run_identity": "e2b00000-0000-4000-8000-00000000001c",
      "authorization_ref": "",
      "requested_by": null,
-     "adapter_version": "anthropic-messages@cptstudio-harness-3",
+     "adapter_version": "anthropic-messages@cptstudio-harness-4",
      "endpoint": "https://api.anthropic.com/v1/messages",
      "requested_model": "claude-fable-5-1",
      "returned_model": "claude-fable-5-1",
@@ -724,18 +724,18 @@
      },
      "usage_basis": "provider_reported_tokens_summed_over_exchanges",
      "estimated_cost_usd": null,
-     "request_sha256": "8b8c8a85aa8f0a6e31208329dd36b0319b6390d2493bc63809fe99774e5509b1",
-     "response_sha256": "d3d0fe604810be56566e9a48d17090bd64a8be7ee8020a5d81a35442ab4d4afc",
+     "request_sha256": "9afbdfa12b8fe00ec84c8b72906da1e46b055bd420eaa26978732b03da55ae96",
+     "response_sha256": "6fc558222bc0030a1e39613bd6de82280e2dbc35f2ddd212122d65b25dbb5107",
      "response_bytes": 1083,
-     "created_at": "2026-11-01T09:00:29Z",
-     "finished_at": "2026-11-01T09:00:17Z",
+     "created_at": "2026-11-01T09:00:39Z",
+     "finished_at": "2026-11-01T09:00:23Z",
      "error": "",
      "reused_from": null,
      "reconciled": false,
      "reading": null,
      "review": {
       "provider": "fable",
-      "adapter_version": "anthropic-messages@cptstudio-harness-3",
+      "adapter_version": "anthropic-messages@cptstudio-harness-4",
       "review_version": "harness-peer@1",
       "requested_model": "claude-fable-5-1",
       "returned_model": "claude-fable-5-1",
@@ -750,11 +750,11 @@
        ],
        [
         "cpt_studio",
-        "34f8acae1d094acf38a224f7fcb3b9dda56e1430bfc7b1719c1ed55d78b4d201"
+        "4e1d808c5bb0be68fded06347afa8faa75425f73b3279ff730704a1a2fdee639"
        ],
        [
         "fable",
-        "6db924e0a10de784a6fc501f54a1909c65dbf05e0d3a2fa6d1913ae4c9cc5514"
+        "546fcd0612b8fb5bca587cd0062d5cdc25870a5b71df01631c73f0456e420bdd"
        ],
        [
         "revision",
@@ -763,7 +763,7 @@
       ],
       "answers": [
        {
-        "question_id": "e2b00000-0000-4000-8000-000000000013",
+        "question_id": "e2b00000-0000-4000-8000-000000000014",
         "settled": true,
         "value": "Cecum, appendiceal orifice seen",
         "evidence": [
@@ -829,8 +829,8 @@
         "input_tokens": 1000,
         "output_tokens": 100
        },
-       "request_sha256": "8b8c8a85aa8f0a6e31208329dd36b0319b6390d2493bc63809fe99774e5509b1",
-       "response_sha256": "d3d0fe604810be56566e9a48d17090bd64a8be7ee8020a5d81a35442ab4d4afc",
+       "request_sha256": "9afbdfa12b8fe00ec84c8b72906da1e46b055bd420eaa26978732b03da55ae96",
+       "response_sha256": "6fc558222bc0030a1e39613bd6de82280e2dbc35f2ddd212122d65b25dbb5107",
        "provider_request_id": "req_fable_1",
        "response_id": "resp_fable_1",
        "error": "",
@@ -843,8 +843,8 @@
  ],
  "assessments": [
   {
-   "id": "e2b00000-0000-4000-8000-000000000018",
-   "created_at": "2026-11-01T09:00:26Z",
+   "id": "e2b00000-0000-4000-8000-000000000011",
+   "created_at": "2026-11-01T09:00:32Z",
    "current": false,
    "phase": 1,
    "final": false,
@@ -859,7 +859,7 @@
     ],
     [
      "fable",
-     "6db924e0a10de784a6fc501f54a1909c65dbf05e0d3a2fa6d1913ae4c9cc5514"
+     "546fcd0612b8fb5bca587cd0062d5cdc25870a5b71df01631c73f0456e420bdd"
     ],
     [
      "revision",
@@ -869,7 +869,7 @@
   },
   {
    "id": "e2b00000-0000-4000-8000-000000000008",
-   "created_at": "2026-11-01T09:00:33Z",
+   "created_at": "2026-11-01T09:00:43Z",
    "current": true,
    "phase": 2,
    "final": true,
@@ -884,7 +884,7 @@
     ],
     [
      "fable",
-     "6db924e0a10de784a6fc501f54a1909c65dbf05e0d3a2fa6d1913ae4c9cc5514"
+     "546fcd0612b8fb5bca587cd0062d5cdc25870a5b71df01631c73f0456e420bdd"
     ],
     [
      "revision",

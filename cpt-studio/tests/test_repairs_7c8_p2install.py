@@ -43,7 +43,8 @@ from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
 from tests.test_pipeline_api import OFFICE_NOTE, drain
-from tests.test_repairs_r1_m import NEW_REVISION, OLD_REVISION, DockerWorld, install, run_app_script
+from tests.test_repairs_r1_m import (NEW_REVISION, OLD_REVISION, DockerWorld, install, pre_switch_answer,
+                                    run_app_script)
 from tests.test_services_second_review import LIVE, TwoPassProvider
 
 BANNER = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE'
@@ -575,6 +576,8 @@ def answering(world, recompute):
             if isinstance(recompute, BaseException):
                 raise recompute
             return recompute
+        if pre_switch_answer(body) is not None:  # design v2 (step 6b): no v1 row, nothing counted
+            return pre_switch_answer(body)
         raise AssertionError('an unexpected in-image script')
     return app_script
 

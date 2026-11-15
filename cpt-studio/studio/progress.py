@@ -20,12 +20,14 @@ import uuid
 from django.conf import settings
 from django.utils import timezone
 
-from . import jobs, models, participants, review
+from . import jobs, models, participants, provider_holds, review
 from .gi.context import is_member_conflict
 from .interpretation import holds as interpretation_holds
 
 Job = models.Job
 INTERPRET = jobs.INTERPRET  # the Gemini migration's interpret stage (design/FINAL.md 6.11)
+APPRAISE = jobs.APPRAISE  # design v2's pass 2 (FINAL-V2 7.4; 4.12: in interpret's step, Identifying procedures)
+READING_KINDS = (INTERPRET, APPRAISE)
 ACTIVE = (Job.QUEUED, Job.RUNNING)
 READING, IDENTIFYING, CHECKING, PREPARING = 'reading', 'identifying', 'checking', 'preparing'
 STEPS = ((READING, 'Reading your document'), (IDENTIFYING, 'Identifying procedures'),
@@ -33,15 +35,19 @@ STEPS = ((READING, 'Reading your document'), (IDENTIFYING, 'Identifying procedur
 STEP_ORDER = tuple(key for key, _ in STEPS)
 STEP_STATES = ('done', 'active', 'waiting', 'not_started', 'failed', 'stopped', 'skipped')
 PHASES = ('queued', 'processing', 'action_needed', 'awaiting_detail', 'completed', 'partial', 'failed', 'stopped',
-          'being_confirmed', 'paused')
+          'being_confirmed', 'paused', 'updating')  # FINAL-V2 amendment 1, 5.1: 'updating' while an update is pending
 DOCUMENT_REVIEW, INDEPENDENT_CHECKS, CODING_VALIDATION = 'Document review', 'Independent checks', 'Coding validation'
 SENDING_KINDS = (Job.PREDICT, Job.REVIEW2)
 CHECK_KINDS = Job.PARTICIPANT_KINDS + Job.PEER_KINDS
 # What a running step is doing, by the kind of its job: the functions, never who performs them (the interpret stage's
 # names a function, never a vendor: FINAL 6.11).
+# FINAL-V2 4.12: pass 2's detail is customer_api.APPRAISE_DETAIL, verbatim (customer_api imports this module at its
+# top, so the literal is held equal by tests/v2/test_update_pipeline.py rather than read from it at import)
+APPRAISE_DETAIL = 'Checking the reading against the document'
 DETAILS = {Job.PREDICT: DOCUMENT_REVIEW, Job.REVIEW2: DOCUMENT_REVIEW, Job.ASSESS: CODING_VALIDATION,
-           **{kind: INDEPENDENT_CHECKS for kind in CHECK_KINDS}, INTERPRET: 'Reading the documented procedures'}
-STEP_OF = {Job.EXTRACT: READING, Job.ANALYZE: IDENTIFYING, INTERPRET: IDENTIFYING,
+           **{kind: INDEPENDENT_CHECKS for kind in CHECK_KINDS}, INTERPRET: 'Reading the documented procedures',
+           APPRAISE: APPRAISE_DETAIL}
+STEP_OF = {Job.EXTRACT: READING, Job.ANALYZE: IDENTIFYING, INTERPRET: IDENTIFYING, APPRAISE: IDENTIFYING,
            **{kind: CHECKING for kind in SENDING_KINDS + CHECK_KINDS}}
 JOB_STEP_STATES = {Job.SUCCEEDED: 'done', Job.FAILED: 'failed', Job.CANCELLED: 'stopped',
                    # an outcome still being confirmed did not finish; it is never called a failure of a send that may
@@ -90,6 +96,7 @@ SLOW_MESSAGES = {
                   'recognised.'),
     Job.ANALYZE: 'Identifying the procedures is taking longer than usual for this document.',
     INTERPRET: 'Reading the documented procedures is taking longer than usual for this document.',
+    APPRAISE: 'Checking the reading against the document is taking longer than usual for this document.',
     Job.PREDICT: ('The document review is taking longer than usual: it is still waiting for the coding service to '
                   'answer.'),
     Job.REVIEW2: ('The document review is taking longer than usual: it is still waiting for the coding service to '
@@ -112,6 +119,9 @@ ERRORS = {
 }
 STOPPED_BY_MEMBER = 'Processing was stopped before it finished.'
 STOPPED_BY_SYSTEM = 'Processing paused before it finished.'
+# FINAL-V2 amendment 1, 5.2: the next target job waits behind a superseded stage still running (one worker)
+WAITING_FOR_EARLIER = ('Your change is saved. A step started before it is finishing first; its result is used only where '
+                       'it still applies.')
 # The interpretation's own outcomes (design/FINAL.md 6.11 and 11): a failed interpret stage leaves an existing state
 # (review._failed_stage_state: provider_failed with its run, or provider_not_run), worded here from that run - a document
 # over the size bound or cut off at the output limit (C5: never offered a paid retry), one that could not be prepared,
@@ -235,9 +245,9 @@ def _step_outcome(job):
         return JOB_STEP_STATES.get(job.state, 'failed')
     if _skip(job):
         return None
-    if job.kind == INTERPRET:
-        # an interpretation blocked by an unknown outcome, or whose own outcome is unknown, did not finish: it reads as
-        # an outcome still being confirmed; every other interpret that succeeded read the document (FINAL 6.11)
+    if job.kind in READING_KINDS:
+        # a reading (pass 1 or pass 2) blocked by an unknown outcome, or whose own outcome is unknown, did not finish:
+        # it reads as an outcome still being confirmed; every other reading stage that succeeded read the document
         return 'stopped' if _recorded(job) in (BLOCKED, models.ProviderRun.UNKNOWN) else 'done'
     sends = job.kind in SENDING_KINDS + CHECK_KINDS
     if sends and _held(None, job.context):
@@ -255,16 +265,36 @@ def _step_outcome(job):
 FOLD_ORDER = ('stopped', 'failed', 'done')
 
 
-def _fold(rows):
+def _serving(rows, context_id):
+    """FINAL-V2 amendment 1, 5.2 [R2:truth-RT3][R3:truth-R3T-1][R3:truth-R3T-2]: the attempts of a step whose outcome
+    colours it - only those that served the saved state: a stage that carries a context only while its context is the
+    current context (``context_id``), so a late finisher of an older save's context never does; and of those, and of
+    the context-free stages, only the newest attempt of each kind that started - one that never started (expired or
+    cancelled while queued) only when no attempt of its kind in the run started."""
+    kept = [job for job in rows if job.context_id is None or job.context_id == context_id]
+    out = []
+    for kind in dict.fromkeys(job.kind for job in kept):
+        mine = [job for job in kept if job.kind == kind]
+        started = [job for job in mine if job.started_at is not None]
+        out.append((started or mine)[-1])
+    return out
+
+
+def _fold(rows, context_id=False):
+    """A step's state from its progress jobs (5.2, read in two parts): ACTIVITY from every progress job of the step, as
+    the fold always read it - one RUNNING reads in progress, one QUEUED beside a finished one reads in progress, only
+    QUEUED ones read waiting; and, when none is active, the OUTCOME from the attempts that served the saved state
+    (_serving, when ``context_id`` - the current context's id, None when there is none - is given; False, the default,
+    reads every row as before: an earlier run's step, a direct reader), folded by FOLD_ORDER (refutation r3, C-R3-5:
+    every serving attempt is read, never only the last; a stage that did nothing leaves the others to say what the step
+    did, and every one of them skipped reads skipped)."""
     states = [job.state for job in rows]
     if Job.RUNNING in states:
         return 'active'
     if Job.QUEUED in states:
         return 'active' if any(state != Job.QUEUED for state in states) else 'waiting'
-    # Refutation r3, C-R3-5: every finished stage of the step is read, never only its last - a document review that did
-    # not finish is not made done by the checks that ran after it - and a stage that did nothing leaves the others to
-    # say what the step did (every one of them skipped: skipped, refutation r2, L5-4)
-    found = {outcome for outcome in map(_step_outcome, rows) if outcome is not None}
+    serving = _serving(rows, context_id) if context_id is not False else rows
+    found = {outcome for outcome in map(_step_outcome, serving) if outcome is not None}
     return next((state for state in FOLD_ORDER if state in found), 'skipped')
 
 
@@ -275,12 +305,13 @@ def _step(key, label, rows, state):
             'finished_at': _iso(finished)}
 
 
-def _steps(runs, revision):
-    """The four steps: each step of the current run as its jobs stand; a step before the run's first is the latest
-    earlier run's (a re-assessment re-reads what was read and checked before), and so is one every job of which skipped
-    its work in this run (a skip did nothing: what the step did before stands, or it reads skipped); one between its
-    first and its last was skipped (nothing was sent while a member date conflict held the document); one after its last
-    has not started."""
+def _steps(runs, revision, context_id=False, pending=False):
+    """The four steps: each step of the current run as its jobs stand (_fold over the current context ``context_id``);
+    a step before the run's first is the latest earlier run's (a re-assessment re-reads what was read and checked
+    before) - while an update is pending it reads skipped ("Not needed": FINAL-V2 amendment 1, 5.2) - and so is one every
+    job of which skipped its work in this run (a skip did nothing: what the step did before stands, or it reads
+    skipped); one between its first and its last was skipped (nothing was sent while a member date conflict held the
+    document); one after its last has not started."""
     current = _by_step(runs[-1], revision) if runs else {}
     present = [STEP_ORDER.index(key) for key in current]
     first, last = (min(present), max(present)) if present else (None, None)
@@ -288,11 +319,13 @@ def _steps(runs, revision):
     for index, (key, label) in enumerate(STEPS):
         mine = current.get(key)
         if mine and not all(_skip(job) for job in mine):
-            out.append(_step(key, label, mine, _fold(mine)))
+            out.append(_step(key, label, mine, _fold(mine, context_id)))
+        elif pending and not mine and first is not None and index < first:
+            out.append(_step(key, label, [], 'skipped'))
         elif mine or (first is not None and index < first):
             earlier = next((rows for rows in (_by_step(run, revision).get(key) for run in reversed(runs[:-1])) if rows),
                            None)
-            out.append(_step(key, label, earlier, _fold(earlier)) if earlier
+            out.append(_step(key, label, earlier, _fold(earlier, False)) if earlier
                        else _step(key, label, [], 'skipped' if mine else 'not_started'))
         elif first is not None and first < index < last:
             out.append(_step(key, label, [], 'skipped'))
@@ -326,10 +359,14 @@ def queued_message(steps, queued):
 def date_held(encounter):
     """The member date hold (directive 5: "Action needed" at once): the current context of the current revision holds
     the service date as a member's value that conflicts with the document, so nothing is sent until it is settled. Known
-    as soon as the analyze stage records that context - a few seconds after an upload, never at the upload itself."""
+    as soon as the analyze stage records that context - a few seconds after an upload, never at the upload itself.
+    FINAL-V2 amendment 1, 5.2 [R:truth-T3]: held only while the saved values are the current context's - while a
+    case-B update is pending they differ, the kept context's conflict is no longer the member's choice, and the
+    update's own state decides the phase."""
     context, revision = encounter.current_context, encounter.current_revision
     return (context is not None and revision is not None and context.revision_id == revision.pk
-            and is_member_conflict((context.facts or {}).get('service_date')))
+            and is_member_conflict((context.facts or {}).get('service_date'))
+            and review.values(context) == review.values(encounter))
 
 
 def interpreter_paused(encounter):
@@ -337,8 +374,21 @@ def interpreter_paused(encounter):
     mode is disabled or an installation-wide hold stands, so it recorded a not-sent run and ended CANCELLED with the
     paused message). Read from the stage's own record, never from this process's settings: the worker's mode decides."""
     latest = review.latest_job(encounter)
-    return (latest is not None and latest.kind == INTERPRET and latest.state == Job.CANCELLED
+    return (latest is not None and latest.kind in READING_KINDS and latest.state == Job.CANCELLED
             and latest.error == INTERPRETATION_PAUSED)
+
+
+def provider_paused(encounter):
+    """FINAL-V2 amendment 1, 7.1 (A16) [R2:truth-RT6][R3:truth-R3T-7]: whether the latest target job is a predict that
+    Corti's provider hold ended paused - it recorded a held not-sent run, or its own run set the hold, and ended
+    CANCELLED - AND that hold still stands (provider_holds.active: a row the web process reads). Once an operator has
+    released it the same stage reads stopped by the system, with Resume (which sends once), never paused."""
+    latest = review.latest_job(encounter)
+    if latest is None or latest.kind != Job.PREDICT or latest.state != Job.CANCELLED:
+        return False
+    if latest.error != jobs.PROVIDER_PAUSED_MESSAGE:
+        return False
+    return provider_holds.held(provider_holds.CORTI)
 
 
 def interpretation_error(encounter, state, run):
@@ -346,22 +396,34 @@ def interpretation_error(encounter, state, run):
     stage's: ``state`` and ``run`` are review._state_and_run's (the run is the stage's own, which explains it). Too long -
     the size bound, or an answer cut off at its output limit (C5) - or a document that could not be prepared: upload it
     again; any other failure offers the recorded retry; no request made: not available now."""
+    situation = _reading_situation(encounter, state, run)
+    if situation is None:
+        return None
+    return INTERPRETATION_ERRORS[{'reading_unbuilt': 'unprepared', 'too_long': 'too_long', 'not_run': 'not_run'}.get(
+        situation, 'failed')]
+
+
+def _reading_situation(encounter, state, run):
+    """What a failed reading stage (pass 1 or pass 2) means (FINAL 6.11; FINAL-V2 7.5): 'not_run', 'reading_unbuilt',
+    'too_long' (the size bound, an answer cut off, or pass 2's claim set over its bound: C5), 'appraisal_failed' or
+    'reading_failed' - or None when the failed state is not a reading stage's."""
     latest = review.latest_job(encounter)
-    if latest is None or latest.kind != INTERPRET or latest.state not in (Job.FAILED, Job.UNKNOWN):
+    if latest is None or latest.kind not in READING_KINDS or latest.state not in (Job.FAILED, Job.UNKNOWN):
         return None
     if state == 'provider_not_run':
-        return INTERPRETATION_ERRORS['not_run']
-    if state != 'provider_failed' or run is None or run.purpose != jobs.INTERPRETATION:
+        return 'not_run'
+    if state != 'provider_failed' or run is None or run.purpose not in jobs.READING_PURPOSES:
         return None
     scope = run.scope or {}
     if scope.get('refused') == jobs.UNBUILT:
-        return INTERPRETATION_ERRORS['unprepared']
+        return 'reading_unbuilt'
     if scope.get('refused') == jobs.FAILED_BEFORE:
         # the failed-request door kept it unsent: worded by the attempt that failed (a cut-off answer stays too long)
-        run = encounter.provider_runs.filter(pk=scope.get('failed'), purpose=jobs.INTERPRETATION).first() or run
-    if scope.get('refused') == jobs.SIZE or jobs.interpretation_effect(run) == interpretation_holds.TOO_LONG:
-        return INTERPRETATION_ERRORS['too_long']
-    return INTERPRETATION_ERRORS['failed']
+        run = encounter.provider_runs.filter(pk=scope.get('failed'), purpose=run.purpose).first() or run
+    if (scope.get('refused') in (jobs.SIZE, jobs.CLAIMS)
+            or jobs.interpretation_effect(run) == interpretation_holds.TOO_LONG):
+        return 'too_long'
+    return 'appraisal_failed' if run.purpose == jobs.APPRAISAL else 'reading_failed'
 
 
 def stage_bound(kind):
@@ -374,8 +436,8 @@ def stage_bound(kind):
     predict and review2 entries are read nowhere, so they are never used. None for a kind with no bound."""
     if kind == Job.EXTRACT:
         return settings.EXTRACTION_TIMEOUT_SECONDS
-    if kind == INTERPRET:
-        return settings.JOB_DEADLINE_SECONDS.get(INTERPRET)  # its one send's deadline and its reading: 380 s
+    if kind in READING_KINDS:
+        return settings.JOB_DEADLINE_SECONDS.get(kind)  # its one send's deadline and its reading (D49: 560 s)
     if kind in SENDING_KINDS:
         return settings.PROVIDER_READ_TIMEOUT_SECONDS + 30
     if kind in (Job.ANALYZE, Job.ASSESS) + CHECK_KINDS:
@@ -402,9 +464,11 @@ def _slow(active, now):
 
 
 def final_assessment(encounter):
-    """The live assessment when it was made on the current context and is its chain's final one, else None."""
+    """The live assessment when the encounter is fresh (FINAL-V2 amendment 1, 5.2: made on the current context AND the
+    saved values, and its chain's final one), else None - so the earlier codes' checks are never presented as the
+    current result while an update is pending (a case-B update keeps the context and changes the values)."""
     assessment = review.live_assessment(encounter)
-    if assessment is None or assessment.context_id != encounter.current_context_id or not review.is_final(assessment):
+    if assessment is None or not review.fresh(encounter):
         return None
     return assessment
 
@@ -502,11 +566,10 @@ def checks_summary(encounter):
     reference check could not be completed) or 'not_run' (none was asked, or none could be: no participant configured,
     sending disabled, a member date conflict) - and with no final assessment what the latest run's jobs recorded."""
     revision = encounter.current_revision
-    rows = list(encounter.jobs.filter(revision=revision).select_related('provider_run', 'context')
-                .order_by('created_at', 'pk')) if revision is not None else []
+    rows = progress_jobs(encounter)  # FINAL-V2 amendment 1, 5.2: the progress jobs for what ran ...
     runs = _runs(rows)
     current = runs[-1] if runs else []
-    busy = any(job.state in ACTIVE for job in rows)
+    busy = review.busy_targets(encounter)  # ... and the target jobs for busy
     assessment = final_assessment(encounter) if not busy else None
     configured = bool(participants.configured())
     out = []
@@ -550,31 +613,145 @@ def _busy_state(key, mine, current, revision, configured):
             return 'waiting'  # an assess #1: its peer reviews follow it
     if mine:
         return _jobs_outcome(mine)
-    if (active.kind in (Job.EXTRACT, INTERPRET, Job.ANALYZE)
+    if (active.kind in (Job.EXTRACT, INTERPRET, APPRAISE, Job.ANALYZE)
             or (key == 'independent_checks' and active.kind in SENDING_KINDS)):
         return 'waiting'
-    previous = models.Assessment.objects.filter(revision=revision).order_by('-created_at', '-pk').first()
+    previous = jobs._newest_assessment(revision)  # 4.1: an abandoned unfinished assessment of an update left out
     if previous is None:
         return 'waiting'
     return _document_outcome(previous) if key == 'document_review' else _checks_outcome(previous)
 
 
+def progress_jobs(encounter):
+    """FINAL-V2 amendment 1, 5.2 (the vocabulary's progress jobs) [R:truth-T2]: the current revision's jobs, oldest
+    first, minus every superseded job - a finished job whose result says superseded, and an active job for which the
+    supersession predicate answers a reason (jobs.superseded_on, read here with no lock: nothing here writes, locks,
+    queues or sends)."""
+    if encounter.current_revision_id is None:
+        return []
+    rows = list(encounter.jobs.filter(revision_id=encounter.current_revision_id)
+                .select_related('provider_run', 'context').order_by('created_at', 'pk'))
+    fresh_row = (models.Encounter.objects.select_related('current_assessment', 'current_context')
+                 .get(pk=encounter.pk))
+    out = []
+    for job in rows:
+        if job.state in ACTIVE:
+            if jobs.superseded_on(job, fresh_row):
+                continue
+        elif review._superseded_job(job):
+            continue
+        out.append(job)
+    return out
+
+
+def update_started_at(encounter, base):
+    """5.1 [R:truth-T2] (and [R3:binding-R3B-3]): when the pending update began - the created_at of the oldest
+    context.changed or revision.addendum audit row recorded after the later of the earlier codes ``base``'s creation
+    and the newest restore (the first save, however many followed); for an update no save started (kind check, A21),
+    the provider.reconciled row that started it. None when there is none."""
+    rows = models.AuditEvent.objects.filter(encounter_id=encounter.pk)
+    since = base.created_at
+    restore = (rows.filter(event='context.changed', data__has_key='restored').order_by('-created_at').first())
+    if restore is not None and restore.created_at > since:
+        since = restore.created_at
+    first = (rows.filter(event__in=('context.changed', 'revision.addendum'), created_at__gt=since)
+             .exclude(data__has_key='restored').order_by('created_at').first())
+    if first is None:
+        first = (rows.filter(event='provider.reconciled', created_at__gt=since).order_by('created_at').first())
+    return first.created_at if first is not None else None
+
+
+def _update_situation(encounter, state, run):
+    """7.1's row (customer_api.UPDATE_TEXTS' situation) of an update in derived ``state`` with its run, or None when
+    the update's state is its own (updating, or a state 7.1 does not name)."""
+    reading = _reading_situation(encounter, state, run)
+    if reading is not None:
+        return 'too_long' if reading == 'too_long' else (
+            'appraisal_failed' if reading == 'appraisal_failed' else
+            'interpreter_paused' if reading == 'not_run' else 'reading_failed')
+    if state == 'provider_unknown':
+        return 'being_confirmed'
+    if state == 'processing_failed':
+        return 'processing_failed'
+    if state == 'provider_failed' and run is not None:
+        scope = run.scope or {}
+        if run.state == models.ProviderRun.NOT_SENT and not run.request_sha256:
+            return 'review_unbuilt'
+        if run.state == models.ProviderRun.NOT_SENT and run.error.startswith(jobs.FAILED_BEFORE_MESSAGE):
+            failed = (models.ProviderRun.objects.filter(
+                encounter=encounter, provider=run.provider, adapter_version=run.adapter_version,
+                request_sha256=run.request_sha256, state=models.ProviderRun.FAILED, sent=True)
+                .order_by('-created_at').first())
+            if failed is not None and provider_holds.retry_refused(failed) and not provider_holds.sets_hold(failed):
+                return 'review_refused_before'
+            return 'review_failed'
+        if run.state == models.ProviderRun.NOT_SENT and not scope.get('held') and not run.sent:
+            return 'review_not_sent'
+        return 'review_failed'  # (a not-sent record an adapter marked sent may have reached it: never "not sent")
+    if state == 'provider_failed':
+        return 'review_failed'
+    if state == 'provider_not_run':
+        return 'review_disabled'
+    return None
+
+
+def update_error(encounter, state, run, *, kind, restorable, stopped_by_member):
+    """(phase, error) of a pending update that nothing serves (7.1; worded by customer_api.update_text by the update's
+    kind and whether a restore applies, so a case-C or check text never offers a restore): the paused rows (the
+    interpreter's pause, Corti's standing hold, the coding service disabled), the stopped rows (by a member, by the
+    system), being confirmed, and the failed rows by what failed. None when the update's state is its own."""
+    from . import customer_api  # local import: customer_api imports this module at its top
+
+    latest = review.latest_job(encounter)
+    if state == 'stopped':
+        if interpreter_paused(encounter):
+            situation = 'interpreter_paused'
+        elif provider_paused(encounter):
+            situation = 'review_held'
+        elif latest is not None and latest.error == jobs.PROVIDER_DISABLED_MESSAGE:
+            situation = 'review_disabled'
+        else:
+            situation = 'stopped_by_member' if stopped_by_member else 'stopped_by_system'
+    else:
+        situation = _update_situation(encounter, state, run)
+    if situation is None:
+        return None
+    row = customer_api.UPDATE_TEXTS[situation]
+    action = row.action
+    if action == 'resume' and not review.can_resume(encounter):
+        action = 'none'
+    return row.phase, {'text': customer_api.update_text(situation, kind, restorable), 'action': action}
+
+
 def encounter_progress(encounter, now=None) -> dict:
     """The progress block of a document (DESIGN section 7 ``progress``, every key and nothing else). ``can_stop`` and
     ``can_resume`` say whether the action applies to the document; the caller also requires a role that may take it.
-    ``started_at`` is when the current run was asked for (its first job queued), ``finished_at`` when its last job
-    finished (None while busy)."""
+
+    FINAL-V2 amendment 1, 5.2 (truthful progress) [R:truth-T2]: the steps and the times fold the PROGRESS jobs
+    (progress_jobs: superseded stages left out), and busy and the phase read the TARGET jobs (review.target_jobs), so a
+    superseded stage never colours a step and a stage that ran for the update keeps its step once the reading is no
+    longer owed. With an update pending and busy the phase is 'updating' (today's messages for a queued or a running
+    step, or WAITING_FOR_EARLIER when the next target job waits behind a superseded stage still running); a pending
+    update that nothing serves reads 7.1's row (update_error). ``started_at`` is, while an update is pending, when it
+    began (the first save, however many followed: update_started_at), else the current run's first job's; ``finished_at``
+    when the current run's last job finished (None while busy). A first processing paused under Corti's standing hold
+    reads PROVIDER_PAUSED [R2:truth-RT6]."""
+    from . import customer_api  # local import: customer_api imports this module at its top
+
     now = now or timezone.now()
     revision = encounter.current_revision
-    rows = list(encounter.jobs.filter(revision=revision).select_related('provider_run', 'context')
-                .order_by('created_at', 'pk')) if revision is not None else []
+    rows = progress_jobs(encounter)
     runs = _runs(rows)
-    busy = jobs.busy(encounter)
+    busy = review.busy_targets(encounter)
+    base = review.earlier(encounter)
+    pending = base is not None
     current = runs[-1] if runs else []
     running = next((job for job in current if job.state == Job.RUNNING), None)
     queued = next((job for job in current if job.state == Job.QUEUED), None)
     active = running or queued
-    slow, slow_message, error, limited = False, '', None, None
+    slow, slow_message, error, limited, waiting = False, '', None, None, False
+    kind = review.update_kind(encounter, base=base) if pending else None
+    restorable = review.restorable(encounter, base=base) if pending else False
     if date_held(encounter):
         phase = 'action_needed'
     elif busy and jobs.worker_responding(now=now) is False:
@@ -582,15 +759,26 @@ def encounter_progress(encounter, now=None) -> dict:
         # step animates and nothing is called slow; a worker that never beat (None) claims nothing either way
         phase = 'paused'
     elif busy:
-        phase = 'processing' if running is not None else 'queued'
+        phase = 'updating' if pending else ('processing' if running is not None else 'queued')
         slow, slow_message = _slow(active, now)
+        if pending and running is None and encounter.jobs.filter(state=Job.RUNNING).exists():
+            waiting = True  # the next target job waits behind a superseded stage that is still running (one worker)
     else:
         state, failed_run = review._state_and_run(encounter)
-        if state == 'stopped' and interpreter_paused(encounter):
+        update = (update_error(encounter, state, failed_run, kind=kind, restorable=restorable,
+                               stopped_by_member=encounter.stopped_at is not None) if pending else None)
+        if update is not None:
+            phase, error = update
+        elif state == 'stopped' and interpreter_paused(encounter):
             # FINAL 11.2: the interpreter is disabled or held - the existing stopped state, the paused phase and the
             # paused message; Resume once it is available again
             phase = 'paused'
             error = {'text': INTERPRETATION_PAUSED, 'action': 'resume' if review.can_resume(encounter) else 'none'}
+        elif state == 'stopped' and provider_paused(encounter):
+            # amendment 1, 7.1 [R2:truth-RT6][R3:truth-R3T-7]: a first processing paused under Corti's standing hold
+            phase = 'paused'
+            error = {'text': customer_api.PROVIDER_PAUSED,
+                     'action': 'resume' if review.can_resume(encounter) else 'none'}
         elif state == 'stopped':
             phase = 'stopped'
             error = {'text': STOPPED_BY_MEMBER if encounter.stopped_at is not None else STOPPED_BY_SYSTEM,
@@ -602,18 +790,32 @@ def encounter_progress(encounter, now=None) -> dict:
             error = {'text': text, 'action': action}
         elif state == 'provider_unknown':
             phase = 'being_confirmed'
+        elif pending:
+            phase = 'updating'
         elif _open_details(encounter):
             phase = 'awaiting_detail'
         else:
             limited = _partial(encounter, revision)
             phase = 'partial' if limited else 'completed'
-    steps = _steps(runs, revision)
+    context_id = encounter.current_context_id
+    steps = _steps(runs, revision, context_id, pending)
     if slow:
         message = slow_message
-    elif phase == 'queued':
+    elif waiting:
+        message = WAITING_FOR_EARLIER
+    elif (phase == 'updating' and busy and running is None and not (queued is not None and (queued.result or {})
+                                                                        .get('requeued'))
+          and any(step['state'] == 'active' for step in steps)):
+        # amendment 1, 5.2 [R3:truth-R3T-2]: an update whose step is in progress - a stage queued beside one of the step
+        # that finished, as a save's ':after-save:' twin beside its pass 1 - waits for its next step, never "Waiting to
+        # start" as if nothing had been done (the page titles the phase by the update, not by next_step_queued)
+        message = NEXT_STEP_QUEUED
+    elif phase == 'queued' or (phase == 'updating' and busy and running is None):
         # a retry waits its turn; a step after one the panel shows done waits for the next step (refutation r2, L5-7),
         # by the rule the page titles it with (refutation r3, C-R3-4: next_step_queued)
         message = queued_message(steps, queued)
+    elif phase == 'updating':
+        message = MESSAGES['processing']
     elif error is not None:
         message = error['text']
     elif limited:
@@ -623,10 +825,13 @@ def encounter_progress(encounter, now=None) -> dict:
     else:
         message = MESSAGES[phase]
     finished = [_end(job) for job in current if job.state not in ACTIVE]
+    started = update_started_at(encounter, base) if pending else None
+    if started is None:
+        started = current[0].created_at if current else None
     return {
         'phase': phase, 'busy': busy, 'steps': steps,
         'active_detail': DETAILS.get(active.kind, '') if busy and active is not None else '',
-        'started_at': _iso(current[0].created_at) if current else None,
+        'started_at': _iso(started),
         'finished_at': _iso(max(finished)) if finished and not busy else None,
         'server_time': _iso(now), 'slow': slow, 'message': message,
         'can_stop': busy, 'can_resume': (not busy) and review.can_resume(encounter), 'can_leave': True,

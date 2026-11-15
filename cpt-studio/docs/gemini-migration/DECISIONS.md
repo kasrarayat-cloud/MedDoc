@@ -15807,3 +15807,18 @@ D216's (repeated under w7r's rulings above).
   - Each step is built as a patch, refuted, given one fix round, and refuted again where needed. The integration runs the
     seam check (D252) with named scenes for D265, D266, D268, D269 and D270's inputs added. The gate must be green; D250
     stays.
+
+## Repair round w9r integrated: the swap's one retired-module test line (2026-11-15, session 31dfc45d)
+
+w9r (wf_30f9f59c-339, build-v2/scripts/w9r-build.js) finished with 21 of 21 agents and none failed (journal: 21
+started, 21 results, 0 failed). Every step's first refutation was clear (no critical or high defect), so no fix round
+ran. The integration's merge gate fails on one id, the retired module's slips test below. The lead rebuilt the final tree
+from 73a48ad3c and w9r/final/final.diff (sha256 6e5a62e2...), byte-equal to the integration's work tree but for the
+.hypothesis cache, and re-ran the gate there: the same one id, everything else green.
+
+- **D274 The swap's one retired-module test line (w9r O7; cb R2 and Q4; refute-cb-r1 CB1-4).** D230 keeps the recorded
+  Argon answers labelled gemini-4-argon and replays them as Argon's. tests/test_interpretation_slips.py:91 compared the
+  hand-written Argon slips with the CURRENT model (adapter.MODEL), so the swap turned it red (12 subtests). It now
+  compares them with adapter.ARGON (cb's text, option (a)): the only change to a retired module's test that D230's swap
+  needs. FINAL-V2 8.0 and D243 otherwise stand. The integration owner applies it in the integration commit; with it the
+  module runs 18 tests OK on the lead's tree. The round's other findings are ruled after the lead's triage, from D275.

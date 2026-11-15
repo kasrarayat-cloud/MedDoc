@@ -2071,6 +2071,16 @@ COMMON_STAGE_KINDS = ('analyze', 'assess', 'extract', 'predict')
 # 13): no worker before it runs one, so CLOSE_STAGES closes an open interpret stage on every undo whose next worker
 # lacks it, settling the Gemini run it had in flight as any other (sending: unknown, reserved: not sent), and an older
 # revision's app phase refuses while one is open (UNRUNNABLE_STAGES), as for the participants' stages.
+# Design v2 (docs/gemini-migration/FINAL-V2.md 6.4, step 6b): pass 2's stage kind 'appraise'
+# (interpretation.APPRAISE_JOB_KIND) is not among them either - the old worker would die on STAGES['appraise'] - so both
+# scripts treat it exactly as interpret: CLOSE_STAGES closes it on every undo whose next worker lacks it (the appraisal
+# run it had in flight settled as any other), and UNRUNNABLE_STAGES names it stuck to an older revision's app phase. Both
+# read the kinds from a worker's own jobs.STAGES, so neither names a kind; READING_STAGE_KINDS is what the undo's note
+# counts (interpretation_note) and what the tests pin. A next worker that runs 'appraise' is a design v2 worker, and
+# every design v2 worker carries FINAL-V2 amendment 1's update (the amendment was adopted, D208, before any v2 build),
+# so an undo reverts a pending save's unapplied values only for a next worker that does not (UPDATE_PENDING below).
+APPRAISE_KIND = 'appraise'
+READING_STAGE_KINDS = ('interpret', APPRAISE_KIND)
 # What this revision recorded that an older revision's web and worker would act on under their own rules (refutation
 # p1, migrate-0/-1), read in this revision's image as the installed revision 057a7d39 reads the rows - the oldest a
 # rollback goes back to. {encounter id: reasons}:
@@ -2382,7 +2392,102 @@ print(ANSWER + json.dumps({'reads': reads}))
 # its encounter's latest stage (what a Resume runs again): that worker ends on it (refutation p1, security-0: a second
 # review stopped under an earlier pair of a revision that runs it outlived the window). Nothing finished is touched and
 # no row is removed. The answer names, after the close, what the next pair would still act on wrongly (UNDO_HAZARDS).
-CLOSE_STAGES = UNDO_HAZARDS + f'COMMON_STAGE_KINDS = {list(COMMON_STAGE_KINDS)!r}\n' + '''
+# Design v2 (FINAL-V2 6.4 and amendment 1, 9.4; step 6b), in the same transaction, after the stages are closed and
+# under each encounter's row lock (UPDATE_PENDING): every encounter that reads an update of its codes pending is named
+# ('update_pending', with its reasons: never a hazard, so never a refusal - a rollback is the incident path), and, when
+# P['revert'] (close_undone_stages: the next worker runs no 'appraise', so it has no update), every such encounter whose
+# saved values are not its current context's (an update pending before its analyze) has Encounter.user_values set back
+# to that context's member values, one 'context.rollback_reverted' audit row each naming the fields, and the answer
+# names each field's saved and restored values ('reverted'); 'reading_closed' counts the reading stages (interpret,
+# appraise: P['reading_kinds']) it closed. Each key is given only when there is one, so the answer is as it was
+# otherwise. The old image's details panel shows the context's values while its own save compares a save with
+# Encounter.user_values, so without the revert a pending value entered again there was "unchanged" and silently not
+# saved, and a save of another field applied the hidden value unannounced (amendment 1, 9.4 [R:legacy-L7]).
+# Refutation w7r 6b-r1 R2 (DECISIONS D247 F2: every sentence says what is so): when the next worker runs 'appraise' (an
+# earlier design v2 revision, which reads an update itself; no revert), the answer also says what each pending update
+# reads once the close has run, as this image's page reads it ('update_reads': {encounter: {'phase', 'action'}} from
+# progress.encounter_progress - the phase and the one action it offers; None for one that could not be read), so the
+# note words each update by what it reads (a closed reading or document review reads paused, a closed analysis or
+# assessment reads failed with "Try updating again", ...) - never one reading for all.
+UPDATE_PENDING = '''
+CONTEXT_FIELDS = ('service_date', 'setting', 'billing_context', 'patient_status')  # studio.types.CONTEXT_FACTS
+PENDING_REASONS = ('values_saved', 'assessment_off_context', 'reconciled_unknown')
+
+
+def update_pending_reasons(encounter):
+    """FINAL-V2 amendment 1, 9.4: why ``encounter`` reads an update of its codes pending, [] when it does not -
+    'values_saved' (values(encounter) differs from values(current context)), 'assessment_off_context' (its current
+    assessment is not on its current context) and 'reconciled_unknown' (its current assessment's own document review
+    is an UNKNOWN run an operator's reconciliation released while a reading is owed: A21's update, which no save
+    started). An image with no update (no review.values) names none."""
+    from studio import review
+    if not all(hasattr(review, name) for name in ('values', 'reconciled_unknown', 'reading_owed')):
+        return []
+    context = encounter.current_context if encounter.current_context_id else None
+    assessment = encounter.current_assessment if encounter.current_assessment_id else None
+    reasons = []
+    if context is not None and review.values(encounter) != review.values(context):
+        reasons.append('values_saved')
+    if assessment is not None and context is not None and assessment.context_id != context.pk:
+        reasons.append('assessment_off_context')
+    if (assessment is not None and assessment.provider_run_id is not None
+            and review.reconciled_unknown(assessment.provider_run) and review.reading_owed(encounter)):
+        reasons.append('reconciled_unknown')
+    return reasons
+
+
+def revert_unapplied(encounter):
+    """Encounter.user_values set back to its current context's member values for each coding-context field whose value
+    differs (values(), the vocabulary's normalization), every other key kept, and one 'context.rollback_reverted' audit
+    row naming the fields; {field: {'saved', 'restored'}} ({} when no field differs)."""
+    from studio import models, review
+    context = encounter.current_context
+    saved, restored = review.values(encounter), review.values(context)
+    fields = [name for name in CONTEXT_FIELDS if saved.get(name) != restored.get(name)]
+    if not fields:
+        return {}
+    stored = dict(encounter.user_values) if isinstance(encounter.user_values, dict) else {}
+    member = context.user_values if isinstance(context.user_values, dict) else {}
+    for name in fields:
+        if name in member:
+            stored[name] = member[name]
+        else:
+            stored.pop(name, None)
+    encounter.user_values = stored
+    encounter.save(update_fields=['user_values', 'updated_at'])
+    models.AuditEvent.objects.create(workspace_id=encounter.workspace_id, encounter=encounter, actor=None,
+                                     actor_kind='system', event='context.rollback_reverted',
+                                     data={'fields': fields, 'context': str(context.pk)})
+    return {name: {'saved': saved.get(name), 'restored': restored.get(name)} for name in fields}
+
+
+def pending_updates(revert):
+    """({encounter id: reasons}, {encounter id: reverted fields}): every encounter that reads an update pending; with
+    ``revert``, an encounter named 'values_saved' whose current context is of its current revision has its unapplied
+    values reverted (revert_unapplied), read again under its own row lock first (only those are locked: the web may
+    still serve while the close runs). Called inside the close's transaction."""
+    from studio import models
+    pending, reverted = {}, {}
+    for encounter in list(models.Encounter.objects.filter(current_revision__isnull=False).order_by('created_at', 'pk')):
+        reasons = update_pending_reasons(encounter)
+        if not reasons:
+            continue
+        pending[str(encounter.pk)] = reasons
+        if not (revert and 'values_saved' in reasons):
+            continue
+        locked = models.Encounter.objects.select_for_update().get(pk=encounter.pk)
+        again = update_pending_reasons(locked)  # what the encounter reads under its lock is what is named
+        if not again:
+            pending.pop(str(encounter.pk))
+            continue
+        pending[str(encounter.pk)] = again
+        if 'values_saved' in again and locked.current_context.revision_id == locked.current_revision_id:
+            fields = revert_unapplied(locked)
+            if fields:
+                reverted[str(encounter.pk)] = fields
+    return pending, reverted
+'''
+CLOSE_STAGES = UNDO_HAZARDS + UPDATE_PENDING + f'COMMON_STAGE_KINDS = {list(COMMON_STAGE_KINDS)!r}\n' + '''
 import datetime
 from django.db import transaction
 from django.db.models import Q
@@ -2407,6 +2512,10 @@ with transaction.atomic():
                                 | Q(started_at__gte=since, state=Job.RUNNING) | Q(pk__in=unrunnable))
     encounters = sorted({str(pk) for pk in stages.values_list('encounter_id', flat=True)})
     kinds = sorted(set(stages.values_list('kind', flat=True)))
+    reading = {}  # design v2: the reading stages (interpret, appraise) this close fails, by kind
+    for kind in stages.values_list('kind', flat=True):
+        if kind in (P.get('reading_kinds') or ()):
+            reading[kind] = reading.get(kind, 0) + 1
     runs = Run.objects.filter(in_flight)
     reached = getattr(jobs, 'may_have_reached_vendor', None)  # the stale sweep's rule for sent (sends-3)
     if reached is not None:
@@ -2416,8 +2525,23 @@ with transaction.atomic():
     not_sent = runs.filter(state=Run.RESERVED).update(
         state=Run.NOT_SENT, finished_at=now, error='The worker stopped before sending.')
     closed = stages.update(state=Job.FAILED, error=P['note'], finished_at=now)
-for pk in encounters:
+    # design v2 (amendment 1, 9.4): the pending updates named, and the unapplied saves reverted when P['revert'], in the
+    # step that closes the stages (UPDATE_PENDING)
+    pending, reverted = pending_updates(bool(P.get('revert')))
+for pk in sorted(set(encounters) | set(reverted)):
     review.refresh_state(models.Encounter.objects.get(pk=pk))
+# Refutation w7r 6b-r1 R2: for a next worker that runs appraise (no revert), what each pending update reads now, as this
+# image's page reads it (its phase and the one action it offers), so the note words each by it; None: not read
+update_reads = {}
+if pending and not P.get('revert'):
+    for pk in sorted(pending):
+        try:
+            from studio import progress
+            shown = progress.encounter_progress(models.Encounter.objects.get(pk=pk))
+            offered = shown.get('error') if isinstance(shown.get('error'), dict) else {}
+            update_reads[pk] = {'phase': str(shown.get('phase') or ''), 'action': str(offered.get('action') or 'none')}
+        except Exception:  # noqa: BLE001 - said in the note as not read, never read as any state
+            update_reads[pk] = None
 # Refutation p2, install2:1: the encounters whose stored state this revision labels from more than the state (worded from
 # the run it reads: a response refused whole is provider_failed, 'Provider response not used'). An older revision labels
 # a state by its name alone ('Provider request failed', for a request that succeeded): put_back_states gives each the
@@ -2440,7 +2564,135 @@ answer = {'closed': closed, 'kinds': kinds, 'encounters': len(encounters), 'runs
 written = [pk for pk, reasons in hazards.items() if 'member_answer' in reasons or 'modifier' in reasons]
 if written:
     answer['written_since'] = written_since(since, written)
+if reading:
+    answer['reading_closed'] = dict(sorted(reading.items()))
+if pending:
+    answer['update_pending'] = pending
+if update_reads:
+    answer['update_reads'] = update_reads
+if reading or pending:
+    answer['update_revert'] = bool(P.get('revert'))  # whether the next worker runs no appraise (has no update)
+if reverted:
+    answer['reverted'] = reverted
 print(ANSWER + json.dumps(answer))
+'''
+# Design v2 (amendment 1, 9.4; step 6b, refutation 6b-r1 P2): the unapplied saves a close reverted for an earlier image
+# (CLOSE_STAGES' 'reverted', given as P['reverted']: {encounter: {field: {'saved', 'restored'}}}) put back when the
+# undo that closed them leaves this revision's pair to serve again after all - a switch-back undone before its switch,
+# an S4 undo or a rollback-app that keeps this revision's web serving, a swap that leaves neither pair running, a
+# rollback-app stopped after its close with this pair to be started again (refutation 6b-r2 F1, DECISIONS D247) - so the
+# revision that serves, whose own worker reads the update, shows the member's saved change as an update pending, as
+# before the close, never the earlier codes as current with the change silently gone. Under each encounter's row lock,
+# and only where nothing changed since the revert: its newest 'context.rollback_reverted' audit row names its current
+# context and exactly those fields, its values are that context's, and each field holds the value the revert restored;
+# otherwise it is left as it stands and named in 'not_reapplied' with why ('gone', 'fields', 'context_changed',
+# 'values_changed'). Each put back writes one 'context.rollback_reapplied' audit row naming the fields and the context.
+# D247 DQ1 (option (a)): in the same transaction the put-back queues again the first reading stage the update owes, by
+# the save's own rule (AMENDMENT-1 2.3, jobs._save_awaiting_reading): a reading stage of the revision still QUEUED is
+# coalesced with (its deadline renewed, nothing more queued: 'coalesced'); a reading that failed before is left to show
+# that failure (nothing queued, as a save queues nothing then); otherwise the owed stage (jobs._owed_reading,
+# jobs._owed_key: interpret, or the appraise stage of the read extraction) is queued for the member whose save it was
+# (the newest 'context.changed' row before the revert: its actor, else the requester of the stage it names) under the
+# save's own key shape, its base key plus ':after-save:' and the revert's audit row - so one revert's put-back queues it
+# at most once ('requeued'), and the stage's own doors send the save's request at most once - when the serving worker
+# runs that stage (its kind is in this image's jobs.STAGES; the put-back runs in the image of the revision that serves).
+# A stage so queued, or coalesced with, waits jobs.QUEUE_DEADLINE for a worker to claim it and then expires before it
+# starts, as any queued stage does (refutation w7r 6b-r1 R3: reapply_reverted's sentence says so, never that it runs).
+# Otherwise nothing is queued and why is named ('not_requeued': 'reading_failed', 'no_stage', 'no_save',
+# 'queued_before', 'not_readable'), and such an update reads paused, with nothing to resume. Nothing is sent here.
+REAPPLY_REVERTED = '''
+from django.db import transaction
+from studio import jobs, models, review
+CONTEXT_FIELDS = ('service_date', 'setting', 'billing_context', 'patient_status')  # studio.types.CONTEXT_FACTS
+SAVE_RULE = ('enqueue', 'STAGES', 'INTERPRET', 'APPRAISE', 'AFTER_SAVE', 'READABLE', '_coalesce', '_owed_reading',
+             '_read_extraction', '_owed_key', '_interpret_key', '_reading_failed')  # jobs._save_awaiting_reading's own
+
+
+def saved_by(encounter, marker):
+    """The member whose save the revert set back: the newest 'context.changed' row of the encounter recorded before the
+    revert's row ``marker`` (a restore aside) - its actor, else the requester of the stage it names; None for none."""
+    row = (models.AuditEvent.objects.filter(encounter_id=encounter.pk, event='context.changed',
+                                            created_at__lte=marker.created_at)
+           .exclude(data__has_key='restored').order_by('-created_at', '-pk').first())
+    if row is None:
+        return None
+    if row.actor_id is not None:
+        return row.actor
+    reading = row.data.get('reading') if isinstance(row.data, dict) else None
+    job = models.Job.objects.filter(pk=reading, encounter_id=encounter.pk).first() if reading else None
+    return job.requested_by if job is not None else None
+
+
+def requeue(encounter, marker):
+    """The first reading stage the update of ``encounter`` owes, queued again as its save queued it (2.3), once for the
+    revert ``marker``: ('requeued' or 'coalesced', kind, job id), or ('not_requeued', why, None)."""
+    if not all(hasattr(jobs, name) for name in SAVE_RULE):
+        return 'not_requeued', 'no_stage', None
+    revision = encounter.current_revision
+    if revision is None or revision.extraction_status not in jobs.READABLE:
+        return 'not_requeued', 'not_readable', None
+    found = jobs._coalesce(encounter, revision)
+    if found is not None:
+        return 'coalesced', found.kind, str(found.pk)
+    kind = jobs._owed_reading(revision)
+    extraction = jobs._read_extraction(revision) if kind == jobs.APPRAISE else None
+    base = jobs._owed_key(revision, kind, extraction)
+    if base is None:  # no appraise stage of the read extraction is known: interpret's door queues it (2.3)
+        kind, base = jobs.INTERPRET, jobs._interpret_key(revision)
+    if kind not in jobs.STAGES:
+        return 'not_requeued', 'no_stage', None
+    if jobs._reading_failed(revision, kind):
+        return 'not_requeued', 'reading_failed', None
+    member = saved_by(encounter, marker)
+    if member is None:
+        return 'not_requeued', 'no_save', None
+    key = f'{base}:{jobs.AFTER_SAVE}:{marker.pk}'
+    if models.Job.objects.filter(idempotency_key=key).exists():
+        return 'not_requeued', 'queued_before', None
+    job = jobs.enqueue(kind, encounter=encounter, revision=revision, key=key, requested_by=member)
+    return 'requeued', kind, str(job.pk)
+
+
+reapplied, kept, queued = {}, {}, {'requeued': {}, 'coalesced': {}, 'not_requeued': {}}
+for pk, fields in sorted(P['reverted'].items()):
+    if not (isinstance(fields, dict) and fields and all(name in CONTEXT_FIELDS and isinstance(pair, dict)
+                                                        and set(pair) == {'saved', 'restored'}
+                                                        for name, pair in fields.items())):
+        kept[pk] = 'fields'
+        continue
+    with transaction.atomic():
+        encounter = models.Encounter.objects.select_for_update().filter(pk=pk).first()
+        if encounter is None:
+            kept[pk] = 'gone'
+            continue
+        context = encounter.current_context if encounter.current_context_id else None
+        marker = (models.AuditEvent.objects.filter(encounter_id=encounter.pk, event='context.rollback_reverted')
+                  .order_by('-created_at', '-pk').first())
+        if (context is None or marker is None or not isinstance(marker.data, dict)
+                or marker.data.get('context') != str(context.pk)
+                or sorted(marker.data.get('fields') or ()) != sorted(fields)):
+            kept[pk] = 'context_changed'
+            continue
+        now = review.values(encounter)
+        if now != review.values(context) or any(now.get(name) != pair['restored'] for name, pair in fields.items()):
+            kept[pk] = 'values_changed'
+            continue
+        stored = dict(encounter.user_values) if isinstance(encounter.user_values, dict) else {}
+        for name, pair in fields.items():
+            if pair['saved'] is None:
+                stored.pop(name, None)
+            else:
+                stored[name] = pair['saved']
+        encounter.user_values = stored
+        encounter.save(update_fields=['user_values', 'updated_at'])
+        models.AuditEvent.objects.create(workspace_id=encounter.workspace_id, encounter=encounter, actor=None,
+                                         actor_kind='system', event='context.rollback_reapplied',
+                                         data={'fields': sorted(fields), 'context': str(context.pk)})
+        reapplied[pk] = sorted(fields)
+        outcome, what, job = requeue(encounter, marker)  # D247 DQ1: under the same row lock, as the save queued it
+        queued[outcome][pk] = what if outcome == 'not_requeued' else {'kind': what, 'job': job}
+    review.refresh_state(models.Encounter.objects.get(pk=pk))
+print(ANSWER + json.dumps({'reapplied': reapplied, 'not_reapplied': kept, **queued}))
 '''
 # The stages this image's worker cannot run (a kind its STAGES does not know) that are queued, running, or cancelled
 # as their encounter's latest stage (what a Resume runs again): a worker meeting one ends on a KeyError (migrate-3).
@@ -2523,6 +2775,134 @@ if interpretation is not None and all(any(f.name == 'event_inventory' for f in m
         made['reinstatable'] = sorted(exposed)
 print(ANSWER + json.dumps({'interpretation': made}))
 '''
+# Design v2 (FINAL-V2 6.2 [R:MO-1]; step 6b): the app phase asserts on the target, before the switch, that NO DESIGN V1
+# ROW exists - no Assessment whose engine_version is V1_ENGINE_VERSION and no EventInventory row whose
+# interpretation_version is V1_INTERPRETATION_VERSION - and refuses otherwise. v1 rows only, by exact version: v2's own
+# rows (cpt-studio-events@2, gemini-events@2/appraisal@1) and every legacy row never trip it, so a fix release after the
+# walk, the re-install after a switch-back and a same-revision app re-run (a provider-mode switch, the access check run
+# again, the recovery of a failed app: D83) all pass. (The pre-refutation predicate, the family cpt-studio-events@% and
+# any EventInventory row, refused every install after v2's first row, on append-only tables only a deletion could
+# clear.) The branch was never installed, so live holds no v1 row; a test instance's v1 rows are read as stored by
+# EventReader's V1 branch and are never deleted here. The versions are the design's literals, given as P (the script
+# reads no label of the image's). Read in this revision's image, after migrate (0014 makes EventInventory); nothing is
+# written or sent.
+V1_ENGINE_VERSION = 'cpt-studio-events@1'
+V1_INTERPRETATION_VERSION = 'gemini-events@1'
+NAMED_LIMIT = 200  # encounter ids an in-image count names (its count is complete)
+V1_ROWS = '''
+from studio import models
+assessments = models.Assessment.objects.filter(engine_version=P['engine_version'])
+inventories = models.EventInventory.objects.filter(interpretation_version=P['interpretation_version'])
+named = sorted({str(pk) for pk in (*assessments.values_list('encounter_id', flat=True),
+                                   *inventories.values_list('encounter_id', flat=True))})
+print(ANSWER + json.dumps({'engine_version': P['engine_version'], 'interpretation_version': P['interpretation_version'],
+                           'assessments': assessments.count(), 'inventories': inventories.count(),
+                           'encounter_count': len(named), 'encounters': named[:P['limit']]}))
+'''
+# Amendment 1, 9.5 (step 6b): the install counts, read-only, on the target, before the switch (the app phase, after
+# migrate), printed into the install transcript and NEVER a refusal (9.5: a refusal on them would refuse a fix release,
+# the re-install after a switch-back and a same-revision app, MO-1's defect). In this revision's image, by its own rules:
+#   size        the live encounters whose current revision has no inventory read at the current versions
+#               (jobs.current_versions) and is over INTERPRET_MAX_CHARS or INTERPRET_MAX_PAGES (jobs._size_bound;
+#               expected 0 for characters, D25), and those whose text fails the pure framing check (FINAL-V2 1.2 rule
+#               8's [S<n>] label refusal: contract/extract_prompt.unframed over jobs._participant_pages, as A12's
+#               SAVE_UNPREPARED reads it, whatever the size), with the live maximum length (19,398 at D25) beside the
+#               bound - their details could not be changed after the install (A12, class b);
+#   values      the encounters with a current context of their current revision whose values(encounter) differ from
+#               values(current context) (review.values): printed on every install; on the first install over the
+#               installed release (no gemini context, no EventInventory row of a v2 version) expected 0, and a non-zero
+#               count names its encounters for the owner (they would read an update no save queued);
+#   refused     the provider refusals recorded before the install that no ProviderHold row names: Corti runs FAILED
+#               and sent with 401, 402, 403 or 429; participant runs FAILED and sent with an exchange A20 holds
+#               (provider_holds.classify_run); Corti runs recorded not sent with the installed adapter's token-refusal
+#               sentence (P['token_sentence']) - each with its newest date (7.3's stated limit, class b);
+#   a21         the encounters whose current assessment's own document review is an UNKNOWN run already reconciled while
+#               a reading is owed (review.reconciled_unknown, review.reading_owed): expected 0, named when not;
+#   holds       every standing provider hold (provider_holds.state) and the interpreter hold (holds.state): the
+#               provider holds in the install transcript.
+# Nothing is written or sent.
+INSTALL_COUNTS = '''
+from django.conf import settings
+from studio import interpretation, jobs, models, provider_holds, review
+from studio.interpretation import holds as interpreter_holds
+from studio.interpretation.contract import extract_prompt
+Run, Inventory, limit = models.ProviderRun, models.EventInventory, P['limit']
+versions = jobs.current_versions()
+read_now = set(Inventory.objects.filter(state=Inventory.READ, interpretation_version=versions[0],
+                                        inventory_version=versions[1]).values_list('revision_id', flat=True))
+rows = list(models.Encounter.objects.filter(current_revision__isnull=False)
+            .select_related('current_revision', 'current_context').order_by('created_at', 'pk'))
+over_chars, over_pages, unframed, longest, unread, empty, unextracted = [], [], [], 0, 0, 0, 0
+extracted = (models.SourceRevision.OK, models.SourceRevision.PARTIAL)  # the installed release saves a context on these only
+for encounter in rows:
+    revision = encounter.current_revision
+    longest = max(longest, len(revision.text or ''))
+    if revision.pk in read_now:
+        continue
+    unread += 1
+    bound = jobs._size_bound(revision)
+    if bound == 'chars':
+        over_chars.append(str(encounter.pk))
+    elif bound == 'pages':
+        over_pages.append(str(encounter.pk))
+    try:
+        reason = extract_prompt.unframed(revision.text or '', jobs._participant_pages(revision))
+    except (TypeError, ValueError):
+        reason = True
+    if reason is not None:
+        unframed.append(str(encounter.pk))
+        if getattr(reason, 'value', None) == 'empty':  # no text
+            empty += 1
+            unextracted += revision.extraction_status not in extracted  # an extraction that failed or has not run
+differ = [str(encounter.pk) for encounter in rows
+          if encounter.current_context_id is not None
+          and encounter.current_context.revision_id == encounter.current_revision_id
+          and review.values(encounter) != review.values(encounter.current_context)]
+gemini_context = interpretation.CONTEXT_VERSION.partition('@')[0] + '@'  # every gemini-context@ version
+first = (not models.EncounterContext.objects.filter(version__startswith=gemini_context).exists()
+         and not Inventory.objects.exclude(interpretation_version=interpretation.INTERPRETATION_VERSION).exists())
+named = set(models.ProviderHold.objects.values_list('run_id', flat=True))
+corti = sorted(name for name, provider in provider_holds.COVERS.items() if provider == provider_holds.CORTI)
+participants = sorted(name for name, provider in provider_holds.COVERS.items() if provider != provider_holds.CORTI)
+
+
+def newest(found):
+    times = [run.created_at for run in found]
+    return {'count': len(found), 'newest': max(times).isoformat() if times else None}
+
+
+refused = {
+    'corti_sent': newest([run for run in Run.objects.filter(
+        provider__in=corti, state=Run.FAILED, sent=True,
+        http_status__in=sorted(provider_holds.REFUSED_BEFORE_STATUSES)).order_by('created_at') if run.pk not in named]),
+    'participant_sent': newest([run for run in Run.objects.filter(
+        provider__in=participants, state=Run.FAILED, sent=True).order_by('created_at')
+        if run.pk not in named and provider_holds.classify_run(run) is not None]),
+    'corti_token': newest([run for run in Run.objects.filter(
+        provider__in=corti, state=Run.NOT_SENT, error__startswith=P['token_sentence']).order_by('created_at')
+        if run.pk not in named])}
+a21 = []
+for encounter in rows:
+    assessment = encounter.current_assessment if encounter.current_assessment_id is not None else None
+    if (assessment is not None and assessment.provider_run_id is not None
+            and review.reconciled_unknown(assessment.provider_run) and review.reading_owed(encounter)):
+        a21.append(str(encounter.pk))
+print(ANSWER + json.dumps({
+    'size': {'bound_chars': settings.INTERPRET_MAX_CHARS, 'bound_pages': settings.INTERPRET_MAX_PAGES,
+             'longest_chars': longest, 'without_inventory': unread, 'over_chars': len(over_chars),
+             'over_pages': len(over_pages), 'unframed': len(unframed), 'unframed_empty': empty,
+             'unframed_unextracted': unextracted,
+             'encounters': {'over_chars': over_chars[:limit], 'over_pages': over_pages[:limit],
+                            'unframed': unframed[:limit]}},
+    'values': {'count': len(differ), 'first_install': first, 'encounters': differ[:limit] if first else []},
+    'refused': refused,
+    'a21': {'count': len(a21), 'encounters': a21[:limit]},
+    'holds': {'provider': provider_holds.state(), 'interpreter': interpreter_holds.state()['standing']}}))
+'''
+# The installed release's token-refusal sentence (studio/providers/corti.py at c2e53f8e7d33: "Corti authentication was
+# refused (HTTP {status}); no coding request was sent."), the one field that carries such a refusal it recorded (amendment
+# 1, 7.3: recorded not sent with no status).
+CORTI_TOKEN_REFUSAL = 'Corti authentication was refused (HTTP '
 # The list state the installed revision 057a7d39 derives for each encounter of P['encounters'], written where it differs
 # (refutation p2, install2:1), for an undo with no older image to ask: rollback-app with no pair parked, after which the
 # older revision is installed by its own installer - 057a7d39's never recomputes a stored state, so it shows what it is
@@ -2829,11 +3209,20 @@ def close_undone_stages(image_id, env_bytes, since, revision, reason, kinds) -> 
     unsettled are settled (CLOSE_STAGES). A pair restored or reinstalled afterwards would read that work under its own
     rules: the installed revision's worker ends on a second review it has no stage for, and reads a member date conflict
     as no date at all (refutation r1, migrate-3 and migrate-4; p1, security-0). Run with the undone revision's own
-    image. The answer's 'hazards' name what the next pair would still act on wrongly (UNDO_HAZARDS)."""
+    image. The answer's 'hazards' name what the next pair would still act on wrongly (UNDO_HAZARDS).
+
+    Design v2 (FINAL-V2 6.4; amendment 1, 9.4; step 6b): the same step names every encounter that reads an update of its
+    codes pending ('update_pending', never a refusing reason) and counts the reading stages it closed ('reading_closed');
+    and when the next worker runs no APPRAISE_KIND - it has no update, as the installed c2e53f8e has none, and so is
+    every worker of an image an undo cannot ask (COMMON_STAGE_KINDS) - it reverts each pending save's unapplied values
+    to the current context's ('reverted', with a 'context.rollback_reverted' audit row each). A next worker that runs
+    'appraise' is a design v2 worker, which reads the pending update itself, so nothing is reverted for it."""
     note = (f'Closed by the installer: {reason} (revision {revision[:12]}), so this stage will not run. Change the '
             'context, add an addendum or upload the document again to process it.')
     return app_script(image_id, env_bytes, CLOSE_STAGES, {'since': since.isoformat(), 'note': note,
-                                                          'kinds': sorted(kinds)},
+                                                          'kinds': sorted(kinds),
+                                                          'revert': APPRAISE_KIND not in set(kinds),
+                                                          'reading_kinds': list(READING_STAGE_KINDS)},
                       what=f'Closing the stages revision {revision[:12]} left open')
 
 
@@ -2914,6 +3303,591 @@ def interpretation_note(image_id, env_bytes, revision) -> dict:
     if 'reinstatable' in made:
         found['reinstatable'] = list(exposed)
     return found
+
+
+def _is_ids(value) -> bool:
+    return isinstance(value, list) and all(isinstance(item, str) and item for item in value) \
+        and len(set(value)) == len(value)
+
+
+def _undo_parts(closes) -> tuple:
+    """(update_pending, reverted, reading_closed, without_update) merged over the close answers ``closes``
+    (CLOSE_STAGES'; without_update: no close said the next worker has the update), or None when
+    an answer that names any of them does not say what it read. A close that names none of them (an image with no
+    update, or nothing pending) adds nothing; a None or a missing close is skipped (its own receipt says why)."""
+    pending, reverted, reading, reverts = {}, {}, {}, set()
+    for close in closes or ():
+        if not isinstance(close, dict):
+            continue
+        if close.get('update_pending') or close.get('reading_closed'):
+            reverts.add(close.get('update_revert') is not False)  # unsaid: the earlier image is read as having no update
+        named, values, counted = close.get('update_pending', {}), close.get('reverted', {}), close.get('reading_closed', {})
+        if not (isinstance(named, dict) and all(isinstance(pk, str) and isinstance(reasons, list) and reasons
+                                                and all(reason in UNDO_PENDING_REASONS for reason in reasons)
+                                                for pk, reasons in named.items())):
+            return None
+        if not (isinstance(values, dict) and all(
+                isinstance(pk, str) and pk in named and 'values_saved' in named[pk] and isinstance(fields, dict)
+                and fields and all(isinstance(name, str) and isinstance(pair, dict) and set(pair) == {'saved', 'restored'}
+                                   for name, pair in fields.items())
+                for pk, fields in values.items())):
+            return None
+        if not (isinstance(counted, dict) and all(kind in READING_STAGE_KINDS and type(count) is int and count > 0
+                                                  for kind, count in counted.items())):
+            return None
+        for pk, reasons in named.items():
+            pending[pk] = sorted(set(pending.get(pk, [])) | set(reasons))
+        for pk, fields in values.items():
+            reverted.setdefault(pk, {}).update(fields)
+        for kind, count in counted.items():
+            reading[kind] = reading.get(kind, 0) + count
+    return (dict(sorted(pending.items())), dict(sorted(reverted.items())), dict(sorted(reading.items())),
+            all(reverts) if reverts else True)
+
+
+# CLOSE_STAGES' update_pending reasons (UPDATE_PENDING's PENDING_REASONS), read back by the note
+UNDO_PENDING_REASONS = ('values_saved', 'assessment_off_context', 'reconciled_unknown')
+
+
+def _update_reads(closes, pending):
+    """Refutation w7r 6b-r1 R2: what each pending update of ``pending`` reads after the closes ``closes``, as the image
+    of the close read its page (CLOSE_STAGES' 'update_reads', given for a next worker that runs appraise): {encounter:
+    {'phase', 'action'} or None (not read)}, a later close's reading over an earlier one's; an encounter no close read
+    is None. None when an answer that gives it does not say what it read (never read as any state)."""
+    reads = {}
+    for close in closes or ():
+        if not isinstance(close, dict) or 'update_reads' not in close:
+            continue
+        given = close['update_reads']
+        if not (isinstance(given, dict) and all(
+                isinstance(pk, str) and pk in pending and (shown is None or (
+                    isinstance(shown, dict) and set(shown) == {'phase', 'action'}
+                    and all(isinstance(value, str) and value for value in shown.values())))
+                for pk, shown in given.items())):
+            return None
+        reads.update(given)
+    return {pk: reads.get(pk) for pk in sorted(pending)}
+
+
+def _reads_said(reads) -> str:
+    """The note's clauses for what each pending update reads (_update_reads), grouped by the action its page offers:
+    each says what a member can do there, and none promises an action the page does not offer (D247 F2)."""
+    groups = {}
+    for pk, shown in reads.items():
+        key = ('unread', '') if shown is None else (shown['action'], shown['phase'].replace('_', ' '))
+        groups.setdefault(key, []).append(pk)
+    clauses = []
+    for (action, phase), ids in sorted(groups.items()):
+        count = f'{len(ids)} {"reads" if len(ids) == 1 else "read"}'
+        if action == 'retry_update':
+            clauses.append(f'{count} {phase}, and its member\'s "Try updating again" queues the failed stage again')
+        elif action == 'retry_reading':
+            clauses.append(f'{count} {phase}, and its member\'s "Try reading again" queues its reading again')
+        elif action == 'resume':
+            clauses.append(f'{count} {phase}, and its member\'s "Resume processing" runs it again')
+        elif action == 'none' and phase == 'paused':
+            clauses.append(f'{count} paused, with nothing to resume or retry, until its member saves a change of a '
+                           'detail, which queues the update again')
+        elif action == 'none':
+            clauses.append(f'{count} {phase}, with nothing offered on its page')
+        elif action == 'unread':
+            clauses.append(f'{len(ids)} could not be read after the close')
+        else:
+            clauses.append(f'{count} {phase}, offering {action}')
+    return '; '.join(clauses)
+
+
+def with_update_note(note, closes) -> dict:
+    """Design v2 (FINAL-V2 6.4; amendment 1, 9.4; step 6b): the undo's declared note (interpretation_note's ``note``)
+    with what the closes ``closes`` did for the amendment's update: 'reading_closed' (the interpret and appraise stages
+    failed with the installer's note, which no earlier worker runs), 'update_pending' (the encounters that read an update
+    of their codes pending - a stated rollback limit like D59's 'reinstatable', never a refusal) and 'reverted' (the
+    unapplied values each such save had, set back to the current context's, with the saved and restored values), each
+    key given only when there is one, and each said in the note's sentence with what the operator does. D59's
+    reinstatable clause stays as interpretation_note wrote it. An answer that does not say what it read is said so,
+    never read as none. Refutation 6b-r2 F2 (DECISIONS D247): every sentence says what is so - an earlier revision that
+    runs both reading stages offers no retry and no resume of a reading stage the installer closed, and nothing is
+    queued for an update there (D247 DQ1's 'otherwise'). Refutation w7r 6b-r1 R2: what such an update then reads depends
+    on the stage the close left (a closed reading or document review reads paused, with nothing to resume, until its
+    member saves a change of a detail; a closed analysis or assessment reads failed, and "Try updating again" queues it
+    again), so the note words each pending update by what it reads after the close, as the close's image read its page
+    ('update_reads', grouped by the action offered) - never one reading for all, and no retry promised where none is
+    offered; one the close did not read is said so."""
+    out = dict(note) if isinstance(note, dict) else {'note': ''}
+    sentence = out.get('note') if isinstance(out.get('note'), str) else ''
+    parts = _undo_parts(closes)
+    reads = _update_reads(closes, parts[0]) if parts is not None else None
+    if parts is None or (reads is None and not parts[3]):
+        out['update_pending'] = None
+        out['note'] = (sentence + '; ' if sentence else '') + (
+            'the encounters with an update of their codes pending were not read (a close did not say what it read): '
+            'read each close in this receipt before anyone reviews on the earlier web')
+        return out
+    pending, reverted, reading, without_update = parts
+    clauses = []
+    if reading:
+        total = sum(reading.values())
+        said = (': the earlier image runs neither interpret nor appraise, and a context save there reads the document '
+                'with its own reader' if without_update else
+                ': each was failed with the installer\'s note, and nothing queues it again - the earlier revision runs '
+                'both, but offers no retry and no resume of a stage the installer closed')
+        clauses.append(f'{total} reading stage{"s were" if total != 1 else " was"} closed '
+                       f'({", ".join(f"{kind} {count}" for kind, count in reading.items())}){said}')
+        out['reading_closed'] = reading
+    if pending:
+        out['update_pending'] = sorted(pending)
+        if without_update:
+            said = (': the earlier image has no update and shows the codes from before the change, so tell those '
+                    'encounters\' members that the codes shown predate their change')
+        else:
+            # refutation w7r 6b-r1 R2: each update worded by what it reads after the close, never one reading for all
+            out['update_reads'] = reads
+            said = (': the earlier revision reads an update itself (its worker runs appraise), but each stage of it '
+                    'this revision\'s pair left open was closed with the others (failed, with the installer\'s '
+                    'note) and nothing queues it again; as this revision\'s page reads each after the close '
+                    '(update_reads; an earlier design v2 revision reads an update by the same amendment, 7.1 and '
+                    '7.2): ' + _reads_said(reads) + ' - tell those encounters\' members so')
+        clauses.append(f'{len(pending)} {"encounter reads" if len(pending) == 1 else "encounters read"} an update of '
+                       f'their codes pending (update_pending){said}')
+        checked = [pk for pk, reasons in pending.items() if 'reconciled_unknown' in reasons]
+        if checked:
+            clauses.append(f'{len(checked)} of them read an update no save started (a reconciled document review, '
+                           'A21)' + (': the earlier image reads that reconciled run as an outcome still being '
+                                     'confirmed, with nothing pending' if without_update else ''))
+    if reverted:
+        out['reverted'] = reverted
+        clauses.append(f'the unapplied details of {len(reverted)} {"encounter were" if len(reverted) == 1 else "encounters were"} '
+                       'set back to their current context\'s values (context.rollback_reverted; each field\'s saved '
+                       'and restored value is in reverted): ask each member to save the change again on the earlier web')
+    if clauses:
+        out['note'] = '; '.join(([sentence] if sentence else []) + clauses)
+    return out
+
+
+# REAPPLY_REVERTED's answer for the stage it queues again (D247 DQ1): the reasons it names in 'not_requeued', and the
+# kinds 'requeued' (jobs._owed_reading's) and 'coalesced' (jobs._coalesce's) may name
+REQUEUE_REASONS = ('reading_failed', 'no_stage', 'no_save', 'queued_before', 'not_readable')
+REQUEUED_KINDS = READING_STAGE_KINDS
+# studio.jobs.QUEUE_DEADLINE of this revision's image (a test pins the two equal): a queued stage waits that long for a
+# worker to claim it, then claim_next expires it before it starts (refutation w7r 6b-r1 R3)
+QUEUE_DEADLINE_MINUTES = 30
+COALESCED_KINDS = ('extract',) + READING_STAGE_KINDS
+
+
+def named_ids(ids) -> str:
+    """Encounter ids for a message (refutation 6b-r2 F1: the message names them): sorted, NAMED_LIMIT at most, then
+    how many more - every one is in the receipt."""
+    ordered = sorted(ids)
+    shown = ', '.join(ordered[:NAMED_LIMIT])
+    return shown + (f' and {len(ordered) - NAMED_LIMIT} more' if len(ordered) > NAMED_LIMIT else '')
+
+
+def _queued_said(put, requeued, coalesced, unqueued) -> bool:
+    """Whether REAPPLY_REVERTED's answer says, for each encounter it put back and for no other, what it queued again
+    (D247 DQ1): one of 'requeued' and 'coalesced' ({'kind', 'job'}) or 'not_requeued' (a reason it names)."""
+    if not all(isinstance(found, dict) for found in (requeued, coalesced, unqueued)):
+        return False
+    sets = (set(requeued), set(coalesced), set(unqueued))
+    if sets[0] & sets[1] or sets[0] & sets[2] or sets[1] & sets[2] or sets[0] | sets[1] | sets[2] != set(put):
+        return False
+    return (all(isinstance(item, dict) and item.get('kind') in REQUEUED_KINDS and isinstance(item.get('job'), str)
+                and item['job'] for item in requeued.values())
+            and all(isinstance(item, dict) and item.get('kind') in COALESCED_KINDS and isinstance(item.get('job'), str)
+                    and item['job'] for item in coalesced.values())
+            and all(why in REQUEUE_REASONS for why in unqueued.values()))
+
+
+def _kinds_said(found) -> str:
+    counted = {}
+    for item in found.values():
+        counted[item['kind']] = counted.get(item['kind'], 0) + 1
+    return ', '.join(f'{kind} {count}' for kind, count in sorted(counted.items()))
+
+
+def reapply_reverted(image_id, env_bytes, closes) -> dict:
+    """Design v2 (amendment 1, 9.4; refutation 6b-r1 P2): the unapplied saves the closes ``closes`` reverted for an
+    earlier image (CLOSE_STAGES' 'reverted'), put back by REAPPLY_REVERTED in ``image_id`` (this revision's image) - for
+    an undo that, after its close, leaves this revision's pair to serve again: its web serves on, or neither pair runs
+    and the next phase is the operator's, or rollback-app stopped with this pair to be started again (refutation 6b-r2
+    F1, DECISIONS D247); its worker reads the update itself. D247 DQ1: the put-back also queues again, once, the first
+    reading stage each update owes, as its save queued it (REAPPLY_REVERTED). {'asked': {encounter: [fields]},
+    'reapplied', 'not_reapplied', 'requeued', 'coalesced', 'not_requeued', 'problem', 'sentence'}: nothing runs and the
+    sentence is '' when no close reverted anything; a close that does not say what it reverted, or a put-back that fails
+    or does not say what it did, is the 'problem', said in the sentence with the encounters named and what the operator
+    does - never read as nothing to put back, nor as put back (an interrupt is never swallowed)."""
+    out = {'asked': {}, 'reapplied': {}, 'not_reapplied': {}, 'requeued': {}, 'coalesced': {}, 'not_requeued': {},
+           'problem': '', 'sentence': ''}
+    parts = _undo_parts(closes)
+    if parts is None:
+        out['problem'] = 'a close did not say what it set back'
+        out['sentence'] = ('the unapplied details a close may have set back to their context\'s values were not put '
+                           'back (a close did not say what it set back): read each close in this receipt, and ask '
+                           'the members of the encounters it names to check their details')
+        return out
+    reverted = parts[1]
+    if not reverted:
+        return out
+    out['asked'] = {pk: sorted(fields) for pk, fields in reverted.items()}
+    try:
+        answer = app_script(image_id, env_bytes, REAPPLY_REVERTED, {'reverted': reverted},
+                            what='Putting back the unapplied details the close set back')
+    except Exception as error:  # noqa: BLE001 — said, with what the operator does; an interrupt still stops the undo
+        answer, out['problem'] = None, str(error) or type(error).__name__
+    said = {name: answer.get(name) if isinstance(answer, dict) else None
+            for name in ('reapplied', 'not_reapplied', 'requeued', 'coalesced', 'not_requeued')}
+    put, kept = said['reapplied'], said['not_reapplied']
+    if not out['problem'] and not (
+            isinstance(put, dict) and isinstance(kept, dict) and not set(put) & set(kept)
+            and set(put) | set(kept) == set(reverted)
+            and all(isinstance(fields, list) and sorted(fields) == sorted(reverted[pk]) for pk, fields in put.items())
+            and all(isinstance(why, str) and why for why in kept.values())
+            and _queued_said(put, said['requeued'], said['coalesced'], said['not_requeued'])):
+        out['problem'] = 'the put-back did not say what it did'
+    if out['problem']:
+        # refutation 6b-r2 F1/F2: the encounters named; a put-back that failed or did not say what it did may have put
+        # some of them back (each encounter is its own transaction), so neither "put back" nor "not put back" is said
+        out['sentence'] = may_not_have_been_put_back(reverted, out['problem'], 'this revision\'s web')
+        return out
+    out.update(reapplied=dict(sorted(put.items())), not_reapplied=dict(sorted(kept.items())),
+               requeued=dict(sorted(said['requeued'].items())), coalesced=dict(sorted(said['coalesced'].items())),
+               not_requeued=dict(sorted(said['not_requeued'].items())))
+    clauses = []
+    if put:
+        clauses.append(f'the unapplied details the close had set back on {len(put)} '
+                       f'{"encounter were" if len(put) == 1 else "encounters were"} put back '
+                       '(context.rollback_reapplied): each reads its update pending again, as before the close')
+    requeued, coalesced, unqueued = out['requeued'], out['coalesced'], out['not_requeued']
+    # refutation w7r 6b-r1 R3 (D247 F2): a queued stage runs only if a worker claims it before its queue deadline -
+    # claim_next expires one claimed after it, without starting it (wherever no worker of this revision runs at the
+    # put-back: the stopped layouts) - so the sentence says what it reads while it waits, how long it may wait and what
+    # the update reads after, never that it simply runs
+    if requeued:
+        clauses.append(f'the first reading stage the update of {len(requeued)} of them owes was queued again, once '
+                       f'each ({_kinds_said(requeued)}; reapplied.requeued names each, under its save\'s key with the '
+                       'revert\'s audit row): while it waits for a worker of this revision the update reads '
+                       f'updating; claimed within the queue deadline ({QUEUE_DEADLINE_MINUTES} minutes from the '
+                       'put-back), it runs, its doors sending the save\'s request at most once; claimed after it, it '
+                       'expires without starting, and the update then reads stopped, with Resume')
+    if coalesced:
+        clauses.append(f'{len(coalesced)} of them had a reading stage still queued ({_kinds_said(coalesced)}), its '
+                       f'deadline renewed: claimed by a worker of this revision within {QUEUE_DEADLINE_MINUTES} '
+                       'minutes of the put-back, it reads the details put back; claimed after that, it expires without '
+                       'starting, and the update then reads stopped, with Resume')
+    failed = sorted(pk for pk, why in unqueued.items() if why == 'reading_failed')
+    if failed:
+        clauses.append(f'{len(failed)} of them had a reading that failed before the close, so nothing was queued for '
+                       'it, as a save queues nothing then: each shows that failure as it did before the close')
+    again = sorted(pk for pk, why in unqueued.items() if why == 'queued_before')
+    if again:
+        clauses.append(f'for {len(again)} of them a stage had been queued again for this revert before, so nothing '
+                       'more was queued')
+    unsaved = sorted(pk for pk, why in unqueued.items() if why == 'no_save')
+    if unsaved:
+        clauses.append(f'for {len(unsaved)} of them no member\'s save was found to queue a stage for, so nothing was '
+                       'queued: such an update reads paused, with nothing to resume, until its member changes a detail '
+                       'again, which queues its reading')
+    other = {pk: why for pk, why in unqueued.items() if why in ('no_stage', 'not_readable')}
+    if other:
+        clauses.append(f'for {len(other)} of them nothing was queued '
+                       f'({", ".join(f"{why} {list(other.values()).count(why)}" for why in sorted(set(other.values())))}'
+                       ': this revision\'s worker runs no such stage, or the revision\'s text was not read): such an '
+                       'update reads paused, with nothing to resume')
+    if kept:
+        clauses.append(f'{len(kept)} {"encounter was" if len(kept) == 1 else "encounters were"} left as the close set '
+                       f'{"it" if len(kept) == 1 else "them"}, having changed since (reapplied.not_reapplied names '
+                       'each): ask those members to check their details')
+    out['sentence'] = '; '.join(clauses)
+    return out
+
+
+def may_not_have_been_put_back(reverted, problem, where) -> str:
+    """The sentence for saves a put-back may or may not have put back - it failed, did not say what it did, or was
+    interrupted: REAPPLY_REVERTED puts each encounter back in its own transaction - naming the encounters
+    (``reverted``: CLOSE_STAGES' set-back fields by encounter) and saying neither "put back" nor "not put back"
+    (refutation 6b-r2 F1/F2); ``where`` is the web the members check their details on."""
+    return (f'the unapplied details the close set back on {len(reverted)} '
+            f'{"encounter" if len(reverted) == 1 else "encounters"} ({named_ids(reverted)}; context.rollback_reverted) '
+            f'may not have been put back ({problem}): context.rollback_reapplied names each one that was, so ask each '
+            f'of those members to check their details on {where}')
+
+
+def interrupted_put_back(closes, error) -> dict:
+    """reapply_reverted's answer for a put-back that raised before it answered - an interrupt (a Ctrl-C), or any error
+    reapply_reverted does not answer itself (refutation w7r 6b-r1 R1): any encounter asked may or may not have been put
+    back (each in its own transaction) - the 'problem', with 'interrupted' True, and the sentence naming them; what each
+    field was saved and restored as stays in the close's own record."""
+    parts = _undo_parts(closes)
+    reverted = parts[1] if parts is not None else {}
+    problem = (f'the put-back {"stopped on an error" if isinstance(error, Exception) else "was interrupted"} '
+               f'({str(error) or type(error).__name__})')
+    return {'asked': {pk: sorted(fields) for pk, fields in reverted.items()}, 'reapplied': {}, 'not_reapplied': {},
+            'requeued': {}, 'coalesced': {}, 'not_requeued': {}, 'problem': problem, 'interrupted': True,
+            'sentence': may_not_have_been_put_back(reverted, problem, 'whichever web serves next') if reverted else ''}
+
+
+def kept_serving(image_id, env_bytes, closes, details) -> str:
+    """reapply_reverted for an undo whose close set pending saves back and that then leaves this revision's pair to
+    serve again - its web keeps serving, neither pair runs for the operator to choose, or rollback-app stopped with this
+    pair to be started again (refutation 6b-r1 P2; refutation 6b-r2 F1, DECISIONS D247: before the message that says
+    so): recorded in ``details`` as 'reapplied' when anything was asked or went wrong; the sentence for the undo's
+    message (' ...' or '').
+
+    Refutation w7r 6b-r1 R1: an interrupt while the put-back runs is recorded here (interrupted_put_back: 'reapplied'
+    says so, and the sentence names the encounters the close set back as possibly not put back), never lost with the
+    message that was being built - the close's record of what each member saved is in ``details`` or the caller's
+    receipt. The phase still stops on it: every caller raises its message right after (rollback-app and the swap), or
+    returns it to an undo that raises it (the S4 undo, return_to_old_web, rollback-app in the keep layout)."""
+    try:
+        done = reapply_reverted(image_id, env_bytes, closes)
+    except BaseException as error:  # noqa: BLE001 — recorded and said; the caller's InstallError stops the phase
+        done = interrupted_put_back(closes, error)
+    if done['asked'] or done['problem']:
+        details['reapplied'] = done
+    return f' {done["sentence"][:1].upper()}{done["sentence"][1:]}.' if done['sentence'] else ''
+
+
+def not_put_back(closes, why, where='stages_closed.reverted') -> str:
+    """The sentence for an undo's message that may leave this revision's pair to serve again when the put-back could
+    not run (refutation 6b-r2 F1, DECISIONS D247) - an interrupt, or an undo left half way, which puts nothing back while
+    the earlier web may serve (F3): it names the encounters whose saves the close set back (context.rollback_reverted;
+    ``where`` names the receipt's field) and says they were not put back ' ...', or '' when nothing was set back."""
+    parts = _undo_parts(closes)
+    if parts is None:
+        return (' A close did not say which unapplied details it set back to their context\'s values, and nothing was '
+                f'put back ({why}): read each close in this receipt, and ask the members of the encounters it names to '
+                'check their details.')
+    reverted = parts[1]
+    if not reverted:
+        return ''
+    return (f' The unapplied details the close set back on {len(reverted)} '
+            f'{"encounter" if len(reverted) == 1 else "encounters"} ({named_ids(reverted)}; context.rollback_reverted, '
+            f'each field\'s saved and restored value in {where}) were not put back '
+            f'({why}): whichever web serves next, ask each of those members to save the change again there.')
+
+
+def possibly_set_back(started_at) -> str:
+    """The switch-back's clause (refutation r3, D-5), its subject the close, for a close that was started and gave no
+    answer - CLOSE_STAGES commits its revert, then reads every encounter, so it may have set pending saves back with
+    nothing said - carried by every undo whose close may have raised after its commit (refutation 6b-r2 F4, DECISIONS
+    D247): 'may have set back ... (context.rollback_reverted rows since ``started_at``) ...'."""
+    return ('may have set back the unapplied details of encounters with an update of their codes pending '
+            f'(context.rollback_reverted rows since {started_at}), which were not put back: ask those members to check '
+            'their details')
+
+
+def set_back_clause(closes) -> str:
+    """The sentence for an undo's message whose closes set pending saves back and that hands the rows to the earlier
+    pair (refutation 6b-r1 P2: a message that omitted the revert): ' ...' or '' when nothing was set back."""
+    parts = _undo_parts(closes)
+    if parts is None:
+        return (' A close did not say which unapplied details it set back to their context\'s values: read each close '
+                'in this receipt before anyone reviews on the earlier web.')
+    reverted = parts[1]
+    if not reverted:
+        return ''
+    return (f' The close set the unapplied details of {len(reverted)} '
+            f'{"encounter" if len(reverted) == 1 else "encounters"} back to their context\'s values for the earlier pair '
+            '(stages_closed.reverted names each field\'s saved and restored value): once it serves, ask each of those '
+            'members to save the change again there.')
+
+
+def undone_note(note, served=None, kept=None) -> dict:
+    """The declared note of an undo that handed the site to NO earlier pair after its close (refutation 6b-r1 P2): a
+    switch-back undone before its switch, or a way back that kept this revision's web serving. interpretation_note's
+    ``note`` as it was counted (D59's 'reinstatable' clause kept), with 'handed': False and a first clause saying no
+    earlier web read the rows - never with_update_note's instructions for an earlier web's members, which no earlier web
+    served (what the close set back, and what was put back, is in the receipt's close and 'reapplied').
+
+    Refutation 6b-r2 F5 (DECISIONS D247): ``served`` - {'from', 'until', 'update_pending'} - when nginx may have routed to
+    the earlier web before the undo settled the vhost back (a B5 undo whose nginx_may_have_read was true): the note then
+    says that earlier web may have served from the switch until the settle, what members who used it saw there, and
+    names the encounters with an update pending ('update_pending'; 'served' records the window). ``kept`` says why no
+    earlier web read the rows when it is not that the undo kept this revision's web serving (rollback-app whose removal
+    stopped after a put-back, refutation 6b-r2 F1).
+
+    Refutation w7r 6b-r1 R5: ``served['reconciled_unknown']`` names the encounters among them whose only reason is A21's
+    (an update no save started): no change of their members was pending, so they are worded apart, as with_update_note
+    words them - never said to have seen "the codes from before their change"."""
+    out = dict(note) if isinstance(note, dict) else {'note': ''}
+    sentence = out.get('note') if isinstance(out.get('note'), str) else ''
+    out['handed'] = False
+    if served:
+        unread = served.get('update_pending') is None  # the close did not say what it read: never read as none
+        pending = [] if unread else sorted(served['update_pending'])
+        unstarted = sorted(set(served.get('reconciled_unknown') or ()) & set(pending))
+        changed = [pk for pk in pending if pk not in unstarted]
+        out['served'] = {'from': served.get('from'), 'until': served.get('until')}
+        out['update_pending'] = None if unread else pending
+        saw = []
+        if changed:
+            saw.append(f'the members of the {len(changed)} {"encounter" if len(changed) == 1 else "encounters"} with '
+                       'an update of their codes pending (update_pending) who used it in that window saw the codes '
+                       'from before their change there (AMENDMENT-1 9.4 says what the earlier web shows for each)')
+        if unstarted:
+            saw.append(f'{len(unstarted)} {"encounter" if len(unstarted) == 1 else "encounters"} with an update '
+                       'pending read an update no save started (a reconciled document review, A21), so no change of '
+                       'their members was pending: an earlier image with no update reads that reconciled run as an '
+                       'outcome still being confirmed, with nothing pending (AMENDMENT-1 9.4)')
+        first = (f'the earlier web may have served from the switch ({served.get("from")}) until the settle '
+                 f'({served.get("until")}): nginx was asked to reload with the vhost naming it and was proven to route to '
+                 'this revision\'s web again only at the settle, the requests it had taken by then finishing during its '
+                 'drain, and the undo then kept this revision\'s web serving'
+                 + ('; the encounters with an update of their codes pending were not read (the close did not say what '
+                    'it read): read it in this receipt, tell the members of those it names that they may have seen the '
+                    'codes from before their change there, and check any decision or export made there in that window'
+                    if unread else
+                    '; ' + '; '.join(saw) + ': tell those members, and check any decision or export made there in that '
+                    'window' if saw else '')
+                 + '; what follows is what that web read')
+    else:
+        why = kept or 'the undo kept this revision\'s web serving'
+        first = f'handed to no earlier web: {why}, so what follows is what an earlier web would have read'
+    out['note'] = '; '.join([first] + ([sentence] if sentence else []))
+    return out
+
+
+def v1_rows(image_id, env_bytes) -> dict:
+    """FINAL-V2 6.2 [R:MO-1]: the design v1 rows on the target (V1_ROWS, in this revision's image)."""
+    return app_script(image_id, env_bytes, V1_ROWS, {'engine_version': V1_ENGINE_VERSION,
+                                                     'interpretation_version': V1_INTERPRETATION_VERSION,
+                                                     'limit': NAMED_LIMIT},
+                      what='Reading the target for design v1 rows')
+
+
+def v1_rows_refusal(answer):
+    """None when ``answer`` (V1_ROWS') says no design v1 row exists; otherwise the refusal's message. An answer that
+    does not say what it read, or counted other versions, refuses (D66: never read as "none")."""
+    if not (isinstance(answer, dict) and answer.get('engine_version') == V1_ENGINE_VERSION
+            and answer.get('interpretation_version') == V1_INTERPRETATION_VERSION
+            and all(type(answer.get(key)) is int and answer[key] >= 0
+                    for key in ('assessments', 'inventories', 'encounter_count'))
+            and _is_ids(answer.get('encounters')) and len(answer['encounters']) <= answer['encounter_count']
+            and (answer['encounter_count'] == 0) == (answer['assessments'] == answer['inventories'] == 0)):
+        return ('the read of the target for design v1 rows gave no answer it could be judged by; nothing was replaced '
+                '(FINAL-V2 6.2: the install refuses unless it is shown that no v1 row exists)')
+    if answer['encounter_count'] == 0:
+        return None
+    shown = ', '.join(answer['encounters'])
+    more = answer['encounter_count'] - len(answer['encounters'])
+    return (f'the target holds design v1 rows - {answer["assessments"]} assessment(s) of engine {V1_ENGINE_VERSION} and '
+            f'{answer["inventories"]} event inventor{"y" if answer["inventories"] == 1 else "ies"} of '
+            f'{V1_INTERPRETATION_VERSION}, on {answer["encounter_count"]} encounter(s): {shown}'
+            + (f' and {more} more' if more > 0 else '') + '; nothing was replaced (FINAL-V2 6.2 [R:MO-1]: this '
+            'release is installed only where no v1 row exists - live never held one; a test instance\'s are read as '
+            'stored and retired with that instance, never deleted by the installer)')
+
+
+def install_counts(image_id, env_bytes) -> dict:
+    """Amendment 1, 9.5: the install counts (INSTALL_COUNTS, in this revision's image), with 'report' - the sentences the
+    owner is told before the switch (class b; a non-zero A21 count, which is reported, not asked). NEVER a refusal: a
+    read that fails, or an answer that does not say what it read, is recorded as not counted (an interrupt is never
+    swallowed), and the install goes on."""
+    try:
+        answer = app_script(image_id, env_bytes, INSTALL_COUNTS, {'limit': NAMED_LIMIT,
+                                                                  'token_sentence': CORTI_TOKEN_REFUSAL},
+                            what='Counting what the owner is told before the switch (amendment 1, 9.5)')
+    except Exception as error:  # noqa: BLE001 — printed, never a refusal (9.5)
+        return {'counted': False, 'why': str(error) or type(error).__name__,
+                'report': ['the install counts of amendment 1, 9.5 were not read: read them on the test instance\'s '
+                           'restored dump before reporting to the owner']}
+    problem = counts_problem(answer)
+    if problem:
+        return {'counted': False, 'why': problem, 'answer': answer,
+                'report': ['the install counts of amendment 1, 9.5 did not say what they read: read them on the test '
+                           'instance\'s restored dump before reporting to the owner']}
+    return {'counted': True, **answer, 'report': counts_report(answer)}
+
+
+def counts_problem(answer) -> str:
+    """'' when ``answer`` is INSTALL_COUNTS' answer in its shape; otherwise what is wrong with it."""
+    def count(value):
+        return type(value) is int and value >= 0
+    if not isinstance(answer, dict):
+        return 'no answer'
+    size, values, refused, a21, holds = (answer.get(key) for key in ('size', 'values', 'refused', 'a21', 'holds'))
+    if not (isinstance(size, dict) and all(count(size.get(key)) for key in (
+            'bound_chars', 'bound_pages', 'longest_chars', 'without_inventory', 'over_chars', 'over_pages', 'unframed',
+            'unframed_empty', 'unframed_unextracted'))
+            and isinstance(size.get('encounters'), dict)
+            and all(_is_ids(size['encounters'].get(key)) and len(size['encounters'][key]) <= size[key]
+                    for key in ('over_chars', 'over_pages', 'unframed'))
+            and size['over_chars'] + size['over_pages'] <= size['without_inventory']
+            and size['unframed_unextracted'] <= size['unframed_empty'] <= size['unframed'] <= size['without_inventory']):
+        return 'the size count is not in its shape'
+    if not (isinstance(values, dict) and count(values.get('count')) and type(values.get('first_install')) is bool
+            and _is_ids(values.get('encounters')) and len(values['encounters']) <= values['count']
+            and (values['first_install'] or not values['encounters'])):
+        return 'the saved-values count is not in its shape'
+    if not (isinstance(refused, dict) and set(refused) == {'corti_sent', 'participant_sent', 'corti_token'}
+            and all(isinstance(item, dict) and count(item.get('count'))
+                    and (item.get('newest') is None) == (item['count'] == 0)
+                    and (item.get('newest') is None or isinstance(item['newest'], str))
+                    for item in refused.values())):
+        return 'the refusal count is not in its shape'
+    if not (isinstance(a21, dict) and count(a21.get('count')) and _is_ids(a21.get('encounters'))
+            and len(a21['encounters']) <= a21['count']):
+        return 'the A21 count is not in its shape'
+    if not (isinstance(holds, dict) and isinstance(holds.get('provider'), dict)
+            and all(isinstance(items, list) for items in holds['provider'].values())
+            and isinstance(holds.get('interpreter'), list)):
+        return 'the holds are not in their shape'
+    return ''
+
+
+def counts_report(answer) -> list:
+    """The sentences the owner is told before the switch (amendment 1, 9.5), from INSTALL_COUNTS' ``answer``: each
+    non-zero class-b count, and a non-zero A21 count; [] when there is nothing to report."""
+    size, values, refused, a21 = answer['size'], answer['values'], answer['refused'], answer['a21']
+    report = []
+    if size['over_chars'] or size['over_pages']:
+        report.append(f'{size["over_chars"]} encounter(s) over {size["bound_chars"]} characters and '
+                      f'{size["over_pages"]} over {size["bound_pages"]} pages have no inventory at the current '
+                      'versions: their details cannot be changed after the install (A12, class b)')
+    # refutation 6b-r1 P8: a revision whose extraction failed or has not run has no text, and the installed release
+    # refuses a context save on it too ("once the document text has been extracted"): no capability is lost there
+    lost = size['unframed'] - size['unframed_unextracted']
+    if lost:
+        empty = size['unframed_empty'] - size['unframed_unextracted']
+        report.append(f'{lost} encounter(s) with no inventory at the current versions have a text that cannot be framed'
+                      + (f' ({empty} of them an extracted text that is empty)' if empty else '')
+                      + ': their details cannot be changed after the install (A12, class b)')
+    if size['unframed_unextracted']:
+        report.append(f'{size["unframed_unextracted"]} encounter(s) have no text because their extraction failed or has '
+                      'not run: the installed release refuses a change of their details too, so nothing is lost there '
+                      '(not class b)')
+    report.append(f'an addendum that would take a document over {size["bound_chars"]} characters, or whose text cannot be '
+                  f'framed, is refused before it is recorded (A12); the longest current document is '
+                  f'{size["longest_chars"]} characters')
+    if values['first_install'] and values['count']:
+        report.append(f'{values["count"]} encounter(s) hold saved details their current context does not (first install, '
+                      f'expected 0): they would read an update no save queued - {", ".join(values["encounters"])}')
+    sent, participant, token = refused['corti_sent'], refused['participant_sent'], refused['corti_token']
+    if sent['count'] or participant['count'] or token['count']:
+        report.append(f'refusals recorded before the install that no hold names: Corti {sent["count"]} (newest '
+                      f'{sent["newest"]}) - each stays held against its identical request, and an update meeting one '
+                      f'ends failed and cannot finish for those details on that encounter (7.1\'s refused-before row); '
+                      f'participants {participant["count"]} (newest {participant["newest"]}) - each stays held against '
+                      'its identical request, and an update meeting one goes on without that participant\'s check (it '
+                      f'completes partial, 7.1); Corti token refusals {token["count"]} (newest {token["newest"]}) - each '
+                      'sent once after the install, a refusal again setting the hold (amendment 1, 7.3, class b)')
+    if a21['count']:
+        report.append(f'{a21["count"]} encounter(s) hold a reconciled unknown document review while a reading is owed '
+                      f'(A21, expected 0): from the install on they read an update no save started - '
+                      f'{", ".join(a21["encounters"])}')
+    return report
+
+
+def counts_summary(counts) -> str:
+    """One clause of the app receipt's summary for the install counts (amendment 1, 9.5)."""
+    if not isinstance(counts, dict) or counts.get('counted') is not True:
+        return '; install counts NOT read (9.5): see the receipt'
+    size, values, refused, a21 = counts['size'], counts['values'], counts['refused'], counts['a21']
+    standing = sum(len(items) for items in counts['holds']['provider'].values())
+    return (f'; install counts: {size["over_chars"]} over the character bound, {size["over_pages"]} over the page '
+            f'bound, {size["unframed"]} unframed, longest {size["longest_chars"]} characters; {values["count"]} with '
+            f'saved details not yet read; {sum(item["count"] for item in refused.values())} refusal(s) recorded before '
+            f'the install; {a21["count"]} A21; {standing} provider hold(s) and {len(counts["holds"]["interpreter"])} '
+            'interpreter hold(s) standing' + (f'; {len(counts["report"])} item(s) for the owner' if counts['report'] else ''))
 
 
 def target_reads(prev_image, env_bytes, kinds) -> frozenset:
@@ -3093,13 +4067,16 @@ def swap_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, pa
         if launched and any(parked.values()):
             previous = parked.get('worker') or parked.get('web')
             kinds = stage_kinds_of(previous['image'], env_bytes)  # what the restored worker runs (p1, security-0)
+            close_started = utc_now_ms()  # refutation 6b-r2 F4's class: a close that raises may have committed first
             try:
                 closed = close_undone_stages(image_id, env_bytes, swapped_at, ctx.revision,
                                              'its installation failed and the previous revision was restored', kinds)
             except BaseException as error:
                 raise InstallError(f'{failure}; the stages the new pair left open could not then be closed ({error}), '
                                    'so the new pair was left stopped and the previous pair parked (*-previous): run '
-                                   '--phase rollback-app, then rename the parked pair back.') from error
+                                   '--phase rollback-app, then rename the parked pair back. The close was started and '
+                                   f'gave no answer: it {possibly_set_back(close_started)}.',
+                                   details={'close_started_at': close_started}) from error
             hazards = closed.get('hazards')
             shown, acting = hazards_by_kind(hazards)
             # Refutation p2, the skeptic of the install2:1 repair: a state the restored web would show wrongly whatever
@@ -3110,6 +4087,10 @@ def swap_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, pa
             # does, and is restored as usual.
             if (shown is None or shown) and not same_revision(previous, ctx.revision):
                 named = hazard_summary(shown) if shown is not None else 'the close did not say which encounters'
+                # refutation 6b-r1 P2: neither pair runs and the operator chooses - keeping this revision reads the
+                # saves the close set back as its own update, going back sets them back again (rollback-app's close)
+                left = {'hazards': hazards, 'stages_closed': closed}
+                said = kept_serving(image_id, env_bytes, [closed], left)
                 raise InstallError(
                     f'{failure}; {named} hold states the previous revision would show wrongly whatever it is handed '
                     '(a bounded second review whose response was refused whole, or whose outcome is unknown or not '
@@ -3119,16 +4100,18 @@ def swap_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, pa
                     '(*-previous). To keep this revision, remove the parked pair by hand and run --phase app again '
                     'once its failure is fixed; to go back, start this pair again, clear them on its web '
                     '(ops/INSTALL.md, Reinstalling an older revision), run --phase rollback-app, then rename the '
-                    'parked pair back.', details={'hazards': hazards, 'stages_closed': closed}) from failure
+                    'parked pair back.' + said, details=left) from failure
             # Refutation p2, install2:1: the restored pair shows a stored state by its own labels - a response this
             # revision refused whole would read 'Provider request failed' - so it is handed its own derivation of those.
             try:
                 put_back = put_back_states(closed, previous['image'], image_id, env_bytes)
             except BaseException as error:
+                # refutation 6b-r1 P2: the only way on is back to the previous pair, which reads the saves the close
+                # set back as set back - so they stay so, and the message and the receipt say it
                 raise InstallError(f'{failure}; the list states the previous revision labels otherwise could not then '
                                    f'be put back ({error}), so the new pair was left stopped and the previous pair '
                                    'parked (*-previous): run --phase rollback-app, then rename the parked pair '
-                                   'back.') from error
+                                   'back.' + set_back_clause([closed]), details={'stages_closed': closed}) from error
             ctx.log('undo', json.dumps({**closed, 'states_put_back': put_back}).encode())
             # Refutation p1, migrate-0/-1: this path cannot refuse, so while the close names records the restored
             # revision would act on under its own rules (a send without a date, an identical re-send of a request that
@@ -3143,6 +4126,9 @@ def swap_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, pa
                 docker('rename', SERVICES[role] + '-previous', SERVICES[role])
                 if role != 'worker' or not hold_worker:
                     docker('start', SERVICES[role])
+        # refutation w7r 6b-r1 (its observation, 6b-r1 P2's class): the previous pair was handed the rows, so a close
+        # that set pending saves back is said in the message - and recorded in the receipt, not only in the undo log
+        set_back = set_back_clause([closed]) if closed is not None else ''
         if hold_worker:
             hazards = closed.get('hazards')
             named = hazard_summary(acting) if acting is not None else 'the close did not say which'
@@ -3150,8 +4136,13 @@ def swap_services(ctx, image_id, env_bytes, provider_mode, authorization_ref, pa
                 f'{failure}; the previous web was restored and its worker ({SERVICES["worker"]}) left stopped, so '
                 f'nothing can be sent: {named} hold records it would act on under its own rules (ops/INSTALL.md, '
                 'Reinstalling an older revision). Install this revision again once its failure is fixed: its worker '
-                'reads them under its own rules.', details={'hazards': hazards, 'stages_closed': closed,
-                                                            'states_put_back': put_back}) from failure
+                'reads them under its own rules.' + set_back, details={'hazards': hazards, 'stages_closed': closed,
+                                                                       'states_put_back': put_back}) from failure
+        if set_back:
+            raise InstallError(f'{str(failure) or type(failure).__name__}; the previous pair was restored.' + set_back,
+                               details={**(failure.details if isinstance(getattr(failure, 'details', None), dict)
+                                           else {}),
+                                        'stages_closed': closed, 'states_put_back': put_back}) from failure
         raise
     return {'started': started, 'replaced': parked, 'worker_started_at': worker_started_at}
 
@@ -4158,8 +5149,9 @@ def return_to_old_web(ctx, cause, *, image_id, env_bytes, preflight, live, idle,
     try:
         details['states_put_back'] = put_back_states(first, previous.get('image'), image_id, env_bytes)
     except BaseException as error:  # noqa: BLE001
+        # refutation 6b-r1 P2: the new web keeps serving, so the saves the first close set back are put back
         return (f'{cause}; the list states the old revision labels otherwise could not be put back ({error}), so '
-                f'{keep}.', details, 'kept')
+                f'{keep}.' + kept_serving(image_id, env_bytes, [first], details), details, 'kept')
     back = {}
     try:
         details['switch_back'] = switch_upstream(ctx, preflight, idle, live, revision=old_revision, progress=back,
@@ -4176,23 +5168,31 @@ def return_to_old_web(ctx, cause, *, image_id, env_bytes, preflight, live, idle,
                         f'the old worker parked ({worker}-previous). Remove neither before reading which one nginx '
                         'serves: read "left" in this receipt, then ops/INSTALL.md, Recovery notes (a switch that '
                         'stopped half way). The list states were put back to the old revision\'s: rerun --phase app, '
-                        'which recomputes them.', details, 'halfway')
+                        'which recomputes them.'
+                        # refutation 6b-r2 F3: nothing is put back half way; F1: the saves set back are named
+                        + not_put_back([first], 'an undo left half way puts nothing back while the earlier web may '
+                                                'serve'), details, 'halfway')
+        # refutation 6b-r1 P2: nginx never read the switched vhost, so the old web served nothing and the new web
+        # keeps serving: the saves the first close set back are put back
         return (f'{cause}; the switch back to the old web failed ({error}) and the vhost was left on the new one, so '
                 f'{keep}. The list states were put back to the old revision\'s: rerun --phase app, which recomputes '
-                'them.', details, 'kept')
+                'them.' + kept_serving(image_id, env_bytes, [first], details), details, 'kept')
     done = finish_back(ctx, image_id=image_id, env_bytes=env_bytes, idle=idle, previous=previous,
                        parked_worker=parked_worker, kinds=kinds, reason=reason, since=first_at, closes=[],
                        details=details, worker=True,
                        hold=lambda every: return_hold(first, every[-1], same=same, first_at=first_at))
     switched = f'{cause}; the vhost was switched back, so {web} (revision {old_revision[:12]}) serves on {live} again'
+    # the old web is handed the rows, so what the closes set back for it is said in the message (refutation w7r 6b-r1's
+    # observation, 6b-r1 P2's class: a message that omitted the revert)
+    set_back = set_back_clause([first, details.get('stages_closed_after_drain')])
     if done['outcome'] == 'back':
         return (f'{switched}; {done["problem"]}. {left_for_rollback_app()} Migrations already applied are not '
-                'reversed.', details, 'back')
+                'reversed.' + set_back, details, 'back')
     held = (f' It is held - nothing can be sent - because {"; ".join(done["notes"])} (ops/INSTALL.md, Reinstalling an '
             'older revision).') if done['hold'] else ((' ' + '; '.join(done['notes']) + '.') if done['notes'] else '')
     removed = 'the new worker was removed' if done['worker_removed'] else 'there was no new worker to remove'
     return (f'{switched}; {removed} and the incoming web {done["removed"]}; the old worker was {done["worker_note"]}.'
-            f'{held} Migrations already applied are not reversed.', details, done['outcome'])
+            f'{held} Migrations already applied are not reversed.' + set_back, details, done['outcome'])
 
 
 def undo_switch_s4(ctx, cause, *, image_id, env_bytes, plan, preflight, parked, progress, previous, kinds,
@@ -4207,7 +5207,11 @@ def undo_switch_s4(ctx, cause, *, image_id, env_bytes, plan, preflight, parked, 
     try:
         closed = close_undone_stages(image_id, env_bytes, progress['applied_at'], ctx.revision, reason, kinds)
     except BaseException as error:  # noqa: BLE001
-        return (f'{cause}; {close_did_not_finish("the stages the new pair left open", error)}, so {keep}.', details)
+        # refutation 6b-r2 F4 (DECISIONS D247): the close may have committed its revert before it raised, and the new
+        # web keeps serving: the switch-back's clause names the context.rollback_reverted rows since it started
+        details['close_started_at'] = first_at.isoformat()
+        return (f'{cause}; {close_did_not_finish("the stages the new pair left open", error)}, so {keep}. The close '
+                f'{possibly_set_back(first_at.isoformat())}.', details)
     details['stages_closed'] = closed
     shown, acting = hazards_by_kind(closed.get('hazards'))
     if shown is not None and not same_revision(previous, ctx.revision):
@@ -4220,7 +5224,7 @@ def undo_switch_s4(ctx, cause, *, image_id, env_bytes, plan, preflight, parked, 
         return (f'{cause}; {named} hold states the old revision would show wrongly whatever it is handed (a bounded '
                 'second review refused whole or not read, a code only a harness participant proposed, a member\'s '
                 'answer or a chosen modifier written since this switch began), and this revision shows them as they '
-                f'are: {keep}.', details)
+                f'are: {keep}.' + kept_serving(image_id, env_bytes, [closed], details), details)  # 6b-r1 P2
     message, _, _ = return_to_old_web(ctx, cause, image_id=image_id, env_bytes=env_bytes, preflight=preflight,
                                       live=live, idle=idle, old_revision=plan['web']['revision'],
                                       previous=previous, parked_worker=parked.get('worker'), kinds=kinds,
@@ -4899,6 +5903,28 @@ def phase_app(ctx) -> dict:
                            f'({", ".join(unrunnable["kinds"])}) are queued, running or resumable; nothing was '
                            'replaced. Close them with the newer revision\'s --phase rollback-app first.',
                            details=unrunnable)
+    # Design v2 (FINAL-V2 6.2 [R:MO-1]): on the target, before the switch, no design v1 row - v1 rows only, so v2's own
+    # rows never trip it: a fix release, the re-install after a switch-back and a same-revision re-run all pass.
+    v1 = v1_rows(image_id, env)
+    refusal = v1_rows_refusal(v1)
+    if refusal:
+        raise InstallError(refusal[:1].upper() + refusal[1:] + '.', details={'v1_rows': v1,
+                                                                            'unrunnable_stages': unrunnable})
+    # Amendment 1, 9.5: the install counts, read-only, before the switch, printed into this receipt - never a refusal.
+    counts = install_counts(image_id, env)
+    try:
+        return _app_after_counts(ctx, image_id, env, mode, reference, modes, interpreter, access, live, migrate_log,
+                                 unrunnable, v1, counts)
+    except InstallError as error:  # the receipt of a failure after the read carries the counts too
+        if error.details is None or isinstance(error.details, dict):
+            error.details = {**(error.details or {}), 'install_counts': counts}
+        raise
+
+
+def _app_after_counts(ctx, image_id, env, mode, reference, modes, interpreter, access, live, migrate_log, unrunnable,
+                      v1, counts) -> dict:
+    """phase_app once the target is known to hold no design v1 row and the install counts are read: the replacement,
+    the recompute of the stored list states and the opt-in access checks, as they always were."""
     # The interpreter's mode is named only when it is not the default, as swap_services leaves WEB_PORT to
     # wait_service: a stand-in of replace_services keeps the six arguments it always had.
     services = replace_services(ctx, image_id, env, mode, reference, modes,
@@ -4948,9 +5974,9 @@ def phase_app(ctx) -> dict:
     return {'image_id': image_id, 'provider_mode': mode, 'authorization_ref': reference, 'participants': modes,
             'participant_credentials_loaded': live, 'migrate_log': migrate_log, 'unrunnable_stages': unrunnable,
             'states_recomputed': states, 'access_checks': checks if access else 'not run (no --access-check)',
-            **services, 'interpreter': interpreting,
+            **services, 'interpreter': interpreting, 'v1_rows': v1, 'install_counts': counts,
             'summary': f'web and worker running {image_id[:19]} ({pair_modes(mode, modes, interpreter)})'
-                       + switched_summary(services)
+                       + switched_summary(services) + '; no design v1 row' + counts_summary(counts)
                        + (f'; access checked: {", ".join(checked)}' if access else '')}
 
 
@@ -5175,6 +6201,7 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
     if drifted:
         raise InstallError(baseline_problem(drifted, 'nothing was started or stopped'), details={'baseline': drifted})
     steps, parked, started, progress, closes, put_back = {}, {}, {}, {}, {}, []
+    counted = {}  # design v2 (refutation 6b-r1 P2): B4's note as counted, before the update's clauses were added
     record = {'mode': 'switch-back', 'ports': {'from': live, 'to': idle}, 'steps': steps, 'closes': closes,
               'states_put_back': put_back, 'since': since.isoformat(), 'touched_since': touched_since.isoformat()}
     reached = [None]
@@ -5230,8 +6257,10 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
         closes['first'] = close_undone_stages(image_id, env_bytes, since, ctx.revision, reason, kinds)
         refuse_on_hazards(closes['first'], 'after this revision\'s worker stopped and its stages were closed', checked)
         put_back.append(put_back_states(closes['first'], prev_image, image_id, env_bytes))
-        # ADJUDICATION P-1: no worker of this revision runs from B3 on, so this is what the previous image is handed
-        record['interpretation'] = interpretation_note(image_id, env_bytes, ctx.revision)
+        # ADJUDICATION P-1: no worker of this revision runs from B3 on, so this is what the previous image is handed;
+        # design v2 (amendment 1, 9.4): with what the close did for the update - the note lists the pending updates
+        counted['b4'] = interpretation_note(image_id, env_bytes, ctx.revision)
+        record['interpretation'] = with_update_note(counted['b4'], [closes['first']])
         step('B5')
         record['switch'] = switch_upstream(ctx, preflight, live, idle, revision=prev_revision, progress=progress,
                                            from_revision=ctx.revision)
@@ -5246,7 +6275,8 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
         # before the close's refusal, which leaves the previous web serving these rows with its worker held, so the
         # receipt that stops here carries B7's count too
         record['interpretation_at_b4'] = record.get('interpretation')
-        record['interpretation'] = interpretation_note(image_id, env_bytes, ctx.revision)
+        record['interpretation'] = with_update_note(interpretation_note(image_id, env_bytes, ctx.revision),
+                                                    [closes['first'], closes['second']])
         refuse_on_hazards(closes['second'], 'after the switch', checked)
         put_back.append(put_back_states(closes['second'], prev_image, image_id, env_bytes))
         step('B8')
@@ -5263,9 +6293,18 @@ def switch_back_services(ctx, image_id, env_bytes, prev_image, prev_revision, pr
                                        parked=parked, progress=progress, put_back=put_back, closes=closes,
                                        prev_revision=prev_revision)
         except BaseException as second:  # noqa: BLE001 — the undo itself stopped: say so, with what is there now
+            interrupted = closes.get('reapplied') if isinstance(closes.get('reapplied'), dict) else {}
             message = (f'{str(failure) or type(failure).__name__}; the undo at {reached[0]} stopped too '
                        f'({str(second) or type(second).__name__}): read "left" in this receipt, then ops/INSTALL.md, '
-                       'Recovery notes')
+                       'Recovery notes'
+                       # refutation w7r 6b-r1 R1: a put-back that the stop interrupted names the saves it may have left
+                       + (f'. {interrupted["sentence"][:1].upper()}{interrupted["sentence"][1:]}'
+                          if interrupted.get('interrupted') and interrupted.get('sentence') else ''))
+        if closes.get('undone_before_switch') and 'b4' in counted:
+            # refutation 6b-r1 P2: no previous web was handed the site, so B4's note was handed to none - its
+            # instructions for the previous web's members are not left standing in the receipt; refutation 6b-r2 F5: one
+            # that nginx may have routed to until the settle is said to have served in that window
+            record['interpretation'] = undone_note(counted['b4'], served=closes.get('served'))
         raise InstallError(message, details={**record, 'failed_at': reached[0], 'started': started, 'replaced': parked,
                                              'availability': stop_recorder(recorder),
                                              'left': left_summary()}) from failure
@@ -5295,21 +6334,51 @@ def undo_switch_back(ctx, failure, reached, *, image_id, env_bytes, plan, parked
                 f'{remove_incoming_web()}; {web} kept serving on {live}.')
     if reached in ('B4', 'B5'):
         switched_file = reached == 'B5' and progress.get('applied_at') is not None
+        # refutation 6b-r2 F3: left half way, the previous web may serve, so nothing is put back; F1: the message names
+        # the encounters whose saves B4's close set back, as not put back (the recovery may keep this revision)
+        first_close = [closes.get('first')] if isinstance(closes, dict) else []
+        kept_back = not_put_back(first_close, 'an undo left half way puts nothing back while the earlier web may serve',
+                                 where='closes.first.reverted')
         if switched_file and vhost_state()['file_sha256'] == sha256(rendered_vhosts(ctx.revision, idle)['https']
                                                                      .encode()):
             return (f'{cause}; quillmd-cpt still names the previous revision\'s web ({INCOMING_WEB}, port {idle}), '
-                    + halfway)
+                    + halfway + kept_back)
         touched = reached == 'B5' and nginx_may_have_read(progress)
         notes = []
+        closed = closes if isinstance(closes, dict) else {}
         if touched:
             settled = settle_vhost(ctx, port=live, revision=ctx.revision, other_revision=prev_revision or '')
             if not settled['proven']:
                 return (f'{cause}; the vhost was put back, but nginx may still route to the previous revision\'s web '
                         f'({INCOMING_WEB}, port {idle}): a reload of the switched vhost was asked for, or nginx loaded '
                         f'one since it was written, and nginx was not proven to run this revision\'s again '
-                        f'({settled.get("problem")}), ' + halfway)
+                        f'({settled.get("problem")}), ' + halfway + kept_back)
+            # refutation 6b-r2 F5 (DECISIONS D247): nginx may have routed to the previous web from the switch until
+            # this settle, so the receipt's note says that web may have served in that window (undone_note's served)
+            parts = _undo_parts([closed.get('first')]) if closed.get('first') is not None else None
+            closed['served'] = {'from': progress['applied_at'].isoformat(),
+                                'until': dt.datetime.now(dt.timezone.utc).isoformat(),
+                                'update_pending': sorted(parts[0]) if parts is not None else None,
+                                # refutation w7r 6b-r1 R5: A21's own (an update no save started), worded apart
+                                'reconciled_unknown': sorted(pk for pk, reasons in parts[0].items()
+                                                             if reasons == ['reconciled_unknown'])
+                                if parts is not None else None}
             drain_web(idle)
         removed = remove_incoming_web()
+        # design v2 (amendment 1, 9.4; refutation 6b-r1 P2): B4's close set the pending saves back for the previous
+        # image, which now never serves - this revision's web serves on and its worker reads the update - so they are put
+        # back, once the previous web is gone and before this revision's worker resumes (closes is the receipt's)
+        closed['undone_before_switch'] = True
+        if closed.get('first') is not None:
+            try:
+                closed['reapplied'] = reapplied = reapply_reverted(image_id, env_bytes, [closed['first']])
+            except BaseException as error:  # noqa: BLE001 — recorded, then raised again: the undo stops
+                # refutation w7r 6b-r1 R1: recorded in the receipt's closes before the interrupt stops the undo (this
+                # worker is not resumed after a Ctrl-C), so the undo's message names those encounters
+                closed['reapplied'] = interrupted_put_back([closed['first']], error)
+                raise
+            if reapplied['sentence']:
+                notes.append(reapplied['sentence'])
         if put_back:  # once no previous-revision container runs (I-state), before this revision's worker resumes
             try:
                 app_script(image_id, env_bytes, RECOMPUTE_STATES, {}, what='Recomputing the stored list states')
@@ -5318,13 +6387,12 @@ def undo_switch_back(ctx, failure, reached, *, image_id, env_bytes, plan, parked
                 notes.append(f'the list states put back to the previous revision\'s could not be recomputed ({error}): '
                              'rerun --phase app, which recomputes them')
         worker_note = restore_parked_worker(parked.get('worker'))
-        closed = closes or {}
         if closed.get('first') is not None:
             closing = '. A stage the close already closed stays closed (failed, with the installer\'s note).'
         elif closed.get('first_started_at'):  # refutation r3, D-5: it was started, and may have committed
             closing = ('. The close was started and gave no answer, so it may have closed some or all of this '
                        'revision\'s open stages before it stopped: a stage it closed stays closed (failed, with the '
-                       'installer\'s note).')
+                       f'installer\'s note); and it {possibly_set_back(closed["first_started_at"])}.')
         else:
             closing = '. Nothing was closed.'
         return (f'{cause}; nothing was switched: {web} kept serving on {live}, this revision\'s worker was '
@@ -6155,6 +7223,14 @@ def interpretation_evidence(ctx, image_id, worker) -> tuple:
         problems.append('the interpretation self-test did not say it passed')
     if result.returncode and not failed:
         problems.append(f'the interpretation report exited {result.returncode}; see {evidence["log"]}')
+    # design v2 (FINAL-V2 5.7 measures 1-3; step 6a's request R6): the RETIRED kind is read too - armed, its size its
+    # pin, its positive control ok - from the report's own sentinel record (this one-shot's sentinel.status()); its
+    # probe trips through 'positive control trips', whose ok needs sentinel.trip_test's retired_tripped since step 6a
+    retired = retired_problems(report.get('sentinel'))
+    problems += retired
+    evidence['retired'] = {key: (report.get('sentinel') or {}).get(key) if isinstance(report.get('sentinel'), dict)
+                           else None for key in ('retired_size', 'pinned_retired_size', 'retired_control',
+                                                 'retired_armed', 'retired_modules')}
     window = utc_moment((report.get('window') or {}).get('since'))
     if window != asked:
         problems.append(f'the interpretation report read from {window.isoformat() if window else "an unnamed time"}, '
@@ -6163,11 +7239,29 @@ def interpretation_evidence(ctx, image_id, worker) -> tuple:
     standing = [item.get('reason') for item in hold.get('standing') or [] if isinstance(item, dict)]
     held = (f'standing ({", ".join(sorted(set(map(str, standing))))})' if hold.get('held') else
             'none standing' if hold.get('held') is False else 'not read')
-    passed = not (missing or failed or result.returncode) and test.get('passed') is True
+    passed = not (missing or failed or result.returncode or retired) and test.get('passed') is True
     evidence['summary'] = (f'interpreter {mode}: self-test {"passed" if passed else "FAILED"} '
                            f'({len(INTERPRETATION_SELF_TEST) - len(missing)} of {len(INTERPRETATION_SELF_TEST)} checks '
-                           f'run) since the new worker started ({since}); interpreter hold {held}')
+                           f'run; the retired kind {"as pinned" if not retired else "NOT as pinned"}) since the new '
+                           f'worker started ({since}); interpreter hold {held}')
     return evidence, problems
+
+
+def retired_problems(found) -> list:
+    """Design v2 (FINAL-V2 5.7 measures 1-3; step 6a's request R6): what is wrong with the RETIRED kind in the D22
+    report's sentinel record ``found`` (sentinel.status() of the report's process): [] when it is armed, its size equals
+    its pin (RETIRED_SIZE) and its positive control passed. A record that does not say is wrong, never read as fine."""
+    if not isinstance(found, dict):
+        return ['the interpretation report carries no sentinel record, so the retired kind was not read']
+    problems = []
+    size, pinned = found.get('retired_size'), found.get('pinned_retired_size')
+    if not (type(size) is int and type(pinned) is int and pinned > 0 and size == pinned):
+        problems.append(f'the retired kind holds {size!r} code objects, pinned {pinned!r} (FINAL-V2 5.7 measure 1)')
+    if found.get('retired_control') != 'ok':
+        problems.append(f'the retired kind\'s positive control is {found.get("retired_control")!r}, not ok (5.7 measure 3)')
+    if found.get('retired_armed') is not True:
+        problems.append('the retired kind is not armed in the report\'s process (5.7 measure 2)')
+    return problems
 
 
 def phase_verify(ctx) -> dict:
@@ -6374,25 +7468,39 @@ def rollback_from_keep(ctx, keep) -> dict:
         if keep['worker'] is not None:
             stop_service_container(SERVICES['worker'], 'worker')
         first_at = dt.datetime.now(dt.timezone.utc)
+        record['close_started_at'] = first_at.isoformat()  # refutation 6b-r2 F4: a close that raises may have committed
         record['stages_closed'] = first = close_undone_stages(image_id, env, since, ctx.revision, reason, kinds)
         shown, acting = hazards_by_kind(first.get('hazards'))
         if shown is None or shown or acting:
             named = (hazard_summary(merge_hazards(shown, acting)) if shown is not None
                      else 'the close did not say which encounters')
+            # refutation 6b-r1 P2: this revision's web keeps serving, so the saves the close set back are put back
             message, outcome = (f'{cause}: after the close, {named} hold records an older revision would act on, or '
                                 f'show, wrongly under its own rules, so nothing more was done: {keep_note(live, idle)}. '
-                                'Clear them on this revision\'s web, then rerun --phase rollback-app.'), 'kept'
+                                'Clear them on this revision\'s web, then rerun --phase rollback-app.'
+                                + kept_serving(image_id, env, [first], record)), 'kept'
         else:
-            # ADJUDICATION P-1: this revision's worker is stopped, so this is what the old pair is handed
-            record['interpretation'] = interpretation_note(image_id, env, ctx.revision)
+            # ADJUDICATION P-1: this revision's worker is stopped, so this is what the old pair is handed (design v2:
+            # with the close's pending updates; the close after the drain adds its own below)
+            base = interpretation_note(image_id, env, ctx.revision)
+            record['interpretation'] = with_update_note(base, [first])
             message, _, outcome = return_to_old_web(
                 ctx, cause, image_id=image_id, env_bytes=env, preflight=baseline, live=live, idle=idle,
                 old_revision=old_revision, previous=previous, parked_worker=parked, kinds=kinds, reason=reason,
                 first=first, first_at=first_at, details=record)
+            if record.get('stages_closed_after_drain') is not None:
+                record['interpretation'] = with_update_note(base, [first, record['stages_closed_after_drain']])
+            if outcome == 'kept':  # refutation 6b-r1 P2: the old web served nothing, so the note was handed to none
+                record['interpretation'] = undone_note(base)
         record['availability'] = recorder.stop()  # inside: a Ctrl-C here fails the phase too (D-4)
     except BaseException as failure:
+        # refutation 6b-r2 F4 (DECISIONS D247): a close that raised may have committed its revert first, and this
+        # layout keeps this revision's web serving: the switch-back's clause names the rows since it started
+        unanswered = record.get('close_started_at') and 'stages_closed' not in record
         raise InstallError(f'{cause}: {str(failure) or type(failure).__name__}; read "left" in this receipt, then '
-                           'ops/INSTALL.md, Recovery notes.',
+                           'ops/INSTALL.md, Recovery notes.'
+                           + (f' The close was started and gave no answer: it '
+                              f'{possibly_set_back(record["close_started_at"])}.' if unanswered else ''),
                            details={**record, 'availability': stop_recorder(recorder),
                                     'left': left_summary()}) from failure
     if outcome != 'switched' or record.get('incoming_left'):
@@ -6440,12 +7548,15 @@ def rollback_back(ctx, keep) -> dict:
                                 'start the old worker by hand.'), 'halfway'
         else:
             # ADJUDICATION P-1: no worker of this revision runs in this layout, so this is what the old pair is handed
-            record['interpretation'] = interpretation_note(image_id, env, ctx.revision)
+            base = record['interpretation'] = interpretation_note(image_id, env, ctx.revision)
             done = finish_back(ctx, image_id=image_id, env_bytes=env, idle=idle, previous=previous,
                                parked_worker=parked_of(parked_worker), kinds=kinds, reason=reason, since=since,
                                closes=[], details=record, worker=True,
                                hold=lambda every: undo_hold(every, same=False, strict=True,
                                                             window='the incoming web was created'))
+            # design v2 (amendment 1, 9.4): the note with what the close after the drain did for the update
+            if record.get('stages_closed_after_drain') is not None:
+                record['interpretation'] = with_update_note(base, [record['stages_closed_after_drain']])
             outcome = done['outcome']
             if outcome == 'back':
                 message = f'{cause}: {done["problem"]}. {left_for_rollback_app()}'
@@ -6483,7 +7594,12 @@ def phase_rollback_app(ctx) -> dict:
     so a parked pair renamed back or an older revision installed afterwards never runs that work under its own rules,
     nor shows a state it would misread. When the stages cannot be closed, the states cannot be put back, or the second
     read names a record (a send in flight when the worker stopped is an unknown outcome), the pair is left stopped, not
-    removed. Refutation r2, L6-5: in the S4 'keep' layout (keep_layout) it acts on this revision's web and worker, with
+    removed. Refutation 6b-r2 F1 (DECISIONS D247): when that message has this pair started again (a record named after
+    the close) or offers to keep this revision (a removal that failed), the saves the close set back are put back first
+    (kept_serving), or, when that cannot run (an interrupt), named as not put back; a Ctrl-C while the put-back runs is
+    recorded and said by kept_serving, so the receipt keeps the close's record of what each member saved (refutation
+    w7r 6b-r1 R1), as it does for a close that raised or was interrupted. Refutation r2, L6-5: in the S4 'keep'
+    layout (keep_layout) it acts on this revision's web and worker, with
     this revision's image, and switches back to the old web without interrupting the site (rollback_from_keep), and in
     the 'back' layout it finishes the way back (rollback_back; refutation r3, D-3); with a cpt-studio-web-next in any
     other layout, or a web and a worker of different images, it refuses, stopping nothing: which web serves, and whose
@@ -6543,36 +7659,60 @@ def phase_rollback_app(ctx) -> dict:
                 next_image = previous['Image']
                 break
         kinds = stage_kinds_of(next_image, env) if next_image else list(COMMON_STAGE_KINDS)
-        try:
+        try:  # refutation w7r 6b-r1 R4: a database that refuses here means the close never started - said so
             require_db()
+        except InstallError as error:
+            raise InstallError(f'Web and worker stopped, not removed: the stages they left open could not be closed '
+                               f'({error}): the close was not started, so nothing was closed or set back. Rerun '
+                               '--phase rollback-app once that is resolved.') from error
+        started = utc_now_ms()  # refutation 6b-r2 F4: a close that raises may have committed its revert first
+        try:
             closed = close_undone_stages(first['Image'], env,
                                          min(created_at(container) for container in pair.values()), revision,
                                          'its web and worker were removed (rollback-app)', kinds)
-        except InstallError as error:
-            raise InstallError(f'Web and worker stopped, not removed: the stages they left open could not be closed '
-                               f'({error}). Rerun --phase rollback-app once that is resolved.') from error
+        except BaseException as error:  # noqa: BLE001 — refutation w7r 6b-r1 R1: a Ctrl-C there is said too
+            raise InstallError(f'Web and worker stopped, not removed: '
+                               f'{close_did_not_finish("the stages they left open", error)}; and it '
+                               f'{possibly_set_back(started)}. Rerun --phase rollback-app once that is resolved.',
+                               details={'close_started_at': started}) from error
         hazards = closed.get('hazards')
         if not isinstance(hazards, dict) or hazards:
             named = hazard_summary(hazards) if isinstance(hazards, dict) else 'the close did not say which encounters'
+            left = {'hazards': hazards, 'stages_closed': closed}
+            # refutation 6b-r2 F1 (DECISIONS D247): this message leaves this revision's pair to serve again (started
+            # again to clear the records), so the saves the close set back are put back first, as kept_serving does
+            # on every way that keeps this revision's web serving - or, when that cannot run, it names them
             raise InstallError(f'Web and worker stopped, not removed: after the close, {named} hold records an older '
                                'revision would act on, or show, wrongly under its own rules. Start them again '
                                f'(docker start {SERVICES["worker"]} {SERVICES["web"]}), clear them on this '
                                'revision\'s web (ops/INSTALL.md, Reinstalling an older revision), then rerun --phase '
-                               'rollback-app.',
-                               details={'hazards': hazards, 'stages_closed': closed})
+                               'rollback-app.' + kept_serving(first['Image'], env, [closed], left), details=left)
         # Refutation p2, install2:1: the next pair - the parked one renamed back, or an older revision installed by its
         # own installer, which never recomputes a stored state - shows each state by its own labels, so a response
         # refused whole would read 'Provider request failed'. Each state this revision labels otherwise is given the
         # state that pair derives (the parked image's own derivation, else 057a7d39's), while this pair is stopped.
         try:
             put_back = put_back_states(closed, next_image, first['Image'], env)
-        except InstallError as error:
+        except BaseException as error:  # noqa: BLE001 — refutation w7r 6b-r1 R1's class: a Ctrl-C keeps the record too
+            # the only way on is back to the older pair, which reads the saves the close set back as set back: they
+            # stay so, and the message says it (refutation 6b-r2 F2: what is so)
             raise InstallError(f'Web and worker stopped, not removed: the list states an older revision labels '
-                               f'otherwise could not be put back ({error}). Rerun --phase rollback-app once that is '
-                               'resolved.', details={'stages_closed': closed}) from error
+                               f'otherwise could not be put back ({str(error) or type(error).__name__}). Rerun --phase '
+                               'rollback-app once that is resolved.' + set_back_clause([closed]),
+                               details={'stages_closed': closed}) from error
         # ADJUDICATION P-1: the pair is stopped, so this is what the next pair is handed - a declared note, never a
-        # refusal
-        made = interpretation_note(first['Image'], env, revision)
+        # refusal; design v2 (amendment 1, 9.4): with the close's pending updates and reverted saves
+        try:
+            base = interpretation_note(first['Image'], env, revision)
+        except BaseException as error:  # noqa: BLE001 — it answers every failure itself; an interrupt keeps the record
+            changed = (put_back or {}).get('changed') or {}
+            raise InstallError(f'Web and worker stopped, not removed: the count of what this revision made from event '
+                               f'inventories was interrupted ({str(error) or type(error).__name__})'
+                               + (f', after the list states of {len(changed)} encounter(s) were put back to what the '
+                                  'older revision derives' if changed else '')
+                               + '. Rerun --phase rollback-app.' + set_back_clause([closed]),
+                               details={'stages_closed': closed, 'states_put_back': put_back}) from error
+        made = with_update_note(base, [closed])
     else:
         made = None
     removed = {}
@@ -6582,14 +7722,27 @@ def phase_rollback_app(ctx) -> dict:
             removed[name] = role in pair
             remove_service_container(name, role)
     except BaseException as error:  # noqa: BLE001 — states were put back for the older revision: the receipt says so
-        if not (put_back or {}).get('changed'):
+        changed = (put_back or {}).get('changed')
+        parts = _undo_parts([closed]) if closed is not None else None
+        if not changed and not (closed is not None and (parts is None or parts[1])):
             raise
-        raise InstallError(f'{str(error) or type(error).__name__}; before it, the list states of '
-                           f'{len(put_back["changed"])} encounter(s) were put back to what the older revision derives, '
-                           'which this revision labels otherwise: rerun --phase rollback-app; or, to keep this '
-                           'revision, rerun --phase app, which recomputes them.',
-                           details={'stages_closed': closed, 'states_put_back': put_back,
-                                    'interpretation': made}) from error
+        details = {'stages_closed': closed, 'states_put_back': put_back, 'interpretation': made}
+        states = (f'; before it, the list states of {len(changed)} encounter(s) were put back to what the older '
+                  'revision derives, which this revision labels otherwise' if changed else '')
+        # refutation 6b-r2 F1 (DECISIONS D247): the message offers to keep this revision, so the saves the close set
+        # back are put back first; an interrupt runs nothing more, and the message names them as not put back. Once
+        # any is put back, no earlier pair was handed them, so the note carries none of its members' instructions
+        if isinstance(error, Exception):
+            said = kept_serving(first['Image'], env, [closed], details)
+        else:
+            said = not_put_back([closed], 'the phase was interrupted before they could be')
+        if (details.get('reapplied') or {}).get('reapplied'):
+            details['interpretation'] = undone_note(base, kept='the removal of this revision\'s pair stopped before '
+                                                               'any earlier pair was started, and the saves the close '
+                                                               'set back were put back (reapplied)')
+        raise InstallError(f'{str(error) or type(error).__name__}{states}: rerun --phase rollback-app; or, to keep '
+                           'this revision, rerun --phase app' + (', which recomputes them' if changed else '') + '.'
+                           + said, details=details) from error
     parked = [name + '-previous' for name in SERVICES.values() if inspect('container', name + '-previous')]
     return {'removed': removed, 'stages_closed': closed, 'states_put_back': put_back, 'parked_left_in_place': parked,
             'interpretation': made,

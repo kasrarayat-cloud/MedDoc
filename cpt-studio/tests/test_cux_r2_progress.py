@@ -98,12 +98,16 @@ class StatePrecedenceTests(TestCase):
 
     def test_a_failed_stage_after_an_unknown_outcome_waits_on_its_reconciliation(self):
         pf.assess(self.enc, pf.result())
-        for kind, failed in (('analyze', 'processing_failed'), ('assess', 'processing_failed'),
+        # FINAL-V2 amendment 1, 4.3 and 5.2: the target jobs decide the derived state - a stage of the current context
+        # created after the codes; a context-free stage (analyze) after fresh codes serves nothing, so their state stands
+        current = models.Encounter.objects.get(pk=self.enc.pk).current_context
+        for kind, failed in (('analyze', 'no_codes'), ('assess', 'processing_failed'),
                              ('astra', 'processing_failed'), ('astra_peer', 'processing_failed'),
                              ('predict', 'provider_failed')):
             with self.subTest(kind):
                 models.Job.objects.filter(encounter=self.enc).delete()
-                job = pf.job(self.enc, self.s.revision, kind, 'failed')
+                job = pf.job(self.enc, self.s.revision, kind, 'failed',
+                             **({} if kind == 'analyze' else {'context': current}))
                 if kind == 'predict':  # its own request, sent and failed
                     pf.provider_run(self.enc, self.s.revision, state=models.ProviderRun.FAILED)
                 self.assertEqual(self.state(), failed)  # the control: no unknown outcome
@@ -122,7 +126,9 @@ class StatePrecedenceTests(TestCase):
 
     def test_a_run_left_sending_by_a_failed_stage_is_the_same_unknown_outcome(self):
         pf.assess(self.enc, pf.result())
-        pf.job(self.enc, self.s.revision, 'assess', 'failed')
+        # a stage of the current context (FINAL-V2 amendment 1, 4.3: a target job)
+        pf.job(self.enc, self.s.revision, 'assess', 'failed',
+               context=models.Encounter.objects.get(pk=self.enc.pk).current_context)
         orphan = pf.provider_run(self.enc, self.s.revision, state=models.ProviderRun.SENDING)
         self.assertTrue(review._orphaned_sending(self.enc))
         self.assertEqual(self.state(), 'provider_unknown')
@@ -157,7 +163,9 @@ class StatePrecedenceTests(TestCase):
     def test_control_the_member_s_own_stop_still_reads_stopped_and_resumable(self):
         pf.assess(self.enc, pf.result())
         self.unknown()
-        pf.job(self.enc, self.s.revision, 'assess', 'cancelled')
+        # a stage of the current context, queued after the codes (FINAL-V2 amendment 1, 4.3: a target job)
+        pf.job(self.enc, self.s.revision, 'assess', 'cancelled',
+               context=models.Encounter.objects.get(pk=self.enc.pk).current_context)
         self.assertEqual(self.state(), 'stopped')
         self.assertTrue(review.can_resume(models.Encounter.objects.get(pk=self.enc.pk)))
 
@@ -417,7 +425,10 @@ class ReservationTests(CustomerReads, OperatorReads, TestCase):
         drain()
         encounter = models.Encounter.objects.get(pk=encounter_id)
         job = models.Job.objects.filter(encounter=encounter).order_by('-created_at').first()
-        models.Job.objects.filter(pk=job.pk).update(state=models.Job.RUNNING, started_at=timezone.now())
+        # running now, so queued after the codes it serves (FINAL-V2 amendment 1, 4.3: a target job is created after the
+        # current assessment of a fresh encounter)
+        models.Job.objects.filter(pk=job.pk).update(state=models.Job.RUNNING, started_at=timezone.now(),
+                                                    created_at=timezone.now())
         mine = models.ProviderRun.objects.create(
             encounter=encounter, revision=encounter.current_revision, provider='corti', adapter_version='test',
             request_sha256='f' * 64, request_body={}, contexts=[], state=models.ProviderRun.RESERVED,
@@ -539,14 +550,16 @@ class StageRecordTests(ProgressCase):
 
     def test_a_re_check_s_own_outcome_is_read(self):
         self.chain('extract', 'analyze', 'predict', 'assess')
-        self.final()
+        final = self.final()
+        # the re-check is asked on the final, so its stages are queued after it (FINAL-V2 amendment 1, 4.3: target jobs)
+        later = (final.created_at - self.t0).total_seconds()
         for outcome, expected in (('failed', 'unavailable'), ('unknown', 'unavailable'), ('not_sent', 'unavailable'),
                                   ('succeeded', 'done'), ('reused', 'done')):
             with self.subTest(outcome):
                 models.Job.objects.filter(kind__in=('review2', 'assess'), created_at__gt=self.t0 + timedelta(
                     seconds=100)).delete()
-                self.job('review2', 'succeeded', 600, result={'second_review': outcome, 'run': None})
-                self.job('assess', 'queued', 602)
+                self.job('review2', 'succeeded', later + 1, result={'second_review': outcome, 'run': None})
+                self.job('assess', 'queued', later + 3)
                 self.assertEqual(self.checks()['document_review'], expected)
         # the stale sweep records a re-check it settles under 'provider'
         swept = self.job('review2', 'succeeded', 700, result={'provider': 'failed', 'run': None, 'settled': 'x'})

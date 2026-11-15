@@ -65,7 +65,8 @@ class ContextSaveCase(EventsCase):
         with mock.patch.object(adapter, 'get_interpreter', side_effect=AssertionError('the interpreter was built')), \
                 mock.patch('studio.gi.context.extract_context', side_effect=AssertionError('the text was read')), \
                 self.legacy_reader_fails():
-            return jobs.change_context(encounter, self.user, values)
+            # FINAL-V2 amendment 1, 2.7: change_context returns a ContextSave; the context it names is read here
+            return jobs.change_context(encounter, self.user, values).context
 
     def queued(self):
         return list(Job.objects.filter(state=Job.QUEUED).order_by('created_at', 'pk'))
@@ -261,7 +262,8 @@ class BeforeReadingTests(ContextSaveCase):
         self.assertFalse(Run.objects.filter(encounter=encounter).exists())  # nothing was sent
         [job] = self.queued()
         self.assertEqual((job.kind, job.context_id), ('interpret', None))
-        self.assertTrue(job.idempotency_key.startswith(f'interpret:{revision.pk}:gemini-events@1:{jobs.AFTER_SAVE}:'))
+        # FINAL-V2 amendment 1, 2.3: the owed stage under its base key when no job holds it (else ':after-save:<uuid>')
+        self.assertEqual(job.idempotency_key, f'interpret:{revision.pk}:gemini-events@1')
         changed = models.AuditEvent.objects.get(event='context.changed')
         self.assertEqual((changed.data['reading'], changed.data['fields']), (str(job.pk), ['setting']))
         self.assertNotIn('context', changed.data)
@@ -303,9 +305,9 @@ class BeforeReadingTests(ContextSaveCase):
 
     def test_a_save_while_the_first_reading_is_paused_queues_it_again(self):
         encounter, revision, legacy_context, _ = legacy_encounter(self.ws, self.user)
-        # the revision's first interpretation, as a member's explicit act on a legacy encounter queues it (S09)
-        jobs.enqueue('interpret', encounter=encounter, revision=revision, key=jobs._interpret_key(revision),
-                     requested_by=self.user)
+        # the revision's first interpretation, as a member's save on a legacy encounter queues it (FINAL-V2 amendment 1,
+        # 2.3; an interpret queued on a fresh encounter, with no save, serves nothing and is superseded: 3.4)
+        self.save(encounter, {'setting': 'office'})
         with self.settings(GEMINI_MODE='disabled'):
             job = self.run_next('interpret')
         self.assertEqual(job.state, Job.CANCELLED)  # paused: resumable

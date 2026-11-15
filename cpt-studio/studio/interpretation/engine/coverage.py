@@ -16,8 +16,10 @@ sets them apart; with fewer than two sessions nothing can, as in 4.5's session r
 - FAMILY_BUNDLED (a family's bundled kinds): the part's catalogue kind is one of BUNDLED_KINDS of its session's family,
   less NOT_REPORTED and the EUS's forceps biopsy (read under the upper endoscopy, never bundled: v1's ``kind !=
   'biopsy'``): the ERCP's contrast injection and the reflux study's pH capsule.
-- LIFT_INJECTION: an injection (or a tattoo, by its part_of only: ONE_ACT, v1's arm) whose part_of names an EMR or ESD;
-  or an injection whose purpose is lift_for_resection, of the same lesion as one.
+- LIFT_INJECTION (4.7's lift row; refute-4b-r2 F6, DECISIONS D229): an injection (or a tattoo, by its part_of only:
+  ONE_ACT, v1's arm) whose part_of names an EMR or ESD with part_relation lift_for or step_of; or an injection whose
+  purpose is lift_for_resection, of the same lesion as one - never a hemostatic injection (its purpose supported
+  hemostasis: v1's catalogue kind bleeding_control), which a stated adjunct relation bundles as PROCEDURAL_ADJUNCT.
 - RESECTION_TECHNIQUE: a snare or hot-forceps removal whose part_of names an EMR or ESD, or of the same lesion as one.
 - STENT_INCLUDED (D45): a sphincterotomy or a dilation of an ERCP session beside a stent placement or exchange of the
   same duct - both ducts established; established apart (biliary or cystic against pancreatic) sets them apart, and
@@ -26,11 +28,16 @@ sets them apart; with fewer than two sessions nothing can, as in 4.5's session r
   examination: the session, C-1), or whose cause is act_of_this_session and whose cause_event names an event of the
   session (the examination included: control of bleeding the procedure itself caused). The whole may be performed or
   begun. D41's lexical identity and D58/D77's place adjacency are gone (4.7, 4.13): causality is part_of and cause.
-  v1's same-lesion arm (D30: "by its verified part_of or the removal's lesion"), a FACT arm 4.7's "gone" column does
-  not retire and its v2 inputs do not list, is built FAIL-CLOSED and never decides (the step's NOTES, question DQ1):
-  an ablation or a bleeding control (v1's adjunct kinds, by catalogue kind) with a lesion stated, beside a removal
-  performed or begun with a lesion stated, is possibly that removal's adjunct - U, asked (act_part), never T - unless
-  the lesions are established apart or its own established part_of or cause says otherwise.
+  v1's same-lesion arm (D30: "by its verified part_of or the removal's lesion") asks only where the two acts may name
+  the same lesion (DECISIONS D221, refute-4b-r2 F1): an ablation or a bleeding control (v1's adjunct kinds, by
+  catalogue kind) with a lesion stated, beside a removal performed or begun with a lesion stated, whose lesion may be
+  that removal's (one id; a lesion the other may name; an id naming no lesion of the FactSet, 4.11; a same_as - one
+  member or a chain of them through other entries - that may join them; a lesion fact that is not supported, an
+  unknown identity: DECISIONS D248 G2, option (b)) is possibly its adjunct - U, asked (the identity's question first:
+  an unestablished same_as, one question naming both, or a claim that the two are not one finding; then each lesion
+  fact not supported; then act_part), never T - unless its own established part_of or cause says otherwise. Only two
+  different SUPPORTED lesion ids no same_as can join are different findings (P5): the arm is F, and the ablation's or
+  the bleeding control's code proceeds on its own rows.
 - BIOPSY_OF_REMOVED_LESION (C-2): a biopsy of the same lesion as a removal (snare, EMR, hot biopsy, ESD, or the removal
   umbrella, each of whose methods is one), where that lesion is single or the two anchors share a unit; an established
   group in separate units un-bundles it (DECISIONS D196: lesion.multiplicity is read on the READY path).
@@ -40,15 +47,36 @@ sets them apart; with fewer than two sessions nothing can, as in 4.5's session r
 **What a fact leaves open.** An enumeration fact holds its value when supported; when negated it leaves every other value
 open (pairing's reading); when not established, ``facts.possibly``'s values (its claimed value, its options, a doubt's
 readings, an unrejected control's value; every value for an empty slot). A status that is not established leaves every
-status open (4.2's status arm); a status established negated says the act was not done. The SAME LESION is T when both
-lesions are supported and equal or joined by a supported same_as; F only when facts.apart_by_lesion (distinct_from and
-the lesion pair controls, never while a same_as may join them) or facts.apart_by_place (established disjoint places and
-their pair controls) sets the two acts apart; U otherwise - an unknown identity never sets two acts apart and never
-makes one (4.11, the 2026-11-09 checklist). A part_of or a cause the document does not state (an EMPTY slot that no
-doubt names) relates nothing: P16 and P15 ask pass 1 for them only where the document states them, and 3.2.3 leaves
-part_of, part_relation and cause_event UNCONTROLLED because "a yes-bias can only hold"; a part_of or cause_event that is
-claimed, doubted or contradicted relates the acts it may name (U). Any part_relation counts: an act part_of the whole
-is not a separate service whatever the relation (the step's NOTES record this reading, question Q2).
+status open (4.2's status arm); a status established negated says the act was not done. same_as is read as the
+equivalence it states (P5: one id per distinct finding; a same_as says two entries are one finding): a chain of members
+through other entries joins two lesions as one member does (repair r4b, refute-r4b-r1 R1). The SAME LESION (the lift's
+purpose arm, the resection technique, the biopsy of a removed lesion, the drainage step) is T when both lesions are
+supported and equal or joined by supported same_as members, and no claim between the two entries says they are not one
+finding (a negated same_as member in any state, a contradicted one, a distinct_from: DECISIONS D248 G3 - the FactSet
+contradicting itself on their identity is asked, never explained, and never released: beside such a claim it is U,
+never F by the places or otherwise - repair r4b-2, refute-r4b-r1 F1); F only when facts.apart_by_lesion (distinct_from
+and the lesion pair controls, never while a same_as may join them) or facts.apart_by_place (established disjoint places
+and their pair controls) sets the two acts apart - the place arm never while the two acts' lesion claims may name one
+finding (a common id, by possibly, or a same_as that may join them: DECISIONS D239's reading for bundling, built
+fail-closed - refute-r4b-r1 F3, the step's NOTES question QF3 - so weakening the identity of a bundled part, an act's
+lesion fact or a same_as member, asks it and never releases it); U otherwise - an unknown identity never sets two acts
+apart and never makes one (4.11, the 2026-11-09 checklist). The procedural adjunct's lesion arm reads D221's identity
+instead (above). The same_as graph and
+what is read off it - each walk, each join, each supported component - are computed once per Reader (D248 G5). A part_of
+or a cause the document does not state (an EMPTY slot that no doubt names) relates nothing: P16 and P15 ask pass 1 for
+them only where the document states them, and 3.2.3 leaves part_of, part_relation and cause_event UNCONTROLLED because
+"a yes-bias can only hold"; a part_of or cause_event that is claimed, doubted or contradicted relates the acts it may
+name (U). Any part_relation counts for the procedural adjunct, the resection technique and the drainage step: an act
+part_of the whole is not a separate service whatever the relation (the step's NOTES record this reading, question
+Q2); the lift reads its relation (lift_for or step_of: 4.7, F6).
+
+**The synthetic act as a possible whole** (DECISIONS D216, D231's coverage half: C1). A whole is every other event and
+every synthetic act - 3.2.6 rule 3's synthetic act as D231 reads it: a kept unlisted ACT or DOUBT, with its session card,
+or with no card where every session is possible (combination.synthetic, the set the four engine modules read). Each is
+read as its filed doubted form (Reader._synthetic_wholes): its kind as the entry names it (an empty slot when it names
+none), its status a doubt, its session its card, every other slot empty - so an unlisted act, an unlisted doubt and the
+same act filed in doubt give one outcome. A bundling into it is never T (its status is a doubt); its U rests on the
+synthetic act's own doubt (performed_status at rank 2, cause unlisted, quoting its units), with the part's own doubts.
 
 **One verdict per act** (``verdict``; 4.3's bundling row): F (bundled) when some bundle is T, its witnesses the T
 bundles' EXPLANATIONS alone (naming the whole: performed_status at rank 18, cause ``coding_rule:<rule>``) - the bundling
@@ -60,10 +88,11 @@ contradicted one asks rank 1 (``conflict:<kind>``), a doubted status rank 2 (per
 question** (D3; S4's failure class D3, FINAL-V2 4.8 rank 1 and Appendix C): an act whose own kind, status, date
 relation, performer, entry or session is contradicted, or that a statement contradicts (pairing.Relation.CONTRADICTION),
 is never F - its verdict is U, its rank-1 conflict witnesses first, its T bundles explaining nothing - so neither the
-code-level ``bundling`` nor the listing ever explains it away as part of another act, and reconcile lists it in doubt
-with its conflict question. The same principle on the whole's side ("contradictions ... are never resolved by
-bundling", S4): a whole a statement contradicts may not have been done, so a bundling into it is U, the whole's
-conflict its first witness (the step's NOTES, question Q7).
+code-level ``bundling`` nor the listing ever explains it away as part of another act: it is never read under another
+service (DECISIONS D227 F3), and reconcile lists it in doubt with its conflict question - also where D137's class
+records it reportable (eus_unlisted) - unless a counted code reads it and asks it. The same principle on the whole's
+side ("contradictions ... are never resolved by bundling", S4): a whole a statement contradicts may not have been done,
+so a bundling into it is U, the whole's conflict its first witness (the step's NOTES, question Q7).
 
 **bundling(code, supporting, R)** (4.4's decide: ``held_facts += bundling(code, supporting, R)``): () when one of the
 supporting acts is its own (v1: a code with an own act proceeds on it); otherwise every supporting act's witnesses -
@@ -74,31 +103,59 @@ group.
 **Sessions** (4.7: "from the sessions table"; S3 6.2): one Session per session of the FactSet, in pass 1's order. Its
 members are the events whose session fact claims it (any state but negated: v1's family, the one session reconcile
 lists an act under); its POSSIBLE members (``possible_members``) every event that may be in it (``sessions_of``: its
-claimed session, an empty slot, a doubt's readings, a contradiction's sides, a negation of another session, or an id
-naming no session of the FactSet - 4.2: a doubt is never an absence); its examinations the members that are
-done (4.3 rows 2-5 supported: reading.done), their kind supported examination and their session supported; its POSSIBLE
-examinations (D62, D87) the events, not done, whose kind may be the examination, whose session may be it and each of
-whose rows 2-5 may hold. ``event`` is its one examination (exactly one done, no possible one); ``unresolved`` two or
-more done or possible; ``done`` a member whose session fact is supported as this session, done, with its kind supported
-(a claimed membership that is not established makes no session done: the act is listed in doubt instead);
-``incomplete`` every done examination established attempted_not_completed. ``part_of`` (C3) is the session its
-part_of_session names when supported (of another kind, or a kind not established), else (C-4, structural over supported
-session kinds and tracts: 4.7's base_within row) the done EUS session whose tract is supported upper, for a done EGD
-session with one done examination (v1's ``own``);
-``possibly_part_of`` (D70) the session it may be part of otherwise - a part_of_session not established, or a session
-that may be an EUS (its kind supported EUS, or not established with EUS among what it leaves open: 4.7's
-"possibly_part_of by possibly") and may be upper (its tract not established, or pancreatobiliary) and may be done.
-coding_family's region moves (D114, D141, D148, D153), eus_places and every C-4 word arm are gone (5.4): an act's
-session is its own fact.
+claimed session, an empty slot, a doubt's readings, a contradiction's sides, a negation of another session, a negation
+left open, or an id naming no session of the FactSet - 4.2: a doubt is never an absence). "A session is done" has ONE
+derivation (DECISIONS D227; refute-4b-r2 F2): step 4d's combination.session_done, the reference, and 4.3 row 7's "its
+examination, when it has one, passes 2-5 (an act-only session: the act itself)", a digital examination (a device
+claiming manual: FINAL 5.6 E13, D69; DECISIONS D253 QE13 (a), 4d's _digital) excepted throughout. Its examinations
+(``done_examinations``) are its ESTABLISHED
+examinations - kind supported examination, session supported, no digital examination - that are done (4.3 rows 2-5
+supported: reading.done); its POSSIBLE examinations (``possible_examinations``; D62, D87) the events, not done, that may
+be its examination (4d's _may_be_examination_of: kind possibly the examination, session possibly this one by 4d's
+membership, possibly positive on the date by the documenting team, no digital examination) - and none at all in a
+session whose examination is established, and established not done on the date of service (4d's not_done_today:
+planned, or done on another date, and no event the document places in it that may be its examination done today),
+whatever an act's date or session slot (DECISIONS D269, Q-P2DATE option (c), 4.3 row 7: an act possibly in such a
+session never makes it possibly done - 4d's session_possibly_done; D256 P2's letter excepted only an act whose session
+slot is silent and whose date is not established, so a dated act still made a planned EUS possibly done); its synthetic
+examinations left open (``possible_unlisted_examinations``; DECISIONS D231 row 1, coverage's C2) the kept unlisted acts
+and doubts of kind examination or none that may be in it (4d's combination.synthetic_examinations), read only when it
+has no established examination (D232: beside one, a synthetic examination adds nothing); ``done`` is one of its
+established examinations done, or, with none, one of its acts (session supported, no digital examination) done and no
+possible examination left open, filed or synthetic (tests/v2/test_coverage.py's OneSessionDone asserts all of them
+equal 4d's on generated FactSets, kept unlisted entries among them). ``event`` is its one examination (exactly one done,
+no possible one); ``unresolved`` two or more done or possible, filed or synthetic; ``incomplete`` every done examination
+established attempted_not_completed - so an aborted colonoscopy beside a digital examination is incomplete. A session
+whose established examination is not done is not done, whatever its acts: 4.3 row 7 holds every code of it (step 4a),
+and reconcile still reads its member acts as a done session's (no no_proposal of its own) when counted codes read the
+session - which the unestablished count skips - so a done act no counted code reads is listed whatever step 4a reads of
+the session (refute-r4b-r1 R5; the step's NOTES, QR5-1: step 4a reads an examination whose session is established as
+another as no examination of that session, step 4d's reference as possibly any session's). ``part_of`` (C3) is the
+session its part_of_session names when supported (of another kind, or a kind not established), else (C-4, structural
+over supported session kinds and tracts: 4.7's base_within row) the done EUS session whose tract is supported upper,
+for a done EGD session with one done examination (v1's ``own``); ``possibly_part_of`` (D70) the session it may be
+part of otherwise - a part_of_session not established, or a session that may be an EUS (its kind supported EUS, or not
+established with EUS among what it leaves open: 4.7's "possibly_part_of by possibly") and may be upper (its tract not
+established, or pancreatobiliary) and may be done: 4d's combination.session_possibly_done, the reference (D227's one
+derivation; D231 row 2, coverage's C3: a synthetic act that may be in it makes it possibly done; an entry with no card
+that names a kind makes possibly done only a session one of whose possible families holds that kind, DECISIONS D256
+P2's K2). DECISIONS D269 (Q-P2DATE option (c); the integration's I4 residual): a session whose examination is
+established, and established not done on the date of service (4d's not_done_today), is possibly done by NO act - filed
+or kept unlisted, placed, supported, carded or with no card, whatever its date or session slot - and is never a whole:
+C3's supported part_of_session and D70's part_of_session not established name no such session (4d's wholes), and the
+structural arms read it neither done nor possibly done, so a planned or an earlier EUS is never the whole, established
+or possible, of today's EGD. coding_family's region moves (D114, D141, D148, D153), eus_places and every C-4 word arm
+are gone (5.4): an act's session is its own fact.
 
 **Reportable and doubted** (v1's shapes). Reportable: done (rows 2-5 supported), status supported performed, kind
 supported and its catalogue kind one of its session's family's reportable kinds (the catalogue acts but the examination,
 the umbrellas and NOT_REPORTED, v1's NOT_ACT_KINDS; D116's stent removal and exchange where the family lists the stent),
 session and its kind supported, and not bundled (verdict not F); event_coding drops the E/M kinds from its lists (the
 session's own service is never an act beside itself), as v1 did. Doubted (4.7 [R:HO-1]): an act that may be of a
-reportable kind of a family it may be in - every family when its own session fact is not established (4.2; settle's K2
-demotes the session of an act its family cannot hold) - (D117's positive removal umbrella and D115's possible bleeding
-control - from purpose, never words - included), possibly performed or begun, neither its date relation nor its
+reportable kind of a family it may be in - for an act whose own session fact is not established, every family unless
+the sessions it may be in admit its kind (DECISIONS D227 F8; FAMILY_KINDS, K2's table; ``_families`` reads "admit" so
+that no weakening narrows it) - (D117's positive removal umbrella and D115's possible bleeding control - from purpose,
+never words - included), possibly performed or begun, neither its date relation nor its
 performer established as another, and in doubt: a required fact (4.3 rows 1-6) not supported, a statement paired with it
 in any relation but INDEPENDENT, an unlisted denial or doubt paired with it (3.2.6 rule 4), or a bundling in doubt (U).
 ``doubted_in`` reads the same in ONE session: the act possibly in it, of a reportable kind of a family that session may
@@ -119,21 +176,35 @@ whose kind is not established is read as every supported family it may be of, wh
 family None and only the codes covering it under every reading covering it (v1 grouped it by pass 1's claimed family);
 an act filed under no session of the FactSet (an empty slot, a contradicted or doubted one, an id naming none) is listed
 in doubt with its session None; D142's class (a kind its family's acts do not list, another's do) in doubt is listed in
-doubt; a session not done counts as unestablished by its possible members (an examination whose session fact is in doubt
-is possibly its own); an act of a kind its family has no profile for (``unsupported_kinds``: UNSUPPORTED_ACTS and the
-family's UNSUPPORTED_KINDS, hand-off 1e:R3) is listed unsupported. One service question per (session, fact) for an act
-in doubt no counted code reads, the act chosen by 4.8's binding (one a code's question names last, D149; then the fewest
-witnesses; then document order) and none a code's item already asks (D89); and D125's extent question per done session
-whose extent no code asks.
+doubt, its session or its session's kind not established included; a session not done counts as unestablished by its
+possible members (an examination whose session fact is in doubt is possibly its own) and by the synthetic acts that may
+be in it (D216) - or, when counted codes read it, its member acts are read as a done session's (refute-r4b-r1 R5).
+"Read by a counted code" is read PER SESSION for both (DECISIONS D248 G1): for every family the session is stated as,
+a counted code of that family one of whose events may be in it - v1's "a code of its family" meant this session's code
+because v1 had one session per family, and a second session of a coded family must stay incomplete. An act of a kind
+its family has no profile for (``unsupported_kinds``: UNSUPPORTED_ACTS and the family's UNSUPPORTED_KINDS, hand-off
+1e:R3) is listed unsupported. READ_UNDER (DECISIONS D227 F4; P3) reads no list's completeness: an act is read under
+another service only when its place list is established complete within the rule's regions (every landmark outside them
+its places do not cover excluded by a rejected pair control or a negated member); otherwise it is listed in doubt
+(READ_UNDER_NOT_ESTABLISHED), asking a coverage question (InDoubt.witness: act_target, cause coding_rule:read_under)
+that holds no code; each read-under listing is an item of its own Detail (refute-r4b-r1 R3, D225), and beside a
+session whose kind is not established an act two readings list differently is listed once, in doubt when a reading
+lists it so (D248 G4). One service
+question per (session, fact) for an act in doubt no counted code reads, the act chosen
+by 4.8's binding (one a code's question names last, D149; then the fewest witnesses; then document order) and none a
+code's item already asks (D89); and D125's extent question per done session whose extent no code asks.
 
 **The text-free boundary** (P1; FINAL-V2 4.1, 5.7 measure 4): this module imports the standard library, the package's
-labels, contract/types.py and engine's catalogue, facts, pairing, reading, requirements and types only - no retired v1
-module (5.0), none of contract's text modules, not wording - holds no word, phrase or marker list (every module-level
-collection holds enumeration members), and reads no text. Its only sentences are completeness's fixed ones (v1's); every
-other record carries CPT Studio's codes, ids and integer spans. ``mypy --strict`` passes over it.
+labels, contract/types.py and engine's anatomy, catalogue, combination (step 4d's reference for "session done",
+"possibly done" and "established not done today", D227 and D269, and its synthetic act, D231), facts, pairing,
+reading, requirements and types only - no retired v1 module (5.0), none of contract's text modules, not wording - holds
+no word, phrase or marker list (every module-level collection holds enumeration members), and reads no text. Its only
+sentences are completeness's fixed ones (v1's); every other record carries CPT Studio's codes, ids and integer spans.
+``mypy --strict`` passes over it.
 """
 from __future__ import annotations
 
+from collections import deque
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum, unique
@@ -141,13 +212,15 @@ from types import MappingProxyType
 from typing import TypeVar
 
 from studio.interpretation import ENGINE_VERSION_V2
-from studio.interpretation.contract.types import (Attribute, Cause, DateRelation, Duct, Kind, Landmark, Multiplicity,
-                                                  Owner, Performer, Purpose, Qualifier2, Reason, Result, SessionKind,
-                                                  Status, Tract, UnlistedWhat, VerdictValue)
-from studio.interpretation.engine import anatomy, catalogue, pairing, reading
+from studio.interpretation.contract.types import (Attribute, Cause, DateRelation, Duct, FactState, Kind,
+                                                  Landmark, Multiplicity, Owner, PartRelation, Performer, Purpose,
+                                                  Qualifier2, Reason, Result, SessionKind, Status, Tract, UnlistedWhat,
+                                                  VerdictValue)
+from studio.interpretation.engine import anatomy, catalogue, combination, pairing, reading
 from studio.interpretation.engine import facts as facts_
 from studio.interpretation.engine import requirements as rq
-from studio.interpretation.engine.types import Fact, FactSet, HeldFact, Id, IdFamily, ItemKind, Span, UnlistedStatement
+from studio.interpretation.engine.types import (Anchor, Fact, FactSet, HeldFact, Id, IdFamily, ItemKind, Span,
+                                                UnlistedStatement)
 
 _T = TypeVar('_T', bound=Enum)
 _A = Attribute
@@ -223,6 +296,8 @@ _TODAY: frozenset[DateRelation] = frozenset({DateRelation.ON_DATE_OF_SERVICE})
 _RESECTIONS: frozenset[Kind] = frozenset({Kind.EMR, Kind.ESD})
 _LIFTS: frozenset[Kind] = frozenset({Kind.INJECTION})
 _LIFTS_BY_PART: frozenset[Kind] = catalogue.ONE_ACT  # an injection or a tattoo, by its part_of (v1's ONE_ACT arm)
+# 4.7's lift row (DECISIONS D229, refute-4b-r2 F6): the part_relations that make a part_of a lift - lift_for or step_of.
+_LIFT_RELATIONS: frozenset[PartRelation] = frozenset({PartRelation.LIFT_FOR, PartRelation.STEP_OF})
 _TECHNIQUES: frozenset[Kind] = frozenset({Kind.SNARE, Kind.HOT_BIOPSY})
 _STENT_PARTS: frozenset[Kind] = frozenset({Kind.SPHINCTEROTOMY, Kind.DILATION})
 _STENTS: frozenset[Kind] = frozenset({Kind.STENT, Kind.STENT_EXCHANGE})
@@ -364,17 +439,27 @@ class _Asker:
     """Who a conjunct's doubts are about and how they are asked: the FactSet, the part and its kind, and the Reader
     whose pairs a whole's contradictions are read from (None outside one: no whole is judged then)."""
 
-    __slots__ = ('R', 'part', 'kind', 'reader')
+    __slots__ = ('R', 'part', 'kind', 'reader', '_same')
 
     def __init__(self, R: FactSet, part: Id, reader: Reader | None = None) -> None:
         self.R = R
         self.part = part
         self.kind = _kind_of(R, part)
         self.reader = reader
+        self._same: _SameAs | None = None
 
     def doubt(self, subject: Id, attribute: Attribute, found: Fact, key: rq.FactKey) -> Judged:
         kind = self.kind if subject == self.part or subject.family is not IdFamily.EVENT else _kind_of(self.R, subject)
         return Judged(Truth.U, (Doubt(subject, attribute, found, key, kind),))
+
+    def same_as(self) -> _SameAs:
+        """The FactSet's same_as graph and what is read off it (_SameAs), built once per Reader (once per asker outside
+        one): every walk, join and component computed once (DECISIONS D248 G5)."""
+        if self.reader is not None:
+            return self.reader._same_as()
+        if self._same is None:
+            self._same = _SameAs(self.R)
+        return self._same
 
 
 def _enum_in(ask: _Asker, subject: Id, attribute: Attribute, wanted: frozenset[_T], domain: type[_T],
@@ -476,17 +561,21 @@ def sessions_of(R: FactSet, event: Id) -> frozenset[Id]:
     negated; facts.possibly's sessions otherwise (every session for an empty slot). A session fact that names a session
     the FactSet does not hold (a dangling id: settle's I4 keeps the claimed value, unresolved, FINAL-V2 1.8), as its
     value or as one of its readings, leaves every session open: a missing identifier manufactures neither a match nor a
-    non-match (4.11), and a doubt is never an absence (4.2)."""
+    non-match (4.11), and a doubt is never an absence (4.2). So does a fact that is not established and whose claim is
+    a negation ("not in X1" left unresolved, doubted or contradicted: facts.possibly would read its claimed value alone,
+    so weakening an established negation would narrow every other session to X1, against 9.4 P-MONO), or that names no
+    session at all - step 4d's possible_sessions reads both so (repair r4b; DECISIONS D227's one membership)."""
     found = facts_.fact(R, event, _A.SESSION)
     every = frozenset(R.sessions)
     if found.result is Result.NEGATED:
         return frozenset(session for session in every if session != found.value)
-    named = (found.value, *found.options) if found.result is not Result.SUPPORTED else (found.value,)
-    if any(isinstance(value, Id) and value not in every for value in named):
+    if found.result is Result.SUPPORTED:
+        return frozenset({found.value}) if isinstance(found.value, Id) and found.value in every else every
+    named = tuple(value for value in (found.value, *found.options) if isinstance(value, Id))
+    if facts_.silent(found) or found.state is FactState.NEGATED or not named or any(
+            value not in every for value in named):
         return every
-    if found.result is Result.SUPPORTED and isinstance(found.value, Id):
-        return frozenset({found.value})
-    return frozenset(session for session in every if facts_.possibly(found, session))
+    return frozenset(named)
 
 
 def _established_sessions(R: FactSet, found: Fact) -> frozenset[Id] | None:
@@ -518,8 +607,11 @@ def _same_session(ask: _Asker, part: Id, whole: Id) -> Judged:
 
 def _whole(ask: _Asker, part: Id, whole: Id, kinds: frozenset[Kind] | None, statuses: frozenset[Status]) -> Judged:
     """The whole as 4.3's bundling row reads it (by possibly): of ``kinds`` (None: any kind), its status one of
-    ``statuses``, on the date of service, in the part's session."""
+    ``statuses``, on the date of service, in the part's session. A whole of none of ``kinds`` is F before anything else
+    is read (the same result: Kleene's conjunction is F on any F conjunct; DECISIONS D248 G5's cost)."""
     kind = _TRUE if kinds is None else _kind_in(ask, whole, kinds, rq.FactKey.ACT_PART)
+    if kind.truth is Truth.F:
+        return _FALSE
     return _both(kind, _status_in(ask, whole, statuses, rq.FactKey.ACT_PART),
                  _enum_in(ask, whole, _A.DATE_RELATION, _TODAY, DateRelation, rq.FactKey.ACT_PART),
                  _same_session(ask, part, whole), _unchallenged(ask, whole))
@@ -528,8 +620,9 @@ def _whole(ask: _Asker, part: Id, whole: Id, kinds: frozenset[Kind] | None, stat
 def _unchallenged(ask: _Asker, whole: Id) -> Judged:
     """D3's principle on the whole's side (S4: "contradictions ... are never resolved by bundling"): a whole a
     statement contradicts (pairing's CONTRADICTION) may not have been done, so a bundling into it is asked - its
-    conflict first (rank 1) - and never explained away. T when no statement contradicts it."""
-    if ask.reader is None:
+    conflict first (rank 1) - and never explained away. T when no statement contradicts it, and for a synthetic act's
+    filed doubted form (Reader._synthetic_wholes: no statement pairs with an unlisted act; its own doubt is asked)."""
+    if ask.reader is None or whole not in ask.reader.R.events:
         return _TRUE
     found = tuple(item for item in ask.reader.conflicts(whole) if item.cause == RELATION_CONTRADICTION)
     return Judged(Truth.U, (), None, found) if found else _TRUE
@@ -572,33 +665,279 @@ def _supported_id(found: Fact) -> Id | None:
     return found.value if found.result is Result.SUPPORTED and isinstance(found.value, Id) else None
 
 
-def _joined(R: FactSet, one: Id, other: Id, *, possibly: bool) -> bool:
-    """Two lesions one (same_as in either list): supported, or (``possibly``) possibly so (facts.possibly)."""
-    test = facts_.possibly if possibly else facts_.holds
-    return one == other or any(test(member, other) for member in facts_.members(R, one, _A.SAME_AS)) or any(
-        test(member, one) for member in facts_.members(R, other, _A.SAME_AS))
+# One same_as member, where it is read: (the lesion whose same_as list holds it, the member).
+_Link = tuple[Id, Fact]
+# A claim that two lesion entries are NOT one finding, where it is read (DECISIONS D248 G3): (the lesion whose list holds
+# it, same_as or distinct_from, the member).
+_Claim = tuple[Id, Attribute, Fact]
+# What a walk reaches: each id with the fewest members not supported on a chain to it, and that chain's members.
+_Reach = dict[Id, tuple[int, tuple[_Link, ...]]]
+# A join's answer (_SameAs.join): None when nothing may join the two sides; else (supported members alone join them, the
+# members to ask).
+_Joined = tuple[bool, tuple[_Link, ...]] | None
 
 
-def _apart(R: FactSet, part: Id, whole: Id) -> bool:
+def _member_ids(R: FactSet, member: Fact) -> tuple[Id, ...]:
+    """The lesion ids a same_as member may name (facts.possibly): supported, its value; negated ("L1 is not the same as
+    L2"), none; not established, its claimed value and its options - every lesion of the FactSet for a silent one."""
+    if member.result is Result.NEGATED:
+        return ()
+    if member.result is Result.SUPPORTED:
+        return (member.value,) if isinstance(member.value, Id) else ()
+    if facts_.silent(member):
+        return tuple(R.lesions)
+    return tuple(dict.fromkeys(value for value in (member.value, *member.options) if isinstance(value, Id)))
+
+
+def _same_as_graph(R: FactSet) -> dict[Id, list[tuple[Id, _Link]]]:
+    """same_as as the equivalence it states (P5: one id per distinct finding, and a same_as says two entries are one
+    finding), as an undirected graph: each lesion of the FactSet linked, by each member of its same_as list, to every id
+    that member may name (_member_ids) - an id the FactSet does not hold included. Built in the FactSet's order, so a
+    walk over it is deterministic."""
+    graph: dict[Id, list[tuple[Id, _Link]]] = {}
+    for holder in R.lesions:
+        for member in facts_.members(R, holder, _A.SAME_AS):
+            for other in _member_ids(R, member):
+                if other != holder:
+                    graph.setdefault(holder, []).append((other, (holder, member)))
+                    graph.setdefault(other, []).append((holder, (holder, member)))
+    return graph
+
+
+def _walk(graph: Mapping[Id, Sequence[tuple[Id, _Link]]], start: Iterable[Id]) -> _Reach:
+    """Every id ``graph`` reaches from ``start``, each with the fewest members not supported on a chain to it and that
+    chain's members, in order from ``start`` (a 0-1 breadth-first walk: a supported member costs nothing, so it is
+    queued at the front; one not supported costs one, queued at the back)."""
+    best: _Reach = {}
+    queue: deque[tuple[int, Id, tuple[_Link, ...]]] = deque(
+        (0, node, ()) for node in sorted(frozenset(start), key=_id_order))
+    while queue:
+        cost, node, chain = queue.popleft()
+        if node in best:
+            continue
+        best[node] = (cost, chain)
+        for other, link in graph.get(node, ()):
+            if other in best:
+                continue
+            if link[1].result is Result.SUPPORTED:
+                queue.appendleft((cost, other, chain + (link,)))
+            else:
+                queue.append((cost + 1, other, chain + (link,)))
+    return best
+
+
+def _asked(chain: Sequence[_Link]) -> tuple[_Link, ...]:
+    """The members a chain to an id the FactSet does not hold leaves open: those not supported, else the last one (the
+    member naming that id, whose identity is unknown)."""
+    open_ = tuple(link for link in chain if link[1].result is not Result.SUPPORTED)
+    return open_ or tuple(chain[-1:])
+
+
+def _names(member: Fact) -> tuple[Id, ...]:
+    """The ids a list member names in any state: its claimed value and its options (a contradiction's sides, a doubt's
+    readings)."""
+    return tuple(value for value in (member.value, *member.options) if isinstance(value, Id))
+
+
+class _SameAs:
+    """The FactSet's same_as graph (_same_as_graph) and what the bundling rules read off it, each computed once
+    (DECISIONS D248 G5; refute-r4b-r2 G5: the walk ran once per (part, whole) pair, 388 s at FINAL-V2 1.8's bounds): a
+    walk per start set, a join per (left, right) pair, the ids supported members join to a lesion (its supported
+    component), and _join's third reaches (the components holding two ids the FactSet does not hold). Read-only over a
+    frozen FactSet: one per Reader (per asker outside one), never shared across FactSets."""
+
+    __slots__ = ('R', 'lesions', 'graph', '_walks', '_joins', '_components', '_third')
+
+    def __init__(self, R: FactSet, graph: Mapping[Id, Sequence[tuple[Id, _Link]]] | None = None) -> None:
+        self.R = R
+        self.lesions: frozenset[Id] = frozenset(R.lesions)
+        self.graph: Mapping[Id, Sequence[tuple[Id, _Link]]] = graph if graph is not None else _same_as_graph(R)
+        self._walks: dict[frozenset[Id], _Reach] = {}
+        self._joins: dict[tuple[frozenset[Id], frozenset[Id]], _Joined] = {}
+        self._components: dict[Id, frozenset[Id]] = {}
+        self._third: tuple[tuple[Id, tuple[_Link, ...]], ...] | None = None
+
+    def walk(self, start: frozenset[Id]) -> _Reach:
+        """_walk from ``start``, once per start set."""
+        found = self._walks.get(start)
+        if found is None:
+            found = self._walks[start] = _walk(self.graph, start)
+        return found
+
+    def join(self, left: Iterable[Id], right: Iterable[Id]) -> _Joined:
+        """Whether same_as - one member, or a chain of members through other entries (refute-r4b-r1 R1: a same_as states
+        that two entries are one finding, an equivalence) - may join a lesion id of ``left`` to one of ``right``: None
+        when nothing may; else (by supported members alone, the members to ask) - True when supported members alone join
+        them (one finding), and the members not supported on the cheapest joining chain (the fewest members not
+        supported: _walk). An id the FactSet does not hold that a member names may be any ONE lesion (4.11: a missing
+        identifier manufactures neither a match nor a non-match): in the left's reach or the right's it may be the other
+        side's lesion, and a third reach holding two such ids may be both sides' - then the member naming one (or the
+        first member not supported before it) is asked (refute-r4b-r1 R2). An id of ``left`` or ``right`` itself naming
+        no lesion of the FactSet is the caller's to read (D221's identity: unknown). Once per (left, right) pair."""
+        key = (frozenset(left), frozenset(right))
+        if key not in self._joins:
+            self._joins[key] = self._join(*key)
+        return self._joins[key]
+
+    def _join(self, starts: frozenset[Id], ends: frozenset[Id]) -> _Joined:
+        found = self.walk(starts)
+        reached = sorted((node for node in ends if node in found), key=lambda node: (found[node][0], _id_order(node)))
+        if reached:
+            chain = found[reached[0]][1]
+            open_ = tuple(link for link in chain if link[1].result is not Result.SUPPORTED)
+            return not open_, open_
+        back = self.walk(ends)
+        for reach, origin in ((found, starts), (back, ends)):
+            missing = sorted((node for node in reach if node not in self.lesions and node not in origin),
+                             key=lambda node: (reach[node][0], _id_order(node)))
+            if missing:
+                return False, _asked(reach[missing[0]][1])
+        for first_missing, asked in self.third():
+            if first_missing not in found and first_missing not in back:
+                return False, asked
+        return None
+
+    def third(self) -> tuple[tuple[Id, tuple[_Link, ...]], ...]:
+        """_join's third reaches, once per FactSet: each component of the graph (walked from its first id the FactSet
+        does not hold, in id order) that holds a second such id, as (that first id, the members a walk from it asks
+        to reach its next such id in id order) - in the order of those first ids. A join returns the first one no
+        walk from its two sides reached (those components are read by its own reaches)."""
+        if self._third is None:
+            out: list[tuple[Id, tuple[_Link, ...]]] = []
+            seen: set[Id] = set()
+            for node in sorted(self.graph, key=_id_order):
+                if node in seen or node in self.lesions:
+                    continue
+                reach = self.walk(frozenset({node}))
+                seen |= set(reach)
+                missing = sorted((other for other in reach if other not in self.lesions and other != node),
+                                 key=_id_order)
+                if missing:
+                    out.append((node, _asked(reach[missing[0]][1])))
+            self._third = tuple(out)
+        return self._third
+
+    def component(self, lesion: Id) -> frozenset[Id]:
+        """The ids supported same_as members join to ``lesion``, directly or through other entries, itself included
+        (its supported component), once per component."""
+        found = self._components.get(lesion)
+        if found is None:
+            seen = {lesion}
+            queue = [lesion]
+            while queue:
+                node = queue.pop()
+                for other, link in self.graph.get(node, ()):
+                    if link[1].result is Result.SUPPORTED and other not in seen:
+                        seen.add(other)
+                        queue.append(other)
+            found = frozenset(seen)
+            for node in found:
+                self._components[node] = found
+        return found
+
+    def one_finding(self, one: Id, other: Id) -> bool:
+        """Two lesion ids one finding (P5): the same id, or joined by supported same_as members alone, directly or
+        through other entries - the same answer as a join's first value (a chain of no member not supported)."""
+        return one == other or other in self.component(one)
+
+    def denials(self, one: Id, other: Id) -> tuple[_Claim, ...]:
+        """DECISIONS D248 G3 (refute-r4b-r2 G3): the claims that two different lesion entries are NOT one finding,
+        between them: in either one's list, a same_as member that is a negation in any state ("L2 is not the same as
+        L3" - established, or left open: its claim is still a negation) or a contradicted one with the other among its
+        sides, and a distinct_from member that is no negation, naming the other. Read beside supported members that join
+        the two, they are the FactSet contradicting itself on the two lesions' identity, which is asked and never
+        explained (S4: contradictions are never resolved by bundling; 4.8 rank 1) - and never released either: the
+        readers give U on them, never F by the places or otherwise (repair r4b-2, refute-r4b-r1 F1). A contradicted
+        member is a claim whatever its other sides name - one whose sides all name the other's finding too is asked,
+        its conflict at rank 1, never explained (the step's NOTES, question QF1). Read only between the two acts' own
+        lesions, so a weakening never removes one (an established claim weakened keeps its claim), and a supported
+        member weakened only breaks the join (the step's NOTES, question QG3)."""
+        if one == other:
+            return ()
+        out: list[_Claim] = []
+        for holder, named in ((one, other), (other, one)):
+            for member in facts_.members(self.R, holder, _A.SAME_AS):
+                if (member.state is FactState.NEGATED or member.result is Result.CONTRADICTED) and \
+                        named in _names(member):
+                    out.append((holder, _A.SAME_AS, member))
+            for member in facts_.members(self.R, holder, _A.DISTINCT_FROM):
+                if member.state is not FactState.NEGATED and member.result is not Result.NEGATED and \
+                        named in _names(member):
+                    out.append((holder, _A.DISTINCT_FROM, member))
+        return tuple(out)
+
+
+def _join(R: FactSet, left: Iterable[Id], right: Iterable[Id],
+          graph: Mapping[Id, Sequence[tuple[Id, _Link]]]) -> _Joined:
+    """_SameAs.join over ``graph`` (the FactSet's _same_as_graph), with nothing memoized across calls: the Reader's
+    _SameAs is the reading the rules use."""
+    return _SameAs(R, graph).join(left, right)
+
+
+def _one_finding(R: FactSet, one: Id, other: Id, graph: Mapping[Id, Sequence[tuple[Id, _Link]]]) -> bool:
+    """_SameAs.one_finding over ``graph``: the same id, or joined by supported same_as members alone, directly or
+    through other entries."""
+    return _SameAs(R, graph).one_finding(one, other)
+
+
+def _claimed_lesions(found: Fact) -> frozenset[Id]:
+    """The lesion ids a target.lesion CLAIM names, read by facts.possibly (4.2; DECISIONS D239's "a lesion claim not
+    established whose value or options name the act's lesion"): supported, its value; not established, its claimed value
+    and its options - a doubt's readings, a contradiction's sides, the value of a negation left open (possibly that
+    lesion after all); an established negation, and an empty slot no doubt names (P13: a lesion the document does not
+    state), name none."""
+    if found.result is Result.NEGATED:
+        return frozenset()
+    if found.result is Result.SUPPORTED:
+        return frozenset({found.value}) if isinstance(found.value, Id) else frozenset()
+    return frozenset(value for value in (found.value, *found.options) if isinstance(value, Id))
+
+
+def _may_be_one_finding(R: FactSet, part: Id, whole: Id, same: _SameAs) -> bool:
+    """Whether the two acts' lesion claims may name one finding (DECISIONS D239's reading, here for bundling: refute-
+    r4b-r1 F3, built fail-closed - the step's NOTES, question QF3): both acts state a lesion (_claimed_lesions) and some
+    id one may name is one the other may name, or a same_as - one member or a chain of them, supported or not
+    (_SameAs.join, a member naming an id the FactSet does not hold included, 4.11) - may join them. Every 9.4 weakening
+    keeps a claimed value and a same_as member's edge (an established negation weakened even adds its value), so it
+    only widens this: a weakening never turns it False."""
+    left = _claimed_lesions(facts_.fact(R, part, _A.TARGET_LESION))
+    right = _claimed_lesions(facts_.fact(R, whole, _A.TARGET_LESION))
+    return bool(left) and bool(right) and (bool(left & right) or same.join(left, right) is not None)
+
+
+def _apart(R: FactSet, part: Id, whole: Id, same: _SameAs) -> bool:
     """The two acts' targets established apart (4.2 [R:SC-B]): by lesion (facts.apart_by_lesion: distinct_from and the
-    lesion pair controls, never while a same_as may join the two lesions) or by place (facts.apart_by_place: disjoint
-    established places and their pair controls)."""
+    lesion pair controls, never while a same_as - directly or through other entries, _SameAs.join - may join the two
+    lesions) or by place (facts.apart_by_place: disjoint established places and their pair controls), never while the
+    two acts' lesion claims may name one finding (_may_be_one_finding: DECISIONS D239's reading, which rules pairing's
+    analogue - a supported equal lesion, or a lesion possibly equal, is never set apart by place). Read in that order
+    and the guard last, only where the places set the acts apart (D248 G5's cost)."""
     one = _supported_id(facts_.fact(R, part, _A.TARGET_LESION))
     other = _supported_id(facts_.fact(R, whole, _A.TARGET_LESION))
-    by_lesion = (facts_.apart_by_lesion(R, part, whole) and one is not None and other is not None
-                 and not _joined(R, one, other, possibly=True))
-    return by_lesion or facts_.apart_by_place(R, part, whole)
+    by_lesion = (one is not None and other is not None and facts_.apart_by_lesion(R, part, whole)
+                 and same.join((one,), (other,)) is None)
+    return by_lesion or (facts_.apart_by_place(R, part, whole) and not _may_be_one_finding(R, part, whole, same))
 
 
 def _same_lesion(ask: _Asker, part: Id, whole: Id) -> Judged:
-    """One lesion (module docstring): T when both are supported and equal or joined by a supported same_as; F when the
-    two acts' targets are established apart; U otherwise, resting on the lesion facts not established (on the part's,
+    """One lesion (module docstring): T when both are supported and one finding (_SameAs.one_finding: equal, or joined
+    by supported same_as members, directly or through other entries) and nothing claims the two entries are not one
+    finding (_SameAs.denials, DECISIONS D248 G3); with such a claim, U resting on the claims - never F: one finding by
+    supported members is never set apart, by place or by lesion, while the FactSet contradicts itself on it (repair
+    r4b-2, refute-r4b-r1 F1: the claim's U fell through to the place exit and released the part, where the same FactSet
+    without the claim was bundled). F when the two acts' targets are established apart (_apart: never by place while
+    their lesion claims may name one finding); U otherwise, resting on the lesion facts not established (on the part's,
     when both are supported and nothing joins or sets them apart)."""
     one, other = facts_.fact(ask.R, part, _A.TARGET_LESION), facts_.fact(ask.R, whole, _A.TARGET_LESION)
     first, second = _supported_id(one), _supported_id(other)
-    if first is not None and second is not None and _joined(ask.R, first, second, possibly=False):
-        return _decided(_A.TARGET_LESION)
-    if _apart(ask.R, part, whole):
+    same = ask.same_as()
+    if first is not None and second is not None and same.one_finding(first, second):
+        denials = same.denials(first, second)
+        if not denials:
+            return _decided(_A.TARGET_LESION)
+        return _both(*(ask.doubt(holder, attribute, member, rq.FactKey.ACT_TARGET)
+                       for holder, attribute, member in denials))
+    if _apart(ask.R, part, whole, same):
         return _FALSE
     doubts = [ask.doubt(subject, _A.TARGET_LESION, found, rq.FactKey.ACT_TARGET)
               for subject, found in ((part, one), (whole, other)) if found.result is not Result.SUPPORTED]
@@ -711,57 +1050,189 @@ def _rule_family(ask: _Asker) -> Judged:
 
 
 def _lift(ask: _Asker, whole: Id) -> Judged:
-    """LIFT_INJECTION: an injection or a tattoo whose part_of names an EMR or ESD; or an injection whose purpose is
-    lift_for_resection, of the same lesion as one. The relation comes first, so a T names its deciding fact."""
-    by_part = _both(_part_of(ask, ask.part, whole), _kind_in(ask, ask.part, _LIFTS_BY_PART, rq.FactKey.ACT_PART))
-    by_purpose = _both(_same_lesion(ask, ask.part, whole), _kind_in(ask, ask.part, _LIFTS, rq.FactKey.ACT_PART),
-                       _enum_in(ask, ask.part, _A.PURPOSE, frozenset({Purpose.LIFT_FOR_RESECTION}), Purpose,
-                                rq.FactKey.ACT_PART))
-    return _both(_either(by_part, by_purpose), _whole(ask, ask.part, whole, _RESECTIONS, _PERFORMED))
+    """LIFT_INJECTION (4.7's lift row, refute-4b-r2 F6): an injection or a tattoo whose part_of names an EMR or ESD
+    with part_relation lift_for or step_of; or an injection whose purpose is lift_for_resection, of the same lesion as
+    one - never a hemostatic injection (its purpose supported hemostasis: catalogue kind bleeding_control, which v1's
+    lift arm never read as an injection; a stated adjunct of the resection is PROCEDURAL_ADJUNCT's). The relation
+    comes first, so a T names its deciding fact. A conjunct is read only where no conjunct beside it is F (the same
+    result: Kleene's conjunction is F on any F conjunct; DECISIONS D248 G5's cost) - the whole first."""
+    whole_ = _whole(ask, ask.part, whole, _RESECTIONS, _PERFORMED)
+    if whole_.truth is Truth.F:
+        return _FALSE
+    by_part = _both(_part_of(ask, ask.part, whole),
+                    _enum_in(ask, ask.part, _A.PART_RELATION, _LIFT_RELATIONS, PartRelation, rq.FactKey.ACT_PART),
+                    _kind_in(ask, ask.part, _LIFTS_BY_PART, rq.FactKey.ACT_PART), _not_hemostatic(ask.R, ask.part))
+    kind = _kind_in(ask, ask.part, _LIFTS, rq.FactKey.ACT_PART)
+    purpose = _enum_in(ask, ask.part, _A.PURPOSE, frozenset({Purpose.LIFT_FOR_RESECTION}), Purpose,
+                       rq.FactKey.ACT_PART)
+    by_purpose = _FALSE if Truth.F in (kind.truth, purpose.truth) else _both(_same_lesion(ask, ask.part, whole), kind,
+                                                                             purpose)
+    return _both(_either(by_part, by_purpose), whole_)
+
+
+def _not_hemostatic(R: FactSet, part: Id) -> Judged:
+    """4.7's lift row: never a hemostatic injection - F when the part's purpose is supported hemostasis (v1's
+    catalogue_kind, which read the established purpose only: a clip or an injection whose purpose is open is read as
+    itself there, D157's doubt being the bleeding control's own row); T otherwise."""
+    return _FALSE if facts_.holds(facts_.fact(R, part, _A.PURPOSE), Purpose.HEMOSTASIS) else _TRUE
 
 
 def _technique(ask: _Asker, whole: Id) -> Judged:
-    """RESECTION_TECHNIQUE: a snare or hot-forceps removal whose part_of names an EMR or ESD, or of its lesion."""
-    return _both(_either(_part_of(ask, ask.part, whole), _same_lesion(ask, ask.part, whole)),
-                 _kind_in(ask, ask.part, _TECHNIQUES, rq.FactKey.ACT_PART),
-                 _whole(ask, ask.part, whole, _RESECTIONS, _PERFORMED))
+    """RESECTION_TECHNIQUE: a snare or hot-forceps removal whose part_of names an EMR or ESD, or of its lesion. The
+    whole and the kind are read first, the identity only where neither is F (the same result; D248 G5's cost)."""
+    whole_ = _whole(ask, ask.part, whole, _RESECTIONS, _PERFORMED)
+    kind = _kind_in(ask, ask.part, _TECHNIQUES, rq.FactKey.ACT_PART) if whole_.truth is not Truth.F else _FALSE
+    if Truth.F in (whole_.truth, kind.truth):
+        return _FALSE
+    return _both(_either_lazily(lambda: _part_of(ask, ask.part, whole), lambda: _same_lesion(ask, ask.part, whole)),
+                 kind, whole_)
+
+
+def _either_lazily(*judges: Callable[[], Judged]) -> Judged:
+    """_either over disjuncts judged in order, stopping at the first T (the same result: _either returns the first T;
+    D248 G5's cost)."""
+    found: list[Judged] = []
+    for judge in judges:
+        judged = judge()
+        if judged.truth is Truth.T:
+            return judged
+        found.append(judged)
+    return _either(*found)
 
 
 def _stent(ask: _Asker, whole: Id) -> Judged:
     """STENT_INCLUDED (D45): an ERCP sphincterotomy or dilation beside a stent placement or exchange of its duct."""
+    whole_ = _whole(ask, ask.part, whole, _STENTS, _PERFORMED)
+    if whole_.truth is Truth.F:
+        return _FALSE
     return _both(_same_duct(ask, ask.part, whole), _kind_in(ask, ask.part, _STENT_PARTS, rq.FactKey.ACT_PART),
-                 _family_in(ask, ask.part, _ERCP), _whole(ask, ask.part, whole, _STENTS, _PERFORMED))
+                 _family_in(ask, ask.part, _ERCP), whole_)
 
 
 def _adjunct(ask: _Asker, whole: Id) -> Judged:
     """PROCEDURAL_ADJUNCT (D30, D79): a bleeding control, ablation, clip or injection whose part_of names an act, or
     that treats bleeding the whole (any event of the session) caused; the whole performed or begun. v1's same-lesion
-    arm is possible only (_lesion_adjunct)."""
-    by_part = _both(_part_of(ask, ask.part, whole), _whole(ask, ask.part, whole, _ACT_WHOLES, _POSITIVE))
-    by_cause = _both(_caused_by(ask, ask.part, whole), _whole(ask, ask.part, whole, None, _POSITIVE))
-    return _both(_either(by_part, by_cause, _lesion_adjunct(ask, whole)),
-                 _kind_in(ask, ask.part, _ADJUNCTS, rq.FactKey.ACT_PART))
+    arm is possible only (_lesion_adjunct). An arm's whole is read only where its relation is not F (the same result;
+    D248 G5's cost)."""
+    kind = _kind_in(ask, ask.part, _ADJUNCTS, rq.FactKey.ACT_PART)
+    if kind.truth is Truth.F:
+        return _FALSE
+    part_of = _part_of(ask, ask.part, whole)
+    by_part = _FALSE if part_of.truth is Truth.F else _both(part_of,
+                                                             _whole(ask, ask.part, whole, _ACT_WHOLES, _POSITIVE))
+    caused = _caused_by(ask, ask.part, whole)
+    by_cause = _FALSE if caused.truth is Truth.F else _both(caused, _whole(ask, ask.part, whole, None, _POSITIVE))
+    found = _either(by_part, by_cause) if Truth.T in (by_part.truth, by_cause.truth) else _either(
+        by_part, by_cause, _lesion_adjunct(ask, whole))
+    return _both(found, kind)
 
 
 def _lesion_adjunct(ask: _Asker, whole: Id) -> Judged:
-    """v1's D30 same-lesion arm ("by its verified part_of or the removal's lesion"), built fail-closed (the module
-    docstring; the step's NOTES, question DQ1): a part of v1's adjunct kinds (a catalogue kind ablation or bleeding
-    control, relations.PROCEDURAL_ADJUNCTS; a clip or an injection whose purpose may be hemostasis included) with a
-    lesion stated, beside a removal performed or begun (today, in its session) with a lesion stated, is POSSIBLY that
-    removal's adjunct unless the two lesions are established apart or its own facts establish otherwise (_not_adjunct):
-    U, asked as its part_of (act_part, rank 17) - never T, since whether one lesion alone bundles it is the design's to
-    say, and a part_of or cause_event naming the removal bundles it by those arms. A lesion stated on neither act, or on
-    one only, relates nothing here (P13: a target the document does not state is left empty). Monotone under 9.4's
-    weakenings: none makes a stated lesion silent, and every exit to F reads an established fact."""
-    if any(_pure_silent(facts_.fact(ask.R, subject, _A.TARGET_LESION)) for subject in (ask.part, whole)) or \
+    """v1's D30 same-lesion arm ("by its verified part_of or the removal's lesion"), as DECISIONS D221 rules it (the
+    module docstring; refute-4b-r2 F1): a part of v1's adjunct kinds (a catalogue kind ablation or bleeding control,
+    relations.PROCEDURAL_ADJUNCTS; a clip or an injection whose purpose may be hemostasis included) with a lesion
+    stated, beside a removal performed or begun (today, in its session) with a lesion stated, ASKS only where the two
+    acts may name the same lesion (_adjunct_lesion): U, asked as its part_of (act_part, rank 17), unless its own
+    established part_of or cause says otherwise (_not_adjunct) - never T: with the same lesion the arm reads
+    part_relation and cause as 4.7 says, so a part_of or cause_event naming the removal bundles it by those arms. Two
+    different supported lesion ids no same_as can join are different findings (P5's one id per distinct finding): F,
+    and the ablation's or the bleeding control's code proceeds on its own rows (the installed D30 bundled only the
+    removal's same verified lesion; 4.7 asks nothing there) - and only those: a lesion fact that is not supported
+    (unresolved, contradicted, doubted, negated) is an unknown identity (4.11), so the arm asks its lesion question
+    (DECISIONS D248 G2, option (b)). same_as is read as the equivalence it states: a chain of members through other
+    entries joins them as one member does (refute-r4b-r1 R1: pass 1 filing three entries for one finding, each linked to
+    the first), and a member naming an id the FactSet does not hold may join its chain to any lesion (R2, 4.11). A
+    same_as that may join them and is not established gives U, its one question naming both first; a claim that the two
+    lesions are not one finding beside supported members joining them is asked first likewise (D248 G3). The identity's
+    question - the same_as or that claim, then each lesion fact not supported - comes before the part_of (act_part):
+    what the document must settle about the lesions decides whether the part_of matters. A lesion stated on neither act,
+    or on one only, relates nothing here (P13: a target the document does not state is left empty). Monotone under 9.4's
+    weakenings: none makes a stated lesion silent, a lesion or same_as fact weakened only widens what each act may name
+    and what may join them, and every exit to F reads an established fact, an empty slot no doubt names, or two
+    supported lesion ids themselves - deleting a same_as member is the one change that can release it, and 9.4 deletes
+    members of places, stations and reached only (the step's NOTES, question QR4-1). The kind and the whole are read
+    before the identity (the same result: every exit is F on either; D248 G5's cost)."""
+    if _pure_silent(facts_.fact(ask.R, whole, _A.TARGET_LESION)):
+        return _FALSE
+    removal = _whole(ask, ask.part, whole, _REMOVALS, _POSITIVE)
+    if removal.truth is Truth.F or _pure_silent(facts_.fact(ask.R, ask.part, _A.TARGET_LESION)) or \
             _not_adjunct(ask.R, ask.part, whole):
         return _FALSE
-    found = _both(_ckind_in(ask, ask.part, _LESION_ADJUNCTS, rq.FactKey.ACT_PART), _same_lesion(ask, ask.part, whole),
-                  _whole(ask, ask.part, whole, _REMOVALS, _POSITIVE))
+    found = _both(_ckind_in(ask, ask.part, _LESION_ADJUNCTS, rq.FactKey.ACT_PART), removal)
     if found.truth is Truth.F:
         return _FALSE
+    identity = _adjunct_lesion(ask, whole)
+    if identity.truth is Truth.F:
+        return _FALSE
     asked = ask.doubt(ask.part, _A.PART_OF, facts_.fact(ask.R, ask.part, _A.PART_OF), rq.FactKey.ACT_PART)
-    return Judged(Truth.U, asked.doubts + found.doubts, None, found.conflicts)
+    return Judged(Truth.U, identity.doubts + asked.doubts + found.doubts, None, found.conflicts)
+
+
+def _lesion_values(R: FactSet, found: Fact) -> frozenset[Id]:
+    """The lesions a target.lesion fact may name: supported, its value; negated, every other lesion of the FactSet; not
+    established, its claimed value and its options (facts.possibly) - every lesion for an empty slot a doubt names, a
+    negation left open ("not L2" unresolved) or a value naming no lesion of the FactSet, supported or not (4.11: a
+    missing identifier manufactures neither a match nor a non-match)."""
+    every = frozenset(R.lesions)
+    if found.result is Result.SUPPORTED:
+        if not isinstance(found.value, Id):
+            return frozenset()
+        return frozenset({found.value}) if found.value in every else every | frozenset({found.value})
+    if found.result is Result.NEGATED:
+        return frozenset(lesion for lesion in every if lesion != found.value)
+    named = frozenset(value for value in (found.value, *found.options) if isinstance(value, Id))
+    if facts_.silent(found) or found.state is FactState.NEGATED or not named or any(
+            value not in every for value in named):
+        return every | named
+    return named
+
+
+def _adjunct_lesion(ask: _Asker, whole: Id) -> Judged:
+    """DECISIONS D221 as D248 G2 reads it: whether the part and the whole may name the same lesion. T when both target
+    lesions are supported and one finding (_SameAs.one_finding: one id, or joined by supported same_as members, directly
+    or through other entries) and nothing claims the two entries are not one finding (_SameAs.denials, D248 G3; such a
+    claim is asked first). F only when BOTH lesion facts are supported, naming two lesions of the FactSet that no
+    same_as - one member or a chain of them (_SameAs.join) - may join: two different supported ids are different findings
+    (P5; D221's words, and D248 G2's option (b)). U otherwise: a lesion fact that is not supported - unresolved,
+    contradicted, doubted or negated - is an unknown identity, which never sets two acts apart in the adjunct rule
+    (4.11), whatever the lesions it may name; and a lesion id naming no lesion of the FactSet manufactures neither a
+    match nor a non-match (4.11). A U rests on the first member not established on the cheapest chain that may join them
+    (act_target, rank 17: one question naming both) when only a same_as may, then on each lesion fact not supported (or
+    naming no lesion of the FactSet): the lesion question."""
+    R = ask.R
+    one, other = facts_.fact(R, ask.part, _A.TARGET_LESION), facts_.fact(R, whole, _A.TARGET_LESION)
+    first, second = _supported_id(one), _supported_id(other)
+    same = ask.same_as()
+    if first is not None and second is not None and same.one_finding(first, second):
+        denials = same.denials(first, second)
+        if not denials:
+            return _decided(_A.TARGET_LESION)
+        return _both(*(ask.doubt(holder, attribute, member, rq.FactKey.ACT_TARGET)
+                       for holder, attribute, member in denials))
+    # a lesion fact not supported - or supported naming no lesion of the FactSet (4.11) - is what a U rests on
+    doubts = [ask.doubt(subject, _A.TARGET_LESION, found, rq.FactKey.ACT_TARGET)
+              for subject, found in ((ask.part, one), (whole, other))
+              if found.result is not Result.SUPPORTED or _supported_id(found) not in R.lesions]
+    left, right = _lesion_values(R, one), _lesion_values(R, other)
+    if left & right or not (left | right) <= frozenset(R.lesions):
+        # a lesion both may name; or an id naming no lesion of the FactSet, which may be any lesion (4.11)
+        return _both(*doubts) if doubts else _decided(_A.TARGET_LESION)
+    joined = same.join(left, right)
+    if joined is None:
+        # D248 G2: different findings only when both lesion facts are supported; an unknown identity is asked
+        return _both(*doubts) if doubts else _FALSE
+    if joined[1]:
+        holder, member = joined[1][0]
+        doubts.insert(0, ask.doubt(holder, _A.SAME_AS, member, rq.FactKey.ACT_TARGET))
+    return Judged(Truth.U, tuple(doubt for item in doubts for doubt in item.doubts))
+
+
+# A deterministic order of ids (a frozenset's iteration order is not): family, in IdFamily's order, then number.
+_FAMILY_ORDER: Mapping[IdFamily, int] = MappingProxyType({family: order for order, family in enumerate(IdFamily)})
+
+
+def _id_order(value: Id) -> tuple[int, int]:
+    return (_FAMILY_ORDER[value.family], value.number)
 
 
 def _not_adjunct(R: FactSet, part: Id, whole: Id) -> bool:
@@ -783,17 +1254,24 @@ def _not_adjunct(R: FactSet, part: Id, whole: Id) -> bool:
 
 
 def _biopsy(ask: _Asker, whole: Id) -> Judged:
-    """BIOPSY_OF_REMOVED_LESION (C-2, D196): a biopsy of the lesion a removal removed, single or in a shared unit."""
-    return _both(_same_lesion(ask, ask.part, whole), _kind_in(ask, ask.part, _BIOPSIES, rq.FactKey.ACT_PART),
-                 _whole(ask, ask.part, whole, _REMOVALS, _PERFORMED), _single_or_shared(ask, ask.part, whole))
+    """BIOPSY_OF_REMOVED_LESION (C-2, D196): a biopsy of the lesion a removal removed, single or in a shared unit. The
+    whole and the kind are read first, the identity only where neither is F (the same result; D248 G5's cost)."""
+    whole_ = _whole(ask, ask.part, whole, _REMOVALS, _PERFORMED)
+    kind = _kind_in(ask, ask.part, _BIOPSIES, rq.FactKey.ACT_PART) if whole_.truth is not Truth.F else _FALSE
+    if Truth.F in (whole_.truth, kind.truth):
+        return _FALSE
+    return _both(_same_lesion(ask, ask.part, whole), kind, whole_, _single_or_shared(ask, ask.part, whole))
 
 
 def _drainage(ask: _Asker, whole: Id) -> Judged:
     """DRAINAGE_STEP (G3, D171, D177): a fine-needle aspiration whose part_of names a drainage, or of its lesion; the
-    drainage performed or begun."""
-    return _both(_either(_part_of(ask, ask.part, whole), _same_lesion(ask, ask.part, whole)),
-                 _kind_in(ask, ask.part, _ASPIRATIONS, rq.FactKey.ACT_PART),
-                 _whole(ask, ask.part, whole, _DRAINAGES, _POSITIVE))
+    drainage performed or begun. The whole and the kind are read first (the same result; D248 G5's cost)."""
+    whole_ = _whole(ask, ask.part, whole, _DRAINAGES, _POSITIVE)
+    kind = _kind_in(ask, ask.part, _ASPIRATIONS, rq.FactKey.ACT_PART) if whole_.truth is not Truth.F else _FALSE
+    if Truth.F in (whole_.truth, kind.truth):
+        return _FALSE
+    return _both(_either_lazily(lambda: _part_of(ask, ask.part, whole), lambda: _same_lesion(ask, ask.part, whole)),
+                 kind, whole_)
 
 
 _PART_RULES: tuple[tuple[Rule, Callable[[_Asker], Judged]], ...] = (
@@ -811,8 +1289,11 @@ _RULE_PARTS: Mapping[Rule, frozenset[Kind]] = MappingProxyType({
 @dataclass(frozen=True, slots=True)
 class Bundle:
     """One bundling of ``part`` (module docstring): into ``whole`` (None for a rule that needs none: the examination's
-    or the family's own) by ``rule``; ``truth`` T (established) or U (possible, never F); ``attribute`` the fact that
-    decided a T; ``doubts`` the facts a U rests on."""
+    or the family's own, and for a synthetic act) by ``rule``; ``truth`` T (established) or U (possible, never F);
+    ``attribute`` the fact that decided a T; ``doubts`` the facts a U rests on; ``unlisted`` the index in
+    FactSet.unlisted of the synthetic act it is a bundling into (3.2.6 rule 3 as DECISIONS D231 reads it: a kept
+    unlisted act or doubt, a possible whole read as its filed doubted form - never T, its own doubt asked), None for
+    any other."""
     part: Id
     whole: Id | None
     rule: Rule
@@ -820,6 +1301,7 @@ class Bundle:
     attribute: Attribute | None
     doubts: tuple[Doubt, ...]
     conflicts: tuple[HeldFact, ...] = ()
+    unlisted: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -900,6 +1382,56 @@ _ITEM_OF: Mapping[rq.FactKey, rq.Item] = MappingProxyType({
 _BUNDLED_ITEM = rq.Item(rq.Rank.BUNDLED, rq.FactKey.PERFORMED_STATUS)
 
 
+# --- 3.2.6 rule 3's synthetic act as a possible whole (DECISIONS D216, D231: coverage's C1) ---------------------------
+
+# A synthetic act's status as its filed doubted form holds it: a doubt that it was performed (3.3 row 2).
+_DOUBTED_PERFORMED = Fact(result=Result.UNKNOWN, value=Status.PERFORMED, state=FactState.SUPPORTED, options=(),
+                          reasons=(Reason.DOUBT_STATED,), spans=())
+
+
+def _filed_doubted_form(R: FactSet, entry: UnlistedStatement) -> dict[Attribute, tuple[Fact, ...]]:
+    """The facts pass 1 would have filed for a synthetic act (a kept unlisted act or doubt, 3.2.6 rule 3 as D231 reads
+    it): its kind as the entry names it (an empty slot when it names none: every kind possible), its status a doubt
+    that it was performed, its session its card - supported when the FactSet holds that session, unresolved and
+    reference_invalid when it does not (settle's I4: a missing identifier manufactures neither a match nor a non-match,
+    4.11), an empty slot with no card (every session possible) - and every other slot empty: its date, performer, entry,
+    lesion, places, duct, part_of and cause unknown."""
+    facts: dict[Attribute, tuple[Fact, ...]] = {_A.STATUS: (_DOUBTED_PERFORMED,)}
+    if entry.kind is not None:
+        facts[_A.KIND] = (Fact(result=Result.SUPPORTED, value=entry.kind, state=FactState.SUPPORTED, options=(),
+                               reasons=(), spans=()),)
+    if entry.session is not None:
+        known = entry.session in R.sessions
+        facts[_A.SESSION] = (Fact(result=Result.SUPPORTED if known else Result.UNRESOLVED, value=entry.session,
+                                  state=FactState.SUPPORTED, options=(),
+                                  reasons=() if known else (Reason.REFERENCE_INVALID,), spans=()),)
+    return facts
+
+
+def _free_event_number(R: FactSet) -> int:
+    """One above every event number the FactSet holds or any of its facts names (a dangling part_of or cause_event
+    included) or a pair control asks: a synthetic act's place-holder id is never an event a fact or a control names."""
+    numbers = [event.number for event in R.events]
+    tables = (R.events, R.sessions, R.sections, R.lesions, R.anatomy, R.people)
+    for found in (*(member for table in tables for facts in table.values() for members in facts.values()
+                    for member in members),
+                  *(member for members in R.encounter.values() for member in members)):
+        numbers += [value.number for value in (found.value, *found.options)
+                    if isinstance(value, Id) and value.family is IdFamily.EVENT]
+    for subject, _attribute, value in R.pair_controls:
+        numbers += [item.number for item in (subject, value) if isinstance(item, Id) and item.family is IdFamily.EVENT]
+    return max(numbers, default=0) + 1
+
+
+def _synthetic_item(R: FactSet, index: int) -> HeldFact:
+    """A synthetic act's one doubt where a rule read it as a possible whole (D231): an unlisted act's item -
+    performed_status at the doubt row (rank 2), cause unlisted, about no single fact, quoting the entry's own units -
+    its subject the session its card names when the FactSet holds it, None otherwise (evaluate's _synthetic_doubt and
+    classes' synthetic examination take the same shape, which step 4a words: DECISIONS D246)."""
+    entry = R.unlisted[index]
+    return _unlisted_item(entry, entry.session if entry.session in R.sessions else None)
+
+
 # --- the reader: one FactSet's per-event readings, each computed once -------------------------------------------------
 
 
@@ -908,7 +1440,7 @@ class Reader:
     witnesses), each computed once per Reader. Read-only: the FactSet is frozen, and nothing here changes it. Make one
     per FactSet and pass it where a function takes ``reader``; never share one across FactSets."""
 
-    __slots__ = ('R', 'order', '_pairs', '_unlisted', '_bundles', '_verdicts', '_conflicts')
+    __slots__ = ('R', 'order', '_pairs', '_unlisted', '_bundles', '_verdicts', '_conflicts', '_same', '_synthetic')
 
     def __init__(self, R: FactSet) -> None:
         self.R = R
@@ -918,10 +1450,45 @@ class Reader:
         self._bundles: dict[Id, tuple[Bundle, ...]] = {}
         self._verdicts: dict[Id, Verdict] = {}
         self._conflicts: dict[Id, tuple[HeldFact, ...]] = {}
+        self._same: _SameAs | None = None
+        self._synthetic: tuple[FactSet, tuple[tuple[int, Id], ...]] | None = None
 
     @classmethod
     def of(cls, value: Reader | FactSet) -> Reader:
         return value if isinstance(value, Reader) else cls(value)
+
+    def _same_as(self) -> _SameAs:
+        """The FactSet's same_as graph and its memoized walks, joins and components (_SameAs), built once."""
+        if self._same is None:
+            self._same = _SameAs(self.R)
+        return self._same
+
+    def _synthetic_wholes(self) -> tuple[FactSet, tuple[tuple[int, Id], ...]]:
+        """3.2.6 rule 3's synthetic acts as possible wholes (DECISIONS D231's coverage half, C1): the FactSet with each
+        synthetic act (combination.synthetic: a kept unlisted ACT or DOUBT) added as its filed doubted form under a
+        place-holder event id no fact names (_free_event_number), and (its index in FactSet.unlisted, that id) per act,
+        in stored order - built once. The filed doubted form (_filed_doubted_form) is what pass 1 would have filed for
+        the act: its kind as the entry names it (an empty slot when it names none), its status a doubt, its session its
+        card (an empty slot with none; a card the FactSet does not hold unresolved, reference_invalid: settle's I4), and
+        every other slot empty; its anchor the entry's units. A bundling rule reads it exactly as it reads a filed act
+        in doubt, so an unlisted act, an unlisted doubt and the same act filed in doubt give one outcome."""
+        if self._synthetic is None:
+            R = self.R
+            indices = combination.synthetic(R)
+            start = _free_event_number(R)
+            virtual = tuple((index, Id(IdFamily.EVENT, start + position)) for position, index in enumerate(indices))
+            if not virtual:
+                self._synthetic = (R, ())
+            else:
+                events = dict(R.events)
+                anchors = dict(R.anchors)
+                for index, whole in virtual:
+                    entry = R.unlisted[index]
+                    events[whole] = _filed_doubted_form(R, entry)
+                    anchors[whole] = Anchor(units=tuple(entry.units), kind_words=None, status_words=None)
+                self._synthetic = (FactSet(R.encounter, R.people, R.sections, R.sessions, R.anatomy, R.lesions, events,
+                                           anchors, R.unlisted, R.pair_controls, R.completeness), virtual)
+        return self._synthetic
 
     def pairs(self, event: Id) -> tuple[pairing.Pair, ...]:
         """pairing.pairs_of: every statement paired with ``event``, with its relation."""
@@ -966,6 +1533,10 @@ class Reader:
         return self._bundles[event]
 
     def _compute_bundles(self, event: Id) -> tuple[Bundle, ...]:
+        """Each rule in Rule's order: the part's own rules, then each whole rule over every other event and then every
+        synthetic act (DECISIONS D231, C1: a possible whole, read as its filed doubted form - _synthetic_wholes - so a
+        bundling into it is U, never T; the doubts that rest on the place-holder's own facts are the synthetic act's one
+        doubt, Bundle.unlisted, which the verdict asks)."""
         R = self.R
         ask = _Asker(R, event, self)
         if _status_in(ask, event, _POSITIVE, rq.FactKey.ACT_PART).truth is Truth.F:
@@ -976,9 +1547,10 @@ class Reader:
             if found.truth is not Truth.F:
                 out.append(Bundle(event, None, rule, found.truth, found.attribute, found.doubts, found.conflicts))
         kinds = may_be(facts_.fact(R, event, _A.KIND))
-        for rule, judge_whole in _WHOLE_RULES:
-            if not kinds & _RULE_PARTS[rule]:
-                continue
+        rules = [(rule, judge_whole) for rule, judge_whole in _WHOLE_RULES if kinds & _RULE_PARTS[rule]]
+        synthetic, virtual = self._synthetic_wholes() if rules else (R, ())
+        asked = _Asker(synthetic, event, self)
+        for rule, judge_whole in rules:
             for whole in R.events:
                 if whole == event:
                     continue
@@ -986,6 +1558,12 @@ class Reader:
                 if found.truth is not Truth.F:
                     out.append(Bundle(event, whole, rule, found.truth, found.attribute, found.doubts,
                                       found.conflicts))
+            for index, whole in virtual:
+                found = judge_whole(asked, whole)
+                if found.truth is not Truth.F:
+                    out.append(Bundle(event, None, rule, found.truth, None,
+                                      tuple(doubt for doubt in found.doubts if doubt.subject != whole),
+                                      found.conflicts, index))
         return tuple(out)
 
     def verdict(self, event: Id) -> Verdict:
@@ -1013,13 +1591,18 @@ class Reader:
             if bundle.truth is Truth.U:
                 spans = self._spans(event, bundle)
                 held += list(bundle.conflicts)
+                if bundle.unlisted is not None:  # the synthetic act's one doubt (D231, C1)
+                    held.append(_synthetic_item(self.R, bundle.unlisted))
                 held += [witness(doubt.fact, doubt.attribute, doubt.subject, doubt.key, doubt.kind, spans,
                                  bundle.rule.value) for doubt in bundle.doubts]
         return Verdict(Truth.U, bundles, tuple(dict.fromkeys(held)), bool(conflicts))
 
     def _spans(self, event: Id, bundle: Bundle) -> tuple[Span, ...]:
-        """What a bundle's item quotes: the part's anchor and the whole's (4.3: "naming the whole")."""
-        return _ordered(_anchor_units(self.R, event) + _anchor_units(self.R, bundle.whole))
+        """What a bundle's item quotes: the part's anchor and the whole's (4.3: "naming the whole") - a synthetic act's
+        own units for a bundling into one."""
+        whole = (_anchor_units(self.R, bundle.whole) if bundle.unlisted is None
+                 else tuple(self.R.unlisted[bundle.unlisted].units))
+        return _ordered(_anchor_units(self.R, event) + whole)
 
     def _explanation(self, bundle: Bundle, spans: tuple[Span, ...]) -> HeldFact:
         """A T bundle's EXPLANATION (4.3: "bundled: held (explanation naming the whole)"; 4.8 rank 18)."""
@@ -1072,8 +1655,8 @@ def bundling_doubts(R: FactSet | Reader, event: Id) -> tuple[Bundle, ...]:
 
 def drainage_step(R: FactSet | Reader, event: Id) -> Bundle | None:
     """v1's drainage_step (D171 (1), D177 (3)) over facts: the first bundle of ``event`` into a drainage it may be the
-    step of (T: established; U: possible), None when it is the step of none. engine/assess.py's EUS code checks read
-    it (step 5a)."""
+    step of (T: established; U: possible - a synthetic drainage among them, its whole None and its entry
+    Bundle.unlisted), None when it is the step of none. engine/assess.py's EUS code checks read it (step 5a)."""
     return next((bundle for bundle in Reader.of(R).bundles(event) if bundle.rule is Rule.DRAINAGE_STEP), None)
 
 
@@ -1096,7 +1679,10 @@ class Session:
     """One session of the FactSet as coverage reads it (module docstring): ``kind`` its family when established;
     ``events`` its members in pass 1's order; ``examinations`` its done examinations; ``possible`` its possible ones
     (D62, D87: doubts, never facts); ``event`` its one examination; ``unresolved``, ``done``, ``incomplete``; ``part_of``
-    the session it is the included portion of (C3, C-4); ``possibly_part_of`` the session it may be (D70)."""
+    the session it is the included portion of (C3, C-4); ``possibly_part_of`` the session it may be (D70);
+    ``possible_unlisted`` its synthetic examinations left open (DECISIONS D231's C2: the indices in FactSet.unlisted of
+    the kept unlisted acts and doubts that may be its examination, read only in a session with no established
+    examination - D232 - each a possible examination as its filed doubted form would be)."""
     id: Id
     kind: SessionKind | None
     events: tuple[Id, ...] = ()
@@ -1108,6 +1694,7 @@ class Session:
     incomplete: bool = False
     part_of: Id | None = None
     possibly_part_of: Id | None = None
+    possible_unlisted: tuple[int, ...] = ()
 
 
 def filed(R: FactSet, event: Id) -> Id | None:
@@ -1130,41 +1717,98 @@ def _done(R: FactSet, event: Id) -> bool:
     return reading.done(reading.Reading(R), event) and facts_.fact(R, event, _A.KIND).result is Result.SUPPORTED
 
 
-def _possibly_done(R: FactSet, event: Id) -> bool:
-    """Each of 4.3 rows 2-5 may hold (by possibly): status performed or begun, the date of service, the documenting
-    team, the documenting clinician's entry."""
-    status = facts_.fact(R, event, _A.STATUS)
-    return ((facts_.possibly(status, Status.PERFORMED) or facts_.possibly(status, Status.ATTEMPTED_NOT_COMPLETED))
-            and possibly_today(R, event)
-            and _may_hold(facts_.fact(R, event, _A.PERFORMER), Performer.DOCUMENTING_TEAM)
-            and _may_hold(facts_.fact(R, event, _A.ENTRY), Owner.DOCUMENTING_CLINICIAN))
+def _manual(R: FactSet, event: Id) -> bool:
+    """FINAL 5.6 E13 (DECISIONS D69, D227): a digital examination is no session's examination, and makes no session
+    done - read as step 4d's session_done reads it (DECISIONS D253, QE13 option (a): combination._digital, the
+    reference, called rather than copied: an event that may be an examination whose device CLAIMS manual - supported
+    manual, or, not established, manual its claimed value or a reading)."""
+    return combination._digital(R, event)
 
 
-def _may_hold(found: Fact, wanted: Enum) -> bool:
-    """Whether ``found`` leaves ``wanted`` open (module docstring's reading of a fact): supported, its value; negated,
-    every other value; not established, facts.possibly's."""
-    if found.result is Result.SUPPORTED:
-        return found.value == wanted
-    if found.result is Result.NEGATED:
-        return found.value != wanted
-    return facts_.possibly(found, wanted)
+def _examination_sessions(R: FactSet, event: Id) -> frozenset[Id]:
+    """The sessions ``event`` may be the examination of: step 4d's possible_sessions, read for membership (DECISIONS
+    D227: 4d's session_done is the one derivation of "a session is done", and its membership is part of it) - those
+    sessions_of leaves open, and EVERY session when the session fact is an established negation, which 4d's
+    _named_sessions reads as naming no session. sessions_of keeps "every other session" for that negation elsewhere in
+    this module (the step's NOTES, question QR4-2)."""
+    found = facts_.fact(R, event, _A.SESSION)
+    return frozenset(R.sessions) if found.result is Result.NEGATED else sessions_of(R, event)
+
+
+def _may_be_examination_of(R: FactSet, session: Id, event: Id) -> bool:
+    """``event`` may be ``session``'s examination (D62; step 4d's combination._may_be_examination_of, D227's
+    reference): its kind possibly the examination (facts.possibly), the session possibly ``session``
+    (_examination_sessions), possibly positive on the date by the documenting team (4.4's frame: pairing.positive, its
+    date relation and its performer not established as another), and not a digital examination (E13)."""
+    return (facts_.possibly(facts_.fact(R, event, _A.KIND), Kind.EXAMINATION)
+            and session in _examination_sessions(R, event) and _positive_here(R, event) and not _manual(R, event))
+
+
+def _examinations(R: FactSet, session: Id) -> tuple[Id, ...]:
+    """The session's ESTABLISHED examinations (step 4d's combination._examinations): kind supported examination,
+    session supported ``session``, a digital examination excepted (E13)."""
+    return tuple(event for event in R.events
+                 if facts_.holds(facts_.fact(R, event, _A.KIND), Kind.EXAMINATION)
+                 and facts_.holds(facts_.fact(R, event, _A.SESSION), session) and not _manual(R, event))
 
 
 def done_examinations(R: FactSet, session: Id) -> tuple[Id, ...]:
-    """The session's done examinations (D69-D71 over facts), in pass 1's order: kind supported examination, session
-    supported, done (rows 2-5 supported). Never D62's possible ones."""
-    return tuple(event for event in R.events
-                 if facts_.holds(facts_.fact(R, event, _A.KIND), Kind.EXAMINATION)
-                 and facts_.holds(facts_.fact(R, event, _A.SESSION), session) and _done(R, event))
+    """The session's done examinations (D69-D71 over facts, DECISIONS D227), in pass 1's order: its established
+    examinations (kind supported examination, session supported, a digital examination excepted: FINAL 5.6 E13) that
+    are done (4.3 rows 2-5 supported: reading.done). Never D62's possible ones."""
+    view = reading.Reading.of(R)
+    return tuple(event for event in _examinations(R, session) if reading.done(view, event))
 
 
 def possible_examinations(R: FactSet, session: Id) -> tuple[Id, ...]:
-    """D62, D87: the events that may be the session's examination and are not done: kind possibly the examination,
-    session possibly this one, each of rows 2-5 possibly holding."""
-    done = set(done_examinations(R, session))
-    return tuple(event for event in R.events if event not in done
-                 and _may_hold(facts_.fact(R, event, _A.KIND), Kind.EXAMINATION)
-                 and session in sessions_of(R, event) and _possibly_done(R, event))
+    """D62, D87 (DECISIONS D227: step 4d's reading): the events that may be the session's examination
+    (_may_be_examination_of) and are not done (4.3 rows 2-5 not all supported) - the examinations "left open" that keep
+    a session told only through its acts from being done. DECISIONS D269 (Q-P2DATE option (c), 4.3 row 7; D227's one
+    derivation, step 4d's combination.session_possibly_done the reference): a session whose examination is established,
+    and established not done on the date of service (combination.not_done_today: planned, or done on another date, and
+    no event the document places in it that may be its examination done today), has NONE - every act possibly in it,
+    placed or supported, whatever its date or its session slot, is exempt, so none makes it possibly done (D256 P2's
+    letter, which this replaces, excepted only an act whose session slot is silent and whose date is not established:
+    the mirror of 4d's _unplaced_undated, gone with it). Such a session has an established examination for coverage
+    too, and none of them done (one done today would keep it from not_done_today), so it is not done whatever this
+    lists (4.3 row 7; _session_done): the exemption moves no ``done``, only the record's ``possible`` and
+    ``unresolved``. A 9.4 weakening only ever undoes not_done_today (4d's docstring), so the exemption is never what a
+    weakening adds (r4b's question Q3 of round w8r: under D256 P2's letter, weakening a dated act's date to unresolved
+    dropped it from a settled session's list)."""
+    if combination.not_done_today(R, session):
+        return ()  # DECISIONS D269: no act possibly in a session established not done today is left open there
+    view = reading.Reading.of(R)
+    return tuple(event for event in R.events
+                 if _may_be_examination_of(R, session, event) and not reading.done(view, event))
+
+
+def possible_unlisted_examinations(R: FactSet, session: Id) -> tuple[int, ...]:
+    """DECISIONS D231's coverage half, C2 (its row 1; D232): the synthetic examinations left open in a session told only
+    through its acts - step 4d's combination.synthetic_examinations (the kept unlisted acts and doubts of kind
+    examination or none that may be in the session: its card, or no card, or a card the FactSet does not hold), read
+    only when the session has no established examination: beside one, a synthetic examination adds nothing (D232).
+    Each is a possibly performed examination that is never done, as its filed doubted form is (possible_examinations
+    would list that form)."""
+    return () if _examinations(R, session) else combination.synthetic_examinations(R, session)
+
+
+def _session_done(R: FactSet, session: Id, exams: Sequence[Id], possible: Sequence[Id],
+                  unlisted: Sequence[int]) -> bool:
+    """DECISIONS D227: THE derivation of "a session is done" - step 4d's combination.session_done, the reference (4.3
+    row 7: "its examination, when it has one, passes 2-5 (an act-only session: the act itself)"): one of its
+    established examinations is done (``exams``, done_examinations, read only when it has established ones); with
+    none, one of its acts (session supported; a digital examination excepted, E13) is done - a session told only
+    through its acts (D121, D135) - and no event that may be its examination is left open (``possible``,
+    possible_examinations), nor a synthetic act that may be (``unlisted``, possible_unlisted_examinations: DECISIONS
+    D231 row 1, C2). The cross-module test (tests/v2/test_coverage.py, OneSessionDone) asserts it equals 4d's on
+    generated FactSets, kept unlisted entries among them."""
+    view = reading.Reading.of(R)
+    if _examinations(R, session):
+        return bool(exams)
+    if possible or unlisted:
+        return False
+    return any(facts_.holds(facts_.fact(R, event, _A.SESSION), session) and reading.done(view, event)
+               and not _manual(R, event) for event in R.events)
 
 
 def _session_kind(R: FactSet, session: Id) -> SessionKind | None:
@@ -1190,14 +1834,15 @@ def sessions(R: FactSet) -> dict[Id, Session]:
         members = tuple(event for event in R.events if filed(R, event) == session)
         exams = done_examinations(R, session)
         possible = possible_examinations(R, session)
-        established = [event for event in members if facts_.holds(facts_.fact(R, event, _A.SESSION), session)]
+        unlisted = possible_unlisted_examinations(R, session)
         found[session] = Session(
             id=session, kind=_session_kind(R, session), events=members, examinations=exams, possible=possible,
             event=exams[0] if len(exams) == 1 and not possible else None,
-            unresolved=len(exams) + len(possible) >= 2,
-            done=any(_done(R, event) for event in established),
+            unresolved=len(exams) + len(possible) + len(unlisted) >= 2,
+            done=_session_done(R, session, exams, possible, unlisted),
             incomplete=bool(exams) and all(facts_.holds(facts_.fact(R, event, _A.STATUS),
-                                                        Status.ATTEMPTED_NOT_COMPLETED) for event in exams))
+                                                        Status.ATTEMPTED_NOT_COMPLETED) for event in exams),
+            possible_unlisted=unlisted)
     for session, record in list(found.items()):
         part_of, possibly = _part_of_session(R, found, record)
         if part_of is not None or possibly is not None:
@@ -1208,20 +1853,34 @@ def sessions(R: FactSet) -> dict[Id, Session]:
 def _replace(record: Session, part_of: Id | None, possibly: Id | None) -> Session:
     return Session(id=record.id, kind=record.kind, events=record.events, examinations=record.examinations,
                    possible=record.possible, event=record.event, unresolved=record.unresolved, done=record.done,
-                   incomplete=record.incomplete, part_of=part_of, possibly_part_of=None if part_of else possibly)
+                   incomplete=record.incomplete, part_of=part_of, possibly_part_of=None if part_of else possibly,
+                   possible_unlisted=record.possible_unlisted)
 
 
 def _part_of_session(R: FactSet, found: Mapping[Id, Session], record: Session) -> tuple[Id | None, Id | None]:
     """(part_of, possibly_part_of) of ``record`` (module docstring): C3 by its part_of_session, C-4 and D70 structurally
-    for a done EGD beside an EUS session."""
+    for a done EGD beside an EUS session. D70's "may be done" is step 4d's combination.session_possibly_done, the
+    reference (DECISIONS D227's one derivation; D231 row 2 and coverage's C3: a synthetic act - a kept unlisted act or
+    doubt - with card S, or no card, or a card the FactSet does not hold, makes S possibly done, as the same act filed
+    in doubt does; an entry with no card that names a kind makes possibly done only a session one of whose possible
+    families holds that kind, DECISIONS D256 P2's K2). C-4's established whole reads the EUS done. DECISIONS D269
+    (Q-P2DATE option (c); the integration's I4 residual; its coverage half, read as 4d's combination.wholes reads it): a
+    session whose examination is established, and established not done on the date of service (planned, or done on
+    another date: combination.not_done_today), is never a whole of ``record`` - C3's supported part_of_session naming
+    it is no whole, D70's part_of_session not established names it as no possible whole, and the structural arms read
+    it not done (C-4) and not possibly done by any act, placed or supported, whatever its date or session slot (D70:
+    session_possibly_done reads not_done_today first) - so a planned or an earlier EUS is never the whole of today's
+    EGD, and the EGD keeps its own items."""
     stated = facts_.fact(R, record.id, _A.PART_OF_SESSION)
     whole = _supported_id(stated)
-    if whole is not None and whole != record.id and whole in found and not (
-            record.kind is not None and found[whole].kind is record.kind):
+    if (whole is not None and whole != record.id and whole in found
+            and not (record.kind is not None and found[whole].kind is record.kind)
+            and not combination.not_done_today(R, whole)):  # DECISIONS D269: never a whole
         return whole, None
     possibly: Id | None = None
     if not facts_.established(stated) and not _pure_silent(stated):
-        possibly = next((other for other in found if other != record.id and facts_.possibly(stated, other)), None)
+        possibly = next((other for other in found if other != record.id and facts_.possibly(stated, other)
+                         and not combination.not_done_today(R, other)), None)  # D269
     if record.kind is SessionKind.EGD and record.done and len(record.examinations) == 1:  # v1's ``own``
         for other in found.values():
             # C-4 reads the EUS's kind established; D70 by possibly (4.7): a kind not established that leaves the EUS
@@ -1231,8 +1890,7 @@ def _part_of_session(R: FactSet, found: Mapping[Id, Session], record: Session) -
             upper = _tract_upper(R, other.id)
             if other.kind is SessionKind.EUS and other.done and upper is Truth.T:
                 return other.id, None
-            if upper is not Truth.F and (other.done or other.possible or any(
-                    _possibly_done(R, event) for event in possible_members(R, other.id))):
+            if upper is not Truth.F and combination.session_possibly_done(R, other.id):
                 possibly = possibly or other.id
     return None, possibly
 
@@ -1258,20 +1916,48 @@ def session_families(R: FactSet, session: Id) -> frozenset[SessionKind]:
 
 
 def _families(R: FactSet, event: Id) -> frozenset[SessionKind]:
-    """The families ``event`` may be of: its session's when established; when its session is established and that
-    session's kind is not, the kinds that session may be; when its own session fact is not established, EVERY family
-    (4.2: "every kind, when the session is not established either" - its claimed session may be the wrong one: settle's
-    K2 demotes the session of an act its family cannot hold, D191, as a PEG filed under a colonoscopy, which no reading
-    of that session would ever list); the kinds of the sessions a negated session leaves otherwise."""
+    """The families ``event`` may be of: its session's when established; otherwise the families of the sessions it may
+    be in (sessions_of; for each, its kind when supported, else every kind it may be) - except that, when its own
+    session fact is not established, it reads EVERY family (4.2: "every kind, when the session is not established
+    either") unless the sessions it may be in admit its kind (DECISIONS D227 F8: the kind's membership in FAMILY_KINDS,
+    the table settle's K2 reads, D191 - K2 demotes the session of an act its claimed session cannot hold, as a PEG
+    filed under a colonoscopy, which no reading of that session would ever list). An ERCP's contrast injection whose
+    session pass 2 left unresolved, the ERCP its only possible session, is read as the ERCP's (refute-4b-r2 F8).
+
+    "Admit" is read so that a weakening never narrows the families (9.4 P-MONO; the step's NOTES, question QR4-3):
+    EVERY session the act may be in admits EVERY kind it may be (_raw_kinds) under EVERY family that session may be of.
+    D227's words - every family "only when no session it may be in admits its kind" - read with ANY in place of each
+    EVERY would let an added reading narrow them: a PEG left in a colonoscopy whose kind gains a cannulation reading
+    (which a colonoscopy admits) would be read as a colonoscopy act alone and un-doubted. A session id the FactSet does
+    not hold may be of any family (D227 R2-2): every family."""
     family = facts_.session_family(R, event)
     if family is not None:
         return frozenset({family})
-    if not facts_.established(facts_.fact(R, event, _A.SESSION)):
-        return frozenset(SessionKind)
+    found = facts_.fact(R, event, _A.SESSION)
+    possible = sessions_of(R, event)
+    if not facts_.established(found):
+        named = (found.value, *found.options)
+        if any(isinstance(value, Id) and value not in R.sessions for value in named):
+            return frozenset(SessionKind)
+        kinds = _raw_kinds(R, event)
+        if not all(kinds <= facts_.family_kinds(other) for session in possible
+                   for other in session_families(R, session)):
+            return frozenset(SessionKind)
     out: set[SessionKind] = set()
-    for session in sessions_of(R, event):
+    for session in possible:
         out |= session_families(R, session)
     return frozenset(out) if out else frozenset(SessionKind)
+
+
+def _raw_kinds(R: FactSet, event: Id) -> frozenset[Kind]:
+    """The kinds ``event`` may be, as K2's kind arm reads a kind (the kind itself, an umbrella not expanded): supported,
+    its value; negated, every other kind; not established, facts.possibly's (every kind for an empty slot)."""
+    found = facts_.fact(R, event, _A.KIND)
+    if found.result is Result.SUPPORTED and isinstance(found.value, Kind):
+        return frozenset({found.value})
+    if found.result is Result.NEGATED:
+        return frozenset(kind for kind in Kind if kind != found.value)
+    return frozenset(kind for kind in Kind if facts_.possibly(found, kind))
 
 
 def reportable(R: FactSet | Reader, event: Id) -> bool:
@@ -1448,7 +2134,9 @@ class Detail(Enum):
     """Which of v1's item sentences an item is (step 3c words it): a session with no proposal, documented as performed
     or as incomplete; an act no profile accounts for, done, or attempted or in doubt; an act of a kind no code of its
     service accounts for; read under another service, not placed at its site or with no such service; an act not
-    covered; an act CPT Studio could not confirm as done at this encounter."""
+    covered; an act CPT Studio could not confirm as done at this encounter. READ_UNDER_NOT_ESTABLISHED (DECISIONS D227
+    F4; no v1 sentence, the step's request to 3c): an act another service would read under it whose places are not
+    established all within that service's sites - listed in doubt, with a coverage question."""
     SESSION_PERFORMED = 'session_performed'
     SESSION_INCOMPLETE = 'session_incomplete'
     NO_PROFILE = 'no_profile'
@@ -1456,6 +2144,7 @@ class Detail(Enum):
     NO_CODE_OF_SERVICE = 'no_code_of_service'
     READ_UNDER_NOT_PLACED = 'read_under_not_placed'
     READ_UNDER_NO_SERVICE = 'read_under_no_service'
+    READ_UNDER_NOT_ESTABLISHED = 'read_under_not_established'
     NOT_COVERED = 'not_covered'
     IN_DOUBT = 'in_doubt'
 
@@ -1489,9 +2178,12 @@ class BundledAct:
 
 @dataclass(frozen=True, slots=True)
 class InDoubt:
-    """What an in_doubt item's service question is about: an event, or a kept unlisted act (its index)."""
+    """What an in_doubt item's service question is about: an event, or a kept unlisted act (its index); and
+    ``witness``, the coverage question the listing itself asks besides the act's own witnesses (DECISIONS D227 F4: a
+    read-under act whose place list is not established complete), None for none."""
     event: Id | None = None
     unlisted: int | None = None
+    witness: HeldFact | None = None
 
 
 @dataclass
@@ -1566,9 +2258,13 @@ def reconcile(R: FactSet | Reader, counted: Sequence[Counted], *, procedure_day:
         family = session.kind
         if family is None:  # its kind not established: read as every family it may be of
             _kind_unestablished(reader, sessions_, session, counted, read_by, procedure_day, any_done, out)
-        elif session.done and catalogue.FAMILY_SUPPORT.get(family) is catalogue.SupportLevel.SUPPORTED:
+        elif catalogue.FAMILY_SUPPORT.get(family) is not catalogue.SupportLevel.SUPPORTED:
+            continue
+        elif session.done:
             out.covered[session.id] = _reconcile_session(reader, sessions_, session, family, counted, read_by,
                                                          procedure_day, any_done, out)
+        elif _counted_family(R_, session, counted):  # not done, and the unestablished count skips it
+            _reconcile_not_done(reader, sessions_, session, family, counted, read_by, out)
     for session in sessions_.values():
         _in_doubt(reader, session, read_by, out)
     # the events filed under no session of the FactSet (an empty slot, a contradicted or doubted one, an id naming none):
@@ -1594,7 +2290,10 @@ def _reconcile_session(reader: Reader, sessions_: Mapping[Id, Session], session:
     reconcile lists as not listed)."""
     R_ = reader.R
     codes = _codes_of(session, counted, sessions_)
-    anchor = session.event or next((event for event in session.events if _done(R_, event)), None)
+    # what the session's items quote: its one examination, else its first done member that is no digital examination
+    # (E13: a digital examination is no session)
+    anchor = session.event or next((event for event in session.events if _done(R_, event) and not _manual(R_, event)),
+                                   None)
     evidence = _evidence(R_, (anchor,) if anchor is not None else ())
     if not codes and inclusion_asks_no_code(sessions_, session, counted):
         pass  # the including session's code covers the examination; its own acts still count
@@ -1618,6 +2317,23 @@ def _reconcile_session(reader: Reader, sessions_: Mapping[Id, Session], session:
     return [item.code for item in codes]
 
 
+def _reconcile_not_done(reader: Reader, sessions_: Mapping[Id, Session], session: Session, family: SessionKind,
+                        counted: Sequence[Counted], read_by: Mapping[Id, list[Counted]], out: Coverage) -> None:
+    """A session that is NOT done (DECISIONS D227's one derivation: its established examination not done, or an event
+    that may be its examination left open, filed or synthetic) that counted codes read - per session, D248 G1: for every
+    family it is stated as, a code of that family one of whose events may be in it - which the unestablished count
+    skips (_counted_family): its member acts are read as a done session's are (_member), its items and bundled acts
+    appended to ``out`` - so a done act no counted code reads stays listed whatever step 4a's row 7 reads of the session
+    (refute-r4b-r1 R5: step 4a reads an examination whose session is established as another as no examination of it,
+    step 4d's reference as possibly any session's, so 4a can propose the session's codes READY while coverage calls it
+    not done; the step's NOTES, question QR5-1). No no_proposal item and no covered entry: the session is not
+    established as performed."""
+    codes = _codes_of(session, counted, sessions_)
+    unknown = any(catalogue.code_link(item.code).route is not catalogue.LinkRoute.CATALOGUE for item in codes)
+    for event in session.events:
+        _member(reader, sessions_, session, family, event, read_by, unknown, out)
+
+
 def _kind_unestablished(reader: Reader, sessions_: Mapping[Id, Session], session: Session, counted: Sequence[Counted],
                         read_by: Mapping[Id, list[Counted]], procedure_day: bool, any_done: set[Id],
                         out: Coverage) -> None:
@@ -1626,21 +2342,35 @@ def _kind_unestablished(reader: Reader, sessions_: Mapping[Id, Session], session
     since none is established - and the codes that cover it are those covering it under every reading. So a weakening
     of the session's kind (its family one of those it may be of) never releases what the established family listed,
     and a done session no reading covers is listed no_proposal, never 'complete'. A session that may be of no
-    supported family is not read, as v1 read none."""
+    supported family is not read, as v1 read none. One that is not done is read so too, its members only
+    (_reconcile_not_done), when the unestablished count skips it (for every family it may be of, a counted code of that
+    family whose events may be in it: D248 G1). The readings' items list each act once (_one_entry_per_act, D248 G4)."""
     families = [family for family in session_families(reader.R, session.id)
                 if catalogue.FAMILY_SUPPORT.get(family) is catalogue.SupportLevel.SUPPORTED]
-    if not session.done or not families:
+    if not families or not (session.done or _counted_family(reader.R, session, counted)):
         return
     found = Coverage()
     covered: list[str] | None = None
     for family in sorted(families, key=list(SessionKind).index):
         reading = _with_kind(session, family)
-        codes = _reconcile_session(reader, {**sessions_, session.id: reading}, reading, family, counted, read_by,
-                                   procedure_day, any_done, found)
+        view = {**sessions_, session.id: reading}
+        if not session.done:
+            _reconcile_not_done(reader, view, reading, family, counted, read_by, found)
+            continue
+        codes = _reconcile_session(reader, view, reading, family, counted, read_by, procedure_day, any_done, found)
         covered = codes if covered is None else [code for code in covered if code in codes]
-    out.covered[session.id] = covered or []
-    out.unresolved += [Item(item.session, None, item.act, item.reason, item.detail, item.events, item.evidence,
-                            item.unlisted) for item in found.unresolved]
+    if session.done:
+        out.covered[session.id] = covered or []
+    kept = _one_entry_per_act(found)
+    renamed = {id(item): Item(item.session, None, item.act, item.reason, item.detail, item.events, item.evidence,
+                              item.unlisted) for item in kept}
+    out.unresolved += [renamed[id(item)] for item in kept]
+    # the items a reading listed in doubt keep their questions (D227 F3, F4), each act once
+    asked: set[Id | None] = {ref.event for _, ref in out.in_doubt if ref.event is not None}
+    for item, ref in found.in_doubt:
+        if id(item) in renamed and (ref.event is None or ref.event not in asked):
+            asked.add(ref.event)
+            out.in_doubt.append((renamed[id(item)], ref))
     seen = {act.event for act in out.bundled}
     for act in found.bundled:
         if act.event not in seen:
@@ -1648,23 +2378,74 @@ def _kind_unestablished(reader: Reader, sessions_: Mapping[Id, Session], session
             out.bundled.append(act)
 
 
+def _one_entry_per_act(found: Coverage) -> list[Item]:
+    """DECISIONS D248 G4 (refute-r4b-r2 G4; D225: every customer sentence true for its state): the items the readings of
+    a session whose kind is not established listed, each act once. An act two readings list differently - an EUS
+    biopsy read under the upper endoscopy with its sites not established under the EUS reading, not covered under the
+    upper endoscopy's - is listed by ONE item: the first that lists it in doubt (its question kept: a reading's in-doubt
+    listing keeps its question, D227 F3 and F4), else the first that lists it. A session's own item (no act kind) and an
+    unlisted act's (no event) are kept as listed; _merge then merges by session and act kind as for any session (the
+    step's NOTES, question QG4)."""
+    in_doubt = {id(item) for item, _ in found.in_doubt}
+    chosen: dict[Id, int] = {}
+    for position, item in enumerate(found.unresolved):
+        if item.act is None or not item.events:
+            continue
+        for event in item.events:
+            current = chosen.get(event)
+            if current is None or (id(item) in in_doubt and id(found.unresolved[current]) not in in_doubt):
+                chosen[event] = position
+    return [item for position, item in enumerate(found.unresolved)
+            if item.act is None or not item.events or any(chosen[event] == position for event in item.events)]
+
+
 def _with_kind(record: Session, kind: SessionKind) -> Session:
     return Session(id=record.id, kind=kind, events=record.events, examinations=record.examinations,
                    possible=record.possible, event=record.event, unresolved=record.unresolved, done=record.done,
-                   incomplete=record.incomplete, part_of=record.part_of, possibly_part_of=record.possibly_part_of)
+                   incomplete=record.incomplete, part_of=record.part_of, possibly_part_of=record.possibly_part_of,
+                   possible_unlisted=record.possible_unlisted)
+
+
+def _stated_families(R: FactSet, session: Session) -> list[SessionKind]:
+    """The families a session is stated as, for the unestablished count: its kind, or for a kind not established each
+    family it may be of - each with a catalogue entry."""
+    families = frozenset({session.kind}) if session.kind is not None else session_families(R, session.id)
+    return [family for family in families if catalogue.FAMILY_SUPPORT.get(family) is not None]
+
+
+def _reads(R: FactSet, item: Counted, session: Id) -> bool:
+    """Whether a counted code's decision read an event possibly in ``session`` (sessions_of): one of its supporting or
+    read events."""
+    return any(session in sessions_of(R, event) for event in (*item.supporting, *item.read))
+
+
+def _counted_family(R: FactSet, session: Session, counted: Sequence[Counted]) -> bool:
+    """Whether the session is read by counted codes, PER SESSION (DECISIONS D248 G1; refute-r4b-r2 G1): a family stated,
+    and for EVERY family the session is stated as, a counted code of that family one of whose events (supporting or
+    read) is possibly in this session (_reads). v1's "a code of its family" meant this session's code, because v1 had
+    one session per family; v2 reads sessions from the sessions table (4.7), so a second session of a coded family is
+    read by no code unless a code's events may be in it. The unestablished count skips such a session that is not done,
+    and reconcile reads its members instead (_reconcile_not_done: the R5 gate) - one predicate for both."""
+    stated = _stated_families(R, session)
+    return bool(stated) and all(any(item.family is family and _reads(R, item, session.id) for item in counted)
+                                for family in stated)
 
 
 def _unestablished(R: FactSet, session: Session, counted: Sequence[Counted]) -> bool:
     """v1's unestablished count over one session that is not done: a family stated (its kind, or for a kind not
-    established each family it may be of, with a catalogue entry), read by no counted code (v1: no code of its family;
-    for a kind not established, not every family it may be of has one), and an event possibly in it
-    (possible_members) possibly positive here - an examination whose own session fact is in doubt is possibly this
-    session's. Monotone: a weakening only adds families and possible members, so it never empties the count."""
-    families = frozenset({session.kind}) if session.kind is not None else session_families(R, session.id)
-    stated = [family for family in families if catalogue.FAMILY_SUPPORT.get(family) is not None]
-    if not stated or all(any(item.family is family for item in counted) for family in stated):
+    established each family it may be of, with a catalogue entry), read by no counted code per session (D248 G1: not
+    every family it is stated as has a counted code whose events may be in it - _counted_family), and an event possibly
+    in it (possible_members) possibly positive here - an examination whose own session fact is in doubt is possibly
+    this session's - or a synthetic act that may be in it (DECISIONS D216: a kept unlisted act or doubt is a possibly
+    performed act of its session for every rule whose release is the absence of one; combination.synthetic_in: its
+    card, no card, or a card the FactSet does not hold). A weakening only adds families and possible members; the one
+    that can drop a session from the count is a counted code's event whose own session fact it leaves open, so that
+    the event may be in this session too (sessions_of widens) - and that code's own session row then holds it (4.3 row
+    6: its session not established), an open question of the assessment."""
+    if not _stated_families(R, session) or _counted_family(R, session, counted):
         return False
-    return any(_positive_here(R, event) for event in possible_members(R, session.id))
+    return any(_positive_here(R, event) for event in possible_members(R, session.id)) or any(
+        combination.synthetic_in(R, R.unlisted[index], session.id) for index in combination.synthetic(R))
 
 
 def _member(reader: Reader, sessions_: Mapping[Id, Session], session: Session, family: SessionKind, event: Id,
@@ -1691,10 +2472,21 @@ def _member(reader: Reader, sessions_: Mapping[Id, Session], session: Session, f
         out.unresolved.append(Item(session.id, family, kind, ItemReason.UNSUPPORTED, Detail.NO_PROFILE, (event,),
                                    _evidence(R, (event,))))
         return
+    if catalogue.READ_UNDER.get((family, kind)) is not None and reader.conflicts(event):
+        # DECISIONS D227 F3 (D3; 4.8 rank 1): a contradicted act is never read under another service - listed in
+        # doubt, its service question its conflict (act_witnesses: the conflicts first); a code that reads it asks it
+        if event not in read_by:
+            _list_in_doubt(R, session.id, family, kind, event, Detail.IN_DOUBT, out)
+        return
     under = _read_under(R, sessions_, family, kind, event)
     if under is not None:
         if under is Detail.NOT_COVERED:
             out.bundled.append(BundledAct(session.id, event, kind, None, None))
+        elif under is Detail.READ_UNDER_NOT_ESTABLISHED:
+            # D227 F4: its place list's completeness not established - listed, asking a coverage question (it holds no
+            # code: a service question, 4.8, for an act no counted code reads)
+            if event not in read_by:
+                _list_in_doubt(R, session.id, family, kind, event, under, out, _read_under_witness(R, event))
         else:
             out.unresolved.append(Item(session.id, family, kind, ItemReason.UNSUPPORTED, under, (event,),
                                        _evidence(R, (event,))))
@@ -1728,24 +2520,76 @@ def _member(reader: Reader, sessions_: Mapping[Id, Session], session: Session, f
 
 def _read_under(R: FactSet, sessions_: Mapping[Id, Session], family: SessionKind, kind: Kind,
                 event: Id) -> Detail | None:
-    """v1's _read_under over facts (catalogue.READ_UNDER: an EUS forceps biopsy read under the upper endoscopy):
-    Detail.NOT_COVERED as "read under" when the rule holds - every supported place of the act in the rule's regions
-    (its places established) and a done session of that family has a done performed act of the kind - else why
-    nothing reads it; None for any other act."""
+    """v1's _read_under over facts (catalogue.READ_UNDER: an EUS forceps biopsy read under the upper endoscopy), with
+    DECISIONS D227 F4 (P3: no rule reads a list's completeness except through an established completeness claim or
+    rejected pair controls): Detail.NOT_COVERED as "read under" only when a done session of that family has a done
+    performed act of the kind and the act's place list is established complete within the rule's regions
+    (_places_complete); else why nothing reads it - READ_UNDER_NOT_PLACED when a supported place lies outside them (or
+    its places are not established and no such service reads it: v1's reading), READ_UNDER_NO_SERVICE when no such
+    service reads it, READ_UNDER_NOT_ESTABLISHED (listed in doubt, with a coverage question) when one would and its
+    places do not establish that it may; None for any other act."""
     rule = catalogue.READ_UNDER.get((family, kind))
     if rule is None:
         return None
     other_family, regions = rule
     places = facts_.members(R, event, _A.TARGET_PLACES)
     known = [member.value for member in places if member.result is Result.SUPPORTED]
-    if not places or not all(facts_.established(member) for member in places) or not known or not all(
-            isinstance(place, Landmark) and anatomy.in_regions(place, regions) for place in known):
-        return Detail.READ_UNDER_NOT_PLACED
+    outside = any(not (isinstance(place, Landmark) and anatomy.in_regions(place, regions)) for place in known)
+    inside = bool(places) and all(facts_.established(member) for member in places) and bool(known) and not outside
     reads = any(other.kind is other_family and other.done and any(
         _claimed_catalogue_kind(R, member) is kind and _done(R, member)
         and facts_.holds(facts_.fact(R, member, _A.STATUS), Status.PERFORMED) for member in other.events)
         for other in sessions_.values())
-    return Detail.NOT_COVERED if reads else Detail.READ_UNDER_NO_SERVICE
+    if not inside and (outside or not reads):
+        return Detail.READ_UNDER_NOT_PLACED
+    if not reads:
+        return Detail.READ_UNDER_NO_SERVICE
+    if not inside or not _places_complete(R, event, regions):
+        return Detail.READ_UNDER_NOT_ESTABLISHED
+    return Detail.NOT_COVERED
+
+
+def _places_complete(R: FactSet, event: Id, regions: Iterable[anatomy.Region]) -> bool:
+    """D227 F4: whether the act's place list - established, its supported places all within ``regions`` - is
+    established COMPLETE there: every landmark outside ``regions`` that none of its places is compatible with (the
+    places claims.pair asks an act about) is excluded, by a REJECTED pair control asking the act about it (3.2.3: "This
+    act was done in the {place}.") or a negated member of its list. The FactSet holds no completeness claim for an
+    act's places (FactSet.completeness: an upper EUS session's stations only), and step 2c generates pair controls only
+    for the places other objects of the act's session name, so on a settled FactSet this rarely holds and the act is
+    listed (the step's NOTES, question QR4-4). A deleted member only adds landmarks to exclude: monotone."""
+    regions = frozenset(regions)
+    places = facts_.members(R, event, _A.TARGET_PLACES)
+    listed = [member.value for member in places
+              if member.result is Result.SUPPORTED and isinstance(member.value, Landmark)]
+    denied = frozenset(member.value for member in places if member.result is Result.NEGATED)
+    return all(R.pair_controls.get((event, _A.TARGET_PLACES, landmark)) is True or landmark in denied
+               for landmark in Landmark
+               if not anatomy.in_regions(landmark, regions)
+               and not any(anatomy.compatible(landmark, place) for place in listed))
+
+
+READ_UNDER_RULE = 'read_under'
+
+
+def _read_under_witness(R: FactSet, event: Id) -> HeldFact:
+    """D227 F4's coverage question about a read-under act whose place list is not established complete (4.8 rank 17,
+    act_target: whether another service reads it depends on where it was done): resting on its first place not
+    established (its first place, or an empty slot, otherwise), cause coding_rule:read_under when that place is
+    established (the doubt is the rule's own: the list's completeness), quoting the act and its places."""
+    places = facts_.members(R, event, _A.TARGET_PLACES)
+    found = next((member for member in places if not facts_.established(member)), places[0] if places else
+                 facts_.SILENT)
+    spans = _ordered(_anchor_units(R, event) + tuple(span for member in places for span in member.spans))
+    return witness(found, _A.TARGET_PLACES, event, rq.FactKey.ACT_TARGET, _kind_of(R, event), spans, READ_UNDER_RULE)
+
+
+def _list_in_doubt(R: FactSet, session: Id | None, family: SessionKind | None, kind: Kind | None, event: Id,
+                   detail: Detail, out: Coverage, asked: HeldFact | None = None) -> None:
+    """List ``event`` in doubt with its service question (D227 F3 and F4): an in_doubt item, and its InDoubt (``asked``:
+    the coverage question the listing asks besides the act's own witnesses)."""
+    item = Item(session, family, kind, ItemReason.IN_DOUBT, detail, (event,), _evidence(R, (event,)))
+    out.unresolved.append(item)
+    out.in_doubt.append((item, InDoubt(event=event, witness=asked)))
 
 
 def _in_doubt(reader: Reader, session: Session | None, read_by: Mapping[Id, list[Counted]], out: Coverage,
@@ -1753,7 +2597,9 @@ def _in_doubt(reader: Reader, session: Session | None, read_by: Mapping[Id, list
     """The in_doubt items of one session (``session`` None: of the events filed under none of the ``known`` sessions -
     an empty, contradicted or doubted slot, or an id naming no session of the FactSet), each listed once: each doubted
     act no counted code reads and not bundled - and D142's class in doubt (_elsewhere_in_doubt) - and each unlisted act
-    of the session (3.2.6 rule 3)."""
+    of the session (3.2.6 rule 3). A contradicted act (D3; DECISIONS D227 F3) is listed in doubt with its conflict
+    question even where D137's class records it reportable (eus_unlisted). An act the member loop already listed in
+    doubt (D227 F3, F4) is not listed twice."""
     R = reader.R
     family = session.kind if session is not None else None
     if family is not None and catalogue.FAMILY_SUPPORT.get(family) is not catalogue.SupportLevel.SUPPORTED:
@@ -1761,12 +2607,15 @@ def _in_doubt(reader: Reader, session: Session | None, read_by: Mapping[Id, list
     members = session.events if session is not None else tuple(event for event in R.events
                                                                 if filed(R, event) not in known)
     key = session.id if session is not None else None
+    already = {ref.event for _, ref in out.in_doubt if ref.event is not None}
     for event in members:
-        if event in read_by or bundled(reader, event) is not None:
+        if event in read_by or event in already or bundled(reader, event) is not None:
             continue
         listed, doubt = eus_unlisted(reader, event)
-        if listed or not (doubted(reader, event) or doubt or (
-                session is not None and family is not None and _elsewhere_in_doubt(R, session.id, family, event))):
+        if (listed and not reader.conflicts(event)) or not (doubted(reader, event) or doubt or any(
+                _elsewhere_in_doubt(R, other, event) for other in ((session.id,) if session is not None
+                                                                   else tuple(sorted(sessions_of(R, event),
+                                                                                     key=_id_order))))):
             continue
         item = Item(key, family, _claimed_catalogue_kind(R, event), ItemReason.IN_DOUBT, Detail.IN_DOUBT, (event,),
                     _evidence(R, (event,)))
@@ -1780,30 +2629,53 @@ def _in_doubt(reader: Reader, session: Session | None, read_by: Mapping[Id, list
             out.in_doubt.append((item, InDoubt(unlisted=index)))
 
 
-def _elsewhere_in_doubt(R: FactSet, session: Id, family: SessionKind, event: Id) -> bool:
-    """D142's class IN DOUBT: an act filed under ``session`` (its session supported) that may be of a kind its
-    established ``family`` does not list among its acts while a supported family does (no E/M kind, examination,
-    umbrella or never-reported kind) - D142 lists it not covered when it is done, performed and its kind supported -
-    possibly positive here and not so established: in doubt, listed (a doubt is never an absence). Reachable past
-    settle's K2 for a kind the family's codes account for and its acts do not list (the ERCP's foreign body); v1 listed
-    it nowhere (its compl-1 and doubted read the family's acts)."""
-    if not facts_.holds(facts_.fact(R, event, _A.SESSION), session) or not _positive_here(R, event) or (
-            _done(R, event) and facts_.holds(facts_.fact(R, event, _A.STATUS), Status.PERFORMED)):
+def _elsewhere_in_doubt(R: FactSet, session: Id, event: Id) -> bool:
+    """D142's class IN DOUBT: an act possibly in ``session`` (sessions_of) that may be of a kind a family that session
+    may be of (_reading_families: its kind when established; else each supported family it may be of) does not list
+    among its acts while a supported family does (no E/M kind, examination, umbrella or never-reported kind) - D142
+    lists it not covered when it is done, performed, its kind supported and its session supported - possibly positive
+    here and not so established: in doubt, listed (a doubt is never an absence). Reachable past settle's K2 for a kind
+    the family's codes account for and its acts do not list (the ERCP's foreign body); v1 listed it nowhere (its
+    compl-1 and doubted read the family's acts). Its session not established is a doubt too, and so is its session's
+    kind (repair r4b): DECISIONS D227 F8 reads such an act in its possible sessions' families when they admit its kind,
+    as the ERCP admits a foreign body, so ``doubted`` no longer reaches it through every family. A kind the family
+    bundles as its own (FAMILY_OWN_BUNDLED: the ERCP's contrast injection) is the family's, never this class."""
+    if session not in sessions_of(R, event) or not _positive_here(R, event) or (
+            _done(R, event) and facts_.holds(facts_.fact(R, event, _A.STATUS), Status.PERFORMED)
+            and facts_.holds(facts_.fact(R, event, _A.SESSION), session)):
         return False
-    acts = catalogue.FAMILY_ACTS.get(family, ())
     elsewhere = frozenset(kind for other, level in catalogue.FAMILY_SUPPORT.items()
                           if level is catalogue.SupportLevel.SUPPORTED for kind in catalogue.FAMILY_ACTS.get(other, ()))
-    return any(kind not in acts and kind in elsewhere and kind not in catalogue.EM_KINDS and kind not in _NOT_ACTS
-               and kind not in catalogue.NOT_REPORTED for kind in catalogue_kinds(R, event))
+    kinds = catalogue_kinds(R, event)
+    return any(kind not in catalogue.FAMILY_ACTS.get(family, ()) and kind not in FAMILY_OWN_BUNDLED.get(family, ())
+               and kind in elsewhere and kind not in catalogue.EM_KINDS and kind not in _NOT_ACTS
+               and kind not in catalogue.NOT_REPORTED for family in _reading_families(R, session) for kind in kinds)
+
+
+def _reading_families(R: FactSet, session: Id) -> frozenset[SessionKind]:
+    """The supported families ``session`` is read as: its kind when established, else every family it may be of
+    (session_families) - each with a supported catalogue entry (v1 read no other: reconcile, _in_doubt)."""
+    kind = _session_kind(R, session)
+    families = frozenset({kind}) if kind is not None else session_families(R, session)
+    return frozenset(family for family in families
+                     if catalogue.FAMILY_SUPPORT.get(family) is catalogue.SupportLevel.SUPPORTED)
+
+
+# The read-under listings (v1's two and D227 F4's): each a sentence of its own, never merged into another listing of
+# the same act kind (refute-r4b-r1 R3; DECISIONS D225: every customer sentence true for its state).
+_READ_UNDER_DETAILS: frozenset[Detail] = frozenset({Detail.READ_UNDER_NOT_PLACED, Detail.READ_UNDER_NO_SERVICE,
+                                                    Detail.READ_UNDER_NOT_ESTABLISHED})
 
 
 def _merge(out: Coverage) -> None:
     """One item per (session, act kind): a second site of one service is the same code (v1); every in_doubt event of a
-    merged item keeps its question (D89)."""
-    merged: dict[tuple[Id | None, Kind | None], Item] = {}
-    keys: dict[int, tuple[Id | None, Kind | None]] = {}
+    merged item keeps its question (D89). A read-under listing merges only with listings of its own Detail
+    (_READ_UNDER_DETAILS): an EUS biopsy placed outside the upper GI sites and another whose sites are not established
+    are two sentences, each true of its own acts."""
+    merged: dict[tuple[Id | None, Kind | None, Detail | None], Item] = {}
+    keys: dict[int, tuple[Id | None, Kind | None, Detail | None]] = {}
     for index, item in enumerate(out.unresolved):
-        key = (item.session, item.act)
+        key = (item.session, item.act, item.detail if item.detail in _READ_UNDER_DETAILS else None)
         keys[index] = key
         if key not in merged:
             merged[key] = item
@@ -1865,10 +2737,11 @@ def _item_order(item: HeldFact) -> tuple[int, int]:
 def act_witnesses(R: FactSet | Reader, event: Id) -> tuple[HeldFact, ...]:
     """Every witness of one act read for no code (4.3 rows 1-8 over the act, and its bundling; the service question's
     reading of v1's focus_question h1-h5): its conflicts (rank 1); each statement paired with it in a relation that is
-    not INDEPENDENT (pairing.item at its rank) and each unlisted denial or doubt (statement_scope); its status (rank 2
-    when doubted, else 4), kind (4; a positive umbrella act_method, 9) and - for a clip or an injection - purpose (4);
-    its entry (5: an explanation when established as another role), date relation (6), performer (7), session and its
-    kind (8); its bundling in doubt (rank 17). Ordered by rank (4.8)."""
+    not INDEPENDENT (pairing.item at its rank) and each unlisted denial or doubt (pairing.item: performed_status at
+    rank 2, DECISIONS D228); its status (rank 2 when doubted, else 4), kind (4; a positive umbrella act_method, 9)
+    and - for a clip or an injection - purpose (4); its entry (5: an explanation when established as another role),
+    date relation (6), performer (7), session and its kind (8); its bundling in doubt (rank 17). Ordered by rank
+    (4.8)."""
     reader = Reader.of(R)
     R_ = reader.R
     own = _anchor_units(R_, event)
@@ -1882,9 +2755,11 @@ def act_witnesses(R: FactSet | Reader, event: Id) -> tuple[HeldFact, ...]:
                             kind=ItemKind.QUESTION, cause=pairing.cause(pair) or UNESTABLISHED, reason=None,
                             spans=pair.spans, rank=item.rank.value))
     for unlisted_pair in reader.unlisted_pairs(event):
-        out.append(HeldFact(fact=rq.fact_key(rq.FactKey.STATEMENT_SCOPE), attribute=None, subject=event, result=None,
+        asked = pairing.item(unlisted_pair)  # performed_status at RANK row 2 (DECISIONS D228)
+        assert asked is not None and asked.rank is not None
+        out.append(HeldFact(fact=rq.fact_key(asked.fact), attribute=None, subject=event, result=None,
                             kind=ItemKind.QUESTION, cause=UNLISTED, reason=None, spans=unlisted_pair.spans,
-                            rank=rq.Rank.STATEMENT_SCOPE.value))
+                            rank=asked.rank.value))
     for attribute in _OWN_FACTS:
         found = facts_.fact(R_, event, attribute)
         if found.result is Result.CONTRADICTED:
@@ -1953,7 +2828,8 @@ def _unlisted_item(entry: UnlistedStatement, session: Id | None) -> HeldFact:
 def in_doubt_questions(R: FactSet | Reader, coverage: Coverage, asked: Iterable[tuple[Id | None, str]] = (),
                        holding: Iterable[Id] = ()) -> list[ServiceItem]:
     """One service item per (session, fact) for the in_doubt items (4.8; v1's in_doubt_questions): each act in doubt
-    no counted code reads, with its own item (act_item; an unlisted act's, _unlisted_item). ``asked``: the (subject,
+    no counted code reads, with its own item (act_item, or the listing's own coverage question when it ranks first:
+    InDoubt.witness, DECISIONS D227 F4; an unlisted act's, _unlisted_item). ``asked``: the (subject,
     fact key) of the codes' items - a service item naming one is dropped (D89, by act and fact). ``holding``: the acts
     the codes' items name - such an act takes its (session, fact) slot only when no other act in doubt does (D149, D157
     (3)); then the act with the fewest witnesses (4.8's binding), then document order. Every fact is asked once per
@@ -1966,6 +2842,8 @@ def in_doubt_questions(R: FactSet | Reader, coverage: Coverage, asked: Iterable[
     for item, ref in coverage.in_doubt:
         if ref.event is not None:
             found = act_witnesses(reader, ref.event)
+            if ref.witness is not None:  # the listing's own coverage question (D227 F4), at its rank among them
+                found = tuple(sorted(dict.fromkeys((*found, ref.witness)), key=_item_order))
             if not found:
                 continue
             top = found[0]

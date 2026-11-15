@@ -15,6 +15,7 @@ from unittest import mock
 from django.test import Client, TestCase, override_settings
 
 from studio import customer_api, models, serializers
+from tests import v2_documents, v2_replay
 from tests.legacy_chain import applied
 from tests.test_cux_flow import LIVE as FLOW_LIVE, MARA, pasted, run_stages
 from tests.support import factories as f
@@ -27,15 +28,20 @@ from tests.test_services_second_review import TwoPassProvider
 class RecheckTests(RecordedInterpretation, Harness):
     # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
     # recorded synthetic interpretation.
+    # DECISIONS D243 class C: both tests approve and ask the re-check through the product, which reads event_coding@2 only
+    # (FINAL-V2 6.5): their rows are design v2's, in replay (tests/v2_replay.py), from the colonoscopy report with its
+    # endoscopist named (tests/v2_documents.COLONOSCOPY) - never the v1 chain's.
     interpretations = COLONOSCOPY_INTERPRETATIONS
+    v2_interpretations = ((v2_documents.COLONOSCOPY, v2_documents.colonoscopy_answer),)
     def customer(self, encounter_id, client=None):
         reply = (client or self.client).get(f'/api/encounters/{encounter_id}')
         self.assertEqual(reply.status_code, 200, reply.content)
         return reply.json()
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_a_re_check_is_offered_where_one_can_be_asked_and_only_to_a_member_who_may_ask(self):
         provider = self.use(TwoPassProvider(first=[SNARE], later=[BIOPSY]))
-        encounter_id = self.create()
+        encounter_id = self.create(v2_documents.COLONOSCOPY)
         drain()
         self.approve(encounter_id, '45385')
         self.assertEqual(self.row(encounter_id)['queue_reasons'], ['incomplete', 'second_review'])
@@ -61,9 +67,10 @@ class RecheckTests(RecordedInterpretation, Harness):
         self.assertEqual(self.post(f'/api/encounters/{encounter_id}/second-review').status_code, 409)
         self.assertEqual(len(provider.requests), sent + 1)
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_no_re_check_is_offered_where_nothing_is_open_or_while_processing(self):
         self.use(TwoPassProvider(first=[SNARE, BIOPSY], later=[]))
-        complete = self.create()
+        complete = self.create(v2_documents.COLONOSCOPY)
         self.assertEqual(self.customer(complete)['recheck'], {'available': False, 'can_request': False})  # processing
         drain()
         self.approve(complete, '45385')

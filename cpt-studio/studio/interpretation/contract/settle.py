@@ -25,19 +25,23 @@ it carries is the revision's own slice inside a LocatedWords that geometry made 
 5. Q1, a qualifier but approximate: ``unresolved``, qualified:<q>;
 6. no claim appraises the fact - it is not in CLAIMED, or claims.py left it unclaimed (ClaimSet.unclaimed: no template,
    a partner, a control it cannot write, ...; the integration's hand-off from 2c-2: Unclaimable.CONTROL and PARTNER
-   settle unappraised), or the claim it shares with another fact is bound to that fact (below), or a fact its result
-   also rests on has no per-act claim (a restates role: the owner of the section R lies in, below; its own pair is
-   kept with it): ``unresolved``, unappraised [J];
+   settle unappraised), or the claim it shares with another fact is bound to that fact (below; the one control two
+   facts read is a session's reach and its reached_anatomy's, DECISIONS D244's R-ANAT), or a fact its result also
+   rests on has no per-act claim (a restates role: the owner of the section R lies in, below; its own pair is kept
+   with it): ``unresolved``, unappraised [J];
 7. the event's card reads alike another's while their claimed values of the attribute differ (the request's indistinct
    groups, 3.2.3 [R:CO-7]): ``unresolved``, cards_indistinct;
-8. the appraisal pair is established (3.2.3's coherence table, ``appraise``: the claim supported with no qualifier - a
-   supports verdict naming one is read as qualified, DECISIONS D186 - attached yes, an evidence unit attached (3.2.5),
-   and its control, when it has one, contradicted): ``supported`` or ``negated``, as pass 1's claim is;
-9. otherwise: ``unresolved``, the appraisal's reason - appraisal_missing, appraisal_qualified:<q> (appraisal_qualified
-   for a qualified verdict naming none, D186), appraisal_unclear, appraisal_contradicts (an uninformative pair, both
-   contradicted, is counted apart), appraisal_detached, control_incoherent; a control left with no verdict is
-   appraisal_missing. Pass 2's counter evidence is stored with the appraisal, and an unrejected control's value stays
-   possible (4.2 [R:HO-3]).
+8. the appraisal pair is established (3.2.3's coherence table, ``appraise``: the claim supported with no qualifier but
+   approximate - a supports verdict naming another is read as qualified (DECISIONS D186), and approximate, which is
+   recorded and never lowers (1.3), is not read by that demotion (DECISIONS D224) - attached yes, an evidence unit
+   attached (3.2.5), and its control, when it has one, contradicted): ``supported`` or ``negated``, as pass 1's claim
+   is, pass 2's approximate kept in the stored appraisal;
+9. otherwise: ``unresolved``, the appraisal's reason - appraisal_missing, appraisal_qualified:<q> (for a supports
+   verdict D186 demotes, each qualifier it names but approximate; for a qualified verdict, each it names, approximate
+   included - D224 changes D186's demotion only; appraisal_qualified for a qualified verdict naming none, D186),
+   appraisal_unclear, appraisal_contradicts (an uninformative pair, both contradicted, is counted apart),
+   appraisal_detached, control_incoherent; a control left with no verdict is appraisal_missing. Pass 2's counter
+   evidence is stored with the appraisal, and an unrejected control's value stays possible (4.2 [R:HO-3]).
 
 The reasons of rows 1-5 are the row's own and every finding on the fact (hand-off 1c:R6: a fact's reasons are a set), so
 a check that failed on a doubted, silent or contradicted fact is still counted; rows 6-9 give their own reason. Pass 2's
@@ -83,14 +87,32 @@ segment's two places) is bound to ONE of them - the first whose value is the cla
 - because the store reads a claim for one fact only, and only for the fact whose value it states; the others settle
 unappraised (row 6), fail-closed, though their own pair may be established (a REQUEST in the step's notes: each fact its
 own claim, or the store reading a shared claim per fact). A control that a claim's content also makes a pair control is
-stored in the control role.
+stored in the control role. One control is read by two facts (DECISIONS D244's R-ANAT): 3.2.3 writes a reached_anatomy's
+control in its session's reach form (claims.CONTROLS: "In session {X} the endoscope did not reach the {point at anatomy
+Y}"), so when the session's reach names that point from the same units, the reach's own control and the
+reached_anatomy's are one claim of the request (claims.py makes one claim of one content), and that control appraises
+both facts (SHARED_CONTROL): each fact reads its own claim with it and each pair goes through the coherence table. It is
+STORED once, in the reach's appraisal - the attribute 3.2.3 writes it in - since the store reads a claim for one fact
+only (store._v2_verdicts_bound): the reached_anatomy borrows it (``borrowing``) and stores its own claim and verdict
+with no control, its result and reasons those of the pair it read, while the claim list keeps the control with pass
+2's verdict on it. One verdict on it is read once (``pair_read``): the reached_anatomy's established pair counts only
+beside the reach's established pair, since 3.2.3's first row is the only one that reads the control's rejection as one
+(contradicted beside its claim it is uninformative; beside an unclear, qualified, detached or missing verdict on the
+claim it is not read); otherwise the reached_anatomy settles control_incoherent - the fail-closed reading, a question in
+the step's notes. Any other control read twice, a third reader, a reader in another session, or a control that is also
+a claim, a pair control or a completeness claim keeps the rule above.
 
 **Unlisted statements** (3.2.6 [R:SC-A][R:HO-6]). An entry is dropped only when an event whose valid anchor or valid
 restatement includes one of its units has the same nature (act: a supported performed status; denial: a negated
 performed one, 1.4's "not done"; doubt: a doubt of pass 1 names the event - a planned or attempted event is neither an
 act nor a denial, the fail-closed reading), a compatible kind (equal, or one an umbrella of the other,
 engine/catalogue.UMBRELLAS) and, when pass 2 names a session card, that session (an entry naming an unknown session card
-is kept). Every other entry is kept and stored; every dropped entry is reported with the event that absorbed it.
+is kept). An anchor I3 failed absorbs nothing, nor does a restatement G6 ignores (Checked.restatements). An event whose
+supported kind is no Kind - S2's empty value on a supported fact, an item-level finding with which 1.8 keeps the answer
+(shape_inconsistent) - has no compatible kind, so it absorbs nothing (DECISIONS D229: fail-closed, never a raise).
+Every other entry is kept and stored; every dropped entry is reported with the event that absorbed it. The units of an
+object-less doubt kept as an unlisted doubt (D200) are the ones the segmentation has (an unknown unit id is not
+stored).
 
 **Health** (3.2.6 [R:HO-4]), measured before anything is settled, over the request and pass 2's answer alone:
 control acceptance - the controls not rejected (any verdict but contradicts, or none) over the claim/control pairs
@@ -105,14 +127,16 @@ stage records on the appraisal run.
 
 **The report** (1.7 verification, closed records: hand-off 1d#2): counts per attribute and result, the reasons counted,
 each doubt and the facts it was applied to, the health measures, the pairs' coherence, the unlisted statements kept and
-dropped, and both runs' usage (integer token counts only, P9). store.row_v2 completes it with the bindings.
+dropped, and both runs' usage (integer token counts only, P9). store.row_v2 completes it with the bindings. Its
+records, the stored claim's and ClaimRole are contract/types' (DECISIONS D229), named here too, and the store closes
+the stored report to them.
 
 **What settle never does** (3.4, 3.5, 3.6): it never creates, sets or changes a value, never lifts a fact a check, a
 doubt or a qualifier demoted, never lets pass 2 resolve a doubt or dismiss a contradiction, and never decides what a
 word means. It imports no text module (segment, geometry, fold, date_literals), no regular-expression module and no v1
 module, holds no word list (NoWordLists) and calls no string method; the only membership tests on strings are in closed
-vocabularies of its own - the enumerations' values (P9's filter of a doubt's readings) and claims.py's template ids (a
-control's attribute) - never against document words.
+vocabularies of its own - the enumerations' values (P9's filter of a doubt's readings; an event's kind looked up in
+KINDS) and claims.py's template ids (a control's attribute) - never against document words.
 """
 from __future__ import annotations
 
@@ -136,51 +160,28 @@ from studio.interpretation.contract.types import (Appraisal, Attached, Attribute
                                                   SettledSource, Source, Status, StoredLiteral, Unlisted, UnlistedWhat,
                                                   Verdict, VerdictValue)
 from studio.interpretation.engine import catalogue
+# settle's stored records and the closed lists inside them live in contract/types (DECISIONS D229: w34 O4 and
+# O5, hand-offs 1d#2 and 1d#6), where the store reads them; each is named here as well, so settle.<name> is
+# the very same object it was
+from studio.interpretation.contract.types import ClaimRole as ClaimRole
+from studio.interpretation.contract.types import Coherence as Coherence
+from studio.interpretation.contract.types import DoubtApplied as DoubtApplied
+from studio.interpretation.contract.types import Dropped as Dropped
+from studio.interpretation.contract.types import Health as Health
+from studio.interpretation.contract.types import HealthRefusal as HealthRefusal
+from studio.interpretation.contract.types import PairOutcome as PairOutcome
+from studio.interpretation.contract.types import Report as Report
+from studio.interpretation.contract.types import StoredClaim as StoredClaim
+from studio.interpretation.contract.types import StoredCompleteness as StoredCompleteness
+from studio.interpretation.contract.types import StoredVerdict as StoredVerdict
+from studio.interpretation.contract.types import UnlistedReport as UnlistedReport
+from studio.interpretation.contract.types import Usage as Usage
+from studio.interpretation.contract.types import Usages as Usages
 
 Family = xs.Family
 A = Attribute
 
-# --- the closed lists settle adds (each a REQUEST to move into contract/types: hand-offs 1d#2 and 1d#6) -------------
-
-
-@unique
-class ClaimRole(Enum):
-    """What a stored claim is (1.7; 3.2.2-3.2.3): a fact's own claim; its contrary control; a pair control (an act or a
-    statement asked about a place or a lesion of another); the stations completeness claim; its control. The one home of
-    the claim roles (hand-off 1d#6): equal to store.CLAIM_ROLES, which a test pins. Stored only: a request never marks a
-    control (2.4)."""
-    CLAIM = 'claim'
-    CONTROL = 'control'
-    PAIR_CONTROL = 'pair_control'
-    COMPLETENESS = 'completeness'
-    COMPLETENESS_CONTROL = 'completeness_control'
-
-
-@unique
-class PairOutcome(Enum):
-    """The outcome of one claim with its control (3.2.3's coherence table, ``appraise``): established; incoherent (the
-    claim supported, its control not rejected); uninformative (both contradicted: counted apart, not as incoherent
-    [R:HO-4]); contradicted (the claim contradicted, its control not); qualified; unclear; detached (supported, but not
-    attached or with no evidence attached, 3.2.5); missing (no verdict for the claim); control_missing (the claim would
-    stand, its control has no verdict: not rejected)."""
-    ESTABLISHED = 'established'
-    INCOHERENT = 'incoherent'
-    UNINFORMATIVE = 'uninformative'
-    CONTRADICTED = 'contradicted'
-    QUALIFIED = 'qualified'
-    UNCLEAR = 'unclear'
-    DETACHED = 'detached'
-    MISSING = 'missing'
-    CONTROL_MISSING = 'control_missing'
-
-
-@unique
-class HealthRefusal(Enum):
-    """Why 3.2.6's health refuses an appraisal whole [R:HO-4]: too many controls not rejected (a yes-sayer); too few
-    claims established (a no-sayer, a detached or degenerate answer); too many claims with no verdict."""
-    CONTROL_ACCEPTANCE = 'control_acceptance'
-    ESTABLISHMENT = 'establishment'
-    COMPLETENESS = 'completeness'
+# --- the closed list settle keeps (ClaimRole, PairOutcome and HealthRefusal are contract/types', DECISIONS D229) ----
 
 
 @unique
@@ -262,6 +263,13 @@ DOUBT_REASONS: Mapping[DoubtBasis, Reason] = MappingProxyType({DoubtBasis.STATED
 # once, so a qualifier the closed list does not hold fails the import rather than a settle.
 APPRAISAL_QUALIFIED: Mapping[Qualifier2, Reason] = MappingProxyType({
     qualifier: Reason(f'{Reason.APPRAISAL_QUALIFIED.value}:{qualifier.value}') for qualifier in Qualifier2})
+# The qualifiers a supports verdict may name and stay a support (DECISIONS D224: pass 2's approximate never lowers a
+# supported claim; 1.3: approximate is recorded and never lowers): D186's demotion reads every other qualifier.
+NEVER_LOWERS: frozenset[Qualifier2] = frozenset({Qualifier2.APPROXIMATE})
+# Each Kind by its value, as absorbing() reads an event's kind: a supported kind whose value is no Kind (S2's empty
+# value on a supported fact, an item-level finding: 1.8 keeps the answer) has none, and so absorbs nothing (DECISIONS
+# D229).
+KINDS: Mapping[str, Kind] = MappingProxyType({member.value: member for member in Kind})
 # The section attribute an act inherits each of its effective facts from (1.5): its date relation from the occasion.
 INHERITED_FROM: Mapping[Attribute, Attribute] = MappingProxyType({
     A.DATE_RELATION: A.OCCASION, A.PERFORMER: A.PERFORMER, A.PERFORMER_PERSON: A.PERFORMER_PERSON, A.ENTRY: A.OWNER})
@@ -273,6 +281,12 @@ STATEMENT_INHERITED: tuple[Attribute, ...] = (A.DATE_RELATION,)
 CONTROL_ATTRIBUTES: Mapping[Attribute, Attribute] = MappingProxyType({
     rule.attribute: rule.as_attribute for rule in claims.CONTROLS
     if rule.as_attribute is not None and rule.as_attribute is not rule.attribute})
+# The two facts of a session one contrary control appraises together (DECISIONS D244's R-ANAT; the module's docstring):
+# reached_anatomy, and the attribute 3.2.3 writes its control in (CONTROL_ATTRIBUTES: the reach). Read from the
+# CONTROLS table, so a reached_anatomy control written in another attribute moves it, and an attribute this ruling does
+# not name never shares (a KeyError fails the import, never a settle).
+SHARED_CONTROL: tuple[Family, frozenset[Attribute]] = (
+    Family.SESSION, frozenset({A.REACHED_ANATOMY, CONTROL_ATTRIBUTES[A.REACHED_ANATOMY]}))
 # The attribute a claim's template is the form of, for a control no stored fact names (claims.FORMS, the first row of
 # each template; and 3.2.3's own forms).
 TEMPLATE_ATTRIBUTES: Mapping[str, Attribute] = MappingProxyType({
@@ -289,19 +303,7 @@ _ENUMERATION_VALUES: frozenset[str] = frozenset(
 _ESTABLISHED = frozenset({FactState.SUPPORTED, FactState.NEGATED})
 
 
-# --- the records settle gives (closed: hand-off 1d#2) -------------------------------------------------------------------
-
-
-@dataclass(frozen=True, slots=True)
-class Usage:
-    """One run's provider-reported token counts (UsageCount), each 0 when the provider gives none (an absent or null
-    count is zero: the API omits a zero)."""
-    prompt: int
-    candidates: int
-    thoughts: int
-    total: int
-    cached: int
-    tool_use_prompt: int
+# --- how settle reads a run's usage (its records are contract/types', DECISIONS D229) ----------------------------------
 
 
 def usage_of(metadata: Mapping[str, object]) -> Usage:
@@ -314,124 +316,6 @@ def usage_of(metadata: Mapping[str, object]) -> Usage:
     return Usage(prompt=count(UsageCount.PROMPT), candidates=count(UsageCount.CANDIDATES),
                  thoughts=count(UsageCount.THOUGHTS), total=count(UsageCount.TOTAL), cached=count(UsageCount.CACHED),
                  tool_use_prompt=count(UsageCount.TOOL_USE_PROMPT))
-
-
-@dataclass(frozen=True, slots=True)
-class Usages:
-    """Both runs' usage (1.7 verification.usage): pass 1's (interpretation) and pass 2's (appraisal)."""
-    interpretation: Usage
-    appraisal: Usage
-
-
-@dataclass(frozen=True, slots=True)
-class Health:
-    """3.2.6's measures, as integers [R:HO-4]: pairs, the claim/control pairs (pair controls excluded, hand-off 2c#12);
-    not_rejected, those whose control pass 2 did not contradict; claims, the non-control claims (each fact's claim and
-    each completeness claim, once); established, those every pair of which is established; verdicts, every claim of the
-    request (controls included); missing, those with no verdict read (missing, repeated, or bound to another content
-    key). refused: the measures that refuse the appraisal (empty: healthy)."""
-    pairs: int
-    not_rejected: int
-    claims: int
-    established: int
-    verdicts: int
-    missing: int
-    refused: tuple[HealthRefusal, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class Coherence:
-    """How many claim/control pairs (and uncontrolled claims) ended in each PairOutcome (1.7 verification.coherence)."""
-    established: int
-    incoherent: int
-    uninformative: int
-    contradicted: int
-    qualified: int
-    unclear: int
-    detached: int
-    missing: int
-    control_missing: int
-
-
-@dataclass(frozen=True, slots=True)
-class DoubtApplied:
-    """One doubt of pass 1 and what settle did with it (1.7 verification.doubts): index, its position; about and basis;
-    objects, the ids it names as written (ids only, S1 checked their shape); malformed, whether S2 found it malformed
-    (then it names every attribute of its objects); applied, the stored facts it was applied to; unlisted, whether it was
-    kept as an unlisted doubt (DECISIONS D200: object-less, and no event's anchor holds one of its units)."""
-    index: int
-    about: DoubtAbout
-    basis: DoubtBasis
-    objects: tuple[str, ...]
-    malformed: bool
-    applied: int
-    unlisted: bool
-
-
-@dataclass(frozen=True, slots=True)
-class Dropped:
-    """An unlisted statement settle dropped (3.2.6 [R:SC-A]): its units, what it is, its kind and session as pass 2 gave
-    them (the session as pass 1's id), and the event that absorbed it."""
-    units: tuple[str, ...]
-    what: UnlistedWhat
-    kind: Kind | None
-    session: str | None
-    event: str
-
-
-@dataclass(frozen=True, slots=True)
-class UnlistedReport:
-    """The unlisted statements (1.7 verification.unlisted): how many were kept (events.unlisted), and each dropped one."""
-    kept: int
-    dropped: tuple[Dropped, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class Report:
-    """Settle's verification report (1.7): counts, per attribute, of the stored facts per result; reasons, each reason
-    counted over the stored facts; doubts; health; coherence; unlisted; usage. store.row_v2 adds the label, both runs'
-    request and response sha256, the claim list's sha256 and ``refused``."""
-    counts: Mapping[Attribute, Mapping[Result, int]]
-    reasons: Mapping[Reason, int]
-    doubts: tuple[DoubtApplied, ...]
-    health: Health
-    coherence: Coherence
-    unlisted: UnlistedReport
-    usage: Usages
-
-
-@dataclass(frozen=True, slots=True)
-class StoredVerdict:
-    """Pass 2's verdict as a stored claim keeps it (1.7 events.claims[].verdict; 3.2.4 [R:MO-5])."""
-    verdict: VerdictValue
-    attached: Attached
-    qualifiers: tuple[Qualifier2, ...]
-    evidence: tuple[str, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class StoredClaim:
-    """One claim of the request as the row stores it (1.7 events.claims): id, its place in the seeded order; role; its
-    template's id; subject, the object it is about ('' for the encounter); attribute; value; units; content, its content
-    key; verdict, pass 2's, None when it gave none that binds."""
-    id: str
-    role: ClaimRole
-    template: str
-    subject: str
-    attribute: Attribute
-    value: str
-    units: tuple[str, ...]
-    content: str
-    verdict: StoredVerdict | None
-
-
-@dataclass(frozen=True, slots=True)
-class StoredCompleteness:
-    """The stations completeness claim's settled result (3.2.2 [R:SC-B]; store's sessions[].completeness): its
-    appraisal (its control demanded), supported only as an established pair, else unresolved with the pair's reason."""
-    appraisal: Appraisal
-    result: Result
-    reasons: tuple[Reason, ...]
 
 
 @dataclass(frozen=True)
@@ -525,12 +409,21 @@ def appraise(verdict: Verdict | None, attached_evidence: bool, controlled: bool,
              control: VerdictValue | None) -> tuple[PairOutcome, tuple[Reason, ...]]:
     """3.2.3's coherence table for one claim and its control: ``verdict``, pass 2's on the claim (None: none read);
     ``attached_evidence``, 3.2.5's check (appraise_read.ReadVerdict.attached_evidence); ``controlled``, whether the
-    claim has a control; ``control``, pass 2's verdict on the control (None: none read). A supports verdict naming
-    qualifiers is read as qualified (DECISIONS D186)."""
+    claim has a control; ``control``, pass 2's verdict on the control (None: none read).
+
+    A supports verdict naming a qualifier that lowers - any but those of NEVER_LOWERS - is read as qualified (DECISIONS
+    D186), its reasons appraisal_qualified:<q> for each qualifier that lowers. Approximate never lowers a supports
+    verdict (1.3; DECISIONS D224): it is not read here, so the pair goes on through the table and the qualifier stays
+    recorded in the verdict the row stores. A qualified verdict is pass 2's own and D224 leaves it as 3.2.3 writes it:
+    appraisal_qualified:<q> for every qualifier it names, approximate included, appraisal_qualified when it names
+    none."""
     if verdict is None:
         return PairOutcome.MISSING, (Reason.APPRAISAL_MISSING,)
     value = verdict.verdict
-    if value is VerdictValue.QUALIFIED or (value is VerdictValue.SUPPORTS and verdict.qualifiers):
+    lowering = tuple(qualifier for qualifier in verdict.qualifiers if qualifier not in NEVER_LOWERS)
+    if value is VerdictValue.SUPPORTS and lowering:
+        return PairOutcome.QUALIFIED, ordered(APPRAISAL_QUALIFIED[qualifier] for qualifier in lowering)
+    if value is VerdictValue.QUALIFIED:
         named = ordered(APPRAISAL_QUALIFIED[qualifier] for qualifier in verdict.qualifiers)
         return PairOutcome.QUALIFIED, named or (Reason.APPRAISAL_QUALIFIED,)
     if value is VerdictValue.UNCLEAR:
@@ -697,6 +590,7 @@ class _Settler:
                 for attribute in xs.attributes(Family.EVENT):
                     self.doubting.setdefault((Family.EVENT, name, attribute), []).append(index)
         self.bound, self.partners = self.binding()
+        self.borrowers = self.borrowing()
         self.indistinct = self.indistinct_keys(indistinct)
         self.counted: list[tuple[Attribute, SettledFact]] = []
         self.applied: dict[int, int] = {}
@@ -705,29 +599,82 @@ class _Settler:
 
     def binding(self) -> tuple[dict[FactKey, claims.Appraised], set[FactKey]]:
         """Each appraised fact bound to its claim, and the facts that share a claim another fact reads (the module's
-        docstring): one fact per claim, the first whose value is the claim's, and no control read twice. A claim whose
-        value is no entry's own (a partner rendered as a fact that is not itself claimed) is read by none of them: the
-        store reads a verdict only for the fact whose value its claim states (store._v2_verdicts_bound), so binding it
-        to another would make the row unstorable."""
+        docstring): one fact per claim, the first whose value is the claim's, and no control read twice but the one
+        SHARED_CONTROL names (``shares``). A claim whose value is no entry's own (a partner rendered as a fact that is
+        not itself claimed) is read by none of them: the store reads a verdict only for the fact whose value its claim
+        states (store._v2_verdicts_bound), so binding it to another would make the row unstorable."""
         groups: dict[str, list[claims.Appraised]] = {}
         for item in self.claim_set.appraised:
             groups.setdefault(item.claim, []).append(item)
         bound: dict[FactKey, claims.Appraised] = {}
         partners: set[FactKey] = set()
         read: set[str] = set()
+        readers: dict[str, list[FactKey]] = {}  # each control read, with the facts that read it as their control
         for claim_id, items in groups.items():
             stored = self.claims.get(claim_id)
             chosen = next((item for item in items if stored is not None and item.value == stored.value), None)
             if (stored is None or chosen is None or claim_id in read
-                    or (chosen.control is not None and chosen.control in read)):
+                    or (chosen.control is not None and chosen.control in read
+                        and not self.shares(chosen.control, readers.get(chosen.control, []), chosen.key))):
                 partners.update(item.key for item in items)
                 continue
             bound[chosen.key] = chosen
             read.add(claim_id)
             if chosen.control is not None:
                 read.add(chosen.control)
+                readers.setdefault(chosen.control, []).append(chosen.key)
             partners.update(item.key for item in items if item is not chosen)
         return bound, partners
+
+    def shares(self, control: str, readers: Sequence[FactKey], key: FactKey) -> bool:
+        """Whether the fact at ``key`` may read ``control`` as its contrary control though ``readers`` already read it
+        (DECISIONS D244's R-ANAT; the module's docstring): only when exactly one fact read it before, as its control,
+        and the two are one session's SHARED_CONTROL facts - its reach and its reached_anatomy - and the control is
+        only ever a contrary control of the request (no fact's claim, no pair control, no completeness claim or
+        control: those keep one reader each)."""
+        family, attributes = SHARED_CONTROL
+        if len(readers) != 1:
+            return False
+        first = readers[0]
+        if not (first.family is family and key.family is family and first.object == key.object
+                and {first.attribute, key.attribute} == attributes):
+            return False
+        return not (any(item.claim == control for item in self.claim_set.appraised)
+                    or any(pair.claim == control for pair in self.claim_set.pair_controls)
+                    or any(control in (complete.claim, complete.control) for complete in self.claim_set.completeness))
+
+    def borrowing(self) -> dict[FactKey, FactKey]:
+        """Each bound fact that reads the control another bound fact reads (``shares`` lets in only a session's reach
+        and its reached_anatomy), with that other fact: the BORROWER is the one whose control 3.2.3 writes in the
+        other's attribute (CONTROL_ATTRIBUTES: reached_anatomy -> reached), so the control is stored with the fact whose
+        own form it is, and the borrower's appraisal names no control (the module's docstring: the store reads a claim
+        for one fact only). Computed from the binding alone, so the claim set's order changes nothing."""
+        readers: dict[str, list[FactKey]] = {}
+        for key, item in self.bound.items():
+            if item.control is not None:
+                readers.setdefault(item.control, []).append(key)
+        found: dict[FactKey, FactKey] = {}
+        for keys in readers.values():
+            if len(keys) != 2:
+                continue
+            for key, other in ((keys[0], keys[1]), (keys[1], keys[0])):
+                if CONTROL_ATTRIBUTES.get(key.attribute) is other.attribute:
+                    found[key] = other
+        return found
+
+    def pair_read(self, item: claims.Appraised, pair: Pair) -> tuple[PairOutcome, tuple[Reason, ...]]:
+        """The outcome and reasons a bound fact reads from its pair (rows 8 and 9): the pair's own; but a borrower's
+        established pair counts only beside its lender's established pair - one verdict on the shared control is read
+        once, and 3.2.3's first row is the only one that reads its rejection as one - and otherwise the borrower reads
+        control_incoherent (the module's docstring; the fail-closed reading, a question in the step's notes)."""
+        lender = self.borrowers.get(item.key)
+        if lender is None or pair.outcome is not PairOutcome.ESTABLISHED:
+            return pair.outcome, pair.reasons
+        lent = self.bound.get(lender)
+        their = None if lent is None else self.pairs.get((lent.claim, lent.control))
+        if their is not None and their.outcome is PairOutcome.ESTABLISHED:
+            return pair.outcome, pair.reasons
+        return PairOutcome.INCOHERENT, (Reason.CONTROL_INCOHERENT,)
 
     def indistinct_keys(self, groups: Sequence[Sequence[str]]) -> set[FactKey]:
         """Row 7 (3.2.3 [R:CO-7]): in each group of events whose cards read alike, the claimed facts of every attribute
@@ -797,10 +744,12 @@ class _Settler:
                    for source in sources)
 
     def appraisal_of(self, item: claims.Appraised) -> Appraisal:
+        """The stored appraisal of a bound fact (1.7): its claim and pass 2's verdict on it, and its control with pass
+        2's verdict - none for a borrower, whose control is stored with its lender's (``borrowing``)."""
         claim = self.claims[item.claim]
         verdict = _verdict(self.verdicts, item.claim)
         control = None
-        if item.control is not None:
+        if item.control is not None and item.key not in self.borrowers:
             other = _verdict(self.verdicts, item.control)
             control = ControlVerdict(item.control, None if other is None else other.verdict)
         return Appraisal(claim=item.claim, content=claim.content, verdict=None if verdict is None else verdict.verdict,
@@ -825,9 +774,13 @@ class _Settler:
                                  or item.inherited_from != claim.inherited_from):
             item = None  # a claim made about another value or another section is not this fact's (fail-closed)
         pair = self.pairs.get((item.claim, item.control)) if item is not None else None
+        outcome: PairOutcome | None = None
+        pair_reasons: tuple[Reason, ...] = ()
+        if item is not None and pair is not None:
+            outcome, pair_reasons = self.pair_read(item, pair)
         case = Case(state=claim.state, sides=sides, doubts=bases, joined=any(name in self.joined for name in keys),
                     findings=findings, claimed=item is not None and governed, indistinct=key in self.indistinct,
-                    pair=None if pair is None else pair.outcome, pair_reasons=() if pair is None else pair.reasons)
+                    pair=outcome, pair_reasons=pair_reasons)
         result, reasons = decide(case)
         # pass 2's verdict stays with the fact it was given for, whatever row settled it: a fact claims.py claimed and
         # rows 1-5 settle (K8's joined members, a fact D200's object-less doubt names: claims.py reads neither yet)
@@ -1126,7 +1079,11 @@ class _Settler:
         return found
 
     def absorbing(self, entry: ReadUnlisted) -> str | None:
-        """The event that absorbs an unlisted entry (3.2.6 [R:SC-A][R:HO-6]), None when it is kept."""
+        """The event that absorbs an unlisted entry (3.2.6 [R:SC-A][R:HO-6]), None when it is kept (the module's
+        docstring). An event's kind is read through KINDS, never constructed from pass 1's value: a supported kind
+        whose value is no Kind (S2's empty value, shape_inconsistent, with which 1.8 keeps the answer) is no compatible
+        kind, so the event absorbs nothing and the entry is kept (DECISIONS D229: fail-closed instead of a raise that
+        would leave no settled inventory)."""
         units = set(entry.unlisted.units)
         kind = entry.unlisted.kind
         if not units or kind is None or UnlistedFinding.SESSION_UNKNOWN in entry.findings:
@@ -1142,7 +1099,7 @@ class _Settler:
             if not told & units or entry.unlisted.what not in self.natures(name):
                 continue
             value = self.supported(Family.EVENT, name, A.KIND)
-            own = Kind(value) if value is not None else None
+            own = KINDS.get(value) if value is not None else None
             if own is None or not (own is kind or kind in catalogue.UMBRELLAS.get(own, ())
                                    or own in catalogue.UMBRELLAS.get(kind, ())):
                 continue

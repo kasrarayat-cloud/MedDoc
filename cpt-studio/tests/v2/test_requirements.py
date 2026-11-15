@@ -58,7 +58,9 @@ REQUIREMENTS_PINS = {
     'cpt-requirements@1': {
         'table': '1b0f0d18e5d3328d923f43bd033b75559e439c849dafae259ddd6e64b89820e5',
         'rank': '4c0c972d7c8f05b48bc4cebfaa1628c8e7d772ebb3dbcd4146a0eb80da3c26c1',
-        'rules': '72970ffb5ed848e16d97bea385bc7f3f1f9aa3f16deb081463d97d9e7887309f',
+        # D229 (ENT), D225 P5 (LOWER); round w7r: SUP.7 reads the examination's device (r4a R3), bundling the kept
+        # unlisted entries (r4b RQ-2): e9f12ae3... superseded
+        'rules': '4efba46a8dee311ddd7d357b5dc9a1b5bf719f67779f16ac1a617fd644f3d50c',
         'claimed': '8c95246d6ff8a260b344bb5a52e25f51ac744343ed8ebe5887764ad7e5cd7b81',
     },
 }
@@ -474,7 +476,9 @@ class RequirementTests(SimpleTestCase):
             Tag.STRUCT_PFC: {(Rank.TARGET, FactKey.TARGET)}, Tag.ROUTE: {(Rank.TECHNIQUE, FactKey.TECHNIQUE)},
             Tag.TRACT: {(Rank.PROCEDURE, FactKey.PROCEDURE)},
             Tag.STATIONS: {(Rank.EXAM_STATIONS, FactKey.EXAM_STATIONS)},
-            Tag.LIMITED: {(Rank.EXAM_STATIONS, FactKey.EXAM_STATIONS)}, Tag.LOWER: {(Rank.EXTENT, FactKey.EXTENT)},
+            Tag.LIMITED: {(Rank.EXAM_STATIONS, FactKey.EXAM_STATIONS)},
+            # LOWER: the extent, and the approach at RANK row 8 (DECISIONS D225 P5, repair r4a's R1)
+            Tag.LOWER: {(Rank.EXTENT, FactKey.EXTENT), (Rank.PROCEDURE, FactKey.PROCEDURE)},
             Tag.ENT: {(Rank.PROCEDURE, FactKey.PROCEDURE), (Rank.EXTENT, FactKey.EXTENT)},
             Tag.YIELD: {(Rank.YIELD, FactKey.ACT_YIELD)},
             Tag.XCHG: {(Rank.ACT_TARGET, FactKey.ACT_TARGET), (Rank.STATUS, FactKey.PERFORMED_STATUS)},

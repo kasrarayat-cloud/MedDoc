@@ -1,8 +1,11 @@
 SYNTHETIC DATA — NOT FOR BILLING OR CLAIMS
 CPT STUDIO — APPROVED CODES
 Agent-executed synthetic review — not clinical approval
-Report format: cpt-studio-customer-report@1
+Report format: cpt-studio-customer-report@2
 Encounter: Synthetic colonoscopy (two lesions)
+Document: revision 1
+Details used: date of service 2026-11-03; place of service not documented; patient not documented; claim not documented
+Codes made: 2026-11-03T22:10:00Z
 Date of service: 2026-11-03
 Generated: 2026-11-03T22:10:00Z by CPT Studio review agent (automated agent)
 

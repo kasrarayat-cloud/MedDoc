@@ -4728,3 +4728,22 @@ again" on legacy encounters and closes the class-b item.
 - **Scope:** legacy and new encounters.
 - **Verified by tests and the installed walk:** rapid successive edits, failures, reload persistence and actual exports.
 - **Next:** the behaviour is designed and refuted as FINAL-V2 amendment 1 before it is built (steps 5b and a new UI step).
+
+**Owner directive, 2026-11-13: the interpreter's model becomes `gemini-4-carbon`, at its maximum reasoning** (verbatim in
+`docs/foundation/rulings/2026-10-23-cpt-studio-gi.md`; RULINGS.md; DECISIONS D230, built by round w9r's step cb, D272).
+- **The model.** The interpreter's model, D13's code constant (`studio/interpretation/__init__.py` MODEL, named by the
+  request's URL), is `gemini-4-carbon`: every request built names it, and an answer naming any other model sets the
+  model hold (P-5). The trial above, the FRESH recordings and the slips under `tests/fixtures/interpretation` were
+  answered by `gemini-4-argon` and stay labelled so: they are replayed as Argon's, the adapter reading each against the
+  model its own request named (a v1 request of record named Argon).
+- **The request.** Both passes ask for thinking level high, the model's documented maximum, and 65,536 output tokens,
+  its synchronous limit, which thinking tokens count toward; temperature stays in the body (the model ignores it and does
+  not reject it). The bytes change before the first recording, so no version moves (D202). The HTTP timeouts stay until
+  D1 measures the latency at high reasoning.
+- **Cost.** `gemini-4-carbon` at `gemini-4-argon`'s rates, the same through 2026-11-30 and from 2026-12-01 (Google's
+  pricing page, read 2026-11-13); a run whose request named Argon keeps Argon's rates.
+- **Customer surfaces.** The customer denylist names both full IDs, never the bare word "carbon": a carbon-particle tattoo
+  is clinical wording, as argon plasma coagulation is.
+- **No separate qualification.** D1-D3, the frozen acceptance and the installed walk measure Carbon. Watched at D1: the
+  latency against the 480, 510 and 560 s timeouts, MAX_TOKENS finishes, modelVersion exactly `gemini-4-carbon`, and the
+  cost.

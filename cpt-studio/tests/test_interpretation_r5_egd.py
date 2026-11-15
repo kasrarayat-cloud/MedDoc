@@ -17,7 +17,13 @@ contract, the proposer's citations replayed) and its controls:
   installed release reads the PEG as the EGD's own act.
 CASES holds every input, so the installed release (c2e53f8e) can be run on the very same texts and citations. Each test
 asserts in independent subtests - the outcome, the read-time overlay, the structure - so a regression shows every one it
-breaks. Nothing is sent."""
+breaks. Nothing is sent.
+
+DECISIONS D243 (2026-11-14, step q02): test_d118_the_competing_hold_is_released_once_the_other_code_is_rejected pinned the review overlay's reading of an
+event_coding@1 record, which FINAL-V2 6.5 retires (read time reads event_coding@2 only, a
+cpt-studio-events@1 record is read as stored and blocked). They retire with it, removed here by a counted
+edit naming their ids; step 5c's own tests carry the same kind of @1 record, asserting 6.5's refusal. Nothing
+else in this suite changed (8.0's ban on editing a retired module's tests yields to 6.5 for exactly these ids)."""
 from __future__ import annotations
 
 import copy
@@ -695,14 +701,6 @@ class D118DilationsOfOneStricture(SimpleTestCase):
         with self.subTest(part='each code still accounts for its own dilation only'):
             self.assertEqual(([act['id'] for act in proposal(result, '43249').support['acts']],
                               [act['id'] for act in proposal(result, '43248').support['acts']]), (['E2'], ['E3']))
-
-    def test_d118_the_competing_hold_is_released_once_the_other_code_is_rejected(self):
-        result = assessed(C1)
-        stored = [overlay.stored_from(p) for p in result.proposals]
-        rejected = {proposal(result, '43248').key: overlay.Decided('reject')}
-        view = overlay.review_view(stored, rejected, completeness=to_jsonable(result.completeness))
-        self.assertEqual((view[proposal(result, '43249').key].status,
-                          view[proposal(result, '43249').key].released), ('ready', (combination.COMPETING_FACT,)))
 
     def test_d118_a_savary_dilation_whose_site_is_unread_competes(self):
         result = assessed(C_UNREAD)

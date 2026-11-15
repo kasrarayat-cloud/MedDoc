@@ -30,6 +30,7 @@ from studio.providers.base import request_sha256
 from studio.types import RawExchange
 from tests.support import factories as f
 from tests.support import operator as ops
+from tests import v1_chain
 from tests.test_pipeline_api import FakeProvider
 
 AUTH = 'docs/foundation/rulings/2026-10-23-cpt-studio-gi.md'
@@ -105,6 +106,7 @@ class InterpretCase(TestCase):
         assert status['state'] == 'ok', status
 
     def setUp(self):
+        v1_chain.start(self)  # FINAL-V2 8.1 step 5b: this pins v1's interpret stage (tests/v1_chain.py)
         self.replay = tempfile.mkdtemp(prefix='s09-replay-')
         self.addCleanup(shutil.rmtree, self.replay, True)
         replay = override_settings(GEMINI_REPLAY_DIR=self.replay)
@@ -247,8 +249,8 @@ class ChainTests(InterpretCase):
                               run.scope['mode'], run.scope['effect'], run.service_date),
                              ('gemini', 'gemini-generate@cptstudio-1', 'interpretation', 'succeeded', False,
                               request.canonical_sha256, 'replay', 'answered', None))
-            self.assertEqual((run.endpoint, run.requested_model, run.returned_model), ('', 'gemini-4-argon',
-                                                                                       'gemini-4-argon'))
+            self.assertEqual((run.endpoint, run.requested_model, run.returned_model), ('', interpretation.MODEL,
+                                                                                       interpretation.MODEL))
             self.assertEqual(list(run.exchanges.values_list('turn', 'state')), [(1, 'succeeded')])
             [inventory] = models.EventInventory.objects.filter(revision=revision)
             self.assertEqual((inventory.state, inventory.provider_run_id, inventory.interpretation_version,
@@ -496,7 +498,7 @@ class PauseTests(InterpretCase):
         failed before settling: no hold) - the next document's stage, in another workspace, records that answer's hold at
         its door and sends nothing; a failed 401 run left unsettled likewise."""
         encounter, revision = self.through_extract()
-        interpreter = self.scripted(answered(envelope(model='gemini-4-argon-preview')), answered(envelope()))
+        interpreter = self.scripted(answered(envelope(model=f'{interpretation.MODEL}-preview')), answered(envelope()))
         with mock.patch.object(jobs, '_read_answer', side_effect=jobs.StageFailure('synthetic: the reading child died')):
             self.run_next('interpret')
         [run] = self.interpret_runs(revision)
@@ -516,7 +518,7 @@ class PauseTests(InterpretCase):
         was committed (turn 1, HTTP 200), then the run's outcome write failed (decision (k)): the run is UNKNOWN with no
         bytes of its own, and no hold was set. The next document's stage, in another workspace, records the hold that
         exchange sets against that run at its door and sends nothing; the run itself is not written."""
-        interpreter = self.scripted(answered(envelope(model='gemini-4-argon-preview')), answered(envelope()))
+        interpreter = self.scripted(answered(envelope(model=f'{interpretation.MODEL}-preview')), answered(envelope()))
         encounter, revision = self.through_extract()
         with self.outcome_write_fails_once(), self.assertLogs('studio.jobs', level='ERROR'):
             self.run_next('interpret')
@@ -622,7 +624,7 @@ class PauseTests(InterpretCase):
     def test_an_answer_naming_another_model_is_never_read_and_holds(self):
         """P-5: a substituted model is refused and never read (a 'refused' inventory row), and sets the model hold."""
         encounter, revision = self.through_extract()
-        self.scripted(answered(envelope(model='gemini-4-argon-preview')))
+        self.scripted(answered(envelope(model=f'{interpretation.MODEL}-preview')))
         self.run_next('interpret')
         [inventory] = models.EventInventory.objects.all()
         self.assertEqual((inventory.state, inventory.verification['stage']), ('refused', 'envelope'))
@@ -982,7 +984,7 @@ class UnknownOutcomeTests(InterpretCase):
         interpreter = self.scripted()
         encounter, revision = self.through_extract()
         models.Job.objects.filter(state=models.Job.QUEUED).update(state=models.Job.CANCELLED)
-        run = self.unknown_holding_an_answer(encounter, revision, body=envelope(model='gemini-4-argon-preview'))
+        run = self.unknown_holding_an_answer(encounter, revision, body=envelope(model=f'{interpretation.MODEL}-preview'))
         self.assertTrue(jobs.reconcile(encounter, run, self.user, NOTE))
         job = self.run_next('interpret')
         self.assertEqual((job.state, job.error), (models.Job.CANCELLED, holds.PAUSED_MESSAGE))
@@ -991,7 +993,7 @@ class UnknownOutcomeTests(InterpretCase):
         self.assertEqual((hold.reason, hold.run_id), ('model', run.pk))
         run.refresh_from_db()
         self.assertEqual((run.state, run.scope['effect'], run.returned_model),
-                         ('succeeded', 'hold', 'gemini-4-argon-preview'))
+                         ('succeeded', 'hold', f'{interpretation.MODEL}-preview'))
         self.assertEqual(models.EventInventory.objects.get(provider_run=run).state, 'refused')
         self.assertEqual(len(self.interpret_runs(revision)), 1)
         self.assertFalse(models.Job.objects.filter(kind='analyze').exists())
@@ -1145,7 +1147,7 @@ class StaleSweepTests(InterpretCase):
         interpreter = self.scripted()
         encounter, revision = self.through_extract()
         job = self.dead(revision)
-        run = self.answered_run(encounter, revision, envelope(model='gemini-4-argon-preview'))
+        run = self.answered_run(encounter, revision, envelope(model=f'{interpretation.MODEL}-preview'))
         jobs.mark_stale()
         job.refresh_from_db()
         [settled] = self.queued()
@@ -1167,7 +1169,7 @@ class StaleSweepTests(InterpretCase):
         interpreter = self.scripted(answered(envelope()))
         encounter, revision = self.through_extract()
         self.dead(revision)
-        run = self.answered_run(encounter, revision, envelope(model='gemini-4-argon-preview'))
+        run = self.answered_run(encounter, revision, envelope(model=f'{interpretation.MODEL}-preview'))
         jobs.mark_stale()
         self.assertEqual(self.run_next('interpret').state, models.Job.CANCELLED)
         models.InterpreterHoldRelease.objects.create(hold=models.InterpreterHold.objects.get(), released_by=self.user,
@@ -1420,7 +1422,7 @@ class SendPurposeTests(InterpretCase):
         self.run_next('interpret')
         [run] = self.interpret_runs(revision)
         self.assertEqual((run.endpoint, run.requested_model, run.returned_model, run.http_status, run.usage),
-                         (ScriptedInterpreter.endpoint, 'gemini-4-argon', 'gemini-4-argon', 200, USAGE))
+                         (ScriptedInterpreter.endpoint, interpretation.MODEL, interpretation.MODEL, 200, USAGE))
         [exchange] = run.exchanges.all()
         self.assertEqual((exchange.turn, exchange.state, exchange.http_status, exchange.request_sha256),
                          (1, 'succeeded', 200, run.request_sha256))

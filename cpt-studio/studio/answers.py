@@ -35,6 +35,18 @@ family and fact, and binds by them, as that release bound it (refutation cycle 2
 member reads here is from the fixed tables below: no stored question, reason or
 note text (engine prose, which may quote anything) is passed through; the document's own words are quoted only as
 exact slices of its text.
+
+FINAL-V2 amendment 1 (step 5d; D208): the codes are updated automatically after a save. A save that carries only context
+values (or only the confirmation of a date) is accepted while processing runs or an update is pending - a newer save
+supersedes the pending update (A1), and jobs.change_context refuses only while a member's own act on the current codes
+is queued or running (A18). A save that records an answer ("Not documented", "Cannot confirm") is refused while any stage
+runs or an update is pending (1.4), and so is a withdrawal while an update is pending (UPDATE_ANSWER_WITHDRAW,
+[R:truth-T12]). A save answers ``reassessing`` from what jobs.change_context did (ContextSave: an update pending after it,
+or a recompute this save queued) and ``restored`` when it made the earlier codes current again (2.5 [R:truth-T13]). While a
+case-B update is pending - the saved values are not the current context's, which the update keeps until its analyze
+derives a new one - the date block and the rows show the saved values (Encounter.user_values) and assert no member
+conflict until a context derives one; the document's own date and quote still come from the context (4.3, 5.1
+[R:truth-T3]).
 """
 from __future__ import annotations
 
@@ -42,7 +54,8 @@ import hashlib
 import re
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Optional
+from collections.abc import Mapping, Sequence
+from typing import Any, Optional
 
 from django.db import transaction
 
@@ -163,6 +176,9 @@ _UUID = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 DATE_ENTRY_EVENTS = 200
 
 BUSY = 'Wait for processing to finish (or stop it) before saving details.'
+# FINAL-V2 amendment 1, 5.1 (step 3c's words, customer_api.ANSWER_AFTER_UPDATE, held equal by tests/v2/test_update_api.py:
+# customer_api imports this module): an answer is not recorded while an update of the codes is pending (1.4)
+ANSWER_AFTER_UPDATE = 'You can answer this once the codes are updated.'
 STALE = 'That detail is no longer needed. Reload the page to see the details this document needs now.'
 SHAPE = 'Send the details as a list of answers, each with its id, fact and value.'
 TOO_MANY = f'Send at most {MAX_ANSWERS} answers at a time.'
@@ -254,17 +270,38 @@ def _context_of(encounter):
     return context if context is not None and context.revision_id == encounter.current_revision_id else None
 
 
+def saved_apart(encounter, context) -> bool:
+    """FINAL-V2 amendment 1, 4.3 and 5.1 [R:truth-T3]: whether the saved values are not those of ``context``, the current
+    context of the current revision (review.values) - a case-B update pending: the save stored the values and kept the
+    context until the update's analyze derives one. The date block and the rows then read the saved values
+    (Encounter.user_values), never the kept context's, and assert no member conflict until a context derives one."""
+    return context is not None and review.values(context) != review.values(encounter)
+
+
 def service_date_block(encounter) -> dict:
     """DESIGN section 7 ``service_date``: the date in effect (``value``) and where it comes from; the document's own
     date and its quote, only when the document gives one date of its own; the date a member entered; whether the two
     conflict; and whether "Use document date" - clearing the member's date - settles it. Never a date the document
-    does not give as its own, and never one of two conflicting dates chosen for the member."""
+    does not give as its own, and never one of two conflicting dates chosen for the member.
+
+    While a case-B update is pending (saved_apart) the date entered and the date in effect are the SAVED ones: the
+    member's saved date (source 'member'), else the document's own single date, else none; no conflict is asserted
+    until a context derives one; the document's own date and quote still come from the kept context (amendment 1, 4.3
+    [R:truth-T3])."""
     context = _context_of(encounter)
+    document = _document_date(context) or {}
+    single = bool(document.get('single'))
+    if saved_apart(encounter, context):
+        saved = (encounter.user_values or {}).get(DATE_FACT) or None
+        own = document.get('value') if single else None
+        return {
+            'value': saved or own, 'source': 'member' if saved else 'document' if own else 'missing',
+            'document_value': own, 'document_quote': document.get('quote') if single else None,
+            'entered_value': saved, 'conflict': False, 'can_use_document_date': False,
+        }
     fact = ((context.facts or {}).get(DATE_FACT) if context is not None else None) or {}
     entered = ((context.user_values if context is not None else encounter.user_values) or {}).get(DATE_FACT) or None
-    document = _document_date(context) or {}
     origin = fact.get('origin') or 'missing'
-    single = bool(document.get('single'))
     member_conflict = gi_context.is_member_conflict(fact) if fact else False
     return {
         'value': fact.get('value') if origin in ('document', 'user') else None,
@@ -277,13 +314,16 @@ def service_date_block(encounter) -> dict:
     }
 
 
-def _date_in_use(context) -> bool:
+def _date_in_use(context, saved=None) -> bool:
     """Whether a member's date of service is in effect where the document gives no single date of its own - none, one
     it does not read as this visit's, or more than one: the date row then stays, as the member's saved answer, so the
     member can correct or remove it (refutation r2, L7-05: a date saved from the panel closed its question and could
-    never be corrected or withdrawn there)."""
+    never be corrected or withdrawn there). ``saved``: while a case-B update is pending, the encounter's saved values
+    (amendment 1, 4.3): a saved date stands where the document gives no single date of its own."""
     if context is None:
         return False
+    if saved is not None:
+        return bool(saved.get(DATE_FACT)) and not (_document_date(context) or {}).get('single')
     fact = (context.facts or {}).get(DATE_FACT) or {}
     return (fact.get('origin') == 'user' and bool((context.user_values or {}).get(DATE_FACT))
             and not (_document_date(context) or {}).get('single'))
@@ -301,11 +341,12 @@ def _date_passage(context, document):
     return next((found for found in (_exact(span, text) for span in spans) if found), None)
 
 
-def _date_entry(encounter, entered) -> dict:
+def _date_entry(encounter, entered, apart=False) -> dict:
     """{'by', 'at', 'confirmed'} for the member's date of service in effect: who entered it and when - the details save
     that chose it (a detail.answered row naming the date), else the context change that set it, else the upload that
     carried it - and whether it was chosen or confirmed in the details panel on the current revision, where the
-    document's own dates are in view (refutation r2, L7-02)."""
+    document's own dates are in view (refutation r2, L7-02). ``apart``: a case-B update is pending, whose save names no
+    context (it kept the current one: amendment 1, 2.3), so its row names the date it saved by the field alone."""
     revision = str(encounter.current_revision_id)
     events = (models.AuditEvent.objects.filter(encounter=encounter, event__in=('detail.answered', 'context.changed'))
               .select_related('actor').order_by('-created_at', '-pk')[:DATE_ENTRY_EVENTS])
@@ -318,6 +359,10 @@ def _date_entry(encounter, entered) -> dict:
         else:
             if DATE_FACT not in (data.get('fields') or ()):
                 continue
+            if apart and 'context' not in data and 'restored' not in data:
+                # amendment 1, 2.3: the newest case-B save that named the date saved the value now in effect
+                return {'by': event.actor.label() if event.actor is not None else '', 'at': _iso(event.created_at),
+                        'confirmed': False}
             made = models.EncounterContext.objects.filter(pk=data['context'], encounter=encounter).first() \
                 if isinstance(data.get('context'), str) and _UUID.fullmatch(data['context']) else None
             if made is None or (made.user_values or {}).get(DATE_FACT) != entered:
@@ -428,12 +473,19 @@ def effective_view(assessment):
     return view_of(assessment) if callable(view_of) and assessment is not None else None
 
 
-def _questions(encounter, assessment, view, states=((), (), ())):
+# (scope, fact, family, code, position): one question _questions finds, as _rows reads it - the first four the stored
+# rows' own values (a Clarification's, a Proposal's)
+_Asked = tuple[Any, Any, Any, Any, tuple[int, int]]
+
+
+def _questions(encounter: Any, assessment: Any, view: Optional[Mapping[str, Any]],
+               states: Sequence[Sequence[Any]] = ((), (), ())) -> list[_Asked]:
     """(scope, fact, family, code, position) of every open question of ``assessment`` - the stored ones, or with the
     overlay's ``view`` the proposals' questions it holds (plus any stored one an answer the overlay applies answers, so
     the member can see and withdraw it) - and every question the assessment closed with a member's answer it read, so
-    the member sees that answer in effect and can withdraw it; when ``assessment`` is the live one on the current
-    context; none otherwise.
+    the member sees that answer in effect and can withdraw it (on a design v2 assessment also the question of each code
+    engine/assess excluded by an answer it read, recorded in the code's support['answered']: review.answered_items,
+    DECISIONS D270); when ``assessment`` is the live one on the current context; none otherwise.
 
     ``view``: review.effective_view's {proposal key: review_view.View}, whose ``questions`` are the dicts the overlay
     builds ({id, scope, family, fact, question, reason}; review_view._question). Only a view in the effective set asks
@@ -470,14 +522,23 @@ def _questions(encounter, assessment, view, states=((), (), ())):
                            (2, proposal.position)))
         else:
             closed.append((item.scope, item.fact, item.family, '', (0 if item.scope == 'encounter' else 1, 0)))
+    # DECISIONS D270 (refute-5b-r1 P1): on a design v2 assessment a code engine/assess excluded by a member's answer has no
+    # clarification row - its support['answered'] is the record (review.answered_items) - and the question it answered is
+    # closed with that answer the same way: its row stays, the answer shown in effect and withdrawable, while the answer
+    # is one the assessment read or a standing answer supersedes it
+    applied_ids = {str(answer.pk) for answer in applied}
+    for proposal, fact, ids in review.answered_items(assessment):
+        key = (fact, proposal.family, proposal.code)
+        if ids & applied_ids or key in superseding:
+            closed.append(('proposal', fact, proposal.family, proposal.code, (2, proposal.position)))
     if view is None:
         return out + closed
     proposals = {proposal.key: proposal for proposal in assessment.proposals.all()}
     answered = {(answer.fact, answer.family, answer.code) for answer in bound}
     held = [entry for entry in out if entry[0] != 'proposal']
     held += [entry for entry in out if entry[0] == 'proposal' and entry[1:4] in answered]
-    for key, item in view.items():
-        proposal = proposals.get(key)
+    for view_key, item in view.items():
+        proposal = proposals.get(view_key)
         if proposal is None or not getattr(item, 'active', True):
             continue
         for spec in getattr(item, 'questions', ()) or ():
@@ -550,10 +611,15 @@ def _rows(encounter, assessment, view=None, states=None):
     answers = list(states[0]) + list(states[1])
     by_key = {(answer.fact, answer.family, answer.code): answer for answer in answers}
     rows: dict = {}
-    hold = context is not None and gi_context.is_member_conflict((context.facts or {}).get(DATE_FACT))
+    # amendment 1, 4.3 [R:truth-T3]: while a case-B update is pending the kept context's member conflict is no longer the
+    # member's choice - none is asserted until a context derives one - and the rows read the saved values
+    apart = saved_apart(encounter, context)
+    saved = dict(encounter.user_values or {}) if apart else None
+    hold = (context is not None and not apart
+            and gi_context.is_member_conflict((context.facts or {}).get(DATE_FACT)))
     selected = [proposal.code for proposal in assessment.proposals.filter(bucket=models.Proposal.SELECTED)] \
         if assessment is not None else []
-    if hold or _date_in_use(context):  # the date of service, which every selected code depends on
+    if hold or _date_in_use(context, saved):  # the date of service, which every selected code depends on
         rows[(DATE_FACT, '', '')] = _Row(DATE_FACT, '', '', 'encounter', (0, -1), codes=list(selected))
     for scope, fact, family, code, position in _questions(encounter, assessment, view, states):
         if hold and fact != DATE_FACT:
@@ -574,7 +640,8 @@ def _rows(encounter, assessment, view=None, states=None):
             row.members.append((fact, family, code))
         if code and code not in row.codes:
             row.codes.append(code)
-    values = dict((context.user_values if context is not None else encounter.user_values) or {})
+    values = (dict(saved) if saved is not None
+              else dict((context.user_values if context is not None else encounter.user_values) or {}))
     by_code: dict = {}
     for proposal in (assessment.proposals.order_by('position') if assessment is not None else ()):
         by_code.setdefault(proposal.code, []).append(proposal)
@@ -582,10 +649,10 @@ def _rows(encounter, assessment, view=None, states=None):
     for row in sorted(rows.values(), key=lambda item: item.position):
         row.answers = {member: by_key.get(member) for member in row.members}
         if row.control == DATE:
-            _date_row(row, encounter, context)
+            _date_row(row, encounter, context, saved)
         elif row.control == CHOICE:
             fact = (context.facts or {}).get(row.fact) if context is not None else None
-            conflict = gi_context.is_member_conflict(fact)
+            conflict = not apart and gi_context.is_member_conflict(fact)
             row.choices = [{'value': value, 'label': CHOICE_LABELS[row.fact].get(value, value)}
                            for value in CHOICES[row.fact]]
             if conflict:
@@ -616,7 +683,7 @@ def _rows(encounter, assessment, view=None, states=None):
     return out
 
 
-def _date_row(row, encounter, context):
+def _date_row(row, encounter, context, saved=None):
     """The date row: the document's date and the member's side by side, and the ways the server takes.
 
     - A member's date that conflicts with the document (the hold): "Use document date" where the document gives one
@@ -631,9 +698,14 @@ def _date_row(row, encounter, context):
     - Otherwise the date asked: the document's own dates as choices where it states more than one; else its wording
       of the date, if any, with the physician's addendum where that date text is not one this service reads.
 
-    Never a date the document does not state as its own offered as the document's, and never prefilled."""
+    Never a date the document does not state as its own offered as the document's, and never prefilled.
+
+    ``saved``: while a case-B update is pending, the encounter's saved values (amendment 1, 4.3 [R:truth-T3]): the row
+    shows the saved date, never the kept context's, and asserts no member conflict until a context derives one."""
     block = service_date_block(encounter)
     fact = ((context.facts or {}).get(DATE_FACT) if context is not None else None) or {}
+    if saved is not None:
+        fact = {}  # the kept context's member conflict is not the member's choice now
     document = _document_date(context) or {}
     single = bool(document.get('single'))
     stated = [] if single else [value for value in document.get('values') or [] if _iso_date(value)]
@@ -657,8 +729,8 @@ def _date_row(row, encounter, context):
             row.quote = row.quote or _date_passage(context, document)
             row.prompt = DATE_PROMPTS['unconfirmed' if unusable else 'disagree']
         return
-    if _date_in_use(context):
-        entry = _date_entry(encounter, entered)
+    if _date_in_use(context, saved):
+        entry = _date_entry(encounter, entered, apart=saved is not None)
         if len(stated) > 1 and entered in stated and not entry['confirmed']:
             row.choices, row.prompt, row.confirm = documented, DATE_PROMPTS['confirm'], True
             return
@@ -786,18 +858,23 @@ def save_details(encounter, user, items) -> dict:
 def _save_details(encounter, user, parsed, gate) -> dict:
     """Save a member's answers to the details asked, in one transaction under the encounter's row lock: every answer
     is checked against the detail's own control before anything is written (InvalidAnswer: 400), the whole save is
-    refused while processing runs or when a detail is no longer asked (jobs.Refused: 409). Context values are ONE
-    jobs.change_context call; 'not_documented' / 'cannot_confirm' are MemberAnswer rows, one for each question the row
-    answers, each bound to that question as it is asked now (its fingerprint; a later answer withdraws the earlier one),
-    and - with no context change, whose re-assessment reads them - ONE recompute of the assessment
-    (jobs.recompute_after_answers: nothing sent). A date typed outside the panel that the member confirms with the
-    document's own dates in view is recorded as confirmed (a detail.answered row; nothing is re-assessed or sent). An
-    answer already in effect is left as it is, so a repeated identical save makes nothing. Every save ends by
-    re-deriving the stored list state (review.refresh_state), after its last row is written."""
+    refused when a detail is no longer asked (jobs.Refused: 409). Context values are ONE jobs.change_context call;
+    'not_documented' / 'cannot_confirm' are MemberAnswer rows, one for each question the row answers, each bound to that
+    question as it is asked now (its fingerprint; a later answer withdraws the earlier one), and - with no context
+    change, whose re-assessment reads them - ONE recompute of the assessment (jobs.recompute_after_answers: nothing
+    sent). A date typed outside the panel that the member confirms with the document's own dates in view is recorded as
+    confirmed (a detail.answered row; nothing is re-assessed or sent). An answer already in effect is left as it is, so a
+    repeated identical save makes nothing. Every save ends by re-deriving the stored list state (review.refresh_state),
+    after its last row is written.
+
+    FINAL-V2 amendment 1, 1.4 (narrowed): only a save that records a MemberAnswer row is refused while a stage of the
+    encounter is queued or running (BUSY) or an update of the codes is pending (ANSWER_AFTER_UPDATE); a save that carries
+    only context values, or only the confirmation of a date, is accepted, subject to jobs.change_context's own refusals
+    (A18: a member's act on the current codes queued or running). The answer's ``reassessing`` comes from what
+    jobs.change_context did (ContextSave.updating) or a recompute this save queued, never from whether a value changed;
+    ``restored`` says the save made the earlier codes current again (2.5 [R:truth-T13])."""
     with transaction.atomic():
         encounter = jobs._locked(encounter)
-        if jobs.busy(encounter):
-            raise jobs.Refused(BUSY)
         if readers.moved(gate, _new_path(encounter)):
             # the gate decided from the LOCKED row (review finding 3): a reading that finished since the request read
             # the encounter moved it to the other path; nothing is read or written under a scope that does not fit it
@@ -857,6 +934,14 @@ def _save_details(encounter, user, parsed, gate) -> dict:
                 confirming = row  # one of the document's own dates, chosen with them in view
             # a value given for a detail said not to be documented replaces that answer, for each of the row's codes
             superseded.extend(answer for answer in row.answers.values() if answer is not None)
+        if recorded:
+            # amendment 1, 1.4: an answer binds to the question of the codes shown now - never recorded while a stage
+            # runs, nor while an update makes those codes earlier codes (5.1: "You can answer this once the codes are
+            # updated."); a save of context values alone is never refused here
+            if review.update_pending(encounter):
+                raise jobs.Refused(ANSWER_AFTER_UPDATE)
+            if jobs.busy(encounter):
+                raise jobs.Refused(BUSY)
         current = dict(encounter.user_values or {})
         changed = {name: value for name, value in values.items() if (current.get(name) or '') != value}
         if DATE_FACT in changed:
@@ -884,13 +969,19 @@ def _save_details(encounter, user, parsed, gate) -> dict:
         for answer in superseded:
             models.MemberAnswerRevocation.objects.create(answer=answer, revoked_by=user,
                                                          reason=models.MemberAnswerRevocation.SUPERSEDED)
+        saved_context = None
         if changed:
-            context = jobs.change_context(encounter, user, changed)
+            saved_context = jobs.change_context(encounter, user, changed)  # ContextSave (amendment 1, 2.7)
+            if saved_context.unchanged:  # the saved values already were these (1.3): nothing was written
+                unchanged += len(changed)
+                changed = {}
+            context = saved_context.context
             for name in sorted(changed):
                 row = next(item for item in rows.values() if item.fact == name)
                 dated = {'revision': revision, 'value': changed[name]} if name == DATE_FACT else {}
                 audit.record(encounter.workspace, 'detail.answered', encounter=encounter, actor=user, fact=name,
-                             family=row.family, code=row.code, kind='context', context=str(context.pk), **dated)
+                             family=row.family, code=row.code, kind='context',
+                             context=str(context.pk) if context is not None else '', **dated)
         if confirming is not None:
             audit.record(encounter.workspace, 'detail.answered', encounter=encounter, actor=user, fact=DATE_FACT,
                          family='', code='', kind='context', confirmed=True, context=str(encounter.current_context_id),
@@ -912,8 +1003,12 @@ def _save_details(encounter, user, parsed, gate) -> dict:
         review.refresh_state(encounter)
         readers.check(gate)  # the last thing before the commit (FINAL 10.3): a refusal rolls the save back whole
     withdrawn = [answer for answer in superseded if answer.fact not in changed]  # counted once with its value
+    # amendment 1, 1.3 [R:truth-T13]: "reassessing" from what the save did - an update pending after it, or a recompute it
+    # queued - never from whether a value changed (a restore, or a first processing's save, updates nothing shown)
+    updating = bool(saved_context is not None and saved_context.updating)
     return {'saved': len(recorded) + len(changed) + len(withdrawn) + (1 if confirming is not None else 0),
-            'unchanged': unchanged, 'answer_ids': saved_ids, 'reassessing': bool(changed) or recompute is not None}
+            'unchanged': unchanged, 'answer_ids': saved_ids, 'reassessing': updating or recompute is not None,
+            'restored': bool(saved_context is not None and saved_context.restored)}
 
 
 def _siblings(encounter, answer):
@@ -942,11 +1037,17 @@ def revoke_answer(encounter, user, answer_id):
 
 def _revoke_answer(encounter, user, answer_id, gate):
     """Withdraw one standing answer (a MemberAnswerRevocation, 'withdrawn') - and the same question's answer for the
-    row's other codes: the detail is asked again. Refused while processing runs and for an answer already withdrawn
-    (jobs.Refused: 409); MemberAnswer.DoesNotExist for an answer that is not this document's (404). Returns the
-    revocation of ``answer_id``."""
+    row's other codes: the detail is asked again. Refused while an update of the codes is pending (amendment 1, 1.4 and
+    5.3 [R:truth-T12]: UPDATE_ANSWER_WITHDRAW - its recompute could not apply it, and a restore would bring back codes
+    still reading it), while processing runs and for an answer already withdrawn (jobs.Refused: 409);
+    MemberAnswer.DoesNotExist for an answer that is not this document's (404). Returns the revocation of
+    ``answer_id``."""
+    from .customer_api import UPDATE_ANSWER_WITHDRAW  # local import: customer_api reads this module (step 3c's words)
+
     with transaction.atomic():
         encounter = jobs._locked(encounter)
+        if review.update_pending(encounter):
+            raise jobs.Refused(UPDATE_ANSWER_WITHDRAW)
         if jobs.busy(encounter):
             raise jobs.Refused(BUSY)
         if readers.moved(gate, _new_path(encounter)):  # the gate decided from the LOCKED row (review finding 3)

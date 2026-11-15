@@ -240,6 +240,38 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   anything, while the queue holds a stage this revision's worker has no handler
   for (queued, running, or cancelled as its encounter's latest stage, which a
   Resume would run again): a worker that claims one ends.
+  **Design v2** (docs/gemini-migration/FINAL-V2.md 6.2 [R:MO-1]; AMENDMENT-1.md
+  9.5): then, still before anything is replaced, it reads the target twice in
+  this revision's image. First it **refuses while a design v1 row exists** - an
+  `Assessment` whose `engine_version` is exactly `cpt-studio-events@1`, or an
+  `EventInventory` whose `interpretation_version` is exactly `gemini-events@1`
+  (`V1_ROWS`; the receipt's `v1_rows` names the encounters). v1 rows only: v2's
+  own rows (`cpt-studio-events@2`, `gemini-events@2/appraisal@1`) and every
+  legacy row never trip it, so a fix release after the walk, the re-install
+  after a switch-back and a same-revision re-run all pass; live never held a v1
+  row, and a test instance's are read as stored and never deleted here. Then it
+  **counts, and never refuses on**, what the owner is told before the switch
+  (`INSTALL_COUNTS`, the receipt's `install_counts` with its `report`, and a
+  clause of the summary): the encounters whose current revision has no
+  inventory at the current versions and is over `INTERPRET_MAX_CHARS` or
+  `INTERPRET_MAX_PAGES`, or whose text cannot be framed (with the longest
+  current document beside the bound: an addendum past it is refused before it
+  is recorded); the encounters whose saved details are not their current
+  context's (printed on every install; on the first install over the installed
+  release expected 0, and named when not); the provider refusals recorded before
+  the install that no hold names (Corti and participant runs failed with an
+  authentication, permission, payment or quota status, and Corti token refusals
+  recorded not sent), each with its newest date; the encounters whose current
+  document review is a reconciled unknown outcome while a reading is owed (A21,
+  expected 0); and every standing provider and interpreter hold. A count that
+  cannot be read is recorded as not counted and the phase goes on. An empty
+  text whose extraction failed or has not run is counted apart
+  (`unframed_unextracted`): the installed release refuses a change of its
+  details too, so it is no capability loss; and a participant's refusal never
+  fails an update (it goes on without that check), as a Corti refusal does.
+  The same reads, measured on a fresh restored dump of live before the
+  install, are `ops/rollback_check.py counts` (below, **The D15 rollback
+  test**).
   **Blue/green** (the site stays served throughout; the receipt's `steps` time
   each step): **S1** the incoming web `cpt-studio-web-next` starts on the idle
   port and must answer `/health/` = `{status ok, service cpt-studio, data_mode
@@ -721,8 +753,111 @@ traffic and removed); from B5 on the previous web serves and the receipt says
 what is left. A B4 close that was started and gave no answer (a Ctrl-C, or the
 180 s timeout while it reads every encounter after it has committed) may have
 closed this revision's open stages: the receipt says so, never that nothing
-was closed. The availability record runs from B2 to the end. To come back to
-this revision, run `app` again.
+was closed - and that it may have set pending saves back
+(`context.rollback_reverted` rows since it started), which were not put back:
+ask those members to check their details. The S4 undo, `rollback-app` (in the
+keep layout and outside it) and the swap say the same of a close of theirs that
+raised or was interrupted (DECISIONS D247, F4); a `rollback-app` whose database
+refused before its close started says the close was not started, and that
+nothing was closed or set back. The availability record runs from B2 to the end.
+To come back to this revision, run `app` again.
+
+**Design v2: pass 2's stage and the pending updates (FINAL-V2 6.4; AMENDMENT-1
+9.4).** The appraise stage (pass 2) is closed like the interpret stage by
+every undo whose next worker does not run it (the old worker would end on
+`STAGES['appraise']`), and an older revision's `app` refuses while one is
+open. The same close names every encounter that reads an update of its codes
+pending (`update_pending`: saved details its current context does not carry
+yet, a current assessment on an earlier context, or a reconciled unknown
+document review while a reading is owed - A21's update, which no save
+started). This is a stated rollback limit like D59's below, **never a refusal**
+(a rollback is the incident path). When the next worker runs no `appraise` -
+it has no update, as the installed release has none - the close also **reverts
+each pending save's unapplied values**: under each encounter's row lock,
+`Encounter.user_values` is set back to its current context's member values
+for each differing field (every other key kept), one
+`context.rollback_reverted` audit row names the fields, and the close's
+answer (`reverted`) gives each field's saved and restored value; otherwise the
+earlier web's details panel shows the context's value while its save compares
+with `Encounter.user_values`, so a pending value entered again there would be
+"unchanged" and silently not saved. The receipt's note (`interpretation`)
+lists `update_pending`, `reverted` and the reading stages closed
+(`reading_closed`), and says what to do: tell those encounters' members that
+the codes the earlier web shows predate their change, and ask each member
+whose save was reverted to save it again there (the earlier web's own save
+then applies it); an A21 encounter reads on the earlier web as an outcome still
+being confirmed, with nothing pending. When the next worker runs `appraise`
+itself (an earlier design v2 revision), nothing is reverted, and nothing queues
+again a stage the close closed (that revision offers no retry and no resume of
+a reading stage the installer closed). What such an update then reads depends
+on the stage the close left, so the close also reads, as this revision's page
+reads it, what each pending update reads after the close (`update_reads`: its
+phase and the one action its page offers), and the note words each by it -
+for a stage closed before it started: paused with nothing to resume, until its
+member saves a change of a detail, which queues the update again (a reading or
+a document review); failed, where the member's "Try updating again" queues the
+failed stage again (an analysis or an assessment); stopped, where "Resume
+processing" runs it again (a second review) - and promises no action its page
+does not offer (DECISIONS D247, F2 and DQ1). An earlier design v2 revision
+reads an update by the same amendment (7.1 and 7.2).
+
+**When the undo leaves this revision's pair to serve again, the reverted
+saves are put back first.** A switch-back undone before its switch (B4's close
+refused on a record, or B5 failed), an S4 undo or a `rollback-app` in the keep
+layout that leaves this revision's web serving, a failed swap that leaves
+neither pair running for the operator to choose, and a `rollback-app` that
+stopped after its close - a record named after the close ("Start them
+again"), or a removal that failed ("to keep this revision, rerun --phase
+app") - all closed the stages first, so their close may have set pending saves
+back for an earlier web that never served them. Before the message that leaves
+this revision's pair to serve again (DECISIONS D247, F1), the undo puts them
+back in this revision's image (`REAPPLY_REVERTED`; the receipt's `reapplied`),
+each under its row lock and only where nothing changed since the revert (its
+newest `context.rollback_reverted` row names its current context and exactly
+those fields, and its values are still the restored ones); each put back writes
+one `context.rollback_reapplied` audit row, and the encounter reads its update
+pending again, as before the close. In the same step the first reading stage
+that update owes is queued again, as its save queued it (D247 DQ1): a reading
+stage still queued is kept (`reapplied.coalesced`); a reading that failed before
+the close keeps showing that failure; otherwise the owed stage (interpret, or
+pass 2 of the read extraction) is queued for the member whose save it was,
+under the save's own key with the revert's audit row - once for that revert
+(`reapplied.requeued`). While it waits the update reads updating; a worker of
+this revision that claims it within the queue deadline (`jobs.QUEUE_DEADLINE`,
+30 minutes from the put-back) runs it, its doors sending the save's request at
+most once, and one that claims it later expires it without starting it, as it
+does any queued stage past its deadline - the update then reads stopped, with
+Resume. That is what happens where no worker of this revision runs at the
+put-back (the S4 keep layout, a swap with neither pair running, a
+`rollback-app` stopped after its close) and none is started within the
+deadline; a reading stage still queued has its deadline renewed, and the same
+holds for it. Where nothing could be queued
+(`reapplied.not_requeued`: no save of a member found, or a stage this worker
+does not run) the update reads paused, with nothing to resume, and the message
+says so. An encounter that changed since is left as it stands and named
+(`reapplied.not_reapplied`): ask its member to check the details. A put-back
+that fails, or does not say what it did, is said in the message with those
+encounters named: any of them may not have been put back
+(`context.rollback_reapplied` names each one that was), so ask those members to
+check their details; one that could not run at all (rollback-app interrupted
+during its removal) names them as not put back. A put-back that a Ctrl-C
+interrupts is recorded in the receipt (`reapplied.interrupted`, beside the
+close's own `reverted`) and said the same way - any of those encounters may not
+have been put back - and the phase still stops there. The switch-back's note is
+then marked `handed: false` and says no earlier web read the rows - it carries
+none of the instructions for the earlier web's members - unless nginx may have
+routed to the previous web before the undo settled the vhost back (B5 failed
+after the reload was asked for): then the note says that web may have served
+from the switch until the settle (`served`), names the encounters with an
+update pending (`update_pending`) - an A21 encounter among them worded apart,
+since no change of its member was pending - and asks you to tell those members
+and check any decision or export made there in that window (D247, F5). (A way
+back that does reach the earlier web - the switch-back completed, an S4 undo or
+`rollback-app` that switched back, a swap that restored the old pair - keeps the
+revert, and its message or its note says what the close set back; and an undo
+left half way, where nginx may route to either web, puts nothing back: its
+message names those encounters as not put back, so whichever web serves next,
+ask those members to save the change again there.)
 
 **The rollback limit for new-path assessments (DECISIONS D59).** After a
 switch-back the previous revision reads a new-path assessment through the stub
@@ -736,6 +871,67 @@ reader. The receipt's interpretation note (`interpretation`, also in the
 summary) counts the new-path encounters whose current assessment holds an
 excluded code a reviewer can reinstate - the ones exposed - and names them
 (`reinstatable`).
+
+**Provider holds (AMENDMENT-1 7.3, A16 and A20).** Corti, Astra and Fable each
+have an installation-wide hold, set by an authentication, permission, payment
+or quota refusal of that provider; while it stands no request of that provider
+is sent by any encounter (a stored answer is still reused). The app receipt's
+`install_counts.holds` lists every standing one. An operator reads them with
+`manage provider_hold --status` (or no option; nothing is written: a provider
+with none standing reads "no installation-wide hold", and a request that failed
+before is still held against its identical request, which it does not list)
+and ends
+every standing hold of one provider with `manage provider_hold --release
+<corti|astra|fable> --username <operator> --note-file <path>` (or `--note
+"..."`): the operator must hold an operator grant no revocation ended, as for
+`interpreter_hold`; the hold rows stay; the next member act (a Resume, or a
+save that queues the stage) then sends the held request once, and a refusal
+again sets a new hold.
+
+**The D15 rollback test (design v2).** `ops/rollback_check.py` runs the
+switch-back's own scripts on a test instance's database (never live) and is
+made on v2 records: it counts, before the switch-back, each record kind
+FINAL-V2 6.4 names (an interpreted and appraised upload; a held, an excluded
+and a reinstated code; an approved code with a modifier and its export; a
+member answer; a second review; an interpreter hold; a queued interpret and a
+queued appraise job; a pass-2 refusal; an unhealthy appraisal; a held code
+whose item is a new fact) and fails its assertion 7 on any missing; with
+`--declared`'s `update` (`pending_before_analyze`, `pending_after_analyze`,
+`completed`, `a21`, optionally `resave: {encounter, field, value}`) its
+assertion 8 judges AMENDMENT-1's U17 - the pending encounters named, exactly
+the pending-before-analyze ones reverted with one audit row each, the note
+listing them, and the value saved again on the previous web taking effect
+there. The value is saved as a member saves it there: with the row that
+encounter's own details panel offers for the field, through `POST
+/api/encounters/<id>/details` - the save whose comparison with
+`Encounter.user_values` the revert exists for (the previous release's
+`/context` makes a new context whatever they hold, so a save there would pass
+whether or not the revert ran). Build that encounter so that its panel asks
+the field (an open setting or billing question, or the date row); a panel
+without the row fails assertion 8, as does a save answered 200 with nothing
+saved. Its transcript (`d15.json`, `D15-SUMMARY.txt`) is attached to the
+install declaration. `python3 -B cpt-studio/ops/rollback_check.py counts --db
+<restored dump> --candidate <tag> --out <new dir> --db-env-file <0600 file>`
+reads the candidate's `V1_ROWS` and `INSTALL_COUNTS` into `counts.json`: the
+figures the owner is told before the install. Live has none of 0014's and
+0015's tables, and a restored dump is not migrated, so the command never reads
+the dump as it stands and never writes it: it copies it to `<db>_counts`,
+migrates the copy with the candidate's own migrations (as the install's
+migrate phase migrates live before the app phase reads), and reads the copy in
+read-only sessions. A copy that exists, or a name too long for it, refuses
+before anything is written; a migration or a read that fails is written into
+`counts.json` (`failed`) and exits 1, as does a count that was not read. Drop
+the copy once the counts are reported: it holds the dump's rows.
+
+**The differential check of "what changed" (AMENDMENT-1 11.3).** The operator
+view (`GET /ops/api/encounters/<id>`) serves the stored rows AMENDMENT-1 6.2
+reads as `what_changed_rows` (schema `cpt-studio-what-changed-rows@1`;
+DECISIONS D247, O22), beside two product values it never derives (`fresh`, and
+each proposal's `other_reason`). `python3 cpt-studio/ops/verification/what_changed.py
+--operator OP.json --customer CUST.json` computes "what changed" from those rows,
+written from 6.2 alone, and compares it with the page's (`GET
+/api/encounters/<id>` as a member reads it): exit 0 when they agree, 1 when they
+differ or a part could not be judged, 2 when an input is not usable.
 
 ## Reinstalling an older revision
 

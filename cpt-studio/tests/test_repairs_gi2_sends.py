@@ -33,7 +33,7 @@ from django.test import Client, TransactionTestCase, override_settings
 from django.utils import timezone
 from requests.exceptions import ConnectTimeout, ReadTimeout
 
-from studio import audit, jobs, models, review, serializers
+from studio import audit, jobs, models, provider_holds, review, serializers
 from studio.gi import context as gi_context
 from studio.providers.base import ProviderUnavailable
 from studio.providers.corti import CortiProvider
@@ -41,6 +41,7 @@ from studio.types import RawExchange
 from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
+from tests.support.operator import grant as ops_grant
 from tests.test_pipeline_api import RecordedInterpretation, drain, recorded_addendum
 from tests.test_providers import FakeResponse, dotenv, token_response, write_file
 from tests.test_repairs_7c8_p1sends import DATE, UNDATED, Steps, installed_run_in_use
@@ -285,15 +286,20 @@ class SettlingAMemberDateConflictMakesTheOwedRequestTests(RecordedInterpretation
         encounter_id, refused, hold = self.refused_then_held(outcomes=('not_sent', 'not_sent'))
         self.context(encounter_id, service_date='')  # settles: one attempt, conclusively not sent again
         self.assertEqual([entry[1] for entry in self.provider.log], ['not_sent', 'not_sent'])
-        self.context(encounter_id, setting='office')  # leaves the request unchanged: re-checks only (pipeline3:0)
-        self.context(encounter_id, billing_context='facility')
-        self.context(encounter_id, service_date=DATE)  # the documented date with no conflict settled: re-checks only
-        self.assertEqual(len(self.provider.log), 2)
-        self.context(encounter_id, service_date=MEMBER)  # held again: nothing
-        self.assertEqual(len(self.provider.log), 2)
-        self.context(encounter_id, service_date='')  # settles again: one attempt
+        # FINAL-V2 amendment 1 (A6, 7.2): that attempt's update ended failed (a request not sent for a local reason),
+        # the held codes staying current; the next save is an update too, and with no answer to re-check with and the
+        # earlier codes' own review being the hold, its predict makes the request - the first attempt that reaches the
+        # provider, never a resend of one that did (before the amendment a save that kept the request re-checked only)
+        self.context(encounter_id, setting='office')
         self.assertEqual([entry[1] for entry in self.provider.log], ['not_sent', 'not_sent', 'succeeded'])
-        self.assertEqual(len({entry[0] for entry in self.provider.log}), 1)  # one request, once per settling save
+        self.context(encounter_id, billing_context='facility')  # an answer stands now: re-checks only (pipeline3:0)
+        self.context(encounter_id, service_date=DATE)  # the documented date with no conflict settled: re-checks only
+        self.assertEqual(len(self.provider.log), 3)
+        self.context(encounter_id, service_date=MEMBER)  # held again: nothing
+        self.assertEqual(len(self.provider.log), 3)
+        self.context(encounter_id, service_date='')  # settles again: the request has its answer, nothing is made again
+        self.assertEqual([entry[1] for entry in self.provider.log], ['not_sent', 'not_sent', 'succeeded'])
+        self.assertEqual(len({entry[0] for entry in self.provider.log}), 1)  # one request, never resent
         self.assertEqual(len(self.provider.reached()), 1)
 
     def test_never_automatic(self):
@@ -309,8 +315,8 @@ class SettlingAMemberDateConflictMakesTheOwedRequestTests(RecordedInterpretation
         encounter_id, refused, hold = self.refused_then_held()
         first = self.post(f'/api/encounters/{encounter_id}/context', {'service_date': ''})
         second = self.post(f'/api/encounters/{encounter_id}/context', {'service_date': DATE})
-        self.assertEqual((first.status_code, second.status_code), (201, 409))
-        self.assertIn('Wait for processing to finish', second.json()['error'])
+        # FINAL-V2 amendment 1, A1: the second save is accepted and supersedes the first one's pending stages (3.4)
+        self.assertEqual((first.status_code, second.status_code), (201, 201))
         drain()
         self.assertEqual([entry[1] for entry in self.provider.log], ['not_sent', 'succeeded'])
 
@@ -332,13 +338,18 @@ class SettlingAMemberDateConflictMakesTheOwedRequestTests(RecordedInterpretation
         self.context(encounter_id, service_date='')
         self.assertEqual([entry[1] for entry in self.provider.log], ['not_sent', 'unknown'])
         self.assertEqual(self.encounter(encounter_id).state, 'provider_unknown')
-        self.context(encounter_id, service_date=MEMBER)
+        self.context(encounter_id, service_date=MEMBER)  # amendment 1, 2.5: a save back to the held codes' values
         self.context(encounter_id, service_date='')  # settles a hold again: the run in use is the unknown one
         encounter = self.encounter(encounter_id)
-        unknown = self.runs(encounter_id, state=UNKNOWN)[0]
-        self.assertEqual(review.latest_job(encounter).kind, models.Job.ASSESS)  # it re-checks with it
-        self.assertEqual((encounter.current_assessment.provider_run_id, encounter.current_assessment.context_id),
-                         (unknown.pk, encounter.current_context_id))
+        self.assertTrue(self.runs(encounter_id, state=UNKNOWN))
+        # FINAL-V2 amendment 1 (A6): an update never re-checks with an unknown outcome; its predict is held by the
+        # unknown-outcome block, sending nothing, and the held codes stay current
+        latest = review.latest_job(encounter)
+        self.assertEqual((latest.kind, latest.state, latest.result.get('blocked')),
+                         (models.Job.PREDICT, models.Job.SUCCEEDED,
+                          'a previous request has an unknown outcome; reconcile it before sending again'))
+        self.assertTrue(self.held(encounter.current_assessment.provider_run))
+        self.assertEqual(encounter.state, 'provider_unknown')
         self.context(encounter_id, setting='office')
         self.addendum(encounter_id)
         for _ in range(2):
@@ -374,8 +385,15 @@ class SettlingAMemberDateConflictMakesTheOwedRequestTests(RecordedInterpretation
         self.context(encounter_id, service_date=MEMBER)
         self.context(encounter_id, service_date=DATE)
         self.assertEqual(len(self.provider.log), 1)
-        self.assertEqual(self.encounter(encounter_id).current_assessment.provider_run_id, failed.pk)
-        self.assertEqual(self.encounter(encounter_id).state, 'provider_failed')
+        # FINAL-V2 amendment 1 (A6, 7.2): the documented date's request is the one that failed, and not the earlier
+        # (held) codes' own, so its update records a not-sent run of it and ends failed; the held codes stay current
+        encounter = self.encounter(encounter_id)
+        self.assertTrue(self.held(encounter.current_assessment.provider_run))
+        self.assertTrue(review.update_pending(encounter))
+        newest = self.run_in_use(encounter_id)
+        self.assertEqual((newest.state, newest.sent, newest.request_sha256), (NOT_SENT, False, failed.request_sha256))
+        self.assertTrue(newest.error.startswith(jobs.FAILED_BEFORE_MESSAGE))
+        self.assertEqual(encounter.state, 'provider_failed')
 
     def test_a_not_resent_record_of_a_failed_request_stands(self):
         # constructed: the run a predict records where its send door met a request that FAILED (_not_resent_run) is the
@@ -396,8 +414,14 @@ class SettlingAMemberDateConflictMakesTheOwedRequestTests(RecordedInterpretation
         self.assertEqual(len(self.provider.log), 1)
         runs = self.runs(encounter_id)
         self.assertEqual(runs[:2], [failed, stands])
-        self.assertEqual([self.held(run) for run in runs[2:]], [True])  # only the hold: no new not-resent row
-        self.assertEqual(self.encounter(encounter_id).current_assessment.provider_run_id, stands.pk)
+        # FINAL-V2 amendment 1 (A6, 7.2): the settling save's update re-checks only with a run that succeeded or the
+        # earlier codes' own, so its predict meets the failed request at the send door: one not-sent record of its own,
+        # nothing sent, the update failed and the held codes still current
+        self.assertEqual([self.held(run) for run in runs[2:]], [True, False])
+        self.assertEqual((runs[3].state, runs[3].sent, runs[3].request_sha256), (NOT_SENT, False, failed.request_sha256))
+        encounter = self.encounter(encounter_id)
+        self.assertEqual(encounter.current_assessment.provider_run_id, runs[2].pk)  # the hold's codes
+        self.assertTrue(review.update_pending(encounter))
 
     def test_a_reconciled_unknowns_released_attempt_that_was_not_sent(self):
         # the released attempt never reached the provider: a settling save makes it once, so the request reaches the
@@ -491,7 +515,17 @@ class TheRealAdaptersOutcomesDecideTests(RecordedInterpretation, LensSteps):
         self.assertNotIn('/v2/tools/coding/', corti.calls[0])  # the coding request never left
         self.context(encounter_id, service_date=MEMBER)
         self.assertEqual(len(corti.calls), 1)
+        # FINAL-V2 amendment 1 (A16, A20): the token endpoint's 401 set Corti's provider hold, so the settling save's
+        # request is held unsent (a not-sent run with scope.held) until an operator releases it; then one Resume makes it
+        self.assertEqual(provider_holds.active(provider_holds.CORTI).get().run_id, refused.pk)
         self.context(encounter_id, service_date='')
+        self.assertEqual(len(corti.calls), 1)
+        self.assertTrue(Run.objects.filter(encounter_id=encounter_id, scope__held=provider_holds.HELD).exists())
+        operator = f.user('operator')
+        ops_grant(operator)
+        provider_holds.release(provider_holds.CORTI, user=operator, note='Synthetic release: credentials renewed.')
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/resume').status_code, 201)
+        drain()
         self.assertEqual(len(corti.calls), 3)  # one new token request and one coding request
         self.assertTrue(corti.calls[2].endswith('/v2/tools/coding/'))
         attempt = self.runs(encounter_id)[-1]
@@ -546,7 +580,11 @@ class TheRealAdaptersOutcomesDecideTests(RecordedInterpretation, LensSteps):
         self.context(encounter_id, service_date=MEMBER)
         self.context(encounter_id, service_date='')
         self.assertEqual(len(corti.calls), 2)
-        self.assertEqual(self.encounter(encounter_id).state, 'provider_failed')
+        # FINAL-V2 amendment 1 (A16, A20): the 429 set Corti's provider hold, so the settled date's update is paused
+        # under it (a held not-sent run), never failed with a resend and never retried by a member
+        self.assertEqual(provider_holds.active(provider_holds.CORTI).get().run_id, failed.pk)
+        self.assertTrue(Run.objects.filter(encounter_id=encounter_id, scope__held=provider_holds.HELD).exists())
+        self.assertEqual(self.encounter(encounter_id).state, 'stopped')
 
 
 @override_settings(**LIVE)
@@ -592,8 +630,9 @@ class ConcurrentSettlingSavesTests(RecordedInterpretation, OperatorReads, Transa
             thread.start()
         for thread in threads:
             thread.join(60)
-        self.assertEqual(sorted(results), ['refused: Wait for processing to finish (or stop it) before changing '
-                                           'context.', 'saved'])
+        # FINAL-V2 amendment 1, A1: the row lock serializes the two saves and both are accepted - the newer one
+        # supersedes the older one's pending stages (3.4) - and the request is attempted once
+        self.assertEqual(sorted(results), ['saved', 'saved'])
         drain()
         self.assertEqual([entry[1] for entry in self.provider.log], ['not_sent', 'succeeded'])
 
@@ -732,7 +771,14 @@ class TheOfferRefusesAContextReadUnderEarlierRulesTests(LensSteps):
         encounter_id = self.assessed()
         self.bump()
         self.assert_refused_with_the_remake(encounter_id)
-        self.context(encounter_id, billing_context='')  # an API save of an unchanged value: remade, nothing sent
+        # FINAL-V2 amendment 1, 1.2: an API save of an unchanged value writes nothing (the context is not remade) and
+        # answers 200, unchanged (2.7, T13: step 5d's api, as 5b's R4 asked) ...
+        context = self.encounter(encounter_id).current_context_id
+        reply = self.post(f'/api/encounters/{encounter_id}/context', {'billing_context': ''})
+        self.assertEqual((reply.status_code, reply.json()['unchanged']), (200, True), reply.content)
+        drain()
+        self.assertEqual(self.encounter(encounter_id).current_context_id, context)
+        self.context(encounter_id, billing_context='facility')  # ... and an API save of one change remakes it
         self.assertEqual(len(self.provider.log), 1)
         self.assertEqual(self.encounter(encounter_id).current_context.version, self.next_version)
         self.assert_one_ask_sends_once(encounter_id, 1)
@@ -753,10 +799,11 @@ class TheOfferRefusesAContextReadUnderEarlierRulesTests(LensSteps):
         self.bump()
         drain()
         job = models.Job.objects.get(encounter_id=encounter_id, kind=models.Job.REVIEW2)
-        self.assertEqual(job.result, {'skipped': 'the context changed; nothing was sent'})
+        # FINAL-V2 amendment 1, 3.4: a stage that no longer serves the saved state records it is superseded
+        self.assertEqual(job.result, {'skipped': 'the context changed; nothing was sent', 'superseded': True})
         self.assertEqual(len(self.provider.log), 1)
         self.assert_refused_with_the_remake(encounter_id)
-        self.context(encounter_id, billing_context='')
+        self.context(encounter_id, billing_context='facility')  # amendment 1, 1.2: a save of a change reads it again
         self.assert_one_ask_sends_once(encounter_id, 1)
 
     def test_control_a_current_context_is_offered_and_asked_as_before(self):
@@ -1053,7 +1100,15 @@ class AnOutcomeMarkedSentIsNeverTrustedAsNeverSentTests(RecordedInterpretation, 
         self.context(encounter_id, service_date=MEMBER)
         self.context(encounter_id, service_date='')
         self.assertEqual(len(self.provider.log), 1)
-        self.assertEqual(self.encounter(encounter_id).current_assessment.provider_run_id, marked.pk)
+        # FINAL-V2 amendment 1 (A6): the settling save's update never re-checks with that run (it neither succeeded nor
+        # is the held codes' own), so its predict meets the request at the send door - which holds an outcome marked
+        # sent as it holds one that failed (jobs._marked_sent_before) - and ends failed; the held codes stay current
+        encounter = self.encounter(encounter_id)
+        self.assertTrue(self.held(encounter.current_assessment.provider_run))
+        newest = self.run_in_use(encounter_id)
+        self.assertEqual((newest.state, newest.sent, newest.request_sha256), (NOT_SENT, False, marked.request_sha256))
+        self.assertTrue(newest.error.startswith(jobs.FAILED_BEFORE_MESSAGE))
+        self.assertEqual(encounter.state, 'provider_failed')
 
     def test_a_second_review_marked_sent_uses_up_the_bound(self):
         self.provider.outcomes = ['succeeded', 'not_sent_marked_sent']

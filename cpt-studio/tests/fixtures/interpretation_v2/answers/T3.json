@@ -1,0 +1,1097 @@
+{
+ "acts": {},
+ "answers": [],
+ "case": "T3",
+ "caught": [
+  "date_relation@E2/0"
+ ],
+ "checked": [],
+ "considerations": {},
+ "date_of_service": "2031-03-14",
+ "document": "documents/T3.txt",
+ "document_sha256": "668cd53520dfe5de54589dc231be7491a051cb76a062548a1e0c14805a0d8e80",
+ "expect": {
+  "i": {
+   "99213": {
+    "item": null,
+    "item_kind": null,
+    "status": "ready",
+    "why": "4.7 C-3: the only act is established on an earlier date, so no procedure day and no undatable act"
+   }
+  },
+  "ii": {
+   "99213": {
+    "item": "event_time",
+    "item_kind": "question",
+    "status": "needs_clarification",
+    "why": "4.7 C-3: the act's date relation not established: undatable (RANK 6)"
+   }
+  }
+ },
+ "held": {},
+ "kind": "class",
+ "known": {},
+ "listed": {},
+ "member": [
+  "office",
+  "established"
+ ],
+ "note": "",
+ "pass1": {
+  "correct": {
+   "anatomy": [],
+   "doubts": [],
+   "encounter": {
+    "date_of_service": {
+     "options": [],
+     "sources": [
+      {
+       "link": "document_frame",
+       "units": [
+        "S2"
+       ],
+       "words": "03/14/2031"
+      }
+     ],
+     "state": "stated",
+     "value": "2031-03-14"
+    },
+    "documenting_clinician": [
+     {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "document_frame",
+        "units": [
+         "S3"
+        ],
+        "words": "Corvin Ashdale"
+       }
+      ],
+      "state": "supported",
+      "value": "P1"
+     }
+    ],
+    "other_dates": []
+   },
+   "events": [
+    {
+     "access_outcome": [],
+     "anchor": {
+      "kind_words": "seen in the office",
+      "status_words": "was seen",
+      "units": [
+       "S4"
+      ]
+     },
+     "cause": [],
+     "cause_event": [],
+     "date": [],
+     "date_relation": [],
+     "id": "E1",
+     "kind": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S4"
+        ],
+        "words": "seen in the office"
+       }
+      ],
+      "state": "supported",
+      "value": "em_visit"
+     },
+     "other_class": [],
+     "part_of": [],
+     "part_relation": [],
+     "performer": [],
+     "performer_person": [],
+     "purpose": [],
+     "restatements": [],
+     "scope": {
+      "breadth": [],
+      "covers": [],
+      "excepts": [],
+      "segment": [],
+      "targets": []
+     },
+     "session": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S4"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "X1"
+      }
+     ],
+     "status": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S4"
+        ],
+        "words": "was seen"
+       }
+      ],
+      "state": "supported",
+      "value": "performed"
+     },
+     "target": {
+      "anatomy": [],
+      "duct": [],
+      "lesion": [],
+      "places": [],
+      "structure": []
+     },
+     "technique": {
+      "device": [],
+      "route": []
+     },
+     "visit": {
+      "basis": [
+       {
+        "options": [],
+        "qualifiers": [],
+        "sources": [
+         {
+          "link": "other_statement",
+          "units": [
+           "S6"
+          ],
+          "words": "30 minutes"
+         }
+        ],
+        "state": "supported",
+        "value": "total_time"
+       }
+      ],
+      "separately_identifiable": []
+     },
+     "yield": []
+    },
+    {
+     "access_outcome": [],
+     "anchor": {
+      "kind_words": "flexible sigmoidoscopy",
+      "status_words": "I performed",
+      "units": [
+       "S5"
+      ]
+     },
+     "cause": [],
+     "cause_event": [],
+     "date": [],
+     "date_relation": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S5"
+         ],
+         "words": "At her last visit two weeks ago"
+        }
+       ],
+       "state": "supported",
+       "value": "earlier_date"
+      }
+     ],
+     "id": "E2",
+     "kind": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S5"
+        ],
+        "words": "flexible sigmoidoscopy"
+       }
+      ],
+      "state": "supported",
+      "value": "examination"
+     },
+     "other_class": [],
+     "part_of": [],
+     "part_relation": [],
+     "performer": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S5"
+         ],
+         "words": "I performed"
+        }
+       ],
+       "state": "supported",
+       "value": "documenting_team"
+      }
+     ],
+     "performer_person": [],
+     "purpose": [],
+     "restatements": [],
+     "scope": {
+      "breadth": [],
+      "covers": [],
+      "excepts": [],
+      "segment": [],
+      "targets": []
+     },
+     "session": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S5"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "X2"
+      }
+     ],
+     "status": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S5"
+        ],
+        "words": "I performed"
+       }
+      ],
+      "state": "supported",
+      "value": "performed"
+     },
+     "target": {
+      "anatomy": [],
+      "duct": [],
+      "lesion": [],
+      "places": [],
+      "structure": []
+     },
+     "technique": {
+      "device": [],
+      "route": []
+     },
+     "visit": {
+      "basis": [],
+      "separately_identifiable": []
+     },
+     "yield": []
+    }
+   ],
+   "lesions": [],
+   "people": [
+    {
+     "id": "P1",
+     "name": {
+      "link": "statement",
+      "units": [
+       "S3"
+      ],
+      "words": "Corvin Ashdale"
+     },
+     "role": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S3"
+        ],
+        "words": "Clinician"
+       }
+      ],
+      "state": "supported",
+      "value": "documenting_clinician"
+     }
+    }
+   ],
+   "sections": [
+    {
+     "end": [],
+     "id": "N0",
+     "occasion": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "document_frame",
+         "units": [
+          "S2"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "on_date_of_service"
+      }
+     ],
+     "owner": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "document_frame",
+        "units": [
+         "S3"
+        ],
+        "words": ""
+       }
+      ],
+      "state": "supported",
+      "value": "documenting_clinician"
+     },
+     "performer": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "document_frame",
+         "units": [
+          "S3"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "documenting_team"
+      }
+     ],
+     "performer_person": [],
+     "role": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "section",
+         "units": [
+          "S1"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "header"
+      }
+     ],
+     "start": {
+      "link": "section",
+      "units": [],
+      "words": ""
+     }
+    }
+   ],
+   "sessions": [
+    {
+     "approach": [],
+     "completion": [],
+     "device_reached": [],
+     "encounter": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S4"
+         ],
+         "words": "seen in the office today"
+        }
+       ],
+       "state": "supported",
+       "value": "this_encounter"
+      }
+     ],
+     "examination": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S4"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "E1"
+      }
+     ],
+     "id": "X1",
+     "kind": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S4"
+        ],
+        "words": "seen in the office"
+       }
+      ],
+      "state": "supported",
+      "value": "office_em"
+     },
+     "part_of_session": [],
+     "reached": [],
+     "reached_anatomy": [],
+     "stations": [],
+     "through": [],
+     "tract": []
+    },
+    {
+     "approach": [],
+     "completion": [],
+     "device_reached": [],
+     "encounter": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S5"
+         ],
+         "words": "At her last visit"
+        }
+       ],
+       "state": "supported",
+       "value": "separate_encounter"
+      }
+     ],
+     "examination": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S5"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "E2"
+      }
+     ],
+     "id": "X2",
+     "kind": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S5"
+        ],
+        "words": "flexible sigmoidoscopy"
+       }
+      ],
+      "state": "supported",
+      "value": "flex_sig"
+     },
+     "part_of_session": [],
+     "reached": [],
+     "reached_anatomy": [],
+     "stations": [],
+     "through": [],
+     "tract": []
+    }
+   ]
+  },
+  "misfiled": {
+   "anatomy": [],
+   "doubts": [],
+   "encounter": {
+    "date_of_service": {
+     "options": [],
+     "sources": [
+      {
+       "link": "document_frame",
+       "units": [
+        "S2"
+       ],
+       "words": "03/14/2031"
+      }
+     ],
+     "state": "stated",
+     "value": "2031-03-14"
+    },
+    "documenting_clinician": [
+     {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "document_frame",
+        "units": [
+         "S3"
+        ],
+        "words": "Corvin Ashdale"
+       }
+      ],
+      "state": "supported",
+      "value": "P1"
+     }
+    ],
+    "other_dates": []
+   },
+   "events": [
+    {
+     "access_outcome": [],
+     "anchor": {
+      "kind_words": "seen in the office",
+      "status_words": "was seen",
+      "units": [
+       "S4"
+      ]
+     },
+     "cause": [],
+     "cause_event": [],
+     "date": [],
+     "date_relation": [],
+     "id": "E1",
+     "kind": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S4"
+        ],
+        "words": "seen in the office"
+       }
+      ],
+      "state": "supported",
+      "value": "em_visit"
+     },
+     "other_class": [],
+     "part_of": [],
+     "part_relation": [],
+     "performer": [],
+     "performer_person": [],
+     "purpose": [],
+     "restatements": [],
+     "scope": {
+      "breadth": [],
+      "covers": [],
+      "excepts": [],
+      "segment": [],
+      "targets": []
+     },
+     "session": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S4"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "X1"
+      }
+     ],
+     "status": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S4"
+        ],
+        "words": "was seen"
+       }
+      ],
+      "state": "supported",
+      "value": "performed"
+     },
+     "target": {
+      "anatomy": [],
+      "duct": [],
+      "lesion": [],
+      "places": [],
+      "structure": []
+     },
+     "technique": {
+      "device": [],
+      "route": []
+     },
+     "visit": {
+      "basis": [
+       {
+        "options": [],
+        "qualifiers": [],
+        "sources": [
+         {
+          "link": "other_statement",
+          "units": [
+           "S6"
+          ],
+          "words": "30 minutes"
+         }
+        ],
+        "state": "supported",
+        "value": "total_time"
+       }
+      ],
+      "separately_identifiable": []
+     },
+     "yield": []
+    },
+    {
+     "access_outcome": [],
+     "anchor": {
+      "kind_words": "flexible sigmoidoscopy",
+      "status_words": "I performed",
+      "units": [
+       "S5"
+      ]
+     },
+     "cause": [],
+     "cause_event": [],
+     "date": [],
+     "date_relation": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S5"
+         ],
+         "words": "later in the morning"
+        }
+       ],
+       "state": "supported",
+       "value": "on_date_of_service"
+      }
+     ],
+     "id": "E2",
+     "kind": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S5"
+        ],
+        "words": "flexible sigmoidoscopy"
+       }
+      ],
+      "state": "supported",
+      "value": "examination"
+     },
+     "other_class": [],
+     "part_of": [],
+     "part_relation": [],
+     "performer": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S5"
+         ],
+         "words": "I performed"
+        }
+       ],
+       "state": "supported",
+       "value": "documenting_team"
+      }
+     ],
+     "performer_person": [],
+     "purpose": [],
+     "restatements": [],
+     "scope": {
+      "breadth": [],
+      "covers": [],
+      "excepts": [],
+      "segment": [],
+      "targets": []
+     },
+     "session": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S5"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "X2"
+      }
+     ],
+     "status": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S5"
+        ],
+        "words": "I performed"
+       }
+      ],
+      "state": "supported",
+      "value": "performed"
+     },
+     "target": {
+      "anatomy": [],
+      "duct": [],
+      "lesion": [],
+      "places": [],
+      "structure": []
+     },
+     "technique": {
+      "device": [],
+      "route": []
+     },
+     "visit": {
+      "basis": [],
+      "separately_identifiable": []
+     },
+     "yield": []
+    }
+   ],
+   "lesions": [],
+   "people": [
+    {
+     "id": "P1",
+     "name": {
+      "link": "statement",
+      "units": [
+       "S3"
+      ],
+      "words": "Corvin Ashdale"
+     },
+     "role": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S3"
+        ],
+        "words": "Clinician"
+       }
+      ],
+      "state": "supported",
+      "value": "documenting_clinician"
+     }
+    }
+   ],
+   "sections": [
+    {
+     "end": [],
+     "id": "N0",
+     "occasion": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "document_frame",
+         "units": [
+          "S2"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "on_date_of_service"
+      }
+     ],
+     "owner": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "document_frame",
+        "units": [
+         "S3"
+        ],
+        "words": ""
+       }
+      ],
+      "state": "supported",
+      "value": "documenting_clinician"
+     },
+     "performer": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "document_frame",
+         "units": [
+          "S3"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "documenting_team"
+      }
+     ],
+     "performer_person": [],
+     "role": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "section",
+         "units": [
+          "S1"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "header"
+      }
+     ],
+     "start": {
+      "link": "section",
+      "units": [],
+      "words": ""
+     }
+    }
+   ],
+   "sessions": [
+    {
+     "approach": [],
+     "completion": [],
+     "device_reached": [],
+     "encounter": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S4"
+         ],
+         "words": "seen in the office today"
+        }
+       ],
+       "state": "supported",
+       "value": "this_encounter"
+      }
+     ],
+     "examination": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S4"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "E1"
+      }
+     ],
+     "id": "X1",
+     "kind": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S4"
+        ],
+        "words": "seen in the office"
+       }
+      ],
+      "state": "supported",
+      "value": "office_em"
+     },
+     "part_of_session": [],
+     "reached": [],
+     "reached_anatomy": [],
+     "stations": [],
+     "through": [],
+     "tract": []
+    },
+    {
+     "approach": [],
+     "completion": [],
+     "device_reached": [],
+     "encounter": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S5"
+         ],
+         "words": "At her last visit"
+        }
+       ],
+       "state": "supported",
+       "value": "separate_encounter"
+      }
+     ],
+     "examination": [
+      {
+       "options": [],
+       "qualifiers": [],
+       "sources": [
+        {
+         "link": "statement",
+         "units": [
+          "S5"
+         ],
+         "words": ""
+        }
+       ],
+       "state": "supported",
+       "value": "E2"
+      }
+     ],
+     "id": "X2",
+     "kind": {
+      "options": [],
+      "qualifiers": [],
+      "sources": [
+       {
+        "link": "statement",
+        "units": [
+         "S5"
+        ],
+        "words": "flexible sigmoidoscopy"
+       }
+      ],
+      "state": "supported",
+      "value": "flex_sig"
+     },
+     "part_of_session": [],
+     "reached": [],
+     "reached_anatomy": [],
+     "stations": [],
+     "through": [],
+     "tract": []
+    }
+   ]
+  }
+ },
+ "pass2": {
+  "i": {
+   "default": "faithful",
+   "unlisted": [],
+   "verdicts": []
+  },
+  "ii": {
+   "default": "faithful",
+   "unlisted": [],
+   "verdicts": [
+    {
+     "fact": "date_relation@E2/0",
+     "qualifiers": [],
+     "role": "claim",
+     "verdict": "contradicts"
+    },
+    {
+     "fact": "date_relation@E2/0",
+     "qualifiers": [],
+     "role": "control",
+     "verdict": "supports"
+    }
+   ]
+  },
+  "iii": {
+   "default": "faithful",
+   "unlisted": [],
+   "verdicts": []
+  }
+ },
+ "proposals": [
+  {
+   "code": "99213",
+   "end": 173,
+   "start": 99
+  }
+ ],
+ "provenance": "synthetic: written for this fixture",
+ "refs": [
+  "T3",
+  "BF1"
+ ],
+ "services": {},
+ "settled": {},
+ "subjects": {},
+ "title": "Another day's act read on the date of service by a same-day frame",
+ "variants": [
+  "i",
+  "ii",
+  "iii"
+ ]
+}

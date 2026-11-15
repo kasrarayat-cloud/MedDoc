@@ -1,4 +1,4 @@
-"""Unit tests for the customer-report path of ops/verify_downloads.py (cpt-studio-customer-report@1).
+"""Unit tests for the customer-report path of ops/verify_downloads.py (cpt-studio-customer-report@2).
 
 Over the committed samples - studio/reports.py's own bytes of the sample snapshots, which tests/test_cux_r2_reports.py
 pins (refutation round 2, L3-1: the samples were once written in a grammar the server never wrote, so every genuine
@@ -33,7 +33,11 @@ HUMAN = 'Reviewer Four'
 APPROVER_80 = f'   Approved by {AGENT} (agent) at 2026-11-03T22:05:00+00:00'
 APPROVER_85 = f'   Approved by {AGENT} (agent) at 2026-11-03T22:05:30+00:00'
 QUOTE_80 = '   Quote: "COL-1: a 4 mm ascending colon polyp was removed with cold biopsy forceps." (page 1, characters 256–329)'
-BANNER_ROW = '"' + '","'.join(['SYNTHETIC DATA — NOT FOR BILLING OR CLAIMS'] + [''] * 16) + '"'
+# format @2 (FINAL-V2 amendment 1, 8.2): every row states the revision, the details used and the time the codes were made,
+# the banner rows included (the samples' values)
+MADE = ['1', 'date of service 2026-11-03; place of service not documented; patient not documented; claim not documented',
+        '2026-11-03T22:10:00Z']
+BANNER_ROW = '"' + '","'.join(['SYNTHETIC DATA — NOT FOR BILLING OR CLAIMS'] + [''] * 16 + MADE) + '"'
 
 
 def sample(name: str) -> str:
@@ -127,7 +131,7 @@ class SampleTests(unittest.TestCase):
 
     def test_the_samples_are_in_the_grammar_the_server_writes(self):
         # the banner opens and closes each file; items at column 0 with their details at three spaces (TXT); the
-        # header row, then the banner row, the rows and the banner row again (CSV); review_label last
+        # header row, then the banner row, the rows and the banner row again (CSV); review_label, then @2's three
         text = sample('customer-report-approved.txt').splitlines()
         self.assertEqual(text[:3], ['SYNTHETIC DATA — NOT FOR BILLING OR CLAIMS', 'CPT STUDIO — APPROVED CODES', LABEL])
         self.assertIn('Generated: 2026-11-03T22:10:00Z by CPT Studio review agent (automated agent)', text)
@@ -136,7 +140,7 @@ class SampleTests(unittest.TestCase):
         rows = vd.scanner().csv_rows(sample('customer-report-approved.csv'))
         rows = [row for row in rows if any(cell for cell in row)]
         self.assertEqual(tuple(rows[0]), vd.CUSTOMER_CSV_COLUMNS)
-        self.assertEqual(rows[0][-1], 'review_label')
+        self.assertEqual(rows[0][-4:], ['review_label', 'revision_number', 'details_used', 'codes_made_at'])
         self.assertTrue(vd._banner_row(rows[1]) and vd._banner_row(rows[-1]))
 
     def test_the_truth_is_the_operator_view_s_approved_items_in_the_contract_s_order(self):
@@ -326,7 +330,7 @@ class ApprovedTxtTests(unittest.TestCase):
     def test_banner_format_headline_and_header_fields(self):
         self.assert_fails(lambda t: t.rstrip('\n').rsplit('\n', 1)[0] + '\n', ['marker.synthetic'])
         self.assert_fails(lambda t: t.split('\n', 1)[1], ['marker.synthetic'])
-        self.assert_fails(lambda t: changed(t, 'cpt-studio-customer-report@1', 'cpt-studio-report@4'), ['format'])
+        self.assert_fails(lambda t: changed(t, 'cpt-studio-customer-report@2', 'cpt-studio-report@4'), ['format'])
         self.assert_fails(lambda t: changed(t, 'CPT STUDIO — APPROVED CODES', 'CPT STUDIO — SUGGESTED CODES — NOT APPROVED'), ['headline'])
         self.assert_fails(lambda t: changed(t, 'Encounter: Synthetic colonoscopy (two lesions)', 'Encounter: Another encounter'), ['header.encounter'])
         self.assert_fails(lambda t: changed(t, 'Date of service: 2026-11-03', 'Date of service: 2026-11-02'), ['header.date_of_service'])
@@ -537,16 +541,31 @@ class ServerStatementTests(unittest.TestCase):
         self.assertIs(vd.customer_status(facts), vd.UNKNOWN)
 
 
+class Format2HeaderTests(unittest.TestCase):
+    def test_the_header_states_the_revision_the_details_and_the_time_the_codes_were_made(self):
+        # FINAL-V2 amendment 1, 8.2: "Document: revision {n}", "Details used: ...", "Codes made: {time}"
+        text = sample('customer-report-approved.txt')
+        self.assertEqual({check: status for check, status in statuses(txt('approved', text)).items()
+                          if check in ('header.document', 'header.details_used', 'header.codes_made')},
+                         {'header.document': 'pass', 'header.details_used': 'pass', 'header.codes_made': 'pass'})
+        self.assertIn('header.document', failed(txt('approved', changed(text, 'Document: revision 1\n', 'Document: revision 2\n'))))
+        self.assertIn('header.document', failed(txt('approved', changed(text, 'Document: revision 1\n', ''))))
+        self.assertIn('header.details_used', failed(txt('approved', changed(text, 'Details used: date of service 2026-11-03;',
+                                                                          'Details used: 2026-11-03;'))))
+        self.assertIn('header.codes_made', failed(txt('approved', changed(text, 'Codes made: 2026-11-03T22:10:00Z\n', ''))))
+
+
 class CsvTests(unittest.TestCase):
     def test_columns_format_constants_and_neutralised_cells(self):
         text = sample('customer-report-approved.csv')
         self.assertIn('csv.columns', failed(csv('approved', changed(text, '"evidence_start"', '"evidence_begin"'))))
         self.assertIn('csv.columns', failed(csv('approved', changed(text, ',"review_label"', ''))))
-        self.assertIn('format', failed(csv('approved', changed(text, '"cpt-studio-customer-report@1","Synthetic', '"cpt-studio-report@4","Synthetic', 2))))
+        self.assertIn('format', failed(csv('approved', changed(text, '"cpt-studio-customer-report@2","Synthetic', '"cpt-studio-report@4","Synthetic', 2))))
         self.assertIn('csv.constants', failed(csv('approved', changed(text, '"2026-11-03","1","45380"', '"2026-11-02","1","45380"'))))
         self.assertIn('csv.neutralised', failed(csv('approved', changed(text, '"The colonoscopy documents removal of the 4 mm',
                                                                           '"=1+1 The colonoscopy documents removal of the 4 mm'))))
-        self.assertEqual(statuses(csv('approved', text.replace(BANNER_ROW + '\r\n', '')))['csv.synthetic_marker'], 'fail')
+        self.assertEqual(statuses(csv('approved', changed(text, BANNER_ROW + '\r\n', '', 2).replace(BANNER_ROW + '\r\n', '')))
+                         ['csv.synthetic_marker'], 'fail')
         self.assertEqual(statuses(csv('approved', changed(text, BANNER_ROW + '\r\n', '', 2)))['csv.synthetic_marker'], 'fail')
         # a SYNTHETIC line before the header row is not this renderer's file: its columns are not the header
         self.assertIn('csv.columns', failed(csv('approved', 'SYNTHETIC DATA — NOT FOR BILLING OR CLAIMS\r\n' + text)))
@@ -554,7 +573,7 @@ class CsvTests(unittest.TestCase):
     def test_the_rows_are_the_approved_items_with_their_units_modifiers_approver_and_evidence(self):
         text = sample('customer-report-approved.csv')
         rows = text.split('\r\n')
-        self.assertTrue(rows[2].startswith('"cpt-studio-customer-report@1"') and '"45380"' in rows[2])
+        self.assertTrue(rows[2].startswith('"cpt-studio-customer-report@2"') and '"45380"' in rows[2])
         extra = rows[2].replace('"1","45380",', '"3","45378",')
         self.assertIn('csv.items.items', failed(csv('approved', changed(text, rows[2], rows[2] + '\r\n' + extra))))
         self.assertIn('csv.items.units', failed(csv('approved', changed(text, '"1","45380","1",', '"1","45380","2",'))))
@@ -576,11 +595,25 @@ class CsvTests(unittest.TestCase):
         api = reinstated_by_agent_approved_by_human(operator())
         text = changed(sample('customer-report-approved.csv'), f'"{AGENT}","agent","2026-11-03T22:05:30+00:00"',
                        f'"{HUMAN}","human","2026-11-03T22:05:30+00:00"')
-        unlabelled = text.replace(f'"{LABEL}"\r\n"SYNTHETIC', '""\r\n"SYNTHETIC')
+        made = '","'.join(MADE)
+        unlabelled = text.replace(f'"{LABEL}","{made}"\r\n"SYNTHETIC', f'"","{made}"\r\n"SYNTHETIC')
         self.assertNotEqual(unlabelled, text)
         self.assertEqual(failed(csv('approved', unlabelled, api)), [])
         self.assertIn('csv.items.agent_label', failed(csv('approved', text, api)))
         self.assertIn('csv.items.approver', failed(csv('approved', changed(unlabelled, f'"{HUMAN}","human"', f'"{HUMAN}","agent"'), api)))
+
+    def test_format_2_states_the_revision_the_details_and_the_time_on_every_row(self):
+        # FINAL-V2 amendment 1, 8.2: one set of the three cells across every row, the operator's revision
+        text = sample('customer-report-approved.csv')
+        self.assertEqual(statuses(csv('approved', text))['csv.made'], 'pass')
+        rows = text.split('\r\n')
+        self.assertIn('csv.made', failed(csv('approved', changed(text, rows[2], rows[2].replace('"1","date of service', '"2","date of service')))))
+        def every(old, new):  # each of the four rows (two banner rows, two code rows), so the set stays one
+            self.assertEqual(text.count(old), 4, old)
+            return text.replace(old, new)
+        self.assertIn('csv.made', failed(csv('approved', every('"1","date of service', '"2","date of service'))))
+        self.assertIn('csv.made', failed(csv('approved', every('"2026-11-03T22:10:00Z"\r\n', '""\r\n'))))
+        self.assertIn('csv.made', failed(csv('approved', every('"date of service 2026-11-03;', '"2026-11-03;'))))
 
     def test_a_modifier_the_operator_view_does_not_record_is_never_read_as_none(self):
         text = sample('customer-report-approved.csv')

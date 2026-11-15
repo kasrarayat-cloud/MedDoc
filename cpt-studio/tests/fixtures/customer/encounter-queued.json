@@ -126,5 +126,9 @@
    "actor_kind": "human",
    "at": "2026-11-01T09:03:20Z"
   }
- ]
+ ],
+ "update": null,
+ "earlier_codes": [],
+ "what_changed": null,
+ "decision_history": []
 }

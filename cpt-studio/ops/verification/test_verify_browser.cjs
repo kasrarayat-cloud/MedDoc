@@ -1319,11 +1319,14 @@ test('the date question, the dateless request and the answer the walk reads are 
   assert.ok(read('studio', 'gi', 'context.py').includes("        merged[name] = Fact(name, value, 'user', (), USER_NOTE)\n    return merged"));
   // the save makes a request unless the run in use answers the answered context's request; a re-check never queues the
   // second review. The Gemini migration (S10) moved the decision into jobs._decide_after_save, the same for every
-  // context save (FINAL 6.10: "decide exactly as today"), so the line now stands at that function's own depth
+  // context save (FINAL 6.10: "decide exactly as today"), so the line now stands at that function's own depth. FINAL-V2
+  // amendment 1 (step 5b, its request R8 to 6b; [R3:binding-R3B-5]): never a re-check with a run a ProviderHold row
+  // names, so the decision is a named condition that also leaves a hold-setting run out
   const jobs = read('studio', 'jobs.py');
   const decide = jobs.slice(jobs.indexOf('\ndef _decide_after_save('), jobs.indexOf('\ndef _change_context('));
   assert.ok(decide.startsWith('\ndef _decide_after_save('), 'jobs._decide_after_save not found before _change_context');
-  assert.ok(decide.includes('\n    if _run_answers(last_run, revision, context) and not owed:\n'));
+  assert.ok(decide.includes('\n    recheck = _run_answers(last_run, revision, context) and not owed and not _hold_setting(last_run)\n'));
+  assert.ok(decide.includes('\n    if recheck:\n'), 'the save no longer re-checks on that condition');
   assert.ok(jobs.includes('_decide_after_save(encounter, user, revision, previous, context)'), 'the save no longer decides through it');
   assert.ok(jobs.includes('    # The bounded second review is never queued here: a workspace owner or reviewer asks for it'));
 });
@@ -3795,8 +3798,9 @@ function interpretationSection() {
       encounter_facts: { reach: [{ event: 'E1', family: 'gi.flex_sig', landmark: 'sigmoid_colon', state: 'verified', reasons: [], attached: true },
         { event: 'E2', family: 'gi.colonoscopy', landmark: 'cecum', state: 'verified', reasons: [], attached: true }], visits: [] },
       open_questions: [], verification: {} },
-    run: { id: RUN_ID, provider: 'gemini', purpose: 'interpretation', state: 'succeeded', sent: true, http_status: 200, requested_model: 'gemini-4-argon',
-      returned_model: 'gemini-4-argon', adapter_version: 'gemini-generate@cptstudio-1', request_sha256: sha('request'), response_sha256: sha('response'),
+    // the interpreter's model as the walk names it (vb.INTERPRETER.model: the server's MODEL, DECISIONS D230)
+    run: { id: RUN_ID, provider: 'gemini', purpose: 'interpretation', state: 'succeeded', sent: true, http_status: 200, requested_model: vb.INTERPRETER.model,
+      returned_model: vb.INTERPRETER.model, adapter_version: 'gemini-generate@cptstudio-1', request_sha256: sha('request'), response_sha256: sha('response'),
       usage: { promptTokenCount: 5210, candidatesTokenCount: 1840, totalTokenCount: 7050 }, estimated_cost: '0.0288', reused_from: null,
       started_at: '2026-11-09T10:00:00+00:00', finished_at: '2026-11-09T10:00:04+00:00', latency_ms: 4120 },
     hold: null,
@@ -3966,7 +3970,7 @@ test('checkInterpretation: the inventory read, the interpreter\'s one model aske
     [enc => { enc.assessment.interpretation = { engine: 'legacy', engine_version: 'cpt-studio-validation@10', record: null }; }, 'legacy'],
     [enc => { enc.assessment.interpretation.inventory.state = 'refused'; }, 'event inventory was refused'],
     [enc => { enc.assessment.interpretation.run.requested_model = 'gemini-2.5-pro'; }, 'asked for'],
-    [enc => { enc.assessment.interpretation.run.returned_model = 'gemini-4-argon-latest'; }, 'answered by'],
+    [enc => { enc.assessment.interpretation.run.returned_model = `${vb.INTERPRETER.model}-latest`; }, 'answered by'],
     [enc => { enc.assessment.interpretation.run.provider = 'corti'; }, 'corti/interpretation'],
     [enc => { enc.assessment.interpretation.run.response_sha256 = ''; }, 'sha256'],
     [enc => { enc.assessment.interpretation.record.sentinel.legacy_calls = 1; }, 'execution(s) of the legacy reader'],
@@ -4021,14 +4025,24 @@ test('checkProgressDom: the real page offers "Try reading again" for a failed re
 test('the denylist holds the interpreter\'s names and the new operator identifiers; argon in the document is no hit', () => {
   const op = newPathEncounter();
   const values = vb.denyValuesFrom(op, { interpretation: interpretationSection() });
-  for (const want of [INV, RUN_ID, 'gemini-4-argon', 'gemini-generate@cptstudio-1', 'cpt-studio-events@1', 'gemini-events@1', 'gemini-inventory@1', sha('request'), sha('inventory')]) {
+  for (const want of [INV, RUN_ID, vb.INTERPRETER.model, 'gemini-generate@cptstudio-1', 'cpt-studio-events@1', 'gemini-events@1', 'gemini-inventory@1', sha('request'), sha('inventory')]) {
     assert.ok(values.includes(want), want);
   }
-  assert.equal(values.some(value => /^argon$/i.test(value)), false);
+  assert.equal(values.some(value => /^(?:argon|carbon)$/i.test(value)), false);
   const ctx = vb.scanContext({ documentText: `${TEXT}Hemostasis: argon plasma coagulation was applied.\n`, denyValues: values });
   assert.deepEqual(vb.scanJson({ why: { quotes: [{ text: 'Hemostasis: argon plasma coagulation was applied.' }] } }, ctx), []);
   assert.deepEqual(vb.scanText('Argon plasma coagulation is a treatment.', ctx, 'dom'), []);
-  assert.deepEqual(hitIds(vb.scanJson({ summary: 'Read by gemini-4-argon.' }, ctx)), ['deny_value', 'interpreter_model', 'model_id', 'provider_name']);
+  assert.deepEqual(hitIds(vb.scanJson({ summary: `Read by ${vb.INTERPRETER.model}.` }, ctx)), ['deny_value', 'interpreter_model', 'model_id', 'provider_name']);
+  // DECISIONS D230: the interpreter's model since 2026-11-13 (gemini-4-carbon) and before it (gemini-4-argon) are each
+  // named by the denylist itself, whatever run a page's record names; "carbon", like "argon", is clinical wording and no hit
+  const bare = vb.scanContext({ documentText: `${TEXT}Marking: no carbon-particle tattoo was placed.\n` });
+  for (const model of ['gemini-4-carbon', 'gemini-4-argon', 'GEMINI-4-CARBON']) {
+    assert.deepEqual(hitIds(vb.scanJson({ summary: `Read by ${model}.` }, bare)), ['interpreter_model', 'model_id', 'provider_name'], model);
+  }
+  assert.deepEqual(vb.scanJson({ why: { quotes: [{ text: 'Marking: no carbon-particle tattoo was placed.' }] } }, bare), []);
+  for (const clinical of ['Carbon dioxide insufflation was used.', 'A carbon particle suspension marked the site.', 'carbon']) {
+    assert.deepEqual(vb.scanText(clinical, bare, 'dom'), [], clinical);
+  }
   assert.deepEqual(hitIds(vb.scanJson({ interpretation: {} }, ctx)), ['forbidden_key']);
   assert.deepEqual(hitIds(vb.scanJson({ limitations: [`Inventory ${INV}`] }, ctx)), ['deny_value']);
   // a customer report that quotes the document's argon is clean; one naming the interpreter is not
@@ -4247,4 +4261,272 @@ test('duplicateSends: a refused reading released for one recorded retry is sent 
   assert.ok(jobs.includes(`audit.record(encounter.workspace, '${vb.RETRY_EVENT}', encounter=encounter, actor=user,`));
   assert.ok(jobs.includes('locked.reconciled_by, locked.reconciled_at = user, timezone.now()'));
   assert.ok(fs.readFileSync(path.join(ROOT, 'studio', 'serializers.py'), 'utf8').includes("'reconciled': run.reconciled_at is not None"));
+});
+
+// --- FINAL-V2 amendment 1 (step 5d's request, refute-5d-r1 P1): the page while an update of the codes is pending ----------
+// The walk's result list, details panel and progress checks, held to the page app.js really draws for an update in every
+// state and kind: the earlier codes are never read as the current list (they have hooks of their own), the answers wait
+// for the update (no answer button, no "Change this answer"; a row that takes only an answer says so) while the context
+// rows keep their controls, and a running update draws the whole panel with its elapsed time.
+
+const UPDATE_KINDS = ['details', 'documentation', 'check'];
+const UPDATE_STATES = ['updating', 'failed', 'stopped', 'paused', 'being_confirmed'];
+const IDLE_UPDATE_TEXT = 'Your change is saved, but the codes could not be updated: processing could not be completed, and nothing was sent. '
+  + 'The codes shown are from before your change and cannot be approved or exported until the update finishes.';
+
+function pendingUpdate(state, kind = 'details') {
+  const doc = JSON.parse(JSON.stringify(customerFixture('encounter-ready.json')));
+  const running = state === 'updating';
+  doc.earlier_codes = doc.codes.map(code => ({ ...code, allowed_actions: [] }));
+  doc.codes = [];
+  doc.details_needed = JSON.parse(JSON.stringify(customerFixture('encounter-awaiting-detail.json').details_needed));
+  doc.state = running ? 'updating' : state === 'paused' ? 'stopped' : state;
+  doc.state_label = { updating: 'Updating codes', failed: 'Could not finish', stopped: 'Stopped', being_confirmed: 'Being confirmed' }[doc.state];
+  doc.progress = { ...doc.progress, phase: state, busy: running, can_stop: running, can_resume: ['stopped', 'paused'].includes(state),
+    started_at: '2026-11-13T10:00:00Z', finished_at: running ? null : '2026-11-13T10:02:00Z', server_time: '2026-11-13T10:03:00Z',
+    message: running ? 'Working on your document. This page updates by itself.' : IDLE_UPDATE_TEXT,
+    error: running ? null : { text: IDLE_UPDATE_TEXT, action: 'none' }, active_detail: running ? 'Coding validation' : '',
+    steps: doc.progress.steps.map(step => ({ ...step, state: ['reading', 'identifying'].includes(step.key) ? 'skipped' : step.key === 'checking' ? (running ? 'active' : 'done') : 'not_started' })) };
+  doc.readiness = { draft: false, approved: false, blockers: [running ? 'The codes are being updated after your change.' : 'The codes have not been updated after your change yet.'] };
+  doc.recheck = { available: false, can_request: false };
+  doc.update = { pending: true, state, kind, restorable: kind === 'details', changes: kind === 'documentation' ? ['Documentation added (revision 2)'] : ['Place of service: Office'],
+    saved_by: kind === 'check' ? null : 'Synthetic Reviewer', saved_at: kind === 'check' ? null : '2026-11-13T10:00:00Z', started_at: '2026-11-13T10:00:00Z',
+    earlier: { made_at: '2026-11-12T09:30:00Z', revision: 1, service_date: '2 November 2026', details: [] } };
+  doc.what_changed = null;
+  doc.decision_history = [];
+  return doc;
+}
+const wholePage = doc => domOf(`<html><body><main>${app.reviewView(doc, app.documentLayout(doc), pageUi(doc))}</main></body></html>`);
+
+test('the walk reads the page of a pending update in every state and kind as the page means it: no current code, answers waiting, the whole panel', () => {
+  assert.ok(vb.PANEL_PHASES.has('updating'));
+  assert.ok(vb.ELAPSED_PHASES.has('updating'));
+  assert.equal(vb.ANSWER_AFTER_UPDATE, app.TEXTS.ANSWER_AFTER_UPDATE);  // the page's copy of the server's sentence
+  for (const kind of UPDATE_KINDS) {
+    for (const state of UPDATE_STATES) {
+      const doc = pendingUpdate(state, kind);
+      const dom = wholePage(doc);
+      const at = `${kind}/${state}`;
+      assert.deepEqual(dom.rows, [], at);
+      assert.deepEqual(failed(vb.checkResultList(doc, dom)), [], at);
+      assert.deepEqual(failed(vb.checkDetailsPanel(doc, dom)), [], at);
+      assert.deepEqual(failed(vb.checkProgressDom(doc, dom, [])), [], at);
+      if (state === 'updating') assert.ok(ids(vb.checkProgressDom(doc, dom, [])).includes('progress.dom.elapsed:pass'), at);
+    }
+  }
+});
+
+test('the walk fails a pending update\'s page that draws the earlier codes as the current list, offers an answer, or draws a running update as one line', () => {
+  const doc = pendingUpdate('failed');
+  const html = app.reviewView(doc, app.documentLayout(doc), pageUi(doc));
+  const page = edit => domOf(`<html><body><main>${edit(html)}</main></body></html>`);
+  // the earlier codes under the current codes' hooks: read as codes the API does not serve
+  const asCurrent = page(markup => markup.replace('<ol class="earlier-list"', '<ol class="result-list"').replaceAll('<li class="earlier-row"', '<li class="result-row"'));
+  assert.deepEqual(failed(vb.checkResultList(doc, asCurrent)), ['dom.result_list']);
+  // the page drawn as if no update were pending (answer buttons, "Change this answer"), judged against the update
+  const plain = { ...doc, update: null };
+  const offered = domOf(`<html><body><main>${app.reviewView(plain, app.documentLayout(plain), pageUi(plain))}</main></body></html>`);
+  const problems = vb.checkDetailsPanel(doc, offered)[0];
+  assert.equal(problems.status, 'fail');
+  assert.match(problems.reason, /offers not_documented(, cannot_confirm)? while an update of the codes is pending/);
+  assert.match(problems.reason, /does not say that it can be answered once the codes are updated/);
+  // the wait sentence removed from the page: the row no longer says why it offers nothing
+  assert.deepEqual(failed(vb.checkDetailsPanel(doc, page(markup => markup.replaceAll(app.TEXTS.ANSWER_AFTER_UPDATE, '')))), ['dom.details_panel']);
+  // a saved answer the page offers to withdraw while the update is pending
+  const saved = doc.details_needed.find(row => row.saved && row.saved.answer_id);
+  assert.ok(saved, 'the fixture has a saved answer');
+  const withdraw = `<button type="button" class="meta-link" data-action="revoke-detail" data-answer="${saved.saved.answer_id}">Change this answer</button>`;
+  const revocable = page(markup => markup.replace(`data-detail="${saved.id}" data-fact="${saved.fact}">`, `data-detail="${saved.id}" data-fact="${saved.fact}">${withdraw}`));
+  assert.equal(revocable.details.rows.find(row => row.id === saved.id).revoke, true);
+  const refused = vb.checkDetailsPanel(doc, revocable)[0];
+  assert.equal(refused.status, 'fail');
+  assert.match(refused.reason, /offers to withdraw its answer while an update of the codes is pending/);
+  // a running update drawn as the compact line
+  const running = pendingUpdate('updating');
+  const compact = domOf(`<html><body>${app.progressPanel(running, pageUi(running)).replace('class="progress-panel progress-card"', 'class="progress-panel progress-done"')}</body></html>`);
+  assert.ok(failed(vb.checkProgressDom(running, compact, [])).includes('progress.dom.whole_panel'));
+});
+
+// --- design v2 (step 6b): the D22 provenance of a v2 assessment names both runs; the denylist sees joined forms --------
+// FINAL-V2 5.7 measure 9: a cpt-studio-events@2 assessment's inventory was settled from pass 1 (purpose interpretation) and
+// the appraisal (pass 2, purpose appraisal), so its record and its interpretation section name both, and its sentinel
+// record counts no retired execution. The labels are the server's own (interpretation/__init__.py).
+
+function v2Section() {
+  const section = interpretationSection();
+  section.engine_version = 'cpt-studio-events@2';
+  Object.assign(section.record, { engine_version: 'cpt-studio-events@2', interpretation_version: 'gemini-events@2/appraisal@1',
+    inventory_version: 'gemini-inventory@2', appraisal_run: 'run-appraisal' });
+  section.record.sentinel = { ...section.record.sentinel, retired_calls: 0 };
+  Object.assign(section.inventory, { interpretation_version: 'gemini-events@2/appraisal@1', inventory_version: 'gemini-inventory@2' });
+  section.appraisal_run = { ...section.run, id: 'run-appraisal', purpose: 'appraisal', request_sha256: sha('appraisal request'),
+    response_sha256: sha('appraisal response'), usage: { promptTokenCount: 9100, candidatesTokenCount: 2100, totalTokenCount: 11200 } };
+  return section;
+}
+function v2Encounter() {
+  const enc = newPathEncounter();
+  enc.assessment.engine_version = 'cpt-studio-events@2';
+  enc.assessment.interpretation = v2Section();
+  enc.routing.version = 'gemini-routing@2';
+  return enc;
+}
+
+test('design v2: the walk\'s v2 labels and the appraisal run are the server\'s own', () => {
+  const labels = fs.readFileSync(path.join(ROOT, 'studio', 'interpretation', '__init__.py'), 'utf8');
+  const label = name => new RegExp(`^${name} = '([^']*)'`, 'm').exec(labels)?.[1];
+  assert.equal(label('ENGINE_VERSION_V2'), vb.EVENTS_ENGINE_V2);
+  assert.equal(label('ROUTING_VERSION_V2'), vb.ROUTING_STAND_IN_V2);
+  assert.deepEqual({ ...vb.APPRAISER }, { provider: label('PROVIDER'), model: label('MODEL'), purpose: label('APPRAISAL_PURPOSE') });
+  assert.deepEqual([...vb.STAND_IN_VERSIONS].sort(), [label('ROUTING_VERSION'), label('ROUTING_VERSION_V2')].sort());
+  // the operator section the server builds names both runs (report.interpretation_section_v2)
+  const report = fs.readFileSync(path.join(ROOT, 'studio', 'interpretation', 'report.py'), 'utf8');
+  assert.ok(report.includes("            'appraisal_run': run_json(second) if second is not None else None,"), 'the v2 section no longer names the appraisal run');
+});
+
+test('design v2: checkInterpretation holds the appraisal run to the interpreter\'s model, its hashes and the record, and counts retired executions', () => {
+  const op = v2Encounter();
+  const trace = { interpretation: v2Section() };
+  const good = vb.checkInterpretation(op, trace);
+  assert.deepEqual(failed(good), []);
+  assert.deepEqual(ids(good), ['provenance.interpretation:pass', 'provenance.interpretation.usage:pass',
+    'provenance.interpretation.appraisal_usage:pass', 'provenance.interpretation.trace:pass']);
+  assert.match(good[0].reason, /and its appraisal run run-appraisal; no legacy or retired execution counted/);
+  assert.ok(vb.newPath(op));
+  assert.deepEqual(failed([vb.checkStandIn(op)]), []);
+  const broken = [
+    [enc => { delete enc.assessment.interpretation.appraisal_run; }, 'no appraisal run (pass 2)'],
+    [enc => { enc.assessment.interpretation.appraisal_run.purpose = 'interpretation'; }, 'its appraisal run is gemini/interpretation'],
+    [enc => { enc.assessment.interpretation.appraisal_run.requested_model = 'gemini-2.5-flash'; }, 'its appraisal run asked for'],
+    [enc => { enc.assessment.interpretation.appraisal_run.returned_model = `${vb.APPRAISER.model}-001`; }, 'its appraisal run was answered by'],
+    [enc => { enc.assessment.interpretation.appraisal_run.response_sha256 = ''; }, 'its appraisal run lacks'],
+    [enc => { enc.assessment.interpretation.appraisal_run.id = RUN_ID; enc.assessment.interpretation.record.appraisal_run = RUN_ID; }, 'its appraisal run is its pass-1 run'],
+    [enc => { enc.assessment.interpretation.record.appraisal_run = 'another'; }, 'the record names another appraisal run'],
+    [enc => { enc.assessment.interpretation.record.sentinel.retired_calls = 2; }, 'retired execution(s)'],
+    [enc => { delete enc.assessment.interpretation.record.sentinel.retired_calls; }, 'retired execution(s)'],
+  ];
+  for (const [mutate, word] of broken) {
+    const enc = v2Encounter();
+    mutate(enc);
+    const results = vb.checkInterpretation(enc, { interpretation: enc.assessment.interpretation });
+    assert.deepEqual(failed(results), ['provenance.interpretation'], word);
+    assert.match(results[0].reason, new RegExp(word.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')), word);
+  }
+  // a v1 assessment naming an appraisal run is no v2 one
+  const v1 = newPathEncounter();
+  v1.assessment.interpretation.appraisal_run = v2Section().appraisal_run;
+  assert.match(vb.checkInterpretation(v1, undefined)[0].reason, /an assessment of "cpt-studio-events@1" names an appraisal run/);
+  // the trace must name the same appraisal run; the appraisal's usage is a warning when missing, as pass 1's
+  assert.deepEqual(failed(vb.checkInterpretation(op, { interpretation: { ...v2Section(), appraisal_run: { id: 'x' } } })), ['provenance.interpretation.trace']);
+  const unmetered = v2Encounter();
+  unmetered.assessment.interpretation.appraisal_run.usage = {};
+  assert.deepEqual(statuses(vb.checkInterpretation(unmetered, trace), 'provenance.interpretation.appraisal_usage'), ['warn']);
+  // the stand-in of either design is a stand-in; any other routing version is not
+  const other = v2Encounter();
+  other.routing.version = 'gemini-routing@3';
+  assert.deepEqual(failed([vb.checkStandIn(other)]), ['routing.stand_in']);
+});
+
+test('design v2: both runs\' identifiers are deny values, and the joined forms are hits in this reader as in the others', () => {
+  const op = v2Encounter();
+  const values = vb.denyValuesFrom(op, { interpretation: v2Section() });
+  for (const want of ['run-appraisal', sha('appraisal request'), sha('appraisal response'), RUN_ID]) {
+    assert.ok(values.includes(want) || want.length < vb.DENYLIST.deny_value_min_length, want);
+  }
+  assert.ok(values.includes(sha('appraisal request')) && values.includes(sha('appraisal response')));
+  const ctx = vb.scanContext();
+  assert.deepEqual(hitIds(vb.scanText('gemini_unknown', ctx, 'json')), ['provider_name']);
+  assert.deepEqual(hitIds(vb.scanText('the readingGemini step', ctx, 'dom')), ['provider_name_joined']);
+  assert.deepEqual(hitIds(vb.scanText('A corticosteroid injection was given.', ctx, 'dom')), []);
+  assert.deepEqual(hitIds(vb.scanText('Corticosteroid and CORTICAL wording', ctx, 'dom')), []);
+  for (const p of vb.DENYLIST.patterns) assert.ok(p.case_sensitive === undefined || p.case_sensitive === true, p.id);
+  assert.deepEqual(vb.DENYLIST.patterns.filter(p => p.case_sensitive).map(p => p.id), ['provider_name_joined']);
+});
+
+// Refutation 6b-r1 P1: a v2 encounter as the operator view serves it - the routing of a gemini-routing@2 run with the
+// serializer's own family entries, labelled derived and naming its inventory once the integration applies the requested
+// one-line change (serializers._routing_json labels ROUTING_VERSION_V2 as it labels ROUTING_VERSION), beside an inventory
+// in report._inventory_json_v2's shape holding store's v2 events (each attribute a settled fact). v2Encounter above kept
+// v1's routing and v1's inventory, which hid that every per-fact expectation failed on a real v2 encounter.
+function v2Fact(value) {
+  return { claim: { state: 'supported', value, qualifiers: [], options: [], inherited_from: null },
+    sources: [{ units: ['S3'], link: 'statement', words: null, geometry: 'ok' }],
+    checks: { integrity: 'ok', geometry: 'ok', literal: 'not_applicable', literals: [], consistency: 'ok', qualified: false },
+    appraisal: null, result: 'supported', reasons: [] };
+}
+function v2StandInEncounter({ labelled = true } = {}) {
+  const enc = v2Encounter();
+  const examination = { id: 'E1', anchor: { units: ['S3'], kind_words: null, status_words: null }, restatements: [],
+    kind: v2Fact('examination'), other_class: v2Fact(null), status: v2Fact('performed'), session: v2Fact('X1'),
+    date_relation: v2Fact('on_date_of_service'), date: v2Fact(null), performer: v2Fact('documenting_clinician'),
+    performer_person: v2Fact(null), entry: v2Fact('clinician'),
+    target: { lesion: v2Fact(null), structure: v2Fact(null), places: v2Fact(['cecum']), anatomy: v2Fact(null), duct: v2Fact(null) },
+    technique: { device: v2Fact(null), route: v2Fact(null) }, purpose: v2Fact(null), cause: v2Fact(null), cause_event: v2Fact(null),
+    part_of: v2Fact(null), part_relation: v2Fact(null), yield: v2Fact(null), access_outcome: v2Fact(null),
+    scope: { breadth: v2Fact(null), targets: v2Fact([]), segment: v2Fact([]), covers: v2Fact([]), excepts: v2Fact([]) },
+    visit: { basis: v2Fact(null), separately_identifiable: v2Fact(null) } };
+  const session = { id: 'X1', examination: v2Fact('E1'), kind: v2Fact('colonoscopy'), encounter: v2Fact('current'),
+    tract: v2Fact('lower'), approach: v2Fact('transanal'), through: v2Fact(null), reached: v2Fact(['cecum']),
+    device_reached: v2Fact([]), reached_anatomy: v2Fact(null), completion: v2Fact('complete'), stations: v2Fact([]),
+    part_of_session: v2Fact(null), completeness: null };
+  enc.assessment.interpretation.inventory = {
+    id: INV, state: 'read', interpretation_version: 'gemini-events@2/appraisal@1', inventory_version: 'gemini-inventory@2',
+    sha256: sha('inventory'), text_sha256: sha(TEXT), request_sha256: sha('request'), response_sha256: sha('response'),
+    appraisal_request_sha256: sha('appraisal request'), appraisal_response_sha256: sha('appraisal response'),
+    claims_sha256: sha('claims'), created_at: '2026-11-13T10:00:05+00:00',
+    counts: { units: 4, sections: 0, sessions: 1, anatomy: 0, lesions: 0, events: 1, doubts: 0, claims: 0, unlisted: 0 },
+    health: { status: 'healthy' }, coherence: { status: 'coherent' },
+    events: { units: [], encounter: {}, people: [], sections: [], sessions: [session], anatomy: [], lesions: [],
+      events: [examination], doubts: [], claims: [], unlisted: [] },
+    verification: { label: 'gemini-inventory@2' } };
+  enc.routing = { version: 'gemini-routing@2', document_kind: '',
+    families: [{ family: 'gi.colonoscopy', label: 'Colonoscopy', supported: true, status: 'performed', mentions: [], facts: [], missing: [] }],
+    derived: labelled, ...(labelled ? { derived_from: 'the event inventory', inventory: INV, inventory_sha256: sha('inventory') } : {}) };
+  return enc;
+}
+
+test('design v2: a v2 stand-in is judged as a stand-in with its statuses, and no per-fact expectation fails on it', () => {
+  const expected = { families: { 'gi.colonoscopy': { presence: 'required', status_in: ['performed'],
+    facts: { extent: { value_contains_any: ['cecum'] }, target: { value_contains_any: ['cecum'] } },
+    informational: { facts: { em_basis: { value_contains_any: ['time'] }, cannulation: { value_contains_any: ['successful'] } } } } } };
+  const results = vb.checkRouting(expected, v2StandInEncounter());
+  assert.deepEqual(results.map(r => `${r.id}:${r.status}`), [
+    'routing.stand_in:pass', 'routing.gi.colonoscopy.status:pass', 'routing.gi.colonoscopy.fact.extent:skipped',
+    'routing.gi.colonoscopy.fact.target:skipped', 'routing.gi.colonoscopy.info.fact.em_basis:skipped',
+    'routing.gi.colonoscopy.info.fact.cannulation:skipped']);
+  for (const r of results.filter(item => item.status === 'skipped')) assert.ok(r.reason.startsWith(vb.V2_STAND_IN_UNJUDGED), r.reason);
+  assert.equal(vb.standInValues(v2StandInEncounter(), 'gi.colonoscopy', 'extent'), null);
+  // a status the manifest does not expect still fails on a v2 stand-in: only the per-fact reading is not judged
+  const historical = v2StandInEncounter();
+  historical.routing.families[0].status = 'historical';
+  assert.deepEqual(failed(vb.checkRouting(expected, historical)), ['routing.gi.colonoscopy.status']);
+  // as the serializer serves a @2 run today (derived only for @1): the stand-in check fails on the label - the integration
+  // request, never a hidden pass - and still no per-fact expectation fails
+  const unlabelled = vb.checkRouting(expected, v2StandInEncounter({ labelled: false }));
+  assert.deepEqual(failed(unlabelled), ['routing.stand_in']);
+  assert.match(unlabelled[0].reason, /it is not labelled derived; it names no event inventory/);
+  // the same expectations on a v1 stand-in are judged from its verified attributes (this v1 reading states no current
+  // colonoscopy, so its extent fails)
+  const v1 = newPathEncounter();
+  v1.routing.families = [{ family: 'gi.colonoscopy', label: 'Colonoscopy', supported: true, status: 'performed', mentions: [], facts: [], missing: [] }];
+  assert.ok(failed(vb.checkRouting(expected, v1)).includes('routing.gi.colonoscopy.fact.extent'));
+  // the family entries are the serializer's own keys (serializers._routing_json)
+  const serializers = fs.readFileSync(path.join(ROOT, 'studio', 'serializers.py'), 'utf8');
+  for (const key of ["'family': slug, 'label':", "'supported':", "'status': finding.get('status'),", "'facts': finding.get('facts', []), 'missing': finding.get('missing', []),",
+    "'derived': derived, **({'derived_from': 'the event inventory', 'inventory': run.result.get('inventory'),"]) {
+    assert.ok(serializers.includes(key), key);
+  }
+});
+
+test('design v2: the recorded retry releases an appraisal attempt for one send, as it releases pass 1\'s', () => {
+  const T = second => `2026-11-13T10:00:${String(second).padStart(2, '0')}+00:00`;
+  const appraisal = (id, second, extra = {}) => ({ ...sent(id, { provider: 'gemini', purpose: 'appraisal', created_at: T(second) }), ...extra });
+  const retry = second => ({ event: 'interpretation.retry', summary: 'interpretation.retry', actor: 'Operator', actor_kind: 'human', created_at: T(second), data: { effect: 'failed' } });
+  const view = (runs, activity = []) => ({ provider_runs: runs, activity });
+  // pass 2's answer refused (an unhealthy appraisal), released by the recorded retry, then sent again once
+  assert.deepEqual(failed(vb.checkNoDuplicateSends(view([appraisal('a1', 1, { reconciled: true }), appraisal('a2', 5)], [retry(3)]))), []);
+  // without the retry before it, the second send is a duplicate paid request
+  assert.deepEqual(failed(vb.checkNoDuplicateSends(view([appraisal('a1', 1, { reconciled: true }), appraisal('a2', 5)]))), ['pipeline.no_duplicate_send']);
+  // one retry releases one attempt
+  assert.deepEqual(failed(vb.checkNoDuplicateSends(view([appraisal('a1', 1, { reconciled: true }), appraisal('a2', 5, { reconciled: true }), appraisal('a3', 9)],
+    [retry(3)]))), ['pipeline.no_duplicate_send']);
 });

@@ -33,6 +33,7 @@ from django.conf import settings
 from django.test import Client, TestCase, override_settings
 
 from studio import customer_api, jobs, review
+from tests import v2_documents, v2_replay
 from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
@@ -85,11 +86,16 @@ class AfterRejectionTests(RecordedInterpretation, RowMixin, ColonCase):
     questions are not asked: two questions, each about one of Corti's codes."""
     # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
     # recorded synthetic interpretation.
+    # DECISIONS D243 class C: the test rejects through the product, which reads event_coding@2 only (FINAL-V2 6.5): its
+    # rows are design v2's, in replay (tests/v2_replay.py), from TWO_EXTENTS with its endoscopist named
+    # (tests/v2_documents.TWO_EXTENTS) - never the v1 chain's.
     interpretations = TWO_EXTENTS_INTERPRETATIONS
+    v2_interpretations = ((v2_documents.TWO_EXTENTS, v2_documents.two_extents_answer),)
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_every_code_rejected_and_the_encounter_reviewed_the_row_says_only_what_is_open(self):
         self.assertIs(review.confirmations_offered(), False)
-        encounter_id = self.create(TWO_EXTENTS)
+        encounter_id = self.create(v2_documents.TWO_EXTENTS)
         drain()
         encounter = self.encounter(encounter_id)
         final = encounter.current_assessment
@@ -167,7 +173,11 @@ class CortiOnlyTests(RecordedInterpretation, OperatorReads, RowMixin, TestCase):
     still open."""
     # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
     # recorded synthetic interpretation.
+    # DECISIONS D243 class C: the test decides through the product, which reads event_coding@2 only (FINAL-V2 6.5): its
+    # rows are design v2's, in replay (tests/v2_replay.py), from COLON with its endoscopist named
+    # (tests/v2_documents.COLON) - never the v1 chain's.
     interpretations = COLON_INTERPRETATIONS
+    v2_interpretations = ((v2_documents.COLON, v2_documents.colon_answer),)
 
     def setUp(self):
         super().setUp()
@@ -190,11 +200,12 @@ class CortiOnlyTests(RecordedInterpretation, OperatorReads, RowMixin, TestCase):
                              {'proposal_id': proposal['id'], 'action': action, **extra})
         self.assertEqual(response.status_code, 201, response.content)
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_a_rejected_code_whose_question_is_still_open_the_row_says_only_what_is_open(self):
         self.assertEqual((settings.ASTRA_MODE, settings.FABLE_MODE), ('disabled', 'disabled'))
         self.assertIs(review.confirmations_offered(), False)
         with self.captureOnCommitCallbacks(execute=True):
-            response = self.client.post('/api/encounters', {'text': COLON, 'synthetic_attestation': 'yes'})
+            response = self.client.post('/api/encounters', {'text': v2_documents.COLON, 'synthetic_attestation': 'yes'})
         self.assertEqual(response.status_code, 201, response.content)
         encounter_id = response.json()['id']
         drain()

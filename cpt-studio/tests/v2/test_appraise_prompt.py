@@ -14,6 +14,8 @@ What is proved, item by item against the done-when of 8.1 step 2c:
   arbiter's 2c#15) - then the cards and the claims (FramingTests);
 - the request is a pure function of its inputs: a byte-identical body for identical inputs, in any process, no member
   value can enter it, and the check findings are a required keyword (BodyTests; the arbiter's 2c#10, DECISIONS D206);
+  its generation settings are pass 1's: temperature 0 and DECISIONS D230's thinking configuration (thinkingLevel high)
+  and output limit (65536), the one thinking setting sent (BodyTests);
 - no option, state, qualifier, doubt or unknown of pass 1 in the request, and no label of pass 1's values on a card
   (LeakTests, both scans);
 - no request is built for a text that cannot be framed, over the claim bound, or under an empty or changed pin; the
@@ -482,11 +484,21 @@ class BodyTests(SimpleTestCase):
         self.assertEqual(list(built.body), ['systemInstruction', 'contents', 'generationConfig'])
         self.assertEqual(built.body['systemInstruction'], {'parts': [{'text': appraise_prompt.INSTRUCTIONS}]})
         self.assertEqual(built.body['contents'], [{'role': 'user', 'parts': [{'text': built.turn}]}])
-        self.assertEqual(built.body['generationConfig'], {'temperature': 0, 'maxOutputTokens': 32768,
+        self.assertEqual(built.body['generationConfig'], {'temperature': 0, 'maxOutputTokens': 65536,
+                                                          'thinkingConfig': {'thinkingLevel': 'high'},
                                                           'responseMimeType': 'application/json',
                                                           'responseSchema': appraise_schema.RESPONSE_SCHEMA})
+        self.assertEqual((appraise_prompt.MAX_OUTPUT_TOKENS, appraise_prompt.THINKING_LEVEL), (65536, 'high'))  # D230
+        # pass 1's generation settings exactly, the schema apart (DECISIONS D230: both passes)
+        with pinned():
+            first = extract_prompt.build_request(fixtures.NOTE, (), 'txt')['generationConfig']
+        self.assertEqual({key: value for key, value in built.body['generationConfig'].items() if key != 'responseSchema'},
+                         {key: value for key, value in first.items() if key != 'responseSchema'})
         built.body['generationConfig']['responseSchema']['properties'].clear()  # shares nothing with the module
         self.assertTrue(appraise_schema.RESPONSE_SCHEMA['properties'])
+        built.body['generationConfig']['thinkingConfig']['thinkingLevel'] = 'low'
+        self.assertEqual(request(fixtures.NOTE, fixtures.note_answer()).body['generationConfig']['thinkingConfig'],
+                         {'thinkingLevel': 'high'})
 
     def test_identical_inputs_give_a_byte_identical_request(self):
         first = request(fixtures.RICH, fixtures.rich_answer())

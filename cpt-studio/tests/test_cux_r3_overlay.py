@@ -84,7 +84,8 @@ class DetailsSaveRefreshesTheStoredStateTests(PipelineCase):
         self.assertEqual(review.readiness(self.encounter(encounter_id))['blockers'], [review.DATE_CONFIRMATION_BLOCKER])
         self.assertEqual(self.assert_current(encounter_id), 'ready_for_review')
         response = self.save(encounter_id, self.date_row(self.doc(encounter_id)), '2026-10-21')
-        self.assertEqual(response.json(), {'saved': 1, 'unchanged': 0, 'answer_ids': [], 'reassessing': False})
+        self.assertEqual(response.json(), {'saved': 1, 'unchanged': 0, 'answer_ids': [], 'reassessing': False,
+                                           'restored': False})  # FINAL-V2 amendment 1, 1.3: 'restored' added
         self.assertEqual(self.assert_current(encounter_id, 'after the confirmation'), 'reviewed')
         doc = self.doc(encounter_id)
         self.assertEqual((doc['state'], doc['state_label'], doc['readiness']['approved']), ('reviewed', 'Reviewed', True))

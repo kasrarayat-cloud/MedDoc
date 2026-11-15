@@ -24,7 +24,14 @@ left unresolved only by possible examinations keeps the C3/C-4 structure of its 
   statement's scope again.
 
 Each pin also asserts its input's shape (the aside examination is unverified, current_encounter, and possible), so it
-cannot pass on an input that no longer reaches the path it guards."""
+cannot pass on an input that no longer reaches the path it guards.
+
+DECISIONS D243 (2026-11-14, step q02): the 12 subtests of D87PossibleExaminationIsNoFactSource (43253 and 43240, each beside the six
+asides of ASIDE_WORDS) pinned the review overlay's reading of an
+event_coding@1 record, which FINAL-V2 6.5 retires (read time reads event_coding@2 only, a
+cpt-studio-events@1 record is read as stored and blocked). They retire with it, removed here by a counted
+edit naming their ids; step 5c's own tests carry the same kind of @1 record, asserting 6.5's refusal. Nothing
+else in this suite changed (8.0's ban on editing a retired module's tests yields to 6.5 for exactly these ids)."""
 from __future__ import annotations
 
 from django.test import SimpleTestCase
@@ -85,42 +92,6 @@ def eus_beside_an_aside(words: str, kind: str = 'injection') -> tuple:
                             procedure=a('eus'))
     inv, text = inventory(lines, events=[today, aside, procedure_act])
     return inv, text, line
-
-
-class D87PossibleExaminationIsNoFactSource(Possible):
-    """Problem 1 of the review of D68 (HIGH, a new wrong READY at 62d5bf0dd): the target fact reads the session's DONE
-    examinations and the code's supporting events, never an examination that may be another occasion's."""
-
-    def held_on_its_target(self, code: str, kind: str) -> None:
-        for words, reasons in ASIDE_WORDS:
-            inv, text, line = eus_beside_an_aside(words, kind)
-            reading = events.Reading.of(inv)
-            with self.subTest(code=code, words=words):
-                self.assert_possible(reading, 'E2', reasons)  # the input reaches the path
-                result = run(inv, text, [(code, line)])
-                p = proposal(result, code)  # the outcome first, then the structure that gives it
-                # DECISIONS D136: a drainage naming no place meets no defining target, so it supports no 43240 - D145:
-                # held on it with the drainage's own target question (events._target_hold, its target not established),
-                # and the structure examined still asked after it
-                self.assertEqual((p.status, asked(p), p.support['reason']),
-                                 ('needs_clarification', ['target', 'target'], events.SITE)
-                                 if code == '43240' else ('needs_clarification', ['target'], events.SUPPORTED))
-                targets = [spec.question for spec in p.clarifications if spec.fact == 'target']
-                self.assertEqual(targets[-1] if code == '43240' else question_of(p, 'target'),
-                                 'Endoscopic ultrasound: confirm the structure examined.')
-                self.assertEqual(check(p, 'facts.required').detail, 'Not documented: structure examined.')
-                self.assertEqual(result.completeness['state'], 'incomplete')
-                self.assertEqual(session_shape(reading, 'gi.eus'), ('', True, ('E1',), ('E2',), '', ''))
-                # the stored record lists the possible examination apart from the done one (event_coding, D87)
-                stored = overlay.read_coding(result.completeness)['sessions']['gi.eus']
-                self.assertEqual((stored['examinations'], stored['possible'], stored['unresolved']),
-                                 (['E1'], ['E2'], True))
-
-    def test_d87_43253_beside_a_possible_examination_naming_the_pancreas_asks_the_structure_examined(self):
-        self.held_on_its_target('43253', 'injection')
-
-    def test_d87_43240_beside_a_possible_examination_naming_the_pancreas_asks_the_structure_examined(self):
-        self.held_on_its_target('43240', 'drainage')
 
 
 # --- the currency review, problem 2: the pairing reads VERIFIED current examinations (relations.Context) --------------

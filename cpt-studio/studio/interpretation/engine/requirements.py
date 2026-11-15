@@ -381,12 +381,15 @@ RULES: Mapping[Requirement | Tag, Rule] = MappingProxyType({
     Requirement.SUP_SESSION: Rule((_r(_ACT, _A.SESSION, _BOTH), _r(_SESSION, _A.KIND, _BOTH)),
                                   asks=(_PROCEDURE, _ACT_TARGET),
                                   arms=((frozenset({Template.ROUTE_B}), (_r(_ACT, _A.TARGET_PLACES, _BOTH),)),)),
-    # 4.3 row 7: rows 2-5 on the session's examination; K2 never touches it from another act (HO-7)
+    # 4.3 row 7: rows 2-5 on the session's examination; K2 never touches it from another act (HO-7). Its act-only arm
+    # reads the examination's device for E13 (a digital examination is no session's examination; engine/evaluate's
+    # act_only, repair r4a-2's request R3), so 4.9's closure is exact by role
     Requirement.SUP_SESSION_DONE: Rule((
         _r(_EXAM, _A.KIND, kinds=_EXAMINATION), _r(_EXAM, _A.SESSION, kinds=_EXAMINATION),
         _r(_EXAM, _A.STATUS, kinds=_EXAMINATION), _r(_EXAM, _A.DATE_RELATION, kinds=_EXAMINATION),
         _r(_EXAM, _A.DATE, _HOLD, _EXAMINATION), _r(_EXAM, _A.PERFORMER, kinds=_EXAMINATION),
-        _r(_EXAM, _A.ENTRY, kinds=_EXAMINATION), _r(_EXAM, _A.RESTATEMENTS_ROLE, kinds=_EXAMINATION)),
+        _r(_EXAM, _A.ENTRY, kinds=_EXAMINATION), _r(_EXAM, _A.RESTATEMENTS_ROLE, kinds=_EXAMINATION),
+        _r(_EXAM, _A.TECHNIQUE_DEVICE, kinds=_EXAMINATION)),
         asks=(_DOUBT, _STATUS, _ENTRY, _TIME, _PERFORMER), explains=(_STATUS, _ENTRY)),
     # 4.3 row 8: the pairing table (4.5) over every paired statement, both sides read; 4.6 conditions 1-3 read the
     # statement; an unlisted denial or doubt pairs UNRESOLVED (3.2.6 rule 4). A CONTRADICTION asks rank 1, a DOUBT
@@ -426,7 +429,10 @@ RULES: Mapping[Requirement | Tag, Rule] = MappingProxyType({
         _r(Role.LESION, _A.DISTINCT_FROM), _r(Role.LESION, _A.MULTIPLICITY),
         _r(_WHOLE, _A.KIND, _HOLD), _r(_WHOLE, _A.STATUS, _HOLD), _r(_WHOLE, _A.DATE_RELATION, _HOLD),
         _r(_WHOLE, _A.SESSION, _HOLD), _r(_WHOLE, _A.TARGET_LESION, kinds=_WHOLE_LESION_KINDS),
-        _r(_WHOLE, _A.TARGET_PLACES, kinds=_WHOLE_LESION_KINDS), _r(_WHOLE, _A.TARGET_DUCT, kinds=_STENT_KINDS)),
+        _r(_WHOLE, _A.TARGET_PLACES, kinds=_WHOLE_LESION_KINDS), _r(_WHOLE, _A.TARGET_DUCT, kinds=_STENT_KINDS),
+        # the kept unlisted entries: a synthetic act is a possible whole (DECISIONS D231, coverage C1; repair r4b's
+        # request RQ-2) - a hold only. Its other half, a lesion's distinct_from on the T path, is read above.
+        _r(Role.UNLISTED, None, _HOLD)),
         asks=(Item(Rank.BUNDLING, FactKey.ACT_PART), Item(Rank.BUNDLING, FactKey.ACT_TARGET)),
         explains=(_BUNDLED,)),
     # 4.3 combination, 4.7: the competition (every code), and base_included and base_within (BASE_ARM_TEMPLATES)
@@ -467,10 +473,14 @@ RULES: Mapping[Requirement | Tag, Rule] = MappingProxyType({
     Tag.STATIONS: Rule((_r(_SESSION, _A.STATIONS), _r(_SESSION, _A.REACHED)), asks=(_STATIONS,),
                        explains=(_STATIONS,)),
     Tag.LIMITED: Rule((_r(_SESSION, _A.REACHED), _r(_SESSION, _A.STATIONS)), asks=(_STATIONS,), explains=(_STATIONS,)),
+    # LOWER asks and explains the approach at RANK row 8 beside the extent (DECISIONS D225 P5; repair r4a's R1)
     Tag.LOWER: Rule((_r(_SESSION, _A.REACHED), _r(_SESSION, _A.APPROACH), _r(Role.ANATOMY, _A.TYPE)),
-                    asks=(_EXTENT,), explains=(_EXTENT,)),
+                    asks=(_EXTENT, _PROCEDURE), explains=(_EXTENT, _PROCEDURE)),
     Tag.ENT: Rule((_r(_SESSION, _A.APPROACH), _r(_SESSION, _A.THROUGH), _r(_SESSION, _A.REACHED),
-                   _r(_SESSION, _A.COMPLETION), _r(Role.ANATOMY, _A.TYPE)),
+                   _r(_SESSION, _A.COMPLETION), _r(Role.ANATOMY, _A.TYPE),
+                   # D72 as D217 reads it (engine/classes.py's EXAMINATION part; DECISIONS D229, 4c G)
+                   _r(_EXAM, _A.KIND, kinds=_EXAMINATION), _r(_EXAM, _A.SESSION, kinds=_EXAMINATION),
+                   _r(_EXAM, _A.STATUS, kinds=_EXAMINATION)),
                   asks=(_PROCEDURE, _EXTENT), explains=(_PROCEDURE, _EXTENT)),
     # YIELD: F (negated: "documented as retrieving nothing"); contradicted: conflict:stone_extraction (rank 1)
     Tag.YIELD: Rule((_e(_A.YIELD),), asks=(Item(Rank.YIELD, FactKey.ACT_YIELD),),

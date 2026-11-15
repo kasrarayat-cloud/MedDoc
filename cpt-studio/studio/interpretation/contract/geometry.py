@@ -1,7 +1,7 @@
 """Where pass 1's citations sit (docs/gemini-migration/FINAL-V2.md 1.2 rules 6-7, 1.5, 3.1 I2, I3 and G1-G6; step 1c of
 8.1; DECISIONS D198, D199 and D207): words located over consecutive units, runs of units and their sentence closures,
-section spans and containment, and the link geometry of every source. Every check here proves WHERE a source is, never
-what it means (P4).
+section spans and containment, and the link geometry of every source; and the letter-or-digit runs of a span R1 kept
+(D261). Every check here proves WHERE a source is, never what it means (P4).
 
 **I2, words over consecutive units** [R:CO-4]. ``bind_words`` locates a source's ``words`` in the revision slice from its
 first unit's start to its last unit's end: the exact tier first, any whitespace run (line breaks included) matching any
@@ -65,6 +65,13 @@ acts' units, of this session or another, is ``extent_inferred``; there is no sec
 across several parts passes. **G6** (``restatement_valid``): a restatement's units are a valid run and no event's anchor
 units (``anchored_units``: any event's, D198 keeps the broad reading), and a ``title`` restatement lies in N0 or in a
 section start; any other restatement is ignored.
+
+**R1's kept runs** (``word_runs``; DECISIONS D261 and its note). The letter-or-digit runs of a span R1 kept - C-10's
+``kept_words`` (FINAL-V2 4.6 condition 4), which engine/assess hands engine/evaluate when its caller's Integrity gives
+this function (jobs._Integrity.word_runs) - so a provider's quote that reaches past a statement's covering words only by
+a stop or a space covers it, as v1's within_words read each letter or digit of a kept span. A run is cut at the span's
+edges; ``str.isalnum`` alone decides a character. The runs are R1's result, computed before and outside the per-code
+rule; nothing here reads what a run says.
 
 **Every failure is a closed-list reason** (types.Reason) that leaves the fact UNRESOLVED when settle applies it (3.3 row
 4). Nothing here sets, changes or removes a value, creates a fact, or makes anything READY; a malformed citation is
@@ -361,6 +368,38 @@ def locate_anchor(layout: Layout, anchor: Anchor) -> AnchorCitation:
         return AnchorCitation(units, span, kind.words, status.words, None, (Reason.ANCHOR_WORDS,))
     place = Span(min(kind.place.start, status.place.start), max(kind.place.end, status.place.end))
     return AnchorCitation(units, span, kind.words, status.words, place, ())
+
+
+# --- R1's kept runs: C-10's kept_words (DECISIONS D261) ----------------------------------------------------------------
+
+
+def word_runs(text: str, span: Span) -> tuple[Span, ...]:
+    """The letter-or-digit runs of a kept span (DECISIONS D261 and its note; C-10's ``kept_words``, FINAL-V2 4.6 condition
+    4): each maximal run of characters inside ``span`` for which ``str.isalnum`` holds - the characters v1's
+    within_words read of a kept span - as a Span of revision offsets, in document order. A run is cut at the span's
+    edges, so a span inside a word gives the part of the word it holds; a space, a stop or any other character that is no
+    letter or digit separates two runs and is in none. Character classes only (5.7 measure 4, SingleCharacterGeometry):
+    no word, no list, no pattern; one character read at a time. () for an empty span or one holding no letter or digit.
+    TypeError for a text that is not a str or a span that is not a contract Span; ValueError for a span reaching past
+    the text (a caller's breach: R1 keeps only exact slices of the revision)."""
+    if not isinstance(text, str):
+        raise TypeError('The revision text must be a str.')
+    if not isinstance(span, Span):
+        raise TypeError('A kept span is a contract Span.')
+    if span.end > len(text):
+        raise ValueError('A kept span lies inside the revision text.')
+    runs: list[Span] = []
+    start: int | None = None
+    for index in range(span.start, span.end):
+        if text[index].isalnum():
+            if start is None:
+                start = index
+        elif start is not None:
+            runs.append(Span(start, index))
+            start = None
+    if start is not None:
+        runs.append(Span(start, span.end))
+    return tuple(runs)
 
 
 # --- G2 and containment: sections ---------------------------------------------------------------------------------------

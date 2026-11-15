@@ -19,6 +19,29 @@ What is proved here:
   (HO-5) over THE family table K2 reads too (requirements_table.FAMILY_KINDS, D191; triage 2d#1): P-UNKNOWN-KIND over
   every (family, kind) of it, read off that table so a narrowed copy turns red; apart_by_lesion and apart_by_place
   only on established targets and rejected pair controls in both directions, SC-B's short list held;
+- DECISIONS D220 (repair r2d; 3d PMONO, 4b F5) for places: apart_by_place reads EVERY pair control between the two
+  objects, whatever place it asks about - every control asked of either object, as the FactSet cannot tell which
+  object a control on a list was generated for - and "apart" needs every such control rejected and every current
+  member of the other covered by a rejected control. 4b's F5 case and 3d's single-target SC-B case stay held when the
+  member is deleted (9.4's weakening, the controls left as they were), through coverage and pairing too; P-MONO of both
+  predicates over generated scenes whose controls come from the full lists, its one release named (a deleted member
+  that overlaps the other's place without being compatible with it, its control rejected: repair r2d's question Q2,
+  ruled by D245); the place reading is never more apart than 4.2's before D220, and differs only through an unrejected
+  control; on the pairing and coverage fixtures as they were at the base - every call their tests made there, frozen as
+  data (repair r2d-2; refute-r2d-r1 RF2), so that a test a later step adds to either module never reaches it - the
+  predicates answer as before; and on a settled FactSet whose controls come from the full lists the place arm holds a
+  pair 4.2's reading set apart when a control another pair made, asked of one of the two objects, was not rejected:
+  repair r2d's question Q1, ruled by D236 (as built, named in 6a's P-MONO) (refute-r2d-r1 RF1, RF3);
+- DECISIONS D235 (this repair; refute-r2d-r2 RL1): apart_by_lesion reads only the lesion pair controls between the two
+  objects as their target lesions name them, (a, lb) and (b, la) - 4.2's lesion reading, on every generated pair - so
+  a control made for another pair never holds the pair: RL1's scene (its lesion_arm probe) sets the biopsy E4 apart
+  from the snare E3 (coverage T) and 45380 carries no bundling hold, with the every-control scan as positive control;
+- DECISIONS D244 question Q-N1 option (b) (this repair): a session fact K3 demoted (session_unreachable) is possibly
+  every session whose reach holds a place the act may be at (catalogue.FAMILY_REACH as K3 reads it; a family it does
+  not list and a place in no region judged by no reach) besides its claimed session and its own options, through the
+  builder's options and so through possibly and every rule reading the fact; a session fact unresolved without a K3
+  finding is read as before; 6c's N1 (ii) and (iii) hold 43235 base_included, with the widening switched off as
+  positive control;
 - effective(): L1 re-judged on the stored literals of every timing fact against the effective date - a member's date,
   none, a coarse literal - demoting only; the re-judge equals the claim-time rule (contract/consistency.rejudge,
   imported here only) over the grid relation x precision x literal x service date (D193);
@@ -27,26 +50,33 @@ Every document here is written for this test: no real patient, no development or
 """
 from __future__ import annotations
 
+import dataclasses
 import datetime
 import enum
 import hashlib
+import importlib
 import inspect
 import json
 import os
+import random
 import subprocess
 import sys
+import types
 import typing
+import unittest
 from pathlib import Path
+from unittest import mock
 
 from django.test import SimpleTestCase
 
 from studio.interpretation import store
 from studio.interpretation.contract import extract_read
 from studio.interpretation.contract import types as ct
+from studio.interpretation.engine import anatomy
 from studio.interpretation.engine import facts as F
 from studio.interpretation.engine import reading as RD
 from studio.interpretation.engine import requirements_table as RT
-from studio.interpretation.engine.types import Cited, Fact, FactSet, Id, IdFamily, IsoDate, Span
+from studio.interpretation.engine.types import Anchor, Cited, Fact, FactSet, Id, IdFamily, IsoDate, Span
 from tests.v2.test_types import measure_4
 
 APP = Path(__file__).resolve().parents[2]
@@ -236,8 +266,14 @@ def content(ledger, *, encounter_=None, people=(), sections=(), sessions=(), ana
 
 
 def report(unlisted=0) -> dict:
-    return {'counts': {}, 'reasons': {}, 'doubts': [], 'health': {}, 'coherence': {},
-            'unlisted': {'kept': unlisted, 'dropped': []}, 'usage': {'interpretation': {}, 'appraisal': {}}}
+    """A verification report with nothing counted, in settle's records (contract/types' Health, Coherence and Usage:
+    the store is closed to them since DECISIONS D229, so an empty object is no longer a report)."""
+    def zero(record) -> dict:
+        return {field.name: 0 for field in dataclasses.fields(record)}
+
+    return {'counts': {}, 'reasons': {}, 'doubts': [], 'health': {**zero(ct.Health), 'refused': []},
+            'coherence': zero(ct.Coherence), 'unlisted': {'kept': unlisted, 'dropped': []},
+            'usage': {'interpretation': zero(ct.Usage), 'appraisal': zero(ct.Usage)}}
 
 
 def stored(events: dict) -> store.StoredInventoryV2:
@@ -637,6 +673,26 @@ class CitedTests(SimpleTestCase):
         self.assertEqual(F.fact(R, E2, A.KIND).counter, ())  # supported
         self.assertEqual(F.fact(R, E3, A.PERFORMER).counter, ())  # never appraised
 
+    def test_a_supports_verdict_naming_approximate_alone_counters_nothing(self):
+        # DECISIONS D224 (1.3): pass 2's approximate is recorded and never lowers a supported claim, so a supports
+        # verdict naming approximate alone holds no counter evidence (r3a's R-B, applied by the integration), and the
+        # fact resting on it stays established; beside another qualifier the verdict is still read as qualified (D186)
+        events = colonoscopy()
+        k = Ledger()
+        k.claims = events['claims']
+        e5 = events['events'][4]
+        cited = [src(['S11'])]
+        e5['kind'] = est(k, 'E5', 'kind', 'biopsy', cited)
+        e5['kind']['appraisal']['qualifiers'] = ['approximate']
+        k.claims[-1]['verdict']['qualifiers'] = ['approximate']  # the claim est() just stored, as settle stores it
+        e5['session'] = unsettled(k, 'E5', 'session', 'X1', cited, verdict='supports',
+                                  qualifiers=['approximate', 'conditional'],
+                                  reasons=('appraisal_qualified:conditional',), evidence=['S10'])
+        R = F.factset(view(events))
+        self.assertEqual(F.fact(R, E5, A.KIND).counter, ())
+        self.assertIs(F.fact(R, E5, A.KIND).result, ct.Result.SUPPORTED)
+        self.assertEqual(F.fact(R, E5, A.SESSION).counter, (unit_span(10),))
+
 
 # --- the predicates (4.2) ------------------------------------------------------------------------------------------------
 
@@ -825,6 +881,1050 @@ class ApartTests(SimpleTestCase):
                 self.assertFalse(F.apart_by_lesion(trimmed, E2, E3))
 
 
+# --- DECISIONS D220 and D235: the pair controls between the two objects (repair r2d; 3d PMONO, 4b F5; RL1) ------------
+#
+# 9.4's weakening acts on the FactSet ("a deleted member of a multi-valued list ..., the list's completeness claim and
+# pair controls left as they were"), so these scenes are FactSets built directly; every value is synthetic.
+
+LM = ct.Landmark
+PERFORMED = ct.Status.PERFORMED
+L3 = Id(IdFamily.LESION, 3)
+E6 = Id(IdFamily.EVENT, 6)
+PLACES, LESION = A.TARGET_PLACES, A.TARGET_LESION
+
+
+def plain(result, value, state) -> Fact:
+    return Fact(result=result, value=value, state=state, options=(), reasons=(), spans=())
+
+
+def sup(value) -> Fact:
+    return plain(ct.Result.SUPPORTED, value, ct.FactState.SUPPORTED)
+
+
+def neg(value) -> Fact:
+    return plain(ct.Result.NEGATED, value, ct.FactState.NEGATED)
+
+
+def unresolved(value) -> Fact:
+    return plain(ct.Result.UNRESOLVED, value, ct.FactState.SUPPORTED)
+
+
+def doubted(value) -> Fact:
+    return plain(ct.Result.UNKNOWN, value, ct.FactState.SUPPORTED)
+
+
+def scene(events, *, lesions=None, controls=None, sessions=None) -> FactSet:
+    """A FactSet of ``events`` ({Id: {Attribute: (Fact, ...)}}), with their lesions, pair controls and sessions."""
+    return FactSet(encounter={}, people={}, sections={}, sessions=sessions or {}, anatomy={}, lesions=lesions or {},
+                   events=events, unlisted=(), pair_controls=controls or {}, completeness={},
+                   anchors={subject: Anchor(units=(Span(100 * subject.number, 100 * subject.number + 40),),
+                                            kind_words=None, status_words=None) for subject in events})
+
+
+def placed(*places, lesion=None) -> dict:
+    """What apart_* reads of an event: its target places (each supported) and its target lesion (or a silent slot)."""
+    return {PLACES: tuple(sup(place) for place in places), LESION: (sup(lesion) if lesion is not None else F.SILENT,)}
+
+
+def replaced(R, subject, attribute, facts) -> FactSet:
+    """``R`` with ``subject``'s ``attribute`` (an event's or a lesion's) replaced by ``facts``; everything else - the
+    pair controls first - left as it was."""
+    table = R.lesions if subject.family is IdFamily.LESION else R.events
+    copy = {key: dict(value) for key, value in table.items()}
+    copy[subject][attribute] = tuple(facts)
+    if subject.family is IdFamily.LESION:
+        return scene(R.events, lesions=copy, controls=R.pair_controls, sessions=R.sessions)
+    return scene(copy, lesions=R.lesions, controls=R.pair_controls, sessions=R.sessions)
+
+
+def deleted(R, subject, index, attribute=PLACES) -> FactSet:
+    """9.4's weakening: member ``index`` of the list deleted, the pair controls left as they were."""
+    members = list((R.lesions if subject.family is IdFamily.LESION else R.events)[subject][attribute])
+    del members[index]
+    return replaced(R, subject, attribute, members)
+
+
+def before_place(R, a, b) -> bool:
+    """4.2's apart_by_place as built before D220 (base ffb2d083's facts.py, by value): only the controls asking about
+    the other object's CURRENT places are read."""
+    first, second = F._supported(R, a, PLACES), F._supported(R, b, PLACES)
+    if first is None or second is None:
+        return False
+    places_a = [place for place in first if isinstance(place, LM)]
+    places_b = [place for place in second if isinstance(place, LM)]
+    if len(places_a) != len(first) or len(places_b) != len(second):
+        return False
+    if not all(anatomy.disjoint(one, other) for one in places_a for other in places_b):
+        return False
+    return (all(R.pair_controls.get((a, PLACES, place)) is True for place in places_b)
+            and all(R.pair_controls.get((b, PLACES, place)) is True for place in places_a))
+
+
+def before_lesion(R, a, b) -> bool:
+    """4.2's apart_by_lesion as built before D220 (base ffb2d083's facts.py, by value)."""
+    first, second = F.fact(R, a, LESION), F.fact(R, b, LESION)
+    if first.result is not ct.Result.SUPPORTED or second.result is not ct.Result.SUPPORTED:
+        return False
+    la, lb = first.value, second.value
+    if not isinstance(la, Id) or not isinstance(lb, Id) or la == lb:
+        return False
+    distinct = any(F.holds(member, lb) for member in F.members(R, la, A.DISTINCT_FROM)) or any(
+        F.holds(member, la) for member in F.members(R, lb, A.DISTINCT_FROM))
+    return (distinct and R.pair_controls.get((a, LESION, lb)) is True
+            and R.pair_controls.get((b, LESION, la)) is True)
+
+
+def unrejected_between(R, a, b, attribute) -> bool:
+    """Whether a pair control asked of ``a`` or ``b`` about ``attribute`` was not rejected (D220's added reading)."""
+    return any(not rejected for (subject, about, _value), rejected in R.pair_controls.items()
+               if about is attribute and subject in (a, b))
+
+
+def performed(kind, *places, lesion=None) -> dict:
+    """An act of ``kind`` as coverage and pairing read it: established performed in X1, on the date of service, by the
+    documenting team, entered by the documenting clinician, with its target places and lesion (``placed``)."""
+    facts = {A.KIND: (sup(kind),), A.STATUS: (sup(PERFORMED),), A.SESSION: (sup(X1),),
+             A.DATE_RELATION: (sup(ct.DateRelation.ON_DATE_OF_SERVICE),),
+             A.PERFORMER: (sup(ct.Performer.DOCUMENTING_TEAM),), A.ENTRY: (sup(ct.Owner.DOCUMENTING_CLINICIAN),)}
+    facts.update(placed(*places, lesion=lesion))
+    return facts
+
+
+def full_list_controls(events, pairs, unclear=()) -> dict:
+    """The place pair controls contract/claims.pair() makes from the FULL lists of ``pairs`` (claims.py's ``pair``: each
+    object asked about every place of the other that none of its own places is compatible with, in both directions; one
+    claim, so one control, per question), each rejected but those in ``unclear``."""
+    controls = {}
+    for first, second in pairs:
+        for asked, other in ((first, second), (second, first)):
+            own = [member.value for member in events[asked][PLACES]]
+            for member in events[other][PLACES]:
+                if own and not any(anatomy.compatible(member.value, place) for place in own):
+                    controls[(asked, PLACES, member.value)] = (asked, PLACES, member.value) not in unclear
+    return controls
+
+
+def lesion_pair_controls(events, pairs, unclear=()) -> dict:
+    """The lesion pair controls contract/claims.pair() makes for ``pairs`` (claims.py's ``pair``: each object asked
+    about the other's target lesion when the two differ, in both directions; one claim, so one control, per question),
+    each rejected but those in ``unclear``."""
+    controls = {}
+    for first, second in pairs:
+        for asked, other in ((first, second), (second, first)):
+            mine, theirs = events[asked][LESION][0].value, events[other][LESION][0].value
+            if mine is not None and theirs is not None and mine != theirs:
+                controls[(asked, LESION, theirs)] = (asked, LESION, theirs) not in unclear
+    return controls
+
+
+class D220Tests(SimpleTestCase):
+    """DECISIONS D220: "apart" needs every pair control between the two objects rejected, whatever place it asks about,
+    and every current member of the other covered by a rejected control; DECISIONS D235: the lesion arm reads only the
+    lesion controls between the two objects, (a, lb) and (b, la)."""
+
+    def test_4b_f5_a_deleted_members_unrejected_control_keeps_the_pair_together(self):
+        # refute-4b-r2 F5 (its q4_case, seed 11, trial 36): a snare E3 at the liver on L2 and a biopsy E4 at a lymph
+        # node and the duodenum; "This act was done in the duodenum." asked of the snare was NOT rejected, the other two
+        # were
+        controls = {(E3, PLACES, LM.LYMPH_NODE): True, (E3, PLACES, LM.DUODENUM): False, (E4, PLACES, LM.LIVER): True}
+        R = scene({E3: placed(LM.LIVER, lesion=L2), E4: placed(LM.LYMPH_NODE, LM.DUODENUM)}, controls=controls)
+        weak = deleted(R, E4, 1)  # the duodenum deleted, the controls left as they were
+        self.assertEqual([member.value for member in F.members(weak, E4, PLACES)], [LM.LYMPH_NODE])
+        for x, y in ((E3, E4), (E4, E3)):
+            with self.subTest(pair=(x, y)):
+                self.assertFalse(F.apart_by_place(R, x, y))
+                self.assertTrue(before_place(weak, x, y))  # the defect: 4.2's reading before D220 sets it apart
+                self.assertFalse(F.apart_by_place(weak, x, y))  # D220: the duodenum's control still holds the pair
+        # with every control rejected the pair is apart, its member deleted or not: the controls decide
+        rejected = scene(R.events, controls={key: True for key in controls})
+        self.assertTrue(F.apart_by_place(rejected, E3, E4))
+        self.assertTrue(F.apart_by_place(deleted(rejected, E4, 1), E3, E4))
+
+    def test_4b_f5_through_coverage_the_biopsy_stays_held(self):
+        # the same scene as coverage reads it (refute-4b-r2's fixture shape): an EGD X1 with its done examination, the
+        # snare E3 and the biopsy E4; before the deletion E4 is U (biopsy_of_removed_lesion asked), and it stays U
+        from studio.interpretation.engine import coverage as C
+
+        def act(kind, *places, lesion=None):
+            facts = {A.KIND: (sup(kind),), A.STATUS: (sup(PERFORMED),), A.SESSION: (sup(X1),),
+                     A.DATE_RELATION: (sup(ct.DateRelation.ON_DATE_OF_SERVICE),),
+                     A.PERFORMER: (sup(ct.Performer.DOCUMENTING_TEAM),),
+                     A.ENTRY: (sup(ct.Owner.DOCUMENTING_CLINICIAN),)}
+            facts.update(placed(*places, lesion=lesion))
+            return facts
+
+        lesions = {L2: {A.PLACES: (sup(LM.LIVER),), A.DISTINCT_FROM: (), A.SAME_AS: (),
+                        A.MULTIPLICITY: (sup(ct.Multiplicity.SINGLE),)}}
+        sessions = {X1: {A.KIND: (sup(ct.SessionKind.EGD),), A.REACHED: (), A.DEVICE_REACHED: (), A.STATIONS: ()}}
+        controls = {(E3, PLACES, LM.LYMPH_NODE): True, (E3, PLACES, LM.DUODENUM): False, (E4, PLACES, LM.LIVER): True}
+        R = scene({E1: act(ct.Kind.EXAMINATION), E3: act(ct.Kind.SNARE, LM.LIVER, lesion=L2),
+                   E4: act(ct.Kind.BIOPSY, LM.LYMPH_NODE, LM.DUODENUM)}, lesions=lesions, controls=controls,
+                  sessions=sessions)
+        weak = deleted(R, E4, 1)
+        for name, given in (('settled', R), ('the duodenum deleted', weak)):
+            with self.subTest(name):
+                self.assertIs(C.verdict(given, E4).truth, C.Truth.U)
+                self.assertTrue(C.doubted(given, E4))
+        with mock.patch.object(F, 'apart_by_place', before_place):  # the reading before D220: the release F5 found
+            self.assertIs(C.verdict(weak, E4).truth, C.Truth.T)
+
+    def test_3d_sc_b_single_target_case_holds(self):
+        # refute-3d-r2 PMONO, its single-target SC-B case (through pairing.py's facts.apart_by_place): D "No polyps
+        # were removed from the hepatic flexure." filed [hepatic flexure]; A a cold snare filed [ascending colon,
+        # cecum]; "This statement is about snares in the cecum." was NOT rejected; then A's cecum deleted, the controls
+        # left as they were
+        from studio.interpretation.engine import pairing as P
+        from studio.interpretation.engine import requirements as rq
+
+        common = {A.KIND: (sup(ct.Kind.SNARE),), A.SESSION: (sup(X1),),
+                  A.DATE_RELATION: (sup(ct.DateRelation.ON_DATE_OF_SERVICE),)}
+        statement = {**common, A.STATUS: (neg(PERFORMED),), A.SCOPE_BREADTH: (sup(ct.Breadth.SINGLE_TARGET),),
+                     PLACES: (sup(LM.HEPATIC_FLEXURE),)}
+        snare = {**common, A.STATUS: (sup(PERFORMED),), A.PERFORMER: (sup(ct.Performer.DOCUMENTING_TEAM),),
+                 A.TECHNIQUE_DEVICE: (sup(ct.Device.COLD_SNARE),), PLACES: (sup(LM.ASCENDING_COLON), sup(LM.CECUM))}
+        controls = {(E1, PLACES, LM.ASCENDING_COLON): True, (E1, PLACES, LM.CECUM): False,
+                    (E2, PLACES, LM.HEPATIC_FLEXURE): True}
+        R = scene({E1: statement, E2: snare}, controls=controls,
+                  sessions={X1: {A.KIND: (sup(ct.SessionKind.COLONOSCOPY),)}})
+        weak = deleted(R, E2, 1)
+        self.assertTrue(before_place(weak, E1, E2))  # the release 3d found
+        for name, given in (('settled', R), ('the cecum deleted', weak)):
+            with self.subTest(name):
+                self.assertFalse(F.apart_by_place(given, E1, E2))
+                pair = P.relation(given, E1, E2)
+                self.assertIs(pair.relation, P.Relation.UNRESOLVED)
+                self.assertIs(pair.row, P.Row.TARGET)
+                self.assertEqual(P.item(pair).fact, rq.FactKey.STATEMENT_SCOPE)
+
+    def test_every_place_control_asked_of_either_object_is_read_whatever_place_it_asks(self):
+        # the stored row: the snare E2 (sigmoid colon) and the rectal biopsy denial E3 are apart; then "This act was
+        # done in the transverse colon." - asked of the snare for the biopsy E5's place - is left unclear by pass 2
+        self.assertTrue(F.apart_by_place(F.factset(view(colonoscopy())), E2, E3))
+        events = colonoscopy()
+        k = Ledger()
+        k.claims = events['claims']
+        k.pair('E2', 'target.places', 'transverse_colon', ['S6'], 'unclear')
+        R = F.factset(view(events))
+        self.assertIs(R.pair_controls[(E2, PLACES, LM.TRANSVERSE_COLON)], False)
+        for x, y in ((E2, E3), (E3, E2)):
+            with self.subTest(pair=(x, y)):
+                self.assertTrue(before_place(R, x, y))  # 4.2's reading before D220 (repair r2d's question Q1)
+                self.assertFalse(F.apart_by_place(R, x, y))
+        # rejected, the pair is apart again; and the biopsy E5's own unrejected rectum control (SC-B) never reaches
+        # the pair E2/E3: a control asked of a third object is not between them
+        events = colonoscopy()
+        k.claims = events['claims']
+        k.pair('E2', 'target.places', 'transverse_colon', ['S6'], 'contradicts')
+        R = F.factset(view(events))
+        self.assertIs(R.pair_controls[(E5, PLACES, LM.RECTUM)], False)
+        self.assertTrue(F.apart_by_place(R, E2, E3))
+        self.assertTrue(F.apart_by_place(R, E3, E2))
+
+    def test_d235_the_lesion_arm_reads_only_the_controls_between_the_two_objects(self):
+        # DECISIONS D235 (refute-r2d-r2 RL1): target.lesion is single-valued and no 9.4 weakening deletes or changes it,
+        # so the lesion pair controls between E2 (L1) and E3 (L2) are exactly (E2, L2) and (E3, L1) - their target
+        # lesions name them. A lesion control asked of either about L3, a lesion only E4 names (made for another pair),
+        # is not read, rejected or not: 4.2's lesion reading
+        lesions = {L1: {A.DISTINCT_FROM: (sup(L2),)}, L2: {}, L3: {}}
+        controls = {(E2, LESION, L2): True, (E3, LESION, L1): True}
+        events = {E2: placed(lesion=L1), E3: placed(lesion=L2), E4: placed(lesion=L3)}
+        R = scene(events, lesions=lesions, controls=controls)
+        self.assertTrue(F.apart_by_lesion(R, E2, E3))
+        for asked in (E2, E3):
+            for rejected in (False, True):
+                given = scene(events, lesions=lesions, controls={**controls, (asked, LESION, L3): rejected})
+                with self.subTest(asked=asked, rejected=rejected):
+                    self.assertTrue(before_lesion(given, E2, E3))
+                    self.assertTrue(F.apart_by_lesion(given, E2, E3))
+                    self.assertTrue(F.apart_by_lesion(given, E3, E2))
+                    # the every-control scan, which stays for multi-valued sets (D235), reads that control
+                    self.assertIs(F.apart_by_controls(given, E2, E3, LESION, (L1,), (L2,)), rejected)
+        # asked of a third object: not between E2 and E3
+        given = scene(events, lesions=lesions, controls={**controls, (E4, LESION, L1): False})
+        self.assertTrue(F.apart_by_lesion(given, E2, E3))
+        # a between control not rejected keeps the pair together, in both directions
+        for between in controls:
+            given = scene(events, lesions=lesions, controls={**controls, between: False})
+            with self.subTest(unrejected=between):
+                self.assertFalse(F.apart_by_lesion(given, E2, E3))
+                self.assertFalse(F.apart_by_lesion(given, E3, E2))
+        # each current lesion still needs its own rejected control (a control not generated is not rejected)
+        for missing in controls:
+            given = scene(events, lesions=lesions, controls={key: True for key in controls if key != missing})
+            with self.subTest(missing=missing):
+                self.assertFalse(F.apart_by_lesion(given, E2, E3))
+
+    def test_d235_rl1_a_biopsy_of_another_polyp_is_apart_and_45380_carries_no_bundling_hold(self):
+        # refute-r2d-r2 RL1 (its lesion_arm probe; DECISIONS D235): one colonoscopy, three polyps, distinct_from
+        # supported between every two; a cold snare E3 of L1 in the sigmoid colon, a forceps biopsy E4 of L2 also in the
+        # sigmoid colon, a cold snare E5 of L3 in the transverse colon. The pair controls are exactly claims.pair()'s
+        # place and lesion rule over D211's pairs (the biopsy with each snare), every one rejected but "This act was
+        # done to lesion L3.", asked of the biopsy for the pair (E4, E5) and left unclear
+        from studio.interpretation.engine import coverage as C
+
+        sessions = {X1: {A.KIND: (sup(ct.SessionKind.COLONOSCOPY),), A.REACHED: (), A.DEVICE_REACHED: (),
+                         A.STATIONS: ()}}
+
+        def polyp(place, *others):
+            return {A.PLACES: (sup(place),), A.DISTINCT_FROM: tuple(sup(other) for other in others), A.SAME_AS: (),
+                    A.MULTIPLICITY: (sup(ct.Multiplicity.SINGLE),)}
+
+        def snare(place, lesion):
+            return {**performed(ct.Kind.SNARE, place, lesion=lesion), A.TECHNIQUE_DEVICE: (sup(ct.Device.COLD_SNARE),)}
+
+        lesions = {L1: polyp(LM.SIGMOID_COLON, L2, L3), L2: polyp(LM.SIGMOID_COLON, L1, L3),
+                   L3: polyp(LM.TRANSVERSE_COLON, L1, L2)}
+        events = {E1: performed(ct.Kind.EXAMINATION), E3: snare(LM.SIGMOID_COLON, L1),
+                  E4: performed(ct.Kind.BIOPSY, LM.SIGMOID_COLON, lesion=L2), E5: snare(LM.TRANSVERSE_COLON, L3)}
+        pairs, unclear = ((E4, E3), (E4, E5)), {(E4, LESION, L3)}
+        R = scene(events, lesions=lesions, sessions=sessions,
+                  controls={**full_list_controls(events, pairs, unclear), **lesion_pair_controls(events, pairs,
+                                                                                                unclear)})
+        self.assertEqual(dict(R.pair_controls), {
+            (E4, LESION, L1): True, (E3, LESION, L2): True, (E4, PLACES, LM.TRANSVERSE_COLON): True,
+            (E4, LESION, L3): False, (E5, PLACES, LM.SIGMOID_COLON): True, (E5, LESION, L2): True})
+        for x, y in ((E4, E3), (E3, E4)):
+            with self.subTest(pair=(x, y)):
+                self.assertTrue(F.apart_by_lesion(R, x, y))  # L1 and L2: the controls between them rejected
+                self.assertFalse(F.apart_by_place(R, x, y))  # both in the sigmoid colon: only the lesions differ
+        self.assertTrue(F.apart_by_place(R, E4, E5))  # the pair the unclear control was made for, apart either way
+        self.assertIs(C.verdict(R, E4).truth, C.Truth.T)  # the biopsy is its own act, never the snared polyp's
+        self.assertFalse(C.doubted(R, E4))
+        self.assertEqual(C.bundling('45380', (E4,), R), ())  # 45380 carries no bundling hold
+
+        # the positive control: the every-control scan as repair r2d-2 built it (D220's reading of the lesion arm)
+        # holds the biopsy against the snare through the control made for (E4, E5) - the defect RL1 found
+        def scanned(R_, a, b):
+            first, second = F.fact(R_, a, LESION), F.fact(R_, b, LESION)
+            if not (F.holds(first, first.value) and F.holds(second, second.value)) or first.value == second.value:
+                return False
+            distinct = any(F.holds(member, second.value) for member in F.members(R_, first.value, A.DISTINCT_FROM))
+            distinct = distinct or any(F.holds(member, first.value)
+                                       for member in F.members(R_, second.value, A.DISTINCT_FROM))
+            return distinct and F.apart_by_controls(R_, a, b, LESION, (first.value,), (second.value,))
+
+        with mock.patch.object(F, 'apart_by_lesion', scanned):
+            self.assertIs(C.verdict(R, E4).truth, C.Truth.U)
+            self.assertEqual([(held.fact, held.subject) for held in C.bundling('45380', (E4,), R)],
+                             [('act_target', E4)])
+
+    def test_apart_by_controls(self):
+        controls = {(E2, PLACES, LM.RECTUM): True, (E3, PLACES, LM.SIGMOID_COLON): True,
+                    (E2, LESION, L2): False, (E4, PLACES, LM.CECUM): False}
+        R = scene({E2: placed(LM.SIGMOID_COLON), E3: placed(LM.RECTUM)}, controls=controls)
+        self.assertTrue(F.apart_by_controls(R, E2, E3, PLACES, (LM.SIGMOID_COLON,), (LM.RECTUM,)))
+        self.assertTrue(F.apart_by_controls(R, E3, E2, PLACES, (LM.RECTUM,), (LM.SIGMOID_COLON,)))
+        # a current member no rejected control covers
+        self.assertFalse(F.apart_by_controls(R, E2, E3, PLACES, (LM.SIGMOID_COLON,), (LM.RECTUM, LM.CECUM)))
+        # the attribute's own controls only: E2's unrejected lesion control does not touch its places, and does
+        # touch its lesions
+        self.assertFalse(F.apart_by_controls(R, E2, E3, LESION, (), ()))
+        self.assertTrue(F.apart_by_controls(R, E3, E5, LESION, (), ()))
+        with self.assertRaises(ValueError):
+            F.apart_by_controls(R, E2, E3, A.KIND, (), ())
+
+    def test_never_more_apart_than_before_and_different_only_through_an_unrejected_control(self):
+        # over generated settled scenes (controls from the full lists, as contract/claims.pair() makes them): D220's
+        # place reading sets nothing apart that 4.2's reading before D220 did not, and every pair it no longer sets
+        # apart has an unrejected control asked of one of the two objects (repair r2d's question Q1, D236); the lesion
+        # arm IS 4.2's reading on every pair (D235), also where the every-control scan would read a lesion control
+        # made for another pair (refute-r2d-r2 RL1)
+        rnd = random.Random(220)
+        changed = scanned = 0
+        for _ in range(150):
+            R = generated(rnd)
+            for x in R.events:
+                for y in R.events:
+                    if x == y:
+                        continue
+                    now, was = F.apart_by_place(R, x, y), before_place(R, x, y)
+                    self.assertLessEqual(now, was)
+                    if now != was:
+                        changed += 1
+                        self.assertTrue(unrejected_between(R, x, y, PLACES))
+                    lesion_now, lesion_was = F.apart_by_lesion(R, x, y), before_lesion(R, x, y)
+                    self.assertIs(lesion_now, lesion_was)
+                    if lesion_was and unrejected_between(R, x, y, LESION):
+                        scanned += 1  # D220's every-control scan would have held this pair (RL1's class)
+        self.assertGreater(changed, 0)  # the generator reaches the place class
+        self.assertGreater(scanned, 0)  # and RL1's lesion class, where the lesion arm stays 4.2's reading
+
+    def test_p_mono_under_9_4s_weakenings(self):
+        # P-MONO of both predicates (9.4) over generated settled scenes and every weakening of each: a deleted list
+        # member (the pair controls left as they were), a member unresolved or doubted, a target lesion unresolved, a
+        # distinct_from member deleted or unresolved, a rejected control not rejected. No pair is set apart that was
+        # not before - but for the one named release (repair r2d's question Q2): a deleted member that overlaps a place
+        # of the other object without being compatible with it (engine/anatomy: neither compatible nor disjoint), its
+        # control on the other object REJECTED, so the controls do set the two apart and the deletion removed only the
+        # overlap
+        rnd = random.Random(9_4)
+        releases = defects = 0
+        for _ in range(120):
+            R = generated(rnd)
+            before = {(name, x, y): predicate(R, x, y)
+                      for name, predicate in (('place', F.apart_by_place), ('lesion', F.apart_by_lesion))
+                      for x in R.events for y in R.events if x != y}
+            old = {(x, y): before_place(R, x, y) for x in R.events for y in R.events if x != y}
+            for weakening, weak in weakenings(R):
+                for (name, x, y), was in before.items():
+                    now = (F.apart_by_place if name == 'place' else F.apart_by_lesion)(weak, x, y)
+                    if (name == 'place' and not old[(x, y)] and before_place(weak, x, y)
+                            and not overlap_release(R, weakening, x, y)):
+                        defects += 1  # 4.2's reading before D220 released it: D220's class
+                    if now and not was:
+                        releases += 1
+                        with self.subTest(weakening=weakening, pair=(name, x, y)):
+                            self.assertEqual(name, 'place')
+                            self.assertTrue(overlap_release(R, weakening, x, y))
+        self.assertGreater(defects, 0)  # the generator reaches D220's class: every one stays held
+        self.assertGreater(releases, 0)  # and reaches the named release
+
+    def test_on_the_pairing_and_coverage_fixtures_the_predicates_answer_as_before(self):
+        # the done-when: on the pairing and coverage fixtures as they were at the base - every call the base's
+        # tests.v2.test_pairing and tests.v2.test_coverage made to the two predicates, frozen as data (FIXTURE_CALLS;
+        # refute-r2d-r1 RF2) - both predicates answer as recorded there, and so does 4.2's reading before D220. Those
+        # fixtures hold no settled FactSet of question Q1's class (a control another pair made, not rejected, asked of
+        # one of the two objects: refute-r2d-r1 RF3); test_q1_... pins that class
+        self.assertEqual(len(set(FIXTURE_CALLS)), len(FIXTURE_CALLS))
+        tally = {}
+        for line in FIXTURE_CALLS:
+            tally[tuple(line.split()[:2])] = tally.get(tuple(line.split()[:2]), 0) + 1
+        self.assertEqual(tally, {('lesion', '0'): 103, ('lesion', '1'): 3, ('place', '0'): 92, ('place', '1'): 5})
+        self.assertEqual(fixture_replay(), (203, []))
+
+    def test_a_later_steps_d220_tests_in_pairing_or_coverage_never_reach_the_fixture_replay(self):
+        # refute-r2d-r1 RF2: the first patch ran the tests test_pairing and test_coverage hold at run time, so a D220
+        # test a step built on r2d adds to either - r4b's for 4b F5 (the biopsy held when its duodenum is deleted),
+        # r3d's for 3d's single-target case (held when the cecum is deleted) - turned this file red. Both modules here
+        # hold such tests, served to every import route (sys.modules, the package's attributes, import_module); no
+        # test of any module runs while the replay runs, and the replay, data recorded at the base, answers as recorded
+        f5 = deleted(scene({E3: placed(LM.LIVER, lesion=L2), E4: placed(LM.LYMPH_NODE, LM.DUODENUM)},
+                           controls={(E3, PLACES, LM.LYMPH_NODE): True, (E3, PLACES, LM.DUODENUM): False,
+                                     (E4, PLACES, LM.LIVER): True}), E4, 1)
+        sc_b = deleted(scene({E1: placed(LM.HEPATIC_FLEXURE), E2: placed(LM.ASCENDING_COLON, LM.CECUM)},
+                             controls={(E1, PLACES, LM.ASCENDING_COLON): True, (E1, PLACES, LM.CECUM): False,
+                                       (E2, PLACES, LM.HEPATIC_FLEXURE): True}), E2, 1)
+
+        class LaterD220Tests(unittest.TestCase):
+            def test_4b_f5_held(self_):
+                self_.assertFalse(F.apart_by_place(f5, E4, E3))
+
+            def test_3d_sc_b_held(self_):
+                self_.assertFalse(F.apart_by_place(sc_b, E1, E2))
+
+        later = types.ModuleType('later_d220_tests')
+        later.LaterD220Tests = LaterD220Tests
+        result = unittest.TestResult()
+        unittest.TestLoader().loadTestsFromTestCase(LaterD220Tests).run(result)
+        self.assertEqual((result.testsRun, result.wasSuccessful()), (2, True))  # D220 holds both pairs
+        self.assertTrue(before_place(f5, E4, E3) and before_place(sc_b, E1, E2))  # 4.2's reading before D220 does not
+        names = ('tests.v2.test_pairing', 'tests.v2.test_coverage')
+        package, real = importlib.import_module('tests.v2'), importlib.import_module
+        ran = []
+        run, debug = unittest.TestCase.run, unittest.TestCase.debug
+
+        def import_module(name, package=None):
+            return later if name in names else real(name, package)
+
+        def recorded(method):
+            def call(test, *args, **kwargs):
+                ran.append(test.id())
+                return method(test, *args, **kwargs)
+            return call
+
+        saved = {name: sys.modules.get(name) for name in names}
+        try:
+            sys.modules.update(dict.fromkeys(names, later))
+            with mock.patch.object(package, 'test_pairing', later, create=True), \
+                    mock.patch.object(package, 'test_coverage', later, create=True), \
+                    mock.patch.object(importlib, 'import_module', import_module), \
+                    mock.patch.object(unittest.TestCase, 'run', recorded(run)), \
+                    mock.patch.object(unittest.TestCase, 'debug', recorded(debug)):
+                served = (sys.modules['tests.v2.test_pairing'], importlib.import_module('tests.v2.test_coverage'),
+                          unittest.TestLoader().loadTestsFromName('tests.v2.test_pairing').countTestCases())
+                replayed = fixture_replay()
+        finally:
+            for name, module in saved.items():
+                if module is None:
+                    sys.modules.pop(name, None)
+                else:
+                    sys.modules[name] = module
+        self.assertEqual(served, (later, later, 2))  # every route serves the later step's two tests
+        self.assertEqual(ran, [])  # no test of any module ran inside the replay
+        self.assertEqual(replayed, (203, []))
+
+    def test_q1_on_a_settled_factset_another_pairs_unrejected_control_holds_the_pair(self):
+        # repair r2d's question Q1, open for the owner (refute-r2d-r1 RF1, RF3). D220 expects 4.2's reading unchanged on
+        # the FactSets settle produces, whose pair controls come from the full lists. A stored pair control names the
+        # object it asks and the value it asks about, never the pair it was made for, so a control another pair made,
+        # asked of one of the two objects and not rejected, holds a pair 4.2's reading set apart - on a settled FactSet
+        # whose controls are exactly the ones contract/claims.pair() makes. Pinned to the fail-closed reading as built
+        # (Q1's option (a)); under option (b) - each pair control's other objects carried through settle, store and the
+        # FactSet (request R3), and exactly the controls between the two read - both scenes answer as 4.2's reading did,
+        # and this test changes with the ruling
+        from studio.interpretation.engine import coverage as C
+        from studio.interpretation.engine import pairing as P
+        from studio.interpretation.engine import requirements as rq
+
+        # scene A (coverage): one colonoscopy; a cold snare E3 of L1 at the rectosigmoid, a biopsy E4 in the rectum
+        # and a biopsy E5 in the ascending colon; claims.pair() pairs the snare with each biopsy (D211: never two
+        # biopsies); every control rejected but "This act was done in the rectum.", asked of the snare for E4, left
+        # unclear
+        sessions = {X1: {A.KIND: (sup(ct.SessionKind.COLONOSCOPY),), A.REACHED: (), A.DEVICE_REACHED: (),
+                         A.STATIONS: ()}}
+        lesions = {L1: {A.PLACES: (sup(LM.RECTOSIGMOID),), A.DISTINCT_FROM: (), A.SAME_AS: (),
+                        A.MULTIPLICITY: (sup(ct.Multiplicity.SINGLE),)}}
+
+        def colonoscopy_scene(*places_of_e5):
+            events = {E1: performed(ct.Kind.EXAMINATION), E3: performed(ct.Kind.SNARE, LM.RECTOSIGMOID, lesion=L1),
+                      E4: performed(ct.Kind.BIOPSY, LM.RECTUM), E5: performed(ct.Kind.BIOPSY, *places_of_e5)}
+            return scene(events, lesions=lesions, sessions=sessions, controls=full_list_controls(
+                events, ((E3, E4), (E3, E5)), {(E3, PLACES, LM.RECTUM)}))
+
+        R = colonoscopy_scene(LM.ASCENDING_COLON)
+        self.assertEqual(dict(R.pair_controls), {
+            (E3, PLACES, LM.RECTUM): False, (E4, PLACES, LM.RECTOSIGMOID): True,
+            (E3, PLACES, LM.ASCENDING_COLON): True, (E5, PLACES, LM.RECTOSIGMOID): True})
+        for x, y in ((E5, E3), (E3, E5)):
+            with self.subTest(pair=(x, y)):
+                self.assertTrue(before_place(R, x, y))  # 4.2's reading: the ascending colon biopsy is apart
+                self.assertFalse(F.apart_by_place(R, x, y))  # as built: the snare's unclear rectum control holds it
+        self.assertIs(C.verdict(R, E5).truth, C.Truth.U)  # biopsy_of_removed_lesion asked: 45380's bundling is held
+        self.assertTrue(C.doubted(R, E5))
+        with mock.patch.object(F, 'apart_by_place', before_place):
+            self.assertIs(C.verdict(R, E5).truth, C.Truth.T)
+        # why no reading of the FactSet alone does both: S2, scene A with E5 also in the rectum, is settled too, with
+        # the same controls (the snare's rectum control is one claim for both biopsies); deleting E5's rectum (9.4,
+        # the controls left as they were) gives scene A exactly, and P-MONO keeps E5 held there, as it is on S2
+        S2 = colonoscopy_scene(LM.ASCENDING_COLON, LM.RECTUM)
+        self.assertEqual(dict(S2.pair_controls), dict(R.pair_controls))
+        W = deleted(S2, E5, 1)
+        self.assertEqual((W.events, dict(W.pair_controls)), (R.events, dict(R.pair_controls)))
+        for reading in (F.apart_by_place, before_place):
+            with mock.patch.object(F, 'apart_by_place', reading):
+                self.assertIs(C.verdict(S2, E5).truth, C.Truth.U)
+
+        # scene B (pairing): "No biopsies were taken from the rectum." (single target), a biopsy E4 at the rectosigmoid
+        # and a biopsy E5 in the transverse colon; claims.pair() pairs the statement with each biopsy; every control
+        # rejected but "This statement is about biopsies in the rectosigmoid.", asked of the statement for E4, left
+        # unclear
+        statement = {A.KIND: (sup(ct.Kind.BIOPSY),), A.STATUS: (neg(PERFORMED),), A.SESSION: (sup(X1),),
+                     A.DATE_RELATION: (sup(ct.DateRelation.ON_DATE_OF_SERVICE),),
+                     A.SCOPE_BREADTH: (sup(ct.Breadth.SINGLE_TARGET),), PLACES: (sup(LM.RECTUM),)}
+        events = {E1: performed(ct.Kind.EXAMINATION), E2: statement, E4: performed(ct.Kind.BIOPSY, LM.RECTOSIGMOID),
+                  E5: performed(ct.Kind.BIOPSY, LM.TRANSVERSE_COLON)}
+        R = scene(events, sessions=sessions, controls=full_list_controls(
+            events, ((E2, E4), (E2, E5)), {(E2, PLACES, LM.RECTOSIGMOID)}))
+        self.assertEqual(dict(R.pair_controls), {
+            (E2, PLACES, LM.RECTOSIGMOID): False, (E4, PLACES, LM.RECTUM): True,
+            (E2, PLACES, LM.TRANSVERSE_COLON): True, (E5, PLACES, LM.RECTUM): True})
+        self.assertTrue(before_place(R, E2, E5))
+        pair = P.relation(R, E2, E5)  # as built: the statement's unclear rectosigmoid control holds the pair
+        self.assertEqual((pair.relation, pair.row, P.item(pair).fact),
+                         (P.Relation.UNRESOLVED, P.Row.TARGET, rq.FactKey.STATEMENT_SCOPE))
+        with mock.patch.object(F, 'apart_by_place', before_place):  # 4.2's reading: independent, 45380 not held
+            self.assertIs(P.relation(R, E2, E5).relation, P.Relation.INDEPENDENT)
+
+
+def fixture_test(test) -> bool:
+    """Whether a loaded test of another module is one repair r2d's fixture harvest ran: not a hypothesis test (it
+    carries hypothesis's ``is_hypothesis_test`` mark) and not a BoundaryTests test. The harvest ran once, at the base,
+    to record FIXTURE_CALLS (repair r2d-2); nothing here runs another module's tests any more (refute-r2d-r1 RF2)."""
+    method = getattr(type(test), test._testMethodName, None)
+    return type(test).__name__ != 'BoundaryTests' and not getattr(method, 'is_hypothesis_test', False)
+
+
+# --- the pairing and coverage fixtures' calls, frozen as data (D220's done-when; refute-r2d-r1 RF2) -------------------
+#
+# Every call the base's (ffb2d083) tests.v2.test_pairing and tests.v2.test_coverage made to apart_by_place and
+# apart_by_lesion - their 174 tests that ``fixture_test`` admits, 9,865 calls - recorded once by repair r2d-2 with the
+# base's facts.py: one line per distinct call, holding what the called predicate reads and nothing else. A place call:
+# the two objects' target places and the place pair controls asked of either; a lesion call: their target lesions, those
+# lesions' distinct_from and the lesion pair controls asked of either. Each member is its result and value (the state
+# it had follows from them: ``fixture_case``); the two objects are renamed E1 and E2 and the lesions L1.. in order of
+# appearance. The recorder decoded every line again and found the predicate answering on it exactly as on the call's
+# whole FactSet, with the base's facts.py and with D220's, and the lines identical under both. A line:
+#     <place | lesion> <1 apart, 0 not> | <E1's members> | <E2's members> [| <distinct_from>] | <pair controls>
+# members: <result>:<value>, the result sup, neg, unr, con or unk and the value ~ for none, '-' for no member;
+# distinct_from: L<n>=<member>,<member>...; pair controls: E<1 or 2, the object asked>:<value>:<1 rejected, 0 not>.
+# As data it is frozen: a test a later step adds to either module never reaches it.
+FIXTURE_CALLS = (
+    'lesion 0 | - | - | - | -',
+    'lesion 0 | - | sup:L1 | - | -',
+    'lesion 0 | - | unk:L1 | - | -',
+    'lesion 0 | - | unk:~ | - | -',
+    'lesion 0 | - | unk:~ | - | E1:L2:1 E2:L1:1',
+    'lesion 0 | - | unr:L1 | - | -',
+    'lesion 0 | con:~ | - | - | -',
+    'lesion 0 | con:~ | neg:L1 | L1=sup:L2 | E1:L1:0',
+    'lesion 0 | con:~ | neg:L1 | L1=sup:L2,sup:L3 | E2:L3:1',
+    'lesion 0 | con:~ | sup:L1 | - | -',
+    'lesion 0 | con:~ | sup:L1 | - | E1:L1:1 E2:L2:1',
+    'lesion 0 | con:~ | unr:L1 | L1=sup:L2 | -',
+    'lesion 0 | neg:L1 | con:~ | L1=sup:L2,sup:L3 | E1:L3:1',
+    'lesion 0 | neg:L1 | neg:L1 | - | E1:L2:1 E2:L2:1',
+    'lesion 0 | neg:L1 | neg:L2 | L1=sup:L2 L2=sup:L3 | -',
+    'lesion 0 | neg:L1 | sup:L2 | - | E2:L1:0',
+    'lesion 0 | neg:L1 | sup:L2 | L1=sup:L3 L2=sup:L1 | -',
+    'lesion 0 | neg:L1 | unk:L2 | - | E1:L1:0 E1:L2:0 E2:L1:1 E2:L3:1',
+    'lesion 0 | neg:L1 | unk:L2 | - | E1:L2:0 E2:L3:0',
+    'lesion 0 | neg:L1 | unk:L2 | - | E1:L2:1 E2:L3:1',
+    'lesion 0 | neg:L1 | unk:L2 | - | E2:L1:0',
+    'lesion 0 | neg:L1 | unk:L2 | L1=sup:L3 L2=sup:L1 | E2:L3:0',
+    'lesion 0 | neg:L1 | unk:~ | L1=sup:L2 | E1:L1:1',
+    'lesion 0 | neg:L1 | unk:~ | L1=sup:L2,sup:L3 | E1:L1:1',
+    'lesion 0 | neg:L1 | unr:L1 | - | E2:L2:0',
+    'lesion 0 | neg:L1 | unr:L1 | L1=sup:L2 | E1:L1:1 E2:L3:0',
+    'lesion 0 | neg:L1 | unr:L1 | L1=sup:L2,sup:L3 | E1:L1:1 E2:L2:0',
+    'lesion 0 | neg:L1 | unr:L2 | - | E1:L2:0 E2:L3:0',
+    'lesion 0 | sup:L1 | - | - | -',
+    'lesion 0 | sup:L1 | - | - | E1:L2:0',
+    'lesion 0 | sup:L1 | - | - | E1:L2:1',
+    'lesion 0 | sup:L1 | - | L1=sup:L2 | -',
+    'lesion 0 | sup:L1 | - | L1=sup:L2 | E1:L2:0',
+    'lesion 0 | sup:L1 | - | L1=sup:L2 | E1:L2:1',
+    'lesion 0 | sup:L1 | - | L1=unk:L2 | E1:L2:1',
+    'lesion 0 | sup:L1 | - | L1=unr:L2 | E1:L2:1',
+    'lesion 0 | sup:L1 | con:~ | - | -',
+    'lesion 0 | sup:L1 | con:~ | L1=sup:L2 | E1:L2:1 E2:L1:1',
+    'lesion 0 | sup:L1 | con:~ | L1=sup:L2 | E1:L3:1 E2:L1:0 E2:L2:1',
+    'lesion 0 | sup:L1 | con:~ | L1=sup:L2,sup:L3 | E1:L2:0 E1:L3:0 E2:L1:0 E2:L3:0',
+    'lesion 0 | sup:L1 | sup:L1 | - | -',
+    'lesion 0 | sup:L1 | sup:L2 | - | -',
+    'lesion 0 | sup:L1 | sup:L2 | - | E1:L2:1 E2:L1:1',
+    'lesion 0 | sup:L1 | sup:L2 | L1=sup:L2 | -',
+    'lesion 0 | sup:L1 | sup:L2 | L1=sup:L2 | E1:L2:0 E2:L1:0',
+    'lesion 0 | sup:L1 | sup:L2 | L1=sup:L2 | E1:L2:0 E2:L1:1',
+    'lesion 0 | sup:L1 | sup:L2 | L1=sup:L2 | E1:L2:1',
+    'lesion 0 | sup:L1 | sup:L2 | L1=sup:L2 | E1:L2:1 E2:L1:0',
+    'lesion 0 | sup:L1 | sup:L2 | L1=unk:L2 | E1:L2:1 E2:L1:1',
+    'lesion 0 | sup:L1 | sup:L2 | L1=unr:L2 | E1:L2:1 E2:L1:1',
+    'lesion 0 | sup:L1 | sup:L2 | L2=sup:L1 | E1:L2:0 E2:L1:1',
+    'lesion 0 | sup:L1 | sup:L2 | L2=sup:L1 | E1:L2:1',
+    'lesion 0 | sup:L1 | sup:L2 | L2=sup:L1 | E1:L2:1 E2:L1:0',
+    'lesion 0 | sup:L1 | sup:L2 | L2=sup:L1 | E2:L1:1',
+    'lesion 0 | sup:L1 | sup:L2 | L2=unk:L1 | E1:L2:1 E2:L1:1',
+    'lesion 0 | sup:L1 | sup:L2 | L2=unr:L1 | E1:L2:1 E2:L1:1',
+    'lesion 0 | sup:L1 | unk:L1 | - | -',
+    'lesion 0 | sup:L1 | unk:L1 | L1=sup:L2 | E2:L3:0',
+    'lesion 0 | sup:L1 | unk:L1 | L1=sup:L2,sup:L3 | -',
+    'lesion 0 | sup:L1 | unk:L2 | L1=sup:L2 | E1:L2:1 E2:L1:1',
+    'lesion 0 | sup:L1 | unk:L2 | L1=sup:L3 L2=sup:L1 | E1:L2:0 E2:L1:0 E2:L3:0',
+    'lesion 0 | sup:L1 | unk:L2 | L2=sup:L1 | E1:L2:1 E2:L1:1',
+    'lesion 0 | sup:L1 | unk:~ | - | -',
+    'lesion 0 | sup:L1 | unk:~ | L1=sup:L2 | E1:L2:1 E2:L1:1',
+    'lesion 0 | sup:L1 | unk:~ | L1=sup:L2 | E1:L3:1',
+    'lesion 0 | sup:L1 | unr:L1 | - | -',
+    'lesion 0 | sup:L1 | unr:L2 | - | E1:L2:0 E2:L1:0',
+    'lesion 0 | sup:L1 | unr:L2 | L1=sup:L2 | E1:L2:1 E2:L1:1',
+    'lesion 0 | sup:L1 | unr:L2 | L2=sup:L1 | E1:L2:1 E2:L1:1',
+    'lesion 0 | unk:L1 | - | - | -',
+    'lesion 0 | unk:L1 | - | - | E1:L2:1',
+    'lesion 0 | unk:L1 | - | L1=sup:L2 | E1:L2:1',
+    'lesion 0 | unk:L1 | con:~ | L1=sup:L2 | -',
+    'lesion 0 | unk:L1 | neg:L2 | - | E1:L2:1 E1:L3:1 E2:L1:0 E2:L2:0',
+    'lesion 0 | unk:L1 | neg:L2 | - | E1:L3:0 E2:L1:0',
+    'lesion 0 | unk:L1 | neg:L2 | - | E1:L3:1 E2:L1:1',
+    'lesion 0 | unk:L1 | neg:L2 | L1=sup:L2 L2=sup:L1,sup:L3 | E2:L3:1',
+    'lesion 0 | unk:L1 | neg:L2 | L1=sup:L3 L2=sup:L3 | E1:L2:0',
+    'lesion 0 | unk:L1 | neg:L2 | L1=sup:L3 L2=sup:L3 | E1:L2:0 E1:L3:0',
+    'lesion 0 | unk:L1 | sup:L1 | - | -',
+    'lesion 0 | unk:L1 | sup:L1 | L1=sup:L2 | E1:L3:0',
+    'lesion 0 | unk:L1 | sup:L2 | L1=sup:L2 L2=sup:L3 | E1:L2:0 E1:L3:0 E2:L1:0',
+    'lesion 0 | unk:L1 | sup:L2 | L1=sup:L2 | E1:L2:1 E2:L1:1',
+    'lesion 0 | unk:L1 | sup:L2 | L2=sup:L1 | E1:L2:1 E2:L1:1',
+    'lesion 0 | unk:L1 | unk:L1 | - | E1:L2:1 E2:L2:1',
+    'lesion 0 | unk:L1 | unk:L1 | L1=sup:L2,sup:L3 | -',
+    'lesion 0 | unk:L1 | unr:L1 | - | E1:L2:0 E2:L2:0',
+    'lesion 0 | unk:L1 | unr:L2 | L1=sup:L3 L2=sup:L3 | E1:L2:1 E2:L3:0',
+    'lesion 0 | unk:~ | - | - | -',
+    'lesion 0 | unk:~ | sup:L1 | - | -',
+    'lesion 0 | unk:~ | sup:L1 | - | E1:L1:1 E2:L2:1',
+    'lesion 0 | unk:~ | sup:L1 | L1=sup:L2 | E2:L3:1',
+    'lesion 0 | unk:~ | unk:~ | - | -',
+    'lesion 0 | unk:~ | unr:L1 | L1=sup:L2 | E2:L3:0',
+    'lesion 0 | unk:~ | unr:L1 | L1=sup:L2,sup:L3 | E2:L2:0',
+    'lesion 0 | unr:L1 | - | - | -',
+    'lesion 0 | unr:L1 | - | - | E1:L2:1',
+    'lesion 0 | unr:L1 | - | L1=sup:L2 | E1:L2:1',
+    'lesion 0 | unr:L1 | sup:L1 | - | -',
+    'lesion 0 | unr:L1 | sup:L2 | - | E1:L2:0 E2:L1:0',
+    'lesion 0 | unr:L1 | sup:L2 | L1=sup:L2 | E1:L2:1 E2:L1:1',
+    'lesion 0 | unr:L1 | sup:L2 | L2=sup:L1 | E1:L2:1 E2:L1:1',
+    'lesion 0 | unr:L1 | unk:L2 | L1=sup:L3 L2=sup:L3 | E1:L3:0 E2:L1:1',
+    'lesion 1 | sup:L1 | sup:L2 | L1=sup:L2 | E1:L2:1 E2:L1:1',
+    'lesion 1 | sup:L1 | sup:L2 | L1=sup:L2 | E1:L2:1 E2:L1:1 E2:L3:1',
+    'lesion 1 | sup:L1 | sup:L2 | L2=sup:L1 | E1:L2:1 E2:L1:1',
+    'place 0 | - | - | -',
+    'place 0 | - | - | E1:anastomosis:0',
+    'place 0 | - | - | E1:cecum:1',
+    'place 0 | - | - | E1:transverse_colon:1',
+    'place 0 | - | con:~ sup:sigmoid_colon | E2:ascending_colon:0 E2:cecum:0',
+    'place 0 | - | con:~ | -',
+    'place 0 | - | sup:cecum | -',
+    'place 0 | - | sup:cecum | E1:cecum:1 E2:rectum:1',
+    'place 0 | - | sup:rectum | -',
+    'place 0 | - | sup:sigmoid_colon | -',
+    'place 0 | - | sup:sigmoid_colon | E1:sigmoid_colon:1 E2:rectum:1',
+    'place 0 | - | sup:stomach | -',
+    'place 0 | - | sup:transverse_colon | E1:transverse_colon:1 E2:sigmoid_colon:1',
+    'place 0 | - | unk:cecum unk:hepatic_flexure | -',
+    'place 0 | - | unk:~ | -',
+    'place 0 | - | unr:anastomosis unk:~ | E1:anastomosis:0 E2:rectum:0',
+    'place 0 | - | unr:anastomosis unk:~ | E2:ascending_colon:0 E2:rectum:0',
+    'place 0 | - | unr:anastomosis unk:~ | E2:rectum:0',
+    'place 0 | - | unr:hepatic_flexure | -',
+    'place 0 | - | unr:hepatic_flexure | E2:ascending_colon:0',
+    'place 0 | con:~ sup:colon | - | -',
+    'place 0 | con:~ sup:colon | con:~ sup:colon | -',
+    'place 0 | con:~ sup:colon | unk:~ | -',
+    'place 0 | con:~ sup:colon | unk:~ | E1:rectum:1',
+    'place 0 | con:~ sup:sigmoid_colon | - | E1:ascending_colon:0 E1:cecum:0',
+    'place 0 | con:~ unk:sigmoid_colon | unk:~ sup:sigmoid_colon | E1:ascending_colon:0 E1:rectum:0 '
+    'E2:ascending_colon:1 E2:cecum:1 E2:rectum:0',
+    'place 0 | con:~ unr:sigmoid_colon | - | E1:hepatic_flexure:0',
+    'place 0 | con:~ unr:sigmoid_colon | con:~ sup:sigmoid_colon | E1:hepatic_flexure:0 E2:ascending_colon:0 '
+    'E2:cecum:0',
+    'place 0 | con:~ | - | -',
+    'place 0 | con:~ | neg:ascending_colon unk:anastomosis | -',
+    'place 0 | con:~ | sup:sigmoid_colon | E1:sigmoid_colon:1 E2:rectum:1',
+    'place 0 | con:~ | unk:anastomosis | E1:anastomosis:0 E2:ascending_colon:0',
+    'place 0 | con:~ | unk:colon | -',
+    'place 0 | neg:colon | sup:sigmoid_colon sup:sigmoid_colon | E1:sigmoid_colon:1 E2:hepatic_flexure:0',
+    'place 0 | sup:cecum | - | -',
+    'place 0 | sup:cecum | sup:cecum | -',
+    'place 0 | sup:colon | sup:cecum | E1:cecum:1 E2:colon:1',
+    'place 0 | sup:other | sup:rectum | E1:rectum:1 E2:other:1',
+    'place 0 | sup:rectum | - | -',
+    'place 0 | sup:rectum | - | E1:cecum:0',
+    'place 0 | sup:rectum | - | E1:cecum:1',
+    'place 0 | sup:rectum | - | E1:cecum:1 E2:rectum:1',
+    'place 0 | sup:rectum | con:~ | -',
+    'place 0 | sup:rectum | con:~ | E1:sigmoid_colon:1 E2:rectum:1',
+    'place 0 | sup:rectum | sup:anastomosis | E1:anastomosis:1 E2:rectum:1',
+    'place 0 | sup:rectum | sup:cecum | -',
+    'place 0 | sup:rectum | sup:cecum | E1:cecum:0 E2:rectum:1',
+    'place 0 | sup:rectum | sup:cecum | E1:cecum:1 E2:rectum:0',
+    'place 0 | sup:rectum | sup:sigmoid_colon sup:rectum | E1:rectum:1 E1:sigmoid_colon:1 E2:rectum:1',
+    'place 0 | sup:rectum | sup:sigmoid_colon | -',
+    'place 0 | sup:rectum | sup:sigmoid_colon | E1:sigmoid_colon:0 E2:rectum:1',
+    'place 0 | sup:rectum | sup:sigmoid_colon | E1:sigmoid_colon:1',
+    'place 0 | sup:rectum | sup:sigmoid_colon | E1:sigmoid_colon:1 E2:rectum:0',
+    'place 0 | sup:rectum | sup:sigmoid_colon | E2:rectum:1',
+    'place 0 | sup:rectum | sup:transverse_colon | E1:transverse_colon:1 E2:rectum:0',
+    'place 0 | sup:rectum | unk:cecum | E1:cecum:1 E2:rectum:1',
+    'place 0 | sup:rectum | unk:sigmoid_colon | -',
+    'place 0 | sup:rectum | unk:sigmoid_colon | E1:sigmoid_colon:1 E2:rectum:1',
+    'place 0 | sup:rectum | unk:~ | E1:sigmoid_colon:1 E2:rectum:1',
+    'place 0 | sup:rectum | unr:cecum | E1:cecum:1 E2:rectum:1',
+    'place 0 | sup:rectum | unr:sigmoid_colon | -',
+    'place 0 | sup:rectum | unr:sigmoid_colon | E1:sigmoid_colon:1 E2:rectum:1',
+    'place 0 | sup:sigmoid_colon | - | E1:transverse_colon:1',
+    'place 0 | sup:sigmoid_colon | sup:colon | E1:colon:1 E2:sigmoid_colon:1',
+    'place 0 | sup:sigmoid_colon | sup:sigmoid_colon | -',
+    'place 0 | sup:stomach | - | -',
+    'place 0 | sup:transverse_colon | - | E1:sigmoid_colon:1',
+    'place 0 | sup:transverse_colon | - | E1:sigmoid_colon:1 E2:transverse_colon:1',
+    'place 0 | unk:cecum | - | -',
+    'place 0 | unk:rectum | - | E1:cecum:1',
+    'place 0 | unk:rectum | sup:cecum | E1:cecum:1 E2:rectum:1',
+    'place 0 | unk:rectum | sup:sigmoid_colon | E1:sigmoid_colon:1 E2:rectum:1',
+    'place 0 | unk:~ unk:colon | unk:~ sup:sigmoid_colon | E2:ascending_colon:1 E2:cecum:1 E2:rectum:0',
+    'place 0 | unk:~ | - | -',
+    'place 0 | unk:~ | con:~ sup:colon | -',
+    'place 0 | unk:~ | con:~ sup:colon | E2:rectum:1',
+    'place 0 | unk:~ | sup:sigmoid_colon | E1:sigmoid_colon:1 E2:rectum:1',
+    'place 0 | unk:~ | unk:~ | -',
+    'place 0 | unr:anastomosis unk:~ | - | E1:ascending_colon:0 E1:rectum:0',
+    'place 0 | unr:anastomosis unk:~ | - | E1:rectum:0',
+    'place 0 | unr:cecum unr:hepatic_flexure | unk:~ | E1:rectum:1 E1:sigmoid_colon:0 E2:cecum:0 E2:hepatic_flexure:1',
+    'place 0 | unr:cecum unr:hepatic_flexure | unr:colon | E1:rectum:1 E1:sigmoid_colon:0 E2:rectum:0',
+    'place 0 | unr:cecum | - | -',
+    'place 0 | unr:colon | unr:cecum unr:hepatic_flexure | E1:rectum:0 E2:rectum:1 E2:sigmoid_colon:0',
+    'place 0 | unr:hepatic_flexure | - | -',
+    'place 0 | unr:hepatic_flexure | - | E1:ascending_colon:0',
+    'place 0 | unr:rectum | - | E1:cecum:1',
+    'place 0 | unr:rectum | sup:cecum | E1:cecum:1 E2:rectum:1',
+    'place 0 | unr:rectum | sup:sigmoid_colon | -',
+    'place 0 | unr:rectum | sup:sigmoid_colon | E1:sigmoid_colon:1 E2:rectum:1',
+    'place 0 | unr:sigmoid_colon | sup:sigmoid_colon sup:sigmoid_colon | E1:ascending_colon:1 E1:hepatic_flexure:0 '
+    'E2:hepatic_flexure:0',
+    'place 0 | unr:sigmoid_colon | sup:sigmoid_colon | -',
+    'place 1 | sup:rectum | sup:cecum | E1:cecum:1 E2:rectum:1',
+    'place 1 | sup:rectum | sup:sigmoid_colon | E1:sigmoid_colon:1 E2:rectum:1',
+    'place 1 | sup:rectum | sup:transverse_colon | E1:transverse_colon:1 E2:rectum:1',
+    'place 1 | sup:sigmoid_colon | sup:transverse_colon | E1:transverse_colon:1 E2:sigmoid_colon:1',
+    'place 1 | sup:transverse_colon | sup:sigmoid_colon | E1:sigmoid_colon:1 E2:transverse_colon:1',
+)
+
+
+_RESULTS = {'sup': ct.Result.SUPPORTED, 'neg': ct.Result.NEGATED, 'unr': ct.Result.UNRESOLVED,
+            'con': ct.Result.CONTRADICTED, 'unk': ct.Result.UNKNOWN}
+_STATES = {ct.Result.SUPPORTED: ct.FactState.SUPPORTED, ct.Result.NEGATED: ct.FactState.NEGATED,
+           ct.Result.CONTRADICTED: ct.FactState.CONTRADICTED}
+
+
+def fixture_case(line) -> tuple:
+    """One line of FIXTURE_CALLS: (the predicate, 'place' or 'lesion'; the answer recorded at the base; the FactSet, the
+    two objects E1 and E2). Each member gets the state every recorded member of its result and value had: supported,
+    negated or contradicted for those results; supported for an unresolved or unknown member with a value; none (a
+    silent slot) for an unknown member without one."""
+    head, *fields = line.split(' | ')
+    name, answer = head.split()
+    attribute = PLACES if name == 'place' else LESION
+
+    def value(token):
+        return None if token == '~' else LM(token) if attribute is PLACES else Id.parse(token)
+
+    def facts(field, separator=' '):
+        found = []
+        for token in [] if field == '-' else field.split(separator):
+            result, raw = token.split(':')
+            member = value(raw)
+            state = _STATES.get(_RESULTS[result], ct.FactState.SUPPORTED if member is not None else None)
+            found.append(plain(_RESULTS[result], member, state))
+        return tuple(found)
+
+    events = {E1: {attribute: facts(fields[0])}, E2: {attribute: facts(fields[1])}}
+    lesions = {}
+    if attribute is LESION and fields[2] != '-':
+        for entry in fields[2].split():
+            named, listed = entry.split('=')
+            lesions[Id.parse(named)] = {A.DISTINCT_FROM: facts(listed, ',')}
+    controls = {}
+    for token in [] if fields[-1] == '-' else fields[-1].split():
+        asked, raw, rejected = token.split(':')
+        controls[(Id.parse(asked), attribute, value(raw))] = rejected == '1'
+    return name, answer == '1', scene(events, lesions=lesions, controls=controls)
+
+
+def fixture_replay() -> tuple:
+    """Replays FIXTURE_CALLS: (how many lines; every line on which apart_by_place or apart_by_lesion, or 4.2's reading
+    before D220 - before_place, before_lesion - does not answer as recorded at the base, with the two answers)."""
+    changed = []
+    for line in FIXTURE_CALLS:
+        name, answer, R = fixture_case(line)
+        now = (F.apart_by_place if name == 'place' else F.apart_by_lesion)(R, E1, E2)
+        was = (before_place if name == 'place' else before_lesion)(R, E1, E2)
+        if now is not answer or was is not answer:
+            changed.append((line, now, was))
+    return len(FIXTURE_CALLS), changed
+
+
+# The places the generated scenes draw from: colonic and upper, one place containing another (left colon, sigmoid
+# colon; stomach, gastric body), two that overlap without either containing the other (esophagus, stomach) and an
+# altered place (anastomosis), which engine/anatomy calls neither compatible nor disjoint with anything placed.
+POOL = (LM.CECUM, LM.ASCENDING_COLON, LM.TRANSVERSE_COLON, LM.SIGMOID_COLON, LM.RECTUM, LM.LEFT_COLON, LM.ESOPHAGUS,
+        LM.STOMACH, LM.GASTRIC_BODY, LM.DUODENUM, LM.ANASTOMOSIS)
+
+
+def generated(rnd) -> FactSet:
+    """A settled scene: 2-4 events with 1-3 supported target places and a target lesion or none; lesions with
+    distinct_from; the pair controls contract/claims.pair() makes from the FULL lists - each event asked about every
+    place of every other event that none of its own places is compatible with, and about the other's lesion when they
+    differ - each rejected or not at random (one claim per question: asked for two events, it is one control)."""
+    ids = [Id(IdFamily.EVENT, number) for number in range(1, rnd.randint(3, 5))]
+    events = {event: placed(*rnd.sample(POOL, rnd.randint(1, 3)), lesion=rnd.choice((None, L1, L2, L3)))
+              for event in ids}
+    lesions = {lesion: {A.DISTINCT_FROM: tuple(sup(other) for other in (L1, L2, L3)
+                                               if other != lesion and rnd.random() < 0.6)}
+               for lesion in (L1, L2, L3)}
+    controls = {}
+    for asked in ids:
+        own = [member.value for member in events[asked][PLACES]]
+        mine = events[asked][LESION][0].value
+        for other in ids:
+            if other == asked:
+                continue
+            for member in events[other][PLACES]:
+                if not any(anatomy.compatible(member.value, place) for place in own):
+                    controls.setdefault((asked, PLACES, member.value), rnd.random() < 0.75)
+            theirs = events[other][LESION][0].value
+            if mine is not None and theirs is not None and mine != theirs:
+                controls.setdefault((asked, LESION, theirs), rnd.random() < 0.75)
+    return scene(events, lesions=lesions, controls=controls)
+
+
+def weakenings(R):
+    """9.4's weakenings of ``R``, one at a time: (a description, the weakened FactSet)."""
+    for subject, facts in R.events.items():
+        members = facts[PLACES]
+        for index, member in enumerate(members):
+            if len(members) >= 2:  # a deleted member: the list stays a list
+                yield ('delete', subject, index), deleted(R, subject, index)
+            for name, weaker in (('unresolved', unresolved(member.value)), ('doubted', doubted(member.value))):
+                yield (name, subject, index), replaced(R, subject, PLACES,
+                                                       members[:index] + (weaker,) + members[index + 1:])
+        lesion = facts[LESION][0]
+        if lesion.result is ct.Result.SUPPORTED:
+            yield ('unresolved lesion', subject, 0), replaced(R, subject, LESION, (unresolved(lesion.value),))
+    for subject, facts in R.lesions.items():
+        members = facts[A.DISTINCT_FROM]
+        for index, member in enumerate(members):
+            yield ('delete distinct_from', subject, index), deleted(R, subject, index, A.DISTINCT_FROM)
+            yield ('unresolved distinct_from', subject, index), replaced(
+                R, subject, A.DISTINCT_FROM, members[:index] + (unresolved(member.value),) + members[index + 1:])
+    for key, rejected in R.pair_controls.items():
+        if rejected:
+            yield ('not rejected', key, 0), scene(R.events, lesions=R.lesions, controls={**R.pair_controls, key: False})
+
+
+def overlap_release(R, weakening, x, y) -> bool:
+    """The one release P-MONO names (repair r2d's question Q2): ``weakening`` deletes a place X of x or y that overlaps
+    a place p of the other without being compatible with it (neither compatible nor disjoint: the only bar to apartness
+    X raised), and the control asking the other object about X was REJECTED."""
+    kind, subject, index = weakening
+    if kind != 'delete' or subject not in (x, y) or not isinstance(subject, Id) or subject.family is not IdFamily.EVENT:
+        return False
+    other = y if subject == x else x
+    place = R.events[subject][PLACES][index].value
+    overlaps = any(not anatomy.compatible(place, member.value) and not anatomy.disjoint(place, member.value)
+                   for member in R.events[other][PLACES])
+    return overlaps and R.pair_controls.get((other, PLACES, place)) is True
+
+
+# --- DECISIONS D244 Q-N1 option (b): a session fact K3 demoted (repair r2d) -------------------------------------------
+
+X3, X4, X5 = (Id(IdFamily.SESSION, n) for n in range(3, 6))
+
+
+def unreachable(value, sources) -> dict:
+    """A session fact K3 demoted, as settle stores it (6c's N1 (ii)): its claim kept, no claim made for it and no
+    appraisal, the consistency check failed, unresolved with session_unreachable."""
+    record = fact(value, sources, reasons=('session_unreachable',))
+    record['checks'] = {**checks(), 'consistency': 'failed'}
+    return record
+
+
+def k3_row(*, places=('gastric_body',), readings=()) -> dict:
+    """A synthetic settled row on TEXT's units (cited for their offsets only: the builder reads no text) in the shapes
+    question Q-N1 reads: an EGD X1, a push enteroscopy X2, a colonoscopy X3, an upper EUS X4 (a family K3's reach
+    table does not list, DECISIONS D192) and X5, whose kind pass 2 left between a colonoscopy and a sigmoidoscopy (its
+    control flex_sig not rejected); E3, a polypectomy at ``places`` (each supported) whose session claim X2 K3 demoted
+    (session_unreachable: the stomach lies outside an enteroscopy's reach), with a session doubt of ``readings`` when
+    given; E4, a biopsy at the gastric body whose session claim X2 pass 2 left unclear (no K3 finding)."""
+    k = Ledger()
+    frame = lambda: src(['S1'], 'document_frame')  # noqa: E731
+    sessions = [session('X1', kind=est(k, 'X1', 'kind', 'egd', [frame()])),
+                session('X2', kind=est(k, 'X2', 'kind', 'enteroscopy', [frame()])),
+                session('X3', kind=est(k, 'X3', 'kind', 'colonoscopy', [frame()])),
+                session('X4', kind=est(k, 'X4', 'kind', 'eus', [frame()])),
+                session('X5', kind=unsettled(k, 'X5', 'kind', 'colonoscopy', [frame()], control='flex_sig'))]
+    events = [
+        event('E3', ['S6'], kind=est(k, 'E3', 'kind', 'removal', [src(['S6'])]),
+              status=est(k, 'E3', 'status', 'performed', [src(['S6'])]), session=unreachable('X2', [src(['S6'])]),
+              target={'places': [est(k, 'E3', 'target.places', place, [src(['S6'])]) for place in places]}),
+        event('E4', ['S11'], kind=est(k, 'E4', 'kind', 'biopsy', [src(['S11'])]),
+              status=est(k, 'E4', 'status', 'performed', [src(['S11'])]),
+              session=unsettled(k, 'E4', 'session', 'X2', [src(['S11'])]),
+              target={'places': [est(k, 'E4', 'target.places', 'gastric_body', [src(['S11'])])]}),
+    ]
+    doubts = [{'about': 'session', 'objects': ['E3'], 'units': ['S6'], 'basis': 'unclear',
+               'readings': list(readings)}] if readings else []
+    return content(k, sessions=sessions, events=events, doubts=doubts)
+
+
+class K3SessionTests(SimpleTestCase):
+    """DECISIONS D244, question Q-N1 option (b): a session fact K3 demoted (session_unreachable) is possibly any session
+    whose reach holds the act's place, not its claimed session alone - in facts.possibly, through the fact's options,
+    which every rule reading the session fact reads too."""
+
+    def test_a_k3_demoted_session_is_possibly_every_session_whose_reach_holds_the_place(self):
+        from studio.interpretation.engine import combination as CB
+        from studio.interpretation.engine import coverage as C
+
+        row = view(k3_row())
+        for name, R in (('factset', F.factset(row)), ('effective', F.effective(row, '2026-11-09'))):
+            found = F.fact(R, E3, A.SESSION)
+            with self.subTest(name):
+                self.assertEqual((found.result, found.value, found.reasons),
+                                 (ct.Result.UNRESOLVED, X2, (ct.Reason.SESSION_UNREACHABLE,)))
+                # the EGD's reach holds the stomach; the EUS is a family K3 does not judge (it never demotes there)
+                self.assertEqual(found.options, (X1, X4))
+                self.assertEqual({session: F.possibly(found, session) for session in (X1, X2, X3, X4, X5)},
+                                 {X1: True, X2: True, X3: False, X4: True, X5: False})
+                # every rule reading the session fact's options reads the same sessions
+                self.assertEqual(CB.possible_sessions(R, E3), (X2, X1, X4))
+                self.assertEqual(C.sessions_of(R, E3), frozenset({X1, X2, X4}))
+                # a session fact pass 2 left unresolved without a K3 finding is read as before: its claim alone
+                other = F.fact(R, E4, A.SESSION)
+                self.assertEqual((other.result, other.options), (ct.Result.UNRESOLVED, ()))
+                self.assertFalse(F.possibly(other, X1))
+
+    def test_its_own_options_come_first_and_the_claimed_session_stays_possible(self):
+        # a session doubt naming E3 (reading the colonoscopy X3) is kept as the fact's own option, first; the K3
+        # widening adds the sessions it does not already name, in pass 1's order: it never narrows what was possible
+        found = F.fact(F.factset(view(k3_row(readings=('X3',)))), E3, A.SESSION)
+        self.assertEqual(found.options, (X3, X1, X4))
+        self.assertTrue(F.possibly(found, X2))
+
+    def test_each_place_the_act_may_be_at_is_read(self):
+        # any place of the act: a jejunal place is held by a colonoscopy's reach too (D192: the small bowel beyond the
+        # valve), so the colonoscopy X3 and X5 (possibly a colonoscopy) join; a place in no region (an anastomosis) is
+        # judged by no reach, so every session's reach may hold it
+        for places in (('gastric_body', 'jejunum'), ('gastric_body', 'anastomosis')):
+            with self.subTest(places=places):
+                found = F.fact(F.factset(view(k3_row(places=places))), E3, A.SESSION)
+                self.assertEqual(found.options, (X1, X3, X4, X5))
+        # no place known (an empty list is unknown, never an absence, P3): every session's reach may hold it
+        self.assertEqual(F.fact(F.factset(view(k3_row(places=()))), E3, A.SESSION).options, (X1, X3, X4, X5))
+
+    def test_the_places_an_act_may_be_at_and_the_families_a_session_may_be_of(self):
+        S = ct.SessionKind
+        doubted_place = Fact(result=ct.Result.UNKNOWN, value=LM.STOMACH, state=ct.FactState.SUPPORTED,
+                             options=(LM.DUODENUM,), reasons=(ct.Reason.DOUBT_UNCLEAR,), spans=())
+        # a supported member's value, an open member's value and options; a negated member names none
+        self.assertEqual(F._places((sup(LM.GASTRIC_BODY), neg(LM.CECUM), unresolved(LM.JEJUNUM), doubted_place)),
+                         (LM.GASTRIC_BODY, LM.JEJUNUM, LM.STOMACH, LM.DUODENUM))
+        # no place known: no member, negated members only, or a member that is not negated and names none
+        for members in ((), (neg(LM.STOMACH),), (sup(LM.STOMACH), plain(ct.Result.UNKNOWN, None, None))):
+            with self.subTest(members=members):
+                self.assertIsNone(F._places(members))
+        # a session's families: its supported kind; every other when negated; possibly's otherwise
+        self.assertEqual(F._families(sup(S.EGD)), frozenset({S.EGD}))
+        self.assertEqual(F._families(neg(S.EGD)), frozenset(S) - {S.EGD})
+        self.assertEqual(F._families(unresolved(S.COLONOSCOPY)), frozenset({S.COLONOSCOPY}))
+        self.assertEqual(F._families(F.SILENT), frozenset(S))
+
+    def test_the_reach_is_k3s(self):
+        # K3's reach (DECISIONS D192): catalogue.FAMILY_REACH against engine/anatomy.region; a family it does not list
+        # and a place in no region are judged by no reach
+        S, LM_ = ct.SessionKind, ct.Landmark
+        rows = {(S.EGD, LM_.GASTRIC_BODY): True, (S.ENTEROSCOPY, LM_.GASTRIC_BODY): False,
+                (S.COLONOSCOPY, LM_.GASTRIC_BODY): False, (S.FLEX_SIG, LM_.JEJUNUM): False,
+                (S.COLONOSCOPY, LM_.JEJUNUM): True, (S.ENTEROSCOPY, LM_.JEJUNUM): True, (S.EGD, LM_.AMPULLA): False,
+                (S.EUS, LM_.GASTRIC_BODY): True, (S.ERCP, LM_.CECUM): True, (S.EGD, LM_.ANASTOMOSIS): True}
+        self.assertEqual({key: F._reach_holds(*key) for key in rows}, rows)
+        from studio.interpretation.engine import catalogue
+        for family in S:
+            for place in LM_:
+                region, reach = anatomy.region(place), catalogue.FAMILY_REACH.get(family)
+                with self.subTest(family=family, place=place):
+                    self.assertIs(F._reach_holds(family, place), region is None or reach is None or region in reach)
+
+    def test_n1_ii_and_iii_hold_43235_base_included(self):
+        # 6c's N1 (S4's class; the step's NOTES question Q-N1): "EGD ...; push enteroscopy ...; on withdrawal, a
+        # polypectomy of a 7 mm gastric body polyp was performed." filed in the enteroscopy X2 (misfiled), caught by K3
+        # in (ii) and (iii) alike (a deterministic check): the polypectomy may be the EGD's, so the EGD's base code
+        # 43235 is held base_included with a question, as (i) documents - never READY
+        from tests.v2 import test_failure_classes as FC
+
+        wanted = ('needs_clarification', 'base_included', 'question')
+        for variant in ('i', 'ii', 'iii'):
+            run = FC.run('N1', variant)
+            found = FC.outcomes(run.assessment)['43235']
+            with self.subTest(variant=variant):
+                self.assertEqual((found['status'], found['item'], found['item_kind']), wanted)
+                self.assertTrue(F.possibly(F.fact(run.R, E3, A.SESSION), X1))  # the EGD's session
+        # the positive control: without the widening, (ii) and (iii) read the claimed session alone: 43235 READY
+        with mock.patch.object(F, '_k3_widened', lambda sessions, held: held):
+            for variant in ('ii', 'iii'):
+                run = FC.run.__wrapped__('N1', variant)
+                with self.subTest(variant=variant, widening='off'):
+                    self.assertEqual(FC.outcomes(run.assessment)['43235']['status'], 'ready')
+                    self.assertFalse(F.possibly(F.fact(run.R, E3, A.SESSION), X1))
+
+
 # --- effective(): L1 re-judged (4.2, 6.5) ---------------------------------------------------------------------------------
 
 
@@ -1002,7 +2102,7 @@ class RefusalTests(SimpleTestCase):
 
 PUBLIC_FACTS = ('factset', 'effective', 'encounter_dates', 'fact', 'members', 'holds', 'denied', 'established',
                 'silent', 'possibly', 'family_kinds', 'session_family', 'possibly_of_family', 'possible_kinds',
-                'apart_by_lesion', 'apart_by_place', 'iso_value', 'as_date', 'compare', 'rejudged')
+                'apart_by_lesion', 'apart_by_place', 'apart_by_controls', 'iso_value', 'as_date', 'compare', 'rejudged')
 
 
 class BoundaryTests(SimpleTestCase):

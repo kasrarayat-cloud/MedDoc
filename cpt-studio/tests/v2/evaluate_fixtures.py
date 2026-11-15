@@ -9,6 +9,7 @@ done today by the documenting team, told in the documenting clinician's own entr
 is about."""
 from __future__ import annotations
 
+import dataclasses
 from typing import Any
 
 from studio.interpretation.contract import types as ct
@@ -201,3 +202,56 @@ def statement_source(units: Span, at: Span | None) -> tuple:
 
 def unlisted(what: ct.UnlistedWhat, kind: Kind | None, session: Id | None, span: Span) -> UnlistedStatement:
     return UnlistedStatement(units=(span,), what=what, kind=kind, session=session)
+
+
+def without_events(R: FactSet, *events: Id) -> FactSet:
+    """The same settled inventory without ``events`` (DECISIONS D265's reference: "the item the same FactSet gets without
+    the digital examination's events and the relations that pair it" - a relation pairs two events, so it goes with
+    either): their facts, their anchors and the pair controls asked of them dropped; every other object, the unlisted
+    statements and the completeness claims unchanged."""
+    gone = frozenset(events)
+    return dataclasses.replace(
+        R, events={subject: found for subject, found in R.events.items() if subject not in gone},
+        anchors={subject: anchor for subject, anchor in R.anchors.items() if subject not in gone},
+        pair_controls={key: value for key, value in R.pair_controls.items() if key[0] not in gone})
+
+
+# refute-r4a-r2's DRE grid (round w8r; its probes/w2_dre_grid_shapes.py, restated here over this module's builders): the
+# shapes DECISIONS D265's test reads - a colonoscopy X1 to the cecum (or with no reach) with the digital rectal
+# examination E1 filed as an examination (``DRE_DEVICES``: its device; 'none' no E1 at all, the reference D265 compares
+# with; 'neg' manual negated, which claims no manual and so is no digital examination), the colonoscope's examination E2
+# in one of ``DRE_OTHERS``' states, the cold snare E3 of L1 at the sigmoid colon or not, one of ``DRE_STATEMENTS`` (pass
+# 2's unlisted doubt or denial of kind examination in unit 9 with no card or carded X1, or a filed denial E4 of the
+# colonoscopy, all of its kind, today) - and 45378 kept on one of ``DRE_KEPT``'s units (45385 on the snare's).
+DRE_DEVICES: dict = {'none': None, 'sup': sup(ct.Device.MANUAL), 'unres': unres(ct.Device.MANUAL),
+                     'doubted': doubted(ct.Device.MANUAL), 'contra': contra(ct.Device.MANUAL, ct.Device.ENDOSCOPE),
+                     'neg': neg(ct.Device.MANUAL)}
+DRE_CLAIMING = ('sup', 'unres', 'doubted', 'contra')  # the devices that claim manual: a digital examination (E13)
+DRE_SESSIONS = ('X1', 'silent')
+DRE_OTHERS: dict = {'none': None, 'done': {}, 'status_unres': dict(status=unres(Status.PERFORMED)),
+                    'planned': dict(status=sup(Status.PLANNED)), 'earlier': dict(date=sup(EARLIER)),
+                    'performer_unres': dict(performer=unres(TEAM)), 'session_silent': dict(session=SILENT)}
+DRE_STATEMENTS = ('none', 'doubt_nocard', 'denial_nocard', 'doubt_X1', 'denial_X1', 'filed_denial')
+DRE_REACHES = ('cecum', 'none')
+DRE_KEPT = (1, 2, 7, 4)
+
+
+def dre_grid(dre: str, dre_session: str, other: str, snare: bool, statement: str, reach: str) -> FactSet:
+    """One FactSet of refute-r4a-r2's DRE grid (the comment above): its builder, restated."""
+    doc = Doc()
+    doc.session(1, SessionKind.COLONOSCOPY, encounter=sup(ct.EncounterRelation.THIS_ENCOUNTER),
+                reached=[sup(ct.Extent.CECUM)] if reach == 'cecum' else None)
+    if DRE_DEVICES[dre] is not None:
+        doc.exam(1, device=DRE_DEVICES[dre], session=SILENT if dre_session == 'silent' else X(1))
+    if DRE_OTHERS[other] is not None:
+        doc.exam(2, **DRE_OTHERS[other])
+    if snare:
+        doc.lesion(1, lesion_places=[sup(Landmark.SIGMOID_COLON)])
+        doc.act(3, Kind.SNARE, places=[sup(Landmark.SIGMOID_COLON)], lesion=sup(L(1)), device=sup(ct.Device.COLD_SNARE))
+    if statement.startswith(('doubt', 'denial')):
+        what = ct.UnlistedWhat.DOUBT if statement.startswith('doubt') else ct.UnlistedWhat.DENIAL
+        doc.unlisted.append(unlisted(what, Kind.EXAMINATION, X(1) if statement.endswith('X1') else None, unit(9)))
+    if statement == 'filed_denial':
+        doc.event(4, kind=sup(Kind.EXAMINATION), status=neg(Status.PERFORMED), session=sup(X(1)), date=sup(ON),
+                  breadth=sup(ct.Breadth.ALL_OF_KIND), kind_words=Span(403, 411), status_words=Span(400, 425))
+    return doc.build()

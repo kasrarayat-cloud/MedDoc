@@ -23,9 +23,23 @@ R-2 and R-6 amend them; DECISIONS D17 and D22): the one dispatch, every consumer
 
 Synthetic data only, no network: Gemini is the replay interpreter over a recording written for each test, Corti an
 in-process fake (tests.test_pipeline_assess_events.EventsCase).
+
+DECISIONS D243 class C (2026-11-14): read time reads event_coding@2 only (FINAL-V2 6.5), so the tests here that decide
+through the product (approve, reject, reinstate, a member's answer, the reports) over rows the test-only v1 chain made
+read a record the product blocks. Each of them, marked ``v2_replay.applied``, keeps its assertions and builds its rows by
+design v2's path in replay instead (tests/v2_replay.py: pass 1 from tests/v2_documents.py's answer to the same document
+with its endoscopist named, pass 2 the faithful oracle), never by the v1 chain; the other tests keep their chain.
+
+DECISIONS D243 with D251 (O20's R9 is D243; step 6a's request R9, refutation 6a-r1 F2): every S11 check here - the nine
+tests STRICT_V1_INSTRUMENT names - runs on design v2's path (marked ``v2_replay.applied``; the re-homed helpers' check
+reads no encounter) under ``sentinel.strict(..., retired=True)``, which counts a RETIRED module's execution like a legacy
+one (FINAL-V2 5.7 measure 1). Before, the v1-chain row was read under legacy_record, so the S11 checks counted nothing in
+the reader code they guard, and the default strict left the retired code objects unarmed. A planted retired call trips
+the instrument as a planted legacy call does (the two positive controls).
 """
 import ast
 import hashlib
+import importlib
 import json
 from datetime import timedelta
 from pathlib import Path
@@ -45,6 +59,7 @@ from studio.validation import engine, reconcile, review_view
 from tests.support import factories as f
 from tests.support import operator as ops
 from tests.support import pipeline_factories as pf
+from tests import v2_documents, v2_replay
 from tests.test_interpretation_events import COLONOSCOPE, POLYP, exam, reached
 from tests.test_interpretation_identity import a, act, sc
 from tests.test_pipeline_assess_events import (TWO_CODES, EventsCase, document, envelope, legacy_encounter,
@@ -139,7 +154,7 @@ class RehomedHelperTests(SimpleTestCase):
             with self.subTest(name=name):
                 self.assertEqual(Path(fn.__code__.co_filename).resolve(), home)
                 self.assertNotIn(id(fn.__code__), armed)
-        with sentinel.strict('the re-homed helpers'):
+        with sentinel.strict('the re-homed helpers', retired=True):  # DECISIONS D243 (R9): both kinds counted
             self.assertEqual(reconcile.act_label('snare'), 'snare removal')
             self.assertEqual(reconcile.kind_label('egd'), 'upper endoscopy')
             self.assertEqual(review_view.service_answers([{'code': '', 'family': 'gi.egd', 'fact': 'extent',
@@ -185,7 +200,10 @@ class DispatchTests(SimpleTestCase):
         self.assertTrue(issubclass(readers.WrongReader, ValueError))
 
     def test_each_reader_labels_its_rows(self):
-        new = SimpleNamespace(engine_version='cpt-studio-events@1', completeness={'event_coding': None})
+        # design v2 (FINAL-V2 6.2; step 5c): the event reader labels a v2 row new_path and a v1 row
+        # (cpt-studio-events@1) legacy_record - a v1 row is never read under new_path
+        new = SimpleNamespace(engine_version='cpt-studio-events@2', completeness={'event_coding': None})
+        v1 = SimpleNamespace(engine_version='cpt-studio-events@1', completeness={'event_coding': None})
         old = SimpleNamespace(engine_version='cpt-studio-validation@10', services={'services': []})
         seen = {}
 
@@ -196,14 +214,20 @@ class DispatchTests(SimpleTestCase):
         real = sentinel.relabel
         with mock.patch.object(sentinel, 'relabel', side_effect=spy):
             readers.for_assessment(new).services_list(new)
+            readers.for_assessment(v1).services_list(v1)
             readers.for_assessment(old).services_list(old)
-        self.assertEqual(seen['labels'], [sentinel.NEW_PATH, sentinel.LEGACY_RECORD])
+        self.assertEqual(seen['labels'], [sentinel.NEW_PATH, sentinel.LEGACY_RECORD, sentinel.LEGACY_RECORD])
 
     def test_the_label_of_an_encounter_follows_its_assessment_then_its_context(self):
-        events = SimpleNamespace(engine_version='cpt-studio-events@1')
+        # design v2 (FINAL-V2 6.2; step 5c): a v1 row - a cpt-studio-events@1 assessment, a gemini-context@1 context -
+        # is labelled legacy_record; a v2 one new_path
+        events = SimpleNamespace(engine_version='cpt-studio-events@2')
+        v1 = SimpleNamespace(engine_version='cpt-studio-events@1')
         legacy = SimpleNamespace(engine_version='cpt-studio-validation@10')
-        gemini, old = SimpleNamespace(version='gemini-context@1'), SimpleNamespace(version='gi-context@5')
+        gemini, old = SimpleNamespace(version='gemini-context@2'), SimpleNamespace(version='gi-context@5')
+        gemini_v1 = SimpleNamespace(version='gemini-context@1')
         rows = ((events, old, sentinel.NEW_PATH), (legacy, gemini, sentinel.LEGACY_RECORD),
+                (v1, gemini_v1, sentinel.LEGACY_RECORD), (None, gemini_v1, sentinel.LEGACY_RECORD),
                 (None, gemini, sentinel.NEW_PATH), (None, old, sentinel.LEGACY_RECORD), (None, None, sentinel.NEW_PATH))
         for assessment, context, label in rows:
             encounter = SimpleNamespace(current_assessment=assessment, current_assessment_id=1 if assessment else None,
@@ -274,6 +298,9 @@ def denied_removal():
 
 class NewPathCase(EventsCase):
     corti_groups = (TWO_CODES, DENIED_CODES)
+    # DECISIONS D243: a marked test reads each scenario as its v2 twin (tests/v2_documents.py)
+    v2_scenarios = {**EventsCase.v2_scenarios, denied_removal: v2_documents.denied_removal}
+    v2_corti_groups = (v2_documents.TWO_CODES, v2_documents.DENIED_CODES)
 
     def setUp(self):
         super().setUp()
@@ -303,16 +330,19 @@ class NewPathCase(EventsCase):
 
 
 class NewPathConsumerTests(NewPathCase):
-    """FINAL 8.3 and 10.4(1) for read time: every consumer, on new-path encounters, in strict mode."""
+    """FINAL 8.3 and 10.4(1) for read time: every consumer, on new-path encounters, in strict mode (DECISIONS D243 with
+    D251, R9: on design v2's path, the RETIRED kind counted too)."""
 
+    @v2_replay.applied  # DECISIONS D243 (D251: O20's R9)
     def test_every_consumer_reads_a_new_path_encounter_with_no_legacy_execution(self):
         encounter = self.new_path_encounter()
-        with sentinel.strict('S11 read time: a new-path encounter, no decision') as opened:
+        with sentinel.strict('S11 read time: a new-path encounter, no decision', retired=True) as opened:
             served = read_everything(self, encounter, self.membership, self.user)
         self.assertEqual(opened.count(sentinel.NEW_PATH), 0)
         statuses = {view.code: view.status for view in served['views'].values() if view.bucket != 'alternative'}
         self.assertEqual(statuses, {'43239': 'ready', '45385': 'needs_clarification'})
 
+    @v2_replay.applied  # DECISIONS D243 (D251: O20's R9)
     def test_the_instrument_is_live_a_planted_legacy_call_in_a_consumer_trips_it(self):
         encounter = self.new_path_encounter()
         real = customer_api.limitations
@@ -322,31 +352,56 @@ class NewPathConsumerTests(NewPathCase):
             return real(*args)
 
         with mock.patch.object(customer_api, 'limitations', side_effect=planted), \
-                self.assertRaises(AssertionError) as caught, sentinel.strict('S11 positive control'):
+                self.assertRaises(AssertionError) as caught, sentinel.strict('S11 positive control', retired=True):
             read_everything(self, encounter, self.membership, self.user)
         self.assertIn('studio/validation/reconcile.py', str(caught.exception))
 
+    @v2_replay.applied  # DECISIONS D243 (D251: O20's R9)
+    def test_the_instrument_is_live_a_planted_retired_call_in_a_consumer_trips_it(self):
+        # R9's own positive control (refutation 6a-r1 F2): a RETIRED module's function - the sentinel's own retired probe,
+        # sentinel.PROBE_CALL_RETIRED - run inside a consumer fails the S11 check as a legacy one does; v1's instrument
+        # (strict without retired=True) leaves those code objects unarmed and would count nothing
+        encounter = self.new_path_encounter()
+        module, name, arguments = sentinel.PROBE_CALL_RETIRED
+        retired_function = getattr(importlib.import_module(module), name)
+        real = customer_api.limitations
+
+        def planted(*args):
+            retired_function(*arguments)  # a retired v1 module's function (FINAL-V2 5.0), as a consumer that kept it
+            return real(*args)
+
+        with mock.patch.object(customer_api, 'limitations', side_effect=planted) as plant, \
+                self.assertRaises(AssertionError) as caught, sentinel.strict('S11 retired control', retired=True):
+            read_everything(self, encounter, self.membership, self.user)
+        self.assertTrue(plant.called)
+        self.assertIn(f"studio/interpretation/{module.rsplit('.', 1)[1]}.py", str(caught.exception))
+
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_a_decision_and_its_readers_run_no_legacy_code(self):
         encounter = self.new_path_encounter()
-        with sentinel.strict('S11 a decision on a new-path assessment') as opened:
+        with sentinel.strict('S11 a decision on a new-path assessment', retired=True) as opened:
             decision = self.decide(encounter, '43239', 'approve')
             served = read_everything(self, encounter, self.membership, self.user)
         self.assertEqual(opened.count(sentinel.NEW_PATH), 0)
         self.assertEqual(decision.action, 'approve')
         self.assertEqual(served['views'][decision.proposal.key].decision, 'approve')
 
+    @v2_replay.applied  # DECISIONS D243 (D251: O20's R9)
     def test_a_member_answer_its_recompute_and_its_withdrawal_run_no_legacy_code(self):
         encounter = self.new_path_encounter()
         rows = answers.details_needed(encounter, review.live_assessment(encounter))
         row = next(item for item in rows if '45385' in item['affects'] and 'not_documented' in item['allow'])
-        with sentinel.strict('S11 a member answer on a new-path revision') as opened:
+        with sentinel.strict('S11 a member answer on a new-path revision', retired=True) as opened:
             saved = answers.save_details(encounter, self.user, [{'id': row['id'], 'fact': row['fact'],
                                                                  'value': 'not_documented'}])
             read_everything(self, encounter, self.membership, self.user)
         self.assertEqual(opened.count(sentinel.NEW_PATH), 0)
         self.assertTrue(saved['answer_ids'])
         self.settle()  # the recompute (AGAIN): a new new-path assessment that read the answer
-        with sentinel.strict('S11 the recomputed assessment') as opened:
+        # (on design v2's path the recompute records this door-saved answer as asked differently and read time applies
+        # it - the open question Q1 of step q02's repair NOTES; tests.test_pipeline_assess_events.AgainTests.
+        # test_an_answer_saved_through_the_details_door_is_applied_by_the_recompute_as_read_time_applies_it)
+        with sentinel.strict('S11 the recomputed assessment', retired=True) as opened:
             served = read_everything(self, encounter, self.membership, self.user)
             answer = models.MemberAnswer.objects.get(pk=saved['answer_ids'][0])
             answers.revoke_answer(encounter, self.user, answer.pk)
@@ -355,12 +410,13 @@ class NewPathConsumerTests(NewPathCase):
         excluded = [view for view in served['views'].values() if view.code == '45385']
         self.assertTrue(excluded and excluded[0].status == 'excluded', excluded)
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_a_reinstated_exclusion_holds_the_base_and_its_coverage_is_read_again_with_no_legacy_code(self):
         encounter = self.new_path_encounter(denied_removal)
         excluded = self.proposal_of(encounter, '45385')
         self.assertEqual((excluded.bucket, excluded.reinstatable), ('excluded', True))
         self.assertEqual(self.proposal_of(encounter, '45378').status, 'ready')
-        with sentinel.strict('S11 a reinstated exclusion on a new-path assessment') as opened:
+        with sentinel.strict('S11 a reinstated exclusion on a new-path assessment', retired=True) as opened:
             self.decide(encounter, '45385', 'reinstate')
             served = read_everything(self, encounter, self.membership, self.user)
         self.assertEqual(opened.count(sentinel.NEW_PATH), 0)
@@ -374,11 +430,15 @@ class NewPathConsumerTests(NewPathCase):
         self.assertIn('approve', review.allowed_actions(self.proposal_of(encounter, '45385'),
                                                         review.live_assessment(encounter), self.membership))
         self.assertEqual(served['completeness']['reinstated'], ['45385'])
-        self.assertIn('45385', served['completeness']['covered']['gi.colonoscopy'])
+        # DECISIONS D243: design v2's coverage is keyed by the session it reconciles (engine/coverage.py: covered[session
+        # id]; FINAL-V2 4.9), and X1 is the colonoscopy (tests/v2_documents.denied_removal_answer) - the key 'gi.colonoscopy'
+        # was v1's family key
+        self.assertIn('45385', served['completeness']['covered']['X1'])
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_every_write_of_a_member_runs_no_legacy_code(self):
         encounter = self.new_path_encounter()
-        with sentinel.strict('S11 the writes') as opened:
+        with sentinel.strict('S11 the writes', retired=True) as opened:
             self.decide(encounter, '43239', 'approve')
             self.decide(encounter, '45385', 'reject')
             for kind, fmt in ((reports.DRAFT, 'txt'), (reports.DRAFT, 'csv')):
@@ -397,13 +457,14 @@ class NewPathParticipantConsumerTests(NewPathCase):
     """The operator report's peer-review sections (phase 2) on a new-path final assessment: the located passages' pages
     are read without studio.candidates (reports._paging)."""
 
+    @v2_replay.applied  # DECISIONS D243 (D251: O20's R9)
     def test_the_final_assessment_with_peer_reviews_runs_no_legacy_code(self):
         from django.test import override_settings
 
         with override_settings(ASTRA_MODE='replay', FABLE_MODE='replay'):
             encounter = self.new_path_encounter()
             self.assertEqual(review.assessment_phase(encounter.current_assessment), 2)
-            with sentinel.strict('S11 a new-path final assessment with peer reviews') as opened:
+            with sentinel.strict('S11 a new-path final assessment with peer reviews', retired=True) as opened:
                 served = read_everything(self, encounter, self.membership, self.user)
             self.assertEqual(opened.count(sentinel.NEW_PATH), 0)
         self.assertIn(b'PEER REVIEW', served['operator_txt'])
@@ -420,10 +481,12 @@ class NewPathUnlistedCodeTests(NewPathCase):
     corti_unlisted_words(events=True): interpretation.wording.unlisted_codes), never by checks.unlisted_codes, which the
     sentinel denies on the new path - so the consumer matrix runs with zero new_path executions, and states it."""
     corti_groups = ((*TWO_CODES, (LONG, POLYP)),)
+    v2_corti_groups = ((*v2_documents.TWO_CODES, (LONG, v2_documents.POLYP)),)  # DECISIONS D243: the same, on the v2 twin
 
+    @v2_replay.applied  # DECISIONS D243 (D251: O20's R9)
     def test_the_unlisted_sentence_is_said_on_the_console_and_in_the_report_with_no_legacy_code(self):
         encounter = self.new_path_encounter()
-        with sentinel.strict('S11 a Corti code that cannot be listed, on a new-path encounter') as opened:
+        with sentinel.strict('S11 a Corti code that cannot be listed, on a new-path encounter', retired=True) as opened:
             served = read_everything(self, encounter, self.membership, self.user)
         self.assertEqual(opened.count(sentinel.NEW_PATH), 0)
         row = next(item for item in served['operator']['harness']['participants'] if item['name'] == 'corti')
@@ -503,6 +566,7 @@ class ScopeTests(NewPathCase):
             response = call()
         return response, opened
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_a_request_naming_a_new_path_encounter_runs_under_new_path(self):
         encounter = self.new_path_encounter()
         response, opened = self.scopes_of(lambda: self.client_.get(f'/api/encounters/{encounter.pk}'))
@@ -521,6 +585,7 @@ class ScopeTests(NewPathCase):
         self.assertEqual((response.status_code, opened[0]), (200, (sentinel.LEGACY_RECORD,
                                                                    'web:studio.api.encounter_detail')))
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_a_request_naming_no_encounter_runs_under_other_and_labels_each_row(self):
         encounter = self.new_path_encounter()
         s = pf.scenario()
@@ -562,6 +627,7 @@ class ScopeTests(NewPathCase):
                 self.assertIs(getattr(pattern.callback, '__wrapped__', None) is not None, True)
                 self.assertEqual(pattern.callback.__code__.co_qualname, 'web_scope.<locals>.scoped')
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_a_read_that_ran_legacy_code_records_the_trip_and_still_answers(self):
         encounter = self.new_path_encounter()
         real = customer_api.limitations
@@ -594,6 +660,7 @@ class ScopeTests(NewPathCase):
                          [(entry, True, 'executed')])
         self.assertTrue(any('studio/validation/reconcile.py' in line for line in trips[0].data['executed']))
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_the_decision_gate_refuses_and_records_nothing_but_the_trip(self):
         encounter = self.new_path_encounter()
         proposal = self.proposal_of(encounter, '43239')
@@ -610,6 +677,7 @@ class ScopeTests(NewPathCase):
                                                       'acknowledgement': ACK}), content_type='application/json')
         self.assertEqual(response.status_code, 201, response.content)
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_the_member_answer_gate_refuses_and_records_nothing_but_the_trip(self):
         encounter = self.new_path_encounter()
         rows = answers.details_needed(encounter, review.live_assessment(encounter))
@@ -650,6 +718,7 @@ class ScopeTests(NewPathCase):
                                                                                    encounter=encounter))
         self.assertEqual(entries, sorted([reports.CUSTOMER_REPORT_GATE, reports.OPERATOR_REPORT_GATE]))
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_a_process_that_cannot_count_refuses_new_path_writes(self):
         encounter = self.new_path_encounter()
         proposal = self.proposal_of(encounter, '43239')
@@ -685,15 +754,18 @@ class GateUnderTheLockTests(NewPathCase):
         """(the encounter as it stands, the same row as a request read it before its lock): a legacy encounter
         (tests.test_pipeline_assess_events.legacy_encounter), read; then a member's context save has its revision's
         first interpretation run, to a new-path assessment."""
-        encounter, revision, _, _ = legacy_encounter(self.ws, self.user)
+        encounter, revision, _, _ = legacy_encounter(self.ws, self.user, self.scenario_of(two_procedures))
         stale = models.Encounter.objects.get(pk=encounter.pk)
         jobs.change_context(encounter, self.user, {'setting': 'asc'})
-        value, _ = two_procedures()
-        request = adapter.build_request(revision.text, jobs._participant_pages(revision),
-                                        jobs._participant_document(revision)[0])
-        folder = Path(self.replay) / adapter.NAME
-        folder.mkdir(exist_ok=True)
-        (folder / f'{request.canonical_sha256}.json').write_bytes(envelope(value))
+        value, _ = self.scenario_of(two_procedures)()
+        if v2_replay.marked(self):  # DECISIONS D243: pass 1's answer for the revision's exact text
+            self.v2.register(revision.text, value)
+        else:
+            request = adapter.build_request(revision.text, jobs._participant_pages(revision),
+                                            jobs._participant_document(revision)[0])
+            folder = Path(self.replay) / adapter.NAME
+            folder.mkdir(exist_ok=True)
+            (folder / f'{request.canonical_sha256}.json').write_bytes(envelope(value))
         self.settle()
         encounter.refresh_from_db()
         self.assertTrue(interpretation.is_new_assessment(review.live_assessment(encounter)))
@@ -735,6 +807,7 @@ class GateUnderTheLockTests(NewPathCase):
                 make(stale, reports.DRAFT, 'txt', self.user)
         self.assertFalse(models.ReportArtifact.objects.filter(encounter=encounter).exists())
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_a_member_answer_and_its_withdrawal_are_decided_from_the_locked_row(self):
         encounter, stale = self.read_then_interpreted()
         rows = answers.details_needed(encounter, review.live_assessment(encounter))
@@ -759,13 +832,18 @@ class GateUnderTheLockTests(NewPathCase):
 
 class CustomerNamesNoProviderTests(NewPathCase):
     def test_the_denylist_refuses_the_interpreters_provider_and_model_and_keeps_argon(self):
-        for text in ('Read by Gemini.', 'gemini-4-argon', 'Google read it', 'GEMINI', 'the gemini-4 model'):
+        # the interpreter's model since DECISIONS D230 (gemini-4-carbon) and before it (gemini-4-argon), both refused;
+        # the clinical words those names share stay a member's words (argon plasma coagulation, a carbon tattoo)
+        for text in ('Read by Gemini.', 'gemini-4-argon', 'Google read it', 'GEMINI', 'the gemini-4 model',
+                     'gemini-4-carbon', 'Read by GEMINI-4-CARBON.', interpretation.MODEL):
             with self.subTest(text=text):
                 self.assertEqual(customer_api.plain(text), '')
-        for text in ('Argon plasma coagulation of the antral vascular ectasia.', 'argon beam'):
+        for text in ('Argon plasma coagulation of the antral vascular ectasia.', 'argon beam',
+                     'No carbon-particle tattoo was placed into the resection bed.', 'carbon dioxide insufflation'):
             with self.subTest(text=text):
                 self.assertEqual(customer_api.plain(text), text)
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_the_customer_json_and_exports_of_a_new_path_encounter_name_no_provider_or_model(self):
         encounter = self.new_path_encounter()
         self.decide(encounter, '43239', 'approve')
@@ -792,6 +870,7 @@ class UnreadableRecordTests(NewPathCase):
     """FINAL 8.1: a new-path assessment whose event coding this release cannot read is never approved or exported until
     it is assessed again - readiness says why, in the member's words too, and the approved export is refused."""
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_readiness_blocks_and_the_member_is_told(self):
         encounter = self.new_path_encounter()
         self.decide(encounter, '43239', 'approve')
@@ -807,6 +886,7 @@ class UnreadableRecordTests(NewPathCase):
                          (False, [customer_api.BLOCKER_EXACT[review.UNREADABLE_EVENTS_BLOCKER]]))
         self.assertFalse(models.ReportArtifact.objects.filter(encounter=encounter).exists())
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_d50_no_decision_but_a_revoke_is_taken_on_a_record_this_release_cannot_read(self):
         """D50 (the S17 refutation, finding 15): the blocker's promise is enforced on the decision path. With the event
         coding unreadable (a version this release does not read, written as a later release would), a READY code offers
@@ -834,6 +914,7 @@ class UnreadableRecordTests(NewPathCase):
         self.assertEqual(review.allowed_actions(self.proposal_of(encounter, '43239'), review.live_assessment(encounter),
                                                 self.membership), [])
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_a_reinstated_codes_coverage_that_cannot_be_re_run_blocks_what_it_says_it_blocks(self):
         # review finding 2: the frozen event inventory a reinstated code's coverage is re-run over cannot be read (an
         # inventory version this release no longer reads, run bytes or a text sha256 that do not match: EventReader.
@@ -861,7 +942,10 @@ class UnreadableRecordTests(NewPathCase):
         self.assertEqual((completeness['state'], completeness['reasons'][-1], completeness['statement']),
                          ('incomplete', overlay.UNREADABLE_COVERAGE_REASON,
                           'Coding for this encounter is incomplete: ' + '; '.join(completeness['reasons']) + '.'))
-        self.assertNotIn('45385', completeness['covered'].get('gi.colonoscopy', []))  # the recorded coverage, as said
+        # DECISIONS D243 (refute-q02-r1 Q02-2): design v2's coverage is keyed by the session it reconciles, X1 the
+        # colonoscopy (as the reinstated-exclusion test reads it); v1's family key 'gi.colonoscopy' is never a v2 key, so
+        # .get('gi.colonoscopy', []) could not fail - indexed, a coverage without the colonoscopy's entry fails too
+        self.assertNotIn('45385', completeness['covered']['X1'])  # the recorded coverage, as said
         self.assertEqual(coding['state'], 'incomplete')
         self.assertIn(f'{overlay.UNREADABLE_COVERAGE_REASON}. Supported proposals stay available', coding['statement'])
         for said in (coding['statement'], completeness['statement'], str(refused.exception)):
@@ -964,6 +1048,7 @@ class SwitchBackHazardTests(NewPathCase):
         from tests.test_repairs_r1_m import install, run_app_script
         return set(run_app_script(install.TOUCHED_SINCE_READ, {'since': since.isoformat()})['touched'])
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_a_reinstatement_on_a_new_path_assessment_is_named_until_it_is_revoked(self):
         encounter = self.new_path_encounter(denied_removal)
         self.assertNotIn('reinstatement', self.hazards().get(str(encounter.pk), []))  # control: nothing reinstated
@@ -972,6 +1057,7 @@ class SwitchBackHazardTests(NewPathCase):
         self.decide(encounter, '45385', 'revoke')
         self.assertNotIn('reinstatement', self.hazards().get(str(encounter.pk), []))
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_touched_lists_an_encounter_only_for_a_record_created_since(self):
         encounter = self.new_path_encounter()
         later = timezone.now() + timedelta(seconds=1)
@@ -990,6 +1076,7 @@ class SwitchBackHazardTests(NewPathCase):
         reasons = self.hazards().get(str(encounter.pk), [])
         (self.assertIn if named else self.assertNotIn)('reinstatement', reasons)
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_d59_a_reinstated_code_approved_afterwards_stays_named_until_its_decision_is_revoked(self):
         # finding 11 (a): approve the base, reinstate the therapeutic code, approve it
         encounter = self.new_path_encounter(denied_removal)
@@ -1004,6 +1091,7 @@ class SwitchBackHazardTests(NewPathCase):
         self.decide(encounter, '45385', 'revoke')
         self.assert_named(encounter, False)  # both revoked: nothing stands reinstated
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_d59_a_reinstated_code_approved_with_its_base_undecided_stays_named_and_a_rejection_clears_it(self):
         # finding 11 (b): reinstate and approve the therapeutic code, the base left undecided - c2e53f8e then offered
         # the base's approve, and one click billed both
@@ -1019,6 +1107,7 @@ class SwitchBackHazardTests(NewPathCase):
         self.decide(encounter, '45385', 'reject')
         self.assert_named(encounter, False)
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_d59_an_image_without_review_reinstated_codes_reads_the_same_rule(self):
         # read where the image has it (hasattr); otherwise the same rule over the current decisions, never the
         # reinstatement alone
@@ -1040,6 +1129,7 @@ class SwitchBackHazardTests(NewPathCase):
             review.reinstated_codes = saved
         self.assertIs(review.reinstated_codes, saved)
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_d59_the_note_counts_the_new_path_encounters_holding_an_excluded_code_a_reviewer_can_reinstate(self):
         # DECISIONS D59 (finding 13): INTERPRETATION_MADE names them as 'reinstatable' - those whose current new-path
         # assessment holds an excluded, reinstatable code (an older overlay adds no base hold for a reinstatement made

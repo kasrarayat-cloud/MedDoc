@@ -91,6 +91,35 @@ def tearDownModule():
     release_host()
 
 
+# Design v2 (FINAL-V2 6.2 [R:MO-1]; amendment 1, 9.5; step 6b): the two reads the app phase makes after migrate and before
+# the switch, as a target with no design v1 row and nothing to count answers them - the stand-ins every app-phase world
+# of these suites gives (ops/test_install_v2.py runs both scripts on real rows and judges every other answer).
+def clean_v1_rows() -> dict:
+    """V1_ROWS' answer on a target that holds no design v1 row."""
+    return {'engine_version': install.V1_ENGINE_VERSION, 'interpretation_version': install.V1_INTERPRETATION_VERSION,
+            'assessments': 0, 'inventories': 0, 'encounter_count': 0, 'encounters': []}
+
+
+def clean_counts() -> dict:
+    """INSTALL_COUNTS' answer on a target with nothing to count and no hold standing."""
+    return {'size': {'bound_chars': 20000, 'bound_pages': 40, 'longest_chars': 0, 'without_inventory': 0,
+                     'over_chars': 0, 'over_pages': 0, 'unframed': 0, 'unframed_empty': 0, 'unframed_unextracted': 0,
+                     'encounters': {'over_chars': [], 'over_pages': [], 'unframed': []}},
+            'values': {'count': 0, 'first_install': True, 'encounters': []},
+            'refused': {name: {'count': 0, 'newest': None} for name in ('corti_sent', 'participant_sent', 'corti_token')},
+            'a21': {'count': 0, 'encounters': []},
+            'holds': {'provider': {'corti': [], 'astra': [], 'fable': []}, 'interpreter': []}}
+
+
+def pre_switch_answer(body):
+    """The clean answer of an app phase's pre-switch read ``body`` (V1_ROWS or INSTALL_COUNTS), else None."""
+    if body == install.V1_ROWS:
+        return clean_v1_rows()
+    if body == install.INSTALL_COUNTS:
+        return clean_counts()
+    return None
+
+
 def template(kind):
     return (DEPLOY / 'nginx' / f'cpt-quillmd-{kind}.conf').read_text(encoding='utf-8')
 
@@ -1477,12 +1506,17 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
                        authorization_ref='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
         corti = {'exists': True, 'kind': 'file', 'uid': install.APP_UID, 'gid': install.APP_UID, 'mode': '0o400'}
         # credentials, then migrate, then the read of the queue for stages this revision cannot run (refutation r1),
-        # then, once the pair is replaced, the recompute of the stored list states (refutation p1, migrate-2)
-        for loads, expected_commands in ((False, 1), (True, 4)):
+        # design v2's two reads before the switch (FINAL-V2 6.2's v1 rows; amendment 1, 9.5's counts), then, once the
+        # pair is replaced, the recompute of the stored list states (refutation p1, migrate-2)
+        for loads, expected_commands in ((False, 1), (True, 6)):
             commands = []
 
             def fake_oneshot(image_id, command, env, **kwargs):
                 commands.append(command)
+                for body in (install.V1_ROWS, install.INSTALL_COUNTS):
+                    if command[:2] == ['manage', 'shell'] and body in command[-1]:
+                        answer = install.APP_SCRIPT_ANSWER + json.dumps(pre_switch_answer(body))
+                        return SimpleNamespace(returncode=0, stderr=b'', stdout=answer.encode() + b'\n')
                 if command[:2] == ['manage', 'shell'] and install.UNRUNNABLE_STAGES in command[-1]:
                     answer = install.APP_SCRIPT_ANSWER + json.dumps({'known': [], 'stuck': 0, 'kinds': []})
                     return SimpleNamespace(returncode=0, stderr=b'', stdout=answer.encode() + b'\n')

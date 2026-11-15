@@ -1,0 +1,6 @@
+SYNTHETIC COLONOSCOPY REPORT
+Date of service: 03/14/2031
+Endoscopist: Corvin Ashdale, MD (fictional)
+
+Findings: The colonoscope was advanced to the cecum.
+Neither biopsy nor tattoo was performed.

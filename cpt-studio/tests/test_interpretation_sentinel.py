@@ -20,6 +20,10 @@ What each class proves:
   denied readers' keyword patterns are denied and SCOPE_FORMATS is not (R-5); only a pinned pattern is exempt, so a
   module that imports a legacy pattern leaves it denied, and every production regex equal to a denied one is a twin of a
   pinned pattern.
+- Design v2's RETIRED kind (FINAL-V2 5.0, 5.7 measures 1-3): RetiredSetTests, RetiredCountTests, RetiredUnarmedTests,
+  StrictModeTests, RetiredGateTests; and RetiredPatternTests (refutation 6a-r1 F7): the RETIRED kind's regex class in
+  test mode - a retired module's pattern read by the app's own code is counted as RETIRED and refuses, the seam leaves
+  it out in either order, strict measures it with retired=True only, and only the pinned twins are exempt.
 """
 from __future__ import annotations
 
@@ -71,8 +75,24 @@ FINAL_7_1 = ('code_scope', 'scope_check', 'exact_evidence', 'evidence_checks', '
 FINAL_10_1_READERS = ('evidence_readings', 'routing_readings', 'resolve_status', 'required_fact_states',
                       'separate_em_statement', 'routing_check', 'status_check', 'exclusion_reason', 'uncertain_reason',
                       'performed_clarification', 'unproposed_check', 'unsupported_check', 'restated', 'cite', 'silent')
-# The only exempt patterns, named again here: a new exemption takes a deliberate edit of both
-EXEMPT = ('studio.candidates._ISO_DATE', 'studio.gi.context.MONTH_YEAR', 'studio.gi.context._CHARGE_NOTE_OWN')
+# FINAL-V2 5.7 measure 1: each retired file's code-object count, named again here (RETIRED_SIZE is their sum)
+RETIRED_SIZES = {'studio/interpretation/prompt.py': 4, 'studio/interpretation/schema.py': 10,
+                 'studio/interpretation/read.py': 13, 'studio/interpretation/normalize.py': 79,
+                 'studio/interpretation/verify.py': 45, 'studio/interpretation/literals.py': 29,
+                 'studio/interpretation/identity.py': 36, 'studio/interpretation/lexicon.py': 32,
+                 'studio/interpretation/relations.py': 60, 'studio/interpretation/mapping.py': 47,
+                 'studio/interpretation/classes.py': 36, 'studio/interpretation/ercp.py': 85,
+                 'studio/interpretation/facts.py': 22, 'studio/interpretation/events.py': 171,
+                 'studio/interpretation/coverage.py': 72, 'studio/interpretation/combination.py': 27,
+                 'studio/interpretation/assess.py': 139}
+# The only exempt patterns, named again here: a new exemption takes a deliberate edit of both. Since the RETIRED kind has
+# a regex class (refutation 6a-r1 F7) the retired modules' twins are pinned too (RETIRED_EXEMPT)
+RETIRED_EXEMPT = ('studio.interpretation.literals.BARE_YEAR', 'studio.interpretation.literals.FULL_DATE',
+                  'studio.interpretation.literals.MONTH_YEAR', "studio.interpretation.literals._STORED['day']",
+                  "studio.interpretation.literals._STORED['month']", "studio.interpretation.literals._STORED['year']",
+                  'studio.interpretation.read._DATE')
+EXEMPT = ('studio.candidates._ISO_DATE', 'studio.gi.context.MONTH_YEAR', 'studio.gi.context._CHARGE_NOTE_OWN',
+          *RETIRED_EXEMPT)
 
 
 def patterns_in(value, depth=0) -> list:
@@ -138,8 +158,9 @@ class SentinelCase(SimpleTestCase):
 class DenySetTests(SentinelCase):
     def test_the_deny_set_is_computed_from_code_objects_and_equals_its_pins(self):
         status = sentinel.status()
-        self.assertEqual(sentinel.PINNED_SIZES, SIZES)
-        self.assertEqual(status['sizes'], SIZES)
+        self.assertEqual(sentinel.LEGACY_SIZES, SIZES)
+        self.assertEqual(sentinel.PINNED_SIZES, {**SIZES, **RETIRED_SIZES})  # FINAL-V2 5.7 measure 1: both kinds
+        self.assertEqual(status['sizes'], {**SIZES, **RETIRED_SIZES})
         self.assertEqual((status['deny_size'], sentinel.DENY_SIZE), (2539, 2539))
         self.assertEqual((status['positive_control'], status['tool'], status['tool_id']),
                          ('ok', 'sys.monitoring', 4))
@@ -223,8 +244,8 @@ class DenySetTests(SentinelCase):
         with mock.patch.object(sentinel.importlib, 'import_module', recorded_import), \
                 mock.patch.object(sentinel, '_compute', recorded_compute):
             self.assertEqual(sentinel.install()['state'], 'ok')
-        self.assertEqual(events, list(sentinel.DENY_MODULES) + [sentinel.CHECKS_MODULE, sentinel.JOBS_MODULE,
-                                                                'compute'])
+        self.assertEqual(events, list(sentinel.DENY_MODULES) + [sentinel.CHECKS_MODULE, sentinel.JOBS_MODULE]
+                         + list(sentinel.RETIRED_MODULES) + ['compute'])  # FINAL-V2 5.7 measure 1: the retired too
 
     def test_a_fresh_process_installs_it_from_nothing(self):
         # R-1: every process installs it - here a new interpreter that set Django up and imported nothing else
@@ -674,7 +695,8 @@ class GateTests(TestCase):
     def test_the_d22_record(self):
         with sentinel.scope(NEW, entry='assess') as opened:
             self.assertEqual(sentinel.record(), {'legacy_calls': 0, 'scope': 'assess', 'tool': 'sys.monitoring',
-                                                 'deny_size': 2539, 'positive_control': 'ok'})
+                                                 'deny_size': 2539, 'positive_control': 'ok', 'retired_calls': 0,
+                                                 'retired_size': 907, 'retired_control': 'ok'})
             with sentinel.scope(NEW, entry='child'):
                 legacy_call()
             legacy_call()
@@ -684,7 +706,9 @@ class GateTests(TestCase):
 
     def test_the_trip_test_is_the_positive_control_tripping(self):
         before = sentinel.totals()
-        self.assertEqual(sentinel.trip_test(), {'tripped': True, 'clean': True, 'counted': 1, 'ok': True})
+        found = sentinel.trip_test()
+        self.assertGreater(found.pop('retired_counted'), 0)  # FINAL-V2 5.7 measures 2-3: the retired probe trips too
+        self.assertEqual(found, {'tripped': True, 'clean': True, 'counted': 1, 'retired_tripped': True, 'ok': True})
         self.assertEqual(sentinel.totals(), before)  # private scopes: nothing joins a total
         self.assertEqual(self.trips(), [])  # and nothing is recorded
         sentinel.uninstall()
@@ -804,7 +828,12 @@ class CallCheckTests(SentinelCase):
     def test_only_a_pinned_pattern_is_exempt_and_holding_a_legacy_pattern_exempts_nothing(self):
         self.assertEqual(sorted(sentinel.EXEMPT_PATTERNS), sorted(EXEMPT))
         self.assertTrue(all(why.strip() for why in sentinel.EXEMPT_PATTERNS.values()))
-        self.assertEqual(sorted({where for where, _ in self.exempt.values()}), sorted(EXEMPT))
+        # each exempt pattern is named by (the first of) its pinned locations; a twin held by two pinned locations (the
+        # month-and-year literal gi.context and the retired literals both hold) is named once, by either
+        named = {where for where, _ in self.exempt.values()}
+        self.assertLessEqual(named, set(EXEMPT))
+        self.assertEqual({where for where in EXEMPT if not any(other in named for other in EXEMPT
+                                                                if self.same_pattern(where, other))}, set())
         patterns, _ = sentinel.denied_patterns()
         self.assertNotIn(id(context_facts._CHARGE_NOTE_OWN), patterns)  # the re-homed predicates' own pattern
         # the reviewer's case: a consumer that imports a legacy pattern (simulated on studio.progress) must not exempt
@@ -818,6 +847,17 @@ class CallCheckTests(SentinelCase):
             with self.assertRaises(AssertionError) as caught, sentinel.strict('a consumer\'s imported pattern'):
                 progress.PAGE_NUMBER_LINE.search('page 3')
         self.assertIn('studio.gi.cues.PAGE_NUMBER_LINE', str(caught.exception))
+
+    @staticmethod
+    def same_pattern(one: str, other: str) -> bool:
+        """Whether two pinned locations hold one compiled pattern (by identity, or by source and flags)."""
+        held = {}
+        for name in sentinel.DENY_MODULES + sentinel.RETIRED_MODULES:
+            for located in sentinel._pattern_globals(sys.modules[name]).values():
+                held.update(located)
+        first, second = held.get(one), held.get(other)
+        return first is not None and second is not None and (
+            first is second or (first.pattern, first.flags) == (second.pattern, second.flags))
 
     def test_every_production_twin_of_a_denied_pattern_is_a_twin_of_a_pinned_one(self):
         # re's cache returns one object for one source in some import orders, so a production regex equal to a denied
@@ -873,3 +913,433 @@ class CallCheckTests(SentinelCase):
             with sentinel.strict('dirty'):
                 self.pattern.search('page 3')
         self.assertIn('studio.gi.cues.PAGE_NUMBER_LINE', str(caught.exception))
+
+
+# --- design v2: the RETIRED kind (docs/gemini-migration/FINAL-V2.md 5.0 and 5.7 measures 1-3; step 6a) ------------------
+
+RETIRED_NAMES = ('prompt', 'schema', 'read', 'normalize', 'verify', 'literals', 'identity', 'lexicon', 'relations',
+                 'mapping', 'classes', 'ercp', 'facts', 'events', 'coverage', 'combination', 'assess')  # FINAL-V2 5.0
+KEPT = ('__init__', 'adapter', 'holds', 'sentinel', 'readers', 'overlay', 'store', 'wording', 'report', 'replay', 'dates')
+
+
+def retired_call():
+    """One execution of the RETIRED kind's positive-control function (its callees run too)."""
+    from studio.interpretation import lexicon
+
+    return lexicon.negation('no')
+
+
+def interpretation_layout(root: Path, extra=()):
+    """A studio/interpretation of empty files: the kept and retired modules, contract/ and engine/, and ``extra``."""
+    folder = root / 'interpretation'
+    for name in KEPT + RETIRED_NAMES + tuple(extra):
+        (folder / name).parent.mkdir(parents=True, exist_ok=True)
+        (folder / f'{name}.py').write_text('', encoding='utf-8')
+    for package in ('contract', 'engine'):
+        (folder / package).mkdir(exist_ok=True)
+        (folder / package / '__init__.py').write_text('', encoding='utf-8')
+        (folder / package / 'module.py').write_text('', encoding='utf-8')
+
+
+class RetiredSetTests(SentinelCase):
+    """5.7 measure 1: the 17 retired modules denied whole, as code objects, armed by the existing machinery, of the
+    RETIRED kind, their list the files and their sizes pinned."""
+
+    def test_the_retired_set_is_computed_from_code_objects_and_equals_its_pins(self):
+        status = sentinel.status()
+        self.assertEqual(sentinel.RETIRED_MODULES, tuple(f'studio.interpretation.{name}' for name in RETIRED_NAMES))
+        self.assertEqual(sentinel.RETIRED_SIZES, RETIRED_SIZES)
+        self.assertEqual((status['retired_size'], status['pinned_retired_size'], sentinel.RETIRED_SIZE), (907,) * 3)
+        self.assertEqual((status['retired_control'], status['retired_armed'], status['retired_modules']),
+                         ('ok', True, 17))
+        by_file = {}
+        for code in sentinel.retired_set().values():
+            by_file[code.co_filename] = by_file.get(code.co_filename, 0) + 1
+        files = {sys.modules[name].__file__: sentinel._module_key(sys.modules[name]) for name in sentinel.RETIRED_MODULES}
+        self.assertEqual({files[path]: n for path, n in by_file.items()}, RETIRED_SIZES)
+        events = sys.monitoring.events
+        self.assertTrue(all(sys.monitoring.get_local_events(4, code) == events.PY_START
+                            for code in sentinel.retired_set().values()))
+        # the two kinds are disjoint, and each code object is counted as its own kind
+        self.assertFalse(set(sentinel.retired_set()) & set(sentinel.deny_set()))
+        from studio.interpretation import lexicon
+        self.assertEqual(sentinel.kind_of(id(lexicon.negation.__code__)), sentinel.RETIRED)
+        self.assertEqual(sentinel.kind_of(id(cues.page_number_line.__code__)), sentinel.LEGACY)
+        # nested code objects and the cache wrapper are the RETIRED kind's too
+        from studio.interpretation import events as v1_events
+        nested = [const for const in v1_events.another_role_hold.__code__.co_consts
+                  if isinstance(const, type(v1_events.another_role_hold.__code__))]
+        self.assertTrue(nested)
+        self.assertTrue(all(id(code) in sentinel.retired_set() for code in nested))
+        self.assertEqual(sentinel.kind_of(id(lexicon._compiled)), sentinel.RETIRED)
+        # the new path's own code is in neither set
+        from studio.interpretation import dates, store
+        from studio.interpretation.engine import assess as engine_assess, combination as engine_combination
+        for code in (engine_assess.assess.__code__, engine_combination.procedure_day.__code__,
+                     dates.member_date_state.__code__, store.load_v2.__code__):
+            self.assertNotIn(id(code), sentinel.retired_set())
+            self.assertNotIn(id(code), sentinel.deny_set())
+            self.assertEqual(sys.monitoring.get_local_events(4, code), 0)
+
+    def test_the_retired_list_is_the_files_but_the_kept_ones(self):
+        on_disk = {path.stem for path in (APP / 'studio' / 'interpretation').glob('*.py')}
+        self.assertEqual({f'studio.interpretation.{stem}' for stem in on_disk - set(KEPT)},
+                         set(sentinel.RETIRED_MODULES))
+        self.assertEqual(sentinel.expected_retired(), set(sentinel.RETIRED_MODULES))
+        sentinel.check_retired_list()
+
+    def test_a_new_top_level_module_a_missing_one_and_code_outside_contract_and_engine_refuse(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            interpretation_layout(root)
+            sentinel.check_retired_list(root)  # the tree's layout: accepted
+            interpretation_layout(root, extra=('newreader',))
+            with self.assertRaisesRegex(sentinel._Refused, r"neither kept nor retired \['studio\.interpretation\."
+                                                           r"newreader'\]"):
+                sentinel.check_retired_list(root)
+            (root / 'interpretation' / 'newreader.py').unlink()
+            (root / 'interpretation' / 'lexicon.py').unlink()
+            with self.assertRaisesRegex(sentinel._Refused, r"not a file \['studio\.interpretation\.lexicon'\]"):
+                sentinel.check_retired_list(root)
+            interpretation_layout(root)
+            (root / 'interpretation' / 'replay.py').unlink()
+            with self.assertRaisesRegex(sentinel._Refused, r"no kept module \['replay'\]"):
+                sentinel.check_retired_list(root)
+            interpretation_layout(root)
+            (root / 'interpretation' / 'v3').mkdir()
+            (root / 'interpretation' / 'v3' / 'reader.py').write_text('', encoding='utf-8')
+            with self.assertRaisesRegex(sentinel._Refused, r'outside contract/ and engine/'):
+                sentinel.check_retired_list(root)
+            (root / 'interpretation' / 'v3' / 'reader.py').unlink()
+            (root / 'interpretation' / 'contract' / 'deeper').mkdir()
+            (root / 'interpretation' / 'contract' / 'deeper' / 'x.py').write_text('', encoding='utf-8')
+            sentinel.check_retired_list(root)  # under contract/: new code's place
+        with self.assertRaisesRegex(sentinel._Refused, 'differ from the files'):
+            sentinel.check_retired_list(modules=sentinel.RETIRED_MODULES + ('studio.interpretation.lexicon',))
+        with self.assertRaisesRegex(sentinel._Refused, 'differ from the files'):
+            sentinel.check_retired_list(modules=sentinel.RETIRED_MODULES[1:])
+
+    def test_a_retired_pin_or_probe_that_does_not_hold_fails_the_install_and_the_failure_stands(self):
+        self.reinstall_after()
+        cases = {
+            'a retired file\'s pin': (mock.patch.dict(sentinel.PINNED_SIZES,
+                                                      {'studio/interpretation/lexicon.py': 31}),
+                                      'differs from its pins'),
+            'a retired list that is not the files': (mock.patch.object(sentinel, 'RETIRED_MODULES',
+                                                                       sentinel.RETIRED_MODULES[:-1]),
+                                                     'retired modules differ from the files'),
+            'a probe of another kind': (mock.patch.object(sentinel, 'PROBE_CALL_RETIRED',
+                                                          ('studio.gi.cues', 'page_number_line', ('3',))),
+                                        'is not of the RETIRED kind'),
+            'a probe counted twice': (mock.patch.object(sentinel, '_retired_probe_count', return_value=2),
+                                      'counted 2 times, not exactly once'),
+            'a probe never counted': (mock.patch.object(sentinel, '_retired_probe_count', return_value=0),
+                                      'counted 0 times, not exactly once'),
+        }
+        for what, (patch, reason) in cases.items():
+            with self.subTest(case=what):
+                sentinel.uninstall()
+                with patch, self.assertLogs(sentinel.log, 'ERROR'):
+                    status = sentinel.install()
+                self.assertEqual(status['state'], 'failed')
+                self.assertIn(reason, status['reason'])
+                self.assertEqual((status['retired_control'], status['positive_control'], status['retired_armed']),
+                                 ('failed', 'failed', False))
+                self.assertEqual((sentinel.retired_set(), sentinel.deny_set()), ({}, {}))
+                self.assertEqual(sentinel.install()['state'], 'failed')  # the failure stands
+                self.assertEqual(sentinel.refusal(sentinel.Scope(NEW, 'x', armed=True)), 'unavailable')
+
+    def test_the_retired_probe_is_counted_exactly_once_under_the_probe_label(self):
+        from studio.interpretation import lexicon
+
+        self.assertEqual(sentinel.PROBE_CALL_RETIRED, ('studio.interpretation.lexicon', 'negation', ('no',)))
+        self.assertEqual(sentinel._retired_probe_count(lexicon.negation), 1)
+        before = sentinel.totals()
+        with sentinel._private() as probe:
+            lexicon.negation('no')
+            lexicon.negation('no')
+        self.assertEqual(probe.hits[sentinel.PROBE][id(lexicon.negation.__code__)], 2)  # the control: it counts calls
+        self.assertEqual(sentinel.totals(), before)  # the probe label joins no total
+
+
+class RetiredCountTests(SentinelCase):
+    """A retired execution is counted under its label and as the RETIRED kind, apart from a legacy one; it joins the
+    scope from a forked child; in test mode its cache wrapper is counted; the D22 record reports it apart."""
+
+    LIMITS = {'seconds': 60, 'memory_bytes': 512 * 1024 * 1024}
+
+    def test_counted_under_its_label_and_kind_apart_from_the_legacy_set(self):
+        with sentinel.scope(NEW, entry='assess') as opened:
+            retired_call()
+            legacy_call()
+            with sentinel.relabel(LEGACY):
+                retired_call()
+            record = sentinel.record()
+        kinds = opened.by_set(NEW)
+        self.assertGreater(kinds[sentinel.RETIRED], 0)
+        self.assertEqual(kinds[sentinel.LEGACY], 1)
+        self.assertEqual(record['legacy_calls'], 1)
+        self.assertEqual(record['retired_calls'], kinds[sentinel.RETIRED])
+        self.assertEqual((record['retired_size'], record['retired_control']), (907, 'ok'))
+        self.assertGreater(opened.by_set(LEGACY)[sentinel.RETIRED], 0)  # the relabelled row's, under legacy_record
+        self.assertEqual(opened.by_set(LEGACY)[sentinel.LEGACY], 0)
+        self.assertEqual(sentinel.refusal(opened), 'executed')
+        self.assertRegex('\n'.join(opened.describe(NEW)), r'studio/interpretation/lexicon\.py:\d+ negation x1')
+        self.assertRegex(opened.entries[0], r'retired_call -> studio/interpretation/lexicon\.py:\d+ negation$')
+
+    def test_a_retired_execution_alone_refuses_and_a_clean_scope_does_not(self):
+        with sentinel.scope(NEW, entry='assess') as dirty:
+            retired_call()
+        with sentinel.scope(NEW, entry='assess') as clean:
+            from studio.interpretation.engine import catalogue
+            catalogue.EM_FAMILIES  # new-path code and data: nothing counted
+        self.assertEqual(dirty.by_set(NEW)[sentinel.LEGACY], 0)
+        self.assertEqual(sentinel.refusal(dirty), 'executed')
+        self.assertIsNone(sentinel.refusal(clean))
+        with sentinel.scope(LEGACY, entry='a legacy row') as legacy_row:
+            retired_call()
+        self.assertIsNone(sentinel.refusal(legacy_row))  # a legacy_record scope's own reads refuse nothing
+
+    def test_a_forked_childs_retired_executions_join_the_parents_scope_as_retired(self):
+        with sentinel.scope(NEW, entry='assess') as opened:
+            result = sentinel.run_counted(retired_call, **self.LIMITS)
+        self.assertEqual(result, ('no',))
+        self.assertGreater(opened.by_set(NEW)[sentinel.RETIRED], 0)
+        self.assertEqual(opened.by_set(NEW)[sentinel.LEGACY], 0)
+        self.assertEqual(sentinel.refusal(opened), 'executed')
+
+    def test_in_test_mode_a_retired_cache_hit_is_counted_as_retired(self):
+        from studio.interpretation import lexicon
+
+        with sentinel.call_checks(), sentinel.scope(NEW, entry='stage') as opened:
+            lexicon._compiled.cache_clear()
+            lexicon._compiled(('no',))
+            first = (opened.by_kind(), opened.by_set())
+            lexicon._compiled(('no',))  # a hit: only the CALL check sees it
+            second = (opened.by_kind(), opened.by_set())
+        self.assertEqual(second[0][sentinel.CACHE] - first[0][sentinel.CACHE], 1)
+        self.assertEqual(second[0][sentinel.CODE] - first[0][sentinel.CODE], 0)
+        self.assertEqual(second[1][sentinel.RETIRED] - first[1][sentinel.RETIRED], 1)
+        self.assertEqual(second[1][sentinel.LEGACY], 0)
+
+
+class RetiredUnarmedTests(SentinelCase):
+    """retired_unarmed, the test-only v1 chain's seam: nothing retired is counted while it is open, the record is v1's
+    five keys, nested blocks nest, and the retired codes are armed again when it closes."""
+
+    def test_nothing_retired_is_counted_inside_and_everything_again_after(self):
+        events = sys.monitoring.events
+        from studio.interpretation import lexicon
+
+        code = lexicon.negation.__code__
+        with sentinel.retired_unarmed():
+            self.assertFalse(sentinel.retired_armed())
+            self.assertFalse(sentinel.status()['retired_armed'])
+            self.assertEqual(sys.monitoring.get_local_events(4, code), 0)
+            with sentinel.retired_unarmed():
+                pass
+            self.assertEqual(sys.monitoring.get_local_events(4, code), 0)  # the inner block left it unarmed
+            with sentinel.scope(NEW, entry='assess') as opened:
+                retired_call()
+                legacy_call()  # the legacy set is still counted
+                record = sentinel.record()
+            self.assertEqual(opened.by_set(NEW), {sentinel.LEGACY: 1, sentinel.RETIRED: 0})
+            self.assertEqual(sorted(record), ['deny_size', 'legacy_calls', 'positive_control', 'scope', 'tool'])
+            self.assertEqual(record['legacy_calls'], 1)
+            self.assertFalse(sentinel.trip_test()['retired_tripped'])
+        self.assertTrue(sentinel.retired_armed())
+        self.assertEqual(sys.monitoring.get_local_events(4, code), events.PY_START)
+        with sentinel.scope(NEW, entry='assess') as again:
+            retired_call()
+        self.assertGreater(again.by_set(NEW)[sentinel.RETIRED], 0)
+
+    def test_an_install_inside_it_leaves_the_retired_codes_unarmed_until_it_closes(self):
+        self.reinstall_after()
+        from studio.interpretation import lexicon
+
+        code = lexicon.negation.__code__
+        with sentinel.retired_unarmed():
+            sentinel.uninstall()
+            status = sentinel.install()
+            self.assertEqual((status['state'], status['retired_control'], status['retired_armed']), ('ok', 'ok', False))
+            self.assertEqual(sys.monitoring.get_local_events(4, code), 0)
+        self.assertEqual(sys.monitoring.get_local_events(4, code), sys.monitoring.events.PY_START)
+
+    def test_in_test_mode_a_retired_cache_hit_is_not_counted_inside_it(self):
+        from studio.interpretation import lexicon
+
+        with sentinel.call_checks(), sentinel.retired_unarmed(), sentinel.scope(NEW, entry='stage') as opened:
+            lexicon._compiled(('no',))
+            lexicon._compiled(('no',))
+        self.assertEqual(opened.by_set(NEW)[sentinel.RETIRED], 0)
+        with sentinel.retired_unarmed(), sentinel.call_checks(), sentinel.scope(NEW, entry='stage') as inner:
+            lexicon._compiled(('no',))
+        self.assertEqual(inner.by_set(NEW)[sentinel.RETIRED], 0)  # entered in either order
+
+
+class StrictModeTests(SentinelCase):
+    """strict(): v1's instrument by default (v1's own tests, S08 among them, run v1's events engine - retired modules -
+    inside it and read its count: FINAL-V2 5.0, 8.0), the retired kind unarmed while it is open and armed again after;
+    strict(retired=True) measures both kinds and refuses to open where the retired kind is not armed."""
+
+    def test_by_default_a_retired_execution_is_not_counted_and_a_legacy_one_still_fails_it(self):
+        from studio.interpretation import lexicon
+
+        code = lexicon.negation.__code__
+        with sentinel.strict('v1 record: the events engine') as opened:
+            self.assertFalse(sentinel.retired_armed())
+            self.assertEqual(sys.monitoring.get_local_events(4, code), 0)
+            retired_call()
+        self.assertEqual(opened.count(NEW), 0)  # what S08 reads after its block
+        self.assertEqual(opened.by_set(NEW), {sentinel.LEGACY: 0, sentinel.RETIRED: 0})
+        self.assertTrue(sentinel.retired_armed())  # armed again once it closed
+        self.assertEqual(sys.monitoring.get_local_events(4, code), sys.monitoring.events.PY_START)
+        with self.assertRaises(AssertionError) as caught, sentinel.strict('v1 record: a legacy call'):
+            retired_call()
+            legacy_call()
+        self.assertIn('cues.py', str(caught.exception))  # the legacy set is still measured, and named
+        self.assertNotIn('lexicon.py', str(caught.exception))
+
+    def test_with_retired_a_retired_execution_fails_it_named_by_file_and_function(self):
+        with self.assertRaises(AssertionError) as caught, sentinel.strict('v2: both kinds', retired=True) as opened:
+            self.assertTrue(sentinel.retired_armed())
+            retired_call()
+        self.assertIn('lexicon.py', str(caught.exception))
+        self.assertIn('negation', str(caught.exception))
+        self.assertGreater(opened.by_set(NEW)[sentinel.RETIRED], 0)
+        with sentinel.strict('v2: clean', retired=True) as clean:
+            pass
+        self.assertEqual(clean.count(NEW), 0)
+
+    def test_with_retired_it_refuses_to_open_inside_the_seam(self):
+        with sentinel.retired_unarmed(), self.assertRaises(AssertionError) as caught:
+            with sentinel.strict('v2 inside the seam', retired=True):
+                retired_call()  # never reached: it would be measured as nothing
+        self.assertIn('needs the RETIRED kind armed', str(caught.exception))
+        self.assertTrue(sentinel.retired_armed())
+
+    def test_the_default_nests_inside_the_seam_and_leaves_it_open(self):
+        with sentinel.retired_unarmed():
+            with sentinel.strict('v1 record inside the v1 chain'):
+                retired_call()
+            self.assertFalse(sentinel.retired_armed())  # the outer seam is still open
+        self.assertTrue(sentinel.retired_armed())
+
+
+class RetiredGateTests(GateTests):
+    """5.7 measure 2: the write gate refuses a new-path write when the scope counted any RETIRED execution - Tripped, and
+    the AuditEvent sentinel.tripped naming the RETIRED kind apart."""
+
+    def test_a_retired_execution_trips_the_gate(self):
+        with sentinel.scope(NEW, entry='assess'):
+            retired_call()
+            with self.assertLogs(sentinel.log, 'ERROR'), self.assertRaises(sentinel.Tripped) as tripped:
+                sentinel.gate('persist_assessment', encounter=self.encounter, actor=self.user)
+        self.assertEqual(tripped.exception.reason, 'executed')
+        self.assertEqual(str(tripped.exception), sentinel.MESSAGES['executed'])
+        (event,) = self.trips()
+        data = event.data
+        self.assertEqual((data['reason'], data['refused'], data['label']), ('executed', True, NEW))
+        self.assertEqual(data['new_path_by_kind'][sentinel.LEGACY], 0)
+        self.assertGreater(data['new_path_by_kind'][sentinel.RETIRED], 0)
+        self.assertTrue(any(line.startswith('studio/interpretation/lexicon.py:') for line in data['executed']))
+        self.assertRegex(data['entry_points'][0], r'retired_call -> studio/interpretation/lexicon\.py:\d+ negation$')
+
+    def test_a_legacy_execution_trips_it_and_the_record_names_the_legacy_kind(self):
+        with sentinel.scope(NEW, entry='assess'):
+            legacy_call()
+            with self.assertLogs(sentinel.log, 'ERROR'), self.assertRaises(sentinel.Tripped):
+                sentinel.gate('record_decision', encounter=self.encounter, actor=self.user)
+        (event,) = self.trips()
+        self.assertEqual(event.data['new_path_by_kind'], {sentinel.LEGACY: 1, sentinel.RETIRED: 0})
+
+    def test_a_clean_scope_passes_and_writes_nothing(self):
+        with sentinel.scope(NEW, entry='assess'):
+            self.assertIsNone(sentinel.gate('persist_assessment', encounter=self.encounter, actor=self.user))
+        self.assertEqual(self.trips(), [])
+
+
+def retired_pattern_read():
+    """One read of a retired module's compiled pattern (literals.SIZE, a 5.2 literal reader's) from the app's own code
+    (tests/ lives in the app: the CALL check reads call sites under it)."""
+    from studio.interpretation import literals
+
+    return literals.SIZE.search('A 6 mm polyp')
+
+
+class RetiredPatternTests(SentinelCase):
+    """Refutation 6a-r1 F7: the RETIRED kind's regex class (test mode; 5.7 measures 1 and 8). A retired module's compiled
+    pattern read by the app's own code is counted, of the RETIRED kind, and refuses a new-path write; the test-only seam
+    leaves the retired patterns out (entered before or after the checks) and puts them back when it closes; strict counts
+    them with retired=True and not by default (v1's instrument); and of the retired modules' patterns only the pinned
+    twins are exempt (RETIRED_EXEMPT: the date literals contract/date_literals copies for L1, and the bare ISO date
+    shape), so the L1 copy reads clean under strict(retired=True)."""
+
+    def test_a_retired_pattern_read_is_counted_as_retired_and_refuses(self):
+        from studio.interpretation import literals
+
+        patterns, exempt = sentinel.denied_patterns()
+        self.assertIn(id(literals.SIZE), patterns)
+        self.assertNotIn(id(literals.SIZE), exempt)
+        self.assertIn(id(literals.SIZE), sentinel.retired_patterns())
+        with sentinel.call_checks(), sentinel.scope(NEW, entry='a retired pattern') as opened:
+            self.assertIsNotNone(retired_pattern_read())
+        self.assertEqual(opened.by_kind()[sentinel.REGEX], 1)
+        self.assertEqual(opened.by_set(NEW), {sentinel.LEGACY: 0, sentinel.RETIRED: 1})
+        self.assertEqual(sentinel.kind_of(id(literals.SIZE)), sentinel.RETIRED)
+        self.assertEqual(sentinel.refusal(opened), 'executed')
+        self.assertIn('studio.interpretation.literals.SIZE', ' '.join(opened.describe()))
+        with sentinel.scope(NEW, entry='PY_START only') as unseen:  # the control: a C-level read PY_START never sees
+            retired_pattern_read()
+        self.assertEqual(unseen.counts(), {})
+        with sentinel.call_checks(), sentinel.scope(NEW, entry='a legacy pattern') as legacy:
+            cues.PAGE_NUMBER_LINE.search('3')
+        self.assertEqual(legacy.by_set(NEW), {sentinel.LEGACY: 1, sentinel.RETIRED: 0})  # the kinds stay apart
+
+    def test_the_seam_leaves_the_retired_patterns_out_in_either_order_and_puts_them_back(self):
+        with sentinel.call_checks(), sentinel.retired_unarmed(), sentinel.scope(NEW, entry='v1 chain') as inside:
+            retired_pattern_read()
+            cues.PAGE_NUMBER_LINE.search('3')  # the legacy set is still counted
+        self.assertEqual(inside.by_set(NEW), {sentinel.LEGACY: 1, sentinel.RETIRED: 0})
+        with sentinel.retired_unarmed(), sentinel.call_checks(), sentinel.scope(NEW, entry='v1 chain') as entered:
+            retired_pattern_read()
+        self.assertEqual(entered.by_set(NEW), {sentinel.LEGACY: 0, sentinel.RETIRED: 0})
+        with sentinel.call_checks():
+            with sentinel.retired_unarmed():
+                pass
+            with sentinel.scope(NEW, entry='after the seam closed inside the checks') as after:
+                retired_pattern_read()
+        self.assertEqual(after.by_set(NEW), {sentinel.LEGACY: 0, sentinel.RETIRED: 1})
+
+    def test_strict_measures_them_with_retired_and_not_by_default(self):
+        with self.assertRaises(AssertionError) as caught, sentinel.strict('v2: a retired pattern', retired=True):
+            retired_pattern_read()
+        self.assertIn('studio.interpretation.literals.SIZE', str(caught.exception))
+        with sentinel.strict('v1 record: a retired pattern') as opened:
+            retired_pattern_read()
+        self.assertEqual(opened.count(NEW), 0)
+
+    def test_only_the_pinned_twins_of_the_retired_modules_are_exempt(self):
+        from studio.interpretation.contract import date_literals
+
+        patterns, _ = sentinel.denied_patterns()
+        retired, exempted, denied = sentinel.retired_patterns(), set(), 0
+        for name in sentinel.RETIRED_MODULES:
+            for located in sentinel._pattern_globals(sys.modules[name]).values():
+                for where, pattern in located.items():
+                    with self.subTest(pattern=where):
+                        if where in sentinel.EXEMPT_PATTERNS:
+                            exempted.add(where)
+                            self.assertNotIn(id(pattern), patterns)
+                        else:
+                            denied += 1
+                            self.assertIn(id(pattern), patterns)
+                            self.assertIn(id(pattern), retired)
+        self.assertEqual(exempted, set(RETIRED_EXEMPT))
+        self.assertGreaterEqual(denied, 15)  # lexicon's, literals' size and duration, normalize's, verify's ...
+        with sentinel.strict('L1: the date literals contract/date_literals copies', retired=True) as clean:
+            found = date_literals.dates('on 9 November 2026; in 2025; 2026-11-09')
+            stored = date_literals.stored_date('2026-11-09', 'day')
+        self.assertTrue(found)
+        self.assertIsNotNone(stored)
+        self.assertEqual(clean.count(NEW), 0)

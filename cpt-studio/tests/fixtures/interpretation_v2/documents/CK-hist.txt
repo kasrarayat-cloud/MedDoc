@@ -1,0 +1,7 @@
+SYNTHETIC COLONOSCOPY REPORT
+Date of service: 03/14/2031
+Endoscopist: Corvin Ashdale, MD (fictional)
+
+History: A prior colonoscopy in 2028 reached the cecum.
+Findings: The colonoscope was advanced to the transverse colon.
+The examination was stopped there because of poor preparation.

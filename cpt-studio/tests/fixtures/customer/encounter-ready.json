@@ -248,5 +248,9 @@
    "actor_kind": "system",
    "at": "2026-11-01T09:00:12Z"
   }
- ]
+ ],
+ "update": null,
+ "earlier_codes": [],
+ "what_changed": null,
+ "decision_history": []
 }

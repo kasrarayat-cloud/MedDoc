@@ -24,6 +24,12 @@ alone, and never segment or call geometry. Checked is generic in the answer's fa
 which defines FactKey, imports this module, so this module cannot name it, and checks.check returns
 ``Checked[extract_read.FactKey]``. Checked freezes the mappings it is given, so it is not hashable.
 
+**Settle's stored records** (DECISIONS D229; w34 O4 and O5, hand-offs 1d#2 and 1d#6): ClaimRole, the claim roles' one
+home, and the closed lists and records of what contract/settle.py gives the store - StoredClaim with its StoredVerdict,
+StoredCompleteness, and the verification Report with its DoubtApplied, Health (HealthRefusal), Coherence (one count per
+PairOutcome), UnlistedReport (Dropped) and Usages (Usage) - moved here from settle, each as settle defined it, so that
+store.py closes the stored report to them (P9) and reads its claim roles from ClaimRole. settle names each of them too.
+
 This module imports nothing but the standard library. It holds no word list: each Enum is the closed list of values the
 design names (NoWordLists, FINAL-V2 5.7 measure 4, admits the values of a contract enumeration), and nothing here
 compares a value with document text.
@@ -1417,3 +1423,181 @@ class Checked(Generic[Key]):
         object.__setattr__(self, 'joined', tuple((tuple(supported), tuple(negated))
                                                  for supported, negated in self.joined))
         object.__setattr__(self, 'objectless_doubts', _frozen_tuples(self.objectless_doubts))
+
+
+# --- settle's stored records (FINAL-V2 1.7 verification and events.claims; DECISIONS D229) ----------------------------
+#
+# Moved here from contract/settle.py (w34 O4 and O5; hand-offs 1d#2 and 1d#6), each as settle defined it: the claim
+# roles' one home, and the closed records of settle's verification report, to which store.py closes the stored shapes
+# (P9). settle names each of them too (settle.ClaimRole is ClaimRole).
+
+
+@unique
+class ClaimRole(Enum):
+    """What a stored claim is (1.7; 3.2.2-3.2.3): a fact's own claim; its contrary control; a pair control (an act or a
+    statement asked about a place or a lesion of another); the stations completeness claim; its control. The one home of
+    the claim roles (hand-off 1d#6): store.CLAIM_ROLES is read from it. Stored only: a request never marks a control
+    (2.4)."""
+    CLAIM = 'claim'
+    CONTROL = 'control'
+    PAIR_CONTROL = 'pair_control'
+    COMPLETENESS = 'completeness'
+    COMPLETENESS_CONTROL = 'completeness_control'
+
+
+@unique
+class PairOutcome(Enum):
+    """The outcome of one claim with its control (3.2.3's coherence table, ``appraise``): established; incoherent (the
+    claim supported, its control not rejected); uninformative (both contradicted: counted apart, not as incoherent
+    [R:HO-4]); contradicted (the claim contradicted, its control not); qualified; unclear; detached (supported, but not
+    attached or with no evidence attached, 3.2.5); missing (no verdict for the claim); control_missing (the claim would
+    stand, its control has no verdict: not rejected)."""
+    ESTABLISHED = 'established'
+    INCOHERENT = 'incoherent'
+    UNINFORMATIVE = 'uninformative'
+    CONTRADICTED = 'contradicted'
+    QUALIFIED = 'qualified'
+    UNCLEAR = 'unclear'
+    DETACHED = 'detached'
+    MISSING = 'missing'
+    CONTROL_MISSING = 'control_missing'
+
+
+@unique
+class HealthRefusal(Enum):
+    """Why 3.2.6's health refuses an appraisal whole [R:HO-4]: too many controls not rejected (a yes-sayer); too few
+    claims established (a no-sayer, a detached or degenerate answer); too many claims with no verdict."""
+    CONTROL_ACCEPTANCE = 'control_acceptance'
+    ESTABLISHMENT = 'establishment'
+    COMPLETENESS = 'completeness'
+
+
+@dataclass(frozen=True, slots=True)
+class Usage:
+    """One run's provider-reported token counts (contract/settle.UsageCount, read by settle.usage_of), each 0 when the
+    provider gives none (an absent or null count is zero: the API omits a zero)."""
+    prompt: int
+    candidates: int
+    thoughts: int
+    total: int
+    cached: int
+    tool_use_prompt: int
+
+
+@dataclass(frozen=True, slots=True)
+class Usages:
+    """Both runs' usage (1.7 verification.usage): pass 1's (interpretation) and pass 2's (appraisal)."""
+    interpretation: Usage
+    appraisal: Usage
+
+
+@dataclass(frozen=True, slots=True)
+class Health:
+    """3.2.6's measures, as integers [R:HO-4]: pairs, the claim/control pairs (pair controls excluded, hand-off 2c#12);
+    not_rejected, those whose control pass 2 did not contradict; claims, the non-control claims (each fact's claim and
+    each completeness claim, once); established, those every pair of which is established; verdicts, every claim of the
+    request (controls included); missing, those with no verdict read (missing, repeated, or bound to another content
+    key). refused: the measures that refuse the appraisal (empty: healthy)."""
+    pairs: int
+    not_rejected: int
+    claims: int
+    established: int
+    verdicts: int
+    missing: int
+    refused: tuple[HealthRefusal, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class Coherence:
+    """How many claim/control pairs (and uncontrolled claims) ended in each PairOutcome (1.7 verification.coherence)."""
+    established: int
+    incoherent: int
+    uninformative: int
+    contradicted: int
+    qualified: int
+    unclear: int
+    detached: int
+    missing: int
+    control_missing: int
+
+
+@dataclass(frozen=True, slots=True)
+class DoubtApplied:
+    """One doubt of pass 1 and what settle did with it (1.7 verification.doubts): index, its position; about and basis;
+    objects, the ids it names as written (ids only, S1 checked their shape); malformed, whether S2 found it malformed
+    (then it names every attribute of its objects); applied, the stored facts it was applied to; unlisted, whether it
+    was kept as an unlisted doubt (DECISIONS D200: object-less, and no event's anchor holds one of its units)."""
+    index: int
+    about: DoubtAbout
+    basis: DoubtBasis
+    objects: tuple[str, ...]
+    malformed: bool
+    applied: int
+    unlisted: bool
+
+
+@dataclass(frozen=True, slots=True)
+class Dropped:
+    """An unlisted statement settle dropped (3.2.6 [R:SC-A]): its units, what it is, its kind and session as pass 2 gave
+    them (the session as pass 1's id), and the event that absorbed it."""
+    units: tuple[str, ...]
+    what: UnlistedWhat
+    kind: Kind | None
+    session: str | None
+    event: str
+
+
+@dataclass(frozen=True, slots=True)
+class UnlistedReport:
+    """The unlisted statements (1.7 verification.unlisted): how many were kept (events.unlisted), and each dropped
+    one."""
+    kept: int
+    dropped: tuple[Dropped, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class Report:
+    """Settle's verification report (1.7): counts, per attribute, of the stored facts per result; reasons, each reason
+    counted over the stored facts; doubts; health; coherence; unlisted; usage. store.row_v2 adds the label, both runs'
+    request and response sha256, the claim list's sha256 and ``refused``."""
+    counts: Mapping[Attribute, Mapping[Result, int]]
+    reasons: Mapping[Reason, int]
+    doubts: tuple[DoubtApplied, ...]
+    health: Health
+    coherence: Coherence
+    unlisted: UnlistedReport
+    usage: Usages
+
+
+@dataclass(frozen=True, slots=True)
+class StoredVerdict:
+    """Pass 2's verdict as a stored claim keeps it (1.7 events.claims[].verdict; 3.2.4 [R:MO-5])."""
+    verdict: VerdictValue
+    attached: Attached
+    qualifiers: tuple[Qualifier2, ...]
+    evidence: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class StoredClaim:
+    """One claim of the request as the row stores it (1.7 events.claims): id, its place in the seeded order; role; its
+    template's id; subject, the object it is about ('' for the encounter); attribute; value; units; content, its content
+    key; verdict, pass 2's, None when it gave none that binds."""
+    id: str
+    role: ClaimRole
+    template: str
+    subject: str
+    attribute: Attribute
+    value: str
+    units: tuple[str, ...]
+    content: str
+    verdict: StoredVerdict | None
+
+
+@dataclass(frozen=True, slots=True)
+class StoredCompleteness:
+    """The stations completeness claim's settled result (3.2.2 [R:SC-B]; store's sessions[].completeness): its
+    appraisal (its control demanded), supported only as an established pair, else unresolved with the pair's reason."""
+    appraisal: Appraisal
+    result: Result
+    reasons: tuple[Reason, ...]

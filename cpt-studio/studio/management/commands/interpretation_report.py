@@ -1,21 +1,29 @@
 """The D22 operator report on interpretation for a window, and the installer's self-test (design/FINAL.md 13; DECISIONS
-D22; design/ADJUDICATION.md P-7):
+D22; design/ADJUDICATION.md P-7; docs/gemini-migration/FINAL-V2.md 5.7 measure 9 and AMENDMENT-1 9.2 for design v2):
 
     python manage.py interpretation_report --since 2026-11-10T09:00:00Z [--until <time>] [--self-test] [--json]
+                                           [--encounter <id>]
 
 It installs this process's legacy-call sentinel first (ADJUDICATION R-1: every process, one-shots included; a sentinel
 already installed is left as it stands), then prints every D22 field for [since, until): the model and this process's
-interpreter mode, the Gemini runs (state, models, the paused ones, usage, estimated cost), the event inventories, the
-assessments by engine version and the problems of their records, the legacy calls their records count, the sentinel's
+interpreter mode, the Gemini runs (state, models, the paused ones, usage, estimated cost) and, for design v2, the runs,
+usage and estimated cost by purpose (pass 1's interpretation and pass 2's appraisal), the event inventories by state and
+version, the appraisals' health and coherence and the ones refused as unhealthy, the assessments by engine version and
+the problems of their records, the legacy and retired calls their records count, the v1 assessments, the sentinel's
 trips (among them a process that could not count), this process's sentinel and the interpreter hold
 (studio.interpretation.report). Nothing is written and nothing is sent.
 
 ``--self-test`` adds the installer's checks (report.self_test); the exit status is 1 when one fails. The installer gives
 ``--since`` the new worker's start (P-7). The interpreter mode is not among the checks: this one-shot's mode is its own
 (disabled unless it is given one, FINAL 13), so the installer reads the worker's configured mode from the worker.
+
+``--encounter <id>`` adds that encounter's interpretation section: its current assessment's record, both Gemini runs
+with their usage and estimated cost and their sums, and every Gemini run of the encounter by purpose with the sums
+(report.encounter_section). An id that names no encounter is refused, nothing read.
 """
 import json
 
+from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import dateparse
 
@@ -42,6 +50,8 @@ class Command(BaseCommand):
         parser.add_argument('--until', default=None, help='The window\'s end (default: now).')
         parser.add_argument('--self-test', action='store_true', help='Add the installer\'s checks; exit 1 on a failure.')
         parser.add_argument('--json', action='store_true', help='Print one JSON document instead of text.')
+        parser.add_argument('--encounter', default=None,
+                            help='Add this encounter\'s interpretation section: both runs and the usage sums.')
 
     def handle(self, *args, **options):
         since = moment(options['since'], 'since')
@@ -51,11 +61,25 @@ class Command(BaseCommand):
             found = report.window(since, until)
         except ValueError as exc:
             raise CommandError(f'{exc} Nothing was read.')
+        section = None
+        if options['encounter'] is not None:
+            try:
+                section = report.encounter_section(options['encounter'])
+            except (ValueError, ValidationError):
+                section = None
+            if section is None:
+                raise CommandError(f'--encounter {options["encounter"]!r} names no encounter; nothing was read.')
         test = report.self_test(found) if options['self_test'] else None
-        if options['json']:
+        if options['json'] and section is None:
+            # the installer's contract (ops/install.py verify; pinned by ops/test_install_interpreter.py), unchanged
             self.stdout.write(json.dumps({'report': found, 'self_test': test}, indent=2, sort_keys=True))
+        elif options['json']:
+            self.stdout.write(json.dumps({'report': found, 'self_test': test, 'encounter': section}, indent=2,
+                                         sort_keys=True))
         else:
             for line in report.render(found, test):
+                self.stdout.write(line)
+            for line in (report.render_encounter(section) if section is not None else ()):
                 self.stdout.write(line)
         if test is not None and not test['passed']:
             failed = ', '.join(item['name'] for item in test['checks'] if not item['ok'])

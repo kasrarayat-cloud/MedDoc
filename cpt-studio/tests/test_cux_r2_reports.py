@@ -23,6 +23,7 @@ DB-backed (CPT_STUDIO_TEST_DB_SUFFIX) except SampleReportTests and ConstantsTest
 The walk tests need node (as the CI job has).
 """
 import copy
+import csv
 import hashlib
 import importlib.util
 import json
@@ -81,6 +82,34 @@ def changed(text, old, new, count=1):
     out = text.replace(old, new, 1)
     assert out != text, f'the edit of {old!r} did not apply'
     return out
+
+
+def _cells(row):
+    return next(csv.reader([row]))
+
+
+def _row(cells):
+    buffer = StringIO()
+    csv.writer(buffer, quoting=csv.QUOTE_ALL, lineterminator='').writerow(cells)
+    return buffer.getvalue()
+
+
+def review_label(row):
+    """The review_label cell of one CSV row (format @2 appends three columns after it: FINAL-V2 amendment 1, 8.2)."""
+    return _cells(row)[reports.CUSTOMER_CSV_COLUMNS.index('review_label')]
+
+
+def with_review_label(row, label):
+    """``row`` with its review_label cell replaced by ``label``."""
+    cells = _cells(row)
+    cells[reports.CUSTOMER_CSV_COLUMNS.index('review_label')] = label
+    return _row(cells)
+
+
+def banner_row(text):
+    """The SYNTHETIC banner row of a customer CSV, with its line ending (format @2 states the revision, the details used
+    and the time the codes were made on every row, the banner rows included: FINAL-V2 amendment 1, 8.2)."""
+    return next(line for line in text.split('\r\n') if _cells(line)[:1] == [reports.SYNTHETIC_LINE]) + '\r\n'
 
 
 def keys(value):
@@ -298,8 +327,7 @@ class GenuineExportTests(ExportCase):
             ('approved', 'csv', changed(approved_csv, '"agent","2026', '"human","2026', 2), 'csv.items.approver'),
             ('approved', 'csv', changed(approved_csv, f'"{line}"', '""', 2), 'csv.items.agent_label'),
             ('approved', 'csv', changed(approved_csv, '"270","345"', '"271","346"'), 'csv.items.evidence.exact'),
-            ('approved', 'csv', changed(approved_csv, '"' + '","'.join([reports.SYNTHETIC_LINE] + [''] * 16) + '"\r\n', '', 2),
-             'csv.synthetic_marker'),
+            ('approved', 'csv', changed(approved_csv, banner_row(approved_csv), '', 2), 'csv.synthetic_marker'),
             ('draft', 'txt', changed(draft_txt, '45385 — Approved —', '45385 — Ready for review —'), 'items.status'),
             ('draft', 'txt', changed(draft_txt, f'\n   {line}\n', '\n', 2), 'items.agent_label'),
             ('draft', 'txt', changed(draft_txt, '45385 — Approved — units 1 — modifiers: XS',
@@ -396,8 +424,8 @@ class AgentLabelTests(ExportCase):
         # the label is the export's statement: an agent label put on this person's approval fails the check
         approved_csv = text[('approved', 'csv')]
         row = next(line for line in approved_csv.split('\r\n') if '"45385"' in line)
-        self.assertTrue(row.endswith(',""'), row)
-        forged = changed(approved_csv, row, row[:-3] + f',"{reports.AGENT_LINE}"')
+        self.assertEqual(review_label(row), '', row)
+        forged = changed(approved_csv, row, with_review_label(row, reports.AGENT_LINE))
         self.assertIn('csv.items.agent_label', self.failing('approved', 'csv', forged, view, trace, s.reviewer.label()))
 
     def test_a_human_s_own_approvals_carry_no_agent_label_anywhere(self):
@@ -412,8 +440,8 @@ class AgentLabelTests(ExportCase):
         self.assert_all_pass(files, view, trace, s.reviewer.label())
         approved_csv = self.texts(files)[('approved', 'csv')]
         row = approved_csv.split('\r\n')[2]  # the header, the banner, then 45380's row: its review_label is empty
-        self.assertTrue(row.endswith(',""'), row)
-        forged = changed(approved_csv, row, row[:-3] + f',"{reports.AGENT_LINE}"')  # a human's approval labelled an agent's
+        self.assertEqual(review_label(row), '', row)
+        forged = changed(approved_csv, row, with_review_label(row, reports.AGENT_LINE))  # a human's approval labelled an agent's
         self.assertIn('csv.items.agent_label', self.failing('approved', 'csv', forged, view, trace, s.reviewer.label()))
 
 

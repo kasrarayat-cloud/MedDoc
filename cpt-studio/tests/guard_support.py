@@ -855,6 +855,8 @@ class World:
                   {'candidate_id': 'c1', 'attestation': 'synthetic'}, expect=(409,), tag='E1 not offered')
         self.post(f'/api/encounters/{pk}/second-review', expect=(409,), tag='E1 nothing open')
         self.post(f'/api/encounters/{pk}/retry-reading', expect=(409,), tag='E1 nothing to retry')
+        # FINAL-V2 amendment 1, 7.2 (step 5d's route): no update failed, so the retry is refused and nothing runs
+        self.post(f'/api/encounters/{pk}/retry-update', expect=(409,), tag='E1 no failed update')
         self.exports('E1')
         self.reads('E1', 'exported')
 
@@ -1032,6 +1034,17 @@ class World:
         self.case.assertEqual(sorted(pk for pk, reasons in hazards.items() if 'member_answer' in reasons),
                               sorted(standing), hazards)
         self.matrix.script('UNRUNNABLE_STAGES', {})
+        # step 6b's two reads of the app phase before anything is replaced (FINAL-V2 6.2 [R:MO-1]; amendment 1, 9.5),
+        # with the installer's own parameters (install.v1_rows, install.install_counts): each reads the rows it counts
+        # (the waves 5-6 integration: this matrix was built before 6b added them)
+        v1 = self.matrix.script('V1_ROWS', {'engine_version': install.V1_ENGINE_VERSION,
+                                            'interpretation_version': install.V1_INTERPRETATION_VERSION,
+                                            'limit': install.NAMED_LIMIT})
+        self.case.assertEqual(v1['assessments'],
+                              models.Assessment.objects.filter(engine_version=install.V1_ENGINE_VERSION).count())
+        counts = self.matrix.script('INSTALL_COUNTS', {'limit': install.NAMED_LIMIT,
+                                                       'token_sentence': install.CORTI_TOKEN_REFUSAL})
+        self.case.assertGreater(counts['size']['longest_chars'], 0)  # it read the current revisions
         # DECISIONS D51: the switch-back's two reads, run as every other in-image script - what an image's own models
         # read of the review records (here this image's: both), and the encounters with a record created since the
         # world began (every one of them)
@@ -1064,6 +1077,12 @@ class World:
                                                      'note': 'Closed by the synthetic undo.',
                                                      'kinds': list(install.COMMON_STAGE_KINDS)})
         self.case.assertGreaterEqual(closed['closed'], 1)  # the stage left queued above, at least
+        # step 6b's put-back of the details a close set back (amendment 1, 9.4; install.reapply_reverted), asked here
+        # for every encounter with a field no close set back, so it reads each one and puts nothing back
+        put = self.matrix.script('REAPPLY_REVERTED', {'reverted': {pk: {'patient_status': {'saved': 'new',
+                                                                                         'restored': None}}
+                                                                   for pk in every}})
+        self.case.assertEqual((put['reapplied'], sorted(put['not_reapplied'])), ({}, sorted(every)))
         # written_since's member-answer arm on the answers given since the world began (its window), none before
         written = sorted(pk for pk, reasons in (closed.get('written_since') or {}).items()
                          if 'member_answer' in reasons)

@@ -1385,6 +1385,109 @@ class PropertyTests(SimpleTestCase):
                          geometry.bind_words(second.layout, (second.snare,), 'cold snare'))
 
 
+# --- R1's kept runs: C-10's kept_words (DECISIONS D261 and its note; step 5b of round w8r) --------------------------
+
+# Characters the generated texts draw from: letters and digits (ASCII and not), a superscript digit, a combining accent,
+# the letters re.I folds onto ASCII, spaces, line breaks and punctuation - every character class word_runs separates.
+RUN_ALPHABET = 'aZq7 0.,;:-\'"()/\n\té²́ſİ’ x'
+
+
+def run_texts(text: str, runs) -> list:
+    return [text[run.start:run.end] for run in runs]
+
+
+class WordRunsTests(SimpleTestCase):
+    """geometry.word_runs, the letter-or-digit runs of a kept span (D261): what engine/assess hands C-10 as kept_words
+    when jobs._Integrity gives it (tests/v2/test_jobs.py's IntegrityTests and the DENIED_REMOVAL pipeline test)."""
+
+    def runs(self, text, start=0, end=None):
+        return geometry.word_runs(text, Span(start, len(text) if end is None else end))
+
+    def test_punctuation_and_space_separate_runs_and_are_in_none(self):
+        denial = 'No polyp was removed today.'
+        found = self.runs(denial)
+        self.assertEqual(run_texts(denial, found), ['No', 'polyp', 'was', 'removed', 'today'])
+        self.assertEqual(found[-1], Span(len(denial) - 6, len(denial) - 1))  # the stop is in no run
+        for text, expected in (('snare-polypectomy (rectum), patient’s', ['snare', 'polypectomy', 'rectum',
+                                                                              'patient', 's']),
+                               ('cold\n  snare\t biopsy', ['cold', 'snare', 'biopsy']),
+                               ('"No"; \'none\'.', ['No', 'none']), ('...', []), ('a', ['a'])):
+            with self.subTest(text=text):
+                self.assertEqual(run_texts(text, self.runs(text)), expected)
+
+    def test_digits_are_run_characters_beside_letters(self):
+        text = 'A 6 mm polyp at 25 cm; 3/4 removed, 7mm, 45385.'
+        self.assertEqual(run_texts(text, self.runs(text)),
+                         ['A', '6', 'mm', 'polyp', 'at', '25', 'cm', '3', '4', 'removed', '7mm', '45385'])
+        # str.isalnum alone decides, as v1's within_words read each character: a superscript digit is one, a combining
+        # accent none
+        self.assertEqual(run_texts('cm² cafés', self.runs('cm² cafés')), ['cm²', 'cafe', 's'])
+
+    def test_a_span_inside_a_word_gives_the_part_it_holds(self):
+        self.assertEqual(self.runs('colonoscopy', 3, 8), (Span(3, 8),))  # cut at both edges: 'onosc'
+        text = 'the polyp was'
+        found = self.runs(text, 5, 11)
+        self.assertEqual((found, run_texts(text, found)), ((Span(5, 9), Span(10, 11)), ['olyp', 'w']))
+
+    def test_the_runs_are_revision_offsets(self):
+        text = 'Findings: The colonoscope was advanced.\nNo polyp was removed today.\nSigned.'
+        start = text.index('No polyp')
+        found = self.runs(text, start, start + len('No polyp was removed today.'))
+        self.assertEqual([run.start for run in found], [start, start + 3, start + 9, start + 13, start + 21])
+        self.assertEqual(run_texts(text, found), ['No', 'polyp', 'was', 'removed', 'today'])
+
+    def test_nothing_to_run(self):
+        self.assertEqual(self.runs('a b', 1, 1), ())  # an empty span
+        self.assertEqual(self.runs('a .,; b', 1, 6), ())  # only spaces and punctuation
+
+    def test_a_callers_breach_raises(self):
+        with self.assertRaises(TypeError):
+            geometry.word_runs(b'No polyp.', Span(0, 2))
+        with self.assertRaises(TypeError):
+            geometry.word_runs('No polyp.', (0, 2))
+        with self.assertRaises(ValueError):
+            geometry.word_runs('No polyp.', Span(0, 10))  # past the text
+
+    @hypothesis.settings(max_examples=400, deadline=None, database=None)
+    @hypothesis.given(st.data())
+    def test_maximal_runs_of_letters_and_digits_inside_the_span(self, data):
+        text = data.draw(st.text(alphabet=RUN_ALPHABET, max_size=40))
+        start = data.draw(st.integers(0, len(text)))
+        end = data.draw(st.integers(start, len(text)))
+        found = geometry.word_runs(text, Span(start, end))
+        covered = set()
+        for before, after in zip(found, found[1:]):
+            self.assertLess(before.end, after.start)  # in order, apart by at least one character
+        for run in found:
+            self.assertTrue(start <= run.start < run.end <= end)
+            self.assertTrue(all(text[index].isalnum() for index in range(run.start, run.end)))
+            self.assertTrue(run.start == start or not text[run.start - 1].isalnum())  # maximal inside the span
+            self.assertTrue(run.end == end or not text[run.end].isalnum())
+            covered.update(range(run.start, run.end))
+        self.assertEqual(covered, {index for index in range(start, end) if text[index].isalnum()})
+
+    @hypothesis.settings(max_examples=400, deadline=None, database=None)
+    @hypothesis.given(st.data())
+    def test_c10_over_the_runs_reads_as_v1s_within_words(self, data):
+        # C-10 (engine/evaluate.within over each run, as cover reads kept_words) decides exactly as v1's within_words
+        # read the same kept span letter by letter and digit by digit (studio/interpretation/events.py, retired: run
+        # here only to compare)
+        from studio.interpretation import events as v1_events
+        from studio.interpretation.engine import evaluate
+
+        text = data.draw(st.text(alphabet=RUN_ALPHABET, min_size=1, max_size=40))
+        start = data.draw(st.integers(0, len(text)))
+        end = data.draw(st.integers(start, len(text)))
+        words = []
+        for _ in range(data.draw(st.integers(0, 4))):
+            first = data.draw(st.integers(0, len(text)))
+            words.append(Span(first, data.draw(st.integers(first, len(text)))))
+        v2 = all(evaluate.within(run, words) for run in geometry.word_runs(text, Span(start, end)))
+        v1 = v1_events.within_words({'start': start, 'text': text[start:end]},
+                                    [{'start': word.start, 'end': word.end} for word in words])
+        self.assertEqual(v2, v1)
+
+
 # --- 5.7 measure 4 over the module ------------------------------------------------------------------------------------
 
 STR_METHODS = frozenset(name for name in dir(str) if not name.startswith('_'))

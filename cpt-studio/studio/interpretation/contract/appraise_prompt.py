@@ -317,8 +317,11 @@ def indistinct(claim_set: claims.ClaimSet, text: str) -> tuple[tuple[str, ...], 
 
 # --- the request body (v1's three keys) ---------------------------------------------------------------------------------
 
-TEMPERATURE = 0
-MAX_OUTPUT_TOKENS = 32768  # the model's stated output limit, as pass 1's
+TEMPERATURE = 0  # sent as pass 1's is; the model ignores it and does not reject it (DECISIONS D230)
+# DECISIONS D230 (the owner's directive of 2026-11-13), as pass 1's: the model's synchronous output limit, which
+# thinking tokens count toward, and thinking level high, the model's documented maximum - the one thinking setting sent
+MAX_OUTPUT_TOKENS = 65536
+THINKING_LEVEL = 'high'
 RESPONSE_MIME_TYPE = 'application/json'
 
 
@@ -346,7 +349,8 @@ class Request:
 
 def request_parts(turn: str) -> dict[str, Any]:
     """The request body: exactly systemInstruction (INSTRUCTIONS), contents (one user turn holding ``turn``) and
-    generationConfig (temperature 0, maxOutputTokens 32768, responseMimeType application/json, responseSchema
+    generationConfig (temperature 0, maxOutputTokens 65536, thinkingConfig with thinkingLevel high - DECISIONS D230's
+    thinking configuration, the only one sent - responseMimeType application/json, responseSchema
     appraise_schema.RESPONSE_SCHEMA, copied). Pure; RuntimeError when a pin does not match (check_pins)."""
     if not isinstance(turn, str):
         raise TypeError('The user turn must be a string.')
@@ -355,6 +359,7 @@ def request_parts(turn: str) -> dict[str, Any]:
         BodyKey.SYSTEM_INSTRUCTION.value: {'parts': [{'text': INSTRUCTIONS}]},
         BodyKey.CONTENTS.value: [{'role': 'user', 'parts': [{'text': turn}]}],
         BodyKey.GENERATION_CONFIG.value: {'temperature': TEMPERATURE, 'maxOutputTokens': MAX_OUTPUT_TOKENS,
+                                          'thinkingConfig': {'thinkingLevel': THINKING_LEVEL},
                                           'responseMimeType': RESPONSE_MIME_TYPE,
                                           'responseSchema': copy.deepcopy(appraise_schema.RESPONSE_SCHEMA)},
     }

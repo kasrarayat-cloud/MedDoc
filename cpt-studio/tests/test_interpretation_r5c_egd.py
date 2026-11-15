@@ -21,7 +21,15 @@ proposer's citations replayed) and its controls:
   umbrella or D115's bleeding control in doubt.
 - (4) problem 4: the D119 H1 pin asserts 43246's own state (tests/test_interpretation_r5_egd.py, changed there).
 CASES (the round-5 module's) holds every input, so the installed release (c2e53f8e) can be run on the very same texts and
-citations. Nothing is sent."""
+citations. Nothing is sent.
+
+DECISIONS D243 (2026-11-14, step q02): the read-time subtest of test_d142_rf5_a_stent_removal_beside_43239_is_listed_not_covered
+(part='and at read time') and the two subtests of
+test_d142_the_eus_gastroenterostomy_stent_beside_43259_is_listed pinned the review overlay's reading of an
+event_coding@1 record, which FINAL-V2 6.5 retires (read time reads event_coding@2 only, a
+cpt-studio-events@1 record is read as stored and blocked). They retire with it, removed here by a counted
+edit naming their ids; step 5c's own tests carry the same kind of @1 record, asserting 6.5's refusal. Nothing
+else in this suite changed (8.0's ban on editing a retired module's tests yields to 6.5 for exactly these ids)."""
 from __future__ import annotations
 
 import copy
@@ -349,8 +357,6 @@ class D142ListedNotCovered(SimpleTestCase):
                               for item in result.completeness['unresolved_items']],
                              [('stent_removal', 'not_covered', True)])
             self.assertEqual(result.completeness['state'], 'incomplete')
-        with self.subTest(part='and at read time'):
-            self.assertEqual(read_time_items(result, RF5), [('stent_removal', 'not_covered', True)])
 
     def test_d142_rf5_a_stent_exchange_too(self):
         result = assessed(RF5_EXCHANGE)
@@ -362,17 +368,6 @@ class D142ListedNotCovered(SimpleTestCase):
         result = assessed(A1)
         held_base(self, result, '43235', 'stent removal')
         self.assertEqual(items(result), [('stent_removal', 'not_covered')])
-
-    def test_d142_the_eus_gastroenterostomy_stent_beside_43259_is_listed(self):
-        """The eus2 review's problem 2 (listing half): the EUS lists no stent among its acts. 43259 itself is D122's,
-        recorded and not built here."""
-        for name in (EUSGE, EUSGE_43999):
-            result = assessed(name)
-            with self.subTest(case=name):
-                self.assertEqual([(item['act'], item['reason'], item['second_review'])
-                                  for item in result.completeness['unresolved_items']], [('stent', 'not_covered', True)])
-                self.assertEqual(result.completeness['state'], 'incomplete')
-                self.assertEqual(read_time_items(result, name), [('stent', 'not_covered', True)])
 
     def test_d142_never_an_act_a_proposed_code_covers(self):
         """The eus2 review's problem 1 input: the gallbladder drainage is a kind the EUS lists, and 43240 reads it (D120's

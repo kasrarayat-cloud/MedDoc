@@ -277,8 +277,14 @@ test('layout never inserts or loses visible text (seeded property check)', () =>
 
 const CONTRACT = {
   // completion repair (2026-11-06, U11): 'earlier_answers', the answers no question asked now takes
+  // FINAL-V2 amendment 1 (step 5d): 'update', 'earlier_codes', 'what_changed' and 'decision_history'
   top: ['id', 'title', 'created_at', 'updated_at', 'state', 'state_label', 'permissions', 'document', 'service_date', 'progress', 'checks', 'codes',
-    'other_codes', 'not_separately_coded', 'details_needed', 'earlier_answers', 'unresolved', 'recheck', 'limitations', 'readiness', 'reports', 'activity'],
+    'other_codes', 'not_separately_coded', 'details_needed', 'earlier_answers', 'unresolved', 'recheck', 'limitations', 'readiness', 'reports', 'activity',
+    'update', 'earlier_codes', 'what_changed', 'decision_history'],
+  update: ['pending', 'state', 'kind', 'restorable', 'changes', 'saved_by', 'saved_at', 'started_at', 'earlier'],
+  update_earlier: ['made_at', 'revision', 'service_date', 'details'],
+  what_changed: ['compared_with', 'details', 'codes', 'unchanged', 'decisions', 'answers'],
+  history: ['code', 'action', 'by', 'by_kind', 'at', 'revision', 'why'],
   recheck: ['available', 'can_request'],
   document: ['kind', 'name', 'media_type', 'size', 'page_count', 'revision', 'text', 'pages', 'reading', 'original_url'],
   reading: ['status', 'label', 'messages'],
@@ -298,7 +304,7 @@ const CONTRACT = {
   earlier: ['answer_id', 'fact', 'family_label', 'prompt', 'affects', 'value', 'label', 'by', 'at', 'why', 'why_text'],
   saved: ['value', 'label', 'by', 'at', 'answer_id'],
   readiness: ['draft', 'approved', 'blockers'],
-  report: ['id', 'kind', 'fmt', 'filename', 'generated_at', 'generated_by', 'download_url', 'current'],
+  report: ['id', 'kind', 'fmt', 'filename', 'generated_at', 'generated_by', 'download_url', 'current', 'revision'],
   activity: ['event', 'summary', 'actor', 'actor_kind', 'at'],
   session: ['user', 'workspace', 'role', 'can_review', 'acknowledgement', 'counts', 'synthetic_only'],
   row: ['id', 'title', 'state', 'state_label', 'service_date', 'date_conflict', 'open_details', 'created_at', 'kind', 'in_queue'],
@@ -342,6 +348,13 @@ test('every customer fixture has exactly the keys of the customer contract (desi
     assert.deepEqual(sorted(Object.keys(doc.readiness)), sorted(CONTRACT.readiness), at('readiness'));
     for (const report of doc.reports) assert.deepEqual(sorted(Object.keys(report)), sorted(CONTRACT.report), at('report'));
     for (const item of doc.activity) assert.deepEqual(sorted(Object.keys(item)), sorted(CONTRACT.activity), at('activity'));
+    if (doc.update !== null) {
+      assert.deepEqual(sorted(Object.keys(doc.update)), sorted(CONTRACT.update), at('update'));
+      assert.deepEqual(sorted(Object.keys(doc.update.earlier)), sorted(CONTRACT.update_earlier), at('update.earlier'));
+    }
+    for (const code of doc.earlier_codes) assert.deepEqual(sorted(Object.keys(code)), sorted(CONTRACT.code), at(`earlier code ${code.code}`));
+    if (doc.what_changed !== null) assert.deepEqual(sorted(Object.keys(doc.what_changed)), sorted(CONTRACT.what_changed), at('what_changed'));
+    for (const item of doc.decision_history) assert.deepEqual(sorted(Object.keys(item)), sorted(CONTRACT.history), at('decision_history'));
     states.add(`${doc.state}/${doc.progress.phase}`);
   }
   // the states the design names, each drawn from a fixture
@@ -760,7 +773,7 @@ test('a saved answer is shown with who and when, and can be changed; only open r
   assert.equal(count(done, 'Saved: <strong>Not documented</strong>'), all.details_needed.length);
 });
 
-test('pending answers survive a refresh; a viewer, or a busy document, gets no controls', () => {
+test('pending answers survive a refresh; a viewer gets no controls; a busy document keeps its context rows only', () => {
   const doc = fixture('encounter-awaiting-detail.json');
   const choice = doc.details_needed.find(row => row.control === 'choice' && !row.saved);
   const answers = new Map([[choice.id, { fact: choice.fact, value: choice.choices[0].value }]]);
@@ -770,9 +783,15 @@ test('pending answers survive a refresh; a viewer, or a busy document, gets no c
   const seen = app.detailsPanel(viewer, ui(viewer));
   assert.doesNotMatch(seen, /type="radio"|data-detail-choice|save-details|revoke-detail|data-action="addendum"/);
   assert.match(seen, /Answers can be saved once processing has finished\./);
+  // FINAL-V2 amendment 1 (A1, 1.4, 5.1): a context save is accepted while processing runs, so the choice rows keep their
+  // radios and the one save; a row that takes "Not documented" or "Cannot confirm" offers no answer while it runs
   const busy = clone(doc);
   busy.progress.busy = true;
-  assert.doesNotMatch(app.detailsPanel(busy, ui(busy)), /type="radio"|save-details/);
+  const running = app.detailsPanel(busy, ui(busy));
+  assert.match(running, /type="radio"/);
+  assert.equal(count(running, 'data-action="save-details"'), 1);
+  assert.doesNotMatch(running, /data-detail-choice|revoke-detail/);
+  assert.match(running, /Answers can be saved once processing has finished\./);
 });
 
 // --- the date row after refutation r2 (L7-02, L7-03, L7-05, L7-07) -------------------------------------------------------
@@ -856,7 +875,8 @@ test('a saved date the member entered shows who and when, and the same row corre
   } finally {
     app.state.answers = kept;
   }
-  // a viewer, or a busy document, reads the saved date only
+  // a viewer reads the saved date only; a busy document keeps the date's own controls - a context save is accepted
+  // while processing runs (FINAL-V2 amendment 1, A1)
   const viewer = clone(doc);
   viewer.permissions.can_review = false;
   const seen = app.detailsPanel(viewer, ui(viewer));
@@ -864,7 +884,10 @@ test('a saved date the member entered shows who and when, and the same row corre
   assert.doesNotMatch(seen, /data-detail-input|clear-date|save-details/);
   const busy = clone(doc);
   busy.progress.busy = true;
-  assert.doesNotMatch(app.detailsPanel(busy, ui(busy)), /data-detail-input|save-details/);
+  const running = app.detailsPanel(busy, ui(busy));
+  assert.match(running, /data-detail-input/);
+  assert.equal(count(running, 'data-action="save-details"'), 1);
+  assert.doesNotMatch(running, /revoke-detail/);
 });
 
 test('"Nothing is checked until you do" only while the member\'s date holds the document', () => {
@@ -1104,7 +1127,7 @@ test('the export dialog offers the draft as suggestions, and the approved downlo
   assert.doesNotMatch(render(fixture('encounter-processing.json')), /data-action="export"/);
 });
 
-test('earlier downloads link only while they match the saved decisions', () => {
+test('earlier downloads stay linked, labelled as earlier, once they no longer match (FINAL-V2 amendment 1, 8.3)', () => {
   const doc = fixture('encounter-reviewed.json');
   const current = doc.reports.filter(report => report.current === true);
   const stale = doc.reports.filter(report => report.current !== true);
@@ -1112,9 +1135,10 @@ test('earlier downloads link only while they match the saved decisions', () => {
   const html = app.exportOptions(doc);
   for (const report of current) assert.ok(html.includes(`<li class="report-item"><a href="${esc(report.download_url)}" download>${esc(report.filename)}</a><small>`), report.filename);
   for (const report of stale) {
-    assert.ok(html.includes(`<li class="report-item stale"><span>${esc(report.filename)}</span><small>`), report.filename);
-    assert.ok(html.includes('No longer matches the saved decisions; create a new download.'));
-    assert.equal(count(html, report.download_url), 0, report.filename);
+    // A9: an export that is not current downloads with its EARLIER banner - linked, never dropped (the 409 is gone)
+    assert.ok(html.includes(`<li class="report-item earlier"><a href="${esc(report.download_url)}" download>${esc(report.filename)}</a><small>`), report.filename);
+    assert.ok(html.includes(esc(`Earlier — made on revision ${report.revision}; it may not show the current codes`)));
+    assert.doesNotMatch(html, /No longer matches the saved decisions/);
   }
   const bad = clone(doc);
   bad.reports[0].download_url = 'javascript:alert(1)';
@@ -1393,10 +1417,16 @@ test('a reading that could not be completed offers "Try reading again"; too long
   assert.ok(actions.has('retry_reading') && actions.has('new_document'), [...actions].join(', '));
   assert.ok(progress.includes("'action': 'resume' if review.can_resume(encounter) else 'none'"));
   for (const action of actions) assert.ok(action === 'none' || Object.hasOwn(app.ERROR_ACTIONS, action), `progress.py serves ${action}`);
+  // FINAL-V2 amendment 1, 7.1: during an update the notice's action is the row's of customer_api.UPDATE_TEXTS (step 3c's
+  // table, which progress.update_error serves) - every one has its button, "Try updating again" among them
+  const updateActions = new Set([...SERVER('customer_api.py').matchAll(/^\s+'(failed|paused|stopped|being_confirmed)', '([a-z_]+)'\),$/gm)].map(match => match[2]));
+  assert.deepEqual([...updateActions].sort(), ['none', 'resume', 'retry_reading', 'retry_update']);
+  for (const action of updateActions) assert.ok(action === 'none' || Object.hasOwn(app.ERROR_ACTIONS, action), `UPDATE_TEXTS serves ${action}`);
+  assert.deepEqual(app.ERROR_ACTIONS.retry_update, ['retry-update', 'Try updating again']);
 });
 
 test('the paused copy: a reading paused on the installation reads as paused with Resume, ran for its time and is still', () => {
-  assert.ok(SERVER('progress.py').includes("PHASES = ('queued', 'processing', 'action_needed', 'awaiting_detail', 'completed', 'partial', 'failed', 'stopped',\n          'being_confirmed', 'paused')"));
+  assert.ok(SERVER('progress.py').includes("PHASES = ('queued', 'processing', 'action_needed', 'awaiting_detail', 'completed', 'partial', 'failed', 'stopped',\n          'being_confirmed', 'paused', 'updating')"));
   const doc = pausedReading();
   const html = app.progressPanel(doc, ui(doc));
   assert.match(html, /^<section class="progress-panel" data-phase="paused" aria-labelledby="progressTitle">/);
@@ -1522,4 +1552,661 @@ test('the net names the interpreter\'s vendor and model; argon plasma coagulatio
   assert.deepEqual(leaks(app.sourcePanel(own, app.documentLayout(own)), own), []);
   // and "argon" alone is clinical wording, never a name
   assert.deepEqual(forbidden('Argon plasma coagulation (APC) was applied.'), []);
+});
+
+// --- FINAL-V2 amendment 1 (step 5d): the codes are updated automatically after a save ---------------------------------
+//
+// The page while an update is pending (5.1), what changed (6.2), earlier decisions and downloads (5.4, 8.3), "Try updating
+// again" (7.2), and typing that sends nothing until Save (11.1 U2). The server's sentences are read from
+// studio/customer_api.py (step 3c's constants), so every text drawn here is the server's own; the copies app.js holds are
+// held equal to them here and in tests/v2/test_update_api.py.
+
+const CUSTOMER_API = SERVER('customer_api.py');
+// A Python string constant of customer_api (adjacent single-quoted literals, a trailing comment allowed).
+const pyText = name => {
+  const found = new RegExp(`^${name} = \\(?((?:\\s*'[^']*')+)\\)?(?:\\s*#.*)?$`, 'm').exec(CUSTOMER_API);
+  assert.ok(found, `${name} not found`);
+  return [...found[1].matchAll(/'([^']*)'/g)].map(match => match[1]).join('');
+};
+// One customer_api.UPDATE_TEXTS row's four forms (details, no_restore, documentation, check) and its phase and action,
+// read from the source: the literals between `'<situation>': _update_row(` and the row's close.
+function updateRow(situation) {
+  const at = CUSTOMER_API.indexOf(`    '${situation}': _update_row(`);
+  assert.ok(at >= 0, `UPDATE_TEXTS has no ${situation}`);
+  const body = CUSTOMER_API.slice(at + situation.length + 20, CUSTOMER_API.indexOf('),\n', at));
+  const args = [''];
+  for (const match of body.matchAll(/'((?:[^'\\]|\\.)*)'|,/g)) {
+    if (match[0] === ',') args.push('');
+    else args[args.length - 1] += match[1].replace(/\\'/g, "'");
+  }
+  const [details, noRestore, documentation, check, phase, action] = args.map(item => item.trim());
+  return { details, no_restore: noRestore, documentation, check, phase, action };
+}
+// update_text's choice (customer_api.update_text): case C for 'documentation', the check form for 'check', else the
+// restore form only when restorable
+function updateText(situation, kind, restorable) {
+  const row = updateRow(situation);
+  return kind === 'documentation' ? row.documentation : kind === 'check' ? row.check : restorable ? row.details : row.no_restore;
+}
+const SAVED_LINES = {
+  unfinished: { updating: pyText('SAVED_CHANGES_UNFINISHED'), other: pyText('SAVED_CHANGES_UNFINISHED_OTHER') },
+  same_details: { updating: pyText('SAVED_CHANGES_SAME_DETAILS'), other: pyText('SAVED_CHANGES_SAME_DETAILS_OTHER') },
+  check: { updating: pyText('SAVED_CHANGES_CHECK'), other: pyText('SAVED_CHANGES_CHECK_OTHER') },
+};
+// the situations progress.update_error serves for each update state (7.1), one each for the page walk below
+const STATE_SITUATIONS = { failed: 'review_failed', stopped: 'stopped_by_member', paused: 'interpreter_paused', being_confirmed: 'being_confirmed' };
+const PHASE_OF = { updating: 'updating', failed: 'failed', stopped: 'stopped', paused: 'paused', being_confirmed: 'being_confirmed' };
+
+// A pending update as GET /api/encounters/<id> serves it (customer_api.encounter_json, step 5d): the ready fixture's codes
+// become the earlier codes (read-only, no allowed action), every other assessment-derived section stays theirs, and the
+// progress panel, readiness and update block are the update's in ``state`` of ``kind``.
+function updateDoc(state, kind = 'details', { earlier = true, restorable = kind === 'details', changes } = {}) {
+  const doc = clone(fixture('encounter-ready.json'));
+  const running = state === 'updating';
+  doc.earlier_codes = earlier ? doc.codes.map(code => ({ ...code, allowed_actions: [] })) : [];
+  doc.codes = [];
+  doc.state = running ? 'updating' : { failed: 'failed', stopped: 'stopped', paused: 'stopped', being_confirmed: 'being_confirmed' }[state];
+  doc.state_label = app.STATE_LABELS[doc.state];
+  doc.progress = { ...doc.progress, phase: PHASE_OF[state], busy: running, can_stop: running, can_resume: ['stopped', 'paused'].includes(state),
+    started_at: '2026-11-13T10:00:00Z', finished_at: running ? null : '2026-11-13T10:02:00Z', server_time: '2026-11-13T10:03:00Z',
+    message: running ? 'Working on your document. This page updates by itself.' : '',
+    active_detail: running ? 'Coding validation' : '',
+    steps: doc.progress.steps.map(step => ({ ...step, state: ['reading', 'identifying'].includes(step.key) ? 'skipped' : step.key === 'checking' ? (running ? 'active' : 'done') : 'not_started' })) };
+  if (!running) {
+    const row = updateRow(STATE_SITUATIONS[state]);
+    doc.progress.error = { text: updateText(STATE_SITUATIONS[state], kind, restorable), action: row.action };
+    doc.progress.message = doc.progress.error.text;
+  } else {
+    doc.progress.error = null;
+  }
+  const form = running ? 'updating' : 'other';
+  const blocker = { 'updating/details': 'The codes are being updated after your change.', 'other/details': 'The codes have not been updated after your change yet.',
+    'updating/check': 'The codes are being updated.', 'other/check': 'The codes have not been updated yet.' }[`${form}/${kind === 'check' ? 'check' : 'details'}`];
+  doc.readiness = { draft: false, approved: false, blockers: [blocker] };
+  doc.recheck = { available: false, can_request: false };
+  doc.reports = doc.reports.map(report => ({ ...report, current: false, revision: 1 }));
+  const saved = kind === 'check' ? [SAVED_LINES.check[form]] : ['Place of service: Hospital outpatient department'];
+  doc.update = { pending: true, state, kind, restorable, changes: changes || (kind === 'documentation' ? ['Documentation added (revision 2)'] : saved),
+    saved_by: kind === 'check' ? null : 'Synthetic Reviewer', saved_at: kind === 'check' ? null : '2026-11-13T10:00:00Z', started_at: '2026-11-13T10:00:00Z',
+    earlier: { made_at: '2026-11-12T09:30:00Z', revision: 1, service_date: '2 November 2026',
+      details: ['Date of service: 2 November 2026', 'Place of service: not documented', 'Patient: not documented', 'Claim: not documented'] } };
+  doc.what_changed = null;
+  doc.decision_history = [];
+  return doc;
+}
+
+// The texts the page itself draws for a document (the server's notice and the document's own words left out): what a
+// member reads that the page chose.
+function pageTexts(doc, html) {
+  const served = [text(doc.progress?.error?.text), text(doc.progress?.message), ...strings(doc.update?.changes)];
+  return parts(html).texts.map(item => item.trim()).filter(item => item && !served.includes(item) && !String(doc.document?.text || '').includes(item));
+}
+function text(value) { return typeof value === 'string' ? value.trim() : ''; }
+function strings(value) { return (Array.isArray(value) ? value : []).map(text).filter(Boolean); }
+
+test('the page holds the server\'s update sentences verbatim (customer_api, step 3c)', () => {
+  for (const name of ['UPDATE_TITLE', 'UPDATE_TITLE_CHECK', 'CHANGE_SAVED_BY', 'EARLIER_CODES_HEADING', 'EARLIER_CODES_HEADING_CHECK', 'EARLIER_CODES_MADE',
+    'EARLIER_CODES_MADE_CHECK', 'ANSWER_AFTER_UPDATE', 'RESULTS_UPDATING', 'RESULTS_NOT_UPDATED', 'RESULTS_EARLIER_SHOWN', 'RESULTS_NO_EARLIER_CODE', 'TALLY_BEFORE',
+    'TALLY_NO_EARLIER_CODE', 'RESULTS_UPDATING_CHECK', 'RESULTS_NOT_UPDATED_CHECK', 'RESULTS_EARLIER_SHOWN_CHECK', 'RESULTS_NO_EARLIER_CODE_CHECK', 'TALLY_BEFORE_CHECK',
+    'TALLY_NO_EARLIER_CODE_CHECK', 'RESTORED_TOAST', 'WHAT_CHANGED_COMPARED', 'WHAT_CHANGED_UNCHANGED', 'WHAT_CHANGED_UNCHANGED_ONE', 'EARLIER_DOWNLOAD',
+    'RETRY_UPDATE_ASKED']) {
+    assert.equal(app.TEXTS[name], pyText(name), name);
+  }
+  assert.equal(app.RETRY_UPDATE_ASKED, app.TEXTS.RETRY_UPDATE_ASKED);
+  const notes = name => Object.fromEntries([...new RegExp(`^${name} = \\{\\n((?:.|\\n)*?)^\\}`, 'm').exec(CUSTOMER_API)[1]
+    .matchAll(/'(updating|other)': \(?((?:\s*'[^']*')+)\)?,?/g)].map(match => [match[1], [...match[2].matchAll(/'([^']*)'/g)].map(item => item[1]).join('')]));
+  assert.deepEqual(app.TEXTS.UPDATE_EXPORT_NOTE, notes('UPDATE_EXPORT_NOTE'));
+  assert.deepEqual(app.TEXTS.UPDATE_EXPORT_NOTE_CHECK, notes('UPDATE_EXPORT_NOTE_CHECK'));
+  assert.equal(app.STATE_LABELS.updating, /'updating': '([^']*)'/.exec(CUSTOMER_API)[1]);
+  assert.deepEqual(app.UPDATE_STATES, ['updating', 'failed', 'stopped', 'paused', 'being_confirmed']);
+  assert.ok(app.PHASES.includes('updating'));
+});
+
+test('U21: an update in every state and kind - the panel, the results, the earlier codes and the exports say what is true', () => {
+  for (const kind of ['details', 'documentation', 'check']) {
+    for (const state of app.UPDATE_STATES) {
+      const doc = updateDoc(state, kind);
+      const at = `${kind}/${state}`;
+      const html = render(doc);
+      const running = state === 'updating';
+      const check = kind === 'check';
+      // the panel: titled by the update only while it runs; what was saved under the title; nothing animated unless it runs
+      const panel = app.progressPanel(doc, ui(doc));
+      if (running) assert.ok(panel.includes(`<h2 id="progressTitle">${esc(check ? app.TEXTS.UPDATE_TITLE_CHECK : app.TEXTS.UPDATE_TITLE)}</h2>`), at);
+      else assert.doesNotMatch(panel, /updating codes/i, at);
+      for (const line of doc.update.changes) assert.ok(panel.includes(`<li>${esc(line)}</li>`), at);
+      if (check) assert.doesNotMatch(panel, /Saved by/, at);
+      else assert.ok(panel.includes(esc(`Saved by Synthetic Reviewer, ${app.formatTimestamp('2026-11-13T10:00:00Z')}`)), at);
+      assert.equal(/is-animated/.test(panel), running, at);
+      // the results section and the tally: never "no codes were suggested" nor "No codes yet" while earlier codes exist
+      const results = app.resultsSection(doc, app.documentLayout(doc), ui(doc));
+      const expected = running ? (check ? app.TEXTS.RESULTS_UPDATING_CHECK : app.TEXTS.RESULTS_UPDATING) : (check ? app.TEXTS.RESULTS_NOT_UPDATED_CHECK : app.TEXTS.RESULTS_NOT_UPDATED);
+      assert.ok(results.includes(`<p class="results-empty">${esc(expected)}</p>`), `${at}: ${results}`);
+      assert.doesNotMatch(results, /No CPT codes were suggested|No codes were suggested|before codes were suggested|no codes have been suggested/, at);
+      assert.equal(app.tallyText(doc), `${check ? app.TEXTS.TALLY_BEFORE_CHECK : app.TEXTS.TALLY_BEFORE}${doc.earlier_codes.length} ready for review`, at);
+      // "being updated" only while the update runs, in every string the page draws for it
+      const drawn = [html, app.exportOptions(doc), app.exportStatusText(doc)].join('\n');
+      assert.equal(/being updated/.test(drawn), running, `${at}: ${drawn.match(/[^<>]*being updated[^<>]*/)}`);
+      // the earlier codes: their own section, read-only, with when they were made; their other sections inside it
+      const earlier = app.earlierCodesSection(doc, ui(doc));
+      assert.ok(earlier.includes(`<h2 id="earlierTitle">${esc(check ? app.TEXTS.EARLIER_CODES_HEADING_CHECK : app.TEXTS.EARLIER_CODES_HEADING)}</h2>`), at);
+      const made = (check ? app.TEXTS.EARLIER_CODES_MADE_CHECK : app.TEXTS.EARLIER_CODES_MADE).replace('{time}', app.formatTimestamp('2026-11-12T09:30:00Z')).replace('{date}', '2 November 2026');
+      assert.ok(earlier.includes(`<p class="earlier-made">${esc(made)}</p>`), at);
+      // their own hooks, never the current codes' (CORE-UX-DESIGN 8: the walk reads ol.result-list > li.result-row)
+      assert.equal(count(earlier, '<li class="earlier-row" '), doc.earlier_codes.length, at);
+      assert.equal(count(earlier, '<ol class="earlier-list" '), doc.earlier_codes.length ? 1 : 0, at);
+      assert.doesNotMatch(earlier, /result-row|result-list/, at);
+      assert.doesNotMatch(earlier, /data-decision=|data-evidence=/, `${at}: no decision button, no passage button`);
+      assert.doesNotMatch(html, /data-decision=/, at);
+      for (const section of ['class="result-notes not-coded"', 'class="other-codes"', 'class="result-notes limitations"']) {
+        if (!html.includes(section)) continue;
+        assert.equal(count(html, section), count(earlier, section), `${at}: ${section} only inside the earlier codes`);
+      }
+      assert.doesNotMatch(html, /data-action="recheck"/, `${at}: the re-check is never offered on the earlier codes`);
+      // the exports: both kinds disabled, the note by the update's state; earlier downloads linked and labelled
+      const options = app.exportOptions(doc);
+      assert.equal(count(options, ' disabled>'), 4, at);
+      const note = (check ? app.TEXTS.UPDATE_EXPORT_NOTE_CHECK : app.TEXTS.UPDATE_EXPORT_NOTE)[running ? 'updating' : 'other'];
+      assert.ok(options.includes(`<p>${esc(note)}</p>`), at);
+      assert.equal(app.exportStatusText(doc), note, at);
+      for (const report of doc.reports) {
+        assert.ok(options.includes(`<a href="${report.download_url}" download>${esc(report.filename)}</a>`), at);
+        assert.ok(options.includes(esc(app.TEXTS.EARLIER_DOWNLOAD.replace('{n}', '1'))), at);
+      }
+      // a check update names no change of the member's anywhere the page chooses the words
+      if (check) for (const item of pageTexts(doc, drawn)) assert.doesNotMatch(item, /your change|your latest change|Changes saved/i, `${at}: ${item}`);
+      // case C and the check: no restore offered in any text
+      if (kind !== 'details') assert.doesNotMatch(drawn, /restore/i, at);
+      // nothing names a provider, a model or the machinery
+      assert.deepEqual(leaks(html, doc), [], at);
+      assert.deepEqual(leaks(options, doc), [], at);
+    }
+  }
+});
+
+test('U21: earlier codes that listed none - the results and the tally say none was suggested before the change', () => {
+  for (const kind of ['details', 'check']) {
+    for (const state of ['updating', 'failed']) {
+      const doc = updateDoc(state, kind, { earlier: false });
+      const check = kind === 'check';
+      const results = app.emptyResults(doc, ui(doc));
+      assert.ok(results.endsWith(check ? app.TEXTS.RESULTS_NO_EARLIER_CODE_CHECK : app.TEXTS.RESULTS_NO_EARLIER_CODE), results);
+      assert.ok(!results.includes(check ? app.TEXTS.RESULTS_EARLIER_SHOWN_CHECK : app.TEXTS.RESULTS_EARLIER_SHOWN), results);
+      assert.equal(app.tallyText(doc), check ? app.TEXTS.TALLY_NO_EARLIER_CODE_CHECK : app.TEXTS.TALLY_NO_EARLIER_CODE);
+      assert.ok(app.earlierCodesSection(doc, ui(doc)).includes(esc(check ? app.TEXTS.RESULTS_NO_EARLIER_CODE_CHECK : app.TEXTS.RESULTS_NO_EARLIER_CODE)));
+    }
+  }
+});
+
+test('U21: the fixed line in place of an empty saved-changes list, in the form of the update\'s state', () => {
+  for (const reason of ['unfinished', 'same_details', 'check']) {
+    for (const state of app.UPDATE_STATES) {
+      const form = state === 'updating' ? 'updating' : 'other';
+      const doc = updateDoc(state, reason === 'check' ? 'check' : 'details', { changes: [SAVED_LINES[reason][form]], restorable: false });
+      const panel = app.progressPanel(doc, ui(doc));
+      assert.ok(panel.includes(`<ul class="update-changes"><li>${esc(SAVED_LINES[reason][form])}</li></ul>`), `${reason}/${state}`);
+      if (state !== 'updating') assert.doesNotMatch(panel, /being (?:finished|made|read|updated)/, `${reason}/${state}: the "other" forms never say it is being done`);
+    }
+  }
+});
+
+test('U21: the details panel while an update is pending - context rows editable, answers wait, Withdraw hidden, saved values shown', () => {
+  const doc = updateDoc('updating');
+  const base = fixture('encounter-awaiting-detail.json');
+  doc.details_needed = clone(base.details_needed);
+  doc.earlier_answers = [{ answer_id: UUID, fact: 'units', family_label: 'Colonoscopy', prompt: 'How many units were performed?', affects: ['45378'], value: 'not_documented',
+    label: 'Not documented', by: 'Synthetic Reviewer', at: '2026-11-12T09:00:00Z', why: 'no_longer_asked', why_text: 'This question is no longer asked, so this answer is not applied.' }];
+  const choice = doc.details_needed.find(row => row.control === 'choice' && !row.saved);
+  choice.entered_value = choice.choices[1].value;
+  const confirm = doc.details_needed.find(row => row.control === 'confirm' && !row.saved);
+  const saved = doc.details_needed.find(row => row.saved && row.saved.answer_id);
+  const panel = app.detailsPanel(doc, ui(doc));
+  assert.ok(panel.includes(`name="detail-${choice.id}"`), 'a choice row stays editable');
+  assert.ok(panel.includes(`<p class="detail-saved-value">Saved: <strong>${esc(choice.choices[1].label)}</strong></p>`), 'the saved value is shown');
+  const confirmHtml = app.detailRow(confirm, doc, ui(doc));
+  assert.ok(confirmHtml.includes(`<p class="detail-wait">${esc(app.TEXTS.ANSWER_AFTER_UPDATE)}</p>`), confirmHtml);
+  assert.doesNotMatch(confirmHtml, /data-detail-choice|data-action="addendum"/);
+  if (saved) assert.doesNotMatch(app.detailRow(saved, doc, ui(doc)), /revoke-detail/, 'a saved answer is not withdrawn while an update is pending');
+  assert.doesNotMatch(panel, /revoke-detail/, 'Withdraw hidden on earlier answers too');
+  assert.equal(count(panel, 'data-action="save-details"'), 1, 'the one save, for the context rows');
+  assert.doesNotMatch(panel, /stay reviewable/, 'no code is reviewable during an update');
+  // the save sends context values only: an answer chosen before the update began is never sent while it is pending
+  const kept = app.state.answers;
+  app.state.answers = new Map([[choice.id, { fact: choice.fact, value: choice.choices[0].value }], [confirm.id, { fact: confirm.fact, value: 'not_documented' }]]);
+  try {
+    assert.deepEqual(app.detailAnswers(doc), [{ id: choice.id, fact: choice.fact, value: choice.choices[0].value }]);
+  } finally {
+    app.state.answers = kept;
+  }
+});
+
+test('"What changed" stands above the codes once they are updated, in the server\'s order; "Earlier decisions" lists why', () => {
+  const doc = clone(fixture('encounter-ready.json'));
+  doc.update = null;
+  doc.earlier_codes = [];
+  doc.what_changed = { compared_with: { made_at: '2026-11-12T09:30:00Z', revision: 1 },
+    details: ['Place of service: not documented → Hospital outpatient department'],
+    codes: [{ code: '45380', change: 'added', text: '45380 is now suggested (Ready for review)' }, { code: '45385', change: 'removed', text: '45385 is no longer suggested' }],
+    unchanged: 2, decisions: [{ code: '45378', action: 'Approval', outcome: 'kept_then_changed', text: 'Approval of 45378 was kept by the update, then changed by a reviewer.' }],
+    answers: pyText('WHAT_CHANGED_ANSWERS') };
+  doc.decision_history = [{ code: '45385', action: 'Approval', by: 'Synthetic Reviewer', by_kind: 'human', at: '2026-11-12T09:40:00Z', revision: 1,
+    why: pyText('CLEARED_DETAILS_CHANGED') }, { code: '45378', action: 'Rejection', by: 'Review agent', by_kind: 'agent', at: '2026-11-12T09:41:00Z', revision: 1,
+    why: pyText('CLEARED_NEW_READING') }];
+  const html = render(doc, { open: new Set(['earlier-decisions']) });
+  const section = app.whatChangedSection(doc);
+  const ordered = ['Place of service: not documented → Hospital outpatient department', '45380 is now suggested (Ready for review)', '45385 is no longer suggested', '2 codes unchanged',
+    'Approval of 45378 was kept by the update, then changed by a reviewer.', doc.what_changed.answers];
+  let cursor = 0;
+  for (const line of ordered) {
+    const at = section.indexOf(esc(line), cursor);
+    assert.ok(at >= cursor, line);
+    cursor = at;
+  }
+  assert.ok(section.includes(esc(app.TEXTS.WHAT_CHANGED_COMPARED.replace('{time}', app.formatTimestamp('2026-11-12T09:30:00Z')))));
+  assert.ok(html.indexOf('class="what-changed"') < html.indexOf('class="result-list"'), 'above the codes');
+  doc.what_changed.unchanged = 1;
+  assert.ok(app.whatChangedSection(doc).includes(`<li>${app.TEXTS.WHAT_CHANGED_UNCHANGED_ONE}</li>`));
+  const decisions = app.earlierDecisions(doc, ui(doc, { open: new Set(['earlier-decisions']) }));
+  assert.match(decisions, /<summary>Earlier decisions<\/summary>/);
+  assert.ok(decisions.includes(`<strong>Approval of 45385</strong><small>Synthetic Reviewer · ${app.formatTimestamp('2026-11-12T09:40:00Z')} · revision 1</small><p>${esc(doc.decision_history[0].why)}</p>`), decisions);
+  assert.ok(decisions.includes('Review agent (automated agent)'));
+  // while an update is pending what changed is not drawn (the server serves none then)
+  const pending = updateDoc('updating');
+  pending.what_changed = doc.what_changed;
+  assert.equal(app.whatChangedSection(pending), '');
+  assert.deepEqual(leaks(html, doc), []);
+});
+
+test('earlier downloads: linked and labelled as earlier; a current one as before', () => {
+  const report = { id: UUID, kind: 'approved', fmt: 'txt', filename: 'CPT-Studio-approved-r1-20261112T093000.txt', generated_at: '2026-11-12T09:30:00Z',
+    generated_by: 'Synthetic Reviewer', download_url: `/api/reports/${UUID}/download`, current: false, revision: 1 };
+  const earlier = app.reportItem(report);
+  assert.ok(earlier.startsWith('<li class="report-item earlier"><a href="'), earlier);
+  assert.ok(earlier.includes(esc('Earlier — made on revision 1; it may not show the current codes')));
+  const current = app.reportItem({ ...report, current: true });
+  assert.ok(current.startsWith(`<li class="report-item"><a href="/api/reports/${UUID}/download" download>`));
+  assert.doesNotMatch(current, /Earlier/);
+  // an export the server served with no revision (an older server) keeps the earlier page's unlinked line
+  assert.match(app.reportItem({ ...report, revision: undefined }), /class="report-item stale"/);
+});
+
+test('"Try updating again" asks the server once, with the page\'s headers; a refusal says why in the server\'s words', async () => {
+  const doc = updateDoc('failed');
+  assert.equal(doc.progress.error.action, 'retry_update');
+  const panel = app.progressPanel(doc, ui(doc));
+  assert.ok(panel.includes(`<p>${esc(doc.progress.error.text)}</p><button type="button" class="button secondary" data-action="retry-update">Try updating again</button>`), panel);
+  const viewer = clone(doc);
+  viewer.permissions.can_review = false;
+  assert.doesNotMatch(app.progressPanel(viewer, ui(viewer)), /retry-update/);
+  const saved = { document: global.document, fetch: global.fetch };
+  const toastEl = { textContent: '', classList: { add() {}, remove() {} } };
+  const element = selector => (selector === '#toast' ? toastEl : { textContent: '', hidden: false });
+  const button = { dataset: { action: 'retry-update' }, disabled: false, toggleAttribute() {} };
+  const asked = [];
+  let answer = { status: 201, body: { retrying: true } };
+  try {
+    global.document = { querySelector: element, querySelectorAll: () => [], cookie: 'cptstudio_csrf=token123' };
+    global.fetch = async (url, init) => {
+      asked.push({ url, method: init.method, body: init.body ? JSON.parse(init.body) : null, client: init.headers[app.CLIENT_HEADER] });
+      const reply = url === '/api/session' ? { status: 200, body: fixture('session.json') } : answer;
+      return { status: reply.status, ok: reply.status < 300, redirected: false, url: `http://127.0.0.1${url}`, headers: { get: () => 'application/json' }, json: async () => reply.body };
+    };
+    app.state.doc = doc;
+    app.state.route = null;
+    await app.onClick({ target: { closest: selector => (selector === '[data-action]' ? button : null) } });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(asked.filter(item => item.method === 'POST'), [{ url: `/api/encounters/${doc.id}/retry-update`, method: 'POST', body: {}, client: app.CLIENT_VERSION }]);
+    assert.equal(toastEl.textContent, app.RETRY_UPDATE_ASKED);
+    asked.length = 0;
+    answer = { status: 409, body: { error: pyText('RETRY_UPDATE_NOTHING') } };
+    await app.retryUpdate(button);
+    assert.equal(toastEl.textContent, answer.body.error);
+    assert.equal(button.disabled, false);
+  } finally {
+    global.document = saved.document;
+    global.fetch = saved.fetch;
+    app.state.doc = null;
+    clearTimeout(app.state.toastTimer);
+  }
+});
+
+// --- a small live DOM over ops/verification/fake_dom.cjs (the walk's own parser), for the page's event handlers ---------
+const { fakeDocument, Node: FakeNode } = require('../../ops/verification/fake_dom.cjs');
+
+class LiveNode extends FakeNode {
+  get dataset() {
+    const out = {};
+    for (const [name, value] of Object.entries(this.attrs)) {
+      if (name.startsWith('data-')) out[name.slice(5).replace(/-([a-z])/g, (match, letter) => letter.toUpperCase())] = value;
+    }
+    return out;
+  }
+
+  setAttribute(name, value) { this.attrs[name] = String(value); }
+
+  removeAttribute(name) { delete this.attrs[name]; }
+
+  toggleAttribute(name, on) {
+    if (on) this.attrs[name] = '';
+    else delete this.attrs[name];
+    return Boolean(on);
+  }
+
+  get value() { return super.value; }
+
+  set value(next) { this.attrs.value = String(next); }
+
+  get checked() { return super.checked; }
+
+  set checked(on) { this.toggleAttribute('checked', on); }
+
+  get disabled() { return super.disabled; }
+
+  set disabled(on) { this.toggleAttribute('disabled', on); }
+
+  get hidden() { return this.hasAttribute('hidden'); }
+
+  set hidden(on) { this.toggleAttribute('hidden', on); }
+
+  get textContent() { return super.textContent; }
+
+  set textContent(next) { this.childNodes = [{ text: String(next) }]; }
+
+  get classList() {
+    const node = this;
+    const names = () => (node.attrs.class || '').split(/\s+/).filter(Boolean);
+    return {
+      add: name => { node.attrs.class = [...new Set([...names(), name])].join(' '); },
+      remove: name => { node.attrs.class = names().filter(item => item !== name).join(' '); },
+      contains: name => names().includes(name),
+    };
+  }
+
+  focus() {}
+}
+
+function liveDocument(html) {
+  const doc = fakeDocument(html);
+  const live = node => {
+    if (!(node instanceof FakeNode)) return;
+    Object.setPrototypeOf(node, LiveNode.prototype);
+    node.childNodes.forEach(live);
+  };
+  live(doc.root);
+  doc.cookie = 'cptstudio_csrf=token123';
+  return doc;
+}
+
+// The page drawn for ``doc`` in a live DOM, with the page's globals wired to it and a fetch that records every request.
+async function onLivePage(doc, drive) {
+  const saved = { document: global.document, fetch: global.fetch };
+  const requests = [];
+  try {
+    // the shell's session fields too: the session read a save starts (afterChange) draws into them while the page is live
+    const shell = ['workspaceName', 'workspaceSubtitle', 'workspaceAvatar', 'profileAvatar', 'topAvatar', 'profileName',
+      'profileRole', 'documentsCount', 'queueCount'].map(id => `<span id="${id}"></span>`).join('');
+    global.document = liveDocument(`<header>${shell}</header><main id="main">${render(doc)}</main><div id="toast" class="toast"></div>`);
+    global.fetch = async (url, init) => {
+      requests.push({ url, method: init.method || 'GET', body: init.body ? JSON.parse(init.body) : null });
+      const body = url === '/api/session' ? fixture('session.json') : url.endsWith('/details') ? { saved: 2, unchanged: 0, answer_ids: [], reassessing: true, restored: false } : doc;
+      return { status: url.endsWith('/details') ? 201 : 200, ok: true, redirected: false, url: `http://127.0.0.1${url}`, headers: { get: () => 'application/json' }, json: async () => body };
+    };
+    app.state.doc = doc;
+    app.state.route = null;  // the refresh after a save is the route's; nothing is redrawn here
+    app.state.answers = new Map();
+    await drive(global.document, requests);
+  } finally {
+    global.document = saved.document;
+    global.fetch = saved.fetch;
+    app.state.doc = null;
+    app.state.answers = new Map();
+    clearTimeout(app.state.toastTimer);
+  }
+}
+
+// A document with a date row and a choice row (the setting), as the details panel draws them.
+function typingDoc(update) {
+  const doc = update ? updateDoc('updating') : clone(fixture('encounter-awaiting-detail.json'));
+  const base = fixture('encounter-awaiting-detail.json');
+  const choice = clone(base.details_needed.find(row => row.control === 'choice' && row.fact === 'setting' && !row.saved));
+  const date = clone(fixture('encounter-action-needed.json').details_needed.find(row => row.control === 'date'));
+  date.choices = [];
+  doc.details_needed = [date, choice];
+  doc.earlier_answers = [];
+  return { doc, date, choice };
+}
+
+test('U2: typing a date and choosing a setting sends nothing; the one Save sends exactly one POST /details', async () => {
+  for (const update of [false, true]) {
+    const { doc, date, choice } = typingDoc(update);
+    await onLivePage(doc, async (page, requests) => {
+      const input = page.querySelector(`input[data-detail-input][data-detail="${date.id}"]`);
+      assert.ok(input, 'the date field is drawn');
+      for (const typed of ['2', '2026-1', '2026-11-1', '2026-11-10']) {  // keystroke by keystroke, as the browser fires input
+        input.value = typed;
+        app.onInput({ target: input });
+      }
+      app.onChange({ target: input });
+      const radio = page.querySelector(`input[type="radio"][data-detail="${choice.id}"][value="hospital_outpatient"]`);
+      assert.ok(radio, 'the setting radio is drawn');
+      radio.checked = true;
+      app.onChange({ target: radio });
+      await new Promise(resolve => setImmediate(resolve));
+      assert.deepEqual(requests, [], `update ${update}: no request while typing and choosing`);
+      assert.deepEqual([...app.state.answers.keys()].sort(), [date.id, choice.id].sort());
+      const save = page.querySelector('[data-action="save-details"]');
+      assert.ok(save, 'the one save is drawn');
+      await app.onClick({ target: save });
+      await new Promise(resolve => setImmediate(resolve));
+      const posts = requests.filter(item => item.method === 'POST');
+      assert.deepEqual(posts, [{ url: `/api/encounters/${doc.id}/details`, method: 'POST',
+        body: { answers: [{ id: date.id, fact: 'service_date', value: '2026-11-10' }, { id: choice.id, fact: 'setting', value: 'hospital_outpatient' }] } }], `update ${update}`);
+      assert.ok(requests.every(item => item.method === 'POST' || item.url === '/api/session'), 'nothing else but the session read after the save');
+    });
+  }
+});
+
+test('a save that restored the earlier codes says so; one that queued an update says the results are being updated', async () => {
+  const { doc, choice } = typingDoc(false);
+  for (const [reply, message] of [[{ saved: 1, unchanged: 0, answer_ids: [], reassessing: false, restored: true }, app.TEXTS.RESTORED_TOAST],
+    [{ saved: 1, unchanged: 0, answer_ids: [], reassessing: true, restored: false }, 'Answer saved. The results are being updated.'],
+    [{ saved: 1, unchanged: 0, answer_ids: [], reassessing: false, restored: false }, 'Answer saved.']]) {
+    await onLivePage(doc, async page => {
+      const realFetch = global.fetch;
+      global.fetch = async (url, init) => (url.endsWith('/details')
+        ? { status: 201, ok: true, redirected: false, url: `http://127.0.0.1${url}`, headers: { get: () => 'application/json' }, json: async () => reply }
+        : realFetch(url, init));
+      app.state.answers.set(choice.id, { fact: choice.fact, value: 'office' });
+      await app.saveDetails(page.querySelector('[data-action="save-details"]'));
+      await new Promise(resolve => setImmediate(resolve));  // the session read the save starts ends on this page
+      assert.equal(page.querySelector('#toast').textContent, message);
+    });
+  }
+});
+
+test('the live page in every update state and kind: what a member can read and press, through the walk\'s own DOM', async () => {
+  for (const kind of ['details', 'documentation', 'check']) {
+    for (const state of app.UPDATE_STATES) {
+      const doc = updateDoc(state, kind);
+      doc.details_needed = clone(fixture('encounter-awaiting-detail.json').details_needed);
+      const at = `${kind}/${state}`;
+      await onLivePage(doc, async (page, requests) => {
+        const title = page.querySelector('#progressTitle').textContent;
+        assert.equal(title === app.TEXTS.UPDATE_TITLE || title === app.TEXTS.UPDATE_TITLE_CHECK, state === 'updating', `${at}: ${title}`);
+        if (kind === 'check') assert.notEqual(title, app.TEXTS.UPDATE_TITLE, at);
+        assert.deepEqual(page.querySelectorAll('[data-decision]'), [], `${at}: no decision button anywhere`);
+        assert.equal(page.querySelectorAll('ol.earlier-list > li.earlier-row').length, doc.earlier_codes.length, at);
+        assert.deepEqual(page.querySelectorAll('.result-row'), [], `${at}: no current code row`);
+        assert.deepEqual(page.querySelectorAll('ol.result-list'), [], `${at}: no current code list`);
+        assert.equal(page.querySelector('#earlierTitle').textContent, kind === 'check' ? app.TEXTS.EARLIER_CODES_HEADING_CHECK : app.TEXTS.EARLIER_CODES_HEADING, at);
+        assert.ok(page.querySelector('[data-action="save-details"]'), `${at}: the context rows keep the one save`);
+        assert.deepEqual(page.querySelectorAll('[data-detail-choice]'), [], `${at}: no answer button while the update is pending`);
+        assert.deepEqual(page.querySelectorAll('[data-action="revoke-detail"]'), [], `${at}: no withdrawal while the update is pending`);
+        const retry = page.querySelector('[data-action="retry-update"]');
+        assert.equal(Boolean(retry), doc.progress.error?.action === 'retry_update', at);
+        const stop = page.querySelector('[data-action="stop"]');
+        assert.equal(Boolean(stop), state === 'updating', `${at}: Stop only while it runs`);
+        const text = page.querySelector('main').textContent;
+        assert.equal(/being updated/.test(text), state === 'updating', at);
+        assert.doesNotMatch(text, /No codes yet|No CPT codes were suggested|no codes have been suggested/, at);
+        if (kind !== 'details') assert.doesNotMatch(text, /restore/i, at);
+        assert.deepEqual(requests, [], `${at}: drawing the page sends nothing`);
+      });
+    }
+  }
+});
+
+// --- step 5d, round 2 (refute-5d-r1 P1, P5, P6) -----------------------------------------------------------------------
+
+// P1: the walk (ops/verify_browser.cjs) reads ol.result-list > li.result-row as the codes the API serves (CORE-UX-DESIGN
+// 8). While an update is pending the API serves no code: the earlier codes are drawn under hooks of their own, so the
+// walk's own reader finds no current row in any update state and kind, and its result-list check passes on a correct page.
+test('the walk\'s own DOM reader never reads the earlier codes as the current codes, in any update state or kind', () => {
+  const vb = require('../../ops/verify_browser.cjs');
+  for (const kind of ['details', 'documentation', 'check']) {
+    for (const state of app.UPDATE_STATES) {
+      const doc = updateDoc(state, kind);
+      const at = `${kind}/${state}`;
+      const page = fakeDocument(`<main>${render(doc)}</main>`);
+      const dom = vb.readCustomerDom(page);
+      assert.equal(dom.list, false, `${at}: no ol.result-list while the API serves no code`);
+      assert.deepEqual(dom.rows, [], at);
+      assert.deepEqual(vb.checkResultList(doc, dom).map(item => [item.id, item.status]), [['dom.result_list', 'pass']], at);
+      const rows = page.querySelectorAll('section.earlier-codes > ol.earlier-list > li.earlier-row');
+      assert.equal(rows.length, doc.earlier_codes.length, at);
+      assert.deepEqual(rows.map(row => row.getAttribute('data-code')), doc.earlier_codes.map(code => code.code), at);
+      assert.ok(rows.every(row => row.getAttribute('data-proposal') === null), `${at}: an earlier row names no proposal to decide`);
+      assert.deepEqual(page.querySelectorAll('li.result-row, ol.result-list, [data-proposal]'), [], at);
+    }
+  }
+  // the control: once the codes are fresh the walk reads the current list as before
+  const fresh = fixture('encounter-ready.json');
+  const dom = vb.readCustomerDom(fakeDocument(`<main>${render(fresh)}</main>`));
+  assert.equal(dom.rows.length, fresh.codes.length);
+  assert.ok(vb.checkResultList(fresh, dom).every(item => item.status === 'pass'));
+});
+
+// P5: a choice row saved "Not documented" while an update is pending: "Change this answer" is hidden (1.4), but the row
+// still takes one of its values - a context save the server accepts during an update (A1, 5.1(3); A19 names it), which
+// replaces the answer and records none (answers._save_details) - so the page draws the values and the one save. While
+// processing runs outside an update the row keeps only its saved line, as before (the stage is most often that
+// answer's own recompute, during which a context save is refused: A18).
+function savedChoiceRow() {
+  const row = clone(fixture('encounter-awaiting-detail.json').details_needed.find(item => item.control === 'choice' && item.fact === 'setting'));
+  row.saved = { value: 'not_documented', label: 'Not documented', by: 'Synthetic Reviewer', at: '2026-11-12T09:00:00Z', answer_id: UUID };
+  return row;
+}
+
+test('a choice row saved "Not documented" takes one of its values while an update is pending, and its answer is not withdrawn then', async () => {
+  const row = savedChoiceRow();
+  const radios = html => count(html, `name="detail-${row.id}"`);
+  // answers open (nothing runs, no update): the saved answer with "Change this answer", as before
+  const open = clone(fixture('encounter-awaiting-detail.json'));
+  open.details_needed = [clone(row)];
+  const openHtml = app.detailsPanel(open, ui(open));
+  assert.equal(radios(openHtml), 0);
+  assert.match(openHtml, /data-action="revoke-detail"/);
+  assert.equal(app.valueOverAnswer(row, open), false);
+  assert.equal(app.rowEditable(row, open), false);
+  // processing outside an update: the saved line only, as before - no withdrawal, no value, no save
+  const busy = clone(fixture('encounter-awaiting-detail.json'));
+  busy.progress = { ...busy.progress, phase: 'processing', busy: true, can_stop: true };
+  busy.details_needed = [clone(row)];
+  const busyHtml = app.detailsPanel(busy, ui(busy));
+  assert.equal(radios(busyHtml), 0);
+  assert.doesNotMatch(busyHtml, /data-action="revoke-detail"|data-action="save-details"/);
+  assert.ok(busyHtml.includes('Saved: <strong>Not documented</strong>'));
+  assert.equal(app.valueOverAnswer(row, busy), false);
+  assert.equal(app.rowEditable(row, busy), false);
+  // an update pending, in each state: the values, no withdrawal, the one save
+  const waiting = app.UPDATE_STATES.map(state => [`update ${state}`, updateDoc(state)]);
+  for (const [at, doc] of waiting) {
+    doc.details_needed = [clone(row)];
+    const html = app.detailsPanel(doc, ui(doc));
+    assert.equal(radios(html), row.choices.length, at);
+    assert.doesNotMatch(html, /data-action="revoke-detail"/, `${at}: the answer is not withdrawn while an update is pending`);
+    assert.doesNotMatch(html, /data-detail-choice=/, `${at}: no answer button while an update is pending`);
+    assert.ok(html.includes('Saved: <strong>Not documented</strong>'), `${at}: the saved answer stays shown`);
+    assert.equal(count(html, 'data-action="save-details"'), 1, at);
+    assert.ok(html.includes(`<fieldset class="detail-row is-saved" data-detail="${row.id}"`), `${at}: a radio group named by its legend`);
+    assert.equal(app.valueOverAnswer(row, doc), true, at);
+    assert.equal(app.rowEditable(row, doc), true, at);
+  }
+  // a viewer is offered nothing
+  const viewer = updateDoc('failed');
+  viewer.permissions.can_review = false;
+  viewer.details_needed = [clone(row)];
+  assert.equal(radios(app.detailsPanel(viewer, ui(viewer))), 0);
+  assert.equal(app.rowEditable(row, viewer), false);
+  // the live page: choosing a value and pressing Save sends that value, and nothing is sent before Save
+  const doc = updateDoc('failed');
+  doc.details_needed = [clone(row)];
+  await onLivePage(doc, async (page, requests) => {
+    const radio = page.querySelector(`input[type="radio"][data-detail="${row.id}"][value="office"]`);
+    assert.ok(radio, 'the value is offered');
+    radio.checked = true;
+    app.onChange({ target: radio });
+    assert.deepEqual(requests, []);
+    await app.onClick({ target: page.querySelector('[data-action="save-details"]') });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(requests.filter(item => item.method === 'POST'), [{ url: `/api/encounters/${doc.id}/details`, method: 'POST',
+      body: { answers: [{ id: row.id, fact: 'setting', value: 'office' }] } }]);
+  });
+});
+
+// P6: a poll that brings nothing new but the server's clock never redraws the page (a date being typed in a native date
+// field holds no value until it is whole, so a redraw empties it); a poll that brings a change redraws as before.
+test('a read that brings only the server\'s clock does not redraw the page; a read that brings a change does', async () => {
+  const doc = updateDoc('updating');
+  doc.details_needed = clone(fixture('encounter-awaiting-detail.json').details_needed);
+  const later = clone(doc);
+  later.progress.server_time = '2026-11-13T10:03:02Z';
+  const moved = clone(later);
+  moved.progress.steps = moved.progress.steps.map(step => (step.key === 'checking' ? { ...step, state: 'done' } : step));
+  assert.equal(app.renderKey(later), app.renderKey(doc));
+  assert.notEqual(app.renderKey(moved), app.renderKey(doc));
+  assert.notEqual(app.renderKey({ ...later, update: { ...later.update, state: 'failed' } }), app.renderKey(doc));
+  assert.equal(app.renderKey({ id: 'no-progress' }), JSON.stringify({ id: 'no-progress' }));
+  const saved = { window: global.window };
+  try {
+    await onLivePage(doc, async page => {
+      global.window = { scrollY: 0, scrollTo() {} };
+      const main = page.querySelector('#main');
+      let draws = 0;
+      Object.defineProperty(main, 'innerHTML', { configurable: true, set() { draws += 1; }, get() { return ''; } });
+      app.renderDocument(doc, true);  // the route's first draw
+      assert.equal(draws, 1);
+      app.renderDocument(later, false);  // a poll: only the server's clock moved
+      assert.equal(draws, 1, 'the page under the member is not redrawn');
+      assert.equal(app.state.doc, later, 'the newest read is kept');
+      app.renderDocument(moved, false);  // a poll that brings a change
+      assert.equal(draws, 2);
+    });
+  } finally {
+    global.window = saved.window;
+    app.state.docKey = '';
+  }
+});
+
+// Found in round 2's own review: "You can change an answer below" is said only where an answer can be changed now - while
+// an update is pending a saved answer is not withdrawn (1.4), so with every row answered and none taking a value the lead
+// says only that every detail has an answer (D225: every customer sentence true for its state).
+test('with every detail answered, the panel says an answer can be changed only where one can be changed now', () => {
+  const answered = doc => {
+    for (const row of doc.details_needed) row.saved = { value: 'not_documented', label: 'Not documented', by: 'Synthetic Reviewer', at: '2026-11-12T09:00:00Z', answer_id: UUID };
+    return doc;
+  };
+  const confirmOnly = doc => { doc.details_needed = clone(fixture('encounter-awaiting-detail.json').details_needed).filter(row => row.control === 'confirm'); return answered(doc); };
+  const open = confirmOnly(clone(fixture('encounter-awaiting-detail.json')));
+  assert.match(app.detailsPanel(open, ui(open)), /Every detail has an answer\. You can change an answer below\./);
+  for (const state of app.UPDATE_STATES) {
+    const pending = confirmOnly(updateDoc(state));
+    const html = app.detailsPanel(pending, ui(pending));
+    assert.ok(html.includes('<p>Every detail has an answer.</p>'), state);
+    assert.doesNotMatch(html, /You can change an answer below|revoke-detail|save-details/, state);
+  }
+  // a choice row saved "Not documented" still takes a value while the update is pending: the sentence holds
+  const withChoice = answered(updateDoc('failed'));
+  withChoice.details_needed = [savedChoiceRow(), ...confirmOnly(updateDoc('failed')).details_needed];
+  assert.match(app.detailsPanel(withChoice, ui(withChoice)), /Every detail has an answer\. You can change an answer below\./);
 });

@@ -139,27 +139,47 @@ class Steps(Base):
 
     def assert_failed_run_stands(self, encounter_id, failed):
         """The send door met the request that failed and sent nothing: the predict recorded a run of its own - not
-        sent, carrying that request, saying so with the failure's error - and the encounter is re-assessed with it
-        (provider_failed; the screen names it). That run is the revision's newest finished run as this revision and the
-        installed one (057a7d39, after a rollback) read it, and it answers the current context's request on both, so no
-        later save on either sends the request again (round 7c8 skeptic, sk:2: re-assessing with the older failed run
-        itself left a newer run standing)."""
+        sent, carrying that request, saying so with the failure's error. FINAL-V2 amendment 1 (A6, 7.2): during an
+        update that request is not the earlier codes' own, so the predict ends FAILED and queues nothing - the earlier
+        codes stay the current assessment, the update pending, and the state reads provider_failed naming that run (the
+        screen names it; 7.1's failed row). Before the amendment the encounter was re-assessed with that run, which
+        replaced the earlier codes with a final that had no document review. That run is the revision's newest finished
+        run as this revision and the installed one (057a7d39, after a rollback) read it, and it answers the current
+        context's request on both, so no later save on either sends the request again (round 7c8 skeptic, sk:2:
+        re-assessing with the older failed run itself left a newer run standing)."""
         encounter = self.encounter(encounter_id)
         revision, assessment = encounter.current_revision, encounter.current_assessment
-        run = assessment.provider_run
+        run = jobs._run_in_use(revision)
         self.assertEqual(encounter.state, 'provider_failed')
         self.assertEqual((run.state, run.sent, run.request_sha256, run.revision_id, run.purpose),
                          (models.ProviderRun.NOT_SENT, False, failed.request_sha256, revision.pk,
                           models.ProviderRun.PRIMARY))
         self.assertTrue(run.error.startswith(jobs.FAILED_BEFORE_MESSAGE), run.error)
         self.assertIn(failed.error, run.error)
-        self.assertEqual(assessment.context_id, encounter.current_context_id)
-        self.assertEqual(jobs._run_in_use(revision), run)
         self.assertEqual(installed_run_in_use(revision), run)
         self.assertTrue(jobs._run_answers(run, revision, encounter.current_context))
         self.assertEqual(self.detail(encounter_id)['state_run'], str(run.pk))
-        self.assertEqual(review.latest_job(encounter).kind, models.Job.ASSESS)
+        latest = review.latest_job(encounter)
+        self.assertEqual((latest.kind, latest.state), (models.Job.PREDICT, models.Job.FAILED))
+        self.assertTrue(review.update_pending(encounter))  # the earlier codes stand, never replaced by that run
+        self.assertNotEqual(assessment.provider_run_id, run.pk)
+        self.assertFalse(models.Job.objects.filter(encounter_id=encounter_id,
+                                                   state__in=(models.Job.QUEUED, models.Job.RUNNING)).exists())
         return run
+
+    def assert_restored_to_the_failed_codes(self, encounter_id, failed):
+        """FINAL-V2 amendment 1 (2.5, A3): a save back to the earlier codes' own values - codes whose document review is
+        the request that failed itself - makes them current again with nothing queued and nothing sent: fresh,
+        provider_failed, naming that run. Returns it."""
+        encounter = self.encounter(encounter_id)
+        assessment = encounter.current_assessment
+        self.assertTrue(review.fresh(encounter))
+        self.assertEqual(encounter.state, 'provider_failed')
+        self.assertEqual((assessment.provider_run_id, assessment.context_id), (failed.pk, encounter.current_context_id))
+        self.assertEqual(self.detail(encounter_id)['state_run'], str(failed.pk))
+        self.assertFalse(models.Job.objects.filter(encounter_id=encounter_id,
+                                                   state__in=(models.Job.QUEUED, models.Job.RUNNING)).exists())
+        return failed
 
 
 # --- sends-0: a run that carries no request is no request's outcome --------------------------------------------------
@@ -190,8 +210,12 @@ class RunWithoutARequestIsNoOutcomeTests(Steps):
         self.context(encounter_id, service_date='')  # cleared: the request is the failed one, byte for byte
         self.assertEqual(self.sent(), 1)
         self.assertEqual(self.shas(), [failed.request_sha256])
-        run = self.assert_failed_run_stands(encounter_id, failed)
-        self.assertEqual(self.runs(encounter_id), [failed, unbuilt, run])
+        # FINAL-V2 amendment 1: the unbuilt date's update failed (A6) and the clear is a save back to the earlier codes'
+        # own values (2.5): they are current again and nothing new is recorded
+        self.assert_restored_to_the_failed_codes(encounter_id, failed)
+        self.assertEqual(self.runs(encounter_id), [failed, unbuilt])
+        self.context(encounter_id, setting='office')  # and a later save never sends the failed request either
+        self.assertEqual(self.sent(), 1)
 
     def test_the_context_dialogs_whole_body(self):
         # the same steps posted as the context dialog posts them: every field, every time; a smaller limit on the
@@ -204,7 +228,7 @@ class RunWithoutARequestIsNoOutcomeTests(Steps):
         self.context(encounter_id, service_date=DATE, setting='', billing_context='')
         self.context(encounter_id, service_date='', setting='', billing_context='')
         self.assertEqual(self.sent(), 1)
-        self.assert_failed_run_stands(encounter_id, self.runs(encounter_id)[0])
+        self.assert_restored_to_the_failed_codes(encounter_id, self.runs(encounter_id)[0])  # 2.5: a save back
 
     def test_control_a_request_never_sent_is_sent_once_its_date_is_cleared(self):
         # a run without a request before any request was sent: clearing the date makes the one attempt, once
@@ -623,7 +647,13 @@ class TheRunInUseIsTheOutcomeThatStandsTests(Steps):
         sent = self.sent()
         self.context(encounter_id, setting='office')
         self.assertEqual(self.sent(), sent)
-        self.assertEqual(self.encounter(encounter_id).current_assessment.provider_run_id, run.pk)
+        # FINAL-V2 amendment 1 (A6): the save's update re-checks only with a run that succeeded or the earlier codes'
+        # own, so its predict meets the request at the send door and records a not-sent run of it, never a send; that
+        # record is the newest finished run, as both revisions read it
+        newest = jobs._run_in_use(self.encounter(encounter_id).current_revision)
+        self.assertEqual((newest.state, newest.sent, newest.request_sha256),
+                         (models.ProviderRun.NOT_SENT, False, run.request_sha256))
+        self.assertEqual(installed_run_in_use(self.encounter(encounter_id).current_revision), newest)
 
     def test_a_cleared_date_after_an_answered_one(self):
         # the skeptic's shape A: the dateless request FAILED, the member's date was sent and answered, then cleared
@@ -650,7 +680,7 @@ class TheRunInUseIsTheOutcomeThatStandsTests(Steps):
         self.assertEqual((unbuilt.state, unbuilt.request_sha256), (models.ProviderRun.NOT_SENT, ''))
         self.context(encounter_id, service_date='')
         self.assertEqual(self.sent(), 1)
-        run = self.assert_failed_run_stands(encounter_id, failed)
+        run = self.assert_restored_to_the_failed_codes(encounter_id, failed)  # amendment 1, 2.5: a save back
         self.assert_a_setting_save_sends_nothing(encounter_id, run)
 
     def test_a_cleared_date_after_a_second_review(self):

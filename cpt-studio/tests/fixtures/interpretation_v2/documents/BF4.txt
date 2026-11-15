@@ -1,0 +1,8 @@
+SYNTHETIC UPPER ENDOSCOPY REPORT
+Date of service: 03/14/2031
+Endoscopist: Corvin Ashdale, MD (fictional)
+
+History: On June 4, 2030 the esophageal stricture was dilated with a balloon.
+Findings: The gastroscope was advanced to the second portion of the duodenum.
+The esophageal stricture was dilated with a balloon to 15 mm.
+Oozing at the dilation site was treated with an epinephrine injection.

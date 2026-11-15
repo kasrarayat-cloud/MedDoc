@@ -35,6 +35,13 @@ NOVEMBER = datetime(2026, 11, 9, 12, 0, tzinfo=dt_timezone.utc)
 DECEMBER = datetime(2026, 12, 2, 12, 0, tzinfo=dt_timezone.utc)  # the later, higher rate
 CLEAN = {'legacy_calls': 0, 'scope': 'assess', 'tool': 'sys.monitoring', 'deny_size': sentinel.DENY_SIZE,
          'positive_control': 'ok'}
+CLEAN_V2 = {**CLEAN, 'retired_calls': 0}  # design v2 (step 5c): a v2 record counts the retired calls too
+
+
+def V2World(**kw):  # noqa: N802 - design v2's synthetic encounter (tests/v2/test_readers.V2World), imported on use
+    from tests.v2.test_readers import V2World as world
+
+    return world(**kw)
 
 
 def installed(case):
@@ -69,7 +76,8 @@ class Rows:
                                                         sha256='1' * 64)
 
     def run(self, *, provider=interpretation.PROVIDER, state='succeeded', sent=True, http_status=200, body=None,
-            usage=None, started_at=NOVEMBER, returned_model=interpretation.MODEL, scope=None, reused_from=None):
+            usage=None, started_at=NOVEMBER, returned_model=interpretation.MODEL, scope=None, reused_from=None,
+            requested_model=interpretation.MODEL):
         body = encoded(envelope()) if body is None else body
         request = {'contents': [{'parts': [{'text': self.rev.text}]}], 'n': models.ProviderRun.objects.count()}
         return models.ProviderRun.objects.create(
@@ -77,7 +85,7 @@ class Rows:
             purpose=interpretation.PURPOSE if provider == interpretation.PROVIDER else 'primary',
             request_sha256=sha256_json(request), request_body=request, contexts=[], state=state, sent=sent,
             http_status=http_status, response_bytes=body, response_sha256=hashlib.sha256(body).hexdigest(),
-            usage=dict(usage or {}), requested_model=interpretation.MODEL if provider == interpretation.PROVIDER else '',
+            usage=dict(usage or {}), requested_model=requested_model if provider == interpretation.PROVIDER else '',
             returned_model=returned_model if sent and state == 'succeeded' else '', scope=scope or {},
             started_at=started_at if sent else None, reused_from=reused_from)
 
@@ -212,14 +220,33 @@ class SectionTests(TestCase):
         expected = pricing.estimate(interpretation.MODEL, USAGE, on=NOVEMBER)['estimated_usd']
         self.assertEqual({key: run[key] for key in ('id', 'state', 'requested_model', 'returned_model', 'usage',
                                                      'estimated_cost')},
-                         {'id': str(inventory.provider_run_id), 'state': 'succeeded', 'requested_model': 'gemini-4-argon',
-                          'returned_model': 'gemini-4-argon', 'usage': USAGE, 'estimated_cost': expected})
+                         {'id': str(inventory.provider_run_id), 'state': 'succeeded', 'requested_model': 'gemini-4-carbon',
+                          'returned_model': 'gemini-4-carbon', 'usage': USAGE, 'estimated_cost': expected})
         self.assertNotIn('response_bytes', run)
         self.assertNotIn('request_body', run)
         json.dumps(section)  # JSON as stored
 
+    def test_a_run_whose_request_named_gemini_4_argon_keeps_its_estimate(self):
+        # DECISIONS D230: a run is priced by the model its request named, so a run Argon answered before the swap keeps
+        # its estimate at Argon's own rates (participants.pricing.GEMINI_MODELS) - the section shows it and the window
+        # sums it, never counting it as unpriced
+        since = timezone.now()
+        run = self.rows.run(usage=USAGE, requested_model='gemini-4-argon', returned_model='gemini-4-argon')
+        assessment, _, _ = self.rows.new_path(run=run)
+        argon = pricing.estimate('gemini-4-argon', USAGE, on=NOVEMBER)
+        self.assertEqual((argon['rates']['model'], argon['rates']['as_of']), ('gemini-4-argon', '2026-11-09'))
+        carbon = pricing.estimate(interpretation.MODEL, USAGE, on=NOVEMBER)
+        self.assertEqual(argon['estimated_usd'], carbon['estimated_usd'])  # the same rates (D230)
+        run_json = report.interpretation_section(assessment)['run']
+        self.assertEqual((run_json['requested_model'], run_json['estimated_cost']),
+                         ('gemini-4-argon', argon['estimated_usd']))
+        runs = report.window(since)['gemini_runs']
+        self.assertEqual(runs['requested_models'], {'gemini-4-argon': 1})
+        self.assertEqual((runs['cost']['estimated_usd'], runs['cost']['priced_runs'], runs['cost']['unpriced_runs']),
+                         (argon['estimated_usd'], 1, 0))
+
     def test_the_hold_its_run_set_is_shown(self):
-        run = self.rows.run(body=encoded(envelope(modelVersion='gemini-4-argon-preview')))
+        run = self.rows.run(body=encoded(envelope(modelVersion=f'{interpretation.MODEL}-preview')))
         _, hold = holds.settle(run)
         assessment, _, _ = self.rows.new_path(run=run)
         section = report.interpretation_section(assessment)
@@ -264,8 +291,8 @@ class WindowTests(TestCase):
         self.assertEqual(runs['total'], 8)  # the earlier run and the Corti run are outside it
         self.assertEqual(runs['by_state'], {'failed': 2, 'not_sent': 1, 'succeeded': 4, 'unknown': 1})
         self.assertEqual((runs['sent'], runs['reused']), (6, 1))
-        self.assertEqual(runs['requested_models'], {'gemini-4-argon': 8})
-        self.assertEqual(runs['returned_models'], {'(none)': 5, 'gemini-4-argon': 3})
+        self.assertEqual(runs['requested_models'], {'gemini-4-carbon': 8})
+        self.assertEqual(runs['returned_models'], {'(none)': 5, 'gemini-4-carbon': 3})
         self.assertEqual(runs['paused'], {holds.HELD_HOLD: 1})
         self.assertEqual(runs['usage'], {'promptTokenCount': 6355, 'candidatesTokenCount': 11183,
                                          'thoughtsTokenCount': 120, 'totalTokenCount': 17658,
@@ -304,9 +331,14 @@ class WindowTests(TestCase):
         self.assertEqual((hold['held'], hold['process_mode'], hold['process_paused']),
                          (True, 'disabled', holds.HELD_DISABLED))
         self.assertEqual(found['interpreter'], {
-            'process_mode': 'disabled', 'model': 'gemini-4-argon', 'provider': 'gemini',
+            'process_mode': 'disabled', 'model': 'gemini-4-carbon', 'provider': 'gemini',
             'adapter_version': 'gemini-generate@cptstudio-1', 'interpretation_version': 'gemini-events@1',
-            'inventory_version': 'gemini-inventory@1', 'engine_version': 'cpt-studio-events@1'})
+            'inventory_version': 'gemini-inventory@1', 'engine_version': 'cpt-studio-events@1',
+            # design v2 (step 5c): the labels this release writes
+            'adapter_version_v2': 'gemini-generate@cptstudio-2', 'interpretation_pair': 'gemini-events@2/appraisal@1',
+            'inventory_version_v2': 'gemini-inventory@2', 'engine_version_v2': 'cpt-studio-events@2'})
+        # design v2: the cpt-studio-events@1 rows of this window are v1 rows, counted apart (FINAL-V2 6.2)
+        self.assertEqual((found['assessments']['v2'], found['assessments']['v1_events']), (0, 3))
         json.dumps(found)
 
     def test_the_window_is_half_open_and_aware(self):
@@ -339,17 +371,21 @@ class WindowTests(TestCase):
 
         clean = {item['name']: item for item in report.self_test(report.window(timezone.now()))['checks']}
         self.assertTrue(clean['model constant']['ok'], clean['model constant'])
-        self.assertEqual((report.D13_MODEL, report.FINAL_ENDPOINT),
-                         ('gemini-4-argon',
-                          'https://generativelanguage.googleapis.com/v1beta/models/gemini-4-argon:generateContent'))
-        changed = 'gemini-4-argon-preview'  # the reviewer's case: the constant edited in interpretation/__init__.py
-        with mock.patch.object(interpretation, 'MODEL', changed), mock.patch.object(adapter, 'MODEL', changed), \
-                mock.patch.object(adapter, 'ENDPOINT', adapter.ENDPOINT.replace('gemini-4-argon', changed)):
-            test = report.self_test(report.window(timezone.now()))
-        check = {item['name']: item for item in test['checks']}['model constant']
-        self.assertFalse(check['ok'])
-        self.assertFalse(test['passed'])
-        self.assertIn('D13 says gemini-4-argon', check['detail'])
+        self.assertEqual((report.D13_MODEL, report.FINAL_ENDPOINT),  # D13 as DECISIONS D230 sets it
+                         ('gemini-4-carbon',
+                          'https://generativelanguage.googleapis.com/v1beta/models/gemini-4-carbon:generateContent'))
+        # the reviewer's case: the constant edited in interpretation/__init__.py - to a near-miss, or back to
+        # gemini-4-argon, the model until D230
+        for changed in ('gemini-4-carbon-preview', 'gemini-4-argon'):
+            with self.subTest(changed=changed):
+                endpoint = adapter.ENDPOINT.replace('gemini-4-carbon', changed)
+                with mock.patch.object(interpretation, 'MODEL', changed), mock.patch.object(adapter, 'MODEL', changed), \
+                        mock.patch.object(adapter, 'ENDPOINT', endpoint):
+                    test = report.self_test(report.window(timezone.now()))
+                check = {item['name']: item for item in test['checks']}['model constant']
+                self.assertFalse(check['ok'])
+                self.assertFalse(test['passed'])
+                self.assertIn('D13 says gemini-4-carbon', check['detail'])
         with mock.patch.object(adapter, 'ENDPOINT', adapter.ENDPOINT.replace('v1beta', 'v1')):  # the endpoint alone
             self.assertFalse({item['name']: item for item in report.self_test(report.window(timezone.now()))['checks']}
                              ['model constant']['ok'])
@@ -372,8 +408,10 @@ class WindowTests(TestCase):
                          {'new_path': 2, 'without_inventory': 0, 'without_sentinel_record': 0, 'off_pins': 0,
                           'with_record_problems': 1})
         test = report.self_test(found)
+        # design v2 (step 5c): both are cpt-studio-events@1 assessments - v1 rows, which fail the legacy-engine check
+        # too
         self.assertEqual([item['name'] for item in test['checks'] if not item['ok']],
-                         ['every new-path assessment carries its record'])
+                         ['every new-path assessment carries its record', 'no legacy-engine assessment'])
         self.assertIn('The record names another inventory than the assessment does. x1',
                       dict(line.split(': ', 1) for line in report.render(found))['new-path records with problems'])
 
@@ -428,7 +466,7 @@ class CommandTests(TestCase):
         self.assertEqual(self.fields(text), list(report.D22_FIELDS))
         lines = dict(line.split(': ', 1) for line in text.splitlines())
         self.assertTrue(all(lines[field].strip() for field in report.D22_FIELDS))  # each with its value
-        self.assertEqual(lines['model'].split(' ')[0], 'gemini-4-argon')
+        self.assertEqual(lines['model'].split(' ')[0], 'gemini-4-carbon')
         self.assertIn('2539 code objects (pinned 2539', lines['sentinel deny-set size'])
         self.assertEqual(lines['sentinel positive control'], 'ok')
         self.assertTrue(lines['sentinel install'].startswith('ok; sys.monitoring tool 4 (cpt-studio-sentinel)'))
@@ -445,11 +483,13 @@ class CommandTests(TestCase):
         self.assertEqual(set(found), {'report', 'self_test'})
         self.assertIsNone(found['self_test'])
         self.assertEqual(set(found['report']), {'window', 'interpreter', 'gemini_runs', 'inventories', 'assessments',
-                                                'trips', 'sentinel', 'hold'})
+                                                'trips', 'sentinel', 'hold',
+                                                # design v2 (step 5c)
+                                                'inventories_by_version', 'appraisal'})
         self.assertEqual(found['report']['window']['since'], '2026-01-01T00:00:00+00:00')
 
     def test_the_self_test_passes_on_a_clean_window(self):
-        self.rows.new_path()
+        V2World(sentinel_record=CLEAN_V2)  # design v2 (step 5c): a v2 assessment with its record
         text = self.run_command('--since', '2026-01-01T00:00:00Z', '--self-test')
         for name in report.SELF_TEST:
             self.assertIn(f'self-test {name}: PASS (', text)
@@ -462,13 +502,15 @@ class CommandTests(TestCase):
             self.run_command('--since', '2026-01-01T00:00:00Z', '--self-test')
         self.assertEqual(str(failed.exception), 'The interpretation self-test failed: no new-path legacy execution '
                                                 'recorded, no legacy-engine assessment.')
-        self.assertIn('self-test no legacy-engine assessment: FAIL (1 in the window)', failed.exception.output)
+        # design v2 (step 5c): the cpt-studio-events@1 row is a v1 row, counted beside the legacy-engine one
+        self.assertIn('self-test no legacy-engine assessment: FAIL (1 legacy-engine and 1 v1 assessments in the '
+                      'window)', failed.exception.output)
         self.assertTrue(failed.exception.output.rstrip().endswith('self-test: FAILED'))
 
     def test_a_record_off_its_pins_fails_the_self_test(self):
         for change in ({'deny_size': 100}, {'tool': 'settrace'}, {'positive_control': 'failed'}):
             with self.subTest(change=change):
-                self.rows.new_path(sentinel_record={**CLEAN, **change})
+                V2World(sentinel_record={**CLEAN_V2, **change})  # design v2 (step 5c): a v2 assessment
                 with self.assertRaises(CommandError) as failed:
                     self.run_command('--since', '2026-01-01T00:00:00Z', '--self-test')
                 self.assertEqual(str(failed.exception), 'The interpretation self-test failed: every new-path assessment '
@@ -481,7 +523,7 @@ class CommandTests(TestCase):
     def test_the_mode_printed_is_this_processs_own_and_never_checked_as_the_installations(self):
         # FINAL 13: a one-shot runs with the interpreter disabled unless it is given a mode, so checking its own mode
         # either fails every correct install or passes whatever mode the worker runs with
-        self.rows.new_path()
+        V2World(sentinel_record=CLEAN_V2)  # design v2 (step 5c): a v2 assessment with its record
         for mode in ('disabled', 'live'):
             with self.subTest(mode=mode), override_settings(GEMINI_MODE=mode):
                 text = self.run_command('--since', '2026-01-01T00:00:00Z', '--self-test')

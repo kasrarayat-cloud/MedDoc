@@ -27,6 +27,9 @@ urlpatterns = [path(route, web_scope(view), name=NAMES.get(route)) for route, vi
     ('api/encounters/<uuid:encounter_id>/resume', api.resume),
     # the recorded retry of a failed reading (FINAL 11.3): an owner or a reviewer, beside resume
     ('api/encounters/<uuid:encounter_id>/retry-reading', api.retry_reading),
+    # the recorded retry of a failed update's document review, or of a failed stage that sends nothing (FINAL-V2
+    # amendment 1, 7.2, A10): an owner or a reviewer, beside retry-reading
+    ('api/encounters/<uuid:encounter_id>/retry-update', api.retry_update),
     ('api/encounters/<uuid:encounter_id>/second-review', api.second_review),
     ('api/encounters/<uuid:encounter_id>/reports', api.create_report),
     ('api/encounters/<uuid:encounter_id>/original', api.original),

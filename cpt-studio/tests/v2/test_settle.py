@@ -26,7 +26,32 @@ What is proved, item by item against the done-when of 8.1 step 3a:
   under the attribute its value belongs to (ClaimTests); a shared claim counts as established only when every pair it
   is in is (P5, HealthTests); row 1 reads every option's own sources (P6, DateOfServiceTests); P-INDEP-SETTLE's G5 and
   anatomy couplings as narrow as the design states them (P7, IndependenceTests). The shared claims themselves (P1)
-  stay a fail-closed limit, pinned as such, until the step's notes' REQUEST R4 is ruled.
+  are gone since DECISIONS D223 (3a's R4, first option, built in contract/claims.py by repair r2c): each fact one
+  sentence tells has its own claim of it, and settle binds each with nothing changed here (ClaimTests);
+- the repairs after the step's second refutation (refute-3a-r2) and the rulings on it (repair r3a): pass 2's approximate
+  never lowers a supported claim - D186's demotion reads every qualifier but approximate, which stays recorded, and a
+  qualified verdict is unchanged (DECISIONS D224; Q-C, p17: ApproximateTests, TruthTableTests); an event whose kind
+  fails S2 with an empty value absorbs nothing and settle never raises on it (DECISIONS D229, F1: UnlistedTests); the
+  drop rule's three untested conditions each pinned - a restatement G6 ignores and an anchor I3 failed absorb nothing,
+  and an object-less doubt's entry keeps only the units the segmentation has (F2-F4, mutants MN1-MN3: UnlistedTests);
+  P-INDEP-SETTLE's couplings no wider than D201 for K1, K2 and the lesions, with 3.2.3's row 7 (cards_indistinct) named
+  as D224 adds it, a doubt perturbation read as the perturbation of every attribute its row names, and the property run
+  over p19's identical cards and the exceptive note as well as NOTE (F5, Q-D: IndependenceTests); and an unlocated
+  source's fact never established, its stored words a known limit until REQUEST R8 (F6: StoreTests). Q-B stays as built
+  (D224);
+- the round after the waves 5-6 rulings (repair r3a of w7r): DECISIONS D244's R-ANAT - the control a session's reach
+  and its reached_anatomy share (3.2.3 writes the reached_anatomy's control in the reach's form, so the two are one
+  claim when they name one point) appraises both facts: each its own claim with it through the coherence table, no
+  third reader, no reader in another session, never a control that is also a claim, a pair control or a completeness
+  claim, whatever the claim set's order; 6c's CK-v3 and CK-v6 (i) settle their reached_anatomy by it; P-INDEP-SETTLE
+  runs over the shared shape, with the coupling 3.2.3's reached_anatomy control always made (an anatomy entry's type
+  reaching the reached_anatomy that names it) named (SharedControlTests, IndependenceTests). And DECISIONS D237:
+  ApproximateTests' established rows are stored and read back (D224's store half, the integration's A2, is in);
+- the repairs after that round's refutation (refute-r3a-r1, repair r3a-2): every such row stores with the store as it
+  is - the control is stored once, in the reach's appraisal, and the reached_anatomy borrows it, its appraisal naming
+  its own claim alone - under all 27 answers of the refuter's matrix and on CK-v3 and CK-v6 (R3A-1); and one verdict on
+  the control is read once - the reached_anatomy's established pair counts only beside the reach's established pair,
+  the fail-closed reading of R3A-3 (SharedControlTests).
 """
 from __future__ import annotations
 
@@ -55,9 +80,11 @@ from studio.interpretation.contract import (appraise_prompt, appraise_read, chec
 from studio.interpretation.contract import extract_schema as xs
 from studio.interpretation.contract.extract_read import FactKey
 from studio.interpretation.contract.types import (Attached, Attribute, CheckStatus, DoubtBasis, FactState, Kind,
-                                                  Qualifier2, Reason, Result, UnlistedWhat, Verdict, VerdictValue)
+                                                  Qualifier, Qualifier2, Reason, Result, UnlistedWhat, Verdict,
+                                                  VerdictValue)
 from studio.interpretation.engine import catalogue
 from studio.interpretation.engine import facts as engine_facts
+from studio.interpretation.engine.types import Id
 from tests.v2.test_types import STR_METHODS, measure_4
 
 APP = Path(__file__).resolve().parents[2]
@@ -162,9 +189,14 @@ NOT_PLANNED = ('SYNTHETIC UPPER ENDOSCOPY REPORT\n'
                '\n'
                'Findings: The gastroscope was advanced to the duodenum.\n'                     # S4
                'No repeat dilation is planned, and no dilation was performed today.\n')        # S5
+APPROXIMATE = ('SYNTHETIC FLEXIBLE SIGMOIDOSCOPY REPORT\n'                                    # S1
+               'Date of service: 03/14/2031\n'                                                 # S2
+               'Endoscopist: Corvin Ashdale, MD (fictional)\n'                                 # S3
+               '\n'
+               'Findings: The sigmoidoscope was advanced to approximately 40 cm.\n')           # S4 (refute-3a-r2 p17)
 NOTES = {'NOTE': NOTE, 'PROBE_A': PROBE_A, 'PROBE_B': PROBE_B, 'PROBE_C': PROBE_C, 'PROBE_D': PROBE_D,
          'PROBE_E': PROBE_E, 'EXCHANGE': EXCHANGE, 'BOTH': BOTH, 'DATES': DATES, 'NURSING': NURSING,
-         'PLANNED': PLANNED, 'ATTEMPTED': ATTEMPTED, 'NOT_PLANNED': NOT_PLANNED}
+         'PLANNED': PLANNED, 'ATTEMPTED': ATTEMPTED, 'NOT_PLANNED': NOT_PLANNED, 'APPROXIMATE': APPROXIMATE}
 
 # --- building pass 1's answer by hand (FINAL-V2 1.4's shape) ----------------------------------------------------------
 
@@ -331,6 +363,29 @@ def colonoscopy(text, *events, extra_sections=(), lesions=(), anatomy=(), doubts
         lesions=lesions, anatomy=anatomy, doubts=doubts)
 
 
+def identical_answer():
+    """NOTE's answer with E4's and E5's cards made identical (3.2.3 [R:CO-7]; refute-3a-r2 Q-D, p19): both kinds cited
+    at the words 'biopsy nor tattoo', so the two cards quote the same words and their kinds, which differ, settle
+    cards_indistinct (3.3 row 7)."""
+    data = note_answer()
+    for name in ('E4', 'E5'):
+        event_of(data, name)['anchor']['kind_words'] = 'biopsy nor tattoo'
+        event_of(data, name)['kind']['sources'] = [src(['S9'], 'biopsy nor tattoo')]
+    return data
+
+
+def approximate_answer():
+    """APPROXIMATE's answer (refute-3a-r2 p17): a flexible sigmoidoscopy X1 whose examination E1 reached a stated depth,
+    filed with pass 1's qualifier approximate (1.3: recorded, never lowers)."""
+    return answer(sections=[opening(), labelled('N1', 'S4', 'Findings:', 'findings')],
+                  sessions=[session('X1', fact('flex_sig', src(['S4'], 'sigmoidoscope')),
+                                    examination=[fact('E1', src(['S4']))],
+                                    reached=[fact('stated_depth', src(['S4'], 'approximately 40 cm'),
+                                                  qualifiers=['approximate'])])],
+                  events=[event('E1', ['S4'], 'sigmoidoscope', 'was advanced', 'examination',
+                                session=[fact('X1', src(['S4']))])])
+
+
 # --- the pipeline: read, check, claim, appraise (an oracle), settle --------------------------------------------------
 
 
@@ -468,25 +523,32 @@ DOUBTS = (frozenset(), frozenset({DoubtBasis.STATED}), frozenset({DoubtBasis.UNC
           frozenset({DoubtBasis.CONFLICT}), frozenset({DoubtBasis.STATED, DoubtBasis.UNCLEAR}))
 CHECKS = ((), (R.WORDS_NOT_IN_UNITS,), (R.GEOMETRY_SECTION, R.LITERAL_MISMATCH))  # pass; integrity; geometry and L1
 QUALIFIERS = ((), (R.QUALIFIED_HEDGED,))  # Q1: none (or approximate, which gives no finding); hedged
-VERDICTS = (None, 'supports', 'supports+approximate', 'contradicts', 'qualified', 'qualified+none', 'unclear')
+VERDICTS = (None, 'supports', 'supports+approximate', 'supports+approximate+hedged', 'contradicts', 'qualified',
+            'qualified+approximate', 'qualified+none', 'unclear')
 CONTROLS = ('uncontrolled', None, VerdictValue.CONTRADICTS, VerdictValue.SUPPORTS, VerdictValue.QUALIFIED,
             VerdictValue.UNCLEAR)
 
 
 def table_verdict(name, attached):
-    """A Verdict for the table's verdict dimension: supports, supports naming a qualifier (approximate: read as
-    qualified, D186), contradicts, qualified naming one, qualified naming none, unclear; None for no verdict."""
+    """A Verdict for the table's verdict dimension, written <verdict>+<qualifier>+...: supports; supports naming
+    approximate (never lowers, DECISIONS D224); supports naming approximate and hedged (hedged lowers, D186);
+    contradicts; qualified naming hedged (the bare 'qualified'), naming approximate, or naming none; unclear; None for
+    no verdict."""
     if name is None:
         return None
-    value, _, extra = name.partition('+')
-    qualifiers = () if extra == 'none' else ((Qualifier2.APPROXIMATE,) if extra else
-                                             ((Qualifier2.HEDGED,) if value == 'qualified' else ()))
+    value, *extra = name.split('+')
+    if extra == ['none']:
+        qualifiers = ()
+    elif extra:
+        qualifiers = tuple(Qualifier2(item) for item in extra)
+    else:
+        qualifiers = (Qualifier2.HEDGED,) if value == 'qualified' else ()
     return Verdict('K1', VerdictValue(value), attached, qualifiers, ('S1',))
 
 
 def expected(state, sides, doubts, findings, claimed, indistinct, verdict_, attached_evidence, control):
-    """3.3's table, row by row, and 3.2.3's coherence table, as the design writes them (computed here, apart from
-    settle): the result and the reasons of one fact."""
+    """3.3's table, row by row, and 3.2.3's coherence table, as the design and the rulings write them (computed here,
+    apart from settle; DECISIONS D186 and D224): the result and the reasons of one fact."""
     every = set(findings)
     if (state is FactState.CONTRADICTED and sides) or DoubtBasis.CONFLICT in doubts:  # row 1
         return Result.CONTRADICTED, {R.CONTRADICTED_BY_PASS1} | every
@@ -504,9 +566,12 @@ def expected(state, sides, doubts, findings, claimed, indistinct, verdict_, atta
     # rows 8-9: the coherence table
     if verdict_ is None:
         return Result.UNRESOLVED, {R.APPRAISAL_MISSING}
-    if verdict_.verdict is VerdictValue.QUALIFIED or (verdict_.verdict is VerdictValue.SUPPORTS and verdict_.qualifiers):
+    if verdict_.verdict is VerdictValue.QUALIFIED:  # pass 2's own qualified verdict: every qualifier it names
         named = {R(f'appraisal_qualified:{q.value}') for q in verdict_.qualifiers}
         return Result.UNRESOLVED, named or {R.APPRAISAL_QUALIFIED}
+    lowering = {q for q in verdict_.qualifiers if q is not Qualifier2.APPROXIMATE}  # D224: approximate never lowers
+    if verdict_.verdict is VerdictValue.SUPPORTS and lowering:  # D186: read as qualified, by the qualifiers that lower
+        return Result.UNRESOLVED, {R(f'appraisal_qualified:{q.value}') for q in lowering}
     if verdict_.verdict is VerdictValue.UNCLEAR:
         return Result.UNRESOLVED, {R.APPRAISAL_UNCLEAR}
     if verdict_.verdict is VerdictValue.CONTRADICTS:
@@ -546,7 +611,8 @@ class TruthTableTests(SimpleTestCase):
                               evidence))
             self.assertEqual(reasons, settle.ordered(reasons))  # a set, in the closed list's order (1c:R6)
             count += 1
-        self.assertEqual(count, 3 * 5 * 3 * 2 * 2 * 2 * 7 * 6 * 3 * 2 + 1 * 2 * 5 * 3 * 2 * 2 * 2 * 7 * 6 * 3 * 2)
+        self.assertEqual(len(VERDICTS), 9)
+        self.assertEqual(count, 3 * 5 * 3 * 2 * 2 * 2 * 9 * 6 * 3 * 2 + 1 * 2 * 5 * 3 * 2 * 2 * 2 * 9 * 6 * 3 * 2)
 
     def test_k8_joins_settle_as_row_one(self):
         result, reasons = settle.decide(settle.Case(
@@ -574,6 +640,21 @@ class TruthTableTests(SimpleTestCase):
              (R.APPRAISAL_QUALIFIED_HEDGED, R.APPRAISAL_QUALIFIED_OTHER_OCCASION)),
             (dataclasses.replace(supports, qualifiers=(Qualifier2.PLANNED_ONLY,)), True, True,
              VerdictValue.CONTRADICTS, settle.PairOutcome.QUALIFIED, (R.APPRAISAL_QUALIFIED_PLANNED_ONLY,)),
+            # DECISIONS D224: approximate never lowers a supports verdict - alone it is established, with another
+            # qualifier only the other lowers it; a qualified verdict naming approximate is pass 2's own, unchanged
+            (dataclasses.replace(supports, qualifiers=(Qualifier2.APPROXIMATE,)), True, True,
+             VerdictValue.CONTRADICTS, settle.PairOutcome.ESTABLISHED, ()),
+            (dataclasses.replace(supports, qualifiers=(Qualifier2.APPROXIMATE,)), True, False, None,
+             settle.PairOutcome.ESTABLISHED, ()),
+            (dataclasses.replace(supports, qualifiers=(Qualifier2.APPROXIMATE,)), True, True, VerdictValue.SUPPORTS,
+             settle.PairOutcome.INCOHERENT, (R.CONTROL_INCOHERENT,)),
+            (dataclasses.replace(supports, qualifiers=(Qualifier2.APPROXIMATE,)), False, True,
+             VerdictValue.CONTRADICTS, settle.PairOutcome.DETACHED, (R.APPRAISAL_DETACHED,)),
+            (dataclasses.replace(supports, qualifiers=(Qualifier2.APPROXIMATE, Qualifier2.OTHER_TARGET)), True, True,
+             VerdictValue.CONTRADICTS, settle.PairOutcome.QUALIFIED, (R.APPRAISAL_QUALIFIED_OTHER_TARGET,)),
+            (dataclasses.replace(supports, verdict=VerdictValue.QUALIFIED, qualifiers=(Qualifier2.APPROXIMATE,)),
+             True, True, VerdictValue.CONTRADICTS, settle.PairOutcome.QUALIFIED,
+             (R.APPRAISAL_QUALIFIED_APPROXIMATE,)),
             (dataclasses.replace(supports, verdict=VerdictValue.UNCLEAR), True, True, VerdictValue.CONTRADICTS,
              settle.PairOutcome.UNCLEAR, (R.APPRAISAL_UNCLEAR,)),
             (dataclasses.replace(supports, attached=Attached.NO), True, True, VerdictValue.CONTRADICTS,
@@ -648,6 +729,79 @@ class WiringTests(Case):
         self.assertSettled(at(out.events, 'people', 'P2', 'role'), Result.UNRESOLVED, R.UNAPPRAISED)
         # a statement's entry is not claimed (CLAIMED's statement class lists none)
         self.assertSettled(at(out.events, 'events', 'E4', 'entry'), Result.UNRESOLVED, R.UNAPPRAISED)
+
+
+class ApproximateTests(Case):
+    """DECISIONS D224 (refute-3a-r2 Q-C, p17): pass 2's approximate never lowers a supported claim. D186's demotion of a
+    supports verdict naming qualifiers reads every qualifier but approximate, which stays recorded in the verdict the
+    row stores; the other qualifiers are unchanged, and a qualified verdict naming approximate is pass 2's own verdict,
+    unresolved as 3.2.3 writes it (D224 changes D186's demotion only: the step's notes' question). Every row here is
+    stored and read back: D224's store half (DECISIONS D237: the integration's, applied by the waves 5-6 integration as
+    its A2) lets store._v2_appraisal_establishes take a support naming approximate alone, and D237 has these established
+    rows call stored()."""
+
+    def test_p17_a_reach_pass_two_supports_naming_approximate_settles_supported_with_the_qualifier_recorded(self):
+        """'The sigmoidoscope was advanced to approximately 40 cm.': pass 1 files the reach stated_depth with its
+        qualifier approximate (1.3; Q1 gives no finding); pass 2 supports the reach claim and names approximate, as its
+        instruction lets it ('for another verdict, any that applies'). The reach - R6:extent's only fact here - settles
+        supported, both qualifiers recorded: pass 1's on the claim, pass 2's on the appraisal and the stored claim."""
+        prepared = Prepared(APPROXIMATE, approximate_answer())
+        item = prepared.appraised(A.REACHED, 'X1')
+        self.assertIsNotNone(item.control)  # the reach is controlled (3.2.3: the opposite polarity)
+        faithful_out = prepared.settle()
+        self.assertSettled(at(faithful_out.events, 'sessions', 'X1', 'reached', 0), Result.SUPPORTED)
+        out = prepared.settle(overriding(**{'reached@X1/0': {'qualifiers': ['approximate']}}))
+        self.assertIsInstance(out, settle.Settled)
+        reach = at(out.events, 'sessions', 'X1', 'reached', 0)
+        self.assertSettled(reach, Result.SUPPORTED)
+        self.assertEqual((reach.claim.value, reach.claim.qualifiers), ('stated_depth', (Qualifier.APPROXIMATE,)))
+        self.assertFalse(reach.checks.qualified)
+        self.assertEqual((reach.appraisal.verdict, reach.appraisal.attached, reach.appraisal.qualifiers),
+                         (VerdictValue.SUPPORTS, Attached.YES, (Qualifier2.APPROXIMATE,)))
+        self.assertEqual((reach.appraisal.claim, reach.appraisal.control.claim, reach.appraisal.control.verdict),
+                         (item.claim, item.control, VerdictValue.CONTRADICTS))
+        claim = next(found for found in out.events['claims'] if found.id == item.claim)
+        self.assertEqual((claim.role, claim.verdict.verdict, claim.verdict.qualifiers),
+                         (settle.ClaimRole.CLAIM, VerdictValue.SUPPORTS, (Qualifier2.APPROXIMATE,)))
+        # an established pair, counted as the faithful reading counts it; nothing reports approximate as a reason
+        self.assertEqual(out.verification.coherence, faithful_out.verification.coherence)
+        self.assertEqual(out.verification.health, faithful_out.verification.health)
+        self.assertNotIn(R.APPRAISAL_QUALIFIED_APPROXIMATE, out.verification.reasons)
+        fields, factset = stored(prepared, out)  # DECISIONS D237: the established row stores, approximate recorded
+        self.assertEqual(fields['events']['sessions'][0]['reached'][0]['appraisal']['qualifiers'],
+                         [Qualifier2.APPROXIMATE.value])
+        self.assertIsNotNone(factset)
+
+    def test_d186_reads_every_qualifier_but_approximate_and_a_qualified_verdict_is_unchanged(self):
+        """D224 on NOTE's snare kind (a controlled claim), each pattern through the whole pipeline: approximate alone
+        establishes; approximate beside another qualifier demotes by the other alone; another qualifier alone demotes as
+        D186 reads it; a qualified verdict naming approximate is unresolved; approximate never stands in for the
+        control's rejection or for the attachment. Pass 2's qualifiers are recorded as it gave them, every time."""
+        prepared = Prepared(NOTE, note_answer())
+        patterns = {
+            'supports naming approximate': ({'kind@E2/0': {'qualifiers': ['approximate']}}, Result.SUPPORTED, ()),
+            'supports naming approximate and hedged': ({'kind@E2/0': {'qualifiers': ['approximate', 'hedged']}},
+                                                       Result.UNRESOLVED, (R.APPRAISAL_QUALIFIED_HEDGED,)),
+            'supports naming hedged': ({'kind@E2/0': {'qualifiers': ['hedged']}}, Result.UNRESOLVED,
+                                       (R.APPRAISAL_QUALIFIED_HEDGED,)),
+            'qualified naming approximate': ({'kind@E2/0': {'value': 'qualified', 'qualifiers': ['approximate']}},
+                                             Result.UNRESOLVED, (R.APPRAISAL_QUALIFIED_APPROXIMATE,)),
+            'supports naming approximate, its control supported': (
+                {'kind@E2/0': {'qualifiers': ['approximate']}, 'kind@E2/0/control': {'value': 'supports'}},
+                Result.UNRESOLVED, (R.CONTROL_INCOHERENT,)),
+            'supports naming approximate, detached': (
+                {'kind@E2/0': {'qualifiers': ['approximate'], 'attached': 'no'}}, Result.UNRESOLVED,
+                (R.APPRAISAL_DETACHED,)),
+        }
+        for name, (answers, result, reasons) in patterns.items():
+            with self.subTest(pattern=name):
+                out = prepared.settle(overriding(**answers))
+                self.assertIsInstance(out, settle.Settled)
+                fact_ = at(out.events, 'events', 'E2', 'kind')
+                self.assertSettled(fact_, result, *reasons)
+                self.assertEqual(fact_.appraisal.qualifiers,
+                                 tuple(Qualifier2(value) for value in answers['kind@E2/0']['qualifiers']))
+                stored(prepared, out)  # every pattern, the established one included (DECISIONS D237)
 
 
 class ProbeTests(Case):
@@ -883,6 +1037,113 @@ class UnlistedTests(Case):
                     self.assertEqual([item.event for item in report.dropped], [absorbed])
                 stored(prepared, out)
 
+    def test_only_a_restatement_g6_counts_absorbs(self):
+        """refute-3a-r2 F2 (mutant MN1, probe p16): 3.1 G6 ignores a restatement that lies on another event's anchor
+        unit, so it tells nothing and absorbs nothing. E2, the snare of X1, filed with a restatement at S12 (E7's
+        anchor): pass 2's unlisted snare act at S12 in X1 is kept - dropping it would lose a statement pass 2 reported.
+        The control: the same restatement at S13, which G6 counts, absorbs the same entry there."""
+        cases = {"at S12, E7's anchor unit (G6 ignores it)": ('S12', None),
+                 'the control: at S13 (G6 counts it)': ('S13', 'E2')}
+        for name, (unit, absorbed) in cases.items():
+            with self.subTest(case=name):
+                data = note_answer()
+                event_of(data, 'E2')['restatements'] = [{'units': [unit], 'role': 'restates'}]
+                prepared = Prepared(NOTE, data)
+                self.assertEqual(('E2', 0) in prepared.checked.restatements, absorbed is not None)
+                entry = unlisted_entry([unit], 'act', 'snare', card_of(prepared, F.SESSION, 'X1'))
+                out = prepared.settle(unlisted=[entry])
+                report = out.verification.unlisted
+                if absorbed is None:
+                    self.assertEqual(list(out.events['unlisted']),
+                                     [settle.Unlisted((unit,), UnlistedWhat.ACT, Kind.SNARE, 'X1')])
+                    self.assertEqual((report.kept, report.dropped), (1, ()))
+                else:
+                    self.assertEqual(list(out.events['unlisted']), [])
+                    self.assertEqual([(item.event, item.units) for item in report.dropped], [(absorbed, (unit,))])
+                stored(prepared, out)
+
+    def test_an_anchor_i3_failed_absorbs_nothing(self):
+        """refute-3a-r2 F3 (mutant MN2): an event whose anchor fails I3 (its kind words do not lie in its unit) tells
+        nothing - every fact of it is unresolved(anchor_invalid) - so it absorbs no unlisted entry at its anchor's
+        units, though its nature, kind and session are the entry's. The control: the same entry beside the valid
+        anchor is absorbed by E7."""
+        cases = {"E7's anchor failing I3": ('snare', None), 'the control: the anchor valid': ('Biopsies', 'E7')}
+        for name, (kind_words, absorbed) in cases.items():
+            with self.subTest(case=name):
+                data = note_answer()
+                event_of(data, 'E7')['anchor']['kind_words'] = kind_words
+                prepared = Prepared(NOTE, data)
+                self.assertEqual(bool(prepared.checked.anchors['E7'].reasons), absorbed is None)
+                entry = unlisted_entry(['S12'], 'act', 'biopsy', card_of(prepared, F.SESSION, 'X2'))
+                out = prepared.settle(unlisted=[entry])
+                report = out.verification.unlisted
+                if absorbed is None:
+                    self.assertIn(R.ANCHOR_INVALID, at(out.events, 'events', 'E7', 'kind').reasons)
+                    self.assertEqual(list(out.events['unlisted']),
+                                     [settle.Unlisted(('S12',), UnlistedWhat.ACT, Kind.BIOPSY, 'X2')])
+                    self.assertEqual((report.kept, report.dropped), (1, ()))
+                else:
+                    self.assertEqual([item.event for item in report.dropped], [absorbed])
+                stored(prepared, out)
+
+    def test_an_objectless_doubts_entry_keeps_only_the_units_the_segmentation_has(self):
+        """refute-3a-r2 F4 (mutant MN3, probe p12): an object-less doubt citing S10 and S99 (a unit id the
+        segmentation does not have) is kept as an unlisted doubt of S10 alone - the store accepts either list, so only
+        this pins it."""
+        data = note_answer()
+        data['doubts'] = [doubt('status', [], ['S10', 'S99'], 'stated')]
+        prepared, out = run(NOTE, data)
+        self.assertEqual(dict(prepared.checked.objectless_doubts), {0: ()})
+        self.assertEqual(list(out.events['unlisted']), [settle.Unlisted(('S10',), UnlistedWhat.DOUBT, None, None)])
+        self.assertEqual((out.verification.doubts[0].unlisted, out.verification.unlisted.kept), (True, 1))
+        stored(prepared, out)
+
+    def test_an_event_whose_kind_fails_s2_with_an_empty_value_absorbs_nothing_and_settle_never_raises(self):
+        """DECISIONS D229 (refute-3a-r2 F1, probe p13): a supported kind whose value is '' is S2's item-level breach
+        (shape_inconsistent; 1.8 keeps the answer). Beside pass 2's unlisted biopsy at E7's anchor, settle settles: E7
+        has no compatible kind, so it absorbs nothing - the entry is kept and holds (3.2.6's five rules consume it),
+        E7's kind is unresolved(shape_inconsistent), and the row is written. claims.py raises on that answer today (2c's
+        file), so the request is the one built from the unbroken answer, as p13 builds it. The same breach of the kind,
+        the status or the session, of an act and of a denial, beside an entry of every nature at its anchor, never
+        raises and drops nothing."""
+        base = Prepared(NOTE, note_answer())
+        cards = {name: card_of(base, F.SESSION, name) for name in ('X1', 'X2')}
+
+        def breached(name, attribute):
+            data = note_answer()
+            node = event_of(data, name)[xs.field(F.EVENT, attribute).path[0]]
+            (node[0] if isinstance(node, list) else node)['value'] = ''
+            found = extract_read.read(json.dumps(data), len(base.units))
+            self.assertNotIsInstance(found, extract_read.Refusal)
+            self.assertIn(R.SHAPE_INCONSISTENT, found.fact(FactKey(F.EVENT, name, attribute, 0)).reasons)
+            return found, checks.check(NOTE, (), found)
+
+        def settled(found, checked_, entries):
+            with mock.patch.object(interpretation, 'HEALTH_THRESHOLDS_SHA256', HEALTH_PIN):
+                return settle.settle(found, checked_, base.claim_set, base.request.indistinct,
+                                     base.appraisal(unlisted=entries), USAGE)
+
+        entry = unlisted_entry(['S12'], 'act', 'biopsy', cards['X2'])
+        out = settled(*breached('E7', A.KIND), [entry])
+        self.assertIsInstance(out, settle.Settled)
+        self.assertEqual(list(out.events['unlisted']), [settle.Unlisted(('S12',), UnlistedWhat.ACT, Kind.BIOPSY, 'X2')])
+        self.assertEqual(out.verification.unlisted, settle.UnlistedReport(kept=1, dropped=()))
+        self.assertSettled(at(out.events, 'events', 'E7', 'kind'), Result.UNRESOLVED, R.SHAPE_INCONSISTENT)
+        stored(base, out)
+        # the control: with its kind 'biopsy', E7 absorbs the same entry
+        self.assertEqual([item.event for item in base.settle(unlisted=[entry]).verification.unlisted.dropped], ['E7'])
+        for name, attribute in itertools.product(('E2', 'E4', 'E7'), (A.KIND, A.STATUS, A.SESSION)):
+            with self.subTest(event=name, attribute=attribute):
+                record = event_of(base.data, name)
+                kind, session_ = record['kind']['value'], record['session'][0]['value']
+                entries = [unlisted_entry(record['anchor']['units'], what, kind, cards[session_])
+                           for what in ('act', 'denial', 'doubt')]
+                out = settled(*breached(name, attribute), entries)
+                self.assertIsInstance(out, settle.Settled)
+                self.assertEqual((out.verification.unlisted.kept, out.verification.unlisted.dropped), (3, ()))
+                self.assertIn(R.SHAPE_INCONSISTENT, at(out.events, 'events', name, attribute.value).reasons)
+                stored(base, out)
+
 
 class HealthTests(Case):
     """3.2.6's health [R:HO-4]: every degenerate appraisal the refutation named is refused whole, never a row."""
@@ -963,12 +1224,13 @@ class HealthTests(Case):
 
     def test_a_claim_two_facts_share_is_established_only_when_every_pair_it_is_in_is(self):
         """Establishment counts a non-control claim once, established only when EVERY pair it is in is (the step's notes,
-        D13): EXCEPTIVE's breadth claim is shared by the breadth (its control the all_of_kind form) and the excepted act
-        (its control the covers form). Pass 2 supporting the covers form leaves the breadth's pair established and the
-        excepted act's incoherent: the shared claim is not established, so establishment drops by exactly one."""
+        D13). Since DECISIONS D223 EXCEPTIVE's breadth (its control the all_of_kind form) and its excepted act (its
+        control the covers form) each have their own claim of the one exceptive sentence. Pass 2 supporting the covers
+        form leaves the breadth's pair established and the excepted act's incoherent: the act's claim is not
+        established, so establishment drops by exactly one."""
         prepared = Prepared(EXCEPTIVE, exceptive_answer())
         breadth, excepted = prepared.appraised(A.SCOPE_BREADTH, 'E3'), prepared.appraised(A.SCOPE_EXCEPTS, 'E3')
-        self.assertEqual(breadth.claim, excepted.claim)
+        self.assertNotEqual(breadth.claim, excepted.claim)
         self.assertNotEqual(breadth.control, excepted.control)
         faithful_health = prepared.settle().verification.health
         out = prepared.settle(overriding(**{'scope.excepts@E3/0/control': {'value': 'supports'}}))
@@ -1388,6 +1650,31 @@ def exceptive_answer():
                              scope__excepts=['E2']))
 
 
+SHARED_REACH = ('SYNTHETIC COLONOSCOPY REPORT\n'                                               # S1
+                'Date of service: 03/14/2031\n'                                                  # S2
+                'Endoscopist: Corvin Ashdale, MD (fictional)\n'                                  # S3
+                '\n'
+                'Findings: The colonoscope was advanced to the ileocolic anastomosis.\n'         # S4
+                'A 5 mm polyp in the transverse colon was removed with a cold snare.\n')         # S5
+NOTES['SHARED_REACH'] = SHARED_REACH
+
+
+def shared_answer():
+    """SHARED_REACH's answer (DECISIONS D244's R-ANAT; 6c's CK-v3 and CK-v6 shape): a colonoscopy X1 after a right
+    hemicolectomy whose reach is the anastomosis and whose reached_anatomy is the ileocolic anastomosis Y1, both cited
+    at S4, so 3.2.3's reached_anatomy control ("did not reach the {point at anatomy Y1}") and the reach's own control
+    are one claim of the request; and a cold-snare removal at the transverse colon (E2)."""
+    data = colonoscopy(SHARED_REACH,
+                       event('E2', ['S5'], 'cold snare', 'was removed', 'snare', session=[fact('X1', src(['S5']))],
+                             target__places=[fact('transverse_colon', src(['S5'], 'transverse colon'))],
+                             technique__device=[fact('cold_snare', src(['S5'], 'cold snare'))]),
+                       anatomy=[{'id': 'Y1', 'type': fact('anastomosis', src(['S4'], 'ileocolic anastomosis')),
+                                 'organ': [], 'subtype': [fact('ileocolic', src(['S4'], 'ileocolic'))], 'joins': []}],
+                       reached='anastomosis', reached_words='advanced to the ileocolic anastomosis')
+    data['sessions'][0]['reached_anatomy'] = [fact('Y1', src(['S4'], 'ileocolic anastomosis'))]
+    return data
+
+
 class ClaimTests(Case):
     """The stored claims (1.7), the claims several facts share, the restatement role, cards_indistinct, and verdicts
     bound by content key [R:MO-5]."""
@@ -1435,35 +1722,36 @@ class ClaimTests(Case):
         self.assertEqual(settle.ACT_INHERITED, checks.ACT_INHERITED)
         self.assertEqual(settle.STATEMENT_INHERITED, checks.STATEMENT_INHERITED)
 
-    def test_part_of_and_part_relation_share_one_claim_read_by_part_of_alone(self):
-        """A KNOWN LIMIT, fail-closed until the step's notes' REQUEST R4 is ruled (refutation P1): claims.py renders
-        part_relation as part_of's claim, and the store reads a claim for one fact only (the one whose attribute and value
-        it states), so part_relation settles unappraised although its own pair is established."""
+    def test_part_of_and_part_relation_each_read_their_own_claim(self):
+        """DECISIONS D223 (refutation P1, 3a's R4, first option): claims.py gives part_relation its own claim of
+        part_of's sentence (its value the relation's, so its own content key), and settle binds each with nothing changed
+        here: both settle supported, and each stored claim is about its own fact's attribute."""
         data = note_answer()
         event_of(data, 'E3')['part_of'] = [fact('E2', src(['S8'], 'polypectomy site'))]
         event_of(data, 'E3')['part_relation'] = [fact('adjunct_of', src(['S8'], 'was treated'))]
         prepared, out = run(NOTE, data)
         part_of, relation = prepared.appraised(A.PART_OF, 'E3'), prepared.appraised(A.PART_RELATION, 'E3')
-        self.assertEqual(part_of.claim, relation.claim)  # one sentence, one claim (claims.py)
+        self.assertNotEqual(part_of.claim, relation.claim)  # one sentence, a claim of it for each fact (claims.py)
         self.assertSettled(at(out.events, 'events', 'E3', 'part_of'), Result.SUPPORTED)
-        self.assertSettled(at(out.events, 'events', 'E3', 'part_relation'), Result.UNRESOLVED, R.UNAPPRAISED)
-        self.assertIsNone(at(out.events, 'events', 'E3', 'part_relation').appraisal)
-        claim = next(item for item in out.events['claims'] if item.id == part_of.claim)
-        self.assertEqual(claim.attribute, A.PART_OF)
+        self.assertSettled(at(out.events, 'events', 'E3', 'part_relation'), Result.SUPPORTED)
+        self.assertEqual(at(out.events, 'events', 'E3', 'part_relation').appraisal.claim, relation.claim)
+        claims_by_id = {item.id: item for item in out.events['claims']}
+        self.assertEqual((claims_by_id[part_of.claim].attribute, claims_by_id[relation.claim].attribute),
+                         (A.PART_OF, A.PART_RELATION))
         stored(prepared, out)
 
-    def test_an_exceptive_breadth_and_its_excepted_act_share_the_breadths_claim(self):
-        """A KNOWN LIMIT, fail-closed until the step's notes' REQUEST R4 is ruled (refutation P1; FINAL-V2 4.5's BF17
-        needs the excepted act established): the excepted act shares its breadth's exceptive claim, the store reads that
-        claim for the breadth alone, so the excepted act settles unappraised although its own pair - the shared claim
-        and its covers-form control - is established."""
+    def test_an_exceptive_breadth_and_its_excepted_act_each_read_their_own_claim(self):
+        """DECISIONS D223 (refutation P1, 3a's Q-A; FINAL-V2 4.5's BF17 needs the excepted act established): claims.py
+        gives the breadth and its excepted act each their own claim of the one exceptive sentence, the act's with its
+        covers-form control, and settle binds each with nothing changed here: both settle supported."""
         prepared, out = run(EXCEPTIVE, exceptive_answer())
         breadth, excepted = prepared.appraised(A.SCOPE_BREADTH, 'E3'), prepared.appraised(A.SCOPE_EXCEPTS, 'E3')
-        self.assertEqual(breadth.claim, excepted.claim)
+        self.assertNotEqual(breadth.claim, excepted.claim)
         self.assertSettled(at(out.events, 'events', 'E3', 'scope.breadth'), Result.SUPPORTED)
         member = at(out.events, 'events', 'E3', 'scope.excepts', 0)
-        self.assertSettled(member, Result.UNRESOLVED, R.UNAPPRAISED)
+        self.assertSettled(member, Result.SUPPORTED)
         self.assertEqual((member.claim.value, [source.units for source in member.sources]), ('E2', [('S6',)]))
+        self.assertEqual((member.appraisal.claim, member.appraisal.control.claim), (excepted.claim, excepted.control))
         pairs = {(pair.claim, pair.control): pair.outcome for pair in settle.pairs_of(
             prepared.claim_set, settle.verdicts_of(prepared.claim_set, prepared.appraisal()))}
         self.assertEqual(pairs[(excepted.claim, excepted.control)], settle.PairOutcome.ESTABLISHED)
@@ -1473,11 +1761,14 @@ class ClaimTests(Case):
         """A claim several facts share is bound only to the entry whose value it states: when that fact is not itself
         claimed (here its Appraised entry is withdrawn, as claims.py withdraws a fact it cannot claim), the partner
         rendered as its claim is read by no fact - settle never binds it to a fact whose value it does not state, which
-        the store refuses (store._v2_verdicts_bound) - and the row stores."""
+        the store refuses (store._v2_verdicts_bound) - and the row stores. claims.py shares no claim since DECISIONS
+        D223, so the excepted act is pointed here at the breadth's claim, as claims.py rendered it before."""
         prepared = Prepared(EXCEPTIVE, exceptive_answer())
         breadth = prepared.appraised(A.SCOPE_BREADTH, 'E3')
+        excepted = prepared.appraised(A.SCOPE_EXCEPTS, 'E3')
         claim_set = dataclasses.replace(prepared.claim_set, appraised=tuple(
-            item for item in prepared.claim_set.appraised if item is not breadth))
+            dataclasses.replace(item, claim=breadth.claim) if item is excepted else item
+            for item in prepared.claim_set.appraised if item is not breadth))
         with mock.patch.object(interpretation, 'HEALTH_THRESHOLDS_SHA256', HEALTH_PIN):
             out = settle.settle(prepared.read, prepared.checked, claim_set, prepared.request.indistinct,
                                 prepared.appraisal(), USAGE)
@@ -1587,11 +1878,7 @@ class ClaimTests(Case):
         stored(prepared, out)
 
     def test_identical_cards_unresolve_the_facts_whose_values_differ(self):
-        data = note_answer()
-        for name in ('E4', 'E5'):
-            event_of(data, name)['anchor']['kind_words'] = 'biopsy nor tattoo'
-            event_of(data, name)['kind']['sources'] = [src(['S9'], 'biopsy nor tattoo')]
-        prepared, out = run(NOTE, data)
+        prepared, out = run(NOTE, identical_answer())
         self.assertEqual(prepared.request.indistinct, (('E4', 'E5'),))
         for name in ('E4', 'E5'):
             with self.subTest(event=name):
@@ -1636,6 +1923,329 @@ class ClaimTests(Case):
             with self.assertRaises(ValueError):  # checks of another segmentation
                 settle.settle(other.read, prepared.checked, prepared.claim_set, prepared.request.indistinct,
                               appraisal, USAGE)
+
+
+FIXTURES = APP / 'tests' / 'fixtures' / 'interpretation_v2'
+
+
+def fixture_case(case_id):
+    """Step 6c's committed fixture of a case: its document and its answers (tests/fixtures/interpretation_v2), read as
+    data - pass 1's correct filing and pass 2's rule per variant."""
+    text = (FIXTURES / 'documents' / f'{case_id}.txt').read_text(encoding='utf-8')
+    return text, json.loads((FIXTURES / 'answers' / f'{case_id}.json').read_text(encoding='utf-8'))
+
+
+def settle_with(prepared, claim_set, oracle=faithful):
+    """Settle ``prepared``'s answer against ``claim_set`` (a request's claim set changed by a test), pass 2 answering
+    every claim of it by ``oracle``."""
+    verdicts = []
+    for claim in claim_set.claims:
+        found = oracle(claim, roles_of(claim_set)[claim.id], claim_set)
+        if found is not None:
+            verdicts.append(found)
+    appraisal = appraise_read.read(json.dumps({'verdicts': verdicts, 'unlisted': []}), claim_set, len(prepared.units))
+    assert not isinstance(appraisal, extract_read.Refusal), appraisal
+    with mock.patch.object(interpretation, 'HEALTH_THRESHOLDS_SHA256', HEALTH_PIN):
+        return settle.settle(prepared.read, prepared.checked, claim_set, prepared.request.indistinct, appraisal, USAGE)
+
+
+class SharedControlTests(Case):
+    """DECISIONS D244's R-ANAT (6c's P3 and request R-ANAT): a control a session's reach and its reached_anatomy share
+    appraises both facts. 3.2.3 writes a reached_anatomy's control in the reach's form ("In session {X} the endoscope
+    did not reach the {point at anatomy Y}"), so when the reach names that point from the same units claims.py makes
+    ONE claim of the two controls. Settle reads it for both - each fact its own claim with it, each pair through the
+    coherence table - and for no other fact, whatever the claim set's order. It is stored once, in the reach's
+    appraisal (the attribute 3.2.3 writes it in): the store reads a claim for one fact only
+    (store._v2_verdicts_bound), so the reached_anatomy BORROWS it and its appraisal names its own claim and no
+    control, and every such row stores (refute-r3a-r1's R3A-1: with both appraisals naming it, store.row_v2 refused
+    every such row, GI Note #8's among them). One verdict on the control is read once: the reached_anatomy's
+    established pair counts only beside the reach's established pair, the one row of 3.2.3 that reads the control's
+    rejection as one (R3A-3, the fail-closed reading the step's notes ask a ruling on). Before R-ANAT the control was
+    read once, so the reached_anatomy settled unappraised and 45386 was held on extent where the design gives READY
+    (6c's CK-v3 and CK-v6 (i), KnownDefectTests.test_R_ANAT)."""
+
+    REACH, ANATOMY = ('sessions', 'X1', 'reached', 0), ('sessions', 'X1', 'reached_anatomy')
+
+    def shared(self):
+        prepared = Prepared(SHARED_REACH, shared_answer())
+        reach, anatomy = prepared.appraised(A.REACHED, 'X1'), prepared.appraised(A.REACHED_ANATOMY, 'X1')
+        self.assertIsNotNone(reach.control)
+        self.assertEqual(reach.control, anatomy.control)  # one claim of the two controls (claims.py)
+        self.assertNotEqual(reach.claim, anatomy.claim)
+        return prepared, reach, anatomy
+
+    def assertReads(self, fact_, item, verdict):  # noqa: N802 - unittest's naming
+        """``fact_`` (the reach, the lender) reads its own claim and the shared control, pass 2's verdict on it
+        ``verdict``, and its appraisal names both."""
+        self.assertEqual((fact_.appraisal.claim, fact_.appraisal.control.claim, fact_.appraisal.control.verdict),
+                         (item.claim, item.control, verdict))
+
+    def assertBorrows(self, fact_, item):  # noqa: N802 - unittest's naming
+        """``fact_`` (the reached_anatomy, the borrower) reads its own claim, and its appraisal names no control: the
+        shared control is stored with the reach's."""
+        self.assertEqual((fact_.appraisal.claim, fact_.appraisal.control), (item.claim, None))
+
+    def assertStores(self, prepared, out):  # noqa: N802 - unittest's naming
+        """The row stores and reads back (store.row_v2, load_v2), the control named by the reach's appraisal alone, and
+        the FactSet holds the reach and the reached_anatomy as settle settled them."""
+        fields, factset = stored(prepared, out)
+        session_ = fields['events']['sessions'][0]
+        reach, anatomy = at(out.events, *self.REACH), at(out.events, *self.ANATOMY)
+        self.assertIsNone(session_['reached_anatomy']['appraisal']['control'])
+        self.assertEqual(session_['reached'][0]['appraisal']['control']['claim'], reach.appraisal.control.claim)
+        x1 = Id.parse('X1')
+        self.assertEqual((engine_facts.members(factset, x1, A.REACHED)[0].result,
+                          engine_facts.fact(factset, x1, A.REACHED_ANATOMY).result), (reach.result, anatomy.result))
+        return factset
+
+    def test_r_anat_the_shared_control_appraises_both_facts(self):
+        """The faithful reading: the reach and the reached_anatomy each settle supported on its own claim and the one
+        control, rejected; both pairs are established and counted; the control is stored once, in the control role,
+        about the reach (CONTROL_ATTRIBUTES: the attribute 3.2.3 writes reached_anatomy's control in), named by the
+        reach's appraisal, and the reached_anatomy's appraisal names its own claim alone; the row stores."""
+        self.assertEqual(settle.SHARED_CONTROL, (F.SESSION, frozenset({A.REACHED, A.REACHED_ANATOMY})))
+        self.assertIs(settle.CONTROL_ATTRIBUTES[A.REACHED_ANATOMY], A.REACHED)
+        prepared, reach, anatomy = self.shared()
+        out = prepared.settle()
+        self.assertIsInstance(out, settle.Settled)
+        reached, reached_anatomy = at(out.events, *self.REACH), at(out.events, *self.ANATOMY)
+        self.assertSettled(reached, Result.SUPPORTED)
+        self.assertSettled(reached_anatomy, Result.SUPPORTED)
+        self.assertReads(reached, reach, VerdictValue.CONTRADICTS)
+        self.assertBorrows(reached_anatomy, anatomy)
+        controls = [claim for claim in out.events['claims'] if claim.id == reach.control]
+        self.assertEqual([(claim.role, claim.attribute, claim.subject, claim.verdict.verdict) for claim in controls],
+                         [(settle.ClaimRole.CONTROL, A.REACHED, 'X1', VerdictValue.CONTRADICTS)])
+        pairs = {(pair.claim, pair.control): pair.outcome for pair in settle.pairs_of(
+            prepared.claim_set, settle.verdicts_of(prepared.claim_set, prepared.appraisal()))}
+        self.assertEqual((pairs[(reach.claim, reach.control)], pairs[(anatomy.claim, anatomy.control)]),
+                         (settle.PairOutcome.ESTABLISHED, settle.PairOutcome.ESTABLISHED))
+        self.assertEqual(out.verification.health.refused, ())
+        self.assertNotIn(R.UNAPPRAISED, reached_anatomy.reasons)
+        factset = self.assertStores(prepared, out)
+        self.assertEqual(engine_facts.fact(factset, Id.parse('X1'), A.REACHED_ANATOMY).value, Id.parse('Y1'))
+
+    def test_each_fact_reads_the_shared_control_through_the_coherence_table(self):
+        """3.2.3's coherence table for each pair (its own claim, the one control): the control not rejected or not
+        answered unresolves both facts; a verdict on the reached_anatomy's own claim settles it alone. And one verdict
+        on the control is read once (R3A-3, fail-closed): when the reach's pair is not established - its claim
+        contradicted (with the control: 3.2.3's uninformative pair), unclear, qualified, detached or given no verdict -
+        the control's rejection counts for the reached_anatomy neither, which settles control_incoherent. Every row
+        stores."""
+        prepared, reach, anatomy = self.shared()
+        control, anat_control = 'reached@X1/0/control', 'reached_anatomy@X1/0/control'
+        reach_claim, anat_claim = 'reached@X1/0', 'reached_anatomy@X1/0'
+        rejected = VerdictValue.CONTRADICTS
+        patterns = {
+            'the control supported': ({anat_control: {'value': 'supports'}}, VerdictValue.SUPPORTS,
+                                      (R.CONTROL_INCOHERENT,), (R.CONTROL_INCOHERENT,)),
+            'the control unclear': ({control: {'value': 'unclear'}}, VerdictValue.UNCLEAR,
+                                    (R.CONTROL_INCOHERENT,), (R.CONTROL_INCOHERENT,)),
+            'the control qualified': ({anat_control: {'value': 'qualified', 'qualifiers': ['hedged']}},
+                                      VerdictValue.QUALIFIED, (R.CONTROL_INCOHERENT,), (R.CONTROL_INCOHERENT,)),
+            'the control given no verdict': ({anat_control: None}, None, (R.APPRAISAL_MISSING,),
+                                             (R.APPRAISAL_MISSING,)),
+            "the reached_anatomy's claim contradicted": ({anat_claim: {'value': 'contradicts'}}, rejected, (),
+                                                         (R.APPRAISAL_CONTRADICTS,)),
+            "the reached_anatomy's claim detached": ({anat_claim: {'attached': 'no'}}, rejected, (),
+                                                     (R.APPRAISAL_DETACHED,)),
+            'both claims and the control contradicted': (
+                {reach_claim: {'value': 'contradicts'}, anat_claim: {'value': 'contradicts'}}, rejected,
+                (R.APPRAISAL_CONTRADICTS,), (R.APPRAISAL_CONTRADICTS,)),
+            # R3A-3: the reach's pair not established, so the one rejection is no rejection for the reached_anatomy
+            "the reach's claim contradicted (the uninformative pair)": (
+                {reach_claim: {'value': 'contradicts'}}, rejected, (R.APPRAISAL_CONTRADICTS,), (R.CONTROL_INCOHERENT,)),
+            "the reach's claim unclear": ({reach_claim: {'value': 'unclear'}}, rejected, (R.APPRAISAL_UNCLEAR,),
+                                          (R.CONTROL_INCOHERENT,)),
+            "the reach's claim qualified": ({reach_claim: {'value': 'qualified', 'qualifiers': ['hedged']}}, rejected,
+                                            (R.APPRAISAL_QUALIFIED_HEDGED,), (R.CONTROL_INCOHERENT,)),
+            "the reach's claim detached": ({reach_claim: {'attached': 'no'}}, rejected, (R.APPRAISAL_DETACHED,),
+                                           (R.CONTROL_INCOHERENT,)),
+            "the reach's claim given no verdict": ({reach_claim: None}, rejected, (R.APPRAISAL_MISSING,),
+                                                   (R.CONTROL_INCOHERENT,)),
+        }
+        for name, (answers, verdict_, reach_reasons, anatomy_reasons) in patterns.items():
+            with self.subTest(pattern=name):
+                out = prepared.settle(overriding(**answers))
+                self.assertIsInstance(out, settle.Settled)
+                reached, reached_anatomy = at(out.events, *self.REACH), at(out.events, *self.ANATOMY)
+                self.assertSettled(reached, Result.UNRESOLVED if reach_reasons else Result.SUPPORTED, *reach_reasons)
+                self.assertSettled(reached_anatomy, Result.UNRESOLVED if anatomy_reasons else Result.SUPPORTED,
+                                   *anatomy_reasons)
+                self.assertReads(reached, reach, verdict_)
+                self.assertBorrows(reached_anatomy, anatomy)
+                self.assertStores(prepared, out)
+
+    def test_the_shared_control_is_read_by_no_other_fact(self):
+        """Fail-closed beside the ruling: a third reader of the control (here X1's examination's kind, given the
+        control by hand - claims.py never writes it) is never let in and settles unappraised, while the two keep it; a
+        first reader that is not the reach or the reached_anatomy keeps it alone and both of them settle unappraised
+        (the rule of one reader); and a control that is also a fact's claim is never shared."""
+        prepared, reach, anatomy = self.shared()
+        kind = prepared.appraised(A.KIND, 'E1')
+        self.assertIsNone(kind.control)  # an examination's kind has no control (3.2.3)
+        third = dataclasses.replace(kind, control=reach.control)
+        others = tuple(item for item in prepared.claim_set.appraised if item is not kind)
+        cases = {
+            'a third reader': (others + (third,), Result.SUPPORTED, Result.UNRESOLVED),
+            'a first reader of another attribute': ((third,) + others, Result.UNRESOLVED, Result.SUPPORTED),
+        }
+        for name, (appraised, pair_result, kind_result) in cases.items():
+            with self.subTest(case=name):
+                out = settle_with(prepared, dataclasses.replace(prepared.claim_set, appraised=appraised))
+                self.assertIsInstance(out, settle.Settled)
+                reached, reached_anatomy = at(out.events, *self.REACH), at(out.events, *self.ANATOMY)
+                if pair_result is Result.SUPPORTED:
+                    self.assertSettled(reached, Result.SUPPORTED)
+                    self.assertSettled(reached_anatomy, Result.SUPPORTED)
+                    self.assertReads(reached, reach, VerdictValue.CONTRADICTS)
+                    self.assertBorrows(reached_anatomy, anatomy)
+                else:
+                    self.assertSettled(reached, Result.UNRESOLVED, R.UNAPPRAISED)
+                    self.assertSettled(reached_anatomy, Result.UNRESOLVED, R.UNAPPRAISED)
+                kind_fact = at(out.events, 'events', 'E1', 'kind')
+                if kind_result is Result.UNRESOLVED:
+                    self.assertSettled(kind_fact, Result.UNRESOLVED, R.UNAPPRAISED)
+                else:
+                    self.assertSettled(kind_fact, Result.SUPPORTED)
+                    self.assertEqual(kind_fact.appraisal.control.claim, reach.control)
+        # a control that is also a fact's claim (E1's kind pointed at it: no fact's value is that claim's, so it is read
+        # as nobody's claim) is never shared: the reach reads it, the reached_anatomy settles unappraised (pass 2
+        # rejects it, as it would a control)
+        claimed = dataclasses.replace(kind, claim=reach.control)
+
+        def rejected(claim, role, claim_set):
+            return faithful(claim, 'control' if claim.id == reach.control else role, claim_set)
+
+        for appraised in (others + (claimed,), (claimed,) + others):
+            with self.subTest(case='a control that is a claim', first=appraised[0] is claimed):
+                out = settle_with(prepared, dataclasses.replace(prepared.claim_set, appraised=appraised), rejected)
+                self.assertSettled(at(out.events, *self.REACH), Result.SUPPORTED)
+                self.assertSettled(at(out.events, *self.ANATOMY), Result.UNRESOLVED, R.UNAPPRAISED)
+
+    def test_shares_names_one_sessions_reach_and_reached_anatomy_only(self):
+        """``_Settler.shares``, the predicate binding reads, at each of its conditions: exactly one earlier reader, the
+        two facts one session's reach and reached_anatomy (either order), and the control only ever a contrary control
+        - never a fact's claim, a pair control, or a completeness claim or control."""
+        prepared, reach, anatomy = self.shared()
+
+        def shares(control, readers, key, claim_set=prepared.claim_set):
+            appraisal = prepared.appraisal()
+            verdicts = settle.verdicts_of(prepared.claim_set, appraisal)
+            settler = settle._Settler(prepared.read, prepared.checked, claim_set, prepared.request.indistinct,
+                                      appraisal, verdicts, settle.pairs_of(claim_set, verdicts))
+            return settler.shares(control, readers, key)
+
+        def key(attribute, name='X1', index=0, family=F.SESSION):
+            return FactKey(family, name, attribute, index)
+
+        shared = reach.control
+        self.assertTrue(shares(shared, [reach.key], anatomy.key))
+        self.assertTrue(shares(shared, [anatomy.key], reach.key))
+        refused = {
+            'no earlier reader': (shared, [], anatomy.key),
+            'two earlier readers': (shared, [reach.key, anatomy.key], anatomy.key),
+            'another session': (shared, [reach.key], key(A.REACHED_ANATOMY, 'X2')),
+            'two reaches': (shared, [reach.key], key(A.REACHED, index=1)),
+            'another attribute': (shared, [reach.key], key(A.COMPLETION)),
+            'another family': (shared, [key(A.REACHED, 'E1', family=F.EVENT)], key(A.REACHED_ANATOMY, 'E1',
+                                                                                    family=F.EVENT)),
+            "a fact's claim": (reach.claim, [anatomy.key], reach.key),
+        }
+        for name, (control, readers, reader) in refused.items():
+            with self.subTest(refused=name):
+                self.assertFalse(shares(control, readers, reader))
+        claim_set = prepared.claim_set
+        as_pair = dataclasses.replace(claim_set, pair_controls=(*claim_set.pair_controls, claims.PairControl(
+            shared, (F.EVENT, 'E2'), (F.EVENT, 'E1'), A.TARGET_PLACES, 'transverse_colon')))
+        other = next(claim.id for claim in claim_set.claims if claim.id not in (shared, reach.claim, anatomy.claim))
+        as_claim = dataclasses.replace(claim_set, completeness=(claims.Completeness('X1', shared, other),))
+        as_control = dataclasses.replace(claim_set, completeness=(claims.Completeness('X1', other, shared),))
+        for name, changed in {'a pair control': as_pair, 'a completeness claim': as_claim,
+                              'a completeness control': as_control}.items():
+            with self.subTest(refused=name):
+                self.assertFalse(shares(shared, [reach.key], anatomy.key, changed))
+
+    def test_the_borrower_is_the_reached_anatomy_and_only_it(self):
+        """``_Settler.borrowing``: of the two facts that read the shared control, the reached_anatomy - whose control
+        3.2.3 writes in the reach's attribute - borrows it from the reach, in either order of the claim set; with no
+        shared control (a faithful NOTE, or the reach's control read by the reach alone) nothing is borrowed."""
+        prepared, reach, anatomy = self.shared()
+
+        def borrowers(found, claim_set):
+            appraisal = found.appraisal()
+            verdicts = settle.verdicts_of(found.claim_set, appraisal)
+            return settle._Settler(found.read, found.checked, claim_set, found.request.indistinct, appraisal,
+                                   verdicts, settle.pairs_of(claim_set, verdicts)).borrowers
+
+        flipped = dataclasses.replace(prepared.claim_set, appraised=tuple(reversed(prepared.claim_set.appraised)))
+        for name, claim_set in {'as claims.py orders it': prepared.claim_set, 'reversed': flipped}.items():
+            with self.subTest(order=name):
+                self.assertEqual(borrowers(prepared, claim_set), {anatomy.key: reach.key})
+        alone = dataclasses.replace(prepared.claim_set, appraised=tuple(
+            item for item in prepared.claim_set.appraised if item is not anatomy))
+        self.assertEqual(borrowers(prepared, alone), {})
+        note = Prepared(NOTE, note_answer())
+        self.assertEqual(borrowers(note, note.claim_set), {})
+
+    def test_the_order_of_the_claim_set_changes_nothing(self):
+        """The binding, the borrower and the pair it reads depend on no order: the appraised list reversed settles to
+        the same inventory and report, byte for byte, faithfully and with the reach's pair left unestablished."""
+        prepared, reach, anatomy = self.shared()
+        flipped = dataclasses.replace(prepared.claim_set, appraised=tuple(reversed(prepared.claim_set.appraised)))
+        for name, oracle in {'faithful': faithful,
+                             "the reach's claim unclear": overriding(**{'reached@X1/0': {'value': 'unclear'}})}.items():
+            with self.subTest(appraisal=name):
+                self.assertEqual(flat(settle_with(prepared, flipped, oracle)), flat(prepared.settle(oracle)))
+                self.assertEqual(canonical(settle_with(prepared, flipped, oracle)), canonical(prepared.settle(oracle)))
+
+    def test_the_ck_v3_and_ck_v6_inputs_settle_reached_anatomy_by_the_shared_control(self):
+        """6c's CK-v3 and CK-v6 (i), verbatim development documents (FRESH-1 inputs; each checked here, as written and
+        whitespace-stripped, against the acceptance set's DEV-EXCLUSION hashes): pass 1's correct filing, pass 2
+        faithful (their (i) rule), through settle. The reach and the reached_anatomy of X1 share one control and both
+        settle supported on it, the reach's appraisal naming it; the row stores, and its FactSet holds the
+        reached_anatomy Y1 supported - what KnownDefectTests.test_R_ANAT needs for 45386 READY."""
+        with open(DEV_EXCLUSION, encoding='ascii') as handle:
+            excluded = {line.strip() for line in handle if line.strip()}
+        for case_id in ('CK-v3', 'CK-v6'):
+            with self.subTest(case=case_id):
+                text, data = fixture_case(case_id)
+                for raw in (text.encode('utf-8'), text.strip().encode('utf-8')):
+                    self.assertNotIn(hashlib.sha256(raw).hexdigest(), excluded)
+                self.assertEqual(data['pass2']['i'], {'default': 'faithful', 'unlisted': [], 'verdicts': []})
+                prepared = Prepared(text, data['pass1']['correct'])
+                reach, anatomy = prepared.appraised(A.REACHED, 'X1'), prepared.appraised(A.REACHED_ANATOMY, 'X1')
+                self.assertEqual(reach.control, anatomy.control)
+                out = prepared.settle()
+                self.assertIsInstance(out, settle.Settled)
+                fact_ = at(out.events, *self.ANATOMY)
+                self.assertSettled(fact_, Result.SUPPORTED)
+                self.assertEqual(fact_.claim.value, 'Y1')
+                self.assertBorrows(fact_, anatomy)
+                self.assertReads(at(out.events, *self.REACH), reach, VerdictValue.CONTRADICTS)
+                factset = self.assertStores(prepared, out)
+                found = engine_facts.fact(factset, Id.parse('X1'), A.REACHED_ANATOMY)
+                self.assertEqual((found.result, found.value), (Result.SUPPORTED, Id.parse('Y1')))
+
+    def test_the_rows_store(self):
+        """refute-r3a-r1's R3A-1: every row whose session's reach and reached_anatomy read their shared control stores
+        and reads back with the store as it is - under all 27 answers pass 2 may give the reach's claim, the shared
+        control and the reached_anatomy's claim (supports, contradicts, unclear each), the refuter's matrix - the
+        control named once, by the reach's appraisal, and the FactSet holding both facts as settle settled them. The
+        reached_anatomy is supported only on the faithful answer."""
+        prepared, _reach, _anatomy = self.shared()
+        values = ('supports', 'contradicts', 'unclear')
+        supported = []
+        for reach_value, control_value, anatomy_value in itertools.product(values, values, values):
+            with self.subTest(reach=reach_value, control=control_value, reached_anatomy=anatomy_value):
+                out = prepared.settle(overriding(**{'reached@X1/0': {'value': reach_value},
+                                                    'reached@X1/0/control': {'value': control_value},
+                                                    'reached_anatomy@X1/0': {'value': anatomy_value}}))
+                self.assertIsInstance(out, settle.Settled)
+                self.assertStores(prepared, out)
+                if at(out.events, *self.ANATOMY).result is Result.SUPPORTED:
+                    supported.append((reach_value, control_value, anatomy_value))
+        self.assertEqual(supported, [('supports', 'contradicts', 'supports')])
 
 
 def canonical(out):
@@ -1690,6 +2300,28 @@ class StoreTests(Case):
                                           'thoughtsTokenCount': 7.5, 'totalTokenCount': True,
                                           'cachedContentTokenCount': 4, 'promptTokensDetails': [{'x': 'text'}]}),
                          settle.Usage(0, 0, 0, 0, 4, 0))
+
+    def test_an_unlocated_source_is_never_established_and_its_stored_words_are_a_known_limit(self):
+        """refute-3a-r2 F6 (round 1's P4), as far as 3a's files reach. A source whose words do not lie in its units (I2)
+        makes its fact unresolved(words_not_in_units), integrity failed: never claimed, never established, so nothing
+        is decided on it, and the row records why. A KNOWN LIMIT until REQUEST R8 (1d's store, 0b's
+        types.SettledSource): the stored contract has no form for 'words given, not located', so the source is stored
+        words None - the form that also means 'cites its whole units' (pass 1's words '') - with G1's geometry, which
+        passes on its units. Settle cannot write a third form the store does not read, and marking the geometry failed
+        would misstate G1."""
+        data = note_answer()
+        event_of(data, 'E7')['technique']['device'] = [fact('cold_forceps', src(['S12'], 'hot forceps'))]
+        prepared, out = run(NOTE, data)
+        device = at(out.events, 'events', 'E7', 'technique.device')
+        self.assertSettled(device, Result.UNRESOLVED, R.WORDS_NOT_IN_UNITS)
+        self.assertEqual((device.checks.integrity, device.appraisal), (CheckStatus.FAILED, None))
+        self.assertIsNone(prepared.appraised(A.TECHNIQUE_DEVICE, 'E7'))
+        self.assertEqual([(source.units, source.words, source.geometry) for source in device.sources],
+                         [(('S12',), None, CheckStatus.OK)])
+        whole = at(out.events, 'events', 'E7', 'session')  # cited at its whole unit (words ''): the same stored form
+        self.assertSettled(whole, Result.SUPPORTED)
+        self.assertEqual([(source.units, source.words) for source in whole.sources], [(('S12',), None)])
+        stored(prepared, out)
 
 
 def _every_fact(events):
@@ -1767,16 +2399,29 @@ def _cites(slot, units):
 
 def couplings(prepared, family, name, attribute):
     """The facts of OTHER objects that perturbing ``family`` ``name``'s ``attribute`` may change: DECISIONS D201's
-    listed couplings - 4.9's rules (a section's owner, occasion and performer through inheritance, 1.5, and the owner of
-    the section a restates restatement lies in, through its role; an invalid anchor and K8 stay inside their object; a
-    doubt naming several objects is never planted here), K1's exceptive rule, K2's arms 2-4, K3, K4, K5, K7 (inside its
-    section, then through inheritance) and L1 - and the couplings the design specifies beside them, each named and each
-    as narrow as the design states it: G5's reading of an act's status (D198: an event's claimed status decides whether
-    its anchor and restatements are an act's units, so only the extent facts citing one of them), CLAIMED's conditions
-    on another object (3.2.1: a lesion of a claimed act; the anatomy entry an act's target.anatomy or a session's through
-    or reached_anatomy names, and a surgically absent organ a reach or a station names; a session holding a visit; a
-    restatement in the documenting clinician's part) and the all_of_kind control's reported acts (3.2.3, D210). Computed
-    from the raw answer and the checks' geometry, never from settle."""
+    listed couplings, each as narrow as its check reads (refute-3a-r2 F5) - 4.9's rules (a section's owner, occasion
+    and performer through inheritance, 1.5, and the owner of the section a restates restatement lies in, through its
+    role; an invalid anchor and K8 stay inside their object; a doubt naming several objects is never planted here), K1's
+    exceptive rule (the excepted events' kind and status: the excepting statement's breadth, and its excepts, which
+    claims.py renders as the breadth's claim), K2's arm 2 (the examination's session fact: its session's examination
+    link) and arm 4 (the examination's effective date relation - its own, or its section's occasion: the acts of its
+    session, their session facts), K2's arm 3 and K3 (the session's kind) and K2's arm 4 again (which event the
+    session's examination is: its acts' session facts), K4 (an act's places against anatomy entries - an event's places
+    count as an act's by its kind and status), K5, K7 (inside its section, then through inheritance) and L1 - and the
+    couplings the design specifies beside them, each named and each as narrow as the design states it: G5's reading of
+    an act's status (D198: an event's claimed status decides whether its anchor and restatements are an act's units, so
+    only the extent facts citing one of them), CLAIMED's conditions on another object (3.2.1, each read as claims.py
+    reads it: the lesions of a claimed act - a codable kind, the lesion its target names; the anatomy entry an act's
+    target.anatomy or a session's through or reached_anatomy names, and a surgically absent organ a reach or a station
+    names; a session holding a visit - the visit's kind and session; an injection's structure in an EUS session - the
+    session's kind; a restatement in the documenting clinician's part) and the all_of_kind control's reported acts
+    (3.2.3, D210: an act's kind, status and session); and, the other way, an anatomy entry's type reaching the
+    reached_anatomy of a session that names the entry (3.2.3: that fact's control is "did not reach the {point at
+    anatomy Y}", the point the entry's supported type's - claims.ANATOMY_POINT - and 2.4: its claim is posed beside the
+    entry's card; a coupling claims.py always made, which the reached_anatomy's own unappraised reading hid until
+    DECISIONS D244's R-ANAT let the shared control appraise it; no ruling names it yet - refute-r3a-r1's R3A-4, a
+    question in the step's notes - and it only ever unresolves). 3.2.3's row 7, which D224 adds to D201's table, reads
+    two requests: card_couplings. Computed from the raw answer and the checks' geometry, never from settle."""
     data, checked = prepared.data, prepared.checked
     out = set()
     sessions = {item['id']: item for item in data['sessions']}
@@ -1787,45 +2432,55 @@ def couplings(prepared, family, name, attribute):
     extent = (A.REACHED, A.COMPLETION, A.STATIONS, A.APPROACH, A.THROUGH)
     lesion_facts = (A.MULTIPLICITY, A.PLACES, A.DISTINCT_FROM, A.SAME_AS)
     anatomy_facts = (A.TYPE, A.ORGAN, A.SUBTYPE, A.JOINS)
+
+    def acts_of(session_):
+        return {(F.EVENT, act, A.SESSION) for act, of in session_of.items() if of == session_}
+
     if family is F.SECTION:  # inheritance (1.5; 4.9), K7 through it, L1's per-event rule (D193)
         for event_, section_ in checked.containing.items():
             if section_ == name:
                 out |= {(F.EVENT, event_, item) for item in inherited}
-                for session_, examination in examination_of.items():  # K2 arm 4: the examination's effective relation
-                    if examination == event_:
-                        out |= {(F.EVENT, act, A.SESSION) for act, of in session_of.items() if of == session_}
+                if attribute is A.OCCASION:  # K2 arm 4: an examination's effective relation is its section's occasion
+                    out |= {item for session_, examination in examination_of.items() if examination == event_
+                            for item in acts_of(session_)}
         for (event_, _index), section_ in checked.restatements.items():  # 3.2.1: restates in the clinician's part
             if section_ == name:
                 out.add((F.EVENT, event_, A.RESTATEMENTS_ROLE))
     if family is F.EVENT:
-        for item in data['events']:  # K1's exceptive rule; the all_of_kind control's reported acts (3.2.3, D210)
-            excepts = name in item['scope']['excepts']
-            reported = (_value(item['scope']['breadth']) == 'all_of_kind' and kind_of[item['id']] is not None
-                        and kind_of[name] is not None
-                        and catalogue.covers(Kind(kind_of[item['id']]), Kind(kind_of[name])))
-            if excepts or reported:
+        for item in data['events']:
+            if attribute in (A.KIND, A.STATUS) and name in item['scope']['excepts']:  # K1's exceptive rule
                 out |= {(F.EVENT, item['id'], A.SCOPE_BREADTH), (F.EVENT, item['id'], A.SCOPE_EXCEPTS)}
-        for session_, examination in examination_of.items():  # K2 arms 2 and 4
-            if examination == name:
+            if (attribute in (A.KIND, A.STATUS, A.SESSION)  # the all_of_kind control's reported acts (3.2.3, D210)
+                    and _value(item['scope']['breadth']) == 'all_of_kind' and kind_of[item['id']] is not None
+                    and kind_of[name] is not None
+                    and catalogue.covers(Kind(kind_of[item['id']]), Kind(kind_of[name]))):
+                out.add((F.EVENT, item['id'], A.SCOPE_BREADTH))
+        for session_, examination in examination_of.items():
+            if examination == name and attribute is A.SESSION:  # K2 arm 2: a session's examination names it
                 out.add((F.SESSION, session_, A.EXAMINATION))
-                out |= {(F.EVENT, act, A.SESSION) for act, of in session_of.items() if of == session_}
+            if examination == name and attribute is A.DATE_RELATION:  # K2 arm 4: the examination's own relation
+                out |= acts_of(session_)
         event_item = next(item for item in data['events'] if item['id'] == name)
         if attribute is A.STATUS:  # G5 (D198): only an extent fact citing a unit this event is told in
             told = set(event_item['anchor']['units']) | {unit for item in event_item['restatements']
                                                           for unit in item['units']}
             out |= {(F.SESSION, session_, item) for session_, record in sessions.items() for item in extent
                     if _cites(record[xs.field(F.SESSION, item).path[0]], told)}
-        if kind_of[name] == 'em_visit' and session_of[name] in sessions:  # 3.2.1: a session holding a visit
-            out.add((F.SESSION, session_of[name], A.ENCOUNTER))
-        named = {fact_['value'] for fact_ in event_item['target']['lesion']} | set(event_item['scope']['targets'])
-        out |= {(F.LESION, lesion_, fact_) for lesion_ in named for fact_ in lesion_facts}  # 3.2.1: of a claimed act
+        if attribute in (A.KIND, A.SESSION) and kind_of[name] == 'em_visit' and session_of[name] in sessions:
+            out.add((F.SESSION, session_of[name], A.ENCOUNTER))  # 3.2.1: a session holding a visit
+        if attribute in (A.KIND, A.TARGET_LESION):  # 3.2.1: the lesions of a claimed act (claims.claimable_event)
+            named = {fact_['value'] for fact_ in event_item['target']['lesion']} | set(event_item['scope']['targets'])
+            out |= {(F.LESION, lesion_, fact_) for lesion_ in named for fact_ in lesion_facts}
         if attribute is A.TARGET_ANATOMY:  # 3.2.1: the anatomy entry an act names is read
             out |= {(F.ANATOMY, fact_['value'], item) for fact_ in event_item['target']['anatomy']
                     for item in anatomy_facts}
-        if attribute is A.TARGET_PLACES:  # K4: an act place at or inside a surgically absent organ
+        if attribute in (A.TARGET_PLACES, A.KIND, A.STATUS):  # K4: an act's place inside a surgically absent organ
             out |= {(F.ANATOMY, item['id'], fact_) for item in data['anatomy'] for fact_ in anatomy_facts}
-    if family is F.SESSION:  # K2 arm 3, K3; K4 and 3.2.1's anatomy read by a reach, a station or a through
-        out |= {(F.EVENT, act, A.SESSION) for act, of in session_of.items() if of == name}
+    if family is F.SESSION:  # K2 arms 3 and 4, K3; K4 and 3.2.1's anatomy read by a reach, a station or a through
+        if attribute in (A.KIND, A.EXAMINATION):
+            out |= acts_of(name)
+        if attribute is A.KIND:  # 3.2.1: an injection's structure is claimed in an EUS session
+            out |= {(F.EVENT, act, A.TARGET_STRUCTURE) for act, of in session_of.items() if of == name}
         if attribute in (A.THROUGH, A.REACHED_ANATOMY):  # 3.2.1: the entry a through or a reached_anatomy names
             out |= {(F.ANATOMY, fact_['value'], item) for fact_ in sessions[name][xs.field(F.SESSION, attribute).path[0]]
                     for item in anatomy_facts}
@@ -1834,6 +2489,9 @@ def couplings(prepared, family, name, attribute):
     if family is F.ANATOMY:  # K4
         out |= {(F.SESSION, session_, item) for session_ in sessions for item in (A.REACHED, A.STATIONS)}
         out |= {(F.EVENT, item['id'], A.TARGET_PLACES) for item in data['events']}
+        if attribute is A.TYPE:  # 3.2.3's reached_anatomy control and 2.4's card: the entry's type is its point
+            out |= {(F.SESSION, session_, A.REACHED_ANATOMY) for session_, record in sessions.items()
+                    if any(fact_['value'] == name for fact_ in record['reached_anatomy'])}
     if family is F.PERSON or (family is F.ENCOUNTER and attribute is A.DOCUMENTING_CLINICIAN):  # K5
         out |= {(F.EVENT, item['id'], fact_) for item in data['events'] for fact_ in (A.PERFORMER, A.PERFORMER_PERSON)}
         out |= {(F.SECTION, item['id'], fact_) for item in data['sections']
@@ -1842,6 +2500,34 @@ def couplings(prepared, family, name, attribute):
         out |= {(F.EVENT, item['id'], fact_) for item in data['events'] for fact_ in (A.DATE_RELATION, A.DATE)}
         out |= {(F.SECTION, item['id'], A.OCCASION) for item in data['sections']}
     return out
+
+
+def card_couplings(base, prepared, family, name):
+    """3.2.3's row 7 (cards_indistinct [R:CO-7]), which DECISIONS D224 adds to D201's table (refute-3a-r2 Q-D): the
+    facts of the OTHER events whose cards read alike ``name``'s - a group of the request's ``indistinct``, in the base
+    request or the perturbed one - of the attributes whose claimed values for ``name`` differ between the two claim
+    sets, since row 7 compares a group's claimed values attribute by attribute; of every attribute when ``name``'s
+    groups differ between the two requests. Computed from the two requests (claims.py's claim sets and
+    appraise_prompt's groups), never from settle."""
+    if family is not F.EVENT:
+        return set()
+
+    def claimed(found):
+        values = {}
+        for item in found.claim_set.appraised:
+            if item.key.family is F.EVENT and item.key.object == name:
+                values.setdefault(item.key.attribute, set()).add((item.state, item.value))
+        return values
+
+    def groups(found):
+        return {group for group in found.request.indistinct if name in group}
+
+    before, after = claimed(base), claimed(prepared)
+    moved = {attribute for attribute in set(before) | set(after) if before.get(attribute) != after.get(attribute)}
+    if groups(base) != groups(prepared):
+        moved = set(xs.attributes(F.EVENT))
+    return {(F.EVENT, other, attribute) for group in groups(base) | groups(prepared) for other in group
+            if other != name for attribute in moved}
 
 
 def _node(data, key):
@@ -1862,10 +2548,13 @@ def _node(data, key):
 def perturbations(prepared):
     """Every one-fact perturbation of the answer (P-INDEP-SETTLE): for each fact of pass 1, its state flipped, its
     value changed within its domain, a hedging qualifier, an unknown unit cited, a stated doubt naming it, and pass 2
-    contradicting its claim. Yields (label, key, the perturbed answer, the oracle)."""
+    contradicting its claim. Yields (label, key, touched, the perturbed answer, the oracle): ``touched``, the attributes
+    of the fact's object the perturbation reaches - the fact's own, and for a doubt every attribute its DOUBT_ABOUT row
+    names on that family (a doubt about 'target' names an act's five target fields at once: 1.6, DECISIONS D200)."""
     for item in prepared.read.facts:
         key = item.key
         field = xs.field(key.family, key.attribute)
+        own = (key.attribute,)
 
         def edited(change, key=key):
             data = copy.deepcopy(prepared.data)
@@ -1876,7 +2565,7 @@ def perturbations(prepared):
         node = _node(prepared.data, key)
         if not is_date_of_service and node['state'] in ('supported', 'negated'):
             flipped = 'negated' if node['state'] == 'supported' else 'supported'
-            yield 'state', key, edited(lambda found, flipped=flipped: found.update(state=flipped)), faithful
+            yield 'state', key, own, edited(lambda found, flipped=flipped: found.update(state=flipped)), faithful
         values = []
         if field.values is not None:
             members = [member.value for member in field.values]
@@ -1887,11 +2576,11 @@ def perturbations(prepared):
         elif node['value']:
             values = ['2031-03-13' if len(node['value']) == 10 else '2026']
         for value in values:
-            yield 'value', key, edited(lambda found, value=value: found.update(value=value)), faithful
+            yield 'value', key, own, edited(lambda found, value=value: found.update(value=value)), faithful
         if not is_date_of_service:
-            yield 'qualifier', key, edited(lambda found: found['qualifiers'].append('hedged')), faithful
+            yield 'qualifier', key, own, edited(lambda found: found['qualifiers'].append('hedged')), faithful
         if node['sources']:
-            yield 'unit', key, edited(lambda found: found['sources'][0]['units'].append('S99')), faithful
+            yield 'unit', key, own, edited(lambda found: found['sources'][0]['units'].append('S99')), faithful
         about = next((value for value, row in xs.DOUBT_ATTRIBUTES.items()
                       if value.value != 'whole' and key.attribute in row.get(key.family, ())), None)
         objects = [] if key.family is F.ENCOUNTER else [key.object]
@@ -1899,32 +2588,35 @@ def perturbations(prepared):
             data = copy.deepcopy(prepared.data)
             data['doubts'].append(doubt(about.value, objects, (node['sources'][0]['units'][:1] if node['sources']
                                                                else ['S1']), 'stated'))
-            yield 'doubt', key, data, faithful
+            yield 'doubt', key, tuple(xs.DOUBT_ATTRIBUTES[about][key.family]), data, faithful
         found = prepared.appraised(key.attribute, key.object, key.index)
         if found is not None:
-            yield 'verdict', key, prepared.data, overriding(**{
+            yield 'verdict', key, own, prepared.data, overriding(**{
                 f'{key.attribute.value}@{key.object}/{key.index}': {'value': 'contradicts'}})
 
 
 class IndependenceTests(Case):
-    def test_p_indep_settle_one_objects_fact_changes_anothers_only_through_the_listed_couplings(self):
-        """9.4 P-INDEP-SETTLE [R:HO-7] over DECISIONS D201's couplings: every one-fact perturbation of NOTE's pass-1
-        and pass-2 answers, settled; any fact of ANOTHER object that changed is one a listed coupling reaches. HO-7's
-        defect - one act's performer unresolving its session's examination - is exactly what this catches."""
-        base = Prepared(NOTE, note_answer())
+    def independence(self, text, data):
+        """9.4 P-INDEP-SETTLE [R:HO-7] over DECISIONS D201's couplings and 3.2.3's row 7 (D224): every one-fact
+        perturbation of the answer's pass-1 and pass-2 answers, settled; any fact of ANOTHER object that changed is one
+        a listed coupling of an attribute the perturbation touched reaches. Returns the perturbations counted, by
+        label."""
+        base = Prepared(text, data)
         before = flat(base.settle())
         counted = {'state': 0, 'value': 0, 'qualifier': 0, 'unit': 0, 'doubt': 0, 'verdict': 0}
         unhealthy = 0
-        for label, key, data, oracle in perturbations(base):
+        for label, key, touched, changed_data, oracle in perturbations(base):
             with self.subTest(perturbation=label, fact=key):
-                prepared = base if data is base.data else Prepared(NOTE, data)
+                prepared = base if changed_data is base.data else Prepared(text, changed_data)
                 out = prepared.settle(oracle)
                 if isinstance(out, settle.Unhealthy):
                     unhealthy += 1
                     continue
                 after = flat(out)
-                allowed = couplings(base, key.family, key.object, key.attribute) | couplings(
-                    prepared, key.family, key.object, key.attribute)
+                allowed = card_couplings(base, prepared, key.family, key.object)
+                for attribute in touched:
+                    allowed |= couplings(base, key.family, key.object, attribute) | couplings(
+                        prepared, key.family, key.object, attribute)
                 changed = {(family, name, attribute) for family, name, attribute, index in set(before) | set(after)
                            if before.get((family, name, attribute, index)) != after.get((family, name, attribute,
                                                                                         index))}
@@ -1932,7 +2624,85 @@ class IndependenceTests(Case):
                 self.assertEqual(outside, set(), (label, key))
                 counted[label] += 1
         self.assertEqual(unhealthy, 0)
+        return counted
+
+    def test_p_indep_settle_one_objects_fact_changes_anothers_only_through_the_listed_couplings(self):
+        """P-INDEP-SETTLE over NOTE. HO-7's defect - one act's performer unresolving its session's examination - is
+        exactly what this catches."""
+        counted = self.independence(NOTE, note_answer())
         self.assertTrue(all(count > 10 for count in counted.values()), counted)
+
+    def test_p_indep_settle_over_identical_cards(self):
+        """P-INDEP-SETTLE over p19's identical cards (refute-3a-r2 Q-D; DECISIONS D224 names 3.2.3's row 7 in D201's
+        table): E4's and E5's kinds are unresolved(cards_indistinct), and a perturbation of one event's claimed values
+        reaches its card partner's facts only through row 7 - E4's kind moved to E5's value settles E5's kind
+        supported, which card_couplings admits."""
+        self.assertEqual(Prepared(NOTE, identical_answer()).request.indistinct, (('E4', 'E5'),))
+        counted = self.independence(NOTE, identical_answer())
+        self.assertTrue(all(count > 10 for count in counted.values()), counted)
+
+    def test_p_indep_settle_over_an_exceptive_denial(self):
+        """P-INDEP-SETTLE over EXCEPTIVE, where K1's exceptive rule couples the excepted snare's kind and status to the
+        denial's breadth - and, now that the arm is as narrow as K1 reads (refute-3a-r2 F5), nothing else of it."""
+        counted = self.independence(EXCEPTIVE, exceptive_answer())
+        self.assertTrue(all(count > 0 for count in counted.values()), counted)
+
+    def test_p_indep_settle_over_a_shared_control(self):
+        """P-INDEP-SETTLE over SHARED_REACH (DECISIONS D244's R-ANAT): the control X1's reach and its reached_anatomy
+        share joins two facts of ONE object, so no perturbation reaches another object's facts through it; and the
+        snare beside them stays independent of both."""
+        prepared = Prepared(SHARED_REACH, shared_answer())
+        self.assertEqual(prepared.appraised(A.REACHED, 'X1').control,
+                         prepared.appraised(A.REACHED_ANATOMY, 'X1').control)
+        counted = self.independence(SHARED_REACH, shared_answer())
+        self.assertTrue(all(count > 0 for count in counted.values()), counted)
+
+    def test_the_couplings_are_as_narrow_as_d201_and_d224_state_them(self):
+        """refute-3a-r2 F5 (probe p15) and Q-D (probe p19): each arm admits only what its check reads. K1's exceptive
+        rule reads the excepted events' kind and status - never an excepted act's places; K2's arms read the
+        examination's session fact and its effective date relation - never its kind; a lesion's facts follow a claimed
+        act's kind and the lesion its target names - never its device; 3.2.3's row 7 couples two events whose cards
+        read alike through the attributes whose claimed values the perturbation moved, and nothing where no cards read
+        alike. Each admission is shown beside its refusal, and row 7's beside the change it admits."""
+        exceptive, note = Prepared(EXCEPTIVE, exceptive_answer()), Prepared(NOTE, note_answer())
+        breadth = (F.EVENT, 'E3', A.SCOPE_BREADTH)
+        self.assertIn(breadth, couplings(exceptive, F.EVENT, 'E2', A.KIND))
+        self.assertIn(breadth, couplings(exceptive, F.EVENT, 'E2', A.STATUS))
+        self.assertNotIn(breadth, couplings(exceptive, F.EVENT, 'E2', A.TARGET_PLACES))  # p15's first admission
+        session_ = (F.EVENT, 'E2', A.SESSION)
+        self.assertIn((F.SESSION, 'X1', A.EXAMINATION), couplings(note, F.EVENT, 'E1', A.SESSION))
+        self.assertIn(session_, couplings(note, F.EVENT, 'E1', A.DATE_RELATION))
+        self.assertIn(session_, couplings(note, F.SECTION, 'N2', A.OCCASION))  # E1's effective relation: N2's
+        self.assertIn(session_, couplings(note, F.SESSION, 'X1', A.KIND))
+        self.assertNotIn(session_, couplings(note, F.EVENT, 'E1', A.KIND))  # p15's second admission
+        self.assertNotIn((F.SESSION, 'X1', A.EXAMINATION), couplings(note, F.EVENT, 'E1', A.KIND))
+        self.assertNotIn(session_, couplings(note, F.SECTION, 'N2', A.ROLE))
+        self.assertNotIn(session_, couplings(note, F.SESSION, 'X1', A.REACHED))
+        places = (F.LESION, 'L1', A.PLACES)
+        self.assertIn(places, couplings(note, F.EVENT, 'E2', A.TARGET_LESION))
+        self.assertIn(places, couplings(note, F.EVENT, 'E2', A.KIND))
+        self.assertNotIn(places, couplings(note, F.EVENT, 'E2', A.TECHNIQUE_DEVICE))  # p15's third admission
+        # row 7, p19: E4's kind moved to E5's value - the one fact the perturbation's claimed values move
+        base, data = Prepared(NOTE, identical_answer()), identical_answer()
+        event_of(data, 'E4')['kind']['value'] = 'tattoo'
+        perturbed = Prepared(NOTE, data)
+        self.assertEqual(card_couplings(base, perturbed, F.EVENT, 'E4'), {(F.EVENT, 'E5', A.KIND)})
+        self.assertNotIn((F.EVENT, 'E5', A.KIND), couplings(base, F.EVENT, 'E4', A.KIND))  # D201's list alone
+        before, after = flat(base.settle()), flat(perturbed.settle())
+        self.assertEqual(before[(F.EVENT, 'E5', A.KIND, 0)], (Result.UNRESOLVED, (R.CARDS_INDISTINCT,)))
+        self.assertEqual(after[(F.EVENT, 'E5', A.KIND, 0)], (Result.SUPPORTED, ()))
+        # where no cards read alike (NOTE), the same perturbation couples nothing through row 7
+        data = note_answer()
+        event_of(data, 'E4')['kind']['value'] = 'tattoo'
+        self.assertEqual(card_couplings(note, Prepared(NOTE, data), F.EVENT, 'E4'), set())
+        # 3.2.3's reached_anatomy control (DECISIONS D244's R-ANAT made it visible): an anatomy entry's type reaches the
+        # reached_anatomy of the session naming it - never another attribute of the entry, and nothing where no session
+        # names the entry (NOTE's Y1); the one arm here no ruling names yet (refute-r3a-r1's R3A-4, the step's notes)
+        shared = Prepared(SHARED_REACH, shared_answer())
+        reached_anatomy = (F.SESSION, 'X1', A.REACHED_ANATOMY)
+        self.assertIn(reached_anatomy, couplings(shared, F.ANATOMY, 'Y1', A.TYPE))
+        self.assertNotIn(reached_anatomy, couplings(shared, F.ANATOMY, 'Y1', A.SUBTYPE))
+        self.assertNotIn((F.SESSION, 'X1', A.REACHED_ANATOMY), couplings(note, F.ANATOMY, 'Y1', A.TYPE))
 
     def test_the_coupling_table_is_not_vacuous(self):
         """The property sees a change through a listed coupling: a section's occasion reaches its acts' inherited
@@ -1989,7 +2759,8 @@ class DemotionTests(Case):
     def test_p_demote_pass_two_never_creates_changes_or_upgrades_a_fact(self, answers):
         """9.4 P-DEMOTE: for any appraisal answer, every settled result is at most pass 1's claim - an established
         result only where pass 1 claimed that very state and the faithful reading establishes it too, and nothing
-        contradicted that pass 1 did not report."""
+        contradicted that pass 1 did not report. An established fact rests on a supports verdict, attached, naming no
+        qualifier but approximate (DECISIONS D186 and D224), its control rejected."""
         prepared = _note()
         faithful_out = flat(prepared.settle())
 
@@ -2010,8 +2781,9 @@ class DemotionTests(Case):
         for fact_ in _every_fact(out.events):
             if fact_.result in (Result.SUPPORTED, Result.NEGATED):
                 self.assertEqual(fact_.claim.state.value, fact_.result.value)
-                self.assertEqual((fact_.appraisal.verdict, fact_.appraisal.attached, fact_.appraisal.qualifiers),
-                                 (VerdictValue.SUPPORTS, Attached.YES, ()))
+                self.assertEqual((fact_.appraisal.verdict, fact_.appraisal.attached),
+                                 (VerdictValue.SUPPORTS, Attached.YES))
+                self.assertLessEqual(set(fact_.appraisal.qualifiers), {Qualifier2.APPROXIMATE})  # D224's one
                 self.assertIn(fact_.appraisal.control.verdict if fact_.appraisal.control else None,
                               (None, VerdictValue.CONTRADICTS) if fact_.appraisal.control is None
                               else (VerdictValue.CONTRADICTS,))

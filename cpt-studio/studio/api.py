@@ -7,12 +7,22 @@ This is the CUSTOMER surface (CORE-UX-DESIGN.md 5, 7): every payload is built by
 every refusal raised below this module reaches the member only through customer_api.customer_error (a fixed
 vocabulary; no stored or exception text). The full record - providers, models, usage, runs, hashes, the trace, every
 stored artifact - is a platform operator's, served under /ops/ by studio.operator.
+
+FINAL-V2 amendment 1 (step 5d; D208): the codes are updated automatically after a save. A context save answers what it did
+(1.3 [R:truth-T13]: 200 ``unchanged`` with nothing written, 201 ``updating``, 201 ``restored``); an addendum is accepted
+while processing runs (A1), refused as a duplicate of the current revision's own (A13) and, before anything is written,
+when the document or the document with it could not be read in one piece or prepared for reading (A12, the sentence by
+where the cause is [R2:truth-RT7]); while an update is pending a new export answers 409 UPDATE_EXPORT (8.1) and every
+decision 409 UPDATE_DECISION (review.record_decision, 5.3); an export that is not current is downloaded as an EARLIER
+export with its banner, never refused (8.3, A9); and a failed update's document review is retried by one recorded member
+act (POST .../retry-update, 7.2, A10).
 """
 import functools
 import json
 import re
 import uuid
 from datetime import date
+from types import SimpleNamespace
 
 from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -321,9 +331,50 @@ def confirm_finding(request, encounter_id, clarification_id):
                          'current_effect': customer_api.confirmation_effect(confirmation), 'effect': effect}, status=201)
 
 
+def _unframed(text, pages) -> bool:
+    """Whether ``text`` with ``pages`` fails the pure framing check (FINAL-V2 1.2 rule 8, contract/extract_prompt.unframed:
+    run here, in the web process, without the interpreter adapter, whose key the worker alone holds - D14), the pages
+    tiled as the reading tiles them (jobs._participant_pages: the last page runs to the end of the text). A check that
+    cannot be made is a failure (fail-closed)."""
+    from .interpretation.contract import extract_prompt  # local import: the reading's own pure check
+
+    try:
+        return extract_prompt.unframed(text, jobs._participant_pages(SimpleNamespace(text=text, pages=pages))) is not None
+    except (TypeError, ValueError):
+        return True
+
+
+def _addendum_refusal(parent, combined):
+    """FINAL-V2 amendment 1, 1.4 (A12 [R:truth-T7]; the sentence names where the cause is [R2:truth-RT7]): the customer
+    sentence that refuses an addendum to ``parent`` whose combined text would be ``combined``, or '' when it may be added.
+    The document's own text is checked first, alone: over the character bound, its pages over the page bound (an
+    addendum revision carries its parent's pages), or a text that cannot be framed - then no addendum can pass, and the
+    refusal says so (ADDENDUM_DOCUMENT_TOO_LONG, ADDENDUM_DOCUMENT_UNPREPARED); else the combined text over the
+    character bound or one that cannot be framed (ADDENDUM_TOO_LONG, ADDENDUM_UNPREPARED). Such an addendum's update could
+    never finish (the reading refuses the size, C5 forbids a member's paid retry, and no restore exists across
+    revisions), so it is refused before the revision is recorded and before any decision is invalidated. The test-only
+    v1 chain reads no such refusal (jobs._framing_refusal's rule)."""
+    if jobs._v1_chain():
+        return ''
+    if jobs._size_bound(parent):
+        return customer_api.ADDENDUM_DOCUMENT_TOO_LONG
+    if _unframed(parent.text or '', list(parent.pages or ())):
+        return customer_api.ADDENDUM_DOCUMENT_UNPREPARED
+    if len(combined) > settings.INTERPRET_MAX_CHARS:
+        return customer_api.ADDENDUM_TOO_LONG
+    if _unframed(combined, list(parent.pages or ())):
+        return customer_api.ADDENDUM_UNPREPARED
+    return ''
+
+
 @require_POST
 @api_view
 def addenda(request, encounter_id):
+    """A physician's addendum: a new revision of the document, whose pipeline starts at once. FINAL-V2 amendment 1: no
+    busy refusal (A1: a stage of the earlier revision still queued ends superseded at its start, 3.4); refused (409),
+    under the row lock and before anything is written, as a duplicate of the current revision's own addendum (A13,
+    ADDENDUM_DUPLICATE) and when its update could never finish (A12, _addendum_refusal). No addendum refusal says the
+    codes shown stay as they are: an addendum is accepted during a first processing too, when no codes are shown."""
     data = _payload(request)
     with transaction.atomic():
         encounter, membership = scoped_encounter(request.user, encounter_id, for_update=True)
@@ -334,13 +385,20 @@ def addenda(request, encounter_id):
             raise ApiError(400, 'Write the additional documentation to add.')
         if len(text) > 20000:
             raise ApiError(400, 'An addendum can be at most 20,000 characters.')
-        if jobs.busy(encounter):
-            raise ApiError(409, 'Wait for processing to finish (or stop it) before adding documentation.')
         parent = encounter.current_revision
+        if (parent is not None and parent.kind == models.SourceRevision.ADDENDUM
+                and (parent.addendum_text or '').strip() == text):
+            # A13 (3.9): a double click or a second tab - the documentation is the current revision's own already, read
+            # before its text is extracted (the second click arrives while the first one's revision is being read)
+            raise ApiError(409, customer_api.ADDENDUM_DUPLICATE.format(n=parent.number))
         if parent is None or parent.extraction_status not in {models.SourceRevision.OK, models.SourceRevision.PARTIAL}:
             raise ApiError(409, 'This document has no extracted text to add to.')
         number, now = encounter.revisions.count() + 1, timezone.now()
-        combined = len(canonicalize(parent.text + jobs.addendum_block_text(number, now, text)))
+        combined_text = canonicalize(parent.text + jobs.addendum_block_text(number, now, text))
+        refusal = _addendum_refusal(parent, combined_text)
+        if refusal:
+            raise ApiError(409, refusal)
+        combined = len(combined_text)
         if combined > settings.MAX_PASTE_CHARS:
             raise ApiError(400, f'With this addendum the document would have {combined:,} characters; '
                                 f'the limit is {settings.MAX_PASTE_CHARS:,}.')
@@ -383,6 +441,13 @@ def addenda(request, encounter_id):
 @require_POST
 @api_view
 def context(request, encounter_id):
+    """A context save (FINAL-V2 amendment 1, 1.3 [R:truth-T13]): ``{"service_date", "setting", "billing_context"}``,
+    any of them. Compared under the row lock with the SAVED values (jobs.change_context): a save that changes nothing
+    writes nothing and answers 200 ``{"context_id", "unchanged": true, "updating"}``; a change answers 201 ``{"context_id",
+    "updating"}`` (``updating``: an update of codes the member was shown is pending after it); a save of the earlier
+    codes' own values that made them current again answers 201 ``{"context_id", "updating": false, "restored": true}``.
+    ``context_id`` is the encounter's current context after the save (null while it has none). 409 with why for each
+    refusal (A12, A18, A19, the extraction not finished)."""
     data = _payload(request)
     encounter, membership = scoped_encounter(request.user, encounter_id)
     _require_reviewer(membership)
@@ -397,20 +462,27 @@ def context(request, encounter_id):
     if not values:
         raise ApiError(400, 'Nothing to change.')
     try:
-        ctx = jobs.change_context(encounter, request.user, values)
+        saved = jobs.change_context(encounter, request.user, values)  # ContextSave (amendment 1, 2.7)
     except jobs.Refused as exc:
         raise ApiError(409, customer_api.customer_error(str(exc)))
-    return JsonResponse({'context_id': str(ctx.pk)}, status=201)
+    context_id = str(saved.context.pk) if saved.context is not None else None
+    if saved.unchanged:
+        return JsonResponse({'context_id': context_id, 'unchanged': True, 'updating': bool(saved.updating)})
+    if saved.restored:
+        return JsonResponse({'context_id': context_id, 'updating': False, 'restored': True}, status=201)
+    return JsonResponse({'context_id': context_id, 'updating': bool(saved.updating)}, status=201)
 
 
 @require_POST
 @api_view
 def details(request, encounter_id):
     """P5 FLOW: one save for the "A few details needed" rows, ``{"answers": [{"id", "fact", "value"}]}``
-    (answers.save_details): context values through one context change and its re-assessment, "not documented" or
-    "cannot confirm" stored as the member's answers. An owner or reviewer only; 400 for an answer a detail does not
-    allow, 409 while processing runs or for a detail no longer asked. 201 when something was saved, 200 when the save
-    changed nothing."""
+    (answers.save_details): context values through one context change and its update, "not documented" or "cannot
+    confirm" stored as the member's answers. An owner or reviewer only; 400 for an answer a detail does not allow, 409
+    for an answer while processing runs or an update is pending (FINAL-V2 amendment 1, 1.4: a save of context values
+    alone is accepted then), for a detail no longer asked, and for a context save jobs.change_context refuses. 201 when
+    something was saved, 200 when the save changed nothing; ``reassessing`` when an update is pending after it or a
+    recompute was queued, ``restored`` when it made the earlier codes current again (1.3 [R:truth-T13])."""
     data = _payload(request)
     encounter, membership = scoped_encounter(request.user, encounter_id)
     _require_reviewer(membership)
@@ -481,6 +553,26 @@ def retry_reading(request, encounter_id):
 
 @require_POST
 @api_view
+def retry_update(request, encounter_id):
+    """FINAL-V2 amendment 1, 7.2 (A10): the recorded retry of a failed update - one more attempt at the document review
+    that failed with a status no provider hold reads (a 5xx, another 4xx, a transport failure: its failed run released
+    for that one attempt), at one never sent for a local reason, or at a failed stage that sends nothing - by an owner or
+    a reviewer (jobs.retry_update, audited 'update.retry'). 409, with why in the member's words, while processing runs,
+    when no update failed (RETRY_UPDATE_NOTHING), while an outcome is unknown, while the coding service's hold stands
+    (RETRY_UPDATE_HELD), for a failed reading (RETRY_UPDATE_READING: Try reading again serves it) and for a request the
+    coding service refused before (RETRY_UPDATE_REFUSED_BEFORE). Nothing is sent here; the attempt is a stage of its
+    own."""
+    encounter, membership = scoped_encounter(request.user, encounter_id)
+    _require_reviewer(membership)
+    try:
+        jobs.retry_update(encounter, request.user)
+    except jobs.Refused as exc:
+        raise ApiError(409, customer_api.customer_error(str(exc)))
+    return JsonResponse({'retrying': True}, status=201)  # never the stage's kind
+
+
+@require_POST
+@api_view
 def second_review(request, encounter_id):
     """Ask for the one bounded second review of the current assessment (ARCHITECTURE 5.11): a workspace owner or
     reviewer asks; an assessment never queues one (owner decision 2026-10-27)."""
@@ -493,12 +585,24 @@ def second_review(request, encounter_id):
     return JsonResponse({'second_review': 'queued'}, status=201)
 
 
+def _update_export_refusal(encounter):
+    """ApiError 409 UPDATE_EXPORT (its check form for an update no save started) with the update's customer blockers
+    while an update of ``encounter``'s codes is pending (FINAL-V2 amendment 1, 8.1 and 5.3), else None."""
+    refused = reports.update_refusal(encounter)
+    if refused is None:
+        return None
+    blockers = customer_api.readiness(encounter)['blockers']
+    return ApiError(409, refused.message, blockers=blockers or refused.blockers)
+
+
 @require_POST
 @api_view
 def create_report(request, encounter_id):
-    """A customer report (cpt-studio-customer-report@1): ``{"kind": "draft"|"approved", "fmt": "txt"|"csv"}`` - the
-    suggested codes, or the approved items only. 'reviewed', the name the page used before, is read as 'approved'.
-    The operator's full report is made at /ops/ (studio.operator)."""
+    """A customer report (cpt-studio-customer-report@2): ``{"kind": "draft"|"approved", "fmt": "txt"|"csv"}`` - the
+    suggested codes, or the approved items only, each export stating the revision, the details and the time its codes
+    were made (FINAL-V2 amendment 1, 8.2). 'reviewed', the name the page used before, is read as 'approved'. While an
+    update of the codes is pending neither kind is made: 409 UPDATE_EXPORT before the export is generated, and again
+    under the encounter's lock (8.1), nothing written. The operator's full report is made at /ops/ (studio.operator)."""
     data = _payload(request)
     encounter, membership = scoped_encounter(request.user, encounter_id)
     kind, fmt = str(data.get('kind', '')), str(data.get('fmt', ''))
@@ -507,6 +611,9 @@ def create_report(request, encounter_id):
         raise ApiError(400, 'Choose a draft or an approved export as TXT or CSV.')
     if encounter.current_assessment_id is None:
         raise ApiError(409, 'There is nothing to export yet.')
+    refused = _update_export_refusal(encounter)
+    if refused is not None:
+        raise refused
     if kind == reports.APPROVED:
         ready = customer_api.readiness(encounter)
         if not ready['approved']:
@@ -514,6 +621,8 @@ def create_report(request, encounter_id):
     try:
         report = reports.generate_customer(encounter, kind, fmt, request.user)
     except reports.CustomerExportNotReady as exc:  # its blockers are customer_api.readiness's, already worded
+        if exc.updating:  # a save between the request's read and the lock (8.1)
+            raise _update_export_refusal(encounter) or ApiError(409, exc.message, blockers=exc.blockers)
         raise ApiError(409, 'The approved export is not available yet.', blockers=exc.blockers)
     except ValueError as exc:
         raise ApiError(409, customer_api.customer_error(str(exc)))
@@ -523,22 +632,27 @@ def create_report(request, encounter_id):
 @require_GET
 @api_view(contract=False)
 def download_report(request, report_id):
-    """A customer artifact of the caller's workspace, as stored (no sha256 header). Any other artifact - an operator's,
-    or one recorded before the audience existed, which names the review participants - answers 404; an approved export
-    that no longer matches the persisted decisions answers 409."""
+    """A customer artifact of the caller's workspace (no sha256 header). Any other artifact - an operator's, or one
+    recorded before the audience existed, which names the review participants - answers 404. FINAL-V2 amendment 1, 8.3
+    (A9 [R:races-R1][R:truth-T1][R:legacy-L1]): a CURRENT artifact (its marker matches the encounter's and no update is
+    pending: reports.customer_artifact_current) is served exactly as stored; any other - either kind, either format,
+    @1 included - is served as an EARLIER export (reports.earlier_download: its banner, then the stored bytes, under the
+    stored name with '-earlier'), never refused: historical reports are preserved, and the banner keeps one from being
+    presented as current. The stored artifact is never changed."""
     try:
-        report = models.ReportArtifact.objects.select_related('encounter').get(pk=report_id)
+        report = models.ReportArtifact.objects.select_related('encounter', 'assessment__revision').get(pk=report_id)
     except (models.ReportArtifact.DoesNotExist, ValueError, ValidationError):
         raise Http404()
     active_membership(request.user, report.encounter.workspace_id)
     if report.audience != models.ReportArtifact.CUSTOMER:
         raise Http404()
-    if report.kind == reports.APPROVED and not reports.customer_artifact_current(report):
-        raise ApiError(409, customer_api.STALE_EXPORT)
-    content = bytes(report.content)
+    if reports.customer_artifact_current(report):
+        content, filename = bytes(report.content), report.filename
+    else:
+        content, filename = reports.earlier_download(report)
     content_type = 'text/csv; charset=utf-8' if report.fmt == 'csv' else 'text/plain; charset=utf-8'
     response = HttpResponse(content, content_type=content_type)
-    response['Content-Disposition'] = f'attachment; filename="{report.filename}"'
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
     return response
 
 

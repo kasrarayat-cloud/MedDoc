@@ -13,6 +13,7 @@ from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
 from studio import audit, jobs, models, review
+from tests import v2_documents, v2_replay
 from tests.test_pipeline_api import OFFICE_NOTE_STATE, RecordedInterpretation, drain
 from tests.support.operator import OperatorReads
 from tests.test_repairs_pipeline import FIRST_DATE, INTERPRETATIONS, LIVE, NO_DATE_NOTE, ApiHarness
@@ -195,8 +196,12 @@ class NonStringIdentifiersTests(RecordedInterpretation, OperatorReads, ApiHarnes
                 revision = models.Encounter.objects.get(pk=encounter_id).current_revision
                 self.assertIsNone(revision.answers_clarification)
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_a_string_identifier_still_works(self):
-        encounter_id = self.create()
+        # DECISIONS D243: a decision reads the assessment through the review overlay, which reads event_coding@2 only
+        # (FINAL-V2 6.5): the rows are design v2's, in replay (tests/v2_replay.py), from the office note with its
+        # clinician named (tests/v2_documents.OFFICE_NOTE)
+        encounter_id = self.create(v2_documents.OFFICE_NOTE)
         drain()
         proposal = models.Encounter.objects.get(pk=encounter_id).current_assessment.proposals.get(code='99213')
         # on the production chain 99213 waits on the visit's member facts (DECISIONS D3): the decision it allows is a
@@ -333,6 +338,19 @@ class ContextChangeAfterACancelledAssessTests(RecordedInterpretation, OperatorRe
         self.assertEqual(response.status_code, status, response.content)
         drain()
 
+    def assert_update_failed_once(self, encounter_id, earlier, sends):
+        """FINAL-V2 amendment 1 (A6, 7.2): during an update the request that failed is met at the send door (a not-sent
+        record of it, nothing sent) and, not being the earlier codes' own, ends the update failed: the earlier codes
+        ``earlier`` stay the current assessment, and the state reads provider_failed with that record."""
+        encounter = models.Encounter.objects.get(pk=encounter_id)
+        self.assertEqual(len(self.provider.requests), sends)
+        self.assertEqual(encounter.state, 'provider_failed')
+        self.assertEqual(encounter.current_assessment_id, earlier.pk)
+        self.assertTrue(review.update_pending(encounter))
+        newest = jobs._run_in_use(encounter.current_revision)
+        self.assertEqual((newest.state, newest.sent), (models.ProviderRun.NOT_SENT, False))
+        self.assertTrue(newest.error.startswith(jobs.FAILED_BEFORE_MESSAGE), newest.error)
+
     def assert_failed_once(self, encounter_id, sends=1):
         encounter = models.Encounter.objects.get(pk=encounter_id)
         self.assertEqual(len(self.provider.requests), sends)
@@ -379,11 +397,13 @@ class ContextChangeAfterACancelledAssessTests(RecordedInterpretation, OperatorRe
         # documented one is a conflict and sends nothing (session interpretations 11 and 19)
         encounter_id = self.create(NO_DATE_NOTE, service_date=FIRST_DATE)
         drain()  # succeeds for the member's first date
+        earlier = models.Encounter.objects.get(pk=encounter_id).current_assessment
         self.stop_during_the_send(encounter_id)
         self.change(encounter_id, {'service_date': '2026-10-19'})
         self.assertEqual(len(self.provider.requests), 2)
         self.change(encounter_id, {'billing_context': 'facility'})
-        self.assert_failed_once(encounter_id, sends=2)
+        # FINAL-V2 amendment 1: the first date's codes are the earlier codes of the update, and stay current
+        self.assert_update_failed_once(encounter_id, earlier, sends=2)
 
     def test_a_resume_after_a_context_change_and_a_stop(self):
         encounter_id = self.create()

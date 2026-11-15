@@ -353,5 +353,368 @@ class Installer(unittest.TestCase):
         self.assertIn('set_rollback(True)', wrapped)
 
 
+
+# --- design v2 (FINAL-V2 6.4; AMENDMENT-1 9.4, 9.5 and U17; step 6b) ----------------------------------------------------
+
+class ScenarioV2(unittest.TestCase):
+    def found(self, **overrides):
+        return {**{key: 1 for key, _, _ in rc.SCENARIO_V2}, **overrides}
+
+    def test_the_thirteen_record_kinds_of_6_4_are_each_counted(self):
+        self.assertEqual(len(rc.SCENARIO_V2), 14)  # 6.4's list, the approved code's export counted on its own
+        self.assertEqual(rc.scenario_problems(self.found()), [])
+        keys = [key for key, _, _ in rc.SCENARIO_V2]
+        for want in ('interpreted_and_appraised', 'queued_appraise', 'pass2_refusal', 'unhealthy_appraisal',
+                     'held_new_fact', 'approved_with_modifier', 'interpreter_hold', 'second_review'):
+            self.assertIn(want, keys)
+        for statement in (sql for _, _, sql in rc.SCENARIO_V2):
+            self.assertTrue(statement.startswith('select count(*) from studio_'), statement)
+
+    def test_a_kind_missing_zero_or_not_counted_fails_naming_it(self):
+        problems = rc.scenario_problems(self.found(queued_appraise=0, pass2_refusal='RuntimeError: psql failed'))
+        self.assertEqual(len(problems), 2)
+        self.assertTrue(problems[0].startswith('queued_appraise: the run holds no a queued appraise job'))
+        self.assertTrue(problems[1].startswith('pass2_refusal: not counted'))
+        self.assertEqual(len(rc.scenario_problems({})), len(rc.SCENARIO_V2))
+        self.assertEqual(len(rc.scenario_problems(None)), len(rc.SCENARIO_V2))
+
+
+class UpdateRows(unittest.TestCase):
+    DECLARED = {'pending_before_analyze': ['e1'], 'pending_after_analyze': ['e2'], 'completed': ['e3'], 'a21': ['e4']}
+    CLOSE = {'update_pending': {'e1': ['values_saved'], 'e2': ['assessment_off_context'], 'e4': ['reconciled_unknown']},
+             'reverted': {'e1': {'setting': {'saved': 'office', 'restored': None}}}}
+    AFTER = {'e1': {'user_values': '{"service_date": "2026-11-10", "kept": "x"}', 'context': 'c1',
+                    'context_values': '{"service_date": " 2026-11-10 "}'}}
+    AUDITS = [['e1', '{"fields": ["setting"], "context": "c1"}']]
+
+    def note(self, **overrides):
+        return {'update_pending': ['e1', 'e2', 'e4'], 'reverted': self.CLOSE['reverted'], **overrides}
+
+    def test_the_pending_updates_named_the_save_reverted_audited_listed_and_saved_again(self):
+        self.assertEqual(rc.update_problems(self.DECLARED, self.CLOSE, self.note(), self.AFTER, self.AUDITS), [])
+        declared = {**self.DECLARED, 'resave': {'encounter': 'e1', 'field': 'setting', 'value': 'office'}}
+        resave = {'via': 'details', 'row': 'r1', 'status': 201, 'saved': 1, 'unchanged': 0, 'context_before': 'c1',
+                  'context_after': 'c9', 'value_after': 'office'}
+        self.assertEqual(rc.update_problems(declared, self.CLOSE, self.note(), self.AFTER, self.AUDITS, resave), [])
+
+    def test_each_failure_is_named(self):
+        cases = {
+            'did not name it update_pending (values_saved)':
+                (self.DECLARED, {**self.CLOSE, 'update_pending': {'e2': ['assessment_off_context'],
+                                                                  'e4': ['reconciled_unknown']}}, self.note(), self.AFTER,
+                 self.AUDITS),
+            'completed e3: the close named it':
+                (self.DECLARED, {**self.CLOSE, 'update_pending': {**self.CLOSE['update_pending'], 'e3': ['values_saved']}},
+                 self.note(), self.AFTER, self.AUDITS),
+            'the close reverted []':
+                (self.DECLARED, {**self.CLOSE, 'reverted': {}}, self.note(reverted={}), self.AFTER, self.AUDITS),
+            'are not its context':
+                (self.DECLARED, self.CLOSE, self.note(), {'e1': {**self.AFTER['e1'], 'user_values': '{"setting": "office"}'}},
+                 self.AUDITS),
+            'context.rollback_reverted row(s)':
+                (self.DECLARED, self.CLOSE, self.note(), self.AFTER, []),
+            'the switch-back note lists update_pending':
+                (self.DECLARED, self.CLOSE, self.note(update_pending=['e1']), self.AFTER, self.AUDITS),
+            'does not list the reverted values':
+                (self.DECLARED, self.CLOSE, self.note(reverted={}), self.AFTER, self.AUDITS),
+        }
+        for want, args in cases.items():
+            with self.subTest(want=want):
+                problems = rc.update_problems(*args)
+                self.assertTrue(any(want in problem for problem in problems), problems)
+        declared = {**self.DECLARED, 'resave': {'encounter': 'e1', 'field': 'setting', 'value': 'office'}}
+        saved = {'via': 'details', 'row': 'r1', 'status': 201, 'saved': 1, 'unchanged': 0}
+        for resave, want in (({**saved, 'status': 409}, 'it answered 409'),
+                             # refutation 6b-r1 P4: the hazard itself - 200, nothing saved, the value read "unchanged"
+                             ({**saved, 'status': 200, 'saved': 0, 'unchanged': 1, 'context_before': 'c1',
+                               'context_after': 'c1', 'value_after': None}, 'saved 0, unchanged 1'),
+                             # a save made through /context passes whether or not the revert ran: never accepted
+                             ({'status': 201, 'context_before': 'c1', 'context_after': 'c9', 'value_after': 'office'},
+                              'not saved again through the previous web\'s details panel'),
+                             ({'via': 'details', 'row': None, 'panel_facts': ['date_of_service']},
+                              'offers no setting row for e1 (it asks [\'date_of_service\'])'),
+                             ({**saved, 'context_before': 'c1', 'context_after': 'c1', 'value_after': 'office'},
+                              'did not take effect'),
+                             ({**saved, 'context_before': 'c1', 'context_after': 'c9', 'value_after': None},
+                              'did not take effect')):
+            with self.subTest(resave=resave):
+                problems = rc.update_problems(declared, self.CLOSE, self.note(), self.AFTER, self.AUDITS, resave)
+                self.assertTrue(any(want in problem for problem in problems), problems)
+        self.assertEqual(rc.update_problems(None, self.CLOSE, self.note(), self.AFTER, self.AUDITS),
+                         ['the run declared no update encounters (--declared: update)'])
+
+    def test_member_values_read_as_review_values_reads_them(self):
+        self.assertEqual(rc.member_values('{"setting": " office ", "kept": "x", "service_date": ""}'),
+                         {'setting': 'office'})
+        self.assertEqual(rc.member_values(None), {})
+        self.assertIn('__unreadable__', rc.member_values('not json'))
+
+
+class ReadingStages(unittest.TestCase):
+    def test_each_reading_kind_is_settled_by_the_close_before_the_worker_starts(self):
+        closed = 'Closed by the installer: switched back.'
+        rows = [['j1', 'interpret', 'failed', '2026-11-13 10:00:00+00', closed],
+                ['j2', 'appraise', 'failed', '2026-11-13 10:00:01+00', closed]]
+        self.assertTrue(rc.reading_settled_before(rows, '2026-11-13T10:05:00+00:00'))
+        self.assertFalse(rc.reading_settled_before(rows + [['j3', 'appraise', 'queued', None, '']],
+                                                   '2026-11-13T10:05:00+00:00'))
+        self.assertFalse(rc.reading_settled_before([rows[0], ['j2', 'appraise', 'failed', '2026-11-13 10:00:01+00',
+                                                              'another error']], '2026-11-13T10:05:00+00:00'))
+        self.assertFalse(rc.reading_settled_before([], '2026-11-13T10:05:00+00:00'))
+
+
+class CountsCommand(unittest.TestCase):
+    def test_it_refuses_before_any_command(self):
+        with mock.patch.object(rc.subprocess, 'run', side_effect=AssertionError('nothing may run')) as run, \
+                contextlib.redirect_stderr(io.StringIO()) as said:
+            for extra in (['--pg-port', '55451'], ['--pg-container', 'cpt-studio-db'], ['--db', 'cptstudio']):
+                argv = ['counts', '--db', 'cptg_dump', '--candidate', 'c', '--out', '/nonexistent/counts-out',
+                        '--db-env-file', '/x', *extra]
+                self.assertEqual(rc.main(argv), 2)
+            self.assertEqual(rc.main(['counts', '--db', 'cptg_dump', '--candidate', 'c', '--out', '/',
+                                      '--db-env-file', '/x']), 2)  # an --out that exists
+            run.assert_not_called()
+        lines = said.getvalue().splitlines()
+        self.assertEqual(len(lines), 4)
+        self.assertIn('port 55451 is the live database', lines[0])
+        self.assertIn('cpt-studio-db is a live container', lines[1])
+        self.assertIn("'cptstudio' is not a test database", lines[2])
+        self.assertIn('/ exists', lines[3])
+
+
+class CountsOnACopy(unittest.TestCase):
+    """Refutation 6b-r1 P3: `counts` reads a migrated COPY of the restored dump - live has no 0014/0015 table, so the
+    reads fail on the dump as it stands - writes every failure into counts.json, and never writes the dump."""
+    CANDIDATE = {'id': 'sha256:' + 'c' * 64, 'tag': 'cpt-studio-test:cccccccccccc', 'revision': 'c' * 40}
+
+    def setUp(self):
+        import tempfile
+        self.tmp = Path(tempfile.mkdtemp(prefix='counts-'))
+        self.addCleanup(lambda: __import__('shutil').rmtree(self.tmp, ignore_errors=True))
+        self.env = self.tmp / 'db.env'
+        self.env.write_bytes(b'CPT_STUDIO_DB_USER=u\nCPT_STUDIO_DB_PASSWORD=p\n')
+        self.env.chmod(0o600)
+        self.seen, self.migrate_exit, self.raising, self.existing = [], 0, None, '0'
+
+    def installer(self):
+        ns = SimpleNamespace(APP_SCRIPT_PRELUDE='P = {payload!r}\nANSWER = {answer!r}\n',
+                             APP_SCRIPT_ANSWER='cpt-studio-answer ', InstallError=InstallError)
+        ns.app_script = None  # patched by the command with the copy's transport
+        ns.v1_rows = lambda image, env: ns.app_script(image, env, 'V1_ROWS', {}, what='v1 rows')
+        ns.v1_rows_refusal = lambda answer: None if answer == {'v1': 0} else 'refused'
+
+        def install_counts(image, env):
+            try:
+                answer = ns.app_script(image, env, 'INSTALL_COUNTS', {}, what='counts')
+            except Exception as error:  # the installer's own rule: recorded as not counted
+                return {'counted': False, 'why': str(error), 'report': []}
+            return {'counted': True, **answer, 'report': ['synthetic']}
+        ns.install_counts = install_counts
+        return ns
+
+    def run_counts(self, **extra):
+        test = self
+
+        def sql(instance, statement, *, db=None, write=False):
+            test.seen.append(('sql', instance.db, statement))
+            return [[test.existing]]
+
+        def copy_database(instance, source, target):
+            test.seen.append(('copy', source, target))
+
+        def oneshot(instance, image, command, *, what, db=None, read_only=False, mounts=(), env=(), timeout=900):
+            target = db or instance.db
+            test.seen.append(('oneshot', target, command[:2], read_only))
+            instance.calls.append({'what': what, 'db': target, 'read_only_session': read_only})
+            if command[:2] == ['manage', 'migrate']:
+                return subprocess.CompletedProcess(command, test.migrate_exit, b'Applying studio.0015... OK\n', b'')
+            body = command[-1]
+            if test.raising and test.raising in body:
+                return subprocess.CompletedProcess(command, 1, b'', b'ProgrammingError: relation does not exist')
+            answer = {'v1': 0} if body.endswith('V1_ROWS') else {'size': 'synthetic'}
+            return subprocess.CompletedProcess(command, 0, f'cpt-studio-answer {json.dumps(answer)}\n'.encode(), b'')
+        argv = ['counts', '--db', 'cptg_dump', '--candidate', self.CANDIDATE['tag'], '--out', str(self.tmp / 'out'),
+                '--db-env-file', str(self.env), *extra.get('argv', [])]
+        with mock.patch.object(rc, 'image_info', return_value=dict(self.CANDIDATE)), \
+                mock.patch.object(rc, 'load_installer', return_value=self.installer()), \
+                mock.patch.object(rc.Instance, 'sql', sql), mock.patch.object(rc.Instance, 'copy_database', copy_database), \
+                mock.patch.object(rc.Instance, 'oneshot', oneshot), \
+                mock.patch.object(rc.subprocess, 'run', side_effect=AssertionError('no other command may run')), \
+                contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()) as said:
+            code = rc.main(argv)
+        path = self.tmp / 'out' / 'counts.json'
+        return code, (json.loads(path.read_text(encoding='utf-8')) if path.exists() else None), said.getvalue()
+
+    def test_the_dump_is_copied_the_copy_migrated_and_only_the_copy_read_read_only(self):
+        code, record, _ = self.run_counts()
+        self.assertEqual(code, 0)
+        self.assertEqual(self.seen[0][:2], ('sql', 'cptg_dump'))  # the copy name is free, read before --out is made
+        self.assertEqual(self.seen[1:], [
+            ('copy', 'cptg_dump', 'cptg_dump_counts'),
+            ('oneshot', 'cptg_dump_counts', ['manage', 'migrate'], False),
+            ('oneshot', 'cptg_dump_counts', ['manage', 'shell'], True),
+            ('oneshot', 'cptg_dump_counts', ['manage', 'shell'], True)])
+        self.assertNotIn('cptg_dump', [entry[1] for entry in self.seen[2:]])  # nothing runs on the dump itself
+        self.assertEqual((record['db'], record['copy'], record['db_written']), ('cptg_dump', 'cptg_dump_counts', False))
+        self.assertEqual(record['migrate']['exit'], 0)
+        self.assertEqual(record['v1_rows'], {'v1': 0})
+        self.assertIsNone(record['v1_refusal'])
+        self.assertIs(record['install_counts']['counted'], True)
+        self.assertNotIn('failed', record)
+        self.assertEqual([call['db'] for call in record['calls']], ['cptg_dump_counts'] * 3)
+
+    def test_a_migration_that_fails_is_written_and_nothing_is_read(self):
+        self.migrate_exit = 1
+        code, record, _ = self.run_counts()
+        self.assertEqual(code, 1)
+        self.assertIn('could not be migrated with the candidate (exit 1); nothing was read', record['failed'])
+        self.assertEqual([entry for entry in self.seen if entry[0] == 'oneshot'],
+                         [('oneshot', 'cptg_dump_counts', ['manage', 'migrate'], False)])
+        self.assertNotIn('v1_rows', record)
+
+    def test_a_read_that_fails_is_written_never_raised_behind_an_out_that_exists(self):
+        self.raising = 'V1_ROWS'
+        code, record, _ = self.run_counts()
+        self.assertEqual(code, 1)
+        self.assertIn('InstallError', record['failed'])
+        self.assertNotIn('install_counts', record)
+        self.raising, self.seen = 'INSTALL_COUNTS', []
+        (self.tmp / 'out' / 'counts.json').unlink()
+        (self.tmp / 'out').rmdir()
+        code, record, _ = self.run_counts()
+        self.assertEqual(code, 1)  # read, but not counted: the owner's counts are not there
+        self.assertIs(record['install_counts']['counted'], False)
+        self.assertNotIn('failed', record)
+
+    def test_a_copy_that_exists_or_a_copy_name_too_long_refuses_before_out_is_made(self):
+        self.existing = '1'
+        code, record, said = self.run_counts()
+        self.assertEqual((code, record), (2, None))
+        self.assertIn('cptg_dump_counts exists', said)
+        self.assertFalse((self.tmp / 'out').exists())
+        self.assertEqual([entry[0] for entry in self.seen], ['sql'])
+        self.seen = []
+        long = 'cptg_' + 'a' * 38
+        code, record, said = self.run_counts(argv=['--db', long])
+        self.assertEqual((code, record, self.seen), (2, None, []))
+        self.assertIn('is not a test database name: give a shorter --db', said)
+
+
+class ResaveThroughTheDetailsPanel(unittest.TestCase):
+    """Refutation 6b-r1 P4: U17's resave is made as a member makes it on the previous web - its details panel's own
+    row, POST .../details (answers.save_details) - never through /context, which passes whatever the revert did."""
+    PK = '0b6f6a2e-3c1d-4f7a-9e2b-5d8c7a6b4e3f'
+
+    def browser(self, panel, answer=(201, {'saved': 1, 'unchanged': 0, 'answer_ids': [], 'reassessing': True})):
+        calls = []
+
+        def call(method, path, payload=None, **kwargs):
+            calls.append((method, path, payload))
+            if method == 'GET':
+                return 200, {'details_needed': panel}, {}
+            return answer[0], answer[1], {}
+        return SimpleNamespace(call=call), calls
+
+    def check(self, contexts):
+        check = rc.Check.__new__(rc.Check)
+        statements = []
+
+        def sql(statement, **kwargs):
+            statements.append(statement)
+            return [contexts.pop(0)]
+        check.instance = SimpleNamespace(sql=sql)
+        return check, statements
+
+    def test_the_value_is_saved_with_the_panels_own_row_through_details(self):
+        member, calls = self.browser([{'id': 'd-date', 'fact': 'service_date'},
+                                      {'id': 'd-setting', 'fact': 'setting', 'entered_value': 'office'}])
+        check, statements = self.check([['c1'], ['c9', 'asc']])
+        got = check.resave(member, {'encounter': self.PK, 'field': 'setting', 'value': 'asc'})
+        self.assertEqual(calls, [('GET', f'/api/encounters/{self.PK}', None),
+                                 ('POST', f'/api/encounters/{self.PK}/details',
+                                  {'answers': [{'id': 'd-setting', 'fact': 'setting', 'value': 'asc'}]})])
+        self.assertNotIn(f'/api/encounters/{self.PK}/context', [path for _, path, _ in calls])
+        self.assertEqual({key: got[key] for key in ('via', 'row', 'status', 'saved', 'context_before', 'context_after',
+                                                     'value_after')},
+                         {'via': 'details', 'row': 'd-setting', 'status': 201, 'saved': 1, 'context_before': 'c1',
+                          'context_after': 'c9', 'value_after': 'asc'})
+        self.assertTrue(all(self.PK in statement for statement in statements))
+        declared = {**UpdateRows.DECLARED, 'resave': {'encounter': self.PK, 'field': 'setting', 'value': 'asc'}}
+        problems = rc.update_problems(declared, UpdateRows.CLOSE, UpdateRows().note(), UpdateRows.AFTER,
+                                      UpdateRows.AUDITS, got)
+        self.assertFalse([problem for problem in problems if 'saved again' in problem or 'panel' in problem], problems)
+
+    def test_the_hazard_answer_and_a_panel_without_the_row_each_fail_assertion_8(self):
+        declared = {**UpdateRows.DECLARED, 'resave': {'encounter': self.PK, 'field': 'setting', 'value': 'asc'}}
+        member, _ = self.browser([{'id': 'd-setting', 'fact': 'setting'}],
+                                 answer=(200, {'saved': 0, 'unchanged': 1, 'answer_ids': [], 'reassessing': False}))
+        check, _ = self.check([['c1'], ['c1', 'office']])
+        hazard = check.resave(member, {'encounter': self.PK, 'field': 'setting', 'value': 'asc'})
+        member, calls = self.browser([{'id': 'd-date', 'fact': 'service_date'}])
+        check, statements = self.check([])
+        unasked = check.resave(member, {'encounter': self.PK, 'field': 'setting', 'value': 'asc'})
+        self.assertEqual([method for method, _, _ in calls], ['GET'])  # nothing posted, no SQL
+        self.assertEqual(statements, [])
+        self.assertEqual((unasked['row'], unasked['panel_facts']), (None, ['service_date']))
+        for got, want in ((hazard, 'saved 0, unchanged 1'), (unasked, 'offers no setting row')):
+            problems = rc.update_problems(declared, UpdateRows.CLOSE, UpdateRows().note(), UpdateRows.AFTER,
+                                          UpdateRows.AUDITS, got)
+            self.assertTrue(any(want in problem for problem in problems), problems)
+
+
+class TransportReadOnly(unittest.TestCase):
+    def test_a_read_only_transport_runs_its_one_shots_in_a_read_only_session(self):
+        instance = rc.Instance(db='cptg_test', pg_container='gi4-cpt-test-pg', pg_port=55461,
+                               env_bytes=b'CPT_STUDIO_DB_USER=u\nCPT_STUDIO_DB_PASSWORD=p\n',
+                               files_volume='cptg-files-cptg_test', log=lambda line: None)
+        installer = SimpleNamespace(APP_SCRIPT_PRELUDE='P = {payload!r}\nANSWER = {answer!r}\n',
+                                    APP_SCRIPT_ANSWER='cpt-studio-answer ', InstallError=InstallError)
+        seen = []
+
+        def oneshot(image, command, **kwargs):
+            seen.append(kwargs)
+            instance.calls.append({'what': kwargs.get('what'), 'exit': 0})
+            return subprocess.CompletedProcess(command, 0, b'cpt-studio-answer {}\n', b'')
+        image = 'sha256:' + 'a' * 64
+        with mock.patch.object(instance, 'oneshot', oneshot):
+            instance.transport(installer, {image: 't'}, read_only=True)(image, b'', 'x', {}, what='counts')
+            instance.transport(installer, {image: 't'})(image, b'', 'x', {}, what='close')
+        self.assertEqual([item['read_only'] for item in seen], [True, False])
+
+
+class UpdateRowsSql(unittest.TestCase):
+    def test_only_uuids_reach_the_sql_and_a_field_must_be_a_context_field(self):
+        check = rc.Check.__new__(rc.Check)
+        statements = []
+        check.instance = SimpleNamespace(sql=lambda statement, **kwargs: statements.append(statement) or [])
+        pk = '0b6f6a2e-3c1d-4f7a-9e2b-5d8c7a6b4e3f'
+        self.assertEqual(check.update_rows([pk, "x'); drop table studio_encounter; --", 'e1']), {})
+        self.assertEqual(len(statements), 1)
+        self.assertIn(f"'{pk}'", statements[0])
+        self.assertNotIn('drop table', statements[0])
+        statements.clear()
+        self.assertEqual(check.update_rows(['e1']), {})
+        self.assertEqual(statements, [])  # nothing left to read: no SQL at all
+        self.assertEqual(rc.CONTEXT_FIELDS, ('service_date', 'setting', 'billing_context', 'patient_status'))
+
+
+class InstallerV2(unittest.TestCase):
+    def test_the_v2_names_the_runner_uses_exist_with_their_signatures(self):
+        import inspect
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import install
+        self.assertEqual(install.APPRAISE_KIND, 'appraise')
+        for name in ('V1_ROWS', 'INSTALL_COUNTS'):
+            self.assertIsInstance(getattr(install, name), str, name)
+        for name, params in (('v1_rows', ['image_id', 'env_bytes']), ('v1_rows_refusal', ['answer']),
+                             ('install_counts', ['image_id', 'env_bytes']), ('with_update_note', ['note', 'closes'])):
+            self.assertEqual(list(inspect.signature(getattr(install, name)).parameters), params, name)
+        self.assertEqual(rc.UPDATE_REASON_OF, {'pending_before_analyze': 'values_saved',
+                                               'pending_after_analyze': 'assessment_off_context',
+                                               'a21': 'reconciled_unknown'})
+        self.assertEqual(set(rc.UPDATE_REASON_OF.values()), set(install.UNDO_PENDING_REASONS))
+        self.assertEqual(rc.SCHEMA, 'cpt-studio-d15-rollback@2')
+
+
 if __name__ == '__main__':
     unittest.main()

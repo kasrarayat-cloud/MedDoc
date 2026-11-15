@@ -19,7 +19,7 @@ const PARAGRAPH_BREAK = /\n(?:[^\S\n]*\n)+/g;
 // The page tells the server which build of this page is asking. A server that no longer serves this build refuses the
 // call with a conflict status and {"error_code": "client_outdated"}, and the page asks the member to reload.
 const CLIENT_HEADER = 'X-CPT-Studio-Client';
-const CLIENT_VERSION = 'customer-2026-11-03';
+const CLIENT_VERSION = 'customer-2026-11-13';
 const OUTDATED_TEXT = 'CPT Studio was updated — reload the page to continue.';
 const OFFLINE_TEXT = 'The server could not be reached. Check the connection and try again.';
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -29,6 +29,7 @@ const AGENT_REVIEW = 'Agent-executed synthetic review — not clinical approval'
 const STATE_LABELS = {
   processing: 'Processing', action_needed: 'Action needed', awaiting_detail: 'A few details needed', ready: 'Ready for review',
   reviewed: 'Reviewed', no_codes: 'No codes suggested', stopped: 'Stopped', failed: 'Could not finish', being_confirmed: 'Being confirmed',
+  updating: 'Updating codes',
 };
 const STATE_TONES = { ready: 'green', reviewed: 'green', action_needed: 'amber', awaiting_detail: 'amber', being_confirmed: 'amber', failed: 'amber' };
 // The customer states that wait on a member (a date to choose, a detail to answer, codes to review). The review queue
@@ -53,20 +54,22 @@ const CHECK_KEYS = ['document_review', 'independent_checks', 'coding_validation'
 const CHECK_LABELS = { document_review: 'Document review', independent_checks: 'Independent checks', coding_validation: 'Coding validation' };
 const CHECK_STATES = { done: 'Done', running: 'In progress', waiting: 'Waiting', unavailable: 'Unavailable', not_run: 'Not run' };
 const CHECK_ICONS = { done: 'circle-check', running: 'clock', waiting: 'clock', unavailable: 'info', not_run: 'info' };
-const PHASES = ['uploading', 'queued', 'processing', 'action_needed', 'awaiting_detail', 'completed', 'partial', 'failed', 'stopped', 'being_confirmed', 'paused'];
+// FINAL-V2 amendment 1, 5.1: 'updating' while the codes are updated after a save (the server's progress.PHASES).
+const PHASES = ['uploading', 'queued', 'processing', 'action_needed', 'awaiting_detail', 'completed', 'partial', 'failed', 'stopped', 'being_confirmed', 'paused', 'updating'];
 const PHASE_TITLES = {
   uploading: 'Uploading your document', queued: 'Waiting to start', processing: 'Processing your document', action_needed: 'Action needed',
   awaiting_detail: 'Results ready', completed: 'Results ready', partial: 'Results ready, with a limitation', failed: 'Processing could not finish',
   stopped: 'Processing stopped', being_confirmed: 'An earlier check is being confirmed', paused: 'Processing paused',
+  updating: 'Changes saved—updating codes',
 };
 // Only these phases draw an animated step, and only while the server says the document is busy.
-const ANIMATED_PHASES = new Set(['uploading', 'queued', 'processing']);
+const ANIMATED_PHASES = new Set(['uploading', 'queued', 'processing', 'updating']);
 // These phases draw the whole progress panel; the others (results are ready) draw one compact line.
-const PANEL_PHASES = new Set(['uploading', 'queued', 'processing', 'action_needed', 'failed', 'stopped', 'being_confirmed', 'paused']);
+const PANEL_PHASES = new Set(['uploading', 'queued', 'processing', 'action_needed', 'failed', 'stopped', 'being_confirmed', 'paused', 'updating']);
 // The page polls the document while it is busy (a paused document is busy, so its panel moves on by itself once the
-// processing service answers again: decision (j)), and while an earlier check is being confirmed.
-const POLL_PHASES = new Set(['queued', 'processing', 'being_confirmed']);
-const STATE_PHASES = { processing: 'processing', action_needed: 'action_needed', awaiting_detail: 'awaiting_detail', failed: 'failed', stopped: 'stopped', being_confirmed: 'being_confirmed' };
+// processing service answers again: decision (j)), while an earlier check is being confirmed, and while codes update.
+const POLL_PHASES = new Set(['queued', 'processing', 'being_confirmed', 'updating']);
+const STATE_PHASES = { processing: 'processing', action_needed: 'action_needed', awaiting_detail: 'awaiting_detail', failed: 'failed', stopped: 'stopped', being_confirmed: 'being_confirmed', updating: 'updating' };
 const LEAVE_NOTES = {
   uploading: 'Keep this page open until the upload finishes.',
   queued: 'You can leave this page — processing continues, and the document stays in Documents.',
@@ -80,6 +83,7 @@ const LEAVE_NOTES = {
   // (jobs.change_context clears the stop), so "nothing runs until it is resumed" would not be true.
   stopped: 'You can leave this page — the document stays in Documents.',
   failed: 'You can leave this page — the document stays in Documents.',
+  updating: 'You can leave this page — processing continues, and the document stays in Documents.',
 };
 const DETAIL_ANSWERS = { not_documented: 'Not documented', cannot_confirm: 'Cannot confirm' };
 const USE_DOCUMENT = 'use_document';
@@ -89,8 +93,51 @@ const KIND_LABELS = { upload: 'Uploaded file', paste: 'Pasted text', addendum: '
 // The button the notice offers for the error's action. retry_reading: one more attempt at reading a document whose
 // reading could not be completed, recorded as the member's (POST .../retry-reading; never offered for a document too long
 // to be read in one piece, which says to shorten or split it instead).
-const ERROR_ACTIONS = { resume: ['resume', 'Resume processing'], new_document: ['upload', 'Upload a new document'], retry_reading: ['retry-reading', 'Try reading again'] };
+const ERROR_ACTIONS = { resume: ['resume', 'Resume processing'], new_document: ['upload', 'Upload a new document'], retry_reading: ['retry-reading', 'Try reading again'], retry_update: ['retry-update', 'Try updating again'] };
 const RETRY_ASKED = 'Asked. The documented procedures are being read again.';
+// FINAL-V2 amendment 1, 7.2 (A10): "Try updating again" - one recorded attempt at a failed update (POST .../retry-update);
+// the server's sentence (customer_api.RETRY_UPDATE_ASKED, step 3c's words), held equal by the page tests
+const RETRY_UPDATE_ASKED = 'Asked. Updating the codes is tried once more.';
+
+// --- FINAL-V2 amendment 1: the codes are updated automatically after a save --------------------------------------------
+// The server's own customer sentences (studio/customer_api.py, step 3c's constants), copied here verbatim - the page
+// tests hold each copy equal to the server's - and chosen by the update block's state and kind: "being updated" only
+// while the update runs (5.1 [R:truth-T4]); an update no save started (kind 'check') never names a change of the member's.
+const UPDATE_TITLE = 'Changes saved—updating codes';
+const UPDATE_TITLE_CHECK = 'Updating codes';
+const CHANGE_SAVED_BY = 'Saved by {member}, {time}';
+const EARLIER_CODES_HEADING = 'Codes from before your change';
+const EARLIER_CODES_HEADING_CHECK = 'Codes from before this update';
+const EARLIER_CODES_MADE = 'Made {time}, with date of service {date}. They cannot be approved or exported: they are from before your latest change.';
+const EARLIER_CODES_MADE_CHECK = 'Made {time}, with date of service {date}. They cannot be approved or exported: they are from before this update.';
+const ANSWER_AFTER_UPDATE = 'You can answer this once the codes are updated.';
+const UPDATE_EXPORT_NOTE = {
+  updating: 'Your change is saved and the codes are being updated. Exports are available again once the update finishes.',
+  other: 'Your change is saved, but the codes have not been updated yet; the panel above says why. The codes from before your change cannot be exported as current.',
+};
+const UPDATE_EXPORT_NOTE_CHECK = {
+  updating: 'The codes are being updated. Exports are available again once the update finishes.',
+  other: 'The codes have not been updated yet; the panel above says why. The codes from before this update cannot be exported as current.',
+};
+const RESULTS_UPDATING = 'The updated codes appear here when the update finishes. The codes from before your change are shown below.';
+const RESULTS_NOT_UPDATED = 'The codes have not been updated after your change yet; the panel above says why. The codes from before your change are shown below.';
+const RESULTS_EARLIER_SHOWN = 'The codes from before your change are shown below.';
+const RESULTS_NO_EARLIER_CODE = 'No code was suggested before your change.';
+const TALLY_BEFORE = 'Before your change: ';
+const TALLY_NO_EARLIER_CODE = 'Before your change: no code suggested';
+const RESULTS_UPDATING_CHECK = 'The updated codes appear here when the update finishes. The codes from before this update are shown below.';
+const RESULTS_NOT_UPDATED_CHECK = 'The codes have not been updated yet; the panel above says why. The codes from before this update are shown below.';
+const RESULTS_EARLIER_SHOWN_CHECK = 'The codes from before this update are shown below.';
+const RESULTS_NO_EARLIER_CODE_CHECK = 'No code was suggested before this update.';
+const TALLY_BEFORE_CHECK = 'Before this update: ';
+const TALLY_NO_EARLIER_CODE_CHECK = 'Before this update: no code suggested';
+const RESTORED_TOAST = 'Saved. The codes from before your change are current again.';
+const WHAT_CHANGED_COMPARED = 'Compared with the codes as suggested on {time}, before any answer or decision';
+const WHAT_CHANGED_UNCHANGED = '{n} codes unchanged';
+const WHAT_CHANGED_UNCHANGED_ONE = '1 code unchanged';
+const EARLIER_DOWNLOAD = 'Earlier — made on revision {n}; it may not show the current codes';
+// update.state's values (customer_api.UPDATE_STATES); 'updating' is the one in which the update runs
+const UPDATE_STATES = ['updating', 'failed', 'stopped', 'paused', 'being_confirmed'];
 const ACKNOWLEDGEMENTS = {
   human: 'I read the whole source document, not only the cited passages, and it supports this code as a service performed at this encounter. The documentation checks can miss wording they do not recognise. This synthetic review is not clinical approval or billing advice.',
   agent: 'I am an automated agent. I read the whole source document, not only the cited passages, and it supports this code as a service performed at this encounter. The documentation checks can miss wording they do not recognise. This agent-executed synthetic review is not clinical approval or billing advice.',
@@ -451,9 +498,12 @@ function attestationText(session) {
   return session?.acknowledgement || (session?.user?.actor_kind === 'agent' ? ACKNOWLEDGEMENTS.agent : ACKNOWLEDGEMENTS.human);
 }
 
+// The review bar's tally; while an update is pending it reads the earlier codes, prefixed "Before your change: ", never
+// "No codes yet" while they exist (5.1 [R:truth-T5][R2:truth-RT8]).
 function tallyText(doc) {
+  const update = updateOf(doc);
   const counts = { approved: 0, ready: 0, needs_detail: 0, excluded: 0 };
-  for (const code of codesOf(doc)) {
+  for (const code of update ? earlierCodesOf(doc) : codesOf(doc)) {
     const key = codeStatus(code).key;
     if (Object.hasOwn(counts, key)) counts[key] += 1;
   }
@@ -463,10 +513,17 @@ function tallyText(doc) {
     counts.needs_detail ? `${plural(counts.needs_detail, 'needs', 'need')} a detail` : '',
     counts.excluded ? `${counts.excluded} excluded` : '',
   ].filter(Boolean);
+  if (update) {
+    const check = updateIsCheck(update);
+    if (!earlierCodesOf(doc).length || !parts.length) return check ? TALLY_NO_EARLIER_CODE_CHECK : TALLY_NO_EARLIER_CODE;
+    return `${check ? TALLY_BEFORE_CHECK : TALLY_BEFORE}${parts.join(' · ')}`;
+  }
   return parts.length ? parts.join(' · ') : 'No codes yet';
 }
 
 function exportStatusText(doc) {
+  const update = updateOf(doc);
+  if (update) return updateExportNote(update);
   const readiness = doc?.readiness || {};
   const blockers = strings(readiness.blockers);
   if (readiness.approved === true) {
@@ -488,6 +545,80 @@ function serviceDateText(date, long = true) {
   return value.source === 'member' ? `${shown} (entered)` : shown;
 }
 
+// --- the update block (FINAL-V2 amendment 1, 5.1), read defensively ---
+
+// The pending update, or null: the server's block only when it says it is pending.
+function updateOf(doc) {
+  const update = doc?.update;
+  return update && typeof update === 'object' && !Array.isArray(update) && update.pending === true ? update : null;
+}
+
+// Whether the update runs: only the server's 'updating' - any other state, or one this page does not know, is a state in
+// which nothing runs, so nothing on the page says the codes are being updated (5.1 [R:truth-T4]).
+function updateRunning(update) {
+  return Boolean(update) && update.state === 'updating';
+}
+
+// An update no save started (kind 'check', A21): no text names a change of the member's.
+function updateIsCheck(update) {
+  return Boolean(update) && update.kind === 'check';
+}
+
+function earlierCodesOf(doc) {
+  return objects(doc?.earlier_codes);
+}
+
+function updateTitle(update) {
+  return updateIsCheck(update) ? UPDATE_TITLE_CHECK : UPDATE_TITLE;
+}
+
+// A server sentence with its {name} slots filled; a slot with no value is left as it is.
+function fill(template, values) {
+  return template.replace(/\{(\w+)\}/g, (match, key) => (Object.hasOwn(values, key) ? String(values[key]) : match));
+}
+
+// UPDATE_EXPORT_NOTE by the update's state and kind (5.1 [R:truth-T4]).
+function updateExportNote(update) {
+  const notes = updateIsCheck(update) ? UPDATE_EXPORT_NOTE_CHECK : UPDATE_EXPORT_NOTE;
+  return notes[updateRunning(update) ? 'updating' : 'other'];
+}
+
+// The results section while an update is pending (5.1 [R:truth-T5][R2:truth-RT8]): never that no codes were suggested
+// while earlier codes exist, and never that the earlier codes are shown below when they listed none.
+function updateResultsText(doc, update) {
+  const check = updateIsCheck(update);
+  const head = updateRunning(update) ? (check ? RESULTS_UPDATING_CHECK : RESULTS_UPDATING) : (check ? RESULTS_NOT_UPDATED_CHECK : RESULTS_NOT_UPDATED);
+  if (earlierCodesOf(doc).length) return head;
+  return head.replace(check ? RESULTS_EARLIER_SHOWN_CHECK : RESULTS_EARLIER_SHOWN, check ? RESULTS_NO_EARLIER_CODE_CHECK : RESULTS_NO_EARLIER_CODE);
+}
+
+// Whether a details row takes a value in the one save now: a context row (the date, a choice) whenever the member may
+// review - a context save is accepted while processing runs or an update is pending (A1) - and a row that takes "Not
+// documented" or "Cannot confirm" only while nothing runs and no update is pending (1.4). A choice row whose saved
+// answer is "Not documented" takes one of its values while an update is pending (valueOverAnswer).
+function rowEditable(row, doc) {
+  if (!canReview(doc)) return false;
+  if (valueOverAnswer(row, doc)) return true;
+  if (!answerable(row)) return false;
+  if (row.control === 'date' || row.control === 'choice') return true;
+  return doc?.progress?.busy !== true && !updateOf(doc);
+}
+
+function answersOpen(doc) {
+  return canReview(doc) && doc?.progress?.busy !== true && !updateOf(doc);
+}
+
+// A choice row whose saved answer is "Not documented", while an update is pending: the answer is not withdrawn then
+// (1.4: "Change this answer" is hidden), but the row still takes one of its values - a context save, which the server
+// accepts during an update (A1; 5.1(3): the choice rows stay editable; A19 names this very save) and which replaces that
+// answer (answers._save_details: a value given for a detail said not to be documented supersedes the answer, and no
+// answer is recorded). Outside an update the row keeps "Change this answer" - or, while processing runs, only its saved
+// line: the stage then is most often that answer's own recompute, a member's act during which a context save is refused
+// (A18).
+function valueOverAnswer(row, doc) {
+  return row?.control === 'choice' && Boolean(row.saved) && typeof row.saved === 'object' && canReview(doc) && Boolean(updateOf(doc));
+}
+
 // --- rendering (pure string builders) ----------------------------------------------
 
 const state = {
@@ -506,7 +637,7 @@ function badge(tone, label, iconName = '', attributes = '') {
 }
 
 function stateBadge(stateName, label) {
-  const iconName = stateName === 'reviewed' ? 'check' : stateName === 'processing' ? 'clock' : '';
+  const iconName = stateName === 'reviewed' ? 'check' : stateName === 'processing' || stateName === 'updating' ? 'clock' : '';
   return badge(lookup(STATE_TONES, stateName, 'gray'), stateLabel(stateName, label), iconName);
 }
 
@@ -689,9 +820,22 @@ function progressError(error, { canAct = false, resumeShown = false } = {}) {
   return `<div class="progress-error" role="alert">${icon('info')}<div><p>${escapeHtml(error.text)}</p>${action ? `<button type="button" class="button secondary" data-action="${action[0]}">${escapeHtml(action[1])}</button>` : ''}</div></div>`;
 }
 
+// What the pending update saves (5.1): the saved values that differ from the earlier codes' own (or the one fixed line
+// that says why the codes are updated) and who saved last, when - none for an update no save started (kind 'check').
+function updateSaved(update) {
+  if (!update) return '';
+  const changes = strings(update.changes);
+  const by = text(update.saved_by);
+  const at = formatTimestamp(update.saved_at);
+  const saved = !updateIsCheck(update) && by && at ? fill(CHANGE_SAVED_BY, { member: by, time: at }) : '';
+  if (!changes.length && !saved) return '';
+  return `<div class="update-saved">${changes.length ? `<ul class="update-changes">${changes.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : ''}${saved ? `<p class="update-saved-by">${escapeHtml(saved)}</p>` : ''}</div>`;
+}
+
 function progressPanel(doc, ui = {}) {
   const progress = doc?.progress || {};
   const phase = progressPhase(doc, ui);
+  const update = updateOf(doc);
   const busy = progress.busy === true || phase === 'uploading';
   const message = text(progress.message);
   const time = progressTime(progress, phase, ui);
@@ -713,11 +857,16 @@ function progressPanel(doc, ui = {}) {
   // a step that waits its turn after one the panel shows done - this run's, or one kept from an earlier run - is not
   // "Waiting to start": the server's own rule over the same served steps (progress.next_step_queued), by which its
   // message says the same (progress.NEXT_STEP_QUEUED)
-  const title = phase === 'queued' && steps.some(step => step.state === 'done') ? QUEUED_AFTER_DONE_TITLE : PHASE_TITLES[phase];
+  // FINAL-V2 amendment 1, 5.1: while the update runs the panel is titled "Changes saved—updating codes" ("Updating codes"
+  // for an update no save started); in every other state of an update it keeps the state's own title, which never says
+  // the codes are being updated while nothing runs (5.1 [R:truth-T4]), and the notice below says why
+  const title = phase === 'updating' ? updateTitle(update)
+    : phase === 'queued' && steps.some(step => step.state === 'done') ? QUEUED_AFTER_DONE_TITLE : PHASE_TITLES[phase];
   // the error says its own sentence below; the head does not repeat it
   const said = message && !(progress.error && typeof progress.error === 'object' && text(progress.error.text) === message) ? message : '';
   return `<section class="progress-panel${busy ? ' progress-card' : ''}" data-phase="${phase}" aria-labelledby="progressTitle">`
     + `<div class="progress-head"><span class="progress-icon${animate ? ' is-animated' : ''}">${icon(headIcon)}</span><div class="progress-status" aria-live="polite"><h2 id="progressTitle">${escapeHtml(title)}</h2>${said ? `<p class="progress-message${slow ? ' slow' : ''}">${escapeHtml(said)}</p>` : ''}</div></div>`
+    + updateSaved(update)
     + (showAck ? uploadAck(ui.ack, '', ['waiting', 'active', 'not_started'].includes(steps[0].state)) : '')
     + `<ol class="progress-steps">${steps.map((step, index) => progressStep(step, index === activeIndex, animate, detail)).join('')}</ol>`
     + (time ? `<p class="progress-time">${time[0]} ${time[1]}</p>` : '')
@@ -795,13 +944,18 @@ function dateControl(row, ui) {
     + `<div class="detail-controls">${radios}${useDocument}<label class="detail-date-input">${stated.length || row.saved ? 'Or enter another date' : 'Or enter the date of service'}<input type="date" id="detail-${escapeHtml(row.id)}-date" data-detail-input data-detail="${escapeHtml(row.id)}"${typed ? ` value="${escapeHtml(typed)}"` : ''}></label>${remove}${allowedAnswers(row, pending)}${addendumButton(row)}</div>`;
 }
 
-function choiceControl(row, ui) {
+// ``answers``: whether "Not documented" may be recorded now (never while processing runs or an update is pending, 1.4);
+// ``update``: while one is pending the row shows the value saved for it (5.1 [R:truth-T3]: "Saved: ...").
+function choiceControl(row, ui, answers = true, update = null) {
   const pending = detailAnswer(row, ui);
   const radios = objects(row.choices).filter(choice => typeof choice.value === 'string' && choice.value).map(choice => {
     const checked = pending === choice.value;
     return `<label class="detail-radio"><input type="radio" name="detail-${escapeHtml(row.id)}" id="detail-${escapeHtml(row.id)}-${escapeHtml(choice.value)}" value="${escapeHtml(choice.value)}" data-detail="${escapeHtml(row.id)}"${checked ? ' checked' : ''}><span>${escapeHtml(choice.label || choice.value)}</span></label>`;
   }).join('');
-  return `<div class="detail-controls">${radios}${allowedAnswers(row, pending)}</div>`;
+  const entered = text(row.entered_value);
+  const label = entered ? text(objects(row.choices).find(choice => choice.value === entered)?.label) || entered : '';
+  const saved = update && label ? `<p class="detail-saved-value">Saved: <strong>${escapeHtml(label)}</strong></p>` : '';
+  return `${saved}<div class="detail-controls">${radios}${answers ? allowedAnswers(row, pending) : ''}</div>`;
 }
 
 function confirmControl(row, ui) {
@@ -826,7 +980,8 @@ function questionPassages(row) {
 function earlierAnswers(doc) {
   const items = objects(doc?.earlier_answers).filter(item => typeof item.answer_id === 'string' && item.answer_id);
   if (!items.length) return '';
-  const editable = canReview(doc) && doc?.progress?.busy !== true;
+  // Withdraw is hidden while processing runs or an update is pending (FINAL-V2 amendment 1, 1.4 [R:truth-T12])
+  const editable = answersOpen(doc);
   const rows = items.map(item => {
     const affects = strings(item.affects);
     const by = [text(item.by), formatTimestamp(item.at)].filter(Boolean).join(', ');
@@ -846,24 +1001,35 @@ function answerable(row) {
   return Boolean(row) && (!row.saved || changeableDate(row));
 }
 
-function savedAnswer(row, editable, ui = {}) {
+// ``editable``: whether the saved answer may be withdrawn ("Change this answer": never while processing runs or an update
+// is pending); ``dates``: whether a saved date the member entered may be changed (a context save, accepted then too).
+function savedAnswer(row, editable, ui = {}, dates = editable) {
   const saved = row.saved;
   const value = text(saved.label) || lookup(DETAIL_ANSWERS, saved.value, saved.value === USE_DOCUMENT ? 'Use document date' : formatDate(saved.value, true) || text(saved.value));
   const by = [text(saved.by), formatTimestamp(saved.at)].filter(Boolean).join(', ');
   const change = editable && typeof saved.answer_id === 'string' && saved.answer_id ? `<button type="button" class="meta-link" data-action="revoke-detail" data-answer="${escapeHtml(saved.answer_id)}" id="detail-${escapeHtml(row.id)}-revoke">Change this answer</button>` : '';
   const line = `<p class="detail-saved">${icon('check')}<span>Saved: <strong>${escapeHtml(value)}</strong>${by ? ` — ${escapeHtml(by)}` : ''}</span>${change}</p>`;
-  return line + (editable && changeableDate(row) ? dateControl(row, ui) : '');
+  return line + (dates && changeableDate(row) ? dateControl(row, ui) : '');
 }
 
+// FINAL-V2 amendment 1, 5.1: the date and choice rows (context rows) stay editable while processing runs or an update is
+// pending - a rapid successive edit is a context save (A1) - and a row that takes "Not documented" or "Cannot confirm"
+// says "You can answer this once the codes are updated." with no control while an update is pending (1.4). A choice row
+// saved "Not documented" keeps its saved line then, without "Change this answer", and its values to choose from.
 function detailRow(row, doc, ui) {
-  const editable = canReview(doc) && doc?.progress?.busy !== true;
+  const update = updateOf(doc);
+  const answers = answersOpen(doc);
+  const context = canReview(doc) && (row.control === 'date' || row.control === 'choice');
   const affects = strings(row.affects);
-  const control = row.saved ? savedAnswer(row, editable, ui)
-    : !editable ? '<p class="detail-wait">Answers can be saved once processing has finished.</p>'
-      : row.control === 'date' ? dateControl(row, ui) : row.control === 'choice' ? choiceControl(row, ui) : confirmControl(row, ui);
+  const waiting = update && canReview(doc) ? `<p class="detail-wait">${escapeHtml(ANSWER_AFTER_UPDATE)}</p>`
+    : '<p class="detail-wait">Answers can be saved once processing has finished.</p>';
+  const control = valueOverAnswer(row, doc) ? savedAnswer(row, false, ui, false) + choiceControl(row, ui, false, update)
+    : row.saved ? savedAnswer(row, answers, ui, canReview(doc))
+      : context ? (row.control === 'date' ? dateControl(row, ui) : choiceControl(row, ui, answers, update))
+        : !answers ? waiting : confirmControl(row, ui);
   // radios are a group, named by its legend; the legend comes first, holding the family and the prompt
   const radios = row.control === 'choice' || documentedDates(row).length > 0;
-  const tag = radios && editable && answerable(row) ? 'fieldset' : 'div';
+  const tag = radios && rowEditable(row, doc) ? 'fieldset' : 'div';
   const lead = tag === 'fieldset' ? 'legend' : 'div';
   return `<${tag} class="detail-row${row.saved ? ' is-saved' : ''}" data-detail="${escapeHtml(row.id)}" data-fact="${escapeHtml(row.fact)}"><${lead} class="detail-lead"><span class="detail-family">${escapeHtml(text(row.family_label) || 'Detail')}</span><span class="detail-prompt">${escapeHtml(row.prompt)}</span></${lead}>${affects.length ? `<p class="detail-affects">Affects ${escapeHtml(joinWords(affects))}</p>` : ''}${questionPassages(row)}${control}</${tag}>`;
 }
@@ -873,16 +1039,22 @@ function detailsPanel(doc, ui = {}) {
   const earlier = earlierAnswers(doc);
   if (!rows.length && !earlier) return '';
   const open = rows.filter(row => !row.saved).length;
-  const editable = canReview(doc) && doc?.progress?.busy !== true;
   // "nothing is checked" only while the member's date holds the document (Action needed): a date asked after the
   // checks ran, or one to confirm, leaves the codes that do not depend on it reviewable
   const held = doc?.state === 'action_needed' || doc?.progress?.phase === 'action_needed';
   const dateOnly = open && rows.filter(row => !row.saved).every(row => row.control === 'date');
+  // "You can change an answer below" only where one can be changed now: while answers wait (processing runs or an update
+  // is pending) a saved answer is not withdrawn, so it holds only for a row that still takes a value (a saved date; a
+  // choice saved "Not documented" while an update is pending)
+  const changeable = answersOpen(doc) || rows.some(row => rowEditable(row, doc));
+  // while an update is pending no code is reviewable (the earlier codes are not decided on), so the lead says only what
+  // is needed
   const lead = !rows.length ? 'No detail is needed now.'
-    : !open ? 'Every detail has an answer. You can change an answer below.'
+    : !open ? (changeable ? 'Every detail has an answer. You can change an answer below.' : 'Every detail has an answer.')
       : dateOnly && held ? 'Choose the date of service. Nothing is checked until you do.'
-        : `${plural(open, 'detail is', 'details are')} needed. Answer what you can; codes that do not depend on them stay reviewable.`;
-  const save = editable && rows.some(answerable) ? `<div class="details-actions"><button type="button" class="button primary" data-action="save-details" id="saveDetails">Save answers ${icon('check')}</button><p>One save records every answer above. Nothing here changes the document itself.</p></div>` : '';
+        : updateOf(doc) ? `${plural(open, 'detail is', 'details are')} needed.`
+          : `${plural(open, 'detail is', 'details are')} needed. Answer what you can; codes that do not depend on them stay reviewable.`;
+  const save = rows.some(row => rowEditable(row, doc)) ? `<div class="details-actions"><button type="button" class="button primary" data-action="save-details" id="saveDetails">Save answers ${icon('check')}</button><p>One save records every answer above. Nothing here changes the document itself.</p></div>` : '';
   // refutation cycle 1 (answers F7): with only earlier answers left, the panel never says details are needed
   const title = rows.length ? 'A few details needed' : 'Earlier answers';
   return `<section class="details-panel" aria-labelledby="detailsTitle"><div class="details-head">${icon('info')}<div><h2 id="detailsTitle">${title}</h2><p>${escapeHtml(lead)}</p></div></div>${rows.map(row => detailRow(row, doc, ui)).join('')}<p class="form-error" id="detailsError" role="alert" hidden></p>${save}${earlier}</section>`;
@@ -957,6 +1129,10 @@ function resultRow(code, index, doc, layout, ui = {}) {
 }
 
 function emptyResults(doc, ui) {
+  // FINAL-V2 amendment 1, 5.1 [R:truth-T5]: while an update is pending the codes are the earlier codes, shown below -
+  // never "no codes were suggested" (the failed, stopped and paused sentences below say so)
+  const update = updateOf(doc);
+  if (update) return updateResultsText(doc, update);
   const phase = progressPhase(doc, ui);
   return lookup({
     uploading: 'Suggested codes appear here when processing finishes.', queued: 'Suggested codes appear here when processing finishes.', processing: 'Suggested codes appear here when processing finishes.',
@@ -969,7 +1145,8 @@ function emptyResults(doc, ui) {
 
 function reviewBar(doc) {
   const readiness = doc.readiness || {};
-  const line = readiness.approved === true ? 'Every code has a decision. The approved download is available.' : readiness.draft === true ? 'You can download the suggested codes as a draft. The approved download waits for every decision.' : 'Downloads become available when results are ready.';
+  const update = updateOf(doc);
+  const line = update ? updateExportNote(update) : readiness.approved === true ? 'Every code has a decision. The approved download is available.' : readiness.draft === true ? 'You can download the suggested codes as a draft. The approved download waits for every decision.' : 'Downloads become available when results are ready.';
   return `<div class="review-bar"><div><p class="review-tally">${escapeHtml(tallyText(doc))}</p><p class="review-readiness">${escapeHtml(line)}</p></div><button type="button" class="button secondary" data-action="export">${icon('download')}Review and download</button></div>`;
 }
 
@@ -981,7 +1158,7 @@ function resultList(doc, layout, ui = {}) {
 
 function resultsSection(doc, layout, ui = {}) {
   const codes = codesOf(doc);
-  const bar = codes.length || objects(doc.reports).length ? reviewBar(doc) : '';
+  const bar = codes.length || earlierCodesOf(doc).length || objects(doc.reports).length ? reviewBar(doc) : '';
   return `<section class="results-section" aria-labelledby="resultsTitle"><div class="results-topline"><h2 id="resultsTitle">Suggested codes</h2>${codes.length ? `<span class="small-badge">${escapeHtml(codes.length)}</span>` : ''}</div>${checksPanel(doc)}${resultList(doc, layout, ui)}${bar}</section>`;
 }
 
@@ -1008,7 +1185,8 @@ function recheckOffer(doc) {
 function notesSection(doc) {
   const unresolved = strings(doc.unresolved);
   const limitations = strings(doc.limitations);
-  const recheck = recheckOffer(doc);
+  // the re-check of what is still open is never offered on the earlier codes (FINAL-V2 amendment 1, 5.1 [R:truth-T15])
+  const recheck = updateOf(doc) ? '' : recheckOffer(doc);
   if (!unresolved.length && !limitations.length && !recheck) return '';
   return `<section class="result-notes limitations">${unresolved.length || recheck ? `<h3>Still open</h3>${unresolved.length ? `<ul class="unresolved-list">${unresolved.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : ''}${recheck}` : ''}${limitations.length ? `<h3>Limitations</h3><ul class="limitation-list">${limitations.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : ''}</section>`;
 }
@@ -1024,12 +1202,90 @@ function activityLog(doc, ui = {}) {
   }).join('')}</ol></details>`;
 }
 
+// --- FINAL-V2 amendment 1: the earlier codes, what changed, earlier decisions ---
+
+// One row of the earlier codes (5.1): read-only and greyed - no decision button, its quotes as text (the source panel
+// marks only the current codes' passages) - with its status, units, summary and the decision it carried. Its hooks are
+// its own (li.earlier-row in ol.earlier-list), never the current codes' ol.result-list > li.result-row[data-proposal]
+// that the walk reads as the codes the API serves (CORE-UX-DESIGN 8): the earlier codes are not those codes.
+function earlierRow(code, index, ui = {}) {
+  const status = codeStatus(code);
+  const number = Number.isInteger(code.number) && code.number > 0 ? code.number : index + 1;
+  const quotes = objects(code.why?.quotes).filter(quote => typeof quote.text === 'string' && quote.text);
+  const qualifications = strings(code.why?.qualifications);
+  const key = `earlier-why:${code.id}`;
+  const why = quotes.length || qualifications.length ? `<details class="why-code" data-key="${escapeHtml(key)}"${ui.open?.has?.(key) ? ' open' : ''}><summary>Why this code?</summary><div class="why-body">${quotes.length ? `<p class="why-label">From the document</p><ul class="why-quotes">${quotes.map(quote => `<li><span class="why-quote">${escapeHtml(quote.text)}</span></li>`).join('')}</ul>` : ''}${qualifications.length ? `<ul class="why-qualifications">${qualifications.map(item => `<li class="why-qualification">${escapeHtml(item)}</li>`).join('')}</ul>` : ''}</div></details>` : '';
+  return `<li class="earlier-row" data-code="${escapeHtml(code.code)}" data-status="${escapeHtml(status.key)}">`
+    + `<div class="result-head"><span class="result-number">${escapeHtml(number)}</span><span class="result-code">${escapeHtml(code.code)}</span><span class="result-units">${escapeHtml(unitsLabel(code.units))}</span><span class="result-modifiers">${escapeHtml(modifierLabel(code))}</span>${badge('gray', status.label, status.icon, ` data-status="${escapeHtml(status.key)}"`)}</div>`
+    + `<p class="result-sub">${escapeHtml(rowSubLabel(code))}</p>`
+    + `<p class="result-summary">${escapeHtml(text(code.summary) || 'No explanation was recorded for this code.')}</p>`
+    + decisionLine(code)
+    + (why ? `<div class="result-foot">${why}</div>` : '')
+    + '</li>';
+}
+
+// The earlier codes while an update is pending (5.1, A7): headed "Codes from before your change", with when they were
+// made and with which date of service, and that they cannot be approved or exported - true in every update state
+// [R:truth-T4] - then the rows, read-only, and the earlier codes' other sections inside it, never as the document's
+// current findings [R:truth-T6].
+function earlierCodesSection(doc, ui = {}) {
+  const update = updateOf(doc);
+  if (!update) return '';
+  const check = updateIsCheck(update);
+  const earlier = update.earlier && typeof update.earlier === 'object' ? update.earlier : {};
+  const time = formatTimestamp(earlier.made_at);
+  const date = text(earlier.service_date);
+  const made = time && date ? fill(check ? EARLIER_CODES_MADE_CHECK : EARLIER_CODES_MADE, { time, date }) : '';
+  const codes = earlierCodesOf(doc);
+  const heading = check ? EARLIER_CODES_HEADING_CHECK : EARLIER_CODES_HEADING;
+  const rows = codes.length ? `<ol class="earlier-list" aria-label="${escapeHtml(heading)}">${codes.map((code, index) => earlierRow(code, index, ui)).join('')}</ol>`
+    : `<p class="results-empty">${escapeHtml(check ? RESULTS_NO_EARLIER_CODE_CHECK : RESULTS_NO_EARLIER_CODE)}</p>`;
+  return `<section class="earlier-codes" aria-labelledby="earlierTitle"><div class="earlier-head"><h2 id="earlierTitle">${escapeHtml(heading)}</h2>${made ? `<p class="earlier-made">${escapeHtml(made)}</p>` : ''}</div>${rows}${notSeparatelyCoded(doc)}${otherCodes(doc, ui)}${notesSection(doc)}</section>`;
+}
+
+// "What changed" (6.2), once the codes are updated: against the codes as suggested before the change, from stored rows -
+// the details, the codes, how many are unchanged, the decisions the update acted on and the answers line, in that order.
+function whatChangedSection(doc) {
+  const changed = doc?.what_changed;
+  if (!changed || typeof changed !== 'object' || Array.isArray(changed) || updateOf(doc)) return '';
+  const compared = changed.compared_with && typeof changed.compared_with === 'object' ? changed.compared_with : {};
+  const time = formatTimestamp(compared.made_at);
+  const unchanged = Number.isInteger(changed.unchanged) && changed.unchanged > 0
+    ? (changed.unchanged === 1 ? WHAT_CHANGED_UNCHANGED_ONE : fill(WHAT_CHANGED_UNCHANGED, { n: changed.unchanged })) : '';
+  const lines = [...strings(changed.details), ...objects(changed.codes).map(item => text(item.text)).filter(Boolean), unchanged].filter(Boolean);
+  const decisions = objects(changed.decisions).map(item => text(item.text)).filter(Boolean);
+  const answers = text(changed.answers);
+  return `<section class="what-changed" aria-labelledby="whatChangedTitle"><h2 id="whatChangedTitle">What changed</h2>`
+    + (time ? `<p class="what-changed-compared">${escapeHtml(fill(WHAT_CHANGED_COMPARED, { time }))}</p>` : '')
+    + (lines.length ? `<ul class="what-changed-list">${lines.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : '')
+    + (decisions.length ? `<ul class="what-changed-decisions">${decisions.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : '')
+    + (answers ? `<p class="what-changed-answers">${escapeHtml(answers)}</p>` : '')
+    + '</section>';
+}
+
+// "Earlier decisions" (5.4): every decision that no longer applies, newest first, with who, when, the revision it was
+// made on and why - the server's fixed sentence, never the stored reason.
+function earlierDecisions(doc, ui = {}) {
+  const items = objects(doc?.decision_history).filter(item => text(item.code) && text(item.why));
+  if (!items.length) return '';
+  const key = 'earlier-decisions';
+  return `<details class="earlier-decisions" data-key="${key}"${ui.open?.has?.(key) ? ' open' : ''}><summary>Earlier decisions</summary><ol>${items.map(item => {
+    const by = text(item.by);
+    const meta = [by ? `${by}${item.by_kind === 'agent' && !/automated agent/i.test(by) ? ' (automated agent)' : ''}` : '', formatTimestamp(item.at), Number.isInteger(item.revision) ? `revision ${item.revision}` : ''].filter(Boolean).join(' · ');
+    return `<li><strong>${escapeHtml(`${text(item.action) || 'Decision'} of ${text(item.code)}`)}</strong>${meta ? `<small>${escapeHtml(meta)}</small>` : ''}<p>${escapeHtml(text(item.why))}</p></li>`;
+  }).join('')}</ol></details>`;
+}
+
 function reviewView(doc, layout, ui = {}) {
   const codes = codesOf(doc);
-  const download = codes.length || objects(doc.reports).length ? `<button type="button" class="button secondary" data-action="export">${icon('download')}<span>Download</span></button>` : '';
+  const update = updateOf(doc);
+  const download = codes.length || earlierCodesOf(doc).length || objects(doc.reports).length ? `<button type="button" class="button secondary" data-action="export">${icon('download')}<span>Download</span></button>` : '';
+  // while an update is pending the earlier codes' sections are drawn inside their own section, never as the document's
+  // current findings (5.1 [R:truth-T6]); "What changed" stands above the codes once they are updated (6.1)
+  const findings = update ? earlierCodesSection(doc, ui) : `${notSeparatelyCoded(doc)}${otherCodes(doc, ui)}${notesSection(doc)}`;
   return `<section class="${ui.entrance ? 'view-entrance ' : ''}review-view"><a class="back-link" href="#documents">${icon('arrow')}All documents</a>`
     + `<div class="heading-row review-heading"><div><span class="eyebrow">CODING REVIEW · GASTROENTEROLOGY</span><h1>${escapeHtml(doc.title || 'Untitled document')}</h1><div class="review-meta">${reviewMeta(doc)}</div></div><div class="heading-actions"><button type="button" class="button secondary" data-action="upload">${icon('plus')}<span>New document</span></button>${download}</div></div>`
-    + `<div class="review-layout"><div class="review-column">${progressPanel(doc, ui)}${detailsPanel(doc, ui)}${resultsSection(doc, layout, ui)}${notSeparatelyCoded(doc)}${otherCodes(doc, ui)}${notesSection(doc)}${activityLog(doc, ui)}</div>${sourcePanel(doc, layout)}</div></section>`;
+    + `<div class="review-layout"><div class="review-column">${progressPanel(doc, ui)}${detailsPanel(doc, ui)}${whatChangedSection(doc)}${resultsSection(doc, layout, ui)}${findings}${earlierDecisions(doc, ui)}${activityLog(doc, ui)}</div>${sourcePanel(doc, layout)}</div></section>`;
 }
 
 // --- the export dialog ---
@@ -1038,27 +1294,37 @@ function exportOption(kind, fmt, enabled, title, detail) {
   return `<button type="button" class="export-option" data-export-kind="${kind}" data-export-fmt="${fmt}"${enabled ? '' : ' disabled'}><span class="export-format">${fmt.toUpperCase()}</span><span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(detail)}</small></span>${icon('download')}</button>`;
 }
 
+// FINAL-V2 amendment 1, 5.4 and 8.3 (A9): an export that is not current is still listed and linked - it downloads with
+// its EARLIER banner - labelled as made on its revision and that it may not show the current codes [R:truth-T14].
 function reportItem(report) {
   const url = safeDownloadUrl(report.download_url);
   const name = text(report.filename) || 'Download';
   const kind = report.kind === 'approved' ? 'Approved codes' : 'Suggested codes (draft)';
   const meta = [kind, formatTimestamp(report.generated_at), text(report.generated_by)].filter(Boolean).join(' · ');
+  const link = url ? `<a href="${escapeHtml(url)}" download>${escapeHtml(name)}</a>` : `<span>${escapeHtml(name)}</span>`;
   if (report.current !== true) {
-    return `<li class="report-item stale"><span>${escapeHtml(name)}</span><small>${escapeHtml(`${meta} · No longer matches the saved decisions; create a new download.`)}</small></li>`;
+    if (!Number.isInteger(report.revision)) {
+      return `<li class="report-item stale"><span>${escapeHtml(name)}</span><small>${escapeHtml(`${meta} · No longer matches the saved decisions; create a new download.`)}</small></li>`;
+    }
+    return `<li class="report-item earlier">${link}<small>${escapeHtml(`${meta} · ${fill(EARLIER_DOWNLOAD, { n: report.revision })}`)}</small></li>`;
   }
-  return `<li class="report-item">${url ? `<a href="${escapeHtml(url)}" download>${escapeHtml(name)}</a>` : `<span>${escapeHtml(name)}</span>`}<small>${escapeHtml(meta)}</small></li>`;
+  return `<li class="report-item">${link}<small>${escapeHtml(meta)}</small></li>`;
 }
 
 function exportOptions(doc) {
   const readiness = doc?.readiness || {};
-  const draft = readiness.draft === true;
-  const approved = readiness.approved === true;
+  const update = updateOf(doc);
+  // while an update is pending both kinds are disabled, with the note by the update's state (5.1 [R:truth-T4])
+  const draft = readiness.draft === true && !update;
+  const approved = readiness.approved === true && !update;
   const blockers = strings(readiness.blockers);
   const reports = objects(doc?.reports);
   const draftDetail = 'Every suggested code with its status. Nothing in it is approved.';
   const approvedDetail = 'Only approved codes, with who approved them and when.';
+  const why = update ? `<div class="export-blockers update-export-note"><p>${escapeHtml(updateExportNote(update))}</p></div>`
+    : !approved && blockers.length ? `<div class="export-blockers"><p>Not available yet:</p><ul>${blockers.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div>` : '';
   return `<div class="export-group"><div class="evidence-label">Suggested codes — not approved</div>${exportOption('draft', 'txt', draft, 'Suggested codes as text', draftDetail)}${exportOption('draft', 'csv', draft, 'Suggested codes as a spreadsheet (CSV)', draftDetail)}</div>`
-    + `<div class="export-group"><div class="evidence-label">Approved codes</div>${exportOption('approved', 'txt', approved, 'Approved codes as text', approvedDetail)}${exportOption('approved', 'csv', approved, 'Approved codes as a spreadsheet (CSV)', approvedDetail)}${!approved && blockers.length ? `<div class="export-blockers"><p>Not available yet:</p><ul>${blockers.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul></div>` : ''}</div>`
+    + `<div class="export-group"><div class="evidence-label">Approved codes</div>${exportOption('approved', 'txt', approved, 'Approved codes as text', approvedDetail)}${exportOption('approved', 'csv', approved, 'Approved codes as a spreadsheet (CSV)', approvedDetail)}${why}</div>`
     + (reports.length ? `<div class="export-group"><div class="evidence-label">Earlier downloads</div><ul class="report-list">${reports.map(reportItem).join('')}</ul></div>` : '');
 }
 
@@ -1377,9 +1643,23 @@ function restoreFocus(target) {
   element?.focus({ preventScroll: true });
 }
 
+// What decides whether a read of the document redraws the page: everything served but the server's clock, which moves
+// on every read and changes nothing drawn (the elapsed time follows state.clock, set from it before each draw). So a poll
+// that brings nothing new - an update waiting on its step, an outcome being confirmed - never redraws the page under a
+// member typing in the details panel, where a date being typed holds no value until it is whole (FINAL-V2 amendment 1,
+// 5.1(3): the context rows stay editable while the page polls an update).
+function renderKey(doc) {
+  const progress = doc && typeof doc === 'object' ? doc.progress : null;
+  if (!progress || typeof progress !== 'object' || Array.isArray(progress)) return JSON.stringify(doc);
+  return JSON.stringify({ ...doc, progress: { ...progress, server_time: null } });
+}
+
 function renderDocument(doc, fresh, force = false) {
-  const key = JSON.stringify(doc);
-  if (!fresh && !force && key === state.docKey) return;
+  const key = renderKey(doc);
+  if (!fresh && !force && key === state.docKey) {
+    state.doc = doc;  // the same page: only the server's clock moved
+    return;
+  }
   const keep = fresh ? null : { source: $('#sourceScroll')?.scrollTop || 0, window: window.scrollY, focus: focusTarget() };
   state.doc = doc;
   state.docKey = key;
@@ -1587,7 +1867,7 @@ function syncDetailRow(id) {
 
 function chooseDetail(id, value) {
   const row = findDetail(id);
-  if (!answerable(row)) return;
+  if (!answerable(row) && !valueOverAnswer(row, state.doc)) return;
   if (state.answers.get(id)?.value === value) state.answers.delete(id);
   else state.answers.set(id, { fact: row.fact, value });
   hideError('detailsError');
@@ -1603,8 +1883,13 @@ function enterDetailDate(input) {
   syncDetailRow(row.id);
 }
 
+// The answers the one save sends: the rows that take a value now (rowEditable) - while processing runs or an update is
+// pending, only context values, never "Not documented" or "Cannot confirm" (1.4) - chosen on this page.
 function detailAnswers(doc) {
-  return detailsOf(doc).filter(row => answerable(row) && state.answers.has(row.id)).map(row => ({ id: row.id, fact: row.fact, value: state.answers.get(row.id).value }));
+  const open = answersOpen(doc);
+  return detailsOf(doc).filter(row => rowEditable(row, doc) && state.answers.has(row.id))
+    .map(row => ({ id: row.id, fact: row.fact, value: state.answers.get(row.id).value }))
+    .filter(item => open || !Object.hasOwn(DETAIL_ANSWERS, item.value));
 }
 
 function saveDetails(button) {
@@ -1620,9 +1905,10 @@ function saveDetails(button) {
     try {
       const saved = await api(`/api/encounters/${encodeURIComponent(state.doc.id)}/details`, { method: 'POST', json: { answers } });
       for (const answer of answers) state.answers.delete(answer.id);
-      // an answer recomputes the results (completion repair 2026-11-06, U11): the page shows the progress, then them
+      // an answer recomputes the results (completion repair 2026-11-06, U11): the page shows the progress, then them; a
+      // save that restored the earlier codes says so (FINAL-V2 amendment 1, 1.3 [R:truth-T13])
       const done = answers.length === 1 ? 'Answer saved.' : `${answers.length} answers saved.`;
-      await afterChange(saved?.reassessing === true ? `${done} The results are being updated.` : done);
+      await afterChange(saved?.restored === true ? RESTORED_TOAST : saved?.reassessing === true ? `${done} The results are being updated.` : done);
     } catch (error) {
       showError('detailsError', error.message);
       setBusy(button, false);
@@ -1865,6 +2151,22 @@ function retryReading(button) {
   });
 }
 
+// The recorded retry of a failed update (FINAL-V2 amendment 1, 7.2: "Try updating again"): one more attempt, asked once;
+// a refusal says why in the server's own words.
+function retryUpdate(button) {
+  if (!state.doc) return undefined;
+  return guarded('retry-update', async () => {
+    setBusy(button, true);
+    try {
+      await api(`/api/encounters/${encodeURIComponent(state.doc.id)}/retry-update`, { method: 'POST', json: {} });
+      await afterChange(RETRY_UPDATE_ASKED);
+    } catch (error) {
+      toast(error.message);
+      setBusy(button, false);
+    }
+  });
+}
+
 function openExport() {
   if (!state.doc) return;
   const readiness = state.doc.readiness || {};
@@ -1969,6 +2271,7 @@ function onClick(event) {
     stop: () => stopProcessing(action),
     resume: () => resumeProcessing(action),
     'retry-reading': () => retryReading(action),
+    'retry-update': () => retryUpdate(action),
     recheck: () => requestRecheck(action),
     reload: () => location.reload(),
     retry: route,
@@ -2076,6 +2379,19 @@ if (typeof module === 'object' && module.exports) {
     resultsSection, whyThisCode, decisionLine, reviewBar, notSeparatelyCoded, otherCodes, notesSection, recheckOffer, activityLog, reviewView,
     exportOptions, uploadForm, state, ACKNOWLEDGEMENTS, AGENT_REVIEW, OUTDATED_TEXT, CLIENT_HEADER, CLIENT_VERSION, QUEUE_STATES, RECHECK_LABEL, RECHECK_NOTE, QUEUED_AFTER_DONE_TITLE,
     STEP_KEYS, CHECK_KEYS, MODIFIER_CHOICES, ERROR_ACTIONS, RETRY_ASKED, emptyResults, retryReading, onClick,
+    // FINAL-V2 amendment 1 (step 5d)
+    updateOf, updateRunning, updateIsCheck, updateTitle, updateSaved, updateExportNote, updateResultsText, earlierCodesSection,
+    earlierRow, whatChangedSection, earlierDecisions, reportItem, rowEditable, retryUpdate, saveDetails, onInput, onChange,
+    chooseDetail, enterDetailDate, PHASES, PHASE_TITLES, STATE_LABELS, RETRY_UPDATE_ASKED, UPDATE_STATES,
+    // step 5d round 2: a choice row saved "Not documented" while an update is pending; the redraw key of a read
+    valueOverAnswer, renderKey, renderDocument,
+    TEXTS: {
+      UPDATE_TITLE, UPDATE_TITLE_CHECK, CHANGE_SAVED_BY, EARLIER_CODES_HEADING, EARLIER_CODES_HEADING_CHECK, EARLIER_CODES_MADE,
+      EARLIER_CODES_MADE_CHECK, ANSWER_AFTER_UPDATE, UPDATE_EXPORT_NOTE, UPDATE_EXPORT_NOTE_CHECK, RESULTS_UPDATING, RESULTS_NOT_UPDATED,
+      RESULTS_EARLIER_SHOWN, RESULTS_NO_EARLIER_CODE, TALLY_BEFORE, TALLY_NO_EARLIER_CODE, RESULTS_UPDATING_CHECK, RESULTS_NOT_UPDATED_CHECK,
+      RESULTS_EARLIER_SHOWN_CHECK, RESULTS_NO_EARLIER_CODE_CHECK, TALLY_BEFORE_CHECK, TALLY_NO_EARLIER_CODE_CHECK, RESTORED_TOAST,
+      WHAT_CHANGED_COMPARED, WHAT_CHANGED_UNCHANGED, WHAT_CHANGED_UNCHANGED_ONE, EARLIER_DOWNLOAD, RETRY_UPDATE_ASKED,
+    },
   };
 }
 if (typeof document !== 'undefined') boot();

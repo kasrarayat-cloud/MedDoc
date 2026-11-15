@@ -1,10 +1,49 @@
 """The combination rules of design v2 (docs/gemini-migration/FINAL-V2.md 4.7, 4.1, 4.8, 4.9 and 4.13; step 4d of 8.1;
-DECISIONS D191 and the arbiter triage's hand-off 1e:R3): v1's studio/interpretation/combination.py - base, base-within,
-competing, the same-day E/M, the separate statement, the separate-lesion modifier review and the endoscopic rows - and
-the competition's claims (v1's assess._claims, _one_stricture, _technique_doubts and _stricture_claims: D55, D74, D104,
-D118, D163, D167), forked into engine/ with their readers deleted and their inputs rewired to settled facts. Nothing
-here reads text: every input is an enumeration member, an id, a result or a span of the FactSet (engine/facts.py), a
-code string read as a number (engine/catalogue.py), or a record another step hands in.
+DECISIONS D191, the arbiter triage's hand-off 1e:R3, D227's 4d items, built by the repair r4d, D231's combination half,
+D240's and D244's R-N3, built by its round r4d of build-v2/w7r, D253's QE13, D255, D256 and D257's ``within``,
+built by its round r4d of build-v2/w8r, and D268's base-rule filter and D269, built by its round r4d of build-v2/w9r):
+v1's studio/interpretation/combination.py -
+base, base-within, competing, the same-day E/M, the separate statement, the separate-lesion modifier review and the
+endoscopic rows - and the competition's claims (v1's assess._claims, _one_stricture, _technique_doubts and
+_stricture_claims: D55, D74, D104, D118, D163, D167), forked into engine/ with their readers deleted and their inputs
+rewired to settled facts. Nothing here reads text: every input is an enumeration member, an id, a result or a span of
+the FactSet (engine/facts.py), a code string read as a number (engine/catalogue.py), or a record another step hands in.
+
+**The synthetic act** (FINAL-V2 3.2.6 rule 3; DECISIONS D216, D231, D232, D256). A kept unlisted ACT or DOUBT
+(``synthetic``; a doubt about whether an act was done leaves it possibly performed, refute-r4a-r1 F1; a denial is no
+act) is a possibly performed act of its kind for EVERY rule of this module whose release depends on the absence of a
+possibly performed act (D231: "D216 reaches every absence condition in combination.py"), read as its filed doubted form
+would be - its kind as the entry names it (every kind when it names none), its status the doubt, its date, performer,
+device, places and lesion unknown. WHERE a rule reads it follows its card, as the rulings give each rule; a card
+naming a session the FactSet does not hold is read as no card (contract/appraise_read reads a card that names no
+session card of the request as no session, so the pipeline never hands one in; ``synthetic_sessions`` keeps the id
+itself first, and reads every session after it, as for no card):
+- base_included's (c) (``_unlisted_acts``): a CARDED act (``_card``: its card a session of the FactSet) holds its card's
+  session's base code, whatever its kind (3.2.6 rule 3: "an unlisted act with a session card"); one with no card that
+  names a kind holds the base code of every session whose family may hold that kind as coverage.doubted_in reads it -
+  where step 4b's event_coding would list its filed doubted form among the session's doubted acts
+  (``_listed_doubted``: a reportable kind of a family the session may be) - DECISIONS D256 P1, the step's question
+  Q-CARD option (c), "exactly what coverage.doubted_in admits for the filed doubted form", worded as the carded form
+  is; one with no card that names no kind holds the base code when the document tells one session - counting the
+  sessions that are not established not done today (D269) - and stays out in a document of more than one (D256: the
+  named residual Q-UNNAMED, measured at D2-D3);
+- D119's PEG arm (D231 row 3: "whose card may be the feeding tube's session"), the claims' D55 and D118 openings (row 4:
+  "whose card may be of the code's family") and the competition over the act itself (row 5: "an unlisted act with a
+  card", ``synthetic_claims``): a CARDED act only - those rows name a card (refute-r4d-r1 of build-v2/w7r, F3);
+- session_done's act-only arm (row 1, D232's reading, evaluate.synthetic_in's): its card's session, and EVERY session
+  when it names none (``synthetic_sessions``: 2.4 A6 gives the card "when the document says", so S is possible for every
+  S - 3.2.6 rule 4's "with no session, of every session");
+- session_possibly_done (row 2: "an unlisted act with card S (or no card, S possible)", as DECISIONS D256 P2 and D269
+  read it): its card's session; with no card, every session - and, when it names a kind, only a session whose family
+  holds that kind (K2) -; never a session whose examination is established and established not done on the date of
+  service (planned, or done on another date), which no act makes possibly done, carded or not (D269);
+- every one - the same-day rule's undatable acts (3.2.6 rule 5: "in an encounter with an E/M visit, an unlisted act").
+Each moves one way when an entry is added: claims, competitions, holds and wholes only grow, and a session's done and an
+established whole only fall (EXPLANATION to QUESTION, never READY). The step's NOTES list every absence condition of the
+module with whether, and where, it reads the synthetic act. A kept unlisted act carded to a session established not
+done today makes it neither possibly done nor a whole (DECISIONS D269: "every act possibly in a session S, placed or
+supported"), and leaves it established not done (``not_done_today`` reads the filed events: the step's question
+Q-CARDEXAM).
 
 The engine applies these rules over the codes it counts (engine/assess.py, step 5a) and the read-time overlay
 (interpretation/overlay.py, step 5c) applies the same functions over a reviewer's counted set: one implementation each,
@@ -20,20 +59,38 @@ performed or incomplete). Every function here takes members in their order and k
 base code (``is_base``: a base profile - an endoscopic family's examination or an office visit code, whose two codes of
 one visit hold each other - or an examination-only EUS code, every one of whose covers is the examination) matched to
 session S is held, never excluded, beside (a) another counted code of its family matched to S that accounts for an act,
-(b) S's reportable acts, or (c) S's doubted acts. The reportable and doubted acts are step 4b's (engine/coverage's
-event_coding@2, 4.7's "reportable / doubted | v1's shapes" row), handed in as ``coding`` (SessionActs per session),
-never re-derived here: two derivations would drift. DECISIONS D119: an upper endoscopy's base code reads, as (b) and
-(c), the PEG acts of every feeding-tube session too (a session whose kind may be the feeding tube's, an act whose kind
-may be a PEG, both read by facts.possibly). FINAL-V2 3.2.6 rule 3: an unlisted act whose session card is S is a
-synthetic doubted act of S, read here from the FactSet (R.unlisted), so it holds S's base code as a doubt whatever the
-coding lists. D177(1): the codes the hold NAMES are those of the base code's own EUS tract (catalogue.eus_tract); with
-none, the hold names the acts; with neither, every code beside it (the recorded residual: naming nothing would drop the
-hold). The hold is an EXPLANATION (F, 4.8) when the examination is established included - (b), a reportable act - and a
-QUESTION (U) when only (a), counted codes beside it (a proposal with no act documented is one), or doubted or unlisted
-acts hold it; it never reads another code's support, which rests on facts outside its closure (4.9). ``coding`` must
-list every session it is asked about: step 4b's event_coding@2 lists every session of the FactSet, so a session it
-does not list is a wiring error, refused (ValueError), never read as a session with no acts (which would release a
-base code beside acts nobody listed).
+(b) S's reportable acts, or (c) S's doubted acts. An ADD-ON code (``is_addon``: a key of engine/assess.ADDON_PRIMARIES -
+43273, 91013, 99153, 99417 - reported in addition to its primaries) is never such a code under (a): it never causes a
+base hold and is never named in one, and an add-on and its primaries are governed by assess's ADDON row alone
+(DECISIONS D255, refute-r3c-r1 R3C1-02: 99215 beside 99417 was held "99215 is normally not reported separately from
+it", the inverse of ADDON_PRIMARIES). Rules (b) and (c) read no act that a counted add-on code of S accounts for as its
+supporting act (``addon_acts``: the add-on's E*; DECISIONS D268, refute-r4d-r1 V8R4D1-1: an ERCP's cholangioscopy
+beside a counted 43273 held 43260 base_explained, "which this diagnostic code does not account for", steering the
+reviewer to reject the primary and leave the add-on approvable alone) - 43260 beside 43273 with the cholangioscopy
+documented is READY, as 43273 is; without the add-on counted, the rules read as built. The reportable and doubted acts
+are step 4b's (engine/coverage's event_coding@2, 4.7's "reportable / doubted | v1's shapes" row), handed in as
+``coding`` (SessionActs per session), never re-derived here: two derivations would drift. DECISIONS D119: an upper
+endoscopy's base code reads, as (b) and (c), the PEG acts of every feeding-tube session too (a session whose kind may be
+the feeding tube's, an act whose kind may be a PEG, both read by facts.possibly), and the synthetic acts of kind PEG or
+none carded to such a session (D231 row 3). FINAL-V2
+3.2.6 rule 3, as DECISIONS D231, D232 and D256 read it: a synthetic act (a kept unlisted act or doubt) carded to S is a
+synthetic doubted act of S, read here from the FactSet (R.unlisted), so it holds S's base code as a doubt whatever its
+kind and whatever the coding lists. One with no card that names a kind holds S's base code exactly where step 4b lists
+the same act filed in doubt with its session slot silent: event_coding would list that form among S's doubted acts
+(coverage.doubted_in: a reportable kind of a family S may be; never an E/M kind, the session's own service) - D256 P1,
+Q-CARD option (c): read as no session, a one-session colonoscopy's 45378 went READY beside an unlisted biopsy whose card
+pass 2 left empty (refute-r4d-r2 P1). One with no card that names no kind holds S's base code only when S is the
+document's one session (D256; beside more than one session it stays out, the named residual Q-UNNAMED - refute-r4d-r1
+F1's office visit beside a colonoscopy, whose hold could name nothing), the sessions counted being those that are not
+established not done today (DECISIONS D269, refute-r4d-r1 V8R4D1-3: a planned repeat colonoscopy filed as a session of
+its own no longer turns the hold off). D177(1): the codes the hold NAMES are those of the base code's own EUS tract
+(catalogue.eus_tract); with none, the hold names the acts; with neither, every code beside it (the recorded residual:
+naming nothing would drop the hold). The hold is an EXPLANATION (F, 4.8) when
+the examination is established included - (b), a reportable act - and a QUESTION (U) when only (a), counted codes
+beside it (a proposal with no act documented is one), or doubted or synthetic acts hold it; it never reads another
+code's support, which rests on facts outside its closure (4.9). ``coding`` must list every session it is asked about:
+step 4b's event_coding@2 lists every session of the FactSet, so a session it does not list is a wiring error, refused
+(ValueError), never read as a session with no acts (which would release a base code beside acts nobody listed).
 
 **base_within** (C3, C-4, D70; 4.7: "part_of_session supported (C3); C-4 structural over supported session kinds and
 tracts (a done EGD beside a done upper EUS on the date); possibly_part_of by possibly"), from the FactSet:
@@ -43,19 +100,45 @@ tracts (a done EGD beside a done upper EUS on the date); possibly_part_of by pos
   examining the pancreas - leaves it possible: v1 read every EUS not placed lower as upper). A session is done (4.3
   row 7: "its examination, when it has one, passes 2-5 (an act-only session: the act itself)") when one of its
   examinations - an event whose kind is supported examination and whose session is supported that session, a digital
-  examination (device supported manual: FINAL 5.6 E13) excepted - passes rows 2-5 (engine/reading.done); with no such
-  examination, when one of its acts (session supported) passes them and no event that may be its examination is left
-  open (a kind possibly the examination, possibly in the session, possibly today's), so an EUS told only through its
-  done acts is the session (D121, D135);
+  examination excepted - passes rows 2-5 (engine/reading.done); with no such examination, when one of its acts (session
+  supported; a digital examination excepted) passes them and no event that may be its examination is left open (a kind
+  possibly the examination, possibly in the session, possibly today's, no digital examination), nor a synthetic act of
+  kind examination or none that may be in the session (DECISIONS D231 row 1, read only there, in an act-only session:
+  beside an established examination a synthetic one adds nothing, D232), so an EUS told only through its done acts is
+  the session (D121, D135). The digital examination (FINAL 5.6 E13: "no session") is read as evaluate._digital reads it
+  (DECISIONS D253, QE13 option (a), repair r4a's R2): an event that may be an examination whose device CLAIMS manual -
+  supported manual, or manual its claimed value or one of its readings - so a weakened device never turns a digital
+  examination into the session's own, and the act-only session is evaluate.act_only's (``_digital``);
 - D70, by possibly: the part_of_session claim not established, naming the session (its value or an option); or C-4's
   structure possible on every fact (each kind and the tract possibly so, both sessions possibly done: an event possibly
-  in the session that may have been done today, facts.possibly) - a possible whole, the code held as one that is,
-  never READY. A tract supported lower, or any fact established against the structure, sets nothing up (v1's lower EUS
-  includes no EGD).
+  in the session that may have been done today, facts.possibly - an event whose session fact names an id the FactSet
+  does not hold may be in any session, DECISIONS D227 R2-2, as its family read already was - or a synthetic act that
+  may be in it, D231 row 2) - a possible whole, the code held as one that is, never READY. A tract supported lower, or
+  any fact established against the structure, sets nothing up (v1's lower EUS includes no EGD). An entry with no card
+  that names a kind makes possibly done only a session whose family holds that kind (DECISIONS D256 P2's K2).
+  DECISIONS D269 (Q-P2DATE option (c); 4.3 row 7): a session whose examination is established, and established not
+  done on the date of service (``not_done_today``: planned, or done on another date), is possibly done by NO act -
+  filed or kept unlisted, placed, supported, carded or with no card, whatever its date or session slot - and is never
+  a whole, by C3, D70 or C-4 (refute-r4d-r2 P2: an EGD beside a planned EUS was held "the endoscopic portion of the
+  endoscopic ultrasound" on any entry with no card; D256 P2's letter left an unplaced act dated today making it
+  possible, so weakening that date released the hold: Q-P2DATE). "Established not done" reads every event the
+  document places in the session that may be its examination: one that may be done today keeps the session from it
+  (the step's question Q-NDT: read from the established examinations alone, a session whose examination done today is
+  weakened out of them - its session or kind to unresolved - became established not done beside its planned
+  examination, and the whole was released). Step 4b's _part_of_session reads session_possibly_done (D227's one
+  derivation).
 A base code whose session is (possibly) the endoscopic portion of a whole W is held beside the counted codes matched to
-W that include its family's examination (catalogue.includes_examination), or beside none when W has no counted code;
-W's counted codes that include no such examination hold nothing. The hold is an EXPLANATION when an established whole
-holds it, a QUESTION when only a possible one does. v1's eus_places and its lower-evidence word reading are gone (4.7).
+W that include its family's examination (catalogue.includes_examination), or beside none when W has no counted code.
+W's counted codes that include no such examination hold nothing when W is a whole by C-4's structure alone (43231, the
+esophagoscopic EUS, includes no EGD); when the session's own part_of_session claim names W - C3's established whole, or
+D70's claim not established - the code is held whatever W's counted codes include (DECISIONS D244 R-N3: a flexible
+sigmoidoscopy "performed as part of the colonoscopy" is held beside 45378, which includes no sigmoidoscopy by the
+catalogue's table; the claim's weakened form holds it too, so a weakening never releases it), and beside every one of
+them (DECISIONS D257: ``within`` names the stated whole's counted codes, whatever they include - 45330 within a
+colonoscopy whose 45378 is counted names 45378). An add-on code (D255) is no counted code of W here: it is never named,
+and a whole whose only counted codes are add-ons is a whole with no counted code. The hold is an EXPLANATION when an
+established whole holds it, a QUESTION when only a possible one does. v1's eus_places and its lower-evidence word
+reading are gone (4.7).
 
 **The competition's claims** (``claims``; D40, D55, D74, D104, D118, D163, D167 - 4.7: "claims over E* and over acts
 read by possibly; D118's one stricture by same lesion or places not disjoint; the D29 site fit"; 4.8: "A hold never
@@ -74,35 +157,53 @@ shrink"). A code claims, whatever its state:
   that names a technique), its device not established as another technique class (R4: "a dilation of another
   technique is no act the code accounts for"). This is D163's "a held code keeps, as claims, the acts it could account
   for", read by possibly: 4.4 records every positive candidate's witnesses in held_facts [R:HO-8], and this set holds
-  every such act of the code's family. NO PLACE LIST REMOVES A CLAIM: D29's site fit (a dilation whose listed places
-  all lie outside a site code's class), route (b)'s regions and READ_UNDER's regions would set an act apart on its
-  listed places alone, and a place list may be short - P6 and 9.4's P-MONO name a deleted member as a weakening that
-  never releases a rival, and 3.2.3's pair controls, which make a short list safe, guard two objects' places, never
-  an act against a class (a dilation listed at the distal esophagus and the pylorus is claimed by 43249 and 43245;
-  read by its listed places, deleting the esophageal one would release 43245). The step's NOTES record the question
-  and v1's measured cost (D163's G1);
+  every such act of the code's family. D29'S SITE FIT (DECISIONS D240: the installed reading kept, "A verified target
+  outside the class does not support"): no arm claims, for a site-specific dilation code (catalogue.site_class), an act
+  whose target is established outside its class (``site_outside``, evaluate's SITE row failing: the lesion and every
+  place established, every supported place outside the class, none surgically made or unplaced) - "The distal
+  esophageal stricture was dilated with a balloon. The duodenal bulb stricture was dilated with a balloon." gives
+  43249 the esophageal act and 43245 the duodenal one, and they never compete. A place or a lesion not established
+  leaves the act claimed (fail-closed), and a dilation listed at the distal esophagus and the pylorus is claimed by
+  both. NAMED RELEASE (D240's preamble: the installed reading is kept and its exception named in 6a's property tests
+  and the final report): 9.4's deleted-member weakening of a place list - the pylorus deleted from that list - sets the
+  act outside 43245's class, which then drops it and may stop competing. No other place list is read: route (b)'s
+  regions and READ_UNDER's regions would set an act apart on its listed places alone (P6);
 - D55, D74, D104, D167: a narrowed code (D27: CodeLink.defining) whose family has an act that may be of a defining kind,
-  possibly positive and not established at another date (or whose E* is not empty) also claims every act that may be of
-  its other covered kinds, possibly positive, not established at another date, possibly of its family - any performer,
-  as v1's current performed acts were (only 43265, 44365 and 49440 have such kinds);
+  possibly positive and not established at another date - a filed act, or a synthetic act of a defining kind or none
+  whose card may be of its family (DECISIONS D231 row 4) - (or whose E* is not empty) also claims every act
+  that may be of its other covered kinds, possibly positive, not established at another date, possibly of its family -
+  any performer, as v1's current performed acts were (only 43265, 44365 and 49440 have such kinds);
 - D118: a technique code also claims every act of its family that may be of its kinds (a dilation), possibly positive,
   not established at another date (any performer, any technique), done on ONE stricture with ANOTHER act of its own
   (``one_stricture``: the two lesions possibly the same; else not set apart by facts.apart_by_lesion, nor, when no
-  lesion is possibly shared, by facts.apart_by_place - both read the pair controls [R:SC-B]) - never with itself.
-Every condition reads facts by possibly or as "not established otherwise", and none reads a place list, so weakening a
-fact (to unresolved, an added doubt, a control left unrejected, a deleted member) can only add claims (P-MONO): a hold
-is never a lowered input that releases a rival. v1's G4 exception (a technique code held for its site adds no claim)
-read the code's hold reason, which 4.8 forbids reading; with no site read here it has no counterpart.
+  lesion is possibly shared, by facts.apart_by_place - both read the pair controls [R:SC-B]) - never with itself. A
+  synthetic act of its kinds or none whose card may be of its family is another act of its own (D231 row 4), on one
+  stricture with every act (its identity is unknown, 4.11).
+Every condition reads facts by possibly or as "not established otherwise", and only D29's site fit reads a place list,
+so weakening a fact (to unresolved, an added doubt, a control left unrejected) can only add claims (P-MONO), and a
+deleted place member removes one only through D240's named release: a hold is never a lowered input that releases a
+rival. v1's G4 exception (a technique code held for its site adds no claim) read the code's hold reason, which 4.8
+forbids reading; the site fit reads the act's own established facts instead, whatever the code's state.
 
 **competition** (P-ADMIT2 as D40 amends it, unchanged): two counted codes with different codes whose claims intersect -
 the same documented act - are each held with one competing_codes question naming the others, whoever proposed either.
+``combine`` reads the same rule over the synthetic acts too (DECISIONS D231 row 5, ``synthetic_claims``): two counted
+codes of different codes that may both account for one CARDED synthetic act ("an unlisted act with a card") - its kind
+one of each code's kinds (every kind when it names none; a narrowed code's opened D55 kinds among them), its card's
+session possibly of each code's family - compete, both held competing_codes, as they do for its filed doubted form;
+their item quotes its units. An entry with no card is no act any code competes for (refute-r4d-r1 of build-v2/w7r,
+F3: an unlisted biopsy of no session beside an EGD's and a colonoscopy's own biopsies made 43239 and 45380 "proposed
+for the same documented act").
+``Combination.claims`` stays the documented events (what step 5a reads); the synthetic acts' claims and shared acts
+are ``unlisted_claims`` and ``unlisted_contested``.
 
-**The same-day E/M** (C-3; D81, D94, D109, D111, D130, D133, D134; 4.7). ``procedure_day`` reads every event that may
-be other than an E/M visit or prolonged time (an event whose every possible kind is an E/M kind is never a procedure;
-one whose kind may also be another, a doubt, is read as the other too - fail-closed, so a weakened visit kind can only
-add a procedure), possibly positive, and procedural:
+**The same-day E/M** (C-3; D81, D94, D109, D111, D130, D133, D134, D227; 4.7). ``procedure_day`` reads every event
+that may be other than an E/M visit or prolonged time (an event whose every possible kind is an E/M kind is never a
+procedure; one whose kind may also be another, a doubt, is read as the other too - fail-closed, so a weakened visit kind
+can only add a POSSIBLE procedure, never a done one: D227 R2-1), possibly positive, and procedural:
 - of a procedural family - its session possibly of one of SAME_DAY_FAMILIES (the procedure families and gi.other, D81),
-  read over the sessions its session fact may name (every session of the FactSet when it names none);
+  read over the sessions its session fact may name (every session of the FactSet when it names none, or names an id the
+  FactSet does not hold: D227 R2-2);
 - or possibly of a SAME_DAY_KIND (every kind a procedural family's catalogue entry lists - its acts, its bundled and its
   unsupported kinds, catalogue.BUNDLED_KINDS and UNSUPPORTED_KINDS (hand-off 1e:R3) - the examination and the
   umbrellas: every kind but the visit's, prolonged time, moderate sedation and other; read from D191's one table of a
@@ -113,31 +214,39 @@ add a procedure), possibly positive, and procedural:
   DONE_STATEMENTS are gone, 4.7).
 Its effective date relation (engine/facts.py's stored per-act fact; the caller passes facts.effective's FactSet, so L1
 is re-judged) decides: supported on_date_of_service, it makes the procedure day (DONE when its status is supported
-performed or attempted and what made it procedural is established - its session's family, or its kind supported, and
-for an examination outside a procedural family's session its device established as other than manual, so a digital
-examination left open never counts as done - else possible; an act counted by its class alone is only ever possible,
-D130); established as another date, it is no procedure day; otherwise it is UNDATABLE (event_time). **The performer is
-not read** (legacy parity, S3 hazard 7, 4.13: C-3 counts any performer's same-day procedure). FINAL-V2 3.2.6 rule 5:
-every kept unlisted act (what act, of no E/M kind) is an undatable possible procedure. A counted procedural code adds
-its family to the done list when the per-code rule supports it and to the possible list otherwise (engine._encounter's
-selected procedural codes). ``same_day_holds`` gives an E/M code (catalogue.EM_FAMILIES) its holds, by v1's rule with
-its one release that a weakening could reach closed (9.4 P-MONO: "the READY ... sets never grow"; C-3: an undatable
-event is "a question and never READY"):
+performed or attempted, its kind is supported and no E/M kind - D227 R2-1: an act whose kind is not established may be
+the visit itself, whatever its session's family, so it is never a done procedure - and what made it procedural is
+established - its session's family, or its kind supported, and for an examination outside a procedural family's session
+its device established as other than manual, so a digital examination left open never counts as done - else possible;
+an act counted by its class alone is only ever possible, D130); established as another date, it is no procedure day;
+otherwise it is UNDATABLE (event_time). **The performer is not read** (legacy parity, S3 hazard 7, 4.13: C-3 counts any
+performer's same-day procedure). FINAL-V2 3.2.6 rule 5: every synthetic act of no E/M kind (a kept unlisted act or
+doubt: the same-day rule's release is an absence condition, DECISIONS D216 and D231) is an undatable possible
+procedure. A counted procedural code adds its family to the done list when the per-code rule
+supports it and to the possible list otherwise (engine._encounter's selected procedural codes). ``same_day_holds``
+gives an E/M code (catalogue.EM_FAMILIES) its holds, by v1's rule with its one release that a weakening could reach
+closed (9.4 P-MONO: "the READY ... sets never grow"; C-3: an undatable event is "a question and never READY"):
 - on a procedure day (done or possible) with no separate statement documented: separate_em (rank 20) - an EXPLANATION
   quoting the denial when the visit's separately_identifiable is negated, a QUESTION otherwise (v1's item);
 - otherwise, with an undatable act (or an unlisted one) and no ESTABLISHED procedure day (``ProcedureDay.established``:
-  a done procedure act, every fact that made it one established - never a counted code's support alone, which rests on
-  that code's own facts, outside the E/M code's closure, 4.9): event_time (rank 6) for each undatable act (every
-  witness, 4.4). v1 asked it only with no procedure day at all; a merely possible procedure day beside a
-  documented statement released the code, and a weakening (a status, a device, a kind, a class left open) creates a
-  possible procedure day - so v1's rule turned a held code READY under a weakening. An established procedure day
-  cannot be created by a weakening, and beside one the undatable act's date decides nothing for the E/M code (the day
-  is a procedure day whatever it is), so there the documented statement releases it, as v1's did;
+  a done procedure act, every fact that made it one established, its kind among them - never a counted code's support
+  alone, which rests on that code's own facts, outside the E/M code's closure, 4.9): event_time (rank 6) for each
+  undatable act (every witness, 4.4). v1 asked it only with no procedure day at all; a merely possible procedure day
+  beside a documented statement released the code, and a weakening (a status, a device, a kind, a class left open)
+  creates a possible procedure day - so v1's rule turned a held code READY under a weakening. An established procedure
+  day cannot be created by a weakening (each fact it rests on is established, and a weakening only makes a fact less
+  established; an E/M event whose kind gains another reading is a possible procedure, never a done one: D227 R2-1),
+  and beside one the undatable act's date decides nothing for the E/M code (the day is a procedure day whatever it
+  is), so there the documented statement releases it, as v1's did (D227 R2-3: ADJUDICATION C-3's "never READY" does
+  not apply when another act establishes the procedure day);
 - otherwise none.
-Every input of the hold therefore moves one way under a weakening: the procedure day and the undatable acts can only
-grow, the established procedure day and the documented statement can only shrink. The visit's own session encounter
-(4.3's V.this_encounter) is step 4a's requirement and is not repeated. ``visit_basis`` (v1's, 5.5) is the visit's
-supported basis, which the support display shows; whether R6:em_basis is met is step 4a's row.
+Every input of the hold therefore moves one way under a weakening: an act of the procedure day stays one or, its date
+weakened, becomes undatable (so the procedure day and the undatable acts together only grow, and the undatable acts
+alone only grow); the established procedure day and the documented statement only shrink. A code held separate_em
+whose only act of the day becomes undatable is held event_time instead (no act then establishes the day); with the day
+still a procedure day (another act, or a counted procedural code), it stays held separate_em. The visit's own session
+encounter (4.3's V.this_encounter) is step 4a's requirement and is not repeated. ``visit_basis`` (v1's, 5.5) is the
+visit's supported basis, which the support display shows; whether R6:em_basis is met is step 4a's row.
 
 **The separate statement** (D113; 4.7: "visit.separately_identifiable supported = a statement; negated = a denial
 (quoted); otherwise none"): read from the code's own visit events, then from every other visit of this encounter (kind
@@ -159,33 +268,35 @@ never pairs (4.11).
 **What a hold is** (engine/types.HeldFact, 4.4, 4.8): base_included (rank 21; key-bound), competing_codes (rank 22),
 separate_em (rank 20; key-bound), event_time (rank 6); each with its cause (coding_rule:<rule>, or for event_time the
 date fact's own: reading_unknown, reading_contradicted, appraisal:<verdict or coherence>, unestablished:<reason>;
-unlisted for an unlisted act), operator data that names no vendor, and the spans its item quotes (the acts' anchors).
+unlisted for an unlisted act or doubt), operator data that names no vendor, and the spans its item quotes (the acts'
+anchors, and a synthetic act's own units).
 The codes and acts a hold names (BaseIncluded, BaseWithin, the competition's rivals, the ProcedureDay) are returned
 beside it, as v1's holds' inputs were: the sentences are step 3c's wording, never built here. ``combine`` applies every
 rule to a counted set and gives each member its combination holds (4.1's combine, 4.4's "the combination holds").
 
 **The text-free boundary** (P1, FINAL-V2 5.7 measures 4 and 5): this module imports the standard library,
-contract/types.py and engine's catalogue, facts, pairing, reading, requirements, requirements_table and types only - no
-retired v1 module, none of contract's text modules - holds no word, phrase or marker list (every module-level
+contract/types.py and engine's anatomy, catalogue, facts, pairing, reading, requirements, requirements_table and types
+only - no retired v1 module, none of contract's text modules - holds no word, phrase or marker list (every module-level
 collection holds enumeration members or is computed from them), reads no text and returns no document string (a cause
 is CPT Studio's own code). ``mypy --strict`` passes over it.
 """
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import Hashable, Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
 from enum import Enum, unique
 from types import MappingProxyType
+from typing import TypeVar
 
 from studio.interpretation.contract.types import (Attribute, DateRelation, Device, EmBasis, EncounterRelation,
-                                                  FactState, Kind, OtherClass, Performer, Purpose, Qualifier2, Reason,
-                                                  Result, Separate, SessionKind, Status, Tract, UnlistedWhat,
-                                                  VerdictValue)
-from studio.interpretation.engine import catalogue, pairing, reading, requirements_table
+                                                  FactState, Kind, Landmark, OtherClass, Performer, Purpose,
+                                                  Qualifier2, Reason, Result, Separate, SessionKind, Status, Tract,
+                                                  UnlistedWhat, VerdictValue)
+from studio.interpretation.engine import anatomy, catalogue, pairing, reading, requirements_table
 from studio.interpretation.engine import facts as facts_
 from studio.interpretation.engine import requirements as rq
 from studio.interpretation.engine.catalogue import TechniqueClass
-from studio.interpretation.engine.types import Fact, FactSet, HeldFact, Id, ItemKind, Span
+from studio.interpretation.engine.types import Fact, FactSet, HeldFact, Id, ItemKind, Span, UnlistedStatement
 
 _A = Attribute
 
@@ -232,6 +343,21 @@ TEAM: Performer = Performer.DOCUMENTING_TEAM
 # The family an act counted by its kind or class outside a procedural family is named by (v1: OTHER_GI's label,
 # "another GI service"; D109, D130).
 OTHER_SERVICE: SessionKind = SessionKind.OTHER_GI
+# DECISIONS D231 (refute-r4a-r1 F1): the natures of a kept unlisted entry read as 3.2.6 rule 3's synthetic act - an act,
+# and a doubt (a doubt about whether an act was done leaves it possibly performed: 4.2 [R:HO-1]); never a denial (3.2.6
+# rule 4 pairs it). The same set evaluate.synthetic_possible reads (D231: "the four modules read one set").
+SYNTHETIC_WHAT: frozenset[UnlistedWhat] = frozenset({UnlistedWhat.ACT, UnlistedWhat.DOUBT})
+# DECISIONS D29, D240: the places that are never outside a dilation's site class - the surgically made places, whose
+# position in the tract cannot be told (an anastomosis, a stoma, a pouch), and a place named as none of the chain's -
+# exactly evaluate's SITE row's (D29: "An unverified or ambiguous target (an anastomosis) holds").
+UNPLACED_SITES: frozenset[Landmark] = anatomy.ALTERED | anatomy.UNPLACED
+# DECISIONS D256 P1 (Q-CARD option (c)): what step 4b's coverage.doubted_in reads of a kind for the act filed in doubt
+# with its session slot silent - the kinds never an act beside a session (the examination, the session itself, and the
+# umbrellas: coverage._NOT_ACTS; a removal umbrella is doubted as any of its members, D117) and the stent's own acts a
+# family whose acts hold the stent placement reports (D116: coverage.STENT_ACTS). ``_listed_doubted`` reads them as
+# coverage reads them; tests/v2/test_combination.py pins the two equal over every kind and session shape.
+_NOT_ACTS: frozenset[Kind] = frozenset({Kind.EXAMINATION, *catalogue.UMBRELLAS})
+_STENT_ACTS: frozenset[Kind] = frozenset({Kind.STENT_REMOVAL, Kind.STENT_EXCHANGE})
 
 
 @unique
@@ -319,10 +445,17 @@ class SessionActs:
 @dataclass(frozen=True, slots=True)
 class BaseIncluded:
     """A base code held beside its session's interventions (base_included): ``key``, ``code`` and ``session`` the base
-    code's; ``beside`` every other counted code of its family and session that accounts for an act (rule (a));
-    ``others`` those of its own EUS tract, the codes the hold names (D177(1)); ``reportable`` and ``doubted`` the acts
-    of rules (b) and (c) (with D119's PEG acts), ``unlisted`` the indices in FactSet.unlisted of its session's unlisted
-    acts (3.2.6 rule 3)."""
+    code's; ``beside`` every other counted code of its family and session that accounts for an act (rule (a)), never an
+    add-on code (DECISIONS D255); ``others`` those of its own EUS tract, the codes the hold names (D177(1));
+    ``reportable`` and ``doubted`` the acts of rules (b) and (c) (with D119's PEG acts), never an act a counted add-on
+    code of its session accounts for as its supporting act (DECISIONS D268: ``addon_acts``), ``unlisted`` the indices in
+    FactSet.unlisted of the synthetic acts that hold it (3.2.6 rule 3 as D231, D232 and D256 read it: the kept unlisted
+    acts and doubts carded to its session; those with no card that name a kind whose filed doubted form step 4b would
+    list doubted there; in a document of one session - counted as D269 counts it, ``_one_session`` - those with no
+    card that name no kind; and, for an upper endoscopy's code, those of kind PEG or none carded to a session that may
+    be the feeding tube's - D231 row 3),
+    and ``unlisted_kinds`` the kinds those entries name, each once (an entry that names none can be named by no
+    kind)."""
     key: str
     code: str
     session: Id
@@ -331,6 +464,7 @@ class BaseIncluded:
     reportable: tuple[Id, ...]
     doubted: tuple[Id, ...]
     unlisted: tuple[int, ...]
+    unlisted_kinds: tuple[Kind, ...] = ()
 
     @property
     def established(self) -> bool:
@@ -346,10 +480,14 @@ class BaseIncluded:
     @property
     def named_codes(self) -> tuple[str, ...]:
         """The codes the hold names (D177(1)): its own tract's codes; with none and no act to name, every code beside it
-        (the recorded residual); () when it names acts."""
+        (the recorded residual); () when it names acts. A synthetic act that names no kind is no act the hold can name,
+        so beside only such acts the hold names the codes beside it: whether the code is held is unchanged. With no
+        code beside either, it names nothing - DECISIONS D254's label words it ("another act": step 3c's absence
+        form, step 5c's item_slots), as for a kindless entry with no card in a document of one session (D256). Never an
+        add-on code (D255: ``beside`` holds none)."""
         if self.others:
             return self.others
-        return () if self.reportable or self.doubted or self.unlisted else self.beside
+        return () if self.reportable or self.doubted or self.unlisted_kinds else self.beside
 
 
 @dataclass(frozen=True, slots=True)
@@ -365,8 +503,9 @@ class Whole:
 class BaseWithin:
     """A base code held because its session is (possibly) the endoscopic portion of another (base_within): ``key``,
     ``code`` and ``session`` the base code's; ``wholes`` the sessions it is within; ``within`` the counted codes of
-    those sessions that include its family's examination (() when they have no counted code); ``established`` whether an
-    established whole holds it."""
+    those sessions that include its family's examination, and every counted code of a whole its own part_of_session
+    claim names, whatever it includes (DECISIONS D257), never an add-on code (D255) - () when they have no counted code;
+    ``established`` whether an established whole holds it."""
     key: str
     code: str
     session: Id
@@ -401,14 +540,18 @@ class ProcedureDay:
     could not identify; OTHER_GI for an act counted by its kind or class outside a procedural family), each once;
     ``done_acts`` and ``possible_acts`` the events that make them; ``undatable`` the procedure events whose date
     relation is not established (an E/M code's event_time, never READY); ``undatable_unlisted`` the indices in
-    FactSet.unlisted of the unlisted acts (3.2.6 rule 5). D151 withdrew D144's unidentified, so the reconcile rule reads
-    ``done`` alone (D134)."""
+    FactSet.unlisted of the kept unlisted acts and doubts of no E/M kind (3.2.6 rule 5, the synthetic act as D231 reads
+    it). D151 withdrew D144's unidentified, so the reconcile rule reads ``done`` alone (D134). ``codes`` the counted
+    procedural codes the day reads (each ProceduralCode whose ``procedural`` is True, each once, in member order: the
+    codes whose families it appends), which SEPARATE_EM's codes form names when the day has no act to list (DECISIONS
+    D246; the integration's fix of the combination, repair r3c's R3 and step 5c's R2)."""
     done: tuple[SessionKind | None, ...] = ()
     possible: tuple[SessionKind | None, ...] = ()
     done_acts: tuple[Id, ...] = ()
     possible_acts: tuple[Id, ...] = ()
     undatable: tuple[Id, ...] = ()
     undatable_unlisted: tuple[int, ...] = ()
+    codes: tuple[str, ...] = ()
 
     @property
     def procedure_day(self) -> bool:
@@ -418,15 +561,19 @@ class ProcedureDay:
     @property
     def established(self) -> bool:
         """A procedure is documented as DONE on the date of service by an act whose every fact that made it a done
-        procedure is established (``done_acts``). No weakening can create one (module docstring), which is why it alone
-        may moot an undatable act's date for an E/M code. A counted procedural code never establishes the day by itself:
+        procedure is established (``done_acts``): its status supported performed or attempted, its date relation
+        supported on the date of service, its kind supported and no E/M kind (DECISIONS D227 R2-1: an act whose kind is
+        not established may be the visit itself), and its session's family, or its kind (for an examination, its
+        device), established. Each is an established fact of the act or of its session, and a weakening only makes a
+        fact less established, so no weakening can create one (module docstring), which is why it alone may moot an
+        undatable act's date for an E/M code (D227 R2-3). A counted procedural code never establishes the day by itself:
         its support rests on that code's own facts (its reach, its device, its bundling), and the E/M code's hold would
         then move with facts outside its closure (4.9, P-INDEP); a supported code's act is a done act here anyway."""
         return bool(self.done_acts)
 
     @property
     def undatable_any(self) -> bool:
-        """A procedure event, or an unlisted act, whose date CPT Studio could not establish."""
+        """A procedure event, or an unlisted act or doubt, whose date CPT Studio could not establish."""
         return bool(self.undatable or self.undatable_unlisted)
 
 
@@ -521,9 +668,18 @@ def _named_sessions(R: FactSet, event: Id) -> tuple[Id, ...] | None:
 
 def possible_sessions(R: FactSet, event: Id) -> tuple[Id, ...]:
     """The sessions ``event`` may be in: those its session fact may name; every session of the FactSet when it names
-    none (a silent slot). An id the FactSet does not hold is kept: its kind reads as silent, so any family."""
+    none (a silent slot). DECISIONS D227 R2-2: when one id it names - its supported value, or, not established, its
+    claimed value or a reading - is no session of the FactSet (a dangling id: settle's I4 keeps the claimed value,
+    unresolved, reference_invalid), the event may be in ANY session of the FactSet for membership (FINAL-V2 4.11: a
+    missing identifier manufactures neither a match nor a non-match), as step 4b's coverage.sessions_of reads it: the
+    named ids first, then every session of the FactSet. The dangling id itself is kept, so its family read stays
+    fail-closed as before: its kind reads as silent, so any family (``may_be_of_family``, ``_procedural_family``)."""
     named = _named_sessions(R, event)
-    return tuple(R.sessions) if named is None else named
+    if named is None:
+        return tuple(R.sessions)
+    if any(session not in R.sessions for session in named):
+        return tuple(dict.fromkeys((*named, *R.sessions)))
+    return named
 
 
 def _session_may_be(R: FactSet, session: Id, family: SessionKind) -> bool:
@@ -532,8 +688,9 @@ def _session_may_be(R: FactSet, session: Id, family: SessionKind) -> bool:
 
 def may_be_of_family(R: FactSet, event: Id, family: SessionKind) -> bool:
     """Whether ``event`` may be in a session of ``family``: a session it may be in (possible_sessions: those its
-    session fact may name, every session of the FactSet when it names none) may be of that family; any family when
-    the FactSet has no session at all. Not established otherwise: weakening a session or kind fact only widens it."""
+    session fact may name, every session of the FactSet when it names none or names an id the FactSet does not hold)
+    may be of that family; any family when the FactSet has no session at all. Not established otherwise: weakening a
+    session or kind fact only widens it."""
     sessions = possible_sessions(R, event)
     if not sessions:
         return True
@@ -595,6 +752,152 @@ def _rank(item: rq.Item) -> int | None:
     return item.rank.value if item.rank is not None else None
 
 
+# --- 3.2.6 rule 3's synthetic act (DECISIONS D216, D231) --------------------------------------------------------------
+
+
+def synthetic(R: FactSet) -> tuple[int, ...]:
+    """The indices in FactSet.unlisted of the kept entries read as 3.2.6 rule 3's synthetic act (DECISIONS D216, D231),
+    in stored order: an unlisted ACT, or an unlisted DOUBT - a doubt about whether an act was done leaves it possibly
+    performed (4.2 [R:HO-1]; refute-r4a-r1 F1). A DENIAL is no act: 3.2.6 rule 4 pairs it."""
+    return tuple(index for index, entry in enumerate(R.unlisted) if entry.what in SYNTHETIC_WHAT)
+
+
+def synthetic_sessions(R: FactSet, entry: UnlistedStatement) -> tuple[Id, ...]:
+    """The sessions a synthetic act may be in for DECISIONS D231 rows 1 and 2 (row 2: "an unlisted act with card S (or
+    no card, S possible)"; row 1 by D232's reading, evaluate.synthetic_in's): its session card when the FactSet holds
+    that session (pass 2's card, read as a filed act's supported session); every session of the FactSet when it names
+    none (2.4 A6 gives the card "when the document says": the document does not say, so S is possible for every S -
+    3.2.6 rule 4's "with no session, of every session"); and, for a card the FactSet does not hold, that id and then
+    every session (as for no card: contract/appraise_read reads such a card as none; 4.11). Row 2 reads it with
+    DECISIONS D256 P2's K2 for an entry with no card and D269's exemption of a session established not done today
+    (``session_possibly_done``); rule (c) of base_included reads its card, or D256 P1's admission with none
+    (``_unlisted_acts``); rows 3-5 read a carded act only (``_card``).
+    No fact is read, so no weakening moves it."""
+    if entry.session is None:
+        return tuple(R.sessions)
+    if entry.session not in R.sessions:
+        return tuple(dict.fromkeys((entry.session, *R.sessions)))
+    return (entry.session,)
+
+
+def synthetic_in(R: FactSet, entry: UnlistedStatement, session: Id) -> bool:
+    """Whether the synthetic act ``entry`` may be in ``session`` for rows 1 and 2 (``synthetic_sessions``)."""
+    return session in synthetic_sessions(R, entry)
+
+
+def _card(R: FactSet, entry: UnlistedStatement) -> Id | None:
+    """The session a synthetic act's card names, when the FactSet holds it - what 3.2.6 rule 3 ("an unlisted act with a
+    session card is a synthetic doubted act of that session") and DECISIONS D231 rows 3-5 ("whose card may be the
+    feeding tube's session", "whose card may be of the code's family", "an unlisted act with a card") read; None when
+    the entry names none, and when its card names a session the FactSet does not hold (contract/appraise_read reads a
+    card that names no session card of the request as no session, so the pipeline never hands one in: read the same way
+    here, so DECISIONS D256's readings of an entry with no card apply to it)."""
+    return entry.session if entry.session is not None and entry.session in R.sessions else None
+
+
+def _synthetic_of_family(R: FactSet, entry: UnlistedStatement, family: SessionKind) -> bool:
+    """DECISIONS D231 rows 4 and 5, ``may_be_of_family`` for a synthetic act: its card (``_card``) is a session whose
+    kind may be ``family`` (facts.possibly over that session's kind). An entry with no card is of no family here: those
+    rows read a carded act only (row 2 alone reads "no card, S possible")."""
+    card = _card(R, entry)
+    return card is not None and _session_may_be(R, card, family)
+
+
+def _synthetic_kinds(entry: UnlistedStatement) -> frozenset[Kind]:
+    """Every catalogue kind a synthetic act may be for coding - ``_act_kinds`` of its filed doubted form (its kind fact
+    supported as the entry names it, or an empty slot when it names none; its purpose an empty slot): every kind when
+    it names none ("a silent kind admits every kind", D231 row 5); else its kind, and a clip or an injection, whose
+    purpose no card states, is a bleeding control too (D157's doubt). An umbrella names itself only, as a filed act
+    whose kind is established as the umbrella is none of its members by possibly (4.2)."""
+    if entry.kind is None:
+        return frozenset(Kind)
+    named = frozenset({entry.kind})
+    return named | frozenset({Kind.BLEEDING_CONTROL}) if named & catalogue.HEMOSTASIS_KINDS else named
+
+
+def _synthetic_may_be_of(entry: UnlistedStatement, wanted: frozenset[Kind]) -> frozenset[Kind]:
+    """``_may_be_of`` for a synthetic act: the kinds of ``wanted`` it may be (``_synthetic_kinds``; a tattoo and an
+    injection as one act, catalogue.ONE_ACT)."""
+    kinds = _synthetic_kinds(entry)
+    return frozenset(target for target in wanted if target in kinds
+                     or (target in catalogue.ONE_ACT and bool(kinds & catalogue.ONE_ACT)))
+
+
+def _synthetic_read_under(R: FactSet, entry: UnlistedStatement, family: SessionKind, kinds: frozenset[Kind]) -> bool:
+    """``_read_under`` for a synthetic act: its card may be a session of a family whose act of one of ``kinds`` is read
+    under ``family`` (catalogue.READ_UNDER; its regions not read, as for a filed act)."""
+    return any(under is family and kind in kinds and _synthetic_of_family(R, entry, owner)
+               for (owner, kind), (under, _regions) in catalogue.READ_UNDER.items())
+
+
+def _may_hold(R: FactSet, session: Id, kind: Kind) -> bool:
+    """K2's admission over THE table of a session family's kinds (requirements_table.FAMILY_KINDS, DECISIONS D191):
+    whether a family ``session``'s kind may be (facts.possibly over its kind fact: every family for an empty slot)
+    holds ``kind`` - DECISIONS D256 P2's "an entry with no card that names a kind makes possibly done only sessions
+    whose family holds that kind (K2)". (P1's no-card arm reads coverage.doubted_in's admission alone:
+    ``_listed_doubted``; the step's NOTES, question Q-P1K2.) Weakening the session's kind only adds families."""
+    return any(kind in facts_.family_kinds(family) for family in SessionKind if _session_may_be(R, session, family))
+
+
+def _session_families(R: FactSet, session: Id) -> frozenset[SessionKind]:
+    """The families ``session`` may be of as step 4b's coverage.session_families reads them for its doubted list: its
+    kind when supported; every other kind when negated; facts.possibly's otherwise (every kind for an empty slot)."""
+    found = _fact(R, session, _A.KIND)
+    if found.result is Result.SUPPORTED:
+        return frozenset(family for family in SessionKind if found.value is family)
+    if found.result is Result.NEGATED:
+        return frozenset(family for family in SessionKind if found.value is not family)
+    return frozenset(family for family in SessionKind if facts_.possibly(found, family))
+
+
+def _reportable_kinds(family: SessionKind) -> frozenset[Kind]:
+    """coverage.reportable_kinds (v1's reportable_kind for ``family``): its catalogue acts but the examination, the
+    umbrellas and NOT_REPORTED, and (D116) the stent removal and exchange where its acts hold the stent placement."""
+    acts = frozenset(catalogue.FAMILY_ACTS.get(family, ()))
+    return frozenset(kind for kind in acts if kind not in _NOT_ACTS and kind not in catalogue.NOT_REPORTED) | (
+        _STENT_ACTS if Kind.STENT in acts else frozenset())
+
+
+def _eus_unlisted_kind(kind: Kind) -> bool:
+    """coverage.eus_unlisted_kind (D137, D145): a catalogue kind of an EUS act that the EUS's catalogue entry does not
+    list, and no examination, umbrella, E/M kind or NOT_REPORTED kind."""
+    return (kind not in catalogue.FAMILY_ACTS[SessionKind.EUS] and kind not in _NOT_ACTS and kind not in EM_KINDS
+            and kind not in catalogue.NOT_REPORTED)
+
+
+def _listed_doubted(R: FactSet, kind: Kind, session: Id) -> bool:
+    """DECISIONS D256 P1: whether step 4b's event_coding@2 would list, among ``session``'s doubted acts, the filed
+    doubted form of an unlisted entry with no card that names ``kind`` - an act filed with its kind supported ``kind``,
+    its status a doubt that it was performed, its session slot silent and every other slot empty (coverage's
+    _filed_doubted_form for no card). event_coding never lists an E/M kind beside a session (the session's own service),
+    and lists the rest where coverage.doubted_in admits it - which, for that form, reads only the kind and the families
+    the session may be of (coverage.session_families): nothing else of the act is established, so its required facts
+    are in doubt and it is doubted wherever it may be reportable. Admitted: no examination or umbrella but the removal
+    (D117: any of its members); and, in a family the session may be of, a catalogue kind the act may be (a clip or an
+    injection, its purpose unknown, is a bleeding control too: D157) among that family's reportable kinds
+    (coverage.reportable_kinds), or a removal where the family's acts hold one of its members (D117), or, in an EUS, a
+    catalogue kind its entry does not list (D145: coverage.eus_unlisted_kind, kind other included). A session the
+    FactSet does not hold is no session the act may be in. coverage imports this module, so its derivation is read
+    here, and tests/v2/test_combination.py pins the two readers equal over every kind and session shape (the step's
+    NOTES: one home for both is the integration's)."""
+    if session not in R.sessions or kind in EM_KINDS or (kind in _NOT_ACTS and kind is not Kind.REMOVAL):
+        return False
+    members = catalogue.UMBRELLAS.get(kind, (kind,))
+    kinds = frozenset(found for member in members if member is not Kind.OTHER
+                      for found in ((member, Kind.BLEEDING_CONTROL) if member in catalogue.HEMOSTASIS_KINDS
+                                    else (member,)))
+    eus = kinds | (frozenset(members) & frozenset({Kind.OTHER}))
+    for family in _session_families(R, session):
+        acts = catalogue.FAMILY_ACTS.get(family, ())
+        if kinds & _reportable_kinds(family):
+            return True
+        if kind is Kind.REMOVAL and any(member in acts for member in catalogue.REMOVAL_MEMBERS):
+            return True
+        if family is SessionKind.EUS and any(_eus_unlisted_kind(found) for found in eus):
+            return True
+    return False
+
+
 # --- the codes --------------------------------------------------------------------------------------------------------
 
 
@@ -613,6 +916,17 @@ def accounts_for_an_act(code: str) -> bool:
     act")."""
     profile = catalogue.code_profile(code)
     return profile is not None and bool(profile.covers)
+
+
+def is_addon(code: str) -> bool:
+    """DECISIONS D255: whether ``code`` is an add-on code - a key of engine/assess.ADDON_PRIMARIES (43273, 91013, 99153,
+    99417), read here as the catalogue's add-on profile (catalogue.Profile.addon), which tests/v2/test_assess.py and
+    tests/v2/test_combination.py pin equal to those keys and to requirements_table's ADDON codes (engine/assess imports
+    this module, so it is not imported here). An add-on is reported in addition to its primaries: it is never a code
+    that includes another under the base rules (base_included's (a), the within codes), never causes such a hold and is
+    never named in one; an add-on and its primaries are governed by assess's ADDON row alone."""
+    profile = catalogue.code_profile(code)
+    return profile is not None and profile.addon
 
 
 # --- the competition's claims (D40, D55, D74, D104, D118, D163, D167) -------------------------------------------------
@@ -638,11 +952,38 @@ def _read_under(R: FactSet, event: Id, family: SessionKind, kinds: frozenset[Kin
                for (owner, kind), (under, _regions) in catalogue.READ_UNDER.items())
 
 
+def site_outside(code: str, R: FactSet, event: Id) -> bool:
+    """DECISIONS D29 as D240 keeps it ("A verified target outside the class does not support"): whether ``event``'s
+    target is ESTABLISHED outside ``code``'s site class (catalogue.site_class; never for a code with none) - evaluate's
+    SITE row failing, read the same way (evaluate._places_of and _row_site, step 4a's; the module docstring): the act's
+    target lesion established or an empty slot; every place of the act, and of that lesion when it is supported,
+    established; at least one place supported; and every supported place outside the class, none surgically made or
+    unplaced (UNPLACED_SITES: D29's "an unverified or ambiguous target (an anastomosis) holds"). A place or a lesion not
+    established leaves the act possibly within the class (4.2), so weakening a fact only ever undoes this; only a
+    deleted place member can make it hold (D240's named release; the module docstring)."""
+    site = catalogue.site_class(code)
+    if site is None:
+        return False
+    lesion = _fact(R, event, _A.TARGET_LESION)
+    if not (facts_.established(lesion) or facts_.silent(lesion)):
+        return False
+    places = list(facts_.members(R, event, _A.TARGET_PLACES))
+    if lesion.result is Result.SUPPORTED and isinstance(lesion.value, Id):
+        places += facts_.members(R, lesion.value, _A.PLACES)
+    if not all(facts_.established(member) for member in places):
+        return False
+    supported = [member.value for member in places
+                 if member.result is Result.SUPPORTED and isinstance(member.value, Landmark)]
+    within = catalogue.SITE_CLASSES[site]
+    return bool(supported) and all(place not in within and place not in UNPLACED_SITES for place in supported)
+
+
 def may_account_for(code: str, R: FactSet, event: Id) -> bool:
     """Whether ``code`` may account for ``event`` (the OWN arm of ``claims``; module docstring): a candidate of one of
-    its requirement groups, possibly today's (4.4's frame), possibly of its family (route (b): of any family) and of
-    its technique class. No place list is read: a site or region difference read from listed places could release a
-    rival when a member is deleted (P6)."""
+    its requirement groups, possibly today's (4.4's frame), possibly of its family (route (b): of any family), of its
+    technique class, and not established outside its site class (D29's site fit, DECISIONS D240: ``site_outside``).
+    No other place list is read: route (b)'s and READ_UNDER's regions could release a rival when a member is deleted
+    (P6)."""
     spec = rq.spec(code)
     wanted = frozenset(kind for group in spec.groups for kind in group)
     if not wanted:
@@ -654,7 +995,40 @@ def may_account_for(code: str, R: FactSet, event: Id) -> bool:
     if link.route is not catalogue.LinkRoute.UNRECONCILED and not (
             may_be_of_family(R, event, spec.family) or _read_under(R, event, spec.family, kinds)):
         return False
-    return _technique_fits(R, link.technique, event)
+    return _technique_fits(R, link.technique, event) and not site_outside(code, R, event)
+
+
+def synthetic_claims(code: str, R: FactSet, supporting: Sequence[Id] = ()) -> tuple[int, ...]:
+    """DECISIONS D231 row 5: the synthetic acts ``code`` may account for (``synthetic``; ``claims``' arms over
+    FactSet.unlisted, in stored order), each CARDED ("an unlisted act with a card": ``_card``; an entry with no card is
+    no act any code claims here): OWN - a kind of one of its requirement groups (``_synthetic_may_be_of``: every kind
+    when the entry names none), its card possibly a session of its family (``_synthetic_of_family``; READ_UNDER's rule
+    admits one of a family read under it; on route (b), of any family) - and D55's - for a narrowed code whose other
+    covered kinds are opened (``_opened_extras``, over the code's E* ``supporting`` and its family's acts), one of those
+    kinds, its card possibly of its family - so a code competes for a carded synthetic act exactly where it would
+    compete for the act filed in doubt in that session (D118 adds nothing here: a synthetic act's technique is unknown,
+    so the OWN arm already admits it). A synthetic act's status, date, performer, device and places are unknown, so
+    4.4's frame, R4's technique and D29's site fit never set it apart (each an established fact). Indices, never event
+    ids: ``claims`` (which step 5a reads) stays the documented events, and ``combine`` adds the competition these make
+    (the module docstring)."""
+    spec = rq.spec(code)
+    wanted = frozenset(kind for group in spec.groups for kind in group)
+    link = catalogue.code_link(code)
+    extras = _opened_extras(code, R, supporting)
+    if not wanted and not extras:
+        return ()
+    out: list[int] = []
+    for index in synthetic(R):
+        entry = R.unlisted[index]
+        if _card(R, entry) is None:
+            continue  # D231 row 5: "an unlisted act with a card" (refute-r4d-r1 of build-v2/w7r, F3)
+        kinds = _synthetic_may_be_of(entry, wanted)
+        if kinds and (link.route is catalogue.LinkRoute.UNRECONCILED or _synthetic_of_family(R, entry, spec.family)
+                      or _synthetic_read_under(R, entry, spec.family, kinds)):
+            out.append(index)
+        elif _synthetic_may_be_of(entry, extras) and _synthetic_of_family(R, entry, link.family):
+            out.append(index)
+    return tuple(out)
 
 
 def _possible_lesion_values(found: Fact) -> frozenset[Id]:
@@ -679,57 +1053,113 @@ def one_stricture(R: FactSet, first: Id, second: Id) -> bool:
     return not (facts_.apart_by_lesion(R, first, second) or facts_.apart_by_place(R, first, second))
 
 
-def _defining_extras(code: str, R: FactSet, supporting: Sequence[Id]) -> tuple[Id, ...]:
-    """D55, D74, D104, D167 (module docstring): the acts of a narrowed code's other covered kinds, once its family has
-    an act that may be of a defining kind, possibly positive and not established at another date, or its E* is not
-    empty."""
+def _synthetic_opens(R: FactSet, kinds: frozenset[Kind], family: SessionKind) -> bool:
+    """DECISIONS D231 row 4: a synthetic act (``synthetic``) that may be of one of ``kinds`` (every kind when it names
+    none) and whose card may be of ``family`` (``_synthetic_of_family``: "whose card may be of the code's family"; an
+    entry with no card opens nothing) - a possibly performed act of those kinds in the family, read as a filed doubted
+    act of the kind in that session would be."""
+    return any(_synthetic_may_be_of(R.unlisted[index], kinds) and _synthetic_of_family(R, R.unlisted[index], family)
+               for index in synthetic(R))
+
+
+def _extra_of_family(R: FactSet, family: SessionKind, event: Id, kinds: frozenset[Kind]) -> bool:
+    """D55's act test: ``event`` may be of one of ``kinds``, possibly positive, not established at another date (any
+    performer), possibly in a session of ``family``."""
+    return (bool(_may_be_of(R, event, kinds)) and _possibly_positive_on_date(R, event)
+            and may_be_of_family(R, event, family))
+
+
+def _opened_extras(code: str, R: FactSet, supporting: Sequence[Id]) -> frozenset[Kind]:
+    """D55, D74, D104, D167 (module docstring): a narrowed code's other covered kinds, once its family has an act that
+    may be of a defining kind, possibly positive and not established at another date - a filed act, or a synthetic act
+    of a defining kind or none whose card may be of its family (DECISIONS D231 row 4) - or its E* is not empty; none
+    otherwise."""
     link = catalogue.code_link(code)
     if not link.defining:
-        return ()
+        return frozenset()
     others = frozenset(link.acts) - frozenset(link.defining)
+    defining = frozenset(link.defining)
+    if others and (supporting or any(_extra_of_family(R, link.family, event, defining) for event in R.events)
+                   or _synthetic_opens(R, defining, link.family)):
+        return others
+    return frozenset()
+
+
+def _defining_extras(code: str, R: FactSet, supporting: Sequence[Id]) -> tuple[Id, ...]:
+    """D55, D74, D104, D167 (module docstring): the filed acts of a narrowed code's other covered kinds once they are
+    opened (``_opened_extras``), its E* aside."""
+    others = _opened_extras(code, R, supporting)
     if not others:
         return ()
-    defining = frozenset(link.defining)
-
-    def of_family(event: Id, kinds: frozenset[Kind]) -> bool:
-        return (bool(_may_be_of(R, event, kinds)) and _possibly_positive_on_date(R, event)
-                and may_be_of_family(R, event, link.family))
-
-    if not supporting and not any(of_family(event, defining) for event in R.events):
-        return ()
-    return tuple(event for event in R.events if event not in supporting and of_family(event, others))
+    family = catalogue.code_link(code).family
+    return tuple(event for event in R.events
+                 if event not in supporting and _extra_of_family(R, family, event, others))
 
 
 def _stricture_claims(code: str, R: FactSet, own: Sequence[Id]) -> tuple[Id, ...]:
     """D118 (module docstring): a technique code's claims on ONE stricture with ANOTHER act of its own - the acts of its
     family that may be of its kinds, possibly positive and not established at another date, any performer and any
-    technique."""
+    technique. A synthetic act of its kinds or none whose card may be of its family is another act of its own
+    (DECISIONS D231 row 4): its technique, its site and its lesion are unknown, so it may be the code's and nothing sets
+    it apart from any act (4.11: an unknown identity never sets two acts apart)."""
     link = catalogue.code_link(code)
-    if link.technique is None or not own:
+    if link.technique is None:
         return ()
     kinds = frozenset(link.acts)
+    unlisted = _synthetic_opens(R, kinds, link.family)
+    if not own and not unlisted:
+        return ()
     return tuple(event for event in R.events
                  if _may_be_of(R, event, kinds) and _possibly_positive_on_date(R, event)
                  and may_be_of_family(R, event, link.family)
-                 and any(mine != event and one_stricture(R, mine, event) for mine in own))
+                 and (unlisted or any(mine != event and one_stricture(R, mine, event) for mine in own)))
 
 
 def claims(code: str, R: FactSet, supporting: Sequence[Id] = ()) -> tuple[Id, ...]:
     """The acts ``code`` claims for the competition (module docstring; v1's assess._claims as FINAL-V2 4.7 and 4.8
     rewire it), whatever the code's state: its E* and every act it may account for (OWN), D55's and D167's acts of a
     narrowed code's other kinds, and D118's acts on one stricture - E* first, in the order given, then pass 1's order.
-    An act of E* a technique code cannot account for (its device established as another technique class) is not
-    claimed (R4)."""
+    An act a technique code cannot account for (its device established as another technique class, R4) is not claimed
+    as its E*, and no act established outside a site code's class is claimed by any arm (D29's site fit, DECISIONS
+    D240: ``site_outside``): a dilation the code could never account for is no act it competes for."""
     link = catalogue.code_link(code)
-    given = tuple(dict.fromkeys(event for event in supporting if _technique_fits(R, link.technique, event)))
+    given = tuple(dict.fromkeys(event for event in supporting if _technique_fits(R, link.technique, event)
+                                and not site_outside(code, R, event)))
     own = given + tuple(event for event in R.events if event not in given and may_account_for(code, R, event))
     found = list(own)
     for event in _defining_extras(code, R, supporting) + _stricture_claims(code, R, own):
-        if event not in found:
+        if event not in found and not site_outside(code, R, event):
             found.append(event)
     head = [event for event in found if event in given]
     tail = [event for event in found if event not in given]
     return tuple(head) + _ordered(R, tail)
+
+
+_H = TypeVar('_H', bound=Hashable)
+
+
+def _rivals(entries: Sequence[tuple[str, str, str, Sequence[_H]]]) -> dict[str, tuple[str, ...]]:
+    """competition's rule over any claimed items (event ids, or synthetic acts' indices)."""
+    out: dict[str, tuple[str, ...]] = {}
+    for key, code, _origin, supporting in entries:
+        mine = frozenset(supporting)
+        rivals = [other_code for other_key, other_code, _other_origin, other_items in entries
+                  if other_key != key and other_code != code and mine & frozenset(other_items)]
+        if rivals:
+            out[key] = tuple(dict.fromkeys(rivals))
+    return out
+
+
+def _shared(entries: Sequence[tuple[str, str, str, Sequence[_H]]]) -> dict[str, tuple[_H, ...]]:
+    """contested's rule over any claimed items."""
+    out: dict[str, tuple[_H, ...]] = {}
+    for key, code, _origin, supporting in entries:
+        shared = [item for item in supporting
+                  if any(other_key != key and other_code != code and item in other_items
+                         for other_key, other_code, _other_origin, other_items in entries)]
+        if shared:
+            out[key] = tuple(dict.fromkeys(shared))
+    return out
 
 
 def competition(entries: Sequence[tuple[str, str, str, Sequence[Id]]]) -> dict[str, tuple[str, ...]]:
@@ -737,28 +1167,14 @@ def competition(entries: Sequence[tuple[str, str, str, Sequence[Id]]]) -> dict[s
     unchanged): ``entries`` (key, code, origin, claims) of the counted codes; two of them with different codes whose
     claims intersect - the same documented act - are each held with one question naming the others, WHOEVER proposed
     either. ``origin`` is kept in the entry and never read. {key: the rival codes, in entry order, each once} of every
-    held code."""
-    out: dict[str, tuple[str, ...]] = {}
-    for key, code, _origin, supporting in entries:
-        mine = frozenset(supporting)
-        rivals = [other_code for other_key, other_code, _other_origin, other_events in entries
-                  if other_key != key and other_code != code and mine & frozenset(other_events)]
-        if rivals:
-            out[key] = tuple(dict.fromkeys(rivals))
-    return out
+    held code. ``combine`` applies the same rule over the synthetic acts' claims (DECISIONS D231 row 5)."""
+    return _rivals(entries)
 
 
 def contested(entries: Sequence[tuple[str, str, str, Sequence[Id]]]) -> dict[str, tuple[Id, ...]]:
     """For every code ``competition`` holds, the acts it shares with its rivals, in its claims' order (the acts its
     competing_codes item quotes)."""
-    out: dict[str, tuple[Id, ...]] = {}
-    for key, code, _origin, supporting in entries:
-        shared = [event for event in supporting
-                  if any(other_key != key and other_code != code and event in other_events
-                         for other_key, other_code, _other_origin, other_events in entries)]
-        if shared:
-            out[key] = tuple(dict.fromkeys(shared))
-    return out
+    return _shared(entries)
 
 
 # --- base (engine.base_included; FINAL 7.9, D119, D177(1), 3.2.6 rule 3) ----------------------------------------------
@@ -789,17 +1205,95 @@ def _peg_acts(R: FactSet, coding: Mapping[Id, SessionActs], session: Id) -> Sess
     return SessionActs(tuple(reportable), tuple(doubted))
 
 
+def _one_session(R: FactSet, session: Id) -> bool:
+    """DECISIONS D256 as D269 counts it (refute-r4d-r1 V8R4D1-3, option (a)): whether ``session`` is the one session the
+    document tells - the one session of the FactSet that is not established not done today (``not_done_today``; an
+    entry with no card is in no session established not done today, D256 P2), a planned repeat or an earlier
+    examination filed as a session of its own aside. With no such session at all, the document's only session is still
+    its one session, as before the ruling (the step's question Q-COUNT: D269 counts the sessions that are not
+    established not done today and says nothing of a count of none; the fail-closed reading keeps the hold). A session
+    the FactSet does not hold is none."""
+    if session not in R.sessions:
+        return False
+    if any(other != session and not not_done_today(R, other) for other in R.sessions):
+        return False  # another session may be done today: the document tells more than one
+    return not not_done_today(R, session) or len(R.sessions) == 1
+
+
 def _unlisted_acts(R: FactSet, session: Id) -> tuple[int, ...]:
-    """FINAL-V2 3.2.6 rule 3: the indices of the kept unlisted acts whose session card is ``session``."""
-    return tuple(index for index, entry in enumerate(R.unlisted)
-                 if entry.what is UnlistedWhat.ACT and entry.session == session)
+    """FINAL-V2 3.2.6 rule 3 as DECISIONS D231, D232 and D256 read it: the indices of the synthetic acts (``synthetic``:
+    the kept unlisted acts AND doubts) that hold ``session``'s base code as synthetic doubted acts of the session, in
+    stored order:
+    - one carded to the session (``_card``), whatever its kind (pass 2 names the session; D232: "the base code keeps
+      rule 3's base_included hold");
+    - one with no card (or a card the FactSet does not hold) that names a kind, where the session's family may hold
+      that kind as coverage.doubted_in reads it: step 4b would list its filed doubted form among the session's doubted
+      acts (``_listed_doubted``) - D256 P1, Q-CARD option (c), "exactly what coverage.doubted_in admits for the filed
+      doubted form": where the same act filed in doubt with its session slot silent holds the base code through 4b's
+      doubted list (refute-r4d-r2 P1: read as no session, a one-session colonoscopy's 45378 went READY beside an
+      unlisted biopsy whose card pass 2 left empty). Never an E/M kind beside its own session, moderate sedation, an
+      umbrella of interventions, or kind other outside an EUS (refute-r4d-r1 of build-v2/w7r, F4's kinds: 4b lists none
+      of them);
+    - one with no card that names no kind, when the session is the document's one session (D256); in a document of
+      more than one session it stays out - the named residual Q-UNNAMED, measured at D2-D3 (refute-r4d-r1 F1: read in
+      every session, it held an office visit's base code beside a colonoscopy with nothing the hold could name).
+      DECISIONS D269 (refute-r4d-r1 V8R4D1-3, option (a)): "a document that tells one session" counts the sessions
+      that are not established not done today (``not_done_today``: an entry with no card is in none of them, D256 P2),
+      so a planned repeat colonoscopy filed as a session of its own leaves the colonoscopy done today the document's
+      one session (``_one_session``).
+    Every entry is still consumed by its other rules (completeness; an overlapped code; rule 4 for a doubt; the same-day
+    rule; rows 1 and 2 here)."""
+    alone: bool | None = None  # read once, and only for a kindless entry with no card
+    out: list[int] = []
+    for index in synthetic(R):
+        entry = R.unlisted[index]
+        card = _card(R, entry)
+        if card is not None:
+            held = card == session
+        elif entry.kind is None:
+            if alone is None:
+                alone = _one_session(R, session)
+            held = alone
+        else:
+            held = _listed_doubted(R, entry.kind, session)
+        if held:
+            out.append(index)
+    return tuple(out)
+
+
+def _unlisted_pegs(R: FactSet, session: Id) -> tuple[int, ...]:
+    """DECISIONS D231 row 3 (D119's arm over the synthetic act): the indices of the synthetic acts of kind PEG or none
+    whose card (``_card``) is a session other than ``session`` whose kind may be the feeding tube's ("whose card may be
+    the feeding tube's session") - possibly a PEG of the feeding-tube session, which D119 reads as an act of the upper
+    endoscopy done with it too. An entry with no card is read by no session here (rule (c)'s own arm reads it: a PEG
+    with no card holds the upper endoscopy's base code where step 4b would list it doubted, DECISIONS D256 P1)."""
+    out: list[int] = []
+    for index in synthetic(R):
+        card = _card(R, R.unlisted[index])
+        if (Kind.PEG in _synthetic_kinds(R.unlisted[index]) and card is not None and card != session
+                and _session_may_be(R, card, PEG_SESSION_KIND)):
+            out.append(index)
+    return tuple(out)
+
+
+def addon_acts(members: Sequence[Member], session: Id) -> frozenset[Id]:
+    """DECISIONS D268 (refute-r4d-r1 V8R4D1-1; r4d's Q-ADDON-ACT option (b), narrowed): the acts a counted add-on code
+    (``is_addon``) matched to ``session`` accounts for as its supporting acts (its E*, ``Member.supporting``) - the
+    cholangioscopy beside a counted 43273. Base rules (b) and (c) read none of them: the add-on is reported WITH its
+    primary (assess's ADDON row), so the act it accounts for is never one "this diagnostic code does not account for".
+    Read over the counted set alone (the engine's, or a reviewer's at read time): with the add-on not counted the rules
+    read as built."""
+    return frozenset(event for other in members if other.session == session and is_addon(other.code)
+                     for event in other.supporting)
 
 
 def base_included(members: Sequence[Member], coding: Mapping[Id, SessionActs], R: FactSet) -> tuple[BaseIncluded, ...]:
     """A family's base code matched to session S is held, never excluded, beside (a) another counted code of its family
-    matched to S that accounts for an act, (b) S's reportable acts, or (c) S's doubted acts and unlisted acts (module
-    docstring), in member order. ValueError when ``coding`` does not list S (or, for D119, a session that may be the
-    feeding tube's): step 4b lists every session (``session_acts``)."""
+    matched to S that accounts for an act, never an add-on (DECISIONS D255: ``is_addon``), (b) S's reportable acts, or
+    (c) S's doubted acts and the synthetic acts that hold it (``_unlisted_acts``: carded to S, or D256's readings of an
+    entry with no card) (module docstring), in member order - rules (b) and (c) never reading an act a counted add-on
+    code of S accounts for as its supporting act (DECISIONS D268: ``addon_acts``). ValueError when ``coding`` does not
+    list S (or, for D119, a session that may be the feeding tube's): step 4b lists every session (``session_acts``)."""
     found: list[BaseIncluded] = []
     for index, member in enumerate(members):
         session = member.session
@@ -808,20 +1302,25 @@ def base_included(members: Sequence[Member], coding: Mapping[Id, SessionActs], R
         acts = session_acts(coding, session)
         beside = tuple(other.code for position, other in enumerate(members)
                        if position != index and other.family is member.family and other.session == session
-                       and accounts_for_an_act(other.code))
+                       and accounts_for_an_act(other.code) and not is_addon(other.code))  # D255
         tract = catalogue.eus_tract(member.code)
         others = tuple(code for code in beside if catalogue.eus_tract(code) is tract)  # D177 (1)
         reportable, doubted = acts.reportable, acts.doubted
+        unlisted = _unlisted_acts(R, session)
         if member.family is PEG_FAMILY:  # D119
             pegs = _peg_acts(R, coding, session)
             reportable, doubted = reportable + pegs.reportable, doubted + pegs.doubted
-        reportable = _ordered(R, reportable)
-        doubted = tuple(event for event in _ordered(R, doubted) if event not in reportable)
-        unlisted = _unlisted_acts(R, session)
+            unlisted = tuple(dict.fromkeys(unlisted + _unlisted_pegs(R, session)))  # D231 row 3
+        accounted = addon_acts(members, session)  # D268: rules (b) and (c) read none of the add-on's own acts
+        reportable = tuple(event for event in _ordered(R, reportable) if event not in accounted)
+        doubted = tuple(event for event in _ordered(R, doubted) if event not in reportable and event not in accounted)
+        unlisted = tuple(sorted(unlisted))
         if beside or reportable or doubted or unlisted:
+            named = tuple(dict.fromkeys(kind for kind in (R.unlisted[index].kind for index in unlisted)
+                                        if kind is not None))
             found.append(BaseIncluded(key=member.key, code=member.code, session=session, beside=tuple(
                 dict.fromkeys(beside)), others=tuple(dict.fromkeys(others)), reportable=reportable, doubted=doubted,
-                unlisted=unlisted))
+                unlisted=unlisted, unlisted_kinds=named))
     return tuple(found)
 
 
@@ -829,24 +1328,53 @@ def base_included(members: Sequence[Member], coding: Mapping[Id, SessionActs], R
 
 
 def _manual(R: FactSet, event: Id) -> bool:
-    """FINAL 5.6 E13: an examination whose device is supported manual (a digital examination) is no session."""
+    """FINAL 5.6 E13: an examination whose device is supported manual (a digital examination) is no session - the
+    established reading, which the possible whole (``session_possibly_done``, and ``not_done_today``'s open
+    examination) and the procedure day read: a device not established leaves the event possibly the session's,
+    fail-closed. ``session_done`` reads ``_digital``."""
     return (facts_.holds(_fact(R, event, _A.KIND), Kind.EXAMINATION)
             and facts_.holds(_fact(R, event, _A.TECHNIQUE_DEVICE), Device.MANUAL))
 
 
+def _digital(R: FactSet, event: Id) -> bool:
+    """FINAL 5.6 E13's digital examination as ``session_done`` reads it - evaluate._digital's reading (DECISIONS D253,
+    QE13 option (a): "the claimed-manual reading (monotone) holds in evaluate and in combination alike", repair r4a's
+    R2): an event that may be an examination (its kind possibly the examination, facts.possibly) whose device CLAIMS
+    manual - supported manual, or, not established, manual its claimed value or one of its readings (facts.possibly over
+    a device that is not silent). Each 9.4 weakening keeps a claimed value, so a weakened device never turns a digital
+    examination into the session's own examination or into an act that makes it done; a silent device, one established
+    as another device, and manual negated claim none. engine/evaluate imports this module through engine/questions, so
+    its predicate is read here, and tests/v2/test_combination.py pins the two equal (``_examinations`` empty exactly
+    where evaluate.act_only holds)."""
+    device = _fact(R, event, _A.TECHNIQUE_DEVICE)
+    return (facts_.possibly(_fact(R, event, _A.KIND), Kind.EXAMINATION) and facts_.possibly(device, Device.MANUAL)
+            and not facts_.silent(device))
+
+
 def _examinations(R: FactSet, session: Id) -> tuple[Id, ...]:
     """The session's established examinations: kind supported examination, session supported ``session``, a digital
-    examination excepted (E13)."""
+    examination excepted (E13, ``_digital``: a device claiming manual - evaluate.act_only's set)."""
     return tuple(event for event in R.events
                  if facts_.holds(_fact(R, event, _A.KIND), Kind.EXAMINATION)
-                 and facts_.holds(_fact(R, event, _A.SESSION), session) and not _manual(R, event))
+                 and facts_.holds(_fact(R, event, _A.SESSION), session) and not _digital(R, event))
 
 
 def _may_be_examination_of(R: FactSet, session: Id, event: Id) -> bool:
     """``event`` may be ``session``'s examination (D62's possible examination): its kind possibly the examination, the
-    session possibly ``session``, possibly today's (4.4's frame), not an established digital examination."""
+    session possibly ``session`` (possible_sessions: a session id the FactSet does not hold may be any session, D227
+    R2-2), possibly today's (4.4's frame), no digital examination (``_digital``: a device claiming manual, QE13)."""
     return (facts_.possibly(_fact(R, event, _A.KIND), Kind.EXAMINATION) and session in possible_sessions(R, event)
-            and possibly_today(R, event) and not _manual(R, event))
+            and possibly_today(R, event) and not _digital(R, event))
+
+
+def synthetic_examinations(R: FactSet, session: Id) -> tuple[int, ...]:
+    """DECISIONS D231 row 1: the indices of the synthetic acts (``synthetic``: kept unlisted acts and doubts) that may
+    be ``session``'s examination - of kind examination or none named, possibly in it (``synthetic_sessions``). Each is
+    a possibly performed examination of the session that is never done (its status is the doubt; it has no date,
+    performer or entry) and never a digital one (no device is established), as ``_may_be_examination_of`` reads a filed
+    examination in doubt."""
+    return tuple(index for index in synthetic(R) if Kind.EXAMINATION in _synthetic_kinds(R.unlisted[index])
+                 and synthetic_in(R, R.unlisted[index], session))
 
 
 def session_done(R: FactSet, session: Id) -> bool:
@@ -854,33 +1382,116 @@ def session_done(R: FactSet, session: Id) -> bool:
     itself)"; 4.7's "done = 4.3 rows 2-5"): one of its established examinations passes rows 2-5 (reading.done); with
     none, one of its acts (session supported) passes them - a session told only through its acts (D121, D135) - and no
     event that may be its examination is left open (the refutation's F3: an examination whose date is not established
-    beside a done FNA leaves the EUS only possibly done). A digital examination is excepted throughout (E13)."""
+    beside a done FNA leaves the EUS only possibly done; an event whose session fact names an id the FactSet does not
+    hold may be any session's examination, D227 R2-2), nor a synthetic act that may be (``synthetic_examinations``:
+    DECISIONS D231 row 1, read only in an act-only session - beside an established examination, D232's reading: a
+    synthetic examination adds nothing there). A digital examination is excepted throughout (E13), read as evaluate
+    reads it (``_digital``: a device claiming manual - DECISIONS D253, QE13 option (a)), so the act-only session is
+    evaluate.act_only's. DECISIONS D227: THE derivation of "a session is done" - step 4b's done_examinations,
+    possible_examinations and session event must give its answer (its cross-module test reads this function, so its
+    signature stays)."""
     view = reading.Reading.of(R)
     exams = _examinations(R, session)
     if exams:
         return any(reading.done(view, event) for event in exams)
     if any(_may_be_examination_of(R, session, event) and not reading.done(view, event) for event in R.events):
         return False
+    if synthetic_examinations(R, session):
+        return False
     return any(facts_.holds(_fact(R, event, _A.SESSION), session) and reading.done(view, event)
-               and not _manual(R, event) for event in R.events)
+               and not _digital(R, event) for event in R.events)
+
+
+def _claims_session(R: FactSet, event: Id, session: Id) -> bool:
+    """Whether ``event``'s session fact CLAIMS ``session``: its supported value, or - not established - its claimed
+    value; never a doubt's reading, a contradiction's side or an empty slot a doubt names alone, never a negated claim.
+    Each 9.4 weakening keeps a claimed value (an established fact to unresolved, an added doubt), so an event placed in
+    a session by its session fact stays placed in it under every weakening."""
+    found = _fact(R, event, _A.SESSION)
+    return (found.value == session and not facts_.silent(found) and found.result is not Result.NEGATED
+            and found.state is not FactState.NEGATED)
+
+
+def _open_examination(R: FactSet, session: Id, event: Id) -> bool:
+    """An event that may be ``session``'s examination done on the date of service (``not_done_today``'s second arm,
+    DECISIONS D269 as the step's question Q-NDT builds it): its session fact claims the session (``_claims_session``),
+    its kind may be the examination (facts.possibly), it may be positive (pairing.positive) and its date relation is not
+    established as another date (pairing.other_date) - what ``not_done_today`` asks of an established examination - and
+    it is no established digital examination (``_manual``: E13 as ``session_possibly_done``'s filed arm reads it). An
+    established examination of the session is one exactly when it is not established not done today. Every input only
+    widens under a weakening, so a weakening adds such events and never removes one."""
+    return (_claims_session(R, event, session) and facts_.possibly(_fact(R, event, _A.KIND), Kind.EXAMINATION)
+            and pairing.positive(R, event) and not pairing.other_date(R, event) and not _manual(R, event))
+
+
+def not_done_today(R: FactSet, session: Id) -> bool:
+    """DECISIONS D256 P2 and D269: the session's examination is established, and established not done on the date of
+    service - it has an established examination (``_examinations``: kind supported examination, session supported, a
+    digital examination excepted), and nothing that may be its examination may be done today: no event whose session
+    fact claims it and whose kind may be the examination is possibly positive with its date not established as another
+    (``_open_examination``) - so each established examination is established as not done today (its status established
+    as not positive - planned, or denied - or its date relation established as another date), and no other event the
+    document places in the session may be its examination done today. The second arm is the step's question Q-NDT
+    (DECISIONS D269's exemption over D256 P2's first reading, the established examinations alone, released a hold under
+    a 9.4 weakening: a session whose examination done today is weakened out of the established set - its session or its
+    kind to unresolved, or its device given a doubt reading manual - became "established not done" beside its planned
+    examination, and every act of it exempt). Every input of either arm only weakens toward not settled, so a weakening
+    only ever undoes this (P-MONO). A session the FactSet does not hold reads its events the same way."""
+    if not _examinations(R, session):
+        return False
+    return not any(_open_examination(R, session, event) for event in R.events)
+
+
+def _synthetic_possibly_in(R: FactSet, entry: UnlistedStatement, session: Id) -> bool:
+    """D231 row 2 ("an unlisted act with card S (or no card, S possible)") as DECISIONS D256 P2 reads it: a synthetic
+    act carded to ``session`` makes it possibly done; one with no card (or a card the FactSet does not hold:
+    ``synthetic_sessions``) makes it possibly done, when it names a kind, only where the session's family holds that
+    kind (K2: ``_may_hold``) - a pH capsule placement or an office visit act of no session never makes a planned EUS
+    today's (refute-r4d-r2 P2). A session established not done today is made possibly done by none of them (DECISIONS
+    D269: ``session_possibly_done`` reads ``not_done_today`` first)."""
+    if not synthetic_in(R, entry, session):
+        return False
+    if _card(R, entry) is not None:
+        return True
+    return entry.kind is None or _may_hold(R, session, entry.kind)
 
 
 def session_possibly_done(R: FactSet, session: Id) -> bool:
-    """A session may be done: an event its session fact may name it, possibly today's (4.4's frame)."""
-    return any(session in possible_sessions(R, event) and possibly_today(R, event) and not _manual(R, event)
-               for event in R.events)
+    """A session may be done (D70's possible whole): an event that may be in it (possible_sessions: its session fact may
+    name it, names none, or names an id the FactSet does not hold - D227 R2-2), possibly today's (4.4's frame), not an
+    established digital examination (E13); or a synthetic act that may be in it (DECISIONS D231 row 2: an unlisted act
+    or doubt with card S, or no card - S possible -, or a card the FactSet does not hold: ``synthetic_sessions``), a
+    possibly performed act whose date and performer are unknown; an entry with no card that names a kind makes possibly
+    done only a session whose family holds that kind (D256 P2's K2; ``_synthetic_possibly_in``). DECISIONS D269
+    (Q-P2DATE option (c); 4.3 row 7: a session that has an examination is decided by it): a session whose examination is
+    established, and established not done on the date of service (``not_done_today``: planned, or done on another
+    date), is possibly done by NO act - filed or kept unlisted, placed, supported, carded or with no card, whatever its
+    date or its session slot. This keeps D256 P2's readings (no entry with no card, no act whose session slot is silent
+    and whose date is not established) and removes Q-P2DATE's release (an unplaced act dated today no longer makes a
+    planned EUS possibly done, so weakening its date releases nothing). Step 4b's _part_of_session reads this function
+    (D227's one derivation), so its signature stays."""
+    if not_done_today(R, session):
+        return False  # D269: no act makes a session established not done today possibly done
+    if any(session in possible_sessions(R, event) and possibly_today(R, event) and not _manual(R, event)
+           for event in R.events):
+        return True
+    return any(_synthetic_possibly_in(R, R.unlisted[index], session) for index in synthetic(R))
 
 
 def wholes(R: FactSet, session: Id) -> tuple[Whole, ...]:
     """The sessions ``session`` is, or may be, the endoscopic portion of (module docstring: C3, C-4, D70), in the
-    FactSet's session order, each once (an established whole before a possible one of the same session)."""
+    FactSet's session order, each once (an established whole before a possible one of the same session). DECISIONS
+    D269: a session established not done on the date of service (``not_done_today``) is never a whole - not by C3's
+    supported claim, not by D70's claim not established, and never by C-4 (``session_possibly_done`` is False for it) -
+    so a planned EUS is never named as the whole of today's EGD (the integration's I4 residual)."""
     found: dict[Id, bool] = {}
     part = _fact(R, session, _A.PART_OF_SESSION)
     if part.result is Result.SUPPORTED and isinstance(part.value, Id) and part.value != session:
-        found[part.value] = True  # C3
+        if not not_done_today(R, part.value):  # D269
+            found[part.value] = True  # C3
     elif part.result in facts_.OPEN and not facts_.silent(part):
         for value in (part.value, *part.options):
-            if isinstance(value, Id) and value != session:
+            if isinstance(value, Id) and value != session and not not_done_today(R, value):  # D269
                 found.setdefault(value, False)  # D70, by possibly
     kind = _fact(R, session, _A.KIND)
     if facts_.possibly(kind, WITHIN_FAMILY) and session_possibly_done(R, session):
@@ -901,11 +1512,27 @@ def wholes(R: FactSet, session: Id) -> tuple[Whole, ...]:
                  sorted(found.items(), key=lambda pair: order.get(pair[0], len(order))))
 
 
+def _named_wholes(R: FactSet, session: Id) -> frozenset[Id]:
+    """The sessions ``session``'s own part_of_session claim names - C3's supported value, and D70's claimed value and
+    readings when the claim is not established (``wholes``' first two arms) - never itself: the wholes the document
+    STATES the session is part of, as opposed to C-4's structural inference."""
+    part = _fact(R, session, _A.PART_OF_SESSION)
+    if part.result is Result.SUPPORTED:
+        return frozenset({part.value} - {session}) if isinstance(part.value, Id) else frozenset()
+    if part.result in facts_.OPEN and not facts_.silent(part):
+        return frozenset(value for value in (part.value, *part.options) if isinstance(value, Id) and value != session)
+    return frozenset()
+
+
 def base_within(members: Sequence[Member], R: FactSet) -> tuple[BaseWithin, ...]:
     """engine.base_within over facts (module docstring): a base code whose session is (possibly) the endoscopic portion
     of another is held - beside the counted codes of that session that include its family's examination, or beside none
-    when that session has no counted code. No entry when the code is no base, its session is (possibly) part of no
-    other, or that session's counted codes include no such examination. In member order."""
+    when that session has no counted code, or, when its own part_of_session claim names that session, beside every
+    counted code of it, whatever it includes (DECISIONS D244 R-N3: C3's established whole, and the same claim not
+    established, D70's possible whole; D257: ``within`` names the stated whole's counted codes). An add-on code is no
+    counted code here (D255: never named; a whole whose only counted codes are add-ons has none). No entry when the code
+    is no base, its session is (possibly) part of no other, or every such session is C-4's alone and its counted codes
+    include no such examination. In member order."""
     found: list[BaseWithin] = []
     for index, member in enumerate(members):
         session = member.session
@@ -914,12 +1541,16 @@ def base_within(members: Sequence[Member], R: FactSet) -> tuple[BaseWithin, ...]
         within: list[str] = []
         held: list[Id] = []
         established = False
+        named = _named_wholes(R, session)
         for whole in wholes(R, session):
             including = [other.code for position, other in enumerate(members)
-                         if position != index and other.session == whole.session]
-            codes = [code for code in including if catalogue.includes_examination(code, member.family)]
-            if including and not codes:
-                continue
+                         if position != index and other.session == whole.session and not is_addon(other.code)]
+            if whole.session in named:
+                codes = including  # D244 R-N3, D257: the stated whole's counted codes, whatever they include
+            else:
+                codes = [code for code in including if catalogue.includes_examination(code, member.family)]
+                if including and not codes:
+                    continue  # C-4's structural whole: its counted codes include no such examination
             within += codes
             held.append(whole.session)
             established = established or whole.established
@@ -944,11 +1575,23 @@ def _established_family(R: FactSet, event: Id) -> SessionKind | None:
     return facts_.session_family(R, event)
 
 
+def _kind_established_not_em(R: FactSet, event: Id) -> bool:
+    """DECISIONS D227 R2-1: the event's kind is established (supported) and is no E/M kind, so the event is a procedure
+    and never the visit or its prolonged time. An event whose kind is not established - unresolved, contradicted (pass
+    1's two sides), doubted (a doubt's readings beside the claimed value) or silent - may be the visit itself, whatever
+    its session's family: it is a POSSIBLE procedure, never a DONE one. A weakening that gives an E/M event another
+    possible kind therefore establishes no procedure day (the refutation build-v2/w34/refute-4d-r2, R2-1)."""
+    kind = _fact(R, event, _A.KIND)
+    return kind.result is Result.SUPPORTED and isinstance(kind.value, Kind) and kind.value not in EM_KINDS
+
+
 def _established_kind(R: FactSet, event: Id) -> Kind | None:
     """The event's kind when it is established a SAME_DAY_KIND and, for an examination, established no digital
     examination (E13: its device supported other than manual, or manual negated); None otherwise. A digital examination
     left open (its device silent or not established) may be no procedure at all, so it is never a DONE procedure by its
-    kind: weakening a device supported manual must never create a done procedure (the refutation's F1)."""
+    kind: weakening a device supported manual must never create a done procedure (the refutation's F1). A SAME_DAY_KIND
+    is never an E/M kind (tests/v2/test_combination.py pins it), so this kind is established and no E/M kind too
+    (_kind_established_not_em)."""
     kind = _fact(R, event, _A.KIND)
     if kind.result is not Result.SUPPORTED or not isinstance(kind.value, Kind) or kind.value not in SAME_DAY_KINDS:
         return None
@@ -988,9 +1631,12 @@ def procedure_day(R: FactSet, codes: Sequence[ProceduralCode] = ()) -> Procedure
             continue
         family = _established_family(R, event)
         status = _fact(R, event, _A.STATUS)
-        family_done = family is not None and family in SAME_DAY_FAMILIES
+        in_family = family is not None and family in SAME_DAY_FAMILIES
+        # D227 R2-1: done by its family only when its kind is established and no E/M kind - an act that may be the
+        # visit (its kind not established) is a possible procedure, never a done one, whatever its session's family
+        family_done = in_family and _kind_established_not_em(R, event)
         kind_done = _established_kind(R, event) is not None
-        label = family if family_done else OTHER_SERVICE if (by_kind or by_class) else None
+        label = family if in_family else OTHER_SERVICE if (by_kind or by_class) else None
         if (status.result is Result.SUPPORTED and isinstance(status.value, Status) and status.value in POSITIVE
                 and (family_done or kind_done)):
             done.append(label)
@@ -1002,12 +1648,14 @@ def procedure_day(R: FactSet, codes: Sequence[ProceduralCode] = ()) -> Procedure
         if not code.procedural:
             continue
         (done if code.supported else possible).append(code.family)
-    unlisted = tuple(index for index, entry in enumerate(R.unlisted)
-                     if entry.what is UnlistedWhat.ACT and entry.kind not in EM_KINDS)
+    named = tuple(dict.fromkeys(code.code for code in codes if code.procedural))
+    # 3.2.6 rule 5 over the synthetic act (DECISIONS D231: the same-day rule's release is an absence condition, D216;
+    # an unlisted doubt is a possibly performed act too): every kept unlisted act or doubt of no E/M kind is undatable
+    unlisted = tuple(index for index in synthetic(R) if R.unlisted[index].kind not in EM_KINDS)
     families = tuple(dict.fromkeys(done))
     return ProcedureDay(done=families, possible=tuple(item for item in dict.fromkeys(possible) if item not in families),
                         done_acts=tuple(done_acts), possible_acts=tuple(possible_acts), undatable=tuple(undatable),
-                        undatable_unlisted=unlisted)
+                        undatable_unlisted=unlisted, codes=named)
 
 
 def _today_visit(R: FactSet, event: Id) -> bool:
@@ -1092,8 +1740,8 @@ def same_day_holds(member: Member, R: FactSet, day: ProcedureDay) -> tuple[HeldF
     procedure day (done or possible) with no separate statement documented, separate_em; otherwise, with an undatable
     act and no ESTABLISHED procedure day, event_time for each undatable act (C-3: never READY); otherwise none. v1 asked
     event_time only with no procedure day, so a possible procedure day a weakening created released a code held for an
-    undatable act (the refutation's F1); here only an established procedure day, which no weakening creates, moots the
-    undatable act's date."""
+    undatable act (the refutation's F1); here only an established procedure day, which no weakening creates (D227 R2-1:
+    its act's kind established and no E/M kind among its facts), moots the undatable act's date (D227 R2-3)."""
     if member.family not in EM_FAMILIES:
         return ()
     statement = separate_statement(R, member.supporting)
@@ -1177,8 +1825,9 @@ def endoscopic_rows(pairs: Iterable[tuple[str, Mapping[str, object] | None]]) ->
 
 
 def base_hold(found: BaseIncluded, R: FactSet) -> HeldFact:
-    """The base_included hold (rank 21, key-bound): an EXPLANATION when the examination is established included (rules
-    (a), (b)), a QUESTION when only doubted or unlisted acts hold it; its subject the session; its spans the acts'."""
+    """The base_included hold (rank 21, key-bound): an EXPLANATION when the examination is established included (rule
+    (b), a reportable act of its session: BaseIncluded.established), a QUESTION when only rule (a) - counted codes
+    beside it - or doubted or unlisted acts hold it; its subject the session; its spans the acts'."""
     spans = tuple(sorted(set(_anchor_spans(R, found.reportable + found.doubted))
                          | set(_unlisted_spans(R, found.unlisted))))
     return HeldFact(fact=_key(BASE_ITEM), attribute=None, subject=found.session, result=None,
@@ -1204,11 +1853,13 @@ def base_within_hold(found: BaseWithin, R: FactSet) -> HeldFact:
                     reason=None, spans=_session_spans(R, (found.session, *found.wholes)), rank=_rank(BASE_ITEM))
 
 
-def competing_hold(acts: Sequence[Id], R: FactSet) -> HeldFact:
+def competing_hold(acts: Sequence[Id], R: FactSet, unlisted: Sequence[int] = ()) -> HeldFact:
     """The competing_codes hold (rank 22): a QUESTION naming no single fact; its subject the first act it shares with
-    its rivals; its spans those acts' anchors."""
+    its rivals (None when it shares only synthetic acts); its spans those acts' anchors and the units of the synthetic
+    acts it shares (``unlisted``, indices in FactSet.unlisted: DECISIONS D231 row 5)."""
+    spans = tuple(sorted(set(_anchor_spans(R, acts)) | set(_unlisted_spans(R, unlisted))))
     return HeldFact(fact=_key(COMPETING_ITEM), attribute=None, subject=next(iter(acts), None), result=None,
-                    kind=ItemKind.QUESTION, cause=COMPETING_CAUSE, reason=None, spans=_anchor_spans(R, acts),
+                    kind=ItemKind.QUESTION, cause=COMPETING_CAUSE, reason=None, spans=spans,
                     rank=_rank(COMPETING_ITEM))
 
 
@@ -1221,7 +1872,9 @@ class Combination:
     ``within`` and ``competes`` (the rival codes) and ``contested`` (the shared acts) for each member they hold;
     ``day`` the procedure day; ``statements`` each E/M member's separate statement; ``reviews`` each member's modifier
     review; ``held`` each member's combination holds - base_included (or base-within when base_included does not hold
-    it, v1's order), competing_codes, then the same-day rule's. Every mapping is keyed by member key and frozen."""
+    it, v1's order), competing_codes, then the same-day rule's. ``unlisted_claims`` each member's synthetic claims and
+    ``unlisted_contested`` the synthetic acts a held member shares with its rivals (indices in FactSet.unlisted,
+    DECISIONS D231 row 5; their rivals are in ``competes``). Every mapping is keyed by member key and frozen."""
     claims: Mapping[str, tuple[Id, ...]]
     bases: Mapping[str, BaseIncluded]
     within: Mapping[str, BaseWithin]
@@ -1231,6 +1884,8 @@ class Combination:
     statements: Mapping[str, SeparateStatement]
     reviews: Mapping[str, ModifierReview]
     held: Mapping[str, tuple[HeldFact, ...]]
+    unlisted_claims: Mapping[str, tuple[int, ...]] = field(default_factory=dict)
+    unlisted_contested: Mapping[str, tuple[int, ...]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, 'claims', MappingProxyType(dict(self.claims)))
@@ -1241,16 +1896,28 @@ class Combination:
         object.__setattr__(self, 'statements', MappingProxyType(dict(self.statements)))
         object.__setattr__(self, 'reviews', MappingProxyType(dict(self.reviews)))
         object.__setattr__(self, 'held', MappingProxyType(dict(self.held)))
+        object.__setattr__(self, 'unlisted_claims', MappingProxyType(dict(self.unlisted_claims)))
+        object.__setattr__(self, 'unlisted_contested', MappingProxyType(dict(self.unlisted_contested)))
 
 
 def combine(members: Sequence[Member], coding: Mapping[Id, SessionActs], R: FactSet) -> Combination:
     """Every combination rule over the counted ``members`` (4.1's combine; 4.4's "the combination holds (base,
     base-within, competing, separate_em, event_time)"): ``coding`` is step 4b's reportable and doubted acts per session,
-    ``R`` the FactSet as assess reads it (facts.effective's). Pure: identical inputs give identical outputs (P-DET)."""
+    ``R`` the FactSet as assess reads it (facts.effective's). The competition is read over the documented acts' claims
+    and, by the same rule, over the synthetic acts' (DECISIONS D231 row 5: two counted codes of different codes that
+    may both account for one synthetic act compete, as for a filed act in doubt); a member's rivals are the union, in
+    that order. Pure: identical inputs give identical outputs (P-DET)."""
     claimed = {member.key: claims(member.code, R, member.supporting) for member in members}
     entries = [(member.key, member.code, member.origin, claimed[member.key]) for member in members]
-    competes = competition(entries)
+    synthetic_claimed = {member.key: synthetic_claims(member.code, R, member.supporting) for member in members}
+    synthetic_entries = [(member.key, member.code, member.origin, synthetic_claimed[member.key])
+                         for member in members]
+    filed_rivals, synthetic_rivals = competition(entries), _rivals(synthetic_entries)
+    competes = {member.key: tuple(dict.fromkeys(filed_rivals.get(member.key, ())
+                                                + synthetic_rivals.get(member.key, ())))
+                for member in members if member.key in filed_rivals or member.key in synthetic_rivals}
     shared = contested(entries)
+    shared_unlisted = _shared(synthetic_entries)
     bases = {found.key: found for found in base_included(members, coding, R)}
     within = {found.key: found for found in base_within(members, R)}
     day = procedure_day(R, tuple(ProceduralCode(member.code, member.family, member.procedural, member.supported)
@@ -1267,8 +1934,9 @@ def combine(members: Sequence[Member], coding: Mapping[Id, SessionActs], R: Fact
         elif member.key in within:
             items.append(base_within_hold(within[member.key], R))
         if member.key in competes:
-            items.append(competing_hold(shared.get(member.key, ()), R))
+            items.append(competing_hold(shared.get(member.key, ()), R, shared_unlisted.get(member.key, ())))
         items += same_day_holds(member, R, day)
         held[member.key] = tuple(items)
     return Combination(claims=claimed, bases=bases, within=within, competes=competes, contested=shared, day=day,
-                       statements=statements, reviews=reviews, held=held)
+                       statements=statements, reviews=reviews, held=held, unlisted_claims=synthetic_claimed,
+                       unlisted_contested=shared_unlisted)

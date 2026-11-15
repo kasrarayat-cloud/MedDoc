@@ -117,9 +117,10 @@ class MemberDateConflictIsHeldWhereDecidedTests(OperatorReads, TestCase):
                     .filter(encounter_id=encounter_id, kind=models.Job.PREDICT,
                             state__in=(models.Job.QUEUED, models.Job.RUNNING)))
         self.assertEqual([job.idempotency_key for job in predicts if job.context and member_conflict(job.context)], [])
-        latest = review.latest_job(models.Encounter.objects.get(pk=encounter_id))
-        self.assertFalse(latest.kind == models.Job.PREDICT and latest.state == models.Job.CANCELLED
-                         and member_conflict(latest.context), latest.idempotency_key)
+        latest = review.latest_job(models.Encounter.objects.get(pk=encounter_id))  # the newest TARGET job (4.3)
+        self.assertFalse(latest is not None and latest.kind == models.Job.PREDICT
+                         and latest.state == models.Job.CANCELLED and member_conflict(latest.context),
+                         getattr(latest, 'idempotency_key', None))
 
     def assert_settled_on_the_date_question(self, encounter_id, held):
         encounter = models.Encounter.objects.get(pk=encounter_id)
@@ -347,8 +348,8 @@ class MemberDateConflictIsHeldWhereDecidedTests(OperatorReads, TestCase):
         self.assertEqual(models.ProviderRun.objects.filter(encounter_id=encounter_id).count(), runs)
         drain()
         job.refresh_from_db()
-        self.assertEqual(job.result, {'skipped': 'the context is not the current one for this revision; nothing was '
-                                                 'sent'})
+        # FINAL-V2 amendment 1, 3.4: the start check's fixed reason, the stage recorded superseded
+        self.assertEqual(job.result, {'skipped': review.SUPERSEDED_CONTEXT, 'superseded': True})
         self.assertEqual(len(self.provider.sent), 1)
 
 
@@ -375,6 +376,26 @@ install = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(install)
 
 NEW_REVISION, OLD_REVISION = 'a' * 40, 'b' * 40
+
+
+def pre_switch_answer(body):
+    """Design v2 (step 6b): the clean answer of the app phase's two reads before anything is replaced - V1_ROWS
+    (no design v1 row on the target) and INSTALL_COUNTS (nothing to count, no hold standing) - else None."""
+    if body == install.V1_ROWS:
+        return {'engine_version': install.V1_ENGINE_VERSION,
+                'interpretation_version': install.V1_INTERPRETATION_VERSION,
+                'assessments': 0, 'inventories': 0, 'encounter_count': 0, 'encounters': []}
+    if body == install.INSTALL_COUNTS:
+        return {'size': {'bound_chars': 20000, 'bound_pages': 40, 'longest_chars': 0, 'without_inventory': 0,
+                         'over_chars': 0, 'over_pages': 0, 'unframed': 0, 'unframed_empty': 0,
+                         'unframed_unextracted': 0,
+                         'encounters': {'over_chars': [], 'over_pages': [], 'unframed': []}},
+                'values': {'count': 0, 'first_install': True, 'encounters': []},
+                'refused': {name: {'count': 0, 'newest': None}
+                            for name in ('corti_sent', 'participant_sent', 'corti_token')},
+                'a21': {'count': 0, 'encounters': []},
+                'holds': {'provider': {'corti': [], 'astra': [], 'fable': []}, 'interpreter': []}}
+    return None
 
 
 class DockerWorld:
@@ -593,7 +614,10 @@ class AppPhaseRefusesStagesItCannotRunTests(SimpleTestCase):
         def app_script(image_id, env, body, params, **kwargs):
             scripts.append(body)
             # the stored list states, recomputed once the pair is replaced (7c8 p1install): none changed
-            return {'encounters': 0, 'changed': {}} if body == install.RECOMPUTE_STATES else answer
+            if body == install.RECOMPUTE_STATES:
+                return {'encounters': 0, 'changed': {}}
+            # the two reads before anything is replaced (design v2, step 6b): no v1 row, nothing counted
+            return pre_switch_answer(body) or answer
         with mock.patch.object(install, 'installed_image', return_value='sha256:image'), \
                 mock.patch.object(install, 'require_db'), \
                 mock.patch.object(install, 'read_protected_env', return_value=b''), \
@@ -770,4 +794,6 @@ class TheUndoScriptsOnTheDatabaseTests(OperatorReads, TestCase):
         answer = run_app_script(install.UNRUNNABLE_STAGES, {})
         self.assertEqual((answer['stuck'], answer['kinds']), (2, ['review9']))
         self.assertEqual(answer['known'], sorted(jobs.STAGES))
-        self.assertNotEqual(review.latest_job(c).pk, older.pk)
+        # FINAL-V2 amendment 1, 4.3: the app reads the latest TARGET job - none here, since every stage above predates
+        # c's current final codes - and never the older stage of a kind no worker runs
+        self.assertIsNone(review.latest_job(c))

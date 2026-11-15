@@ -135,9 +135,10 @@ class Fact:
     contradicted, whose values are its options) - a contradiction from a conflict doubt or K8 keeps the claimed value
     (3.3 row 1). state: the claim's FactState; None when silent. options: the other values the fact leaves possible,
     which 4.2's possibly reads beside the claimed value - a contradicted fact's sides, a doubt's readings (3.3 row 2),
-    and the value of a control pass 2 did not reject (3.3 row 9, [R:HO-3]); empty for an established fact. reasons:
-    Reason members (3.3). spans: the revision spans the fact rests on (its sources' whole units), for wording.quote
-    after the decision.
+    the value of a control pass 2 did not reject (3.3 row 9, [R:HO-3]), and, for an event's session fact K3 demoted
+    (session_unreachable), every other session whose reach holds a place the act may be at (DECISIONS D244 Q-N1;
+    engine/facts.py); empty for an established fact. reasons: Reason members (3.3). spans: the revision spans the fact
+    rests on (its sources' whole units), for wording.quote after the decision.
 
     cited: one Cited per stored source - its link, its units' span and its located words' span. inherited_from: the
     section an act's fact was inherited from (1.5; 1.7 claim.inherited_from), None when it is the act's own slot; 4.5's

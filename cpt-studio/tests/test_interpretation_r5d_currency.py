@@ -34,7 +34,13 @@ Each fixture is a synthetic Gemini answer over a synthetic document (fictional p
 with the real linked steps and assessed through assess.assess with a synthetic Corti response citing the document's own
 words (the S08 builders). The installed release's outputs (c2e53f8e: engine.assess with gi_context.extract_context,
 merge_user_values office/established and detect.route on 2026-11-09, as tests/test_harness_engine.py drives it) quoted
-in the docstrings were measured on byte-identical texts. Nothing is sent."""
+in the docstrings were measured on byte-identical texts. Nothing is sent.
+
+DECISIONS D243 (2026-11-14, step q02): test_d144_the_other_readers_of_labels_and_possible_are_unchanged pinned the review overlay's reading of an
+event_coding@1 record, which FINAL-V2 6.5 retires (read time reads event_coding@2 only, a
+cpt-studio-events@1 record is read as stored and blocked). They retire with it, removed here by a counted
+edit naming their ids; step 5c's own tests carry the same kind of @1 record, asserting 6.5's refusal. Nothing
+else in this suite changed (8.0's ban on editing a retired module's tests yields to 6.5 for exactly these ids)."""
 from __future__ import annotations
 
 import inspect
@@ -478,30 +484,6 @@ class D144VisitBesideAnActDoneButForItsProcedure(SimpleTestCase):
                      'separately_identifiable': a('not_stated')}])
                 self.assertEqual(procedure_day(inv), combination.ProcedureDay(possible=(NON_GI_LABEL,)))
                 self.assertEqual(no_em(inv, text), ([NO_PROPOSAL], []))
-
-    def test_d144_the_other_readers_of_labels_and_possible_are_unchanged(self):
-        """After DECISIONS D151 ProcedureDay is labels, possible and undatable again: procedure_day (labels or possible)
-        is as before, so the separate_em and event_time questions and their wording are; the read-time overlay (a bool
-        from the items the assessment listed) keeps the banding's visit listed, as the assessment lists it (D144: set
-        apart); and possible alone lists the visit (D134)."""
-        both = inventory({'V1': VISIT, 'V2': TIME, 'P2': BAND, 'P4': BAND.replace('one internal', 'a second internal'),
-                          'P3': PLAN}, events=[visit(), banding(a('unknown')), act(
-            'E2', 'P4', 'band_ligation', 'Rubber band ligation', status_words='was performed',
-            procedure=a('office_em', 'office', ['P4']), target=tg('', 'anal_canal', 'a second internal hemorrhoid',
-                                                                   ['P4']))], visits=[visit_facts()])
-        self.assertEqual(procedure_day(both[0]), combination.ProcedureDay(labels=(OTHER_GI_LABEL,)))
-        inv, text = office(BAND, banding(a('unknown')))
-        found = procedure_day(inv)
-        self.assertTrue(found.procedure_day)
-        p = em(inv, text)
-        self.assertEqual(p.clarifications[0].question, checks.separate_em_clarification(
-            (), 'gi.office_em', p.key, (OTHER_GI_LABEL,)).question)
-        result = run(inv, text, [], user_values=MEMBER)
-        reviewed = overlay.reviewed_completeness(result.completeness, reading_of(inv), [], ())
-        self.assertEqual(([str(item['label']) for item in reviewed['unresolved_items']],
-                          [str(item['label']) for item in reviewed['not_listed']]), ([NO_PROPOSAL], []))
-        self.assertEqual(coverage.reconcile(reading_of(inv), [], procedure_day=combination.ProcedureDay(
-            possible=(OTHER_GI_LABEL,))).not_listed, [])  # possible alone: listed (D134)
 
     def test_d144_recorded_an_act_of_kind_other_whose_procedure_is_unknown(self):
         """RECORDED (constructed; none attested): an act of kind 'other' whose procedure Gemini left 'unknown' (no

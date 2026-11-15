@@ -37,7 +37,7 @@ INVENTORY_VERSION = 'gemini-inventory@1'
 LABEL = f"{INTERPRETATION_VERSION}+{INVENTORY_VERSION.removeprefix('gemini-')}"  # gemini-events@1+inventory@1
 
 ADAPTER_VERSION = 'gemini-generate@cptstudio-1'  # ProviderRun.adapter_version (at most 40 characters)
-MODEL = 'gemini-4-argon'  # D13: named by the URL; a response's modelVersion must equal it exactly
+MODEL = 'gemini-4-carbon'  # D13: named by the URL; a response's modelVersion must equal it exactly
 PROVIDER = 'gemini'  # ProviderRun.provider; an operator field, never shown to a customer (D22)
 PURPOSE = 'interpretation'  # ProviderRun.purpose (at most 16 characters)
 JOB_KIND = 'interpret'  # Job.kind (at most 10 characters)
@@ -72,7 +72,7 @@ APPRAISE_JOB_KIND = 'appraise'  # Job.kind of pass 2's stage (8 of 10 characters
 # object needs gemini-events@3, of a pass-2 object gemini-appraisal@2.
 # pass 1 (INTERPRETATION_VERSION_V2):
 # contract/extract_prompt.INSTRUCTIONS_2 (UTF-8): step 2a
-INSTRUCTIONS_SHA256_V2 = '462631172d4741a35418ef99bc6befd8ac3dcef95e46649fa5f4f260e98c98f9'
+INSTRUCTIONS_SHA256_V2 = '543adde5d07822bc45c3eaffb52c19175ad5a8d30b842c1e2ebc8008707b9089'
 # canonical bytes of contract/extract_schema.LOCAL_SCHEMA_2 (step 1b): step 2a
 LOCAL_SCHEMA_SHA256_V2 = '7cd387041de317825f371415070bcee1703be0d9022c92bf77580f59dda3d04c'
 # canonical bytes of contract/extract_schema.RESPONSE_SCHEMA_2 (step 1b): step 2a
@@ -87,12 +87,12 @@ APPRAISAL_LOCAL_SCHEMA_SHA256 = '526dd4e4116c07ed3e1431759a47ac79d4a4d3e7aba81c3
 # canonical bytes of contract/appraise_schema's RESPONSE schema: step 2c
 APPRAISAL_RESPONSE_SCHEMA_SHA256 = 'fc83346270c6bc165baba78ed8a731132c7e90f172ad22853b100d085ffbd275'
 # claims.TEMPLATES: step 2c
-TEMPLATES_SHA256 = '5422597831b871e03a0d79f308daba5c3077f4057192b0e6c74637a55d771b14'
+TEMPLATES_SHA256 = '8362112662c3172e6d375e713bb2ba5da7057e6f3c30085b68bc8359a50ef823'
 # claims.STATEMENT_TEMPLATES: step 2c
 STATEMENT_TEMPLATES_SHA256 = '3880e4af3eefbdbccf0c5bb8e4a099df1d50268b485e991f46db7b8f3a19e162'
 # the claims.CONTROLS generator with its tables (KIND_SIBLINGS, SESSION_SIBLINGS, CONTRAST_PLACES, the pair-control
 # and completeness rules, UNCONTROLLED): step 2c
-CONTROLS_SHA256 = '95d1ee8b42f8aaac05fbe17cd1ba34c0ebd4c5d47928cceee1bbb969178a1d05'
+CONTROLS_SHA256 = 'e4a8a79250ed14135b3d9f613fc4c4f57094bbe588b5484a1be98cc591a31c32'
 # engine/requirements.CLAIMED, its sha computed by step 1f: step 2c hands it with its pins
 CLAIMED_SHA256 = '8c95246d6ff8a260b344bb5a52e25f51ac744343ed8ebe5887764ad7e5cd7b81'
 HEALTH_THRESHOLDS_SHA256 = ''  # the health thresholds of 3.2.6 (contract/settle.py, step 3a), set from D3: step 8

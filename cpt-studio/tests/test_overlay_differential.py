@@ -24,6 +24,14 @@ asserted absent rather than silently skipped: an act a procedure line lists and 
 ' (listed, not stated done)' wording; the events engine has no such reading), and an examination-only EUS code (the
 events engine reads it as its family's base, FINAL 7.3; the legacy reader never did).
 
+DESIGN V2 (docs/gemini-migration/FINAL-V2.md 6.2 and 6.5; step 5c of its 8.1): the overlay reads event_coding@2 only,
+so the projection - the cpt-studio-events@1 record the v1 overlay read - is a v1 row, read AS STORED. The differential
+of the v1 overlay against review_view is retired with that overlay (tests/v2/test_overlay.py proves read time equals
+assess time over v2 records); DifferentialTests now asserts the fail-closed reading over every scenario state the suites
+exercise: nothing is released, added or recomputed from the v1 record - its endoscopic-family check included, which
+stands as stored, marked stale where the decisions moved what it reads (the refutation of step 5c, problem 10) - and
+every selected code keeps its stored status and checks.
+
 Synthetic data only, DB-free.
 """
 import dataclasses
@@ -103,7 +111,7 @@ def project(stored, services) -> tuple:
         if waits:
             support['reinstatement_waits'] = waits
         rows.append(replace(p, support=to_jsonable(support)))
-    coding = {'version': overlay.CODING_VERSION, 'sessions': sessions, 'codes': codes, 'lesions': lesions}
+    coding = {'version': 'cpt-studio-events@1', 'sessions': sessions, 'codes': codes, 'lesions': lesions}
     return rows, {'event_coding': coding}
 
 
@@ -231,45 +239,36 @@ EXERCISED_STATES = {
 
 
 class DifferentialTests(SimpleTestCase):
-    def test_the_two_overlays_agree_field_by_field_on_every_scenario_state(self):
-        compared, failures, by_scenario = 0, [], {}
-        exercised = {name: 0 for name in [*EXERCISED, *EXERCISED_STATES]}
+    """Design v2 (module docstring): every state of every scenario, over the v1 projection, read as stored."""
+
+    def test_every_scenario_state_of_a_v1_projection_is_read_as_stored(self):
+        compared, by_scenario, moved, endoscopic_stale = 0, {}, 0, 0
         for scenario in scenarios():
+            self.assertIsNone(overlay.coding_of(scenario.completeness))
+            stored = {p.key: p for p in scenario.projected}
             for decisions, answers in scenario.states():
-                differences = scenario.differences(decisions, answers)
+                views = scenario.new(decisions, answers)
                 compared += 1
                 by_scenario[scenario.name] = by_scenario.get(scenario.name, 0) + 1
-                if differences:
-                    failures.append((scenario.name, decisions, answers, differences[:3]))
-                views = scenario.new(decisions, answers)
-                for name, seen in EXERCISED.items():
-                    exercised[name] += any(seen(view) for view in views.values())
-                for name, seen in EXERCISED_STATES.items():
-                    exercised[name] += bool(seen(scenario, views, decisions))
-        self.assertEqual(failures[:5], [], f'{len(failures)} of {compared} states differ')
+                for key, view in views.items():
+                    p = stored[key]
+                    with self.subTest(scenario=scenario.name, decisions=decisions, answers=answers, code=p.code):
+                        self.assertEqual(view.released, ())
+                        self.assertFalse({'base_included', 'competing_codes', 'separate_em'} & set(view.added))
+                        self.assertEqual(view.recomputed, ())
+                        if view.reason != overlay.DETAIL_UNAVAILABLE and p.bucket == 'selected':
+                            self.assertEqual(view.status, p.status)
+                            self.assertEqual(list(view.checks), list(p.checks))
+                        moved += bool(view.stale)
+                        endoscopic_stale += 'pfs.endoscopic_base' in view.stale
         self.assertGreaterEqual(compared, 300)
         self.assertEqual(len(by_scenario), len(INPUTS) + 4)
-        self.assertEqual([name for name, n in exercised.items() if not n], [], exercised)
+        self.assertGreater(moved, 0)  # states that moved a stored hold were reached, and marked stale, not released
+        self.assertGreater(endoscopic_stale, 0)  # and an endoscopic-family check the decisions moved, stale as stored
 
-    def test_the_harness_is_live_a_projection_that_drops_what_the_overlay_reads_differs(self):
-        # negative controls: each removes from the event coding one thing a seam reads, and the comparison must see it
+    def test_the_projection_is_refused_at_its_version_and_at_v2_s(self):
         shape = next(scenario for scenario in scenarios() if scenario.name == 'siblings')
-        decisions = {}
-        self.assertEqual(shape.differences(decisions), [])
         coding = shape.completeness['event_coding']
-        for label, change in (
-                ('the base rule reads the reportable acts', lambda c: [s.update(reportable=[])
-                                                                       for s in c['sessions'].values()]),
-                ('the modifier review reads distinctness', lambda c: [l.update(distinct_from=[])
-                                                                      for l in c['lesions'].values()]),
-                ('the session of each code', lambda c: [e.update(session='') for e in c['codes'].values()])):
-            with self.subTest(label):
-                import copy
-                saved = copy.deepcopy(coding)
-                change(coding)
-                try:
-                    self.assertNotEqual(shape.differences(decisions), [])
-                finally:
-                    coding.clear()
-                    coding.update(saved)
-        self.assertEqual(shape.differences(decisions), [])
+        for version in ('cpt-studio-events@1', overlay.CODING_VERSION):
+            with self.subTest(version=version):
+                self.assertIsNone(overlay.coding_of({'event_coding': {**coding, 'version': version}}))

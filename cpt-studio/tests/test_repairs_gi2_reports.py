@@ -38,6 +38,7 @@ from studio.types import EvidenceSpan, NormalizedResponse, ProviderCode, RawExch
 from studio.validation import checks
 from studio.validation.engine import MAX_LISTED_CODE, NO_EVIDENCE
 from tests.legacy_chain import applied
+from tests import v2_documents, v2_replay
 from tests.test_pipeline_api import RecordedInterpretation, drain
 from tests.test_repairs_7c8_p1reports import (BIOPSY, COLONOSCOPY, COLONOSCOPY_INTERPRETATIONS, COLONOSCOPY_THREE,
                                               DILATION, SNARE, Harness, page, section)
@@ -408,14 +409,19 @@ class TheOriginOfASecondReviewCodeIsSaidTests(RecordedInterpretation, Harness):
     """F4 and F5. The primary selects the snare polypectomy and lists 45378; a reviewer asks for the second review, which
     selects the biopsy (added, marked as from it) and lists 45381. On the Suggestions screen the alternative it listed
     says where it came from, as the TXT and the CSV do; a code of its the reviewer rejects keeps the Origin line in
-    REJECTED, as in the approved and undecided lists, and the verifier still reads that list as exactly its codes."""
+    REJECTED, as in the approved and undecided lists, and the verifier still reads that list as exactly its codes.
+
+    DECISIONS D243 class C: every test decides and reports through the product, which reads event_coding@2 only (FINAL-V2
+    6.5), so its rows are design v2's, in replay (tests/v2_replay.py), from the colonoscopy report with its endoscopist
+    named (tests/v2_documents.COLONOSCOPY) - never the v1 chain's."""
     # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
     # recorded synthetic interpretation.
     interpretations = COLONOSCOPY_INTERPRETATIONS
+    v2_interpretations = ((v2_documents.COLONOSCOPY, v2_documents.colonoscopy_answer),)
 
     def reviewed(self, rejected):
         self.use(ListingProvider([SNARE], [BIOPSY], first_listed=['45378'], later_listed=['45381']))
-        encounter_id = self.create(COLONOSCOPY)
+        encounter_id = self.create(v2_documents.COLONOSCOPY if v2_replay.marked(self) else COLONOSCOPY)
         drain()
         self.assertEqual(ask(self.client, encounter_id).status_code, 201)
         drain()
@@ -435,12 +441,15 @@ class TheOriginOfASecondReviewCodeIsSaidTests(RecordedInterpretation, Harness):
         reply = self.post(f'/api/encounters/{encounter_id}/decisions', body)
         self.assertEqual(reply.status_code, 201, reply.content)
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_the_screen_marks_the_alternatives_the_second_review_listed(self):
         encounter_id = self.reviewed(rejected='45380')
         detail = self.detail(encounter_id)
         listed = {p['code']: p for p in detail['assessment']['proposals'] if p['bucket'] == 'alternative'}
+        # DECISIONS D243: design v2's alternative names its own origin (jobs._render_alternative: support['origin']),
+        # 'primary' for the primary's - where the v1 chain's alternative carried no support (None)
         self.assertEqual({code: (p['support'] or {}).get('origin') for code, p in listed.items()},
-                         {'45378': None, '45381': 'second_review'})
+                         {'45378': 'primary', '45381': 'second_review'})
         codes = unescape(page(detail)['codes'])
         titles = re.findall(r'<strong>(\d{5} · [^<]*)</strong>', codes)
         label = listed['45381']['family_label']
@@ -451,8 +460,12 @@ class TheOriginOfASecondReviewCodeIsSaidTests(RecordedInterpretation, Harness):
         self.assertIn(f'  - 45381 · {label} — second-review alternative, never selectable', draft)
         rows = {row['code']: row for row in csv.DictReader(self.csv_text(encounter_id).splitlines())
                 if row['item_list'] == 'alternative'}
-        self.assertEqual((rows['45381']['proposal_origin'], rows['45378']['proposal_origin']), ('second_review', ''))
+        # DECISIONS D243: the primary's alternative's origin column reads its support (reports: 'primary'; '' was the v1
+        # chain's alternative, which carried no support)
+        self.assertEqual((rows['45381']['proposal_origin'], rows['45378']['proposal_origin']),
+                         ('second_review', 'primary'))
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_a_rejected_second_review_code_keeps_its_origin_line(self):
         encounter_id = self.reviewed(rejected='45380')
         for kind in ('draft', 'reviewed'):
@@ -469,6 +482,7 @@ class TheOriginOfASecondReviewCodeIsSaidTests(RecordedInterpretation, Harness):
         self.assertNotIn(ORIGIN, approved)  # the primary's 45385
         self.assertEqual(reviewed.count(ORIGIN), 1)
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_control_a_rejected_primary_code_has_none_and_the_approved_one_keeps_its_own(self):
         encounter_id = self.reviewed(rejected='45385')
         reviewed = self.txt(encounter_id, 'reviewed')

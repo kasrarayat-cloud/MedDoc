@@ -1847,7 +1847,7 @@ test('a confirmed question names whose located passage and which reviewer; agree
   // moved by refutation round 3 (falsegreen-11): the fixtures' rows are the engine's; the confirmed passage is the landmarks line
   assert.ok(block.includes('<p>“Landmarks photographed: appendiceal orifice and ileocecal valve.” (page 1)</p>'));
   assert.ok(block.includes(`<p>Attestation recorded: ${app.escapeHtml(ATTESTATION('cecum'))}</p>`));
-  assert.ok(block.includes('1 Nov 2026, 09:00 UTC · A confirmed finding is not a decision: each code still needs its own.'));
+  assert.ok(block.includes('1 Nov 2026, 09:01 UTC · A confirmed finding is not a decision: each code still needs its own.'));
   assert.equal(block.includes('confirm-finding'), false, 'a question takes one confirmation');
   assert.equal(count(block, 'data-candidate='), 2, 'its candidates are still listed');
   // as the engine words it, whoever located it
@@ -1927,7 +1927,7 @@ test('the confirmed findings list every confirmation of the revision, after its 
   const doc = fixture(H2_CONFIRMED);
   const html = render(doc);
   const section = html.slice(html.indexOf('<h2>Confirmed findings (not decisions)</h2>'), html.indexOf('<h2>Documented services</h2>'));
-  assert.ok(section.includes('<strong>Extent reached: cecum</strong><p>Confirmed from Astra&#x27;s and Fable&#x27;s located passage by Synthetic Reviewer · 1 Nov 2026, 09:00 UTC · revision 1</p>'), section);
+  assert.ok(section.includes('<strong>Extent reached: cecum</strong><p>Confirmed from Astra&#x27;s and Fable&#x27;s located passage by Synthetic Reviewer · 1 Nov 2026, 09:01 UTC · revision 1</p>'), section);
   assert.ok(section.includes(`<p>Attestation recorded: ${app.escapeHtml(ATTESTATION('cecum'))}</p>`));
   assert.ok(section.includes('<p>The assessment reads it as documented by this passage; it decides no code.</p>'));
   assert.equal(html.includes(`data-question="${doc.confirmations[0].clarification_id}"`), false, 'its question was answered and is gone');

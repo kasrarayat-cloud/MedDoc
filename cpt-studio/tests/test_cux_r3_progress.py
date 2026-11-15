@@ -30,6 +30,7 @@ from django.test import Client, SimpleTestCase, TestCase, override_settings
 from studio import jobs, models, progress
 from studio.gi.context import _USER_CONFLICT_PREFIX
 from studio.providers.base import ProviderUnavailable
+from tests import v2_documents, v2_replay
 from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support import pipeline_factories as pf
@@ -351,6 +352,15 @@ class QueuedReading:
         self.assertEqual(page['message'], block['message'])  # the page draws the server's message as served
         return page
 
+    def assertUpdating(self, doc):
+        """FINAL-V2 amendment 1, 5.2 (U16): a member's re-run after a finished run is an update - 'updating' while its
+        first stage waits, the steps before the run's first read skipped ("Not needed") and none done, so the server
+        says the stage waits to start (the page's 'updating' title is step 5d's)."""
+        block = doc['progress']
+        self.assertEqual((block['phase'], block['busy'], block['slow']), ('updating', True, False))
+        self.assertEqual(states(doc)[:3], ['skipped', 'skipped', 'skipped'])
+        self.assertEqual(block['message'], progress.MESSAGES['queued'])
+
 
 @override_settings(**LIVE)
 class QueuedTitleFlowTests(RecordedInterpretation, QueuedReading, CustomerReads, OperatorReads, TestCase):
@@ -394,8 +404,8 @@ class QueuedTitleFlowTests(RecordedInterpretation, QueuedReading, CustomerReads,
         drain()
         self.assertEqual(self.post(f'/api/encounters/{encounter_id}/context', {'setting': 'office'}).status_code, 201)
         doc = self.customer(encounter_id)
-        self.assertEqual(states(doc), ['done', 'done', 'done', 'waiting'])
-        self.assertQueued(doc, after_done=True)
+        self.assertEqual(states(doc), ['skipped', 'skipped', 'skipped', 'waiting'])
+        self.assertUpdating(doc)
 
     def test_stop_then_resume_waits_for_the_next_step(self):
         encounter_id = self.upload()
@@ -404,8 +414,8 @@ class QueuedTitleFlowTests(RecordedInterpretation, QueuedReading, CustomerReads,
         self.assertEqual(self.post(f'/api/encounters/{encounter_id}/stop', {}).status_code, 200)
         self.assertEqual(self.post(f'/api/encounters/{encounter_id}/resume', {}).status_code, 201)
         doc = self.customer(encounter_id)
-        self.assertEqual(states(doc), ['done', 'done', 'done', 'waiting'])
-        self.assertQueued(doc, after_done=True)
+        self.assertEqual(states(doc), ['skipped', 'skipped', 'skipped', 'waiting'])
+        self.assertUpdating(doc)
 
     def test_a_saved_detail_waits_for_the_next_step(self):
         encounter_id = self.upload(NO_PATIENT_STATUS)
@@ -416,8 +426,7 @@ class QueuedTitleFlowTests(RecordedInterpretation, QueuedReading, CustomerReads,
         self.assertEqual(saved.status_code, 201, saved.content)
         self.assertTrue(saved.json()['reassessing'])
         doc = self.customer(encounter_id)
-        self.assertEqual(states(doc)[:3], ['done', 'done', 'done'])
-        self.assertQueued(doc, after_done=True)
+        self.assertUpdating(doc)
 
     def test_a_reconciliation_waits_for_the_next_step(self):
         self.provider.outcome = 'unknown'
@@ -438,10 +447,16 @@ class QueuedTitleFlowTests(RecordedInterpretation, QueuedReading, CustomerReads,
 class QueuedRecheckTests(RecordedInterpretation, QueuedReading, CustomerReads, Harness):
     # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
     # recorded synthetic interpretation.
+    # DECISIONS D243 class C: the test approves and asks the re-check through the product, which reads event_coding@2 only
+    # (FINAL-V2 6.5): its rows are design v2's, in replay (tests/v2_replay.py), from the colonoscopy report with its
+    # endoscopist named (tests/v2_documents.COLONOSCOPY) - never the v1 chain's.
     interpretations = COLONOSCOPY_INTERPRETATIONS
+    v2_interpretations = ((v2_documents.COLONOSCOPY, v2_documents.colonoscopy_answer),)
+
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_a_re_check_of_what_is_still_open_waits_for_the_next_step(self):
         self.use(TwoPassProvider(first=[SNARE], later=[BIOPSY]))
-        encounter_id = self.create()
+        encounter_id = self.create(v2_documents.COLONOSCOPY)
         drain()
         self.approve(encounter_id, '45385')
         self.assertEqual(self.post(f'/api/encounters/{encounter_id}/second-review').status_code, 201)

@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import ast
 import copy
+import dataclasses
 import datetime
 import hashlib
 import inspect
@@ -43,7 +44,7 @@ from studio import types as studio_types
 from studio.interpretation import (INTERPRETATION_PAIR, INTERPRETATION_VERSION, INVENTORY_VERSION,
                                    INVENTORY_VERSION_V2, read, store)
 from studio.interpretation.contract import claims as contract_claims
-from studio.interpretation.contract import extract_read
+from studio.interpretation.contract import extract_read, settle
 from studio.interpretation.contract import types as ct
 from studio.interpretation.engine import types as et
 from studio.models import EventInventory, ProviderRun, SourceRevision
@@ -82,9 +83,11 @@ DOCUMENT_WORDS = ('sessile polyp', 'Synthetic Endoscopist', 'colonoscope', 'anas
 # change of its shapes (an enumeration of contract/types included) updates this pin in the same commit; once it has, a
 # change needs a new INVENTORY_VERSION beside the shipped pair, never an edit of its shapes (FINAL-V2 6.1, 6.2;
 # DECISIONS D202). Recomputed with the claim rules of triage 1d#4 and 2d#7 (CONTROL_ATTRIBUTES and what a pair control
-# asks), from int0's 17ad573f... (D186's Reason), which the same signature without those two entries still gives.
+# asks), from int0's 17ad573f... (D186's Reason), which the same signature without those two entries still gives;
+# and again by DECISIONS D229 (hand-off 1d#2, before the first install), from ab62877b...: the report's doubts,
+# health, coherence and usage closed to settle's records (contract/types), where they were free-form JSON.
 SHAPE_PINS = {(INTERPRETATION_PAIR, INVENTORY_VERSION_V2):
-              'ab62877bfd29ae97e6d8d4e48b58bf106b96f0bc6c66d7395f8bcc093eea711a'}
+              'fdef536fe56facd4d52c4e4b79af37796ade63dec1acb22f36ded684212ac613'}
 
 
 # --- the synthetic settled inventory ----------------------------------------------------------------------------------
@@ -306,14 +309,20 @@ def inventory():
         'counts': {'kind': {'supported': 3, 'unresolved': 1}, 'status': {'supported': 2, 'negated': 1}},
         'reasons': {'unappraised': 14, 'silent': 70, 'doubt_unclear': 1, 'appraisal_unclear': 1,
                     'contradicted_by_pass1': 1},
-        'doubts': [{'about': 'performer', 'objects': ['E3'], 'applied': 1}],
-        'health': {'control_acceptance': 0.077, 'establishment': 0.95, 'completeness': 0.0, 'controls': 13,
-                   'claims': 20},
-        'coherence': {'established': 19, 'control_incoherent': 1, 'appraisal_contradicts': 0},
+        # doubts, health, coherence and usage are settle's records, field for field (contract/types' DoubtApplied,
+        # Health, Coherence and Usage; DECISIONS D229: the store is closed to them)
+        'doubts': [{'index': 0, 'about': 'performer', 'basis': 'unclear', 'objects': ['E3'], 'malformed': False,
+                    'applied': 1, 'unlisted': False}],
+        'health': {'pairs': 13, 'not_rejected': 1, 'claims': 20, 'established': 19, 'verdicts': 34, 'missing': 0,
+                   'refused': []},
+        'coherence': {'established': 19, 'incoherent': 1, 'uninformative': 0, 'contradicted': 0, 'qualified': 0,
+                      'unclear': 0, 'detached': 0, 'missing': 0, 'control_missing': 0},
         'unlisted': {'kept': 1, 'dropped': [{'units': ['S6'], 'what': 'act', 'kind': 'snare', 'session': 'X1',
                                              'event': 'E2'}]},
-        'usage': {'interpretation': {'prompt_tokens': 1800, 'output_tokens': 900, 'thinking_tokens': 2100},
-                  'appraisal': {'prompt_tokens': 2600, 'output_tokens': 480, 'thinking_tokens': 3300}},
+        'usage': {'interpretation': {'prompt': 1800, 'candidates': 900, 'thoughts': 2100, 'total': 4800, 'cached': 0,
+                                     'tool_use_prompt': 0},
+                  'appraisal': {'prompt': 2600, 'candidates': 480, 'thoughts': 3300, 'total': 6380, 'cached': 0,
+                                'tool_use_prompt': 0}},
     }
     return settled, report
 
@@ -1109,14 +1118,27 @@ class EstablishedIntegrityTests(SimpleTestCase):
 
     def test_a_supports_verdict_naming_a_qualifier_establishes_nothing(self):
         # DECISIONS D186: a supports verdict that names qualifiers is read as qualified (A3: supports is "with no
-        # qualification"), which settles unresolved, so a stored ESTABLISHED fact never rests on one; approximate too
-        for qualifiers in (['hedged'], ['approximate'], ['other_target', 'partial']):
+        # qualification"), which settles unresolved, so a stored ESTABLISHED fact never rests on one - approximate
+        # beside another qualifier included (D224: the other demotes alone)
+        for qualifiers in (['hedged'], ['approximate', 'hedged'], ['other_target', 'partial']):
             def edit(events, qualifiers=qualifiers):
                 appraisal = events['events'][1]['kind']['appraisal']
                 appraisal['qualifiers'] = list(qualifiers)
                 claim_of(events, appraisal)['verdict']['qualifiers'] = list(qualifiers)
             with self.subTest(qualifiers=qualifiers):
                 refused_both_ways(self, edit, 'without what establishing it needs')
+
+    def test_a_supports_verdict_naming_approximate_alone_stays_established(self):
+        # DECISIONS D224 (1.3): pass 2's approximate is recorded and never lowers a supported claim, so an ESTABLISHED
+        # fact resting on a supports verdict that names approximate alone is stored, the qualifier kept (r3a's R-A)
+        def edit(events):
+            appraisal = events['events'][1]['kind']['appraisal']
+            appraisal['qualifiers'] = ['approximate']
+            claim_of(events, appraisal)['verdict']['qualifiers'] = ['approximate']
+        loaded = read_both_ways(edit)
+        kind = loaded.events['events'][1]['kind']
+        self.assertEqual((kind['result'], kind['appraisal']['qualifiers']), ('supported', ['approximate']))
+        self.assertEqual(claim_of(loaded.events, kind['appraisal'])['verdict']['qualifiers'], ['approximate'])
 
     def test_what_is_not_established_keeps_an_unknown_unit_or_a_dangling_id(self):
         # an unknown unit or an id naming nothing is an item-level finding (1.8): the fact settled unresolved or
@@ -1467,7 +1489,7 @@ class RefusedRowTests(SimpleTestCase):
                 load(refused_row())  # a sentence opening with another prefix than contract's is no refusal
         self.assertEqual(store.shape_signature_v2(store.READ_VERSIONS[0]), pin)
         # and the v2 section writes out neither the prefix nor a collection of stage names (a collection naming two or
-        # more stages; the one stage-like word it holds is 'json', the tag of _V2Json's describe(), alone in its list)
+        # more stages)
         first = _v2_first_line()
         tree = ast.parse(STORE.read_text(encoding='utf-8'))
         written = {node.value for node in ast.walk(tree)
@@ -1507,6 +1529,131 @@ class RefusedRowTests(SimpleTestCase):
                     store.refused_row_v2(refused, encounter_id=ENCOUNTER, revision_id=REVISION, provider_run_id=RUN,
                                          text_sha256=TEXT_SHA256, request_sha256=REQUEST_SHA256,
                                          response_sha256=RESPONSE_SHA256)
+
+
+# --- settle's records: the stored report closed to them, the claim roles read from them (DECISIONS D229) -------------
+
+# The row's own report keys, which store.row_v2 adds to settle's Report (the label, both runs' hashes, the claim list's
+# sha256 and refused); every other key of a read row's report is a field of contract/types.Report.
+ROW_REPORT_KEYS = ('label', 'request_sha256', 'response_sha256', 'appraisal_request_sha256',
+                   'appraisal_response_sha256', 'claims_sha256', 'refused')
+
+
+def settled_report() -> ct.Report:
+    """A verification report built from settle's records themselves (contract/types; synthetic counts), with the
+    fixture's one kept unlisted statement."""
+    usage = ct.Usage(prompt=1800, candidates=900, thoughts=2100, total=4800, cached=0, tool_use_prompt=0)
+    return ct.Report(
+        counts={ct.Attribute.KIND: {ct.Result.SUPPORTED: 3}}, reasons={ct.Reason.SILENT: 70},
+        doubts=(ct.DoubtApplied(index=0, about=ct.DoubtAbout.PERFORMER, basis=ct.DoubtBasis.UNCLEAR, objects=('E3',),
+                                malformed=False, applied=1, unlisted=False),),
+        health=ct.Health(pairs=13, not_rejected=1, claims=20, established=19, verdicts=34, missing=0,
+                         refused=(ct.HealthRefusal.COMPLETENESS,)),
+        coherence=ct.Coherence(established=19, incoherent=1, uninformative=0, contradicted=0, qualified=0, unclear=0,
+                               detached=0, missing=0, control_missing=0),
+        unlisted=ct.UnlistedReport(kept=1, dropped=(ct.Dropped(units=('S6',), what=ct.UnlistedWhat.ACT,
+                                                               kind=ct.Kind.SNARE, session='X1', event='E2'),)),
+        usage=ct.Usages(interpretation=usage, appraisal=dataclasses.replace(usage, prompt=2600, total=5600)))
+
+
+class SettleRecordTests(SimpleTestCase):
+    def test_the_stored_report_is_closed_to_settles_records_field_for_field(self):
+        # hand-off 1d#2: the report's shapes are contract/types' records, in their field order, and nothing else
+        fields = store._V2_REPORT_READ.fields
+        self.assertEqual(tuple(name for name in fields if name not in ROW_REPORT_KEYS),
+                         tuple(field.name for field in dataclasses.fields(ct.Report)))
+        records = {'doubts': (fields['doubts'].item, ct.DoubtApplied), 'health': (fields['health'], ct.Health),
+                   'coherence': (fields['coherence'], ct.Coherence),
+                   'unlisted': (fields['unlisted'], ct.UnlistedReport),
+                   'unlisted.dropped': (fields['unlisted'].fields['dropped'].item, ct.Dropped),
+                   'usage': (fields['usage'], ct.Usages)}
+        records.update({f'usage.{run}': (fields['usage'].fields[run], ct.Usage)
+                        for run in ('interpretation', 'appraisal')})
+        for name, (spec, record) in records.items():
+            with self.subTest(report=name):
+                self.assertIsInstance(spec, store._V2Obj)
+                self.assertEqual(tuple(spec.fields), tuple(field.name for field in dataclasses.fields(record)))
+        # its closed lists are contract/types' (a health refusal; each doubt's about and basis)
+        self.assertEqual(fields['health'].fields['refused'].item.values, {item.value for item in ct.HealthRefusal})
+        self.assertEqual(fields['doubts'].item.fields['about'].values, {item.value for item in ct.DoubtAbout})
+        self.assertEqual(fields['doubts'].item.fields['basis'].values, {item.value for item in ct.DoubtBasis})
+
+    def test_settles_own_records_are_stored_and_read_as_they_are(self):
+        report = settled_report()
+        loaded = load(read_row(verification=report))
+        self.assertEqual(loaded.verification['health'], {'pairs': 13, 'not_rejected': 1, 'claims': 20,
+                                                         'established': 19, 'verdicts': 34, 'missing': 0,
+                                                         'refused': ['completeness']})
+        self.assertEqual(loaded.verification['doubts'], [{'index': 0, 'about': 'performer', 'basis': 'unclear',
+                                                          'objects': ['E3'], 'malformed': False, 'applied': 1,
+                                                          'unlisted': False}])
+        self.assertEqual(loaded.verification['coherence'], {outcome.value: 0 for outcome in ct.PairOutcome}
+                         | {'established': 19, 'incoherent': 1})
+        self.assertEqual(loaded.verification['usage']['appraisal'],
+                         {'prompt': 2600, 'candidates': 900, 'thoughts': 2100, 'total': 5600, 'cached': 0,
+                          'tool_use_prompt': 0})
+        # the fixture's JSON report is the same records written as data (P9: no free-form JSON either way)
+        self.assertEqual(load(read_row()).verification['coherence'].keys(), loaded.verification['coherence'].keys())
+
+    def test_a_report_outside_settles_records_is_refused(self):
+        # the free-form JSON the store accepted before D229 (the fixture's report of waves 1-2, with its shares and
+        # token names) and each way out of the records: a key added, a field missing, a value of another type, a value
+        # of no closed list - refused at row_v2 and on an otherwise sound stored row, naming the place
+        cases = {
+            'a share in health': (('health',), 'control_acceptance', 0.077, r'verification\.health has a field'),
+            'health without refused': (('health',), 'refused', KeyError, r'verification\.health lacks the field'),
+            "a refusal that is no HealthRefusal": (('health',), 'refused', ['yes_sayer'],
+                                                   r'verification\.health\.refused\[0\]'),
+            'a share as a count': (('health',), 'missing', 0.5, r'verification\.health\.missing'),
+            "coherence's old key": (('coherence',), 'control_incoherent', 1, r'verification\.coherence has a field'),
+            "a provider's token name": (('usage', 'interpretation'), 'prompt_tokens', 1800,
+                                        r'verification\.usage\.interpretation has a field'),
+            'a negative count': (('usage', 'appraisal'), 'cached', -1, r'verification\.usage\.appraisal\.cached'),
+            'a doubt without its index': (('doubts', 0), 'index', KeyError, r'verification\.doubts\[0\] lacks'),
+            'a doubt about no DoubtAbout': (('doubts', 0), 'about', 'a reading', r'verification\.doubts\[0\]\.about'),
+            'a doubt naming no id': (('doubts', 0), 'objects', ['E3', 'performer'],
+                                     r'verification\.doubts\[0\]\.objects\[1\]'),
+        }
+        for name, (path, key, value, pattern) in cases.items():
+            def edit(report, path=path, key=key, value=value):
+                setter(*path, key, value=value)(report)
+            with self.subTest(case=name):
+                report = copy.deepcopy(inventory()[1])
+                edit(report)
+                with self.assertRaisesRegex(store.UnknownShape, pattern):
+                    read_row(verification=report)
+                with self.assertRaisesRegex(store.UnknownShape, pattern):
+                    load(variant(read_row(), lambda fields, edit=edit: edit(fields['verification'])))
+
+    def test_the_claim_roles_are_contract_types_claim_role(self):
+        # hand-off 1d#6: one home for the claim roles; settle names the same Enum, and the store reads its values
+        self.assertIs(settle.ClaimRole, ct.ClaimRole)
+        self.assertEqual(store.CLAIM_ROLES, tuple(role.value for role in ct.ClaimRole))
+        self.assertEqual(store._V2_CLAIM.fields['role'].values, {role.value for role in ct.ClaimRole})
+        for name in ('Report', 'DoubtApplied', 'Health', 'HealthRefusal', 'Coherence', 'PairOutcome', 'UnlistedReport',
+                     'Dropped', 'Usages', 'Usage', 'StoredClaim', 'StoredVerdict', 'StoredCompleteness'):
+            with self.subTest(record=name):
+                self.assertIs(getattr(settle, name), getattr(ct, name))
+        # the store keeps no copy of its own: the module's source assigns CLAIM_ROLES only from ClaimRole
+        assigned = [ast.unparse(node.value) for node in ast.walk(ast.parse(STORE.read_text(encoding='utf-8')))
+                    if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == 'CLAIM_ROLES'
+                                                            for target in node.targets)]
+        self.assertEqual(assigned, ['tuple((role.value for role in ct.ClaimRole))'])
+
+    def test_claim_roles_read_before_the_first_v2_use_build_the_shapes_first(self):
+        # importing the store still loads no contract module; a read of CLAIM_ROLES then imports contract/types and
+        # answers ClaimRole's values (the module's __getattr__), as any v2 entry point would
+        code = ('import sys\n'
+                'import studio.interpretation.store as store\n'
+                'print(any("contract" in name for name in sys.modules))\n'
+                'print(",".join(store.CLAIM_ROLES))\n'
+                'print("studio.interpretation.contract.types" in sys.modules)\n')
+        result = subprocess.run([sys.executable, '-I', '-B', '-c', f'import sys; sys.path.insert(0, {str(APP)!r})\n'
+                                 + code], capture_output=True, text=True, timeout=60, cwd=APP)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.split(), ['False', ','.join(role.value for role in ct.ClaimRole), 'True'])
+        with self.assertRaises(AttributeError):
+            store.NOT_A_NAME_OF_THE_STORE  # noqa: B018 (any other unknown name stays an AttributeError)
 
 
 class CopyTests(SimpleTestCase):

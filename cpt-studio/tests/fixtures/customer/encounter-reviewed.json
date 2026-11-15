@@ -233,7 +233,8 @@
    "generated_at": "2026-11-01T09:00:39Z",
    "generated_by": "Reviewbot (automated agent)",
    "download_url": "/api/reports/cc000000-0000-4000-8000-000000000004/download",
-   "current": true
+   "current": true,
+   "revision": 1
   },
   {
    "id": "cc000000-0000-4000-8000-000000000005",
@@ -243,7 +244,8 @@
    "generated_at": "2026-11-01T09:00:33Z",
    "generated_by": "Reviewbot (automated agent)",
    "download_url": "/api/reports/cc000000-0000-4000-8000-000000000005/download",
-   "current": false
+   "current": false,
+   "revision": 1
   }
  ],
  "activity": [
@@ -317,5 +319,9 @@
    "actor_kind": "agent",
    "at": "2026-11-01T09:00:40Z"
   }
- ]
+ ],
+ "update": null,
+ "earlier_codes": [],
+ "what_changed": null,
+ "decision_history": []
 }

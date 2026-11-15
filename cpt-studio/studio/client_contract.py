@@ -13,7 +13,9 @@ No Django import: tests/__init__.py reads it before any app is loaded.
 from __future__ import annotations
 
 HEADER = 'X-CPT-Studio-Client'
-VERSION = 'customer-2026-11-03'
+# FINAL-V2 amendment 1 (step 5d): the encounter payload gains the update block, the earlier codes, what changed, the
+# earlier decisions and each export's revision, and the page draws them - a new build
+VERSION = 'customer-2026-11-13'
 WSGI_KEY = 'HTTP_' + HEADER.upper().replace('-', '_')
 OUTDATED = {'error': 'CPT Studio was updated. Reload this page to continue.', 'error_code': 'client_outdated'}
 

@@ -28,6 +28,7 @@ from studio.providers.base import ProviderUnavailable
 from studio.providers.corti import ADAPTER_VERSION
 from studio.types import ProviderRequest, RawExchange, sha256_json
 from tests import legacy_chain as legacy_chain_module
+from tests import v1_chain, v2_documents, v2_replay
 from tests.legacy_chain import applied
 from tests.support import factories as f
 from tests.support.operator import OperatorReads
@@ -256,8 +257,15 @@ class RecordedInterpretation:
     test that asked the interpreter to read a document with no registered interpretation - an unregistered addendum
     revision included - fails once it ends: a test switched to the production chain never passes on a reading that
     silently did not happen. The recorder is set up before the test's own setUp runs, whether or not that setUp calls
-    super()."""
+    super().
+
+    DECISIONS D243 class C: a test marked ``v2_replay.applied`` decides through the product, which reads event_coding@2
+    only (FINAL-V2 6.5), so it takes design v2's path in replay instead (tests/v2_replay.py), never the v1 chain: pass 1
+    is answered from ``v2_interpretations`` - (document text, pass-1 answer) pairs of tests/v2_documents.py, each
+    document a v1 fixture document with its clinician named - and from any the test registers; a document with no answer
+    fails the test as here."""
     interpretations = ((OFFICE_NOTE, OFFICE_INTERPRETATION),)
+    v2_interpretations = ((v2_documents.OFFICE_NOTE, v2_documents.office_note_answer),)
 
     def _callSetUp(self):
         # unittest calls every test's setUp from here (TestCase.run and TestCase.debug): the recorder is in place first,
@@ -266,6 +274,11 @@ class RecordedInterpretation:
         super()._callSetUp()
 
     def _set_up_the_recorder(self):
+        if v2_replay.marked(self):  # DECISIONS D243 class C: design v2's path in replay, never the v1 chain
+            self.v2 = v2_replay.start(self, self.v2_interpretations)
+            self.interpreters, self.recorded = [], []
+            return
+        v1_chain.start(self)  # FINAL-V2 8.1 step 5b: these mechanics record v1 interpretations (tests/v1_chain.py)
         self.addCleanup(self._every_document_was_recorded)
         replay_dir = tempfile.mkdtemp(prefix='s15-replay-')
         self.addCleanup(shutil.rmtree, replay_dir, True)
@@ -290,7 +303,11 @@ class RecordedInterpretation:
 
     def register(self, text, answer):
         """Record Gemini's synthetic ``answer`` for the document whose revision text is exactly ``text``: one answer per
-        document (the same answer again changes nothing - two encounters can hold one text)."""
+        document (the same answer again changes nothing - two encounters can hold one text). On design v2's path in
+        replay (DECISIONS D243) ``answer`` is pass 1's, registered with the v2 interpreter."""
+        if v2_replay.marked(self):
+            self.v2.register(text, answer)
+            return
         known = [recorded for document, recorded in self.recorded if document == text]
         if known and known[0] != answer:
             raise AssertionError('That document already has another recorded synthetic interpretation.')
@@ -478,12 +495,15 @@ class PipelineApiTests(RecordedInterpretation, PipelineApiCase):
         self.assertEqual(self.post(f'/ops/api/encounters/{encounter_id}/reconcile',
                                    {'provider_run_id': run_id, 'note': 'Second reconciliation attempt.'}).status_code, 409)
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_addendum_creates_revision_and_invalidates_decisions(self):
         """A decision recorded on revision 1 is invalidated by the addendum's revision. On the production chain the
         decision OFFICE_NOTE's 99213 allows is a rejection (its approval waits on the visit's open facts), so that is
         the decision recorded - always one, so the invalidation is always asserted (LegacyReadingTests keeps the
-        approval's twin on the legacy chain, where 99213 is approvable)."""
-        encounter_id = self.create()
+        approval's twin on the legacy chain, where 99213 is approvable). DECISIONS D243: the rows are design v2's,
+        in replay (tests/v2_documents.OFFICE_NOTE: OFFICE_NOTE with its clinician named), where 99213 waits on the
+        visit's setting (a member value) and so allows the rejection too."""
+        encounter_id = self.create(v2_documents.OFFICE_NOTE)
         drain()
         data = self.detail(encounter_id)
         [proposal] = [p for p in data['assessment']['proposals'] if p['code'] == '99213']
@@ -495,8 +515,9 @@ class PipelineApiTests(RecordedInterpretation, PipelineApiCase):
         response = self.post(f'/api/encounters/{encounter_id}/addenda',
                              {'text': 'Setting confirmed as office.', 'synthetic_attestation': 'yes'})
         self.assertEqual(response.status_code, 201, response.content)
-        self.register_addendum(encounter_id, with_addendum(OFFICE_INTERPRETATION,
-                                                           {'A1': 'Setting confirmed as office.'}))
+        # pass 1's answer to the addendum revision is the note's: the added line codes nothing, and the note's units keep
+        # their ids (tests/v2_documents.office_note_answer)
+        self.register_addendum(encounter_id, v2_documents.office_note_answer)
         drain()
         data = self.detail(encounter_id)
         self.assertEqual(data['revision']['number'], 2)

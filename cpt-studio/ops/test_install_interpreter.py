@@ -744,8 +744,14 @@ def self_test(failing=(), names=install.INTERPRETATION_SELF_TEST):
 def d22_report(since=S4, held=False):
     standing = [{'id': 'h1', 'reason': 'quota', 'means': 'a quota or billing limit'}] if held else []
     return {'window': {'since': since.replace('Z', '+00:00'), 'until': '2026-11-09T11:00:00+00:00'},
-            'interpreter': {'process_mode': 'disabled', 'model': 'gemini-4-argon'},
+            # the interpreter's model as the source names it (DECISIONS D230: gemini-4-carbon)
+            'interpreter': {'process_mode': 'disabled', 'model': module_literal('studio/interpretation/__init__.py',
+                                                                                'MODEL')},
             'assessments': {'new_path': 2, 'legacy_engine': 0},
+            # design v2 (step 6b, 6a's request R6): the report's own sentinel record (sentinel.status()), the RETIRED
+            # kind armed as pinned with its positive control ok, which verify reads beside the self-test
+            'sentinel': {'state': 'ok', 'retired_size': 1312, 'pinned_retired_size': 1312, 'retired_control': 'ok',
+                         'retired_armed': True, 'retired_modules': 17},
             'hold': {'held': held, 'standing': standing, 'process_mode': 'disabled', 'set': {}, 'released': []}}
 
 
@@ -834,10 +840,11 @@ class VerifyInterpretationTests(TemporaryDirectoryTest):
                          ('live', 'live', S4, 0))
         self.assertTrue(evidence['worker_holds_key'])
         self.assertEqual(evidence['self_test'], self_test())
-        self.assertEqual(evidence['report']['interpreter']['model'], 'gemini-4-argon')
+        self.assertEqual(evidence['report']['interpreter']['model'], 'gemini-4-carbon')  # D13 as DECISIONS D230 sets it
         self.assertTrue(Path(evidence['log']).is_file())
-        self.assertIn('interpreter live: self-test passed (9 of 9 checks run) since the new worker started '
-                      f'({S4}); interpreter hold none standing', details['summary'])
+        # design v2 (step 6b): the summary also says the retired kind was read as pinned (6a's request R6)
+        self.assertIn('interpreter live: self-test passed (9 of 9 checks run; the retired kind as pinned) since the '
+                      f'new worker started ({S4}); interpreter hold none standing', details['summary'])
         self.assertNotIn('synthetic-never-read', json.dumps(details))  # nothing of the worker's env but its mode
 
     def test_a_standing_hold_is_reported_never_judged(self):

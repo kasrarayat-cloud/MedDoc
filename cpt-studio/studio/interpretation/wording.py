@@ -26,12 +26,71 @@ and MISSING (D181); quote_span, the design's ``wording.quote(span)``, slices the
 decision; and the message ids (Message) with their builders (build, question, explanation) turn the engine's text-free
 item - a message id and its Slots of enumeration members, codes and integer spans - into CPT Studio's fixed question and
 reason, the only place the document's words join it. The v2 part imports contract/types.py and the engine's text-free
-catalogue and types, for its slot types only.
+catalogue and types, for its slot types; and, since D225, the engine's text-free anatomy for one refusal -
+STRUCTURE_PLACE refuses a place that STRUCT:pfc does not set apart, by the engine's own ``in_regions`` over the
+catalogue's DEFINING_TARGET_APART, so the sentence and the rule it explains read one region table. It reads no document
+text for it.
+
+**D225** (DECISIONS; repair r3c of step 3c, for refute-4a-r2 P5, P6, P7, P10 and P11): six ids join Message, each with
+its builder, and three fields join Slots (attribute, unlisted_what, unlisted_kind) - every earlier id, field and
+sentence is unchanged. A contradicted attribute other than the status is a conflict about that attribute
+(CONFLICT_ATTRIBUTE), 3.2.6 rule 2's item names the unlisted entry's kind and quotes its own unit (UNLISTED_EVIDENCE),
+LOWER's stoma class asks its approach (EXAMINATION_ROUTE) and explains another one (EXAMINATION_APPROACH), XCHG's
+two-act duct question names the act whose duct is unknown (SAME_DUCT), and STRUCT:pfc's explanation names the place it
+sets apart (STRUCTURE_PLACE). The engine's mirror (engine/questions.MessageId and Fill) is step r4a's. A conflict about
+a session's attribute is about the session, named by its service (``family``), never about the act the item names, whose
+kind only keys the fact (SESSION_ATTRIBUTES); and the act's label never states the contested value
+(CONTESTED_LABEL_PARTS) - the second round of repair r3c (refute-r3c-r1 P1, P6).
+
+**D246** (DECISIONS; repair r3c of the waves 5-6 rulings, wording's half of "every item the engine makes is worded":
+the lead's L1, refute-5c-r2 R2-03, r4a Q4 and R4): forms and one id are added, and every earlier id, field, constant and
+sentence keeps its text - MESSAGES' ``needs`` relax only for the four ids that gain a form (DOUBT, STATEMENT_SCOPE,
+SAME_DUCT, BASE_INCLUDED), whose builders refuse what is still left unworded. BASE_INCLUDED names the codes beside the
+base code when no act is in doubt (``listed`` empty,
+``codes`` given), and SEPARATE_EM the same-day codes when the procedure day has no act to list (``listed`` and
+``possible`` empty, ``codes`` given): each sentence states only that the codes are proposed, never that an act they
+account for was done. DOUBT, SAME_DUCT and STATEMENT_SCOPE name an act, or a statement, that has no units (its spans
+``()``) without a quote - D160 (3)'s rule, which procedure_question already follows: empty words are never quoted (r4a Q4
+option (a)); units that hold no words are still refused, a binding failure. SYNTHETIC_ACT (rank 2, performed_status, a
+question) words 3.2.6 rule 3's synthetic act - an act the document states that CPT Studio's reading does not account for
+- by its own kind ('an act' when it names none) and its own unit, so the act is never said to be in doubt, which DOUBT's
+sentence says and which is untrue of an act the document states (r4a R4 (a)). Step r4a maps the synthetic act's witness
+to it and mirrors the id in engine/questions.MessageId.
+
+**D254, D257, D258** (DECISIONS; repair r3c of round w8r - every slot an item can carry has a true form for its
+absence): every builder words every value its slots can hold. MESSAGES' ``needs`` name only the slots every item of the
+message carries by construction - the held code, the R6 label's family, a conflict's act and attribute, an unlisted
+entry's nature, the stoma EUS class - each with its reason in CARRIED; ``build`` refuses one of those left empty, or a
+span the revision holds no words at (a binding failure), and nothing else: every other slot has its absence form, and a
+value the message's own fact contradicts is worded as its absence (rule 1). An act no kind names (Kind.OTHER, or a kind
+not established) is NO_KIND_LABEL, 'another act', its article included, wherever a kind is turned into words (rule 2;
+the requirement group names only kinds that name an act). ENTEROSCOPY_APPROACH without an approach names no route, and
+BASE_INCLUDED, BASE_EXPLAINED and SEPARATE_EM have a true form with nothing to name (rule 3). BASE_WITHIN names the whole
+by its own family (``whole_family``) and a whole only possibly done (``whole_possible``) as possibly performed on the
+date of service, its performance not established (D257: two optional Slots fields, appended). UNLISTED_SCOPE (rank 2,
+performed_status, a question) asks whether the held session's examination is documented as done, quoting a statement that
+names no procedure session, never saying the examination is in doubt or denied (D258); ENTEROSCOPY_THROUGH (rank 8,
+procedure, a question) asks an enteroscopy's route part when only the anatomy it was passed through is unknown (D253 QX
+(ii)). Both ids are appended; step r4a maps the holds to them and mirrors them in engine/questions.MessageId, and the two
+Slots fields in its Fill.
+
+**D266, D267** (DECISIONS; repair r3c of round w9r - a denial is worded as a denial, and one label and only known words
+in every item): DOUBT words an unlisted DENIAL (``unlisted_what``, which step r4a fills for a carded entry as for one
+with no card), of any kind or none, as a statement that the act was not done (DENIAL_STATED), quoting the denial and
+never saying the document leaves the act in doubt; an ACT there reads as SYNTHETIC_ACT's sentence over the entry's own
+kind. UNLISTED_SCOPE and DOUBT keep a true form with no quote of the examination for a Fill that gives none (step r4a
+quotes it only when that examination is possibly done on the date of service). BUNDLED with a requirement group that
+names no act words the code itself, as NOT_DOCUMENTED and METHOD do. A route the Fill marks as only possible - the new
+optional Slots field ``possible_approaches``, appended: a doubted or unresolved through, or an anatomy entry whose type is
+not established - is worded as possible, "possibly through a pouch or a stoma" (ENTEROSCOPY_ROUTE), or as a stoma not
+established (EXAMINATION_ROUTE), never "the documented stoma" or "the documented pouch" (refute-r4a-r2 F5; D254 rule
+1); step r4a fills it (classes.doubted_routes) and mirrors it in its Fill. customer_api.held_fact_words (step r3c's
+other file) words 'conflict:other' as 'another act' and a procedure-keyed held fact by the item's message.
 """
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, replace
 from datetime import date
 from enum import Enum, unique
 from types import MappingProxyType
@@ -39,8 +98,9 @@ from typing import Optional, Sequence, TypeVar
 
 from studio.gi import catalogue, profiles
 from studio.interpretation import ENGINE_VERSION
-from studio.interpretation.contract.types import (Approach, Device, Extent, Kind, Landmark, Owner, SessionKind, Span,
-                                                  Station, Tract)
+from studio.interpretation.contract.types import (Approach, Attribute, Device, Extent, Kind, Landmark, Owner,
+                                                  SessionKind, Span, Station, Tract, UnlistedWhat)
+from studio.interpretation.engine import anatomy as engine_anatomy
 from studio.interpretation.engine import catalogue as engine_catalogue
 from studio.interpretation.engine.types import ItemKind
 from studio.types import Check, sha256_json
@@ -891,6 +951,18 @@ class Message(Enum):
     SETTING = 'setting'  # 23 Q (member context, D3)
     PATIENT_STATUS = 'patient_status'  # 23 Q (member context, D3)
     SERVICE_DATE = 'service_date'  # unranked Q: the encounter-scope date question
+    # D225 (repair r3c; refute-4a-r2 P5, P6, P7, P10, P11): appended, so every earlier member keeps its place
+    CONFLICT_ATTRIBUTE = 'conflict_attribute'  # 1 Q: a contradicted attribute, named, each side's own sentence quoted
+    UNLISTED_EVIDENCE = 'unlisted_evidence'  # 2 Q: 3.2.6 rule 2, the unlisted entry's kind named and its unit quoted
+    EXAMINATION_ROUTE = 'examination_route'  # 8 Q: LOWER's stoma class, its approach not established
+    EXAMINATION_APPROACH = 'examination_approach'  # 8 E: LOWER's stoma class, another approach established
+    SAME_DUCT = 'same_duct'  # 11 Q: XCHG, two acts, naming the act whose duct is not established
+    STRUCTURE_PLACE = 'structure_place'  # 12 E: STRUCT:pfc, the biliary or hepatic place it sets apart named
+    # D246 (repair r3c; r4a R4 (a)): appended, so every earlier member keeps its place
+    SYNTHETIC_ACT = 'synthetic_act'  # 2 Q: 3.2.6 rule 3's synthetic act, its own kind named and its own unit quoted
+    # D258 and D253 QX (ii) (repair r3c of round w8r): appended, so every earlier member keeps its place
+    UNLISTED_SCOPE = 'unlisted_scope'  # 2 Q: a statement naming no procedure session, the held session's examination asked
+    ENTEROSCOPY_THROUGH = 'enteroscopy_through'  # 8 Q: ENT's route part, only the anatomy passed through not established
 
 
 @dataclass(frozen=True, slots=True)
@@ -911,7 +983,20 @@ class Slots:
     encounter's anatomy opens. bundling: the bundling rule. listed: the acts listed (the parts bundled, the same-day
     procedures, the acts a base code does not account for); possible: the acts possibly performed. codes: the other
     codes named (the interventions coded, the rival codes). both: the member context's setting and patient status are
-    both missing.
+    both missing. attribute (D225): the attribute a contradicted fact is about (the held fact's own). unlisted_what,
+    unlisted_kind (D225): what an unlisted entry is (an act, a denial or a doubt) and its kind, None when the entry
+    names none (3.2.6: events.unlisted's what and kind). whole_family, whole_possible (D257, repair r3c of round w8r):
+    the family of the session a base-within hold's code is (possibly) part of - BASE_WITHIN names that whole by it - and
+    whether that whole is only possibly done, not established (its sentence then states it as possibly performed on the
+    date of service, its performance not established). possible_approaches (D267, repair r3c of round w9r; refute-r4a-r2
+    F5): the routes the encounter's anatomy only possibly opens - a doubted or unresolved through, or an anatomy entry
+    whose type is not established (engine/classes.doubted_routes) - each worded as possible (ENTEROSCOPY_ROUTE), or as
+    not established (EXAMINATION_ROUTE), never as "the documented stoma" or "the documented pouch"; ``approaches`` holds
+    the routes it establishes (classes.routes). A route in both is worded as possible: the sentence never states more
+    than the marker allows.
+
+    D254 rule 1: a builder refuses only when a slot every item of its message carries by construction is missing
+    (MESSAGES' ``needs``, each with its reason in CARRIED); every other slot has a form for its absence.
 
     ValueError when a field holds anything but its type (a span list a str, a kind a string), or a code is not a code's
     shape (ASCII letters and digits, at most MAX_LISTED_CODE): a sentence is never built from an untyped value."""
@@ -946,6 +1031,12 @@ class Slots:
     possible: tuple[Kind, ...] = ()
     codes: tuple[str, ...] = ()
     both: bool = False
+    attribute: Attribute | None = None
+    unlisted_what: UnlistedWhat | None = None
+    unlisted_kind: Kind | None = None
+    whole_family: SessionKind | None = None
+    whole_possible: bool = False
+    possible_approaches: tuple[Approach, ...] = ()
 
     def __post_init__(self) -> None:
         for field in fields(self):
@@ -987,6 +1078,8 @@ _SLOT_TYPES: Mapping[str, tuple[object, bool]] = MappingProxyType({
     'tract': (Tract, False), 'required_tract': (Tract, False), 'approach': (Approach, False),
     'approach_words': (Span, True), 'approaches': (Approach, True), 'bundling': (Bundling, False),
     'listed': (Kind, True), 'possible': (Kind, True), 'codes': (str, True), 'both': (bool, False),
+    'attribute': (Attribute, False), 'unlisted_what': (UnlistedWhat, False), 'unlisted_kind': (Kind, False),
+    'whole_family': (SessionKind, False), 'whole_possible': (bool, False), 'possible_approaches': (Approach, True),
 })
 # The Slots fields that hold spans: a message that needs one needs words at it, not only a span.
 _SPAN_FIELDS = frozenset({'lesion', 'words', 'whole_words', 'approach_words'})
@@ -1008,7 +1101,8 @@ class Worded:
 class MessageSpec:
     """One message id's entry: fact, its questions.FORM fact key ('conflict' is written conflict:<kind>); kind, question
     or explanation; rank, its RANK row (engine/requirements.Rank's value; None for the unranked service_date); needs,
-    the Slots fields it is never worded without; words, its builder: (slots, revision text) -> (question, reason)."""
+    the Slots fields every item of the message carries by construction (D254 rule 1; CARRIED gives each one's reason) -
+    the only slots it is never worded without; words, its builder: (slots, revision text) -> (question, reason)."""
     fact: str
     kind: ItemKind
     rank: int | None
@@ -1017,35 +1111,83 @@ class MessageSpec:
 
 
 # --- labels over slots ----------------------------------------------------------------------------------------------
+#
+# D254 rule 2 (repair r3c of round w8r): an act no kind names - Kind.OTHER, or a kind not established (``act`` None) -
+# has one label wherever these builders turn a kind into words: NO_KIND_LABEL, 'another act'. Its article is part of
+# it, so no builder puts 'the', 'a' or 'this' before it (``_the``, ``_this``, ``_a``), and a sentence that starts with
+# it reads "Another act ...". A requirement group - what the code accounts for, never an act of the document - names
+# only its kinds that name an act (group_phrase), and a builder whose group names none words the code instead.
+
+NO_KIND_LABEL = 'another act'
 
 
-def act_phrase(text: str, slots: Slots) -> str:
-    """events.event_label over text-free facts: the act's label (an examination's is its session's service), its device
-    where the label does not name it, then 'of the' its lesion's own words, else 'at the' its place."""
-    kind = _req(slots.act, 'act')
+def named_kind(kind: Kind | None) -> bool:
+    """Whether ``kind`` names an act (D254 rule 2): every Kind but OTHER; None, a kind not established, names none."""
+    return kind is not None and kind is not Kind.OTHER
+
+
+def kind_words(kind: Kind | None) -> str:
+    """``kind`` in words: its event_kind_label, else NO_KIND_LABEL (its article included) for an act no kind names."""
+    return event_kind_label(kind.value) if kind is not None and kind is not Kind.OTHER else NO_KIND_LABEL
+
+
+def _the(label: str, named: bool) -> str:
+    """``label`` after 'the', or alone when it is an act no kind names (its article is part of NO_KIND_LABEL)."""
+    return f'the {label}' if named else label
+
+
+def _this(label: str, named: bool) -> str:
+    return f'this {label}' if named else label
+
+
+def _a(label: str, named: bool) -> str:
+    return with_article(label) if named else label
+
+
+def _capital(text: str) -> str:
+    """A sentence's first letter capitalized (CPT Studio's own label, which opens the sentence)."""
+    return text[:1].upper() + text[1:]
+
+
+def _act_label(text: str, kind: Kind | None, family: SessionKind | None, device: Device | None,
+               lesion: tuple[Span, ...], place: Landmark | None) -> str:
+    """act_phrase's label from its parts (CONFLICT_ATTRIBUTE leaves out the parts a conflict contests, by passing
+    them empty)."""
     if kind is Kind.EXAMINATION:
-        service = SESSION_SERVICES.get(slots.family) if slots.family is not None else None
+        service = SESSION_SERVICES.get(family) if family is not None else None
         label = kind_label(service) if service else 'examination'
     else:
-        label = event_kind_label(kind.value)
-    device = slots.device
+        label = kind_words(kind)
     if device is not None and device not in (Device.ENDOSCOPE, Device.OTHER):
         named = landmark_label(device.value)
         if named and named not in label:
             label = f'{label} ({named})'
-    lesion = ' '.join(span_text(text, slots.lesion).split()) if slots.lesion else ''
-    if lesion:
-        return f'{label} of the {lesion}'
-    place = landmark_label(slots.place.value) if slots.place is not None else ''
-    return f'{label} at the {place}' if place else label
+    lesion_words = ' '.join(span_text(text, lesion).split()) if lesion else ''
+    if lesion_words:
+        return f'{label} of the {lesion_words}'
+    where = landmark_label(place.value) if place is not None else ''
+    return f'{label} at the {where}' if where else label
+
+
+def act_phrase(text: str, slots: Slots) -> str:
+    """events.event_label over text-free facts: the act's label (an examination's is its session's service), its device
+    where the label does not name it, then 'of the' its lesion's own words, else 'at the' its place. D254 rule 2: an act
+    no kind names (Kind.OTHER, or ``act`` None: a kind not established) is labelled NO_KIND_LABEL, 'another act'."""
+    return _act_label(text, slots.act, slots.family, slots.device, slots.lesion, slots.place)
+
+
+def the_act(text: str, slots: Slots) -> str:
+    """act_phrase with its article: 'the <label>', or the label alone for an act no kind names (D254 rule 2)."""
+    return _the(act_phrase(text, slots), named_kind(slots.act))
 
 
 def group_phrase(slots: Slots) -> str:
     """events.group_label over kinds: what the code's requirement group names - for an examination, its session's
-    service (the EUS examination's own label in the EUS family), else its acts' labels joined by 'or'."""
-    kinds = slots.group
+    service (the EUS examination's own label in the EUS family), else its acts' labels joined by 'or'. D254: only the
+    kinds that name an act; '' when the group names none (each builder then words the code instead)."""
+    kinds = tuple(kind for kind in slots.group if named_kind(kind))
     if not kinds:
-        raise ValueError('The slot group is needed here.')
+        return ''
     if all(kind is Kind.EXAMINATION for kind in kinds):
         if slots.family is SessionKind.EUS:
             return act_label('eus_exam')
@@ -1054,59 +1196,168 @@ def group_phrase(slots: Slots) -> str:
     return ' or '.join(dict.fromkeys(event_kind_label(kind.value) for kind in kinds))
 
 
-def _words(slots: Slots, text: str) -> str:
-    return span_text(text, slots.words)
+def _unit_words(text: str, spans: tuple[Span, ...], message: str, name: str) -> str:
+    """The words at an act's or a statement's units, '' when it has no units (D246; D160 (3): an act or a statement with
+    no units is named without a quote, never with an empty one). Units that hold no words are refused: every item's spans
+    are units of the revision it was made on (segment's units are trimmed and never empty; the store refuses words that
+    are not the revision's slice), so a span the revision holds no words at is a binding failure, never a shorter quote."""
+    if not spans:
+        return ''
+    words = span_text(text, spans)
+    if not words.strip():
+        raise ValueError(f'{message} quotes {name}, whose spans hold no words.')
+    return words
 
 
-def _statement(text: str, slots: Slots, index: int) -> str:
-    return span_text(text, slots.statements[index])
+def _words(slots: Slots, text: str, message: str = 'an item') -> str:
+    """The act's own statement (``words``), '' when it has no units."""
+    return _unit_words(text, slots.words, message, 'words')
+
+
+def _sides(text: str, statements: tuple[tuple[Span, ...], ...], message: str) -> list[str]:
+    """Each statement's words, in order: a statement with no units left out, the same words (whitespace aside) once."""
+    found = (_unit_words(text, statement, message, 'statements') for statement in statements)
+    return list(dict.fromkeys(' '.join(item.split()) for item in found if item))
+
+
+def _shown(words: str, limit: int = 120) -> str:
+    """' (“words”)' after a label, cut at ``limit``; '' for no words (D160 (3): nothing quoted, no empty brackets)."""
+    return f' ({quote(words, limit)})' if words else ''
+
+
+def _whole_shown(words: str) -> str:
+    """' (“words”)' uncut (assess._whole); '' for no words."""
+    return f' ({_whole(words)})' if words else ''
+
+
+def _reach(slots: Slots) -> str:
+    """The reached point's label; '' when none is given, or the point names no place (Extent.OTHER)."""
+    return landmark_label(slots.reached.value) if slots.reached is not None else ''
 
 
 # --- the builders: (slots, text) -> (question, reason) ----------------------------------------------------------------
+#
+# D254 rule 1 (repair r3c of round w8r): each builder words every value its slots can hold; it requires only the slots
+# MESSAGES' ``needs`` name (CARRIED gives each one's reason). A slot left empty gets its absence form, true for its state
+# and naming nothing CPT Studio does not know: no quote for an act or a statement with no units, NO_KIND_LABEL for an
+# act no kind names, the code for a requirement group that names no act, no clause for a reach, a route, a place or a
+# technique that is not given. A slot whose value the message cannot name truly - a tract, a station, a place, an
+# approach or a stated technique that the message's own established fact contradicts - is worded as its absence: the
+# sentence states the message's fact and never that value.
+
+_HOLD_RULE = '(internal profile rule; NCCI procedure-to-procedure edits are not connected)'
 
 
 def _conflict(s: Slots, text: str) -> tuple[str, str]:
-    act = act_phrase(text, s)
-    return conflict_question(act), conflict_reason(act, _words(s, text), _statement(text, s, 0))
+    """FINAL 7.4 h1 (v1's conflict_question and conflict_reason, worded through the_act): the act's own sentence and the
+    first statement with units, each quoted when it has units."""
+    act = the_act(text, s)
+    done = _words(s, text, 'conflict')
+    denied = next(iter(_sides(text, s.statements, 'conflict')), '')
+    return (f'The record states {act} both as performed and as not performed. Which is correct for this encounter?',
+            f'One statement documents {act} as done{_shown(done, 140)}; another states it was not done'
+            f'{_shown(denied, 140)}. Both are kept; neither is chosen.')
 
 
 def _conflict_fact(s: Slots, text: str) -> tuple[str, str]:
-    act = act_phrase(text, s)
-    said = [span_text(text, statement) for statement in s.statements]
-    if len(said) < 2:
-        raise ValueError('conflict_fact quotes the statements that disagree: at least two.')
+    """A contradicted fact: the statements that disagree, each quoted once; with one statement (or none) with units,
+    CONFLICT_ATTRIBUTE's one-sentence form (or its form with nothing quoted) about the act."""
+    act = the_act(text, s)
+    said = _sides(text, s.statements, 'conflict_fact')
+    if not said:
+        return (f'The document is not consistent about {act}. Which is correct for this encounter?',
+                f'The document is not consistent about {act}. Each value it states is kept; none is chosen.')
+    if len(said) == 1:
+        return (f'The document is not consistent about {act} ({quote(said[0], 120)}). Which is correct for this '
+                'encounter?',
+                f'The document is not consistent about {act} ({quote(said[0], 140)}). Each value it states is kept; '
+                'none is chosen.')
     asked = join([quote(item, 120) for item in said])
     kept = '; '.join(quote(item, 140) for item in said)
     rest = 'Both are kept; neither is chosen.' if len(said) == 2 else 'Each is kept; none is chosen.'
-    return (f'Statements in the document disagree about the {act}: {asked}. Which is correct for this encounter?',
-            f'Statements in the document disagree about the {act} ({kept}). {rest}')
+    return (f'Statements in the document disagree about {act}: {asked}. Which is correct for this encounter?',
+            f'Statements in the document disagree about {act} ({kept}). {rest}')
 
 
 def _doubt(s: Slots, text: str) -> tuple[str, str]:
-    act, words = act_phrase(text, s), _words(s, text)
-    return doubt_question(act, words), doubt_reason(act, _statement(text, s, 0) if s.statements else words)
+    """The act's status in doubt (rank 2): v1's doubt_question over the act's own words and doubt_reason over the doubt's
+    passage (its first statement with units), else the act's words. D246 (r4a Q4 option (a); D160 (3)): an act with no
+    units is named without a quote, and so is the reason's passage when neither has units - never an empty quote.
+
+    D266 (repair r3c of round w9r; refute-r3c-r1 F3): the reason words the unlisted entry the hold rests on by its own
+    nature (``unlisted_what``, which step r4a fills for a carded entry as for one with no card). A DENIAL - carded or
+    not, of any kind or none - is a statement that the act was not done (DENIAL_STATED), quoting the denial: its first
+    statement with units, never the act's own sentence, which states the act; with none, nothing is quoted. It is never
+    said to leave the act in doubt. An ACT (no Fill gives DOUBT one: step r4a words 3.2.6 rule 3's synthetic act by
+    SYNTHETIC_ACT) is SYNTHETIC_ACT's sentence over the entry's own kind (``unlisted_kind``) and statement, never "in
+    doubt" (D246). A DOUBT, or no entry named, reads as before. The question is v1's in every case: whether the act was
+    done (D266's first half: the act's own sentence is quoted only when the Fill gives it)."""
+    act = the_act(text, s)
+    words = _words(s, text, 'doubt')
+    question = f'Confirm whether {act}{_shown(words)} was done on the date of service.'
+    stated = next(iter(_sides(text, s.statements, 'doubt')), '')
+    if s.unlisted_what is UnlistedWhat.DENIAL:
+        denied = DENIAL_STATED.format(act=act)
+        return question, (f'The document {denied}: {quote(stated, 140)}.' if stated else f'The document {denied}.')
+    if s.unlisted_what is UnlistedWhat.ACT:
+        kind = _a(kind_words(s.unlisted_kind), named_kind(s.unlisted_kind))
+        return question, f'The document documents {kind}{_shown(stated, 140)}, {SYNTHETIC_UNACCOUNTED}.'
+    passage = stated or words
+    reason = f'The document leaves {act} in doubt: {quote(passage, 140)}.' if passage else \
+        f'The document leaves {act} in doubt.'
+    return question, reason
+
+
+# D266 (repair r3c of round w9r): what DOUBT's reason says an unlisted denial states - the act not done, the act with
+# its article (the_act: 'the snare removal', or NO_KIND_LABEL alone); UNLISTED_STATED's DENIAL row, said of the act
+DENIAL_STATED = 'states that {act} was not done'
 
 
 def _scope(s: Slots, text: str) -> tuple[str, str]:
-    act = act_phrase(text, s)
-    said = [span_text(text, statement) for statement in s.statements]
-    words = _words(s, text) if s.words else ''
-    return (scope_question(said[0], act, words, whole=True, also=said[1:]),
-            scope_reason(said[0], act, whole=True, also=said[1:]))
+    """Whether a statement applies to the act (rank 3): v1's scope_question and scope_reason (every statement quoted
+    uncut, DECISIONS D103; the act's own words quoted when it has units, else "this code accounts for"). D246: a
+    statement with no units is named, never quoted; with none that has units, the statement is the document's,
+    unquoted."""
+    act = the_act(text, s)
+    said = _sides(text, s.statements, 'statement_scope')
+    words = _words(s, text, 'statement_scope')
+    applies = f'{act}{_shown(words)}' if words else f'{act} this code accounts for'
+    if not said:
+        return (f'Does a statement in the document apply to {applies}?',
+                f'CPT Studio could not confirm whether a statement in the document applies to {act}.')
+    quoted = [quote(item, len(item) + 1) for item in said]
+    asked = quoted[0] if len(quoted) == 1 else ', '.join(quoted[:-1]) + ' or ' + quoted[-1]
+    if len(quoted) > 1:  # DECISIONS D126: every statement the question asks about
+        reason = (f'The document states {join(quoted)}; CPT Studio could not confirm from the document whether those '
+                  f'statements apply to {act}.')
+    else:
+        reason = (f'The document states {quoted[0]}; CPT Studio could not confirm from the document whether that '
+                  f'statement applies to {act}.')
+    return f'Does {asked} apply to {applies}?', reason
 
 
 def _status(s: Slots, text: str) -> tuple[str, str]:
-    act = act_phrase(text, s)
-    return status_question(act, _words(s, text)), status_reason(act)
+    act = the_act(text, s)
+    return (f'Was {act}{_shown(_words(s, text, "status"))} done on the date of service?',
+            f'CPT Studio could not confirm from the document that {act} was done.')
 
 
 def _not_documented(s: Slots, text: str) -> tuple[str, str]:
-    return performed_question(s.code), not_documented_reason(group_phrase(s))
+    """FINAL 7.6: no act of the code's kind documented as done; with a group that names no act, the code's."""
+    group = group_phrase(s)
+    reason = (not_documented_reason(group) if group else
+              f"CPT Studio's reading of the document records no act that {s.code} accounts for documented as done on "
+              'the date of service.')
+    return performed_question(s.code), reason
 
 
 def _attempted(s: Slots, text: str) -> tuple[str, str]:
-    act = act_phrase(text, s)
-    return attempted_question(s.code, act), attempted_reason(act, _words(s, text))
+    """ADJUDICATION C-9 (v1's attempted_question and attempted_reason, worded through the_act)."""
+    act = the_act(text, s)
+    return (f'{_capital(act)} was begun and not completed. Confirm whether {s.code} describes what was done on the date '
+            'of service.',
+            f'The document states {act} was begun and not completed{_shown(_words(s, text, "attempted"), 140)}. Kept for '
+            'review: not treated as completed and not excluded.')
 
 
 def _unprofiled(s: Slots, text: str) -> tuple[str, str]:
@@ -1135,186 +1386,352 @@ def _unreconciled(s: Slots, text: str) -> tuple[str, str]:
 
 
 def _entry(s: Slots, text: str) -> tuple[str, str]:
-    act = act_phrase(text, s)
-    return (f'In whose entry is the {act} ({quote(_words(s, text), 120)}) documented: the note of the physician who '
+    act = the_act(text, s)
+    return (f'In whose entry is {act}{_shown(_words(s, text, "entry"))} documented: the note of the physician who '
             'performed the procedure, or another entry?',
-            f'CPT Studio could not confirm from the document whose entry the {act} is told in.')
+            f'CPT Studio could not confirm from the document whose entry {act} is told in.')
+
+
+# The entry an act told only in another role's entry is named by, when its owner is not given (or is the documenting
+# clinician, whom ANOTHER_ENTRY's fact excludes): the fact itself, naming no role
+OTHER_ENTRY = "an entry other than the physician's note"
 
 
 def _another_entry(s: Slots, text: str) -> tuple[str, str]:
     """events.another_role_hold's question and detail (copied), its entry named by the owner of the part that tells
-    the act; the detail's opening clause (the session's acts listed) is left out."""
-    owner = _req(s.owner, 'owner')
-    if owner not in OWNER_ENTRIES:
-        raise ValueError(f'{owner.value} is no other entry than the documenting clinician\'s.')
-    entry, name = OWNER_ENTRIES[owner], service_phrase(s.family)
-    what = group_phrase(s) if s.group else act_phrase(text, s)
-    passage = f' ({quote(_words(s, text), 120)})'
-    return (f'The {what} is documented only in {entry}{passage}. Was it performed in this {name} on the date of '
+    the act (OTHER_ENTRY when no other role is given); the detail's opening clause (the session's acts listed) is left
+    out; the group's acts, else the act."""
+    entry = OWNER_ENTRIES.get(s.owner, OTHER_ENTRY) if s.owner is not None else OTHER_ENTRY
+    name = service_phrase(s.family)
+    group = group_phrase(s)
+    what = f'the {group}' if group else the_act(text, s)
+    passage = _shown(_words(s, text, 'another_entry'))
+    return (f'{_capital(what)} is documented only in {entry}{passage}. Was it performed in this {name} on the date of '
             'service?',
-            f'The {what} this code accounts for is documented only in {entry}{passage}, not by the physician performing '
-            f'the {name}. {HELD}')
+            f'{_capital(what)} this code accounts for is documented only in {entry}{passage}, not by the physician '
+            f'performing the {name}. {HELD}')
 
 
 def _time(s: Slots, text: str) -> tuple[str, str]:
-    act = act_phrase(text, s)
-    return time_question(act, _words(s, text)), time_reason(act)
+    act = the_act(text, s)
+    return (f'Was {act}{_shown(_words(s, text, "time"))} done at this encounter?',
+            f'CPT Studio could not confirm from the document when {act} was done.')
 
 
 def _time_beside_visit(s: Slots, text: str) -> tuple[str, str]:
     """assess's C-3 question of an undatable procedure beside an E/M (copied)."""
-    act = act_phrase(text, s)
-    return (time_question(act, _words(s, text)),
-            f'{time_reason(act)} A procedure done on the date of service would need a significant, separately '
-            'identifiable visit beside it.')
+    question, reason = _time(s, text)
+    return (question, f'{reason} A procedure done on the date of service would need a significant, separately '
+                      'identifiable visit beside it.')
 
 
 def _performer(s: Slots, text: str) -> tuple[str, str]:
-    act = act_phrase(text, s)
-    return performer_question(act, _words(s, text)), performer_reason(act)
+    act = the_act(text, s)
+    return (f'Was {act}{_shown(_words(s, text, "performer"))} done by the documenting endoscopist or the endoscopy '
+            'team?',
+            f'CPT Studio could not confirm from the document who performed {act}.')
 
 
 def _procedure(s: Slots, text: str) -> tuple[str, str]:
-    act = act_phrase(text, s)
-    return procedure_question(act, _words(s, text) if s.words else ''), procedure_reason(act)
+    """v1's procedure_question (D160 (3): empty words never quoted) and procedure_reason, worded through the_act."""
+    act = the_act(text, s)
+    return (f'In which procedure was {act}{_shown(_words(s, text, "procedure"))} done?',
+            f'CPT Studio could not confirm from the document in which procedure {act} was done.')
 
 
 def _another_tract(s: Slots, text: str) -> tuple[str, str]:
     """assess._eus_code_hold's D171 (2) tract hold (copied), for either luminal tract. A session placed in the
     pancreatobiliary tract is said by the rule it fails - the code needs it placed in the code's own tract - never as a
-    place no code of that tract describes, which would be false of an upper endoscopic ultrasound of the pancreas or
-    the bile ducts (recorded as a question)."""
-    tract, required = _req(s.tract, 'tract'), _req(s.required_tract, 'required_tract')
-    if tract is required or required not in EUS_TRACT_WORDS:
-        raise ValueError('another_tract names a session tract other than the code\'s upper or lower tract.')
+    place no code of that tract describes. D254: a session tract that is not given, or that is the code's own (which the
+    message's fact contradicts), is worded as "another tract than" the code's; the code's tract when it is not given
+    (or is no luminal tract) as the endoscopic ultrasound this code describes; the place and the words when given."""
+    required = s.required_tract
+    tract = s.tract if s.tract is not None and s.tract is not required else None
+    needed = EUS_TRACT_WORDS.get(required) if required is not None else None
+    needed = needed or (f'an endoscopic ultrasound placed in {TRACT_PLACES[required]}' if required is not None
+                        else 'the endoscopic ultrasound this code describes')
     place = landmark_label(s.place.value) if s.place is not None else ''
-    where = (f'the {place}: ' if place else '') + _whole(_words(s, text))
-    needed, placed = EUS_TRACT_WORDS[required], TRACT_PLACES[tract]
-    why = (f'which no {required.value} endoscopic ultrasound code describes' if tract in EUS_TRACT_WORDS
-           else f'and this code needs it placed in {TRACT_PLACES[required]}')
-    return (f'The documented endoscopic ultrasound is placed in {placed} ({where}). Was {needed} performed on the date '
-            'of service?',
-            f'{s.code} accounts for {needed}; the document places this endoscopic ultrasound in {placed} ({where}), '
-            f'{why}. {HELD}')
+    words = _words(s, text, 'another_tract')
+    if place and words:
+        where = f' (the {place}: {_whole(words)})'
+    else:
+        where = f' (the {place})' if place else _whole_shown(words)
+    why = ''
+    if tract is None:
+        placed = (f'another tract than {TRACT_PLACES[required]}' if required is not None
+                  else 'another tract than the one this code describes')
+    else:
+        placed = TRACT_PLACES[tract]
+        if required is not None and tract in EUS_TRACT_WORDS and required in EUS_TRACT_WORDS:
+            why = f', which no {required.value} endoscopic ultrasound code describes'
+        elif required is not None:
+            why = f', and this code needs it placed in {TRACT_PLACES[required]}'
+    return (f'The documented endoscopic ultrasound is placed in {placed}{where}. Was {needed} performed on the date of '
+            'service?',
+            f'{s.code} accounts for {needed}; the document places this endoscopic ultrasound in {placed}{where}{why}. '
+            f'{HELD}')
 
 
-def _enteroscopy_parts(s: Slots, text: str) -> tuple[str, str, str, str]:
-    required = ENTEROSCOPY_CLASS_WORDS[_req(s.enteroscopy_class, 'enteroscopy_class')]
-    reached = landmark_label(_req(s.reached, 'reached').value)
-    words = _words(s, text) if s.words else ''
-    said, shown = (f' ({quote(words)})', f' ({quote(words, 120)})') if words else ('', '')
-    return required, reached, said, shown
+# --- the enteroscopy class items (classes.class_hold's forms, copied; D254 rules 1 and 3, D253 QX (ii)) ---------------
+
+
+_ENT = 'an enteroscopy class item'  # what a refusal of an enteroscopy class item's spans names (any of the four items)
+
+
+def _enteroscopy_required(s: Slots) -> str:
+    """The class words of the code's enteroscopy class (classes.CLASS_WORDS); the enteroscopy the code describes when no
+    class is given."""
+    exam_class = s.enteroscopy_class
+    return ENTEROSCOPY_CLASS_WORDS[exam_class] if exam_class is not None else 'the enteroscopy this code describes'
+
+
+def _route_told(s: Slots, text: str, words: str, message: str) -> tuple[str, str]:
+    """The route's own words, quoted after the route (160 and 120 characters) when they are not the examination's own
+    sentence (``words``), which is quoted once."""
+    passage = _unit_words(text, s.approach_words, message, 'approach_words')
+    passage = '' if ' '.join(passage.split()) == ' '.join(words.split()) else passage
+    return _shown(passage, 160), _shown(passage, 120)
 
 
 def _enteroscopy_class(s: Slots, text: str) -> tuple[str, str]:
-    """classes.class_hold's class and incomplete forms (copied), with the examination's own route when it is named."""
-    required, reached, said, shown = _enteroscopy_parts(s, text)
+    """classes.class_hold's class and incomplete forms (copied), with the examination's own route when it is given
+    (ROUTE_WORDS: every approach, D254 rule 1 - refute-r4a-r2 recorded the transanal route left unnamed). D254 rule 1
+    (r4a's R4): a reach that is not given (or names no place) leaves the reach clause out."""
+    required, reached = _enteroscopy_required(s), _reach(s)
+    words = _words(s, text, _ENT)
+    said, shown = _shown(words, 160), _shown(words, 120)
     if s.incomplete:
+        documented = (f'The enteroscopy is documented as reaching the {reached}{said} and as incomplete' if reached
+                      else f'The enteroscopy is documented{said} as incomplete')
         return (f'The documented enteroscopy{shown} is stated to be incomplete. Was {required} performed on the date of '
                 'service?',
-                f'The enteroscopy is documented as reaching the {reached}{said} and as incomplete; {s.code} accounts '
-                f'for {required}, which CPT Studio could not find in the document.')
-    way = ('', '')
-    if s.approach is not None and s.approach in APPROACH_WORDS and s.approach_words:
-        route = span_text(text, s.approach_words)
-        way = (f' {APPROACH_WORDS[s.approach]} ({quote(route)})', f' {APPROACH_WORDS[s.approach]} ({quote(route, 120)})')
-    return (f'The documented enteroscopy{shown} reached the {reached}{way[1]}. Was {required} performed on the date of '
-            'service?',
-            f'The enteroscopy is documented as reaching the {reached}{said}{way[0]}; {s.code} accounts for {required}, '
-            'which CPT Studio could not find in the document.')
+                f'{documented}; {s.code} accounts for {required}, which CPT Studio could not find in the document.')
+    route = ROUTE_WORDS[s.approach] if s.approach is not None else ''
+    told, told_q = _route_told(s, text, words, _ENT) if route else ('', '')
+    if reached:
+        asked = f'The documented enteroscopy{shown} reached the {reached}' + (f' {route}{told_q}' if route else '') + '.'
+        documented = f'The enteroscopy is documented as reaching the {reached}{said}' + (f' {route}{told}' if route
+                                                                                          else '')
+    elif route:
+        asked = f'The documented enteroscopy{shown} was passed {route}{told_q}.'
+        documented = f'The enteroscopy is documented{said} as passed {route}{told}'
+    else:
+        asked = f'CPT Studio could not find {required} in the documented enteroscopy{shown}.'
+        documented = f'The enteroscopy is documented{said}'
+    tail = 'Was it performed on the date of service?' if not (reached or route) else \
+        f'Was {required} performed on the date of service?'
+    return (f'{asked} {tail}',
+            f'{documented}; {s.code} accounts for {required}, which CPT Studio could not find in the document.')
+
+
+def _enteroscopy_approach(s: Slots, text: str) -> tuple[str, str]:
+    """ENT's approach explanation: classes.class_hold's class form naming the examination's established route. D254 rule
+    3: without ``approach`` (a denied or unstated route - refute-r4a-r2 A1), the class is worded without naming a route,
+    saying only that CPT Studio could not confirm the route the code describes; the incomplete form is the class's."""
+    if s.approach is not None or s.incomplete:
+        return _enteroscopy_class(s, text)
+    required, reached = _enteroscopy_required(s), _reach(s)
+    words = _words(s, text, _ENT)
+    said, shown = _shown(words, 160), _shown(words, 120)
+    unknown = 'CPT Studio could not confirm from the document the route this code describes'
+    if reached:
+        asked = f'The documented enteroscopy{shown} reached the {reached}; {unknown}.'
+        documented = f'The enteroscopy is documented as reaching the {reached}{said}'
+    else:
+        asked = f'{unknown} for the documented enteroscopy{shown}.'
+        documented = f'The enteroscopy is documented{said}'
+    return (f'{asked} Was {required} performed on the date of service?',
+            f'{documented}; {s.code} accounts for {required}, which CPT Studio could not find in the document.')
+
+
+def _route_anatomy(s: Slots) -> tuple[list[str], list[str]]:
+    """(the anatomy of each route the encounter's anatomy establishes, the anatomy of each it only possibly opens),
+    each sorted, for the routes a question names (APPROACH_ANATOMY: a stoma, a pouch). D267 (repair r3c of round w9r;
+    refute-r4a-r2 F5): a route the Fill marks as only possible (``possible_approaches``) is never among the established
+    ones, whatever ``approaches`` holds - it is never "the documented stoma" or "the documented pouch"."""
+    possible = {APPROACH_ANATOMY[way] for way in s.possible_approaches if way in APPROACH_ANATOMY}
+    established = {APPROACH_ANATOMY[way] for way in s.approaches if way in APPROACH_ANATOMY} - possible
+    return sorted(established), sorted(possible)
 
 
 def _enteroscopy_route(s: Slots, text: str) -> tuple[str, str]:
-    """classes.class_hold's route form (copied): the route not established beside the encounter's stoma or pouch."""
-    required, reached, said, shown = _enteroscopy_parts(s, text)
-    names = sorted({APPROACH_ANATOMY[way] for way in s.approaches if way in APPROACH_ANATOMY})
-    ways = ' or '.join(f'through the documented {name}' for name in names) or 'through a stoma or pouch'
-    also, also_shown = (' and as incomplete', ' and is stated to be incomplete') if s.incomplete else ('', '')
-    return (f'The documented enteroscopy{shown} reached the {reached}{also_shown}; CPT Studio could not confirm from the '
-            f'document whether it was passed through the mouth or {ways}. Was {required} performed on the date of '
-            'service?',
-            f'The enteroscopy is documented as reaching the {reached}{said}{also}, and CPT Studio could not confirm from '
-            f'the document whether it was passed through the mouth or {ways}; {s.code} accounts for {required}, which '
-            'CPT Studio could not find in the document.')
+    """classes.class_hold's route form (copied): the route not established beside the encounter's stoma or pouch. D254
+    rule 1 (r4a's R4): with no reach given, the reach clause is left out. D267 (refute-r4a-r2 F5): the routes only
+    possibly opened (``possible_approaches``: a doubted or unresolved through, or an entry whose type is not established)
+    are one alternative worded as possible - "possibly through a pouch or a stoma" - after the routes the anatomy
+    establishes ("through the documented stoma"): the possibility is the route's, so the words are true whether the
+    anatomy itself or only the passage through it is not established, and never "the documented pouch"."""
+    required, reached = _enteroscopy_required(s), _reach(s)
+    words = _words(s, text, _ENT)
+    said, shown = _shown(words, 160), _shown(words, 120)
+    established, possible = _route_anatomy(s)
+    routes = [f'through the documented {name}' for name in established]
+    if possible:
+        routes.append('possibly through ' + ' or '.join(f'a {name}' for name in possible))
+    ways = ' or '.join(routes) or 'through a stoma or pouch'
+    unknown = f'CPT Studio could not confirm from the document whether it was passed through the mouth or {ways}'
+    if reached:
+        also, also_shown = (' and as incomplete', ' and is stated to be incomplete') if s.incomplete else ('', '')
+        asked = f'The documented enteroscopy{shown} reached the {reached}{also_shown}; {unknown}.'
+        documented = f'The enteroscopy is documented as reaching the {reached}{said}{also}'
+    elif s.incomplete:
+        asked = f'The documented enteroscopy{shown} is stated to be incomplete; {unknown}.'
+        documented = f'The enteroscopy is documented{said} as incomplete'
+    else:
+        asked = (f'CPT Studio could not confirm from the document whether the documented enteroscopy{shown} was passed '
+                 f'through the mouth or {ways}.')
+        documented = f'The enteroscopy is documented{said}'
+    return (f'{asked} Was {required} performed on the date of service?',
+            f'{documented}, and {unknown}; {s.code} accounts for {required}, which CPT Studio could not find in the '
+            'document.')
+
+
+THROUGH_UNKNOWN = 'CPT Studio could not confirm from the document the altered anatomy it was passed through'
+
+
+def _enteroscopy_through(s: Slots, text: str) -> tuple[str, str]:
+    """ENT's route part when only the anatomy the enteroscopy was passed through is not established (D253 QX (ii):
+    "asked by the route's own question", never "In which procedure was the enteroscopy done?"): the class's route form
+    naming that one unknown - the altered anatomy it was passed through (ATTRIBUTE_PHRASES' through) - beside the reach
+    and the established route when they are given."""
+    required, reached = _enteroscopy_required(s), _reach(s)
+    words = _words(s, text, _ENT)
+    said, shown = _shown(words, 160), _shown(words, 120)
+    route = ROUTE_WORDS[s.approach] if s.approach is not None else ''
+    told, told_q = _route_told(s, text, words, _ENT) if route else ('', '')
+    if reached:
+        asked = (f'The documented enteroscopy{shown} reached the {reached}' + (f', passed {route}{told_q}' if route
+                                                                                else '') + f'; {THROUGH_UNKNOWN}.')
+        documented = f'The enteroscopy is documented as reaching the {reached}{said}' + (f', passed {route}{told}' if
+                                                                                          route else '')
+    elif route:
+        asked = f'The documented enteroscopy{shown} was passed {route}{told_q}; {THROUGH_UNKNOWN}.'
+        documented = f'The enteroscopy is documented{said} as passed {route}{told}'
+    else:
+        asked = (f'CPT Studio could not confirm from the document the altered anatomy the documented enteroscopy{shown} '
+                 'was passed through.')
+        documented = f'The enteroscopy is documented{said}'
+    return (f'{asked} Was {required} performed on the date of service?',
+            f'{documented}, and {THROUGH_UNKNOWN}; {s.code} accounts for {required}, which CPT Studio could not find in '
+            'the document.')
 
 
 def _method(s: Slots, text: str) -> tuple[str, str]:
+    """FINAL 7.4 h5: the lesion's own words, else its place, else 'lesion'; the group's acts, else the code's method."""
     lesion = ' '.join(span_text(text, s.lesion).split()) if s.lesion else ''
     if not lesion:
         place = landmark_label(s.place.value) if s.place is not None else ''
         lesion = f'lesion at the {place}' if place else 'lesion'
-    return method_question(lesion), method_reason(group_phrase(s))
+    group = group_phrase(s)
+    reason = method_reason(group) if group else ('The document states a removal without its method; CPT Studio could '
+                                                 'not confirm from the document the method this code accounts for.')
+    return method_question(lesion), reason
 
 
 def _technique(s: Slots, text: str) -> tuple[str, str]:
-    act = act_phrase(text, s)
-    required = TECHNIQUE_WORDS[_req(s.technique, 'technique').value]
-    return technique_question(act, _words(s, text)), technique_reason(act, required)
+    act = the_act(text, s)
+    question = f'Which technique was used for {act}{_shown(_words(s, text, "technique"))}?'
+    if s.technique is None:
+        return question, f'CPT Studio could not confirm from the document which technique was used for {act}.'
+    return (question, f'This code accounts for a {TECHNIQUE_WORDS[s.technique.value]}; CPT Studio could not confirm from '
+                      f'the document the technique of {act}.')
 
 
 def _stated_technique(s: Slots, text: str) -> tuple[str, str]:
-    act = act_phrase(text, s)
-    return technique_question(act, _words(s, text)), technique_unresolved_reason(act)
+    act = the_act(text, s)
+    return (f'Which technique was used for {act}{_shown(_words(s, text, "stated_technique"))}?',
+            f'CPT Studio could not confirm from the document which technique was used for {act}.')
 
 
 def _another_technique(s: Slots, text: str) -> tuple[str, str]:
-    technique = _req(s.technique, 'technique')
-    if s.stated is technique:
-        raise ValueError('another_technique names a stated technique other than the code\'s.')
-    stated = TECHNIQUE_WORDS[s.stated.value] if s.stated is not None else 'dilation of another technique'
-    detail, question = another_technique(service_phrase(s.family), stated, TECHNIQUE_WORDS[technique.value],
-                                         _words(s, text))
-    return question, detail
+    """v1's another_technique (reconcile.py:307-316): the stated technique (a dilation of another technique when it is
+    not given, or is the code's own, which the message's fact contradicts) and the code's (the technique this code
+    accounts for when not given)."""
+    technique = s.technique
+    stated = (TECHNIQUE_WORDS[s.stated.value] if s.stated is not None and s.stated is not technique
+              else 'dilation of another technique')
+    words = _words(s, text, 'another_technique')
+    name = service_phrase(s.family)
+    if technique is None:
+        return (f'The documented dilation{_shown(words)} states a {stated}. Was the technique this code accounts for '
+                'performed on the date of service?',
+                f'The {name} is documented as performed with a {stated}{_shown(words, 160)}; CPT Studio could not find '
+                'in the document the technique this code accounts for.')
+    required = TECHNIQUE_WORDS[technique.value]
+    return (f'The documented dilation{_shown(words)} states a {stated}. Was a {required} performed on the date of '
+            'service?',
+            f'The {name} is documented as performed with a {stated}{_shown(words, 160)}; this code accounts for a '
+            f'{required}, which CPT Studio could not find in the document.')
 
 
 def _route_question(s: Slots, text: str) -> tuple[str, str]:
-    act, words = act_phrase(text, s), _words(s, text)
-    return (act, f'Was the {act} ({_whole(words)}) an EUS-guided transmural injection or fiducial placement, or a '
+    act, words = the_act(text, s), _words(s, text, 'route')
+    return (act, f'Was {act}{_whole_shown(words)} an EUS-guided transmural injection or fiducial placement, or a '
                  'submucosal injection of the wall?')
 
 
 def _route(s: Slots, text: str) -> tuple[str, str]:
     act, question = _route_question(s, text)
-    return (question, f'{s.code} describes {TRANSMURAL_WORDS}; CPT Studio could not confirm from the document how the '
-                      f'{act} reached the tissue. {HELD}')
+    return (question, f'{s.code} describes {TRANSMURAL_WORDS}; CPT Studio could not confirm from the document how {act} '
+                      f'reached the tissue. {HELD}')
 
 
 def _wall_injection(s: Slots, text: str) -> tuple[str, str]:
     """assess._eus_code_hold's D171 (4) hold (copied): the route established submucosal."""
-    act, question = _route_question(s, text)
-    return (question, f'{s.code} describes {TRANSMURAL_WORDS}; the document describes this {act} as an injection of the '
-                      f'wall ({quote(_words(s, text))}), a submucosal injection rather than a transmural one. {HELD}')
+    _, question = _route_question(s, text)
+    this = _this(act_phrase(text, s), named_kind(s.act))
+    return (question, f'{s.code} describes {TRANSMURAL_WORDS}; the document describes {this} as an injection of the '
+                      f'wall{_shown(_words(s, text, "wall_injection"), 160)}, a submucosal injection rather than a '
+                      f'transmural one. {HELD}')
 
 
 def _act_target(s: Slots, text: str) -> tuple[str, str]:
-    act = act_phrase(text, s)
-    return target_question(act, _words(s, text)), target_reason(act)
+    act = the_act(text, s)
+    return (f'Which lesion or site was {act}{_shown(_words(s, text, "act_target"))} done on?',
+            f'CPT Studio could not confirm from the document which lesion or site {act} was done on.')
 
 
 def _site(s: Slots, text: str) -> tuple[str, str]:
-    act = act_phrase(text, s)
-    return target_question(act, _words(s, text)), site_reason(act, SITE_WORDS[_req(s.site, 'site').value])
+    """D29: the structure of a dilation not established; v1's site_reason, the code's site class when it is given."""
+    question, _ = _act_target(s, text)
+    act = the_act(text, s)
+    structure = f'CPT Studio could not confirm from the document which structure {act} was done on.'
+    if s.site is None:
+        return question, structure
+    return question, f'This code accounts for a {SITE_WORDS[s.site.value]}; {structure}'
 
 
 def _another_site(s: Slots, text: str) -> tuple[str, str]:
-    place = landmark_label(_req(s.place, 'place').value)
-    if not place:
-        raise ValueError('another_site names a place outside the code\'s site class.')
-    detail, question = another_site(service_phrase(s.family), place, SITE_WORDS[_req(s.site, 'site').value],
-                                    _words(s, text))
-    return question, detail
+    """v1's another_site (DECISIONS D29): the dilation's place outside the code's site class - "another site" when no
+    place is given, or the place given is inside the class (which the message's fact contradicts)."""
+    site = s.site
+    place = landmark_label(s.place.value) if s.place is not None else ''
+    if place and site is not None and s.place in engine_catalogue.SITE_CLASSES[site]:
+        place = ''
+    at = f'at the {place}' if place else 'at another site'
+    words = _words(s, text, 'another_site')
+    name = service_phrase(s.family)
+    if site is None:
+        return (f'The documented dilation{_shown(words)} is {at}. Was the dilation this code accounts for performed on '
+                'the date of service?',
+                f'The {name} is documented as performed with a dilation {at}{_shown(words, 160)}; CPT Studio could not '
+                'find in the document the site this code accounts for.')
+    required = SITE_WORDS[site.value]
+    return (f'The documented dilation{_shown(words)} is {at}. Was a {required} performed on the date of service?',
+            f'The {name} is documented as performed with a dilation {at}{_shown(words, 160)}; this code accounts for a '
+            f'{required}, which CPT Studio could not find in the document.')
 
 
 def _duct(s: Slots, text: str) -> tuple[str, str]:
-    act, said = act_phrase(text, s), quote(_words(s, text), 120)
+    """XCHG's duct: the two-act form when the counterpart and its words are given, else the act's own."""
+    act, own = the_act(text, s), _words(s, text, 'duct')
     if s.whole is not None and s.whole_words:
-        other = event_kind_label(s.whole.value)
-        return (f'Were the {act} ({said}) and the {other} ({quote(span_text(text, s.whole_words), 120)}) done in the '
-                'same duct?',
-                f'CPT Studio could not confirm from the document that the {act} and the {other} were done in the same '
-                'duct.')
-    return (f'In which duct was the {act} ({said}) done?',
-            f'CPT Studio could not confirm from the document in which duct the {act} was done.')
+        other = _the(kind_words(s.whole), named_kind(s.whole))
+        theirs = _unit_words(text, s.whole_words, 'duct', 'whole_words')
+        return (f'Were {act}{_shown(own)} and {other}{_shown(theirs)} done in the same duct?',
+                f'CPT Studio could not confirm from the document that {act} and {other} were done in the same duct.')
+    return (f'In which duct was {act}{_shown(own)} done?',
+            f'CPT Studio could not confirm from the document in which duct {act} was done.')
 
 
 def _r6(fact: str) -> Callable[[Slots, str], tuple[str, str]]:
@@ -1331,17 +1748,33 @@ def _setting(s: Slots, text: str) -> tuple[str, str]:
     return _r6('setting')(s, text)
 
 
+_PFC_WORDS = ('describes the transmural drainage of a pancreatic fluid collection (a pseudocyst or walled-off '
+              'necrosis)')  # defining_target_hold's (v1's) words, copied
+
+
+def _structure_parts(s: Slots, text: str, message: str) -> tuple[str, str, str]:
+    """(the act after 'this', its quoted words, the question) of a STRUCT:pfc item (v1's defining_target_hold, with
+    the act's kind label only)."""
+    label, named = kind_words(s.act), named_kind(s.act)
+    words = _words(s, text, message)
+    return (_this(label, named), _shown(words, 160),
+            f'Which structure was {_the(label, named)}{_shown(words, 160)} done on: a pancreatic fluid collection (a '
+            'pseudocyst or walled-off necrosis), or another structure?')
+
+
 def _structure(s: Slots, text: str) -> tuple[str, str]:
-    reason, question = defining_target_hold(s.code, event_kind_label(_req(s.act, 'act').value), '', _words(s, text))
-    return question, reason
+    this, _, question = _structure_parts(s, text, 'structure')
+    return (question, f'{s.code} {_PFC_WORDS}; CPT Studio could not confirm from the document which structure {this} '
+                      f'was done on. {HELD}')
 
 
 def _another_structure(s: Slots, text: str) -> tuple[str, str]:
-    place = landmark_label(_req(s.place, 'place').value)
-    if not place:
-        raise ValueError('another_structure names the place the document gives the act.')
-    reason, question = defining_target_hold(s.code, event_kind_label(_req(s.act, 'act').value), place, _words(s, text))
-    return question, reason
+    """STRUCT:pfc's structure established as another: the place the document gives the act, "another structure" when
+    none is given."""
+    this, _, question = _structure_parts(s, text, 'another_structure')
+    place = landmark_label(s.place.value) if s.place is not None else ''
+    where = f'at the {place}' if place else 'at another structure'
+    return question, f'{s.code} {_PFC_WORDS}; the document places {this} {where}. {HELD}'
 
 
 def _named_stations(stations: Sequence[Station]) -> tuple[str, str]:
@@ -1351,121 +1784,177 @@ def _named_stations(stations: Sequence[Station]) -> tuple[str, str]:
     return named, missing
 
 
+def _eus_required(s: Slots) -> str:
+    """The class words of the code's EUS class (_eus_class_words); the endoscopic ultrasound examination the code
+    describes when no class is given."""
+    return (_eus_class_words(s.code, s.exam_class) if s.exam_class is not None
+            else 'the endoscopic ultrasound examination this code describes')
+
+
 def _stations(s: Slots, text: str) -> tuple[str, str]:
     """STATIONS and LIMITED unresolved: which upper-tract stations were examined. Where some stations are established
     examined and not all three, assess's D171 (3) and D177 (4) wording (copied) names them."""
-    words = _words(s, text)
+    words = _words(s, text, 'stations')
     exam_class = s.exam_class or engine_catalogue.EusClass.FULL
     named_in = [station for station in engine_catalogue.UPPER_STATIONS if station in s.stations]
+    exam = 'The documented endoscopic ultrasound examination'
     if exam_class is engine_catalogue.EusClass.FULL and len(named_in) == 1:
-        return (f'The documented endoscopic ultrasound examination ({_whole(words)}) names one station only, the '
-                f'{named_in[0].value}. Was {FULL_STATIONS_WORDS} performed on the date of service?',
-                f'The documented endoscopic ultrasound examination names one station only, the {named_in[0].value} '
-                f'({quote(words)}); {s.code} accounts for {FULL_STATIONS_WORDS}, which CPT Studio could not find in the '
-                f'document. {HELD}')
+        return (f'{exam}{_whole_shown(words)} names one station only, the {named_in[0].value}. Was '
+                f'{FULL_STATIONS_WORDS} performed on the date of service?',
+                f'{exam} names one station only, the {named_in[0].value}{_shown(words, 160)}; {s.code} accounts for '
+                f'{FULL_STATIONS_WORDS}, which CPT Studio could not find in the document. {HELD}')
     if exam_class is engine_catalogue.EusClass.FULL and 1 < len(named_in) < len(engine_catalogue.UPPER_STATIONS):
         named, missing = _named_stations(named_in)
-        return (f'The documented endoscopic ultrasound examination ({_whole(words)}) names {named}, not {missing}. Was '
-                f'{FULL_STATIONS_WORDS} performed on the date of service?',
-                f'The documented endoscopic ultrasound examination names {named}, not {missing} ({quote(words)}); '
-                f'{s.code} accounts for {FULL_STATIONS_WORDS}, which CPT Studio could not find in the document. {HELD}')
+        return (f'{exam}{_whole_shown(words)} names {named}, not {missing}. Was {FULL_STATIONS_WORDS} performed on the '
+                'date of service?',
+                f'{exam} names {named}, not {missing}{_shown(words, 160)}; {s.code} accounts for {FULL_STATIONS_WORDS}, '
+                f'which CPT Studio could not find in the document. {HELD}')
     required = FULL_STATIONS_WORDS if exam_class is engine_catalogue.EusClass.FULL else _eus_class_words(s.code,
                                                                                                          exam_class)
     return (f'Which parts of the upper tract (the esophagus, the stomach, the duodenum) were examined in the endoscopic '
-            f'ultrasound examination ({quote(words, 120)})?',
+            f'ultrasound examination{_shown(words)}?',
             f'{s.code} accounts for {required}; CPT Studio could not confirm from the document which parts of the upper '
             f'tract were examined. {HELD}')
 
 
 def _station_class(s: Slots, text: str) -> tuple[str, str]:
-    """STATIONS and LIMITED established otherwise: a station established not examined (the full class; assess's D171
-    (3) wording, copied), or all three established examined (a limited class)."""
-    words = _words(s, text)
-    if s.denied:
-        region = s.denied[0].value
-        return (f'The document states that the {region} was not examined ({_whole(words)}). Was {FULL_STATIONS_WORDS} '
-                'performed on the date of service?',
-                f'The document states that the {region} was not examined ({quote(words)}); {s.code} accounts for '
+    """STATIONS and LIMITED established otherwise: an upper station established not examined (the full class; assess's
+    D171 (3) wording, copied), or all three established examined (a limited class). D254: neither given - the class the
+    stations do not fit, named by the code's class (or the examination the code describes)."""
+    words = _words(s, text, 'station_class')
+    exam = 'The documented endoscopic ultrasound examination'
+    denied = [station for station in s.denied if station in engine_catalogue.UPPER_STATIONS]
+    if denied:
+        region = denied[0].value
+        return (f'The document states that the {region} was not examined{_whole_shown(words)}. Was '
+                f'{FULL_STATIONS_WORDS} performed on the date of service?',
+                f'The document states that the {region} was not examined{_shown(words, 160)}; {s.code} accounts for '
                 f'{FULL_STATIONS_WORDS}, which CPT Studio could not find in the document. {HELD}')
     if all(station in s.stations for station in engine_catalogue.UPPER_STATIONS):
         required = _eus_class_words(s.code, engine_catalogue.EusClass.LIMITED)
         named, _ = _named_stations(s.stations)
-        return (f'The documented endoscopic ultrasound examination ({_whole(words)}) names {named}. Was {required} '
-                'performed on the date of service?',
-                f'The documented endoscopic ultrasound examination names {named} ({quote(words)}); {s.code} accounts '
-                f'for {required}, which CPT Studio could not find in the document. {HELD}')
-    raise ValueError('station_class names a station established not examined, or all three established examined.')
+        return (f'{exam}{_whole_shown(words)} names {named}. Was {required} performed on the date of service?',
+                f'{exam} names {named}{_shown(words, 160)}; {s.code} accounts for {required}, which CPT Studio could '
+                f'not find in the document. {HELD}')
+    required = _eus_required(s)
+    return (f'CPT Studio could not find {required} in the documented endoscopic ultrasound examination{_shown(words)}. '
+            'Was it performed on the date of service?',
+            f'{s.code} accounts for {required}, which CPT Studio could not find in the document. {HELD}')
 
 
 def _examination_class(s: Slots, text: str) -> tuple[str, str]:
     """wording.examination_class_hold's two forms (copied; equal to it wherever the class words are its own: tested),
-    with the class words chosen first - the limited class as CPT states it for 43237 and 43238 (DECISIONS D171 (3)) -
-    rather than assess's replacement inside the finished sentence, which also rewrote the document's quoted words when
-    they held the class words."""
-    exam_class = _req(s.exam_class, 'exam_class')
-    required = _eus_class_words(s.code, exam_class)
-    reached = landmark_label(_req(s.reached, 'reached').value)
-    words = _words(s, text) if s.words else ''
-    said, shown = (f' ({quote(words)})', f' ({quote(words, 120)})') if words else ('', '')
+    with the class words chosen first - the limited class as CPT states it for 43237 and 43238 (DECISIONS D171 (3)).
+    D254: with no reach given the reach clause is left out; with no class, the examination the code describes."""
+    required, reached = _eus_required(s), _reach(s)
+    words = _words(s, text, 'examination_class')
+    said, shown = _shown(words, 160), _shown(words, 120)
     if s.incomplete:
+        documented = (f'The endoscopic ultrasound examination is documented as reaching the {reached}{said} and as '
+                      'incomplete' if reached else f'The endoscopic ultrasound examination is documented{said} as '
+                                                   'incomplete')
         return (f'The documented endoscopic ultrasound examination{shown} is stated to be incomplete. Was {required} '
                 'performed on the date of service?',
-                f'The endoscopic ultrasound examination is documented as reaching the {reached}{said} and as incomplete; '
-                f'{s.code} accounts for {required}, which CPT Studio could not find in the document.')
-    return (f'The documented endoscopic ultrasound examination{shown} reached the {reached}. Was {required} performed '
-            'on the date of service?',
-            f'The endoscopic ultrasound examination is documented as reaching the {reached}{said}; {s.code} accounts for '
-            f'{required}, which CPT Studio could not find in the document.')
+                f'{documented}; {s.code} accounts for {required}, which CPT Studio could not find in the document.')
+    if reached:
+        return (f'The documented endoscopic ultrasound examination{shown} reached the {reached}. Was {required} '
+                'performed on the date of service?',
+                f'The endoscopic ultrasound examination is documented as reaching the {reached}{said}; {s.code} accounts '
+                f'for {required}, which CPT Studio could not find in the document.')
+    return (f'CPT Studio could not find {required} in the documented endoscopic ultrasound examination{shown}. Was it '
+            'performed on the date of service?',
+            f'The endoscopic ultrasound examination is documented{said}; {s.code} accounts for {required}, which CPT '
+            'Studio could not find in the document.')
 
 
 def _yield(s: Slots, text: str) -> tuple[str, str]:
-    act, words = act_phrase(text, s), _words(s, text)
-    return (f'Was any stone, calculus, debris or sludge removed with the {act} ({quote(words, 120)})?',
-            f'CPT Studio could not confirm from the document what the {act} retrieved ({quote(words, 140)}). {HELD}')
+    act, words = the_act(text, s), _words(s, text, 'yield')
+    return (f'Was any stone, calculus, debris or sludge removed with {act}{_shown(words)}?',
+            f'CPT Studio could not confirm from the document what {act} retrieved{_shown(words, 140)}. {HELD}')
 
 
 def _nothing_retrieved(s: Slots, text: str) -> tuple[str, str]:
     """ercp._nothing_retrieved_hold (copied)."""
-    act, words = act_phrase(text, s), _words(s, text)
-    return (f'Was any stone, calculus, debris or sludge removed with the {act} ({quote(words, 120)})?',
-            f'The document states that nothing was retrieved with the {act} ({quote(words, 140)}). CPT Studio does not '
-            f'read a sweep or an extraction that retrieved nothing as a removal of stones or debris. {HELD}')
+    act, words = the_act(text, s), _words(s, text, 'nothing_retrieved')
+    return (f'Was any stone, calculus, debris or sludge removed with {act}{_shown(words)}?',
+            f'The document states that nothing was retrieved with {act}{_shown(words, 140)}. CPT Studio does not read a '
+            f'sweep or an extraction that retrieved nothing as a removal of stones or debris. {HELD}')
+
+
+# The part questions of every rule that asks (v1's BUNDLING_QUESTIONS and PART_QUESTIONS, worded through the act with its
+# article and each quote optional: tests/v2/test_wording.py pins each equal to v1's where both quotes are given);
+# a rule that always bundles (the clip, the cannulation) or none asks whether the act was part of another act (D181's
+# act_part).
+PART_FORMS: Mapping[Bundling, str] = MappingProxyType({
+    Bundling.BIOPSY_OF_REMOVED_LESION: 'Was {act}{part} taken from the lesion that was removed{whole}, or from another '
+                                       'lesion?',
+    Bundling.RESECTION_TECHNIQUE: 'Was {act}{part} part of the resection of that lesion{whole}, or of another lesion?',
+    Bundling.LIFT_INJECTION: 'Was {act}{part} made to lift the lesion that was resected{whole}, or given for another '
+                             'reason or lesion?',
+    Bundling.PROCEDURAL_ADJUNCT: 'Was {act}{part} done as part of the removal{whole} - at the site it removed, or for the '
+                                 'bleeding it caused - or on another lesion or site?',
+    Bundling.DRAINAGE_STEP: 'Was {act}{part} a separate sampling, or a step of the transmural drainage{whole}?',
+    Bundling.STENT_INCLUDED: 'Was {act}{part} done in the duct of the stent placement{whole}, or in the other duct?',
+})
+PART_OF_ANOTHER = 'Was {act}{part} part of another act documented with it{whole}?'
 
 
 def _part(s: Slots, text: str) -> tuple[str, str]:
-    rule = _req(s.bundling, 'bundling')
-    kind, part, whole = event_kind_label(_req(s.act, 'act').value), _words(s, text), span_text(text, s.whole_words)
-    if rule.value in BUNDLING_QUESTIONS:
-        question = bundling_question(rule.value, kind, part, whole)
-    elif rule in PART_QUESTIONS:
-        question = PART_QUESTIONS[rule].format(act=kind, part=quote(part, 120), whole=quote(whole, 120))
-    else:
-        raise ValueError(f'{rule.value} is always bundled; nothing about it is asked.')
-    return question, bundling_reason(act_phrase(text, s))
+    """act_part and the bundling identity (PART, BUNDLING_TARGET): the rule's question, the part named by its kind and
+    quoted, its whole quoted; v1's bundling_reason. With no rule that asks, whether the act was part of another act,
+    and a reason that says only that."""
+    rule = s.bundling
+    kind = _the(kind_words(s.act), named_kind(s.act))
+    part = _words(s, text, 'part')
+    whole = _unit_words(text, s.whole_words, 'part', 'whole_words')
+    asks = rule is not None and rule in PART_FORMS
+    template = PART_FORMS[rule] if rule is not None and asks else PART_OF_ANOTHER
+    question = template.format(act=kind, part=_shown(part), whole=_shown(whole))
+    act = the_act(text, s)
+    if not asks:
+        return (question, f'CPT Studio could not confirm from the document whether {act} is part of another act '
+                          'documented with it.')
+    return (question, f'Whether {act} is part of another act documented with it depends on which lesion it was done on, '
+                      'which CPT Studio could not confirm from the document.')
 
 
 def _cause(s: Slots, text: str) -> tuple[str, str]:
     """act_cause unresolved: the causes contract.types.Cause names - an act of this session, a lesion present before
     it, an earlier procedure, or none (spontaneous)."""
-    act, said = act_phrase(text, s), quote(_words(s, text), 120)
+    act, said = the_act(text, s), _shown(_words(s, text, 'cause'))
     other = 'or was the bleeding from a lesion present before it, from an earlier procedure, or spontaneous'
     if s.whole is not None and s.whole_words:
-        whole = event_kind_label(s.whole.value)
-        question = (f'Did the {whole} ({quote(span_text(text, s.whole_words), 120)}) at this procedure cause the '
-                    f'bleeding the {act} ({said}) treated, {other}?')
+        whole = _the(kind_words(s.whole), named_kind(s.whole))
+        theirs = _unit_words(text, s.whole_words, 'cause', 'whole_words')
+        question = (f'Did {whole}{_shown(theirs)} at this procedure cause the bleeding {act}{said} treated, '
+                    f'{other}?')
     else:
-        question = f'Did an act of this procedure cause the bleeding the {act} ({said}) treated, {other}?'
-    return question, f'CPT Studio could not confirm from the document what caused the bleeding the {act} treated.'
+        question = f'Did an act of this procedure cause the bleeding {act}{said} treated, {other}?'
+    return question, f'CPT Studio could not confirm from the document what caused the bleeding {act} treated.'
 
 
 def _bundled(s: Slots, text: str) -> tuple[str, str]:
-    """wording.act_included (v1's, unchanged): the explanation naming the whole act's rule."""
-    why = BUNDLING_WHY[_req(s.bundling, 'bundling')]
-    listed = ('; '.join(dict.fromkeys(event_kind_label(kind.value) for kind in s.listed)) if s.listed
+    """wording.act_included (v1's, worded through its parts): the explanation naming the whole act's rule (none named
+    when no rule is given), the parts listed (each by its kind; the act when none is listed) and the group's acts.
+    D267 (repair r3c of round w9r; refute-r3c-r1 F6): a group that names no act (``()``, or only Kind.OTHER) words the
+    code itself, as _not_documented and _method do - "the documented act that 45385 accounts for" (this code's, when no
+    code is given) - never a bare 'act' standing for a kind ("The act documented ...")."""
+    why = BUNDLING_WHY[s.bundling] if s.bundling is not None else ''
+    listed = ('; '.join(dict.fromkeys(kind_words(kind) for kind in s.listed)) if s.listed
               else act_phrase(text, s))
-    detail, question = act_included(service_phrase(s.family), 'performed', listed, why, group_phrase(s),
-                                    _words(s, text))
-    return question, detail
+    group = group_phrase(s)
+    name = service_phrase(s.family)
+    words = _words(s, text, 'bundled')
+    rule = f': {why}' if why else '.'
+    done = f'The {name} is documented as performed with {listed}, which is part of another documented act{rule}'
+    if group:
+        return (f'The {group} documented{_shown(words)} is part of another procedure documented with it. Was a separate '
+                f'{group} performed on the date of service?',
+                f'{done} No separate {group} is documented for this code.')
+    code = s.code or 'this code'
+    return (f'The documented act{_shown(words)} that {code} accounts for is part of another procedure documented with '
+            f'it. Was a separate act that {code} accounts for performed on the date of service?',
+            f'{done} No separate act that {code} accounts for is documented.')
 
 
 def _same_day_subject(labels: Sequence[str], possible: Sequence[str]) -> str:
@@ -1478,64 +1967,109 @@ def _same_day_subject(labels: Sequence[str], possible: Sequence[str]) -> str:
     return '; '.join(parts)
 
 
+SEPARATE_EM_UNNAMED = ('A significant, separately identifiable E/M service beside a procedure on the same date is not '
+                       'established by this document.')  # D254 rule 3: SEPARATE_EM with nothing to name
+
+
 def _separate_em(s: Slots, text: str) -> tuple[str, str]:
-    """checks.separate_em_clarification (copied): the question, and same_day_reason over the same-day acts."""
-    labels = [event_kind_label(kind.value) for kind in s.listed]
-    possible = [event_kind_label(kind.value) for kind in s.possible]
+    """checks.separate_em_clarification (copied): the question, and same_day_reason over the same-day acts, each named
+    by its kind (D254 rule 2: an act no kind names is NO_KIND_LABEL, "Another act ..." when it opens the sentence). D246
+    (refute-5c-r2 R2-03): when the procedure day has no act to list, the reason names the same-day codes (``codes``) as
+    proposed - never as done. D254 rule 3: with nothing to name, SEPARATE_EM_UNNAMED."""
+    labels = list(dict.fromkeys(kind_words(kind) for kind in s.listed))
+    possible = list(dict.fromkeys(kind_words(kind) for kind in s.possible))
     if not labels and not possible:
-        raise ValueError('separate_em names the same-day procedures (listed or possible).')
+        codes = tuple(dict.fromkeys(s.codes))
+        if not codes:
+            return SEPARATE_EM_QUESTION, SEPARATE_EM_UNNAMED
+        return (SEPARATE_EM_QUESTION, f'{join(codes)} {"is" if len(codes) == 1 else "are"} proposed for the same '
+                                      'date; a significant, separately identifiable E/M service is not established by '
+                                      'this document.')
     subject = _same_day_subject(labels, possible)
-    return (SEPARATE_EM_QUESTION, f'{subject[:1].upper()}{subject[1:]}; a significant, separately identifiable E/M '
-                                  'service is not established by this document.')
+    return (SEPARATE_EM_QUESTION, f'{_capital(subject)}; a significant, separately identifiable E/M service is not '
+                                  'established by this document.')
 
 
 def _separate_em_denied(s: Slots, text: str) -> tuple[str, str]:
     return (SEPARATE_EM_QUESTION, f'The document states that the visit was not a significant, separately identifiable '
-                                  f'service beside the procedure ({quote(_words(s, text), 140)}).')
+                                  f'service beside the procedure{_shown(_words(s, text, "separate_em_denied"), 140)}.')
 
 
 def _base_included(s: Slots, text: str) -> tuple[str, str]:
-    """combination.base_hold's act form (copied), each act in doubt marked (classes.IN_DOUBT)."""
-    if not s.listed:
-        raise ValueError('base_included names the acts in doubt beside the code.')
-    included = ', '.join(dict.fromkeys(f'{event_kind_label(kind.value)}{IN_DOUBT}' for kind in s.listed))
+    """combination.base_hold's act form (copied), each act in doubt marked (classes.IN_DOUBT) and named by its kind (D254
+    rule 2: NO_KIND_LABEL for an act no kind names - R3C1-03's "from act" is gone). D246 (5c's R8, the lead's L1): with
+    no act in doubt (``listed`` empty), the codes beside it, stated only as proposed. D254 rule 3: with nothing to name
+    (no act listed, no code - an act in doubt that no kind names: refute-r3c-r1 R3C1-01, refute-r4d-r2 P4), the act form
+    over NO_KIND_LABEL - the act the hold rests on, no kind naming it."""
+    if not s.listed and s.codes:
+        codes = tuple(dict.fromkeys(s.codes))
+        one = len(codes) == 1
+        return (BASE_QUESTION.format(code=s.code, included=', '.join(codes)),
+                f'{join(codes)} {"is" if one else "are"} also proposed for the documented {service_phrase(s.family)}; '
+                f'{s.code} is normally not reported separately from {"it" if one else "them"} {_HOLD_RULE}. {HELD}')
+    kinds = s.listed or (Kind.OTHER,)
+    included = ', '.join(dict.fromkeys(f'{kind_words(kind)}{IN_DOUBT}' for kind in kinds))
     return (BASE_QUESTION.format(code=s.code, included=included),
             f'The documented {service_phrase(s.family)} includes {included}, which this diagnostic code does not '
             f'account for (internal profile rule). {HELD}')
 
 
 def _base_explained(s: Slots, text: str) -> tuple[str, str]:
-    """combination.base_hold (copied): beside the interventions the codes name, or the acts it does not account for."""
+    """combination.base_hold (copied): beside the interventions the codes name, or the acts it does not account for,
+    each named by its kind (D254 rule 2). D254 rule 3: with neither (an established act that no kind names: refute-5b-r1
+    F1's EUS act of kind other), the act form over NO_KIND_LABEL."""
     name = service_phrase(s.family)
     if s.codes:
         included = ', '.join(s.codes)
         reason = (f'The documented {name} has interventions that {included} account for; its diagnostic examination is '
-                  'normally included in them (internal profile rule; NCCI procedure-to-procedure edits are not '
-                  f'connected). {HELD}')
-    elif s.listed:
-        included = ', '.join(dict.fromkeys(event_kind_label(kind.value) for kind in s.listed))
+                  f'normally included in them {_HOLD_RULE}. {HELD}')
+    else:
+        included = ', '.join(dict.fromkeys(kind_words(kind) for kind in (s.listed or (Kind.OTHER,))))
         reason = (f'The documented {name} includes {included}, which this diagnostic code does not account for '
                   f'(internal profile rule). {HELD}')
-    else:
-        raise ValueError('base_explained names the codes or the acts beside the code.')
     return BASE_QUESTION.format(code=s.code, included=included), reason
 
 
+def _whole_noun(family: SessionKind) -> str:
+    """The whole a base-within code's session is part of, by its own family (D257): its service, else its noun (an E/M
+    of another setting is a visit), else 'procedure'."""
+    service = SESSION_SERVICES.get(family)
+    return kind_label(service) if service else SESSION_NOUNS.get(family, 'procedure')
+
+
 def _base_within(s: Slots, text: str) -> tuple[str, str]:
-    """combination.base_within_hold (copied)."""
+    """combination.base_within_hold (copied) with DECISIONS D257 (refute-r4d-r2 P5): the whole is named by its own family
+    (``whole_family``) - the endoscopic portion of an endoscopic ultrasound, as v1 words it, and part of any other whole
+    - and never as an endoscopic ultrasound it is not; with no family given, another procedure. A whole only possibly
+    done (``whole_possible``) is stated as possibly performed on the date of service, its performance not established,
+    and the code's session as possibly its part. ``codes``: the whole's counted codes."""
     within = s.codes
     coded = f', which {", ".join(within)} {"accounts" if len(within) == 1 else "account"} for' if within else ''
-    return (f'Is {s.code} reported separately from {", ".join(within) or "the endoscopic ultrasound"} for this '
-            'examination?',
-            f'The documented {service_phrase(s.family)} is the endoscopic portion of the endoscopic ultrasound '
-            f'documented with it{coded}; that examination is normally included in it, not reported separately '
-            f'(internal profile rule; NCCI procedure-to-procedure edits are not connected). {HELD}')
+    possible = s.whole_possible
+    if s.whole_family is not None:
+        whole = f'the {_whole_noun(s.whole_family)}'
+        portion = 'the endoscopic portion of' if s.whole_family is SessionKind.EUS else 'part of'
+        named = f'{portion} {whole} documented with it'
+    else:
+        whole = 'the procedure it may be part of' if possible else 'the procedure it is part of'
+        named = 'part of another procedure documented with it'
+    state = ', possibly performed on the date of service (its performance is not established)' if possible else ''
+    return (f'Is {s.code} reported separately from {", ".join(within) or whole} for this examination?',
+            f'The documented {service_phrase(s.family)} {"may be" if possible else "is"} {named}{state}{coded}; that '
+            f'examination is normally included in it, not reported separately {_HOLD_RULE}. {HELD}')
 
 
 def _competing(s: Slots, text: str) -> tuple[str, str]:
-    """combination.competing_hold (copied)."""
-    codes = join([s.code, *s.codes])
+    """combination.competing_hold (copied); with no rival given (read time's item_slots names none), the code alone,
+    another proposed code said only possibly to account for its act."""
     service = service_phrase(s.family) if s.family is not None else 'service'
+    if not s.codes:
+        return (f'{s.code} is proposed for a documented act that another proposed code may also account for. Reject the '
+                'code or codes the documentation does not support; the one left is then ready for review.',
+                f'{s.code} is proposed for one documented act of the {service} that another proposed code may also '
+                'account for. CPT Studio does not choose between them: each is held for the reviewer, not excluded, '
+                'until the others are rejected.')
+    codes = join([s.code, *s.codes])
     return (f'{codes} are proposed for the same documented act. Reject the code or codes the documentation does not '
             'support; the one left is then ready for review.',
             f'{codes} are each proposed for one same documented act of the {service}. CPT Studio does not choose '
@@ -1543,7 +2077,7 @@ def _competing(s: Slots, text: str) -> tuple[str, str]:
 
 
 def _service_date(s: Slots, text: str) -> tuple[str, str]:
-    said = [span_text(text, statement) for statement in s.statements]
+    said = _sides(text, s.statements, 'service_date')
     if len(said) >= 2:
         dates = '; '.join(quote(item, 140) for item in said)
         return (SERVICE_DATE_QUESTION, f'The document states more than one date of service ({dates}); every service and '
@@ -1551,8 +2085,360 @@ def _service_date(s: Slots, text: str) -> tuple[str, str]:
     return SERVICE_DATE_QUESTION, SERVICE_DATE_REASON
 
 
+# --- D225 (repair r3c): the items step r4a words for refute-4a-r2 P5, P6, P7, P10 and P11 -----------------------------
+#
+# Each sentence names the act and the fact that is actually unknown, true in every state its slots allow. D254 (repair
+# r3c of round w8r): a slot that contradicts the message is worded as its absence, never refused.
+
+
+# What a contradicted attribute is about, for every Attribute (CONFLICT_ATTRIBUTE; P7), each read after 'about': '{act}'
+# is the act the item names (act_phrase, less CONTESTED_LABEL_PARTS: a lesion's or a section's fact names the act it is
+# about); '{session}' is the session a session's attribute is about, named by its service (session_label: refute-r3c-r1
+# P1 - the held fact of a session's attribute is keyed by the act it holds, conflict:<that act's kind>, while the fact
+# itself is the session's, so the act never stands in for the session).
+ATTRIBUTE_PHRASES: Mapping[Attribute, str] = MappingProxyType({
+    Attribute.DATE_OF_SERVICE: 'the date of service',
+    Attribute.OTHER_DATES_ROLE: 'what a date the document gives refers to',
+    Attribute.DOCUMENTING_CLINICIAN: 'who documented this encounter',
+    Attribute.ROLE: 'the role of a person or of a part of the document',
+    Attribute.OWNER: 'whose entry a part of the document is',
+    Attribute.OCCASION: 'when the acts a part of the document tells were done',
+    Attribute.PERFORMER: 'who performed the {act}',
+    Attribute.PERFORMER_PERSON: 'who performed the {act}',
+    Attribute.EXAMINATION: 'which documented act was the {session} itself',
+    Attribute.KIND: 'what was done',
+    Attribute.ENCOUNTER: 'whether the {session} was part of this encounter',
+    Attribute.TRACT: 'which part of the digestive tract the {session} examined',
+    Attribute.APPROACH: 'the route of the {session}',
+    Attribute.THROUGH: 'the altered anatomy the {session} was passed through',
+    Attribute.REACHED: 'how far the {session} reached',
+    Attribute.DEVICE_REACHED: 'how far a device reached in the {session}',
+    Attribute.REACHED_ANATOMY: 'which altered anatomy the {session} reached',
+    Attribute.COMPLETION: 'whether the {session} was completed',
+    Attribute.STATIONS: 'which parts the {session} examined',
+    Attribute.PART_OF_SESSION: 'whether the {session} was part of another procedure',
+    Attribute.TYPE: 'what altered anatomy the document records',
+    Attribute.ORGAN: 'which organ an altered anatomy the document records is in',
+    Attribute.SUBTYPE: 'what kind of anastomosis the document records',
+    Attribute.JOINS: 'what an anastomosis the document records joins',
+    Attribute.MULTIPLICITY: 'whether the lesion of the {act} is one lesion or a group',
+    Attribute.PLACES: 'where the lesion of the {act} lies',
+    Attribute.DISTINCT_FROM: 'whether the lesion of the {act} is distinct from another lesion',
+    Attribute.SAME_AS: 'whether the lesion of the {act} is the same as another lesion',
+    Attribute.RESTATEMENTS_ROLE: 'whether another passage restates the {act}',
+    Attribute.OTHER_CLASS: 'what kind of service the {act} was',
+    Attribute.STATUS: 'whether the {act} was done',
+    Attribute.SESSION: 'which procedure the {act} was done in',
+    Attribute.DATE_RELATION: 'when the {act} was done',
+    Attribute.DATE: 'the date of the {act}',
+    Attribute.TARGET_LESION: 'which lesion the {act} was done on',
+    Attribute.TARGET_STRUCTURE: 'which structure the {act} was done on',
+    Attribute.TARGET_PLACES: 'where the {act} was done',
+    Attribute.TARGET_ANATOMY: 'which altered anatomy the {act} was done at',
+    Attribute.TARGET_DUCT: 'which duct the {act} was done in',
+    Attribute.TECHNIQUE_DEVICE: 'which device was used for the {act}',
+    Attribute.TECHNIQUE_ROUTE: 'how the {act} reached the tissue',
+    Attribute.PURPOSE: 'why the {act} was done',
+    Attribute.CAUSE: 'what caused the bleeding the {act} treated',
+    Attribute.CAUSE_EVENT: 'which act caused the bleeding the {act} treated',
+    Attribute.PART_OF: 'whether the {act} was part of another act',
+    Attribute.PART_RELATION: 'how the {act} was part of another act',
+    Attribute.YIELD: 'what the {act} retrieved',
+    Attribute.ACCESS_OUTCOME: 'whether the {act} achieved access',
+    Attribute.SCOPE_BREADTH: 'how much a statement in the document covers',
+    Attribute.SCOPE_TARGETS: 'what a statement in the document is about',
+    Attribute.SCOPE_SEGMENT: 'which segment a statement in the document covers',
+    Attribute.SCOPE_COVERS: 'which acts a statement in the document covers',
+    Attribute.SCOPE_EXCEPTS: 'which acts a statement in the document leaves out',
+    Attribute.VISIT_BASIS: 'the basis for the level of the {act}',
+    Attribute.VISIT_SEPARATELY_IDENTIFIABLE: 'whether the {act} was a significant, separately identifiable service',
+    Attribute.ENTRY: 'whose entry the {act} is told in',
+})
+# contract/types.Attribute's session attributes (its "a session" group; kind, which an event shares, is worded with no
+# subject): a conflict about one is about the session, '{session}' in ATTRIBUTE_PHRASES, never '{act}' (refute-r3c-r1
+# P1); the act's own sentence is never quoted as one of its sides.
+SESSION_ATTRIBUTES = frozenset({Attribute.EXAMINATION, Attribute.ENCOUNTER, Attribute.TRACT, Attribute.APPROACH,
+                                Attribute.THROUGH, Attribute.REACHED, Attribute.DEVICE_REACHED,
+                                Attribute.REACHED_ANATOMY, Attribute.COMPLETION, Attribute.STATIONS,
+                                Attribute.PART_OF_SESSION})
+# The parts of the act's label (act_phrase) that state the value a conflict about each attribute contests
+# (refute-r3c-r1 P6): left out of that conflict's sentence, so it never states one side's value as the act's - a device
+# conflict names no device, a place or lesion conflict no place and no lesion words.
+CONTESTED_LABEL_PARTS: Mapping[Attribute, tuple[str, ...]] = MappingProxyType({
+    Attribute.TECHNIQUE_DEVICE: ('device',),
+    Attribute.TARGET_PLACES: ('place', 'lesion'),
+    Attribute.TARGET_LESION: ('place', 'lesion'),
+    Attribute.PLACES: ('place', 'lesion'),
+    Attribute.MULTIPLICITY: ('lesion',),
+    Attribute.DISTINCT_FROM: ('lesion',),
+    Attribute.SAME_AS: ('lesion',),
+})
+# The noun of a session whose family names no service (SESSION_SERVICES): an E/M of another setting is a visit; any
+# other such session (sedation, another GI service, a service outside the GI profiles) is a procedure (session_label).
+SESSION_NOUNS: Mapping[SessionKind, str] = MappingProxyType({SessionKind.EM_OTHER: 'visit'})
+# What an unlisted entry on a code's evidence states (UNLISTED_EVIDENCE; P11), by its nature; '{kind}' is its kind
+# with its article ('an act' when it names none)
+UNLISTED_STATED: Mapping[UnlistedWhat, str] = MappingProxyType({
+    UnlistedWhat.ACT: 'documents {kind}', UnlistedWhat.DENIAL: 'states that {kind} was not done',
+    UnlistedWhat.DOUBT: 'leaves {kind} in doubt'})
+# Every approach as a route (EXAMINATION_APPROACH; P5): APPROACH_WORDS' three (classes.ROUTE_PHRASES), and the others
+# in their form
+ROUTE_WORDS: Mapping[Approach, str] = MappingProxyType({
+    Approach.ORAL: 'through the mouth', Approach.TRANSNASAL: 'through the nose', Approach.TRANSANAL: 'through the anus',
+    Approach.THROUGH_STOMA: 'through a stoma', Approach.THROUGH_POUCH: 'through a pouch',
+    Approach.THROUGH_GASTROSTOMY: 'through a gastrostomy', Approach.PERCUTANEOUS: 'through the skin'})
+# FINAL-V2 4.3 LOWER: the EUS class that needs a route of its own - the stoma class, the approach through_stoma beside
+# an anatomy entry of type stoma (P5)
+EUS_CLASS_ROUTES: Mapping[engine_catalogue.EusClass, Approach] = MappingProxyType({
+    engine_catalogue.EusClass.STOMA: Approach.THROUGH_STOMA})
+# XCHG's acts (D105, D127), and why their duct decides the code: ercp.exchange_question's two reasons (copied; pinned)
+STENT_KINDS = frozenset({Kind.STENT, Kind.STENT_REMOVAL, Kind.STENT_EXCHANGE})
+EXCHANGE_PAIR_RULE = ('A stent removed and replaced in the same duct at one session is one stent exchange (43276), not '
+                      'a removal (43275) and a placement (43274).')
+EXCHANGE_PART_RULE = ('A removal or a placement that is part of a stent exchange is reported with the exchange '
+                      '(43276), not separately (43275, 43274).')
+# STRUCT:pfc's sentence of the place it sets apart (D120, D136, D145: no supported place biliary or hepatic)
+APART_PLACE_RULE = ('CPT Studio does not read an act placed in the biliary tree or the liver as the drainage of a '
+                    'pancreatic fluid collection.')
+
+
+def with_article(label: str) -> str:
+    """``label`` (CPT Studio's own act label, never the document's words) with its indefinite article."""
+    return f'{"an" if label[:1].lower() in "aeiou" else "a"} {label}'
+
+
+def session_label(s: Slots) -> str:
+    """The session a session attribute's conflict is about (refute-r3c-r1 P1): its service, from ``family`` (Slots: the
+    session's kind), as act_phrase names an examination; for a family that names no service, its noun (an E/M of another
+    setting is a visit), else 'examination' when the act is the examination itself, else 'procedure' - never the act the
+    item names, whose kind only keys the fact, and never a profile's capitalised label inside a sentence."""
+    service = SESSION_SERVICES.get(s.family) if s.family is not None else None
+    if service:
+        return kind_label(service)
+    if s.family is not None and s.family in SESSION_NOUNS:
+        return SESSION_NOUNS[s.family]
+    return 'examination' if s.act is Kind.EXAMINATION else 'procedure'
+
+
+
+# ATTRIBUTE_PHRASES with the act through its article (D254 rule 2): each phrase's 'the {act}' (every '{act}' in the table
+# follows 'the ': tested) read as '{act}', which the_act fills - 'the snare removal', or NO_KIND_LABEL alone.
+_ATTRIBUTE_FORMS: Mapping[Attribute, str] = MappingProxyType({
+    attribute: phrase.replace('the {act}', '{act}') for attribute, phrase in ATTRIBUTE_PHRASES.items()})
+
+
+def _conflict_attribute(s: Slots, text: str) -> tuple[str, str]:
+    """A contradicted attribute (D225, P7), named: each side's own sentence quoted once (two sides in one sentence quote
+    it once); for an act's attribute the act's own sentence when the sides carry none of their own; never "performed and
+    not performed". A session's attribute is the session's (session_label), and the act's own sentence is no side of it:
+    with no side's sentence, nothing is quoted (refute-r3c-r1 P1). The act's label leaves out what the conflict contests
+    (CONTESTED_LABEL_PARTS; P6). D254: a side with no units is no side, and with no sentence at all - for an act's
+    attribute too - nothing is quoted."""
+    attribute = _req(s.attribute, 'attribute')
+    contested = CONTESTED_LABEL_PARTS.get(attribute, ())
+    label = _act_label(text, s.act, s.family, None if 'device' in contested else s.device,
+                       () if 'lesion' in contested else s.lesion, None if 'place' in contested else s.place)
+    what = _ATTRIBUTE_FORMS[attribute].format(act=_the(label, named_kind(s.act)), session=session_label(s))
+    of_session = attribute in SESSION_ATTRIBUTES
+    said = _sides(text, s.statements, 'conflict_attribute')
+    if not said and not of_session:
+        said = _sides(text, (s.words,), 'conflict_attribute')
+    if not said:
+        return (f'The document is not consistent about {what}. Which is correct for this encounter?',
+                f'The document is not consistent about {what}. Each value it states is kept; none is chosen.')
+    if len(said) == 1:
+        return (f'The document is not consistent about {what} ({quote(said[0], 120)}). Which is correct for this '
+                'encounter?',
+                f'The document is not consistent about {what} ({quote(said[0], 140)}). Each value it states is kept; '
+                'none is chosen.')
+    asked = join([quote(item, 120) for item in said])
+    kept = '; '.join(quote(item, 140) for item in said)
+    rest = 'Both are kept; neither is chosen.' if len(said) == 2 else 'Each is kept; none is chosen.'
+    return (f'Statements in the document disagree about {what}: {asked}. Which is correct for this encounter?',
+            f'Statements in the document disagree about {what} ({kept}). {rest}')
+
+
+def _unlisted_evidence(s: Slots, text: str) -> tuple[str, str]:
+    """3.2.6 rule 2's item (D225, P11): the unlisted entry on the code's evidence, by its own nature and kind (never the
+    code's act said to be in doubt; D254 rule 2: an entry of no kind is NO_KIND_LABEL), quoting its own unit. D254: an
+    entry with no units is named without a quote; the units of several statements are its one passage, each run once
+    (span_text), as one statement's several units are."""
+    kind = s.unlisted_kind
+    stated = UNLISTED_STATED[_req(s.unlisted_what, 'unlisted_what')].format(
+        kind=_a(kind_words(kind), named_kind(kind)))
+    unit = _unit_words(text, tuple(span for statement in s.statements for span in statement), 'unlisted_evidence',
+                       'statements')
+    return (f'The evidence passage of {s.code}{_shown(unit, 120)} {stated}. {performed_question(s.code)}',
+            f'The evidence passage of {s.code}{_shown(unit, 140)} {stated}, which CPT Studio\'s reading of the document '
+            f'does not account for. {HELD}')
+
+
+def _eus_route(s: Slots) -> tuple[Approach | None, str]:
+    """The route the slots' EUS class needs (EUS_CLASS_ROUTES: the stoma class's; None for a class that needs none of
+    its own) and the class words."""
+    exam_class = _req(s.exam_class, 'exam_class')
+    return EUS_CLASS_ROUTES.get(exam_class), _eus_class_words(s.code, exam_class)
+
+
+_EXAM = 'The documented endoscopic ultrasound examination'
+
+
+def _examination_passed(s: Slots, text: str, approach: Approach, required: str, message: str) -> tuple[str, str]:
+    """EXAMINATION_APPROACH's form (P5): the examination passed by ``approach``, the class words, its route words quoted
+    when they are not its own sentence."""
+    words = _words(s, text, message)
+    said, told = _route_told(s, text, words, message)
+    return (f'{_EXAM}{_shown(words)} was passed {ROUTE_WORDS[approach]}{told}. Was {required} performed on the date of '
+            'service?',
+            f'The endoscopic ultrasound examination is documented as passed {ROUTE_WORDS[approach]}{said}; {s.code} '
+            f'accounts for {required}, which CPT Studio could not find in the document.')
+
+
+def _examination_route(s: Slots, text: str) -> tuple[str, str]:
+    """LOWER's stoma class (D225, P5; RANK row 8, "approach for a class"): its approach not established - or established
+    through the stoma while the stoma itself (an anatomy entry of type stoma) is not - asked as the route, never as R6's
+    extent sentence. ``approaches``: the routes the encounter's anatomy opens (a stoma entry established). D254: an
+    approach established otherwise than the class's route is worded as not established (the class's route is what the
+    question asks); the route and the stoma both given - the item still asks the route - as the stoma it was passed
+    through not confirmed; a class that needs no route of its own as the route of the examination not confirmed (or
+    passed by the approach given). D267 (repair r3c of round w9r; refute-r4a-r2 F5): a stoma the Fill marks as only
+    possible (``possible_approaches``) is worded as one not established - "through a stoma", "that the patient has a
+    stoma" - never as "the documented stoma": the stoma class reads no through (its route is the approach beside an
+    anatomy entry of type stoma), so a stoma only possible here is one whose type is not established."""
+    route, required = _eus_route(s)
+    words = _words(s, text, 'examination_route')
+    shown = _shown(words)
+    if route is None:
+        if s.approach is not None:
+            return _examination_passed(s, text, s.approach, required, 'examination_route')
+        return (f'CPT Studio could not confirm from the document the route of the documented endoscopic ultrasound '
+                f'examination{shown}. Was {required} performed on the date of service?',
+                f'{s.code} accounts for {required}; CPT Studio could not confirm from the document the route of the '
+                f'endoscopic ultrasound examination. {HELD}')
+    anatomy = APPROACH_ANATOMY[route]
+    documented = anatomy in _route_anatomy(s)[0]
+    if s.approach is not route:
+        way = f'through the documented {anatomy}' if documented else ROUTE_WORDS[route]
+        reached = _reach(s)
+        unknown = (f'{_EXAM}{shown} reached the {reached}; CPT Studio could not confirm from the document whether it was '
+                   f'passed {way}.' if reached else
+                   f'CPT Studio could not confirm from the document whether the documented endoscopic ultrasound '
+                   f'examination{shown} was passed {way}.')
+        return (f'{unknown} Was {required} performed on the date of service?',
+                f'{s.code} accounts for {required}; CPT Studio could not confirm from the document whether the '
+                f'endoscopic ultrasound examination was passed {way}. {HELD}')
+    said, told = _route_told(s, text, words, 'examination_route')
+    missing = (f'that it was passed through the documented {anatomy}' if documented
+               else f'that the patient has a {anatomy}')
+    return (f'{_EXAM}{shown} is stated to be passed {ROUTE_WORDS[route]}{told}; CPT Studio could not confirm from the '
+            f'document {missing}. Was {required} performed on the date of service?',
+            f'{s.code} accounts for {required}; the document states that the endoscopic ultrasound examination was '
+            f'passed {ROUTE_WORDS[route]}{said}, and CPT Studio could not confirm from the document {missing}. {HELD}')
+
+
+def _examination_approach(s: Slots, text: str) -> tuple[str, str]:
+    """LOWER's stoma class (D225, P5): an approach established other than the class's - the class explanation, in
+    EXAMINATION_CLASS's form, naming the route; the examination's route words quoted when they are not its own
+    sentence. D254 rule 3's reading for this class: with no other approach given (none, or the class's own, which the
+    message's fact contradicts), the class is worded without naming a route."""
+    route, required = _eus_route(s)
+    approach = s.approach if s.approach is not None and s.approach is not route else None
+    if approach is not None:
+        return _examination_passed(s, text, approach, required, 'examination_approach')
+    words = _words(s, text, 'examination_approach')
+    return (f'CPT Studio could not confirm from the document that the documented endoscopic ultrasound examination'
+            f'{_shown(words)} was passed by the route this code describes. Was {required} performed on the date of '
+            'service?',
+            f'The endoscopic ultrasound examination is documented{_shown(words, 160)}; {s.code} accounts for '
+            f'{required}, which CPT Studio could not find in the document.')
+
+
+def _same_duct(s: Slots, text: str) -> tuple[str, str]:
+    """XCHG's two-act duct question (D225, P6; DUCT's two-act form): ``act`` is the act whose duct is not established
+    and ``whole`` its counterpart, so the reason names the act whose duct is unknown - never the code's own act whose
+    duct is supported - and why the duct decides the code (ercp.exchange_question's reasons). D246 (r4a Q4 option (a);
+    D160 (3)): an act with no units is named without a quote, either act of the two. D254: either act may name no kind
+    (NO_KIND_LABEL); the exchange's reason is given only for the pair it is about (a removal and a placement; an
+    exchange beside a removal or a placement)."""
+    kind, other = s.act, s.whole
+    act, counterpart = the_act(text, s), _the(kind_words(other), named_kind(other))
+    if kind is not None and other is not None and kind is not other and {kind, other} <= STENT_KINDS:
+        rule = f' {EXCHANGE_PART_RULE if Kind.STENT_EXCHANGE in (kind, other) else EXCHANGE_PAIR_RULE}'
+    else:
+        rule = ''
+    own = _unit_words(text, s.words, 'same_duct', 'words')
+    theirs = _unit_words(text, s.whole_words, 'same_duct', 'whole_words')
+    return (f'Were {act}{_shown(own)} and {counterpart}{_shown(theirs)} done in the same duct?',
+            f'CPT Studio could not confirm from the document in which duct {act} was done.{rule} {HELD}')
+
+
+def _structure_place(s: Slots, text: str) -> tuple[str, str]:
+    """STRUCT:pfc (43240; D225, P10): the explanation naming the place the rule read - a supported place biliary or
+    hepatic, which sets the act apart from a pancreatic fluid collection's drainage (APART_PLACE_RULE). D254: any other
+    place given is named without that rule - the rule never said of a place it does not set apart - and no place as
+    "another structure"."""
+    this, said, question = _structure_parts(s, text, 'structure_place')
+    place = s.place
+    if place is not None and engine_anatomy.in_regions(place, engine_catalogue.DEFINING_TARGET_APART):
+        return (question, f'{s.code} {_PFC_WORDS}; the document places {this} at the {landmark_label(place.value)}{said}. '
+                          f'{APART_PLACE_RULE} {HELD}')
+    label = landmark_label(place.value) if place is not None else ''
+    where = f'at the {label}' if label else 'at another structure'
+    return question, f'{s.code} {_PFC_WORDS}; the document places {this} {where}{said}. {HELD}'
+
+
+# --- D246 (repair r3c): 3.2.6 rule 3's synthetic act (r4a R4 (a)) ----------------------------------------------------
+
+SYNTHETIC_UNACCOUNTED = "which CPT Studio's reading of the document does not account for"
+
+
+def _synthetic_act(s: Slots, text: str) -> tuple[str, str]:
+    """3.2.6 rule 3's synthetic act (D246; r4a R4 (a), Q3): a kept unlisted ACT - an act the document states that CPT
+    Studio's reading does not account for - named by its own kind, as UNLISTED_EVIDENCE names an unlisted entry's kind
+    (D254 rule 2: NO_KIND_LABEL when it names none: ``act`` empty, or Kind.OTHER), and quoting its own unit (``words``).
+    Only the kind: a device, a place, a lesion or a session's service is no fact of an entry CPT Studio's reading does
+    not hold - an unlisted examination is "an examination", never the session it may be told in, which the reading does
+    account for. The act is never said to be in doubt (DOUBT's sentence, true for an unlisted doubt), which is untrue of
+    an act the document states. With no units, the act is named without a quote (D160 (3); r4a Q4 option (a))."""
+    kind = _a(kind_words(s.act), named_kind(s.act))
+    words = _unit_words(text, s.words, 'synthetic_act', 'words')
+    return (f'The document documents {kind}{_shown(words)}, {SYNTHETIC_UNACCOUNTED}. Confirm whether it was done on the '
+            'date of service.',
+            f'The document documents {kind}{_shown(words, 140)}, {SYNTHETIC_UNACCOUNTED}. {HELD}')
+
+
+# --- D258 (repair r3c of round w8r): a statement that names no session (r4a QP2, QD; r4c Q1) --------------------------
+
+UNLISTED_SCOPE_UNNAMED = 'which names no procedure session'
+
+
+def _unlisted_scope(s: Slots, text: str) -> tuple[str, str]:
+    """DECISIONS D258: 3.2.6 rule 4's pair of a statement that names no procedure session (a kept unlisted doubt or
+    denial with no card, or a card naming a session the FactSet does not hold) with the held session's examination.
+    The question names that examination by its service (``family``; 'examination' when none is given), quoting its own
+    sentence (``words``), and asks whether it is documented as done on the date of service - a member's "documented"
+    releases, "not documented" excludes; the reason quotes the statement (``statements``) and says it names no
+    procedure session. It never says the document leaves that examination in doubt or denies it, and it names no nature
+    of the statement (a doubt, a denial). With no statement of units, the statement is named, not quoted."""
+    service = SESSION_SERVICES.get(s.family) if s.family is not None else None
+    noun = kind_label(service) if service else (SESSION_NOUNS.get(s.family, 'examination') if s.family is not None
+                                                else 'examination')
+    words = _words(s, text, 'unlisted_scope')
+    said = _sides(text, s.statements, 'unlisted_scope')
+    if not said:
+        stated = 'A statement in the document names no procedure session'
+        about = 'it is'
+    elif len(said) == 1:
+        stated = f'The document states {quote(said[0], 140)}, {UNLISTED_SCOPE_UNNAMED}'
+        about = 'it is'
+    else:
+        stated = f'The document states {join([quote(item, 140) for item in said])}, which name no procedure session'
+        about = 'they are'
+    return (f'Is the {noun}{_shown(words)} documented as done on the date of service?',
+            f'{stated}; CPT Studio could not confirm from the document whether {about} about the {noun}. {HELD}')
+
+
 _Q, _E = ItemKind.QUESTION, ItemKind.EXPLANATION
-_ACT = ('act', 'words')
 
 
 def _spec(fact: str, kind: ItemKind, rank: int | None, needs: tuple[str, ...],
@@ -1560,64 +2446,97 @@ def _spec(fact: str, kind: ItemKind, rank: int | None, needs: tuple[str, ...],
     return MessageSpec(fact, kind, rank, needs, words)
 
 
-# Every message id's entry (FINAL-V2 4.8's RANK rows; 4.3's unmet and established-otherwise columns).
+# D254 rule 1 (repair r3c of round w8r): why every item of a message carries each slot its ``needs`` names - the only
+# slots a builder may refuse to word without (engine/questions.py, step r4a's file, and studio/interpretation/overlay.py,
+# step 5c's, are what make them).
+CARRIED: Mapping[str, str] = MappingProxyType({
+    'code': "questions.fill sets Fill.code to CodeFacts.code, the held proposal's own code, and overlay.item_slots "
+            'passes fill.code (every message but service_date, whose encounter-scope item_slots gives Slots())',
+    'family': 'questions.fill sets Fill.family to CodeFacts.family, a required SessionKind - only _own_entry (doubt, '
+              "synthetic_act) clears it - and overlay.item_slots passes fill.family (the R6 and member-context items' "
+              'label, recognised_only)',
+    'act': "a conflict's fact key is conflict:<kind> (questions.fact_of finds a kind in every conflict key) and "
+           "questions._specific sets Fill.act to that kind (_conflict_kind; the examination for a session's attribute) - "
+           'the conflict items, whose fact key fact_key builds from it',
+    'attribute': 'questions.message_of gives conflict_attribute only for a held fact whose attribute is set (and item '
+                 "turns a conflict_fact into it only then); questions._specific copies held.attribute",
+    'unlisted_what': 'questions._refined gives unlisted_evidence only for a held fact in raised.evidence, and '
+                     "questions._specific copies that entry's what (UnlistedStatement.what is required)",
+    'exam_class': "questions.message_of gives examination_route and examination_approach only when the code's EUS class "
+                  'is the stoma class (_stoma_route), and Fill.exam_class is CodeFacts.exam_class',
+})
+
+# Every message id's entry (FINAL-V2 4.8's RANK rows; 4.3's unmet and established-otherwise columns). ``needs`` (D254 rule
+# 1): only slots CARRIED names - the code, the R6 label's family, a conflict's act and attribute, an unlisted entry's
+# nature, the stoma EUS class.
 MESSAGES: Mapping[Message, MessageSpec] = MappingProxyType({
-    Message.CONFLICT: _spec('conflict', _Q, 1, _ACT + ('statements',), _conflict),
-    Message.CONFLICT_FACT: _spec('conflict', _Q, 1, ('act', 'statements'), _conflict_fact),
-    Message.DOUBT: _spec('performed_status', _Q, 2, _ACT, _doubt),
-    Message.STATEMENT_SCOPE: _spec('statement_scope', _Q, 3, ('act', 'statements'), _scope),
-    Message.STATUS: _spec('performed_status', _Q, 4, _ACT, _status),
-    Message.NOT_DOCUMENTED: _spec('performed_status', _Q, 4, ('code', 'group'), _not_documented),
-    Message.ATTEMPTED: _spec('performed_status', _E, 4, ('code',) + _ACT, _attempted),
+    Message.CONFLICT: _spec('conflict', _Q, 1, ('act',), _conflict),
+    Message.CONFLICT_FACT: _spec('conflict', _Q, 1, ('act',), _conflict_fact),
+    Message.DOUBT: _spec('performed_status', _Q, 2, (), _doubt),
+    Message.STATEMENT_SCOPE: _spec('statement_scope', _Q, 3, (), _scope),
+    Message.STATUS: _spec('performed_status', _Q, 4, (), _status),
+    Message.NOT_DOCUMENTED: _spec('performed_status', _Q, 4, ('code',), _not_documented),
+    Message.ATTEMPTED: _spec('performed_status', _E, 4, ('code',), _attempted),
     Message.UNPROFILED: _spec('performed_status', _E, 4, ('code',), _unprofiled),
     Message.NOT_LINKED: _spec('performed_status', _E, 4, ('code',), _not_linked),
     Message.RECOGNISED_ONLY: _spec('performed_status', _E, 4, ('code', 'family'), _recognised_only),
     Message.UNRECONCILED: _spec('performed_status', _E, 4, ('code',), _unreconciled),
-    Message.ENTRY: _spec('event_entry', _Q, 5, _ACT, _entry),
-    Message.ANOTHER_ENTRY: _spec('event_entry', _E, 5, _ACT + ('owner', 'family'), _another_entry),
-    Message.TIME: _spec('event_time', _Q, 6, _ACT, _time),
-    Message.TIME_BESIDE_VISIT: _spec('event_time', _Q, 6, _ACT, _time_beside_visit),
-    Message.PERFORMER: _spec('event_performer', _Q, 7, _ACT, _performer),
-    Message.PROCEDURE: _spec('procedure', _Q, 8, ('act',), _procedure),
-    Message.ANOTHER_TRACT: _spec('procedure', _E, 8, ('code', 'words', 'tract', 'required_tract'), _another_tract),
-    Message.ENTEROSCOPY_ROUTE: _spec('procedure', _Q, 8, ('code', 'enteroscopy_class', 'reached'), _enteroscopy_route),
-    Message.ENTEROSCOPY_APPROACH: _spec('procedure', _E, 8, ('code', 'enteroscopy_class', 'reached', 'approach',
-                                                             'approach_words'), _enteroscopy_class),
-    Message.METHOD: _spec('act_method', _Q, 9, ('group',), _method),
-    Message.TECHNIQUE: _spec('technique', _Q, 10, _ACT + ('technique',), _technique),
-    Message.STATED_TECHNIQUE: _spec('technique', _Q, 10, _ACT, _stated_technique),
-    Message.ANOTHER_TECHNIQUE: _spec('technique', _E, 10, ('words', 'technique', 'family'), _another_technique),
-    Message.ROUTE: _spec('technique', _Q, 10, ('code',) + _ACT, _route),
-    Message.WALL_INJECTION: _spec('technique', _E, 10, ('code',) + _ACT, _wall_injection),
-    Message.ACT_TARGET: _spec('act_target', _Q, 11, _ACT, _act_target),
-    Message.SITE: _spec('act_target', _Q, 11, _ACT + ('site',), _site),
-    Message.ANOTHER_SITE: _spec('act_target', _E, 11, ('words', 'place', 'site', 'family'), _another_site),
-    Message.DUCT: _spec('act_target', _Q, 11, _ACT, _duct),
+    Message.ENTRY: _spec('event_entry', _Q, 5, (), _entry),
+    Message.ANOTHER_ENTRY: _spec('event_entry', _E, 5, (), _another_entry),
+    Message.TIME: _spec('event_time', _Q, 6, (), _time),
+    Message.TIME_BESIDE_VISIT: _spec('event_time', _Q, 6, (), _time_beside_visit),
+    Message.PERFORMER: _spec('event_performer', _Q, 7, (), _performer),
+    Message.PROCEDURE: _spec('procedure', _Q, 8, (), _procedure),
+    Message.ANOTHER_TRACT: _spec('procedure', _E, 8, ('code',), _another_tract),
+    Message.ENTEROSCOPY_ROUTE: _spec('procedure', _Q, 8, ('code',), _enteroscopy_route),
+    Message.ENTEROSCOPY_APPROACH: _spec('procedure', _E, 8, ('code',), _enteroscopy_approach),
+    Message.METHOD: _spec('act_method', _Q, 9, (), _method),
+    Message.TECHNIQUE: _spec('technique', _Q, 10, (), _technique),
+    Message.STATED_TECHNIQUE: _spec('technique', _Q, 10, (), _stated_technique),
+    Message.ANOTHER_TECHNIQUE: _spec('technique', _E, 10, (), _another_technique),
+    Message.ROUTE: _spec('technique', _Q, 10, ('code',), _route),
+    Message.WALL_INJECTION: _spec('technique', _E, 10, ('code',), _wall_injection),
+    Message.ACT_TARGET: _spec('act_target', _Q, 11, (), _act_target),
+    Message.SITE: _spec('act_target', _Q, 11, (), _site),
+    Message.ANOTHER_SITE: _spec('act_target', _E, 11, (), _another_site),
+    Message.DUCT: _spec('act_target', _Q, 11, (), _duct),
     Message.TARGET: _spec('target', _Q, 12, ('family',), _r6('target')),
-    Message.STRUCTURE: _spec('target', _Q, 12, ('code',) + _ACT, _structure),
-    Message.ANOTHER_STRUCTURE: _spec('target', _E, 12, ('code',) + _ACT + ('place',), _another_structure),
-    Message.STATIONS: _spec('exam_stations', _Q, 13, ('code', 'words'), _stations),
-    Message.STATION_CLASS: _spec('exam_stations', _E, 13, ('code', 'words'), _station_class),
+    Message.STRUCTURE: _spec('target', _Q, 12, ('code',), _structure),
+    Message.ANOTHER_STRUCTURE: _spec('target', _E, 12, ('code',), _another_structure),
+    Message.STATIONS: _spec('exam_stations', _Q, 13, ('code',), _stations),
+    Message.STATION_CLASS: _spec('exam_stations', _E, 13, ('code',), _station_class),
     Message.EXTENT: _spec('extent', _Q, 14, ('family',), _r6('extent')),
-    Message.EXAMINATION_CLASS: _spec('extent', _E, 14, ('code', 'exam_class', 'reached'), _examination_class),
-    Message.ENTEROSCOPY_CLASS: _spec('extent', _E, 14, ('code', 'enteroscopy_class', 'reached'), _enteroscopy_class),
-    Message.YIELD: _spec('act_yield', _Q, 15, _ACT, _yield),
-    Message.NOTHING_RETRIEVED: _spec('act_yield', _E, 15, _ACT, _nothing_retrieved),
+    Message.EXAMINATION_CLASS: _spec('extent', _E, 14, ('code',), _examination_class),
+    Message.ENTEROSCOPY_CLASS: _spec('extent', _E, 14, ('code',), _enteroscopy_class),
+    Message.YIELD: _spec('act_yield', _Q, 15, (), _yield),
+    Message.NOTHING_RETRIEVED: _spec('act_yield', _E, 15, (), _nothing_retrieved),
     Message.CANNULATION: _spec('cannulation', _Q, 16, ('family',), _r6('cannulation')),
-    Message.PART: _spec('act_part', _Q, 17, _ACT + ('whole_words', 'bundling'), _part),
-    Message.BUNDLING_TARGET: _spec('act_target', _Q, 17, _ACT + ('whole_words', 'bundling'), _part),
-    Message.CAUSE: _spec('act_cause', _Q, 17, _ACT, _cause),
-    Message.BUNDLED: _spec('performed_status', _E, 18, _ACT + ('family', 'group', 'bundling'), _bundled),
+    Message.PART: _spec('act_part', _Q, 17, (), _part),
+    Message.BUNDLING_TARGET: _spec('act_target', _Q, 17, (), _part),
+    Message.CAUSE: _spec('act_cause', _Q, 17, (), _cause),
+    Message.BUNDLED: _spec('performed_status', _E, 18, (), _bundled),
     Message.EM_BASIS: _spec('em_basis', _Q, 19, ('family',), _r6('em_basis')),
     Message.SEPARATE_EM: _spec('separate_em', _Q, 20, (), _separate_em),
-    Message.SEPARATE_EM_DENIED: _spec('separate_em', _E, 20, ('words',), _separate_em_denied),
-    Message.BASE_INCLUDED: _spec('base_included', _Q, 21, ('code', 'listed'), _base_included),
+    Message.SEPARATE_EM_DENIED: _spec('separate_em', _E, 20, (), _separate_em_denied),
+    Message.BASE_INCLUDED: _spec('base_included', _Q, 21, ('code',), _base_included),
     Message.BASE_EXPLAINED: _spec('base_included', _E, 21, ('code',), _base_explained),
     Message.BASE_WITHIN: _spec('base_included', _E, 21, ('code',), _base_within),
-    Message.COMPETING: _spec('competing_codes', _Q, 22, ('code', 'codes'), _competing),
+    Message.COMPETING: _spec('competing_codes', _Q, 22, ('code',), _competing),
     Message.SETTING: _spec('setting', _Q, 23, ('family',), _setting),
     Message.PATIENT_STATUS: _spec('patient_status', _Q, 23, ('family',), _r6('patient_status')),
     Message.SERVICE_DATE: _spec('service_date', _Q, None, (), _service_date),
+    # D225 (repair r3c): refute-4a-r2 P7, P11, P5 (question and explanation), P6, P10
+    Message.CONFLICT_ATTRIBUTE: _spec('conflict', _Q, 1, ('act', 'attribute'), _conflict_attribute),
+    Message.UNLISTED_EVIDENCE: _spec('performed_status', _Q, 2, ('code', 'unlisted_what'), _unlisted_evidence),
+    Message.EXAMINATION_ROUTE: _spec('procedure', _Q, 8, ('code', 'exam_class'), _examination_route),
+    Message.EXAMINATION_APPROACH: _spec('procedure', _E, 8, ('code', 'exam_class'), _examination_approach),
+    Message.SAME_DUCT: _spec('act_target', _Q, 11, (), _same_duct),
+    Message.STRUCTURE_PLACE: _spec('target', _E, 12, ('code',), _structure_place),
+    # D246 (repair r3c): r4a R4 (a) - 3.2.6 rule 3's synthetic act (its kind and its unit, each optional)
+    Message.SYNTHETIC_ACT: _spec('performed_status', _Q, 2, (), _synthetic_act),
+    # D258 and D253 QX (ii) (repair r3c of round w8r)
+    Message.UNLISTED_SCOPE: _spec('performed_status', _Q, 2, (), _unlisted_scope),
+    Message.ENTEROSCOPY_THROUGH: _spec('procedure', _Q, 8, ('code',), _enteroscopy_through),
 })
 
 
@@ -1631,8 +2550,9 @@ def fact_key(message: Message, slots: Slots) -> str:
 def build(message: Message, slots: Slots, text: str) -> Worded:
     """The item of ``message`` in CPT Studio's words, from ``slots`` and the revision ``text`` (FINAL-V2 4.8): its fact
     key, kind, question and reason. ValueError - never a fallback sentence - when ``message`` is not a Message, a slot
-    the message needs is empty, a span it quotes holds no words or reaches past the text, or the slots contradict the
-    message (an explanation of a misfit naming a fit)."""
+    every item of the message carries by construction is empty (MESSAGES' ``needs``, CARRIED: D254 rule 1 - after it a
+    refusal is a programming error, rule 5), or a span it quotes holds no words or reaches past the text (a span the
+    item's revision does not hold: a binding failure)."""
     if not isinstance(message, Message):
         raise ValueError(f'{message!r} is not a message id.')
     if not isinstance(slots, Slots) or not isinstance(text, str):

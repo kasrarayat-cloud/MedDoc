@@ -28,7 +28,13 @@ Each fixture is a synthetic Gemini answer over a synthetic document (fictional p
 with the real linked steps and assessed through assess.assess with a synthetic Corti response citing the document's own
 words (the S08 builders). The installed release's outputs (c2e53f8e: engine.assess with gi_context.extract_context,
 merge_user_values office/established and detect.route on 2026-11-09, as tests/test_harness_engine.py drives it) quoted
-in the docstrings were measured on byte-identical texts. Nothing is sent."""
+in the docstrings were measured on byte-identical texts. Nothing is sent.
+
+DECISIONS D243 (2026-11-14, step q02): the two subtests of test_d134_the_read_time_overlay_keeps_the_assessments_reading pinned the review overlay's reading of an
+event_coding@1 record, which FINAL-V2 6.5 retires (read time reads event_coding@2 only, a
+cpt-studio-events@1 record is read as stored and blocked). They retire with it, removed here by a counted
+edit naming their ids; step 5c's own tests carry the same kind of @1 record, asserting 6.5's refusal. Nothing
+else in this suite changed (8.0's ban on editing a retired module's tests yields to 6.5 for exactly these ids)."""
 from __future__ import annotations
 
 from django.test import SimpleTestCase
@@ -612,22 +618,6 @@ class D134VisitItemBesideAPossibleProcedure(SimpleTestCase):
                 self.assertEqual(no_em(inv, text), ([], [NOT_LISTED]))
         self.assertNotIn('gi.egd', [family for family, session in coverage.sessions(reading_of(cases[1][1][0])).items()
                                     if session.done])
-
-    def test_d134_the_read_time_overlay_keeps_the_assessments_reading(self):
-        """overlay.reviewed_completeness re-reads the coverage from the items the assessment listed: beside the DRE the
-        visit stays listed, beside the done banding it stays set apart - the reading the assessment made."""
-        dre = statement_act('Rectal examination: a digital rectal examination was performed and showed no masses.',
-                            'digital rectal examination', VISIT_WORDS)
-        band = office('Rubber band ligation of one internal hemorrhoid was performed in the office today.', act(
-            'E1', 'P2', 'band_ligation', 'Rubber band ligation', status_words='was performed', procedure=OFFICE_WORD,
-            target=tg('', 'anal_canal', 'one internal hemorrhoid', ['P2'])))
-        for label, (inv, text), expected in (('the DRE', dre, ([NO_PROPOSAL], [])),
-                                             ('the done banding', band, ([], [NOT_LISTED]))):
-            with self.subTest(label):
-                result = run(inv, text, [], user_values=MEMBER)
-                reviewed = overlay.reviewed_completeness(result.completeness, reading_of(inv), [], ())
-                self.assertEqual(([str(item['label']) for item in reviewed['unresolved_items']],
-                                  [str(item['label']) for item in reviewed['not_listed']]), expected)
 
 
 # --- the D130 record: a documented statement beside a possible procedure ----------------------------------------------

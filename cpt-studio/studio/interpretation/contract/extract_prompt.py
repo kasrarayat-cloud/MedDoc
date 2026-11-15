@@ -6,7 +6,11 @@ body (``request_parts``, ``build_request``).
 enumeration names each clause's part, clause_text returns it, and tests/v2/test_extract_prompt.py pins each clause's
 rule by a grep), with 2.2's borderline
 filings stated as general rules in those parts and 1.4's value definitions (extract_schema.DEFINITIONS, step 1b)
-rendered in, one line per list of values, so that a changed definition changes the instruction and its pin. What 2.3
+rendered in, one line per list of values, so that a changed definition changes the instruction and its pin. The DENIALS
+part also carries DECISIONS D244's Q-N8 sentence (option (b)): a statement that a whole examination or procedure was not
+done, of a kind the document tells no other session of on the date it concerns, is the examination event of a session of
+its own, of that kind, never an event with its session empty, so that 4.3's row 7 never reads it as the examination of
+a session of another kind. What 2.3
 forbids is absent and pinned by scans: no CPT code, case, example document, expected answer, member value, filename or
 reading; no phrase of S4's failure cases, of 2.1's or 2.2's quoted examples, of the U32 registry or of the refutation
 case files; no statement that a second reading exists; no provider or product name; no word list to match - meanings
@@ -22,11 +26,14 @@ sent, ``refused: unbuilt``, 1.2 rule 8) when the text holds its own marker, a ma
 or pages that do not tile it, or a page whose number is not an int of at least 1 (``unframed`` says which).
 
 **The request body** has exactly v1's three keys (BODY_KEYS): systemInstruction (INSTRUCTIONS_2), contents (one user
-turn holding the framed document and nothing else) and generationConfig (temperature 0, maxOutputTokens 32768,
-responseMimeType application/json, responseSchema extract_schema.RESPONSE_SCHEMA_2, copied). The model is named by the
-adapter's URL, thinking is not configured and no tool is offered (D12). ``build_request`` takes the revision text, its
-pages and its kind and nothing else, so no member value, filename, title, participant output or reading of CPT
-Studio's can enter the body (D1).
+turn holding the framed document and nothing else) and generationConfig (temperature 0, maxOutputTokens 65536,
+thinkingConfig with thinkingLevel high, responseMimeType application/json, responseSchema
+extract_schema.RESPONSE_SCHEMA_2, copied). The model is named by the adapter's URL (gemini-4-carbon, DECISIONS D230).
+The thinking configuration is D230's and the only one sent: thinking level high, the documented maximum for the model,
+with 65,536 output tokens, its synchronous output limit, which thinking tokens count toward; temperature stays in the
+body (the model ignores it and does not reject it). No tool is offered (D12). ``build_request`` takes the revision
+text, its pages and its kind and nothing else, so no member value, filename, title, participant output or reading of
+CPT Studio's can enter the body (D1).
 
 **The pins** (2.5). A request is built only when INSTRUCTIONS_2, RESPONSE_SCHEMA_2 and the segmentation rule's
 constants (segment.rule_constants) match INTERPRETATION_VERSION_V2's pins in studio/interpretation/__init__.py
@@ -249,6 +256,9 @@ is not an anatomy entry.
 
 DENIALS
 - A statement that an act was not done is an event whose status is performed, negated.
+- A statement that a whole examination or procedure of one kind was not done, where the document tells no other session
+  of that kind on the date the statement concerns, is the examination event of a session of its own, of that kind,
+  never an event whose session is left empty.
 - scope.breadth: single_target, one target, given in target; listed_targets, the two or more lesions it lists, given in
   scope.targets; all_of_kind, every act of its kind in its session; exceptive, every act of its kind except the acts
   already reported, which scope.excepts lists; segment, every act of its kind in a stretch of the tract, its first and
@@ -416,8 +426,12 @@ def framed(text: str, pages: Sequence[segment.Page], kind: str) -> str | None:
 
 # --- the request body (v1's three keys) ---------------------------------------------------------------------------------
 
-TEMPERATURE = 0
-MAX_OUTPUT_TOKENS = 32768  # the model's stated output limit, as v1
+TEMPERATURE = 0  # sent as v1's is; the model ignores it and does not reject it (DECISIONS D230)
+# DECISIONS D230 (the owner's directive of 2026-11-13): the model's synchronous output limit, which thinking tokens
+# count toward (v1's body keeps its 32768), and thinking level high, the model's documented maximum - the one thinking
+# setting sent
+MAX_OUTPUT_TOKENS = 65536
+THINKING_LEVEL = 'high'
 RESPONSE_MIME_TYPE = 'application/json'
 
 
@@ -435,11 +449,11 @@ BODY_KEYS: tuple[str, ...] = tuple(key.value for key in BodyKey)
 def request_parts(framed_text: str) -> dict[str, Any]:
     """The request body for a document framed by ``framed``: exactly BODY_KEYS - systemInstruction (INSTRUCTIONS_2),
     contents (one user turn holding ``framed_text`` and nothing else) and generationConfig (TEMPERATURE,
-    MAX_OUTPUT_TOKENS, RESPONSE_MIME_TYPE and a copy of RESPONSE_SCHEMA_2). Pure; the body shares nothing with this
-    module. TypeError when ``framed_text`` is not a str; ValueError unless it has the form ``framed`` gives (a raw text,
-    a document framed by v1 or by a participant's framer, a unit sequence that is not S1, S2, ... in order, a page line
-    ``framed`` never writes, or a PDF line saying an original is attached is never sent); RuntimeError when a pin does
-    not match (check_pins)."""
+    MAX_OUTPUT_TOKENS, thinkingConfig with THINKING_LEVEL, RESPONSE_MIME_TYPE and a copy of RESPONSE_SCHEMA_2). Pure;
+    the body shares nothing with this module. TypeError when ``framed_text`` is not a str; ValueError unless it has the
+    form ``framed`` gives (a raw text, a document framed by v1 or by a participant's framer, a unit sequence that is not
+    S1, S2, ... in order, a page line ``framed`` never writes, or a PDF line saying an original is attached is never
+    sent); RuntimeError when a pin does not match (check_pins)."""
     if not isinstance(framed_text, str):
         raise TypeError('The framed document must be a string.')
     if not _is_framed(framed_text):
@@ -449,6 +463,7 @@ def request_parts(framed_text: str) -> dict[str, Any]:
         'systemInstruction': {'parts': [{'text': INSTRUCTIONS_2}]},
         'contents': [{'role': 'user', 'parts': [{'text': framed_text}]}],
         'generationConfig': {'temperature': TEMPERATURE, 'maxOutputTokens': MAX_OUTPUT_TOKENS,
+                             'thinkingConfig': {'thinkingLevel': THINKING_LEVEL},
                              'responseMimeType': RESPONSE_MIME_TYPE,
                              'responseSchema': copy.deepcopy(extract_schema.RESPONSE_SCHEMA_2)},
     }

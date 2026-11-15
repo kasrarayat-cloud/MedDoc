@@ -11,11 +11,15 @@ on 2026-11-01 (docs/cpt-harness/vendor-and-reference-facts-20261101.md):
   cache reads and writes, each counted on its own; ``output_tokens`` includes thinking tokens. The harness asks for no
   caching and no fallback, so the top-level counts are the whole request (usage.iterations is not priced).
 
-The interpreter (Gemini migration, FINAL 3.2; studio/interpretation/adapter.py), read 2026-11-09 (GEMINI_SOURCE):
+The interpreter (Gemini migration, FINAL 3.2; studio/interpretation/adapter.py), read 2026-11-13 (GEMINI_SOURCE):
 
-- gemini-4-argon, Standard tier: input $2.00 and output $10.00 through 2026-11-30; input $4.00 and output $20.00 from
-  2026-12-01. Its rates are DATED, so a Gemini answer is priced at the rate of the day its request was sent (``on``, a
-  date, or a timezone-aware datetime read in UTC) and has no estimate without one - never one at a guessed rate.
+- gemini-4-carbon (GEMINI, the interpreter's model since DECISIONS D230), Standard tier: input $2.00 and output $10.00
+  through 2026-11-30; input $4.00 and output $20.00 from 2026-12-01 - the rates of gemini-4-argon (GEMINI_ARGON), the
+  interpreter's model until D230, whose own rates, read 2026-11-09 (GEMINI_ARGON_SOURCE), price the runs whose requests
+  named it, so a run is priced by the model its request named and an Argon run keeps its estimate. Each model's
+  estimate states its own source, the day it was read and its basis (GEMINI_MODELS). The rates are DATED, so a Gemini
+  answer is priced at the rate of the day its request was sent (``on``, a date, or a timezone-aware datetime read in
+  UTC) and has no estimate without one - never one at a guessed rate.
   usageMetadata's ``promptTokenCount`` is the input; the output is ``candidatesTokenCount`` plus
   ``thoughtsTokenCount``, since thinking is billed as output (each absent or null count is zero, as the API omits a zero).
   CPT Studio creates no cached content, but Google's implicit caching, on by default, may serve the prefix every
@@ -24,7 +28,8 @@ The interpreter (Gemini migration, FINAL 3.2; studio/interpretation/adapter.py),
   no cached-input rate, so they are priced with the rest of the prompt at the full input rate: an estimate that reports
   any is an upper bound, on the premise that a cache hit is never billed above the input rate (Google's caching bills
   cache hits at a reduced rate and implicit caching has no storage charge; whether gemini-4-argon caches implicitly at
-  all was not observable in the trial), and it says how many there were (``cached_tokens``) and what that makes it
+  all was not observable in the trial, and gemini-4-carbon is not yet measured), and it says how many there were
+  (``cached_tokens``) and what that makes it
   (GEMINI_BASIS). A usage stating more cached tokens than prompt tokens has no estimate. CPT Studio offers no tool, and
   no rate is recorded for tool-use prompt tokens, so a usage reporting any has no estimate; nor has one whose
   ``totalTokenCount`` is not its input and output added up (some tokens would be unpriced).
@@ -53,13 +58,27 @@ RATES = {  # US dollars per million tokens
 ASTRA_LONG_INPUT_TOKENS = 272_000  # above this many input tokens a request is priced as long context
 ASTRA_LONG_MULTIPLIERS = {'input': Decimal('2'), 'output': Decimal('1.5')}
 
-GEMINI = 'gemini-4-argon'  # the interpreter's model (studio.interpretation.MODEL; a test pins the two equal)
-GEMINI_RATES_AS_OF = '2026-11-09'
-GEMINI_BASIS = ('estimated from published rates as of 2026-11-09; prompt tokens served from a cache are priced at the '
+GEMINI = 'gemini-4-carbon'  # the interpreter's model (studio.interpretation.MODEL; a test pins the two equal)
+GEMINI_RATES_AS_OF = '2026-11-13'
+GEMINI_BASIS = ('estimated from published rates as of 2026-11-13; prompt tokens served from a cache are priced at the '
                 'full input rate, so an estimate that reports any is an upper bound; not reconciled to an invoice')
-GEMINI_SOURCE = ("Google's Gemini API pricing page, read 2026-11-09 (gemini-trial REPORT.md section D): gemini-4-argon, "
-                 'Standard tier, $2.00 per million input tokens and $10.00 per million output tokens (thinking '
-                 'included) through 2026-11-30; $4.00 and $20.00 from 2026-12-01.')
+GEMINI_SOURCE = ("Google's Gemini API pricing page, read 2026-11-13 (DECISIONS D230): gemini-4-carbon, Standard tier, "
+                 '$2.00 per million input tokens and $10.00 per million output tokens (thinking included) through '
+                 '2026-11-30; $4.00 and $20.00 from 2026-12-01, the rates of gemini-4-argon.')
+# The interpreter's model until DECISIONS D230 (2026-11-13): a run whose request named it is priced at its rates as read
+# while it was the interpreter's, so the runs it answered keep their estimates and their stated source.
+GEMINI_ARGON = 'gemini-4-argon'
+GEMINI_ARGON_RATES_AS_OF = '2026-11-09'
+GEMINI_ARGON_BASIS = ('estimated from published rates as of 2026-11-09; prompt tokens served from a cache are priced at '
+                      'the full input rate, so an estimate that reports any is an upper bound; not reconciled to an '
+                      'invoice')
+GEMINI_ARGON_SOURCE = ("Google's Gemini API pricing page, read 2026-11-09 (gemini-trial REPORT.md section D): "
+                       'gemini-4-argon, Standard tier, $2.00 per million input tokens and $10.00 per million output '
+                       'tokens (thinking included) through 2026-11-30; $4.00 and $20.00 from 2026-12-01.')
+# Each Gemini model priced here: (the day its rates were read, the basis, the source) its estimates state; both models'
+# rates are GEMINI_PERIODS. Any other model name, a near-miss included, has no Gemini estimate.
+GEMINI_MODELS = {GEMINI: (GEMINI_RATES_AS_OF, GEMINI_BASIS, GEMINI_SOURCE),
+                 GEMINI_ARGON: (GEMINI_ARGON_RATES_AS_OF, GEMINI_ARGON_BASIS, GEMINI_ARGON_SOURCE)}
 # (first day, last day, US dollars per million tokens), in order; None is open-ended. A day is a UTC calendar day.
 GEMINI_PERIODS = (
     (None, date(2026, 11, 30), {'input': Decimal('2.00'), 'output': Decimal('10.00')}),
@@ -114,7 +133,7 @@ def estimate_loop(model: str, usages, *, on=None) -> Optional[dict]:
     extra = {'exchanges': len(usages), 'exchanges_priced': len(priced)}
     if model == ASTRA:
         extra['long_context_exchanges'] = sum(1 for _, _, details, _ in priced if details['long_context'])
-    if model == GEMINI:
+    if model in GEMINI_MODELS:
         extra['thinking_tokens'] = sum(details['thinking_tokens'] for _, _, details, _ in priced)
         extra['cached_tokens'] = sum(details['cached_tokens'] for _, _, details, _ in priced)
     return _result(model, sum(cost for cost, _, _, _ in priced), tokens, extra, priced[0][3])
@@ -129,8 +148,8 @@ def _priced(model: str, usage, on) -> Optional[tuple]:
             return (*_astra(usage), _Terms(RATES[ASTRA]))
         if model == FABLE:
             return (*_fable(usage), _Terms(RATES[FABLE]))
-        if model == GEMINI:
-            return _gemini(usage, on)
+        if isinstance(model, str) and model in GEMINI_MODELS:
+            return _gemini(model, usage, on)
     except _Invalid:
         return None
     return None
@@ -166,7 +185,7 @@ def _fable(usage: dict) -> tuple:
     return cost, tokens, {}
 
 
-def _gemini(usage: dict, on) -> tuple:
+def _gemini(model: str, usage: dict, on) -> tuple:
     day = _day(on)
     if day is None:
         raise _Invalid  # a dated rate needs the day the request was sent
@@ -187,8 +206,8 @@ def _gemini(usage: dict, on) -> tuple:
     tokens = {'input': prompt, 'output': candidates + thoughts}
     cost = (tokens['input'] * rates['input'] + tokens['output'] * rates['output']) / _MILLION
     effective = f'through {last.isoformat()}' if first is None else f'from {first.isoformat()}'
-    terms = _Terms(rates, GEMINI_RATES_AS_OF, GEMINI_BASIS,
-                   {'priced_on': day.isoformat(), 'effective': effective, 'source': GEMINI_SOURCE})
+    as_of, basis, source = GEMINI_MODELS[model]
+    terms = _Terms(rates, as_of, basis, {'priced_on': day.isoformat(), 'effective': effective, 'source': source})
     return cost, tokens, {'thinking_tokens': thoughts, 'cached_tokens': cached}, terms
 
 

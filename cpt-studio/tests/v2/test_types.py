@@ -1,7 +1,8 @@
 """Design v2's shared labels and types (docs/gemini-migration/FINAL-V2.md, step 0b of 8.1), TEXT-ONLY and SYNTHETIC.
 
 What is proved here, each against the design or against v1 computed in the test:
-- the labels: v1's names and values byte-identical (the 17 retired modules read them for good, 5.0); v2's labels of 1.1
+- the labels: v1's names and values byte-identical (the 17 retired modules read them for good, 5.0) but MODEL's value,
+  which DECISIONS D230 sets to gemini-4-carbon for every request built (D272, step cb); v2's labels of 1.1
   under new names; every pin of 2.5 named, each naming the step that fills it, and written as a sha256 but the health
   thresholds' (DECISIONS D202); the family dispatch of is_new_assessment and is_new_context for @1 and @2 alike;
 - the settings: D49's deadlines for the second call (7.4 [R:MO-3]), as literal assignments beside the interpreter's;
@@ -67,7 +68,8 @@ NEW_MODULES = {
 
 # --- the labels -------------------------------------------------------------------------------------------------------
 
-# v1's label lines, verbatim: each must stand in __init__.py exactly once, byte for byte (FINAL-V2 5.0).
+# v1's label lines, verbatim: each must stand in __init__.py exactly once, byte for byte (FINAL-V2 5.0); MODEL's value is
+# DECISIONS D230's (the owner's directive of 2026-11-13: gemini-4-carbon), its comment unchanged.
 V1_LINES = (
     "INTERPRETATION_VERSION = 'gemini-events@1'",
     "INSTRUCTIONS_SHA256 = '00da58c5a8f0f5deca4ee0dd8259bb7065ee6dd551e408e3257bd33b4eee14b1'",
@@ -76,7 +78,7 @@ V1_LINES = (
     "INVENTORY_VERSION = 'gemini-inventory@1'",
     "LABEL = f\"{INTERPRETATION_VERSION}+{INVENTORY_VERSION.removeprefix('gemini-')}\"  # gemini-events@1+inventory@1",
     "ADAPTER_VERSION = 'gemini-generate@cptstudio-1'  # ProviderRun.adapter_version (at most 40 characters)",
-    "MODEL = 'gemini-4-argon'  # D13: named by the URL; a response's modelVersion must equal it exactly",
+    "MODEL = 'gemini-4-carbon'  # D13: named by the URL; a response's modelVersion must equal it exactly",
     "PROVIDER = 'gemini'  # ProviderRun.provider; an operator field, never shown to a customer (D22)",
     "PURPOSE = 'interpretation'  # ProviderRun.purpose (at most 16 characters)",
     "JOB_KIND = 'interpret'  # Job.kind (at most 10 characters)",
@@ -90,7 +92,7 @@ V1_VALUES = {
     'LOCAL_SCHEMA_SHA256': '93574cacb4dc3d9fb0c3ed7789a8c2f7c708bf94176b53f1dd850fcd0214ccc3',
     'RESPONSE_SCHEMA_SHA256': '7bb3057d724012910b4210272c31480eacb6fc6fe6dbacbce4415c61592d2537',
     'INVENTORY_VERSION': 'gemini-inventory@1', 'LABEL': 'gemini-events@1+inventory@1',
-    'ADAPTER_VERSION': 'gemini-generate@cptstudio-1', 'MODEL': 'gemini-4-argon', 'PROVIDER': 'gemini',
+    'ADAPTER_VERSION': 'gemini-generate@cptstudio-1', 'MODEL': 'gemini-4-carbon', 'PROVIDER': 'gemini',
     'PURPOSE': 'interpretation', 'JOB_KIND': 'interpret', 'ENGINE_VERSION': 'cpt-studio-events@1',
     'CONTEXT_VERSION': 'gemini-context@1', 'ROUTING_VERSION': 'gemini-routing@1',
 }
@@ -159,9 +161,10 @@ class LabelTests(SimpleTestCase):
         self.assertEqual(interpretation.INTERPRETATION_PAIR,
                          f"{interpretation.INTERPRETATION_VERSION_V2}/"
                          f"{interpretation.APPRAISAL_VERSION.removeprefix('gemini-')}")
-        # v2 adds labels and changes none: pass 1 keeps v1's purpose, job kind, model and provider (1.1, 7.4)
+        # v2 adds labels and changes none: pass 1 keeps v1's purpose, job kind, model and provider (1.1, 7.4); the one
+        # model, of both passes and of every request built, is the one DECISIONS D230 sets
         self.assertEqual((interpretation.PURPOSE, interpretation.JOB_KIND, interpretation.MODEL),
-                         ('interpretation', 'interpret', 'gemini-4-argon'))
+                         ('interpretation', 'interpret', 'gemini-4-carbon'))
 
     def test_each_v2_label_fits_its_column(self):
         columns = (
@@ -319,6 +322,11 @@ DESIGN_LISTS = {
     ct.Attached: ('yes', 'no', 'unclear'),
     ct.UnlistedWhat: ('act', 'denial', 'doubt'),
     ct.CardType: ('act', 'session', 'section', 'lesion', 'anatomy'),
+    # settle's closed lists, moved here with its records (DECISIONS D229; FINAL-V2 1.7, 3.2.3's coherence table, 3.2.6)
+    ct.ClaimRole: ('claim', 'control', 'pair_control', 'completeness', 'completeness_control'),
+    ct.PairOutcome: ('established', 'incoherent', 'uninformative', 'contradicted', 'qualified', 'unclear', 'detached',
+                     'missing', 'control_missing'),
+    ct.HealthRefusal: ('control_acceptance', 'establishment', 'completeness'),
     et.ItemKind: ('question', 'explanation'),
     et.Outcome: ('ready', 'needs_clarification', 'excluded'),
     et.Cover: ('citation',),
@@ -456,6 +464,19 @@ FIELDS = {
                       'span', 'reasons'),
     ct.Checked: ('units', 'closures', 'citations', 'anchors', 'sections', 'containing', 'restatements', 'findings',
                  'failed_links', 'literals', 'joined', 'document_date', 'objectless_doubts'),
+    # DECISIONS D229 (w34 O4 and O5): settle's stored claim and verification report records, as settle defined them
+    ct.Usage: ('prompt', 'candidates', 'thoughts', 'total', 'cached', 'tool_use_prompt'),
+    ct.Usages: ('interpretation', 'appraisal'),
+    ct.Health: ('pairs', 'not_rejected', 'claims', 'established', 'verdicts', 'missing', 'refused'),
+    ct.Coherence: ('established', 'incoherent', 'uninformative', 'contradicted', 'qualified', 'unclear', 'detached',
+                   'missing', 'control_missing'),
+    ct.DoubtApplied: ('index', 'about', 'basis', 'objects', 'malformed', 'applied', 'unlisted'),
+    ct.Dropped: ('units', 'what', 'kind', 'session', 'event'),
+    ct.UnlistedReport: ('kept', 'dropped'),
+    ct.Report: ('counts', 'reasons', 'doubts', 'health', 'coherence', 'unlisted', 'usage'),
+    ct.StoredVerdict: ('verdict', 'attached', 'qualifiers', 'evidence'),
+    ct.StoredClaim: ('id', 'role', 'template', 'subject', 'attribute', 'value', 'units', 'content', 'verdict'),
+    ct.StoredCompleteness: ('appraisal', 'result', 'reasons'),
     et.Id: ('family', 'number'),
     et.IsoDate: ('value', 'precision'),
     et.Cited: ('link', 'units', 'at'),  # DECISIONS D188
@@ -524,6 +545,25 @@ TYPES = {
                  'literals': Mapping[ct.Key, tuple[ct.StoredLiteral, ...]],
                  'joined': tuple[tuple[tuple[ct.Key, ...], tuple[ct.Key, ...]], ...],
                  'document_date': datetime.date | None, 'objectless_doubts': Mapping[int, tuple[str, ...]]},
+    ct.Usage: {'prompt': int, 'candidates': int, 'thoughts': int, 'total': int, 'cached': int, 'tool_use_prompt': int},
+    ct.Usages: {'interpretation': ct.Usage, 'appraisal': ct.Usage},
+    ct.Health: {'pairs': int, 'not_rejected': int, 'claims': int, 'established': int, 'verdicts': int, 'missing': int,
+                'refused': tuple[ct.HealthRefusal, ...]},
+    ct.Coherence: {name: int for name in ('established', 'incoherent', 'uninformative', 'contradicted', 'qualified',
+                                          'unclear', 'detached', 'missing', 'control_missing')},
+    ct.DoubtApplied: {'index': int, 'about': ct.DoubtAbout, 'basis': ct.DoubtBasis, 'objects': tuple[str, ...],
+                      'malformed': bool, 'applied': int, 'unlisted': bool},
+    ct.Dropped: {'units': tuple[str, ...], 'what': ct.UnlistedWhat, 'kind': ct.Kind | None, 'session': str | None,
+                 'event': str},
+    ct.UnlistedReport: {'kept': int, 'dropped': tuple[ct.Dropped, ...]},
+    ct.Report: {'counts': Mapping[ct.Attribute, Mapping[ct.Result, int]], 'reasons': Mapping[ct.Reason, int],
+                'doubts': tuple[ct.DoubtApplied, ...], 'health': ct.Health, 'coherence': ct.Coherence,
+                'unlisted': ct.UnlistedReport, 'usage': ct.Usages},
+    ct.StoredVerdict: {'verdict': ct.VerdictValue, 'attached': ct.Attached, 'qualifiers': tuple[ct.Qualifier2, ...],
+                       'evidence': tuple[str, ...]},
+    ct.StoredClaim: {'id': str, 'role': ct.ClaimRole, 'template': str, 'subject': str, 'attribute': ct.Attribute,
+                     'value': str, 'units': tuple[str, ...], 'content': str, 'verdict': ct.StoredVerdict | None},
+    ct.StoredCompleteness: {'appraisal': ct.Appraisal, 'result': ct.Result, 'reasons': tuple[ct.Reason, ...]},
     et.Id: {'family': et.IdFamily, 'number': int},
     et.IsoDate: {'value': datetime.date, 'precision': ct.Precision},
     et.Cited: {'link': ct.Link, 'units': ct.Span, 'at': ct.Span | None},
@@ -575,6 +615,14 @@ def _samples() -> dict:
                          (place,), {'E1': 'N1'}, {('E1', 0): 'N1'}, {status: (ct.Reason.GEOMETRY_STATEMENT,)},
                          {status: (source,)}, {kind: (ct.StoredLiteral('2026-11-09', ct.Precision.DAY),)},
                          (((status,), (kind,)),), datetime.date(2026, 11, 9), {0: ('E1',)})
+    usage = ct.Usage(10, 2, 3, 15, 0, 0)
+    usages = ct.Usages(usage, ct.Usage(20, 4, 6, 30, 0, 0))
+    health = ct.Health(4, 1, 6, 5, 10, 0, (ct.HealthRefusal.COMPLETENESS,))
+    coherence = ct.Coherence(5, 1, 0, 0, 0, 0, 0, 0, 0)
+    doubt_applied = ct.DoubtApplied(0, ct.DoubtAbout.PERFORMER, ct.DoubtBasis.UNCLEAR, ('E1',), False, 1, False)
+    dropped = ct.Dropped(('S2',), ct.UnlistedWhat.ACT, ct.Kind.SNARE, 'X1', 'E1')
+    unlisted_report = ct.UnlistedReport(1, (dropped,))
+    stored_verdict = ct.StoredVerdict(ct.VerdictValue.SUPPORTS, ct.Attached.YES, (), ('S1',))
     return {
         ct.Span: span,
         ct.Unit: ct.Unit('S1', 0, 4, 1, 1, 1, False),
@@ -601,6 +649,19 @@ def _samples() -> dict:
         ct.AnchorCitation: anchor,
         ct.SectionPlace: place,
         ct.Checked: checked,
+        ct.Usage: usage,
+        ct.Usages: usages,
+        ct.Health: health,
+        ct.Coherence: coherence,
+        ct.DoubtApplied: doubt_applied,
+        ct.Dropped: dropped,
+        ct.UnlistedReport: unlisted_report,
+        ct.Report: ct.Report({ct.Attribute.KIND: {ct.Result.SUPPORTED: 1}}, {ct.Reason.SILENT: 2}, (doubt_applied,),
+                             health, coherence, unlisted_report, usages),
+        ct.StoredVerdict: stored_verdict,
+        ct.StoredClaim: ct.StoredClaim('K1', ct.ClaimRole.CLAIM, 'act.kind', 'E1', ct.Attribute.KIND, 'snare', ('S1',),
+                                       'f' * 64, stored_verdict),
+        ct.StoredCompleteness: ct.StoredCompleteness(appraisal, ct.Result.SUPPORTED, ()),
         et.Id: E1,
         et.IsoDate: et.IsoDate(datetime.date(2026, 11, 9), ct.Precision.DAY),
         et.Cited: cited,

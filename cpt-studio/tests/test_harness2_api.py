@@ -1015,7 +1015,14 @@ class DecisionInvalidationTests(_Decisions, PipelineCase):
         approved = self.approve(encounter_id, '99213')
         response = self.post(f'/api/encounters/{encounter_id}/context', {'billing_context': 'facility'})
         self.assertEqual(response.status_code, 201, response.content)
-        self.stop_after_assess_one(encounter_id)
+        jobs.run_job(self.run_until('assess'))
+        self.assertEqual(self.client.post(f'/api/encounters/{encounter_id}/stop').status_code, 200)
+        drain()
+        # FINAL-V2 amendment 1, A17: the update's assess #1 owes its peer stages, so it is recorded and never current
+        first = models.Assessment.objects.filter(encounter_id=encounter_id).order_by('-created_at').first()
+        self.assertEqual((jobs.assessment_phase(first), review.is_final(first), self.jobs_of(encounter_id)[-1].kind),
+                         (1, False, 'astra_peer'))
+        self.assertNotEqual(self.encounter(encounter_id).current_assessment_id, first.pk)
         self.assertFalse(models.DecisionInvalidation.objects.filter(decision=approved).exists())
         response = self.post(f'/api/encounters/{encounter_id}/addenda',
                              {'text': 'Addendum (synthetic): no change to the visit.', 'clarification_id': None,

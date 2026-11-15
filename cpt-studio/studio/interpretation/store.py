@@ -724,9 +724,14 @@ class _v1_reader:  # noqa: N801 - the name FINAL-V2 5.7 gives it
 #   open_questions  = []    (doubts are events.doubts; the column is NOT NULL)
 #   verification    = {label, request_sha256, response_sha256 (pass 1's, as the row's), appraisal_request_sha256,
 #                      appraisal_response_sha256 (the appraisal run's), claims_sha256 (claims_sha256_v2 of
-#                      events.claims), refused: false, counts {attribute: {result: n}}, reasons {reason: n}, doubts,
-#                      health, coherence (JSON data), unlisted {kept: n, dropped: [{units, what, kind, session,
-#                      event}]}, usage {interpretation, appraisal} (JSON objects)}
+#                      events.claims), refused: false, counts {attribute: {result: n}}, reasons {reason: n}, doubts
+#                      [{index n, about DoubtAbout, basis DoubtBasis, objects [ids], malformed bool, applied n,
+#                      unlisted bool}], health {pairs, not_rejected, claims, established, verdicts, missing (each n),
+#                      refused [HealthRefusal]}, coherence {n for each PairOutcome}, unlisted {kept: n, dropped:
+#                      [{units, what, kind, session, event}]}, usage {interpretation, appraisal}: each {prompt,
+#                      candidates, thoughts, total, cached, tool_use_prompt (each n)}}; the report is closed to settle's
+#                      records (contract/types' Report, DoubtApplied, Health, Coherence, UnlistedReport and Usage: P9;
+#                      DECISIONS D229, hand-off 1d#2), so it stores no free-form JSON
 # A REFUSED row records a refused pass-1 answer: appraisal_run_id NULL, events {}, encounter_facts {}, open_questions
 #   [], verification {label, request_sha256, response_sha256, refused: true, stage (one of pass 1's), problems: [the
 #   refusal sentence]}. A refused or unhealthy pass-2 answer is recorded on its ProviderRun and the stage, never as a
@@ -783,8 +788,9 @@ class _v1_reader:  # noqa: N801 - the name FINAL-V2 5.7 gives it
 # no value, option, qualifier, source or appraisal and settles unknown or contradicted; an appraisal is only on a
 # supported or negated claim; an ESTABLISHED result (supported or negated) is its claim's own state, with a value of
 # the right domain (an id of the right family), at least one source, every check and source geometry ok, no qualifier
-# but approximate, no reason, and an appraisal that supports with no qualifier (DECISIONS D186: a supports verdict
-# naming qualifiers is read as qualified), attached yes, with at least one evidence unit (3.2.3's "evidence attached",
+# but approximate, no reason, and an appraisal that supports with no qualifier but approximate (DECISIONS D186: a
+# supports verdict naming another qualifier is read as qualified; D224: pass 2's approximate is recorded and never
+# lowers a supported claim), attached yes, with at least one evidence unit (3.2.3's "evidence attached",
 # 3.2.5), its control (if any) contradicted (3.2.3); and, against the row (_v2_established_bound), every unit its
 # sources and its evidence cite is in the row's units table (3.1 I1) and an id value names an object of its family in
 # the row (3.1 I4). Every other result carries a reason. A pair control asks a value of its attribute's domain: a
@@ -832,7 +838,9 @@ CONTROL_ATTRIBUTES = MappingProxyType({
 # What a stored claim is (FINAL-V2 3.2.2-3.2.3): a fact's own claim; its contrary control; a pair control (asked of an
 # act or a statement about a place or a lesion of another); the stations completeness claim; its control. The role is
 # stored only: a request never marks a control (2.4). The claim list's sha256 is over CLAIM_IDENTITY, never a verdict.
-CLAIM_ROLES = ('claim', 'control', 'pair_control', 'completeness', 'completeness_control')
+# CLAIM_ROLES is contract/types.ClaimRole's values, the roles' one home (hand-off 1d#6; DECISIONS D229), read when the
+# v2 shapes are built (_v2_build) so that importing this module still loads no contract module; a read of
+# store.CLAIM_ROLES before the first v2 use builds them first (the module's __getattr__).
 CLAIM_IDENTITY = ('id', 'role', 'template', 'subject', 'attribute', 'value', 'units', 'content')
 ID_LETTERS_V2 = ('E', 'X', 'N', 'L', 'Y', 'P', 'S')  # engine/types.IdFamily's letters: events, sessions .. units
 CLAIM_LETTER = 'K'
@@ -898,6 +906,15 @@ def _v2() -> None:
                 _V2_BUILT = True
 
 
+def __getattr__(name: str):
+    """CLAIM_ROLES, read before the first v2 use: build the v2 shapes - which read it from contract/types.ClaimRole
+    (DECISIONS D229) - and answer it (PEP 562). Any other name this module does not hold is an AttributeError."""
+    if name == 'CLAIM_ROLES':
+        _v2()
+        return globals()['CLAIM_ROLES']
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
+
+
 def _v2_values(*enumerations) -> frozenset:
     return frozenset(member.value for enumeration in enumerations for member in enumeration)
 
@@ -947,23 +964,6 @@ def _v2_same(first: object, second: object) -> bool:
         return sha256_of([first]) == sha256_of([second])
     except (TypeError, ValueError):
         return False
-
-
-def _v2_json(value: object) -> bool:
-    """Any JSON data: objects with string keys, lists, strings, integers, finite numbers, true, false, null."""
-    pending = [value]
-    while pending:
-        node = pending.pop()
-        if isinstance(node, dict):
-            if not all(isinstance(key, str) for key in node):
-                return False
-            pending.extend(node.values())
-        elif isinstance(node, list):
-            pending.extend(node)
-        elif not (node is None or isinstance(node, (str, bool, int))
-                  or (isinstance(node, float) and math.isfinite(node))):
-            return False
-    return True
 
 
 # --- the v2 shapes ----------------------------------------------------------------------------------------------------
@@ -1109,19 +1109,6 @@ class _V2Obj(_V2Spec):
                 None if self.check is None else self.check.__name__]
 
 
-class _V2Json(_V2Spec):
-    def __init__(self, object_only: bool = False) -> None:
-        self.object_only = object_only
-
-    def problem(self, value, path):
-        if self.object_only and not isinstance(value, dict):
-            return f'{path} is not an object'
-        return '' if _v2_json(value) else f'{path} is not JSON data'
-
-    def describe(self):
-        return ['json', self.object_only]
-
-
 _V2_STR = _V2Test(lambda value: isinstance(value, str), 'a string')
 _V2_BOOL = _V2Test(lambda value: type(value) is bool, 'true or false')
 _V2_INT = _V2Test(lambda value: type(value) is int and value >= 0, 'an integer of at least 0')
@@ -1203,13 +1190,14 @@ def _v2_appraisal_check(value, path):
 
 
 def _v2_appraisal_establishes(appraisal, controlled: Optional[bool] = None) -> bool:
-    """FINAL-V2 3.2.3's established pair: the claim supported - with no qualifier, since a supports verdict that names
-    one is read as qualified (DECISIONS D186) - attached yes, with at least one evidence unit (the coherence table's
-    "evidence attached", 3.2.5; with none it is appraisal_detached), and its control (when there is one, or when
-    ``controlled`` demands one) contradicted. Whether each evidence unit is one of the row's units is checked by
-    _v2_established_bound."""
+    """FINAL-V2 3.2.3's established pair: the claim supported - with no qualifier but approximate, since a supports
+    verdict that names another is read as qualified (DECISIONS D186) and approximate is recorded and never lowers (1.3;
+    DECISIONS D224) - attached yes, with at least one evidence unit (the coherence table's "evidence attached", 3.2.5;
+    with none it is appraisal_detached), and its control (when there is one, or when ``controlled`` demands one)
+    contradicted. Whether each evidence unit is one of the row's units is checked by _v2_established_bound."""
     control = appraisal['control']
-    return (appraisal['verdict'] == ct.VerdictValue.SUPPORTS.value and not appraisal['qualifiers']
+    return (appraisal['verdict'] == ct.VerdictValue.SUPPORTS.value
+            and all(qualifier == ct.Qualifier2.APPROXIMATE.value for qualifier in appraisal['qualifiers'])
             and appraisal['attached'] == ct.Attached.YES.value and len(appraisal['evidence']) > 0
             and (control is not None if controlled else True)
             and (control is None or control['verdict'] == ct.VerdictValue.CONTRADICTS.value))
@@ -1385,11 +1373,12 @@ def _v2_build() -> None:
     global ct, sha256_of, xr, _A, _V2_ESTABLISHED, _V2_PAIR_ATTRIBUTES, _V2_VALUE_ENUMERATIONS, _V2_ANY_VALUE, _V2_CHECK
     global _V2_SOURCE, _V2_CONTROL, _V2_APPRAISAL, _V2_FACT_SHAPE, _V2_ENCOUNTER, _V2_PERSON, _V2_SECTION, _V2_SESSION
     global _V2_ANATOMY, _V2_LESION, _V2_EVENT, _V2_DOUBT, _V2_UNLISTED, _V2_VERDICT, _V2_CLAIM, _V2_EVENTS
-    global _V2_REPORT_READ, _V2_REPORT_REFUSED, _V2_SHAPES, _V2_LABELS
+    global _V2_REPORT_READ, _V2_REPORT_REFUSED, _V2_SHAPES, _V2_LABELS, CLAIM_ROLES
     from studio.interpretation.contract import extract_read as xr
     from studio.interpretation.contract import types as ct
     from studio.interpretation.contract.jsonschema import sha256_of
 
+    CLAIM_ROLES = tuple(role.value for role in ct.ClaimRole)  # the roles' one home (hand-off 1d#6; DECISIONS D229)
     _A = ct.Attribute
     _V2_ESTABLISHED = (ct.Result.SUPPORTED.value, ct.Result.NEGATED.value)
     _V2_PAIR_ATTRIBUTES = (_A.TARGET_PLACES.value, _A.TARGET_LESION.value)  # what a pair control asks (3.2.3)
@@ -1536,19 +1525,30 @@ def _v2_build() -> None:
         'lesions': _V2List(_V2_LESION), 'events': _V2List(_V2_EVENT), 'doubts': _V2List(_V2_DOUBT),
         'claims': _V2Claims(), 'unlisted': _V2List(_V2_UNLISTED),
     })
+    # settle's report records, field for field (contract/types' DoubtApplied, Health, Coherence and Usage; P9: no
+    # free-form JSON is stored; DECISIONS D229, hand-off 1d#2)
+    doubt_applied = _V2Obj({'index': _V2_INT, 'about': _V2Closed(_v2_values(ct.DoubtAbout)),
+                            'basis': _V2Closed(_v2_values(ct.DoubtBasis)), 'objects': _V2List(_V2_ANY_ID),
+                            'malformed': _V2_BOOL, 'applied': _V2_INT, 'unlisted': _V2_BOOL})
+    health = _V2Obj({'pairs': _V2_INT, 'not_rejected': _V2_INT, 'claims': _V2_INT, 'established': _V2_INT,
+                     'verdicts': _V2_INT, 'missing': _V2_INT,
+                     'refused': _V2List(_V2Closed(_v2_values(ct.HealthRefusal)))})
+    coherence = _V2Obj({outcome.value: _V2_INT for outcome in ct.PairOutcome})  # one count per outcome
+    usage = _V2Obj({'prompt': _V2_INT, 'candidates': _V2_INT, 'thoughts': _V2_INT, 'total': _V2_INT,
+                    'cached': _V2_INT, 'tool_use_prompt': _V2_INT})
     _V2_REPORT_READ = _V2Obj({
         'label': _V2_STR, 'request_sha256': _V2_SHA, 'response_sha256': _V2_SHA, 'appraisal_request_sha256': _V2_SHA,
         'appraisal_response_sha256': _V2_SHA, 'claims_sha256': _V2_SHA, 'refused': _V2Const(False),
         'counts': _V2Map(_V2Map(_V2_INT, keys=_v2_values(ct.Result)), keys=_v2_values(ct.Attribute)),
         'reasons': _V2Map(_V2_INT, keys=_v2_values(ct.Reason)),
-        'doubts': _V2Json(), 'health': _V2Json(object_only=True), 'coherence': _V2Json(object_only=True),
+        'doubts': _V2List(doubt_applied), 'health': health, 'coherence': coherence,
         'unlisted': _V2Obj({'kept': _V2_INT,
                             'dropped': _V2List(_V2Obj({'units': _V2_UNITS,
                                                        'what': _V2Closed(_v2_values(ct.UnlistedWhat)),
                                                        'kind': _V2Nullable(_V2Closed(_v2_values(ct.Kind))),
                                                        'session': _V2Nullable(_v2_object_id('X')),
                                                        'event': _v2_object_id('E')}))}),
-        'usage': _V2Obj({'interpretation': _V2Json(object_only=True), 'appraisal': _V2Json(object_only=True)}),
+        'usage': _V2Obj({'interpretation': usage, 'appraisal': usage}),
     })
     _V2_REPORT_REFUSED = _V2Obj({'label': _V2_STR, 'request_sha256': _V2_SHA, 'response_sha256': _V2_SHA,
                                  'refused': _V2Const(True), 'stage': _V2Closed(xr.STAGES),

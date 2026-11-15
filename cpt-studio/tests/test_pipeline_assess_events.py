@@ -21,7 +21,7 @@ from unittest import mock
 
 from django.test import TestCase, override_settings
 
-from studio import customer_api, interpretation, jobs, models, participants, review
+from studio import answers, customer_api, interpretation, jobs, models, participants, review
 from studio.gi import cues
 from studio.interpretation import adapter, report, sentinel
 from studio.interpretation.assess import SERVICES_STUB, INVENTORY_PROBLEMS
@@ -34,6 +34,7 @@ from tests.support import factories as f
 from tests.test_interpretation_events import COLONOSCOPE, POLYP, exam, reached, removed
 from tests.test_interpretation_identity import a, act, answer, les, tg
 from tests.test_participants_support import astra_with, code, empty_reading, fable_with
+from tests import v1_chain, v2_documents, v2_replay
 from tests.test_pipeline_api import FakeProvider
 
 AUTH = 'docs/foundation/rulings/2026-10-23-cpt-studio-gi.md'
@@ -170,9 +171,15 @@ LEGACY_ENTRY_POINTS = ('run_assessment', '_assess_child', '_analyze_child', '_ro
 @override_settings(GEMINI_MODE='replay', PROVIDER_MODE='live', AUTHORIZATION_REF=AUTH, ASTRA_MODE='disabled',
                    FABLE_MODE='disabled', INTERPRET_MAX_CHARS=20_000, INTERPRET_MAX_PAGES=40)
 class EventsCase(TestCase):
-    """Corti answers ``corti_groups``; Astra and Fable, where a class configures them, answer ``participant_codes``."""
+    """Corti answers ``corti_groups``; Astra and Fable, where a class configures them, answer ``participant_codes``.
+
+    DECISIONS D243 class C: a test marked ``v2_replay.applied`` builds its rows by design v2's path in replay
+    (tests/v2_replay.py), never by the v1 chain: each scenario it uploads is read as its v2 twin (``v2_scenarios``:
+    tests/v2_documents.py, the same document with its endoscopist named) and Corti answers ``v2_corti_groups``."""
     corti_groups = (TWO_CODES,)
     participant_codes = (('43239', G2_QUOTE),)
+    v2_scenarios = {two_procedures: v2_documents.two_procedures}
+    v2_corti_groups = (v2_documents.TWO_CODES,)
 
     @classmethod
     def setUpClass(cls):
@@ -183,6 +190,14 @@ class EventsCase(TestCase):
         assert status['state'] == 'ok', status
 
     def setUp(self):
+        if v2_replay.marked(self):
+            # DECISIONS D243 class C: this test decides through the product, which reads event_coding@2 only (FINAL-V2
+            # 6.5) - its rows are built by design v2's path in replay, never by the v1 chain
+            self.v2 = v2_replay.start(self)
+        else:
+            # the recordings here are v1's (gemini-events@1, the events engine @1): since step 5b's switch to design v2
+            # they run through the v1 chain, the record of v1's mechanics (tests/v1_chain.py)
+            v1_chain.start(self)
         self.replay = tempfile.mkdtemp(prefix='s10-replay-')
         self.addCleanup(shutil.rmtree, self.replay, True)
         replay = override_settings(GEMINI_REPLAY_DIR=self.replay)
@@ -190,7 +205,7 @@ class EventsCase(TestCase):
         self.addCleanup(replay.disable)
         self.ws = f.workspace()
         self.user = f.member(self.ws, f.user(), role=models.Membership.REVIEWER)
-        self.corti = Corti(*self.corti_groups)
+        self.corti = Corti(*(self.v2_corti_groups if v2_replay.marked(self) else self.corti_groups))
         self.adapters = {name: Scripted(name, self.replay, self.participant_codes) for name in MODULES}
         for target, kwargs in (('studio.jobs.get_provider', {'return_value': self.corti}),
                                ('studio.participants.get_participant', {'side_effect': self.adapter})):
@@ -205,19 +220,27 @@ class EventsCase(TestCase):
 
     def upload(self, scenario=two_procedures):
         """An encounter with a pasted SYNTHETIC revision of ``scenario``'s text, its pipeline started (extract queued)
-        and Gemini's answer recorded for the request its interpret stage makes."""
-        value, text = scenario()
+        and Gemini's answer recorded for the request its interpret stage makes (on design v2's path in replay: pass 1's
+        answer registered for the revision's exact text)."""
+        value, text = self.scenario_of(scenario)()
         encounter = models.Encounter.objects.create(workspace=self.ws, title='Synthetic note', created_by=self.user)
         revision = f.pasted_revision(encounter, self.user, text, extract=False)
         jobs.start_pipeline(revision, self.user)
         self.run_next(Job.EXTRACT)
         revision.refresh_from_db()
+        if v2_replay.marked(self):
+            self.v2.register(revision.text, value)
+            return encounter, revision
         kind = jobs._participant_document(revision)[0]
         request = adapter.build_request(revision.text, jobs._participant_pages(revision), kind)
         folder = Path(self.replay) / adapter.NAME
         folder.mkdir(exist_ok=True)
         (folder / f'{request.canonical_sha256}.json').write_bytes(envelope(value))
         return encounter, revision
+
+    def scenario_of(self, scenario):
+        """``scenario``, or its v2 twin on design v2's path in replay (DECISIONS D243; ``v2_scenarios``)."""
+        return self.v2_scenarios[scenario] if v2_replay.marked(self) else scenario
 
     def run_next(self, kind):
         job = jobs.claim_next()
@@ -254,7 +277,10 @@ class EventsCase(TestCase):
 
     def assert_new_path(self, assessment, encounter, *, context=None):
         """A new-path assessment: the events engine's, made from the current context's EventInventory through that
-        context, its routing the context's stand-in, and its D22 record describing it with no legacy execution."""
+        context, its routing the context's stand-in, and its D22 record describing it with no legacy execution. On design
+        v2's path in replay (DECISIONS D243), the same at design v2's versions (``assert_new_path_v2``)."""
+        if v2_replay.marked(self):
+            return self.assert_new_path_v2(assessment, encounter, context=context)
         context = context or assessment.context
         inventory = models.EventInventory.objects.get(revision=assessment.revision)
         self.assertEqual((assessment.engine_version, assessment.event_inventory_id, context.event_inventory_id),
@@ -274,6 +300,36 @@ class EventsCase(TestCase):
         self.assertEqual(record['member_date_state']['state'], context.facts['service_date']['state'])
         self.assertEqual(record['sentinel'], {'legacy_calls': 0, 'scope': 'assess', 'tool': 'sys.monitoring',
                                               'deny_size': sentinel.DENY_SIZE, 'positive_control': 'ok'})
+        self.assertEqual(report.record_problems(assessment), [])
+        return inventory
+
+    def assert_new_path_v2(self, assessment, encounter, *, context=None):
+        """assert_new_path at design v2's versions (FINAL-V2 6.1, 6.4, 5.7 measure 9): the events engine @2's assessment,
+        made from the current context's v2 EventInventory (read, bound to pass 1's run and the appraisal run) through
+        that gemini-context@2, its routing the context's gemini-routing@2 stand-in, the stub and the inventory problems
+        the rollback image reads, and its D22 record naming both runs with no legacy or retired execution."""
+        from studio.interpretation.engine import assess as engine_assess
+
+        context = context or assessment.context
+        inventory = models.EventInventory.objects.get(revision=assessment.revision)
+        self.assertEqual((inventory.state, inventory.interpretation_version, inventory.inventory_version),
+                         ('read', interpretation.INTERPRETATION_PAIR, interpretation.INVENTORY_VERSION_V2))
+        self.assertEqual((assessment.engine_version, assessment.event_inventory_id, context.event_inventory_id),
+                         (interpretation.ENGINE_VERSION_V2, inventory.pk, inventory.pk))
+        self.assertEqual((context.version, assessment.context_id), (interpretation.CONTEXT_VERSION_V2, context.pk))
+        self.assertEqual((assessment.routing.version, assessment.routing.result['inventory']),
+                         (interpretation.ROUTING_VERSION_V2, str(inventory.pk)))
+        self.assertEqual(assessment.services, json.loads(json.dumps(dict(engine_assess.SERVICES_STUB))))
+        self.assertEqual(assessment.completeness['inventory_problems'], list(engine_assess.INVENTORY_PROBLEMS))
+        record = assessment.interpretation
+        self.assertEqual(sorted(record), sorted(report.RECORD_KEYS_V2))
+        self.assertEqual(record['inventory'], {'id': str(inventory.pk), 'sha256': inventory.sha256})
+        self.assertEqual((record['gemini_run'], record['appraisal_run'], record['context'], record['engine_version']),
+                         (str(inventory.provider_run_id), str(inventory.appraisal_run_id), str(context.pk),
+                          interpretation.ENGINE_VERSION_V2))
+        self.assertEqual(record['member_date_state']['state'], context.facts['service_date']['state'])
+        self.assertEqual((record['sentinel']['legacy_calls'], record['sentinel'][report.RETIRED_CALLS],
+                          record['sentinel']['positive_control']), (0, 0, 'ok'))
         self.assertEqual(report.record_problems(assessment), [])
         return inventory
 
@@ -511,9 +567,23 @@ class AgainTests(EventsCase):
                               value=models.MemberAnswer.NOT_DOCUMENTED):
         """A member's answer to ``proposal``'s first open question, bound to that question's fingerprint as the stored
         rows give it (questions.question_passages over the record's services stub - FINAL 7.11: the same function the
-        engine and the old image compute)."""
+        engine and the old image compute). On design v2's path in replay (DECISIONS D243) the fingerprint the stored rows
+        give is the engine's own: support['question'], engine/assess.question_fingerprint of the code's one item (FINAL-V2
+        6.5; cpt-studio-question@2), the one an answer binds to at assess time. On v1 that was also the fingerprint the
+        product's details door records, and since DECISIONS D259 (step q02's repair NOTES, Q1: option (a)) it is on
+        design v2 too: the door records an answer with review.asked_fingerprints, which binds a design v2 proposal's
+        item by the fingerprint engine/assess stored for it (review.bound_fingerprints), and read time binds by the
+        same. The door's own answer is driven through the recompute by
+        test_an_answer_saved_through_the_details_door_is_applied_by_the_recompute_as_read_time_applies_it, which passes
+        since D259 with its assertions unchanged (assess and read time bind it alike: DECISIONS D252)."""
         row = proposal.clarifications.filter(state=models.Clarification.OPEN).order_by('created_at', 'pk').first()
         family = row.family or proposal.family
+        if v2_replay.marked(self):
+            fingerprint = proposal.support['question']
+            self.assertTrue(fingerprint, proposal.support)
+            return models.MemberAnswer.objects.create(encounter=encounter, revision=revision, assessment=assessment,
+                                                      fact=row.fact, family=family, code=proposal.code, value=value,
+                                                      answered_by=self.user, question=fingerprint)
         shown = questions.question_passages(assessment.services, family, row.fact, proposal.evidence, proposal.support,
                                             revision.text, questions.acts_of(assessment.services))
         key = questions.member_key(proposal.code, family, row.fact)
@@ -523,6 +593,7 @@ class AgainTests(EventsCase):
                                                   fact=row.fact, family=family, code=proposal.code, value=value,
                                                   answered_by=self.user, question=fingerprint)
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_decisions_carry_across_an_answer_recompute_and_nothing_is_sent(self):
         encounter, revision, final = self.finished()
         ready = self.proposal(final, '43239')
@@ -549,6 +620,41 @@ class AgainTests(EventsCase):
         self.assertEqual(Run.objects.filter(encounter=encounter).count(), runs)  # nothing sent, nothing reused
         self.assertEqual((len(self.corti.sent), self.interpretation_runs(encounter)), (1, 1))
 
+    @v2_replay.applied  # DECISIONS D243 / D252 (refute-q02-r1 Q02-3) / D259: assess and read time bind one answer alike
+    def test_an_answer_saved_through_the_details_door_is_applied_by_the_recompute_as_read_time_applies_it(self):
+        """A member's "Not documented" saved through the product's own door (answers.save_details, the details panel's
+        save) and the AGAIN recompute it queues: read time excludes the code the answer answers, and the recompute must
+        store it excluded by that answer too - DECISIONS D252: a disagreement between assess and read time is a finding.
+
+        Written red, as the fail-closed reading of an open design question - which fingerprint binds a member's answer
+        on design v2 (step q02's repair NOTES, Q1; round w7r's refute-q02-r1 Q02-3) - and green since DECISIONS D259
+        ruled it (option (a)), with no assertion here changed: the door records the answer with the item's stored
+        fingerprint (engine/assess.question_fingerprint, cpt-studio-question@2, through review.asked_fingerprints and
+        review.bound_fingerprints; FINAL-V2 6.5's "rendered question text" read as the Fill the text is built from),
+        read time and engine/assess bind it by the same, and so the recompute applies the answer and stores the code
+        excluded, as read time reads it. A failure here is a finding (D252), not a known red (this text restated under
+        D271)."""
+        encounter, revision, final = self.finished()
+        encounter.refresh_from_db()  # the encounter as the details panel reads it, its final assessment current
+        self.assertEqual(review.live_assessment(encounter), final)
+        rows = answers.details_needed(encounter, final)
+        row = next(item for item in rows if '45385' in item['affects'] and 'not_documented' in item['allow'])
+        saved = answers.save_details(encounter, self.user, [{'id': row['id'], 'fact': row['fact'],
+                                                             'value': models.MemberAnswer.NOT_DOCUMENTED}])
+        [answer_id] = saved['answer_ids']
+        with self.legacy_reader_fails():
+            [job] = self.drain()  # the recompute the saved answer queued
+        self.assertEqual((job.kind, job.state, job.result['mode']), ('assess', Job.SUCCEEDED, 'again'))
+        _, again = self.assessments(encounter)
+        views = review.effective_view(again, review.current_decisions(again))
+        [read_time] = [view for view in views.values() if view.code == '45385' and view.bucket != 'alternative']
+        self.assertEqual(read_time.status, 'excluded')  # read time applies the member's answer
+        stored = self.proposal(again, '45385')
+        self.assertEqual((stored.bucket, (stored.support.get('answered') or {}).get('answers')), ('excluded', [answer_id]),
+                         f'the recompute did not apply the answer read time applies: '
+                         f'{again.completeness.get("member_answers")}')
+
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_a_retained_re_assessment_re_reads_the_final_by_id_and_sends_nothing(self):
         encounter, revision, final = self.finished()
         decision = self.approve(encounter, self.proposal(final, '43239'))
@@ -818,7 +924,10 @@ class PersistTests(EventsCase):
         encounter, revision = self.upload()
         for kind in ('interpret', 'analyze', 'predict'):
             self.run_next(kind)
-        real = jobs.interpretation_facts.derive
+        # v1's facts module (retired): since step 5b jobs imports it where the v1 chain reads it, not at its top
+        from studio.interpretation import facts as interpretation_facts
+
+        real = interpretation_facts.derive
 
         def other(stored, values):
             derived = real(stored, values)
@@ -827,7 +936,7 @@ class PersistTests(EventsCase):
                                      member_date=derived.member_date.__class__(
                                          **{**vars(derived.member_date), 'state': 'conflicts'}))
 
-        with mock.patch.object(jobs.interpretation_facts, 'derive', side_effect=other):
+        with mock.patch.object(interpretation_facts, 'derive', side_effect=other):
             job = self.run_next(Job.ASSESS)
         self.assertEqual((job.state, job.error), (Job.FAILED, jobs.CONTEXT_DERIVATION_MESSAGE))
         self.assertEqual(self.assessments(encounter), [])

@@ -40,6 +40,30 @@ to Docker on stdin.
 
 The comparison is pure and unit-tested (ops/test_rollback_check.py, no Docker and no database): held_move, compare_rows,
 compare_encounter, note_problems, marker_problems, recompute_problems, declared_changes and target_problems.
+
+Design v2 (docs/gemini-migration/FINAL-V2.md 6.4; AMENDMENT-1.md 9.4, 9.5 and U17; step 6b; schema @2). The run is made
+on v2 records: before the switch-back the test database is counted for each of 6.4's thirteen record kinds (SCENARIO_V2:
+an interpreted and appraised upload; a held, an excluded and a reinstated code; an approved code with a modifier and its
+export; a member answer; a second review; an interpreter hold; a queued interpret and a queued appraise job; a pass-2
+refusal; an unhealthy appraisal; a held code whose item is a new fact) - assertion 7 fails on any it lacks - and the
+candidate's own install reads are recorded on it (V1_ROWS and INSTALL_COUNTS, read-only). The switch-back's close also
+names the encounters with an update of their codes pending and reverts the unapplied saves (CLOSE_STAGES, as the
+candidate's installer runs it), and its note lists them (with_update_note): with --declared's 'update' (the encounters the
+instance was built with - pending_before_analyze, pending_after_analyze, completed, a21, and optionally resave: {encounter,
+field, value}), assertion 8 judges U17 - each named with its reason, exactly the pending-before-analyze ones reverted to
+their context's values with one audit row each, the note listing them, and the value saved again on the previous web
+taking effect there (a new context with it) - saved through that web's details panel, the row its own panel offers for
+the field, as a member saves it (refutation 6b-r1 P4: its /context saves whatever the revert did). Assertion 6 reads the appraise stages as it reads the interpret ones.
+update_problems, scenario_problems, member_values and reading_settled_before are pure and unit-tested.
+
+    python3 -B cpt-studio/ops/rollback_check.py counts --db cptg_<dump> --candidate cpt-studio-test:<sha12> \\
+        --out <new directory> --db-env-file <0600 env file>
+
+reads the candidate's V1_ROWS and INSTALL_COUNTS - the counts the owner is told before the install (AMENDMENT-1 9.5),
+measured on a fresh restored dump of live - into <out>/counts.json. The dump is never written and never read as it
+stands (live has none of 0014's and 0015's tables: refutation 6b-r1 P3): it is copied to <db>_counts, the copy is
+migrated with the candidate's own migrations, as the install migrates live before its app phase reads, and the two
+reads run on the copy in read-only sessions.
 """
 from __future__ import annotations
 
@@ -61,7 +85,7 @@ from pathlib import Path
 from unittest import mock
 from urllib.parse import urlencode
 
-SCHEMA = 'cpt-studio-d15-rollback@1'
+SCHEMA = 'cpt-studio-d15-rollback@2'  # @2: design v2's records, the update rows and the install reads
 WORKTREE = Path(__file__).resolve().parents[2]
 INSTALLER_PATH = 'cpt-studio/ops/install.py'
 CLIENT_CONTRACT_PATH = 'cpt-studio/studio/client_contract.py'
@@ -318,6 +342,171 @@ def settled_before(rows, started_at) -> bool:
                and pg_time(row[2]) is not None and pg_time(row[2]) < start for row in rows)
 
 
+def reading_settled_before(rows, started_at) -> bool:
+    """Assertion 6 for design v2 (FINAL-V2 6.4): ``settled_before`` over the interpret AND appraise stages read when the
+    previous worker started ([id, kind, state, finished_at, error]) - each kind present is settled by the close the same
+    way, and none is open."""
+    rows = [row for row in rows or () if isinstance(row, (list, tuple)) and len(row) >= 5]
+    kinds = sorted({row[1] for row in rows})
+    return bool(kinds) and all(settled_before([[row[0], row[2], row[3], row[4]] for row in rows if row[1] == kind],
+                                              started_at) for kind in kinds)
+
+
+# --- design v2 (FINAL-V2 6.4; AMENDMENT-1 9.4 and U17; step 6b): the records the D15 run must hold, and the update rows --
+# FINAL-V2 6.4: "The D15 runtime rollback test runs on v2 records" - each of its thirteen, counted by SQL over the test
+# database before the switch-back, so the transcript shows the run held them (assertion 7). The amendment's U17 rows are
+# named by the run's declared JSON (--declared: 'update', the encounters the instance was built with) and judged from the
+# close's answer, the rows after it, the audit rows and the previous web's own save (assertion 8).
+V2_ENGINE = 'cpt-studio-events@2'
+_V2_ASSESSMENTS = f"(select id from studio_assessment where engine_version = '{V2_ENGINE}')"
+SCENARIO_V2 = (
+    ('interpreted_and_appraised', 'an interpreted and appraised upload (a read inventory bound to its appraisal run)',
+     "select count(*) from studio_eventinventory where state = 'read' and appraisal_run_id is not null"),
+    ('held_code', 'a held code on a v2 assessment',
+     f"select count(*) from studio_proposal where status = 'needs_clarification' and assessment_id in {_V2_ASSESSMENTS}"),
+    ('excluded_code', 'an excluded code on a v2 assessment',
+     f"select count(*) from studio_proposal where bucket = 'excluded' and assessment_id in {_V2_ASSESSMENTS}"),
+    ('reinstated_code', 'a reinstated code on a v2 assessment',
+     f"select count(*) from studio_decision where action = 'reinstate' and assessment_id in {_V2_ASSESSMENTS}"),
+    ('approved_with_modifier', 'an approved code with a modifier on a v2 assessment',
+     f"select count(*) from studio_decision where action = 'approve' and modifiers::text <> '[]' "
+     f"and assessment_id in {_V2_ASSESSMENTS}"),
+    ('approved_export', 'its export (an approved export of a v2 assessment)',
+     f"select count(*) from studio_reportartifact where kind = 'approved' and assessment_id in {_V2_ASSESSMENTS}"),
+    ('member_answer', "a member answer on a v2 assessment's revision",
+     f"select count(*) from studio_memberanswer where revision_id in (select revision_id from studio_assessment "
+     f"where engine_version = '{V2_ENGINE}')"),
+    ('second_review', 'a second review on an encounter with a v2 assessment',
+     f"select count(*) from studio_providerrun where purpose = 'second_review' and encounter_id in "
+     f"(select encounter_id from studio_assessment where engine_version = '{V2_ENGINE}')"),
+    ('interpreter_hold', 'an interpreter hold', 'select count(*) from studio_interpreterhold'),
+    ('queued_interpret', 'a queued interpret job', "select count(*) from studio_job where kind = 'interpret' "
+                                                   "and state = 'queued'"),
+    ('queued_appraise', 'a queued appraise job', "select count(*) from studio_job where kind = 'appraise' "
+                                                 "and state = 'queued'"),
+    ('pass2_refusal', 'a pass-2 refusal (an appraisal answer the reader refused, on its run)',
+     "select count(*) from studio_providerrun where provider = 'gemini' and purpose = 'appraisal' "
+     "and scope->>'refused' = 'reading'"),
+    ('unhealthy_appraisal', 'an unhealthy appraisal (refused whole by its health, on its run)',
+     "select count(*) from studio_providerrun where provider = 'gemini' and purpose = 'appraisal' "
+     "and scope->>'refused' = 'unhealthy'"),
+    ('held_new_fact', "a held code whose item is a new fact (event_entry)",
+     f"select count(*) from studio_clarification where fact = 'event_entry' and assessment_id in {_V2_ASSESSMENTS}"),
+)
+UPDATE_SETS = ('pending_before_analyze', 'pending_after_analyze', 'completed', 'a21')
+UUID = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')  # an id put into SQL is one
+UPDATE_REASON_OF = {'pending_before_analyze': 'values_saved', 'pending_after_analyze': 'assessment_off_context',
+                    'a21': 'reconciled_unknown'}
+CONTEXT_FIELDS = ('service_date', 'setting', 'billing_context', 'patient_status')  # studio.types.CONTEXT_FACTS
+
+
+def scenario_problems(found: dict) -> list:
+    """Assertion 7: the record kinds of FINAL-V2 6.4 the test database did not hold before the switch-back (``found``:
+    {key: count, or an error text})."""
+    problems = []
+    for key, title, _ in SCENARIO_V2:
+        count = found.get(key) if isinstance(found, dict) else None
+        if type(count) is not int:
+            problems.append(f'{key}: not counted ({count!r})')
+        elif count < 1:
+            problems.append(f'{key}: the run holds no {title}')
+    return problems
+
+
+def member_values(raw) -> dict:
+    """A user_values mapping (or its JSON text, as psql prints it) as review.values reads it: the four coding-context
+    fields, non-empty stripped strings only."""
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except ValueError:
+            return {'__unreadable__': raw}
+    out = {}
+    for name in CONTEXT_FIELDS:
+        value = raw.get(name) if isinstance(raw, dict) else None
+        if isinstance(value, str) and value.strip():
+            out[name] = value.strip()
+    return out
+
+
+def update_problems(declared, close, note, after, audits, resave=None) -> list:
+    """Assertion 8 (AMENDMENT-1 9.4, U17): the close named each pending encounter 'update_pending' with its reason, and
+    no completed one; it reverted exactly the encounters pending before their analyze, each now holding its context's
+    values, with one 'context.rollback_reverted' audit row naming the fields; the switch-back's note lists them all;
+    and, when given, the value saved again on the previous web took effect there (a new context with it) - saved as a
+    member saves it there, through its details panel (refutation 6b-r1 P4: the hazard is in that save's comparison with
+    Encounter.user_values; the previous release's /context makes a new context whatever they hold).
+
+    ``declared``: the run's declared {'pending_before_analyze', 'pending_after_analyze', 'completed', 'a21': [ids],
+    'resave': {...}}; ``close``: CLOSE_STAGES' answer; ``note``: the switch-back's note; ``after``: {encounter: {'user_values',
+    'context', 'context_values'}} read by SQL after the close; ``audits``: [[encounter, data JSON]]; ``resave``: the
+    previous web's save (Check.resave), {'via': 'details', 'row', 'status', 'saved', 'unchanged', 'context_before',
+    'context_after', 'value_after', 'field', 'value'}: a save that answered 200 with nothing saved is the hazard itself,
+    and a panel that offers no row for the field ('row' None) leaves the clause unexercised - each fails."""
+    if not isinstance(declared, dict) or not all(isinstance(declared.get(name, []), list) for name in UPDATE_SETS):
+        return ['the run declared no update encounters (--declared: update)']
+    problems = []
+    named = (close or {}).get('update_pending') if isinstance(close, dict) else None
+    named = named if isinstance(named, dict) else {}
+    reverted = (close or {}).get('reverted') if isinstance(close, dict) else None
+    reverted = reverted if isinstance(reverted, dict) else {}
+    for name, reason in UPDATE_REASON_OF.items():
+        for pk in declared.get(name, []):
+            if reason not in (named.get(pk) or ()):
+                problems.append(f'{name} {pk}: the close did not name it update_pending ({reason}); it named '
+                                f'{named.get(pk)}')
+    for pk in declared.get('completed', []):
+        if pk in named:
+            problems.append(f'completed {pk}: the close named it update_pending {named[pk]}')
+    before = sorted(declared.get('pending_before_analyze', []))
+    if sorted(reverted) != before:
+        problems.append(f'the close reverted {sorted(reverted)}, not the encounters pending before analyze {before}')
+    by_encounter = {}
+    for row in audits or ():
+        if isinstance(row, (list, tuple)) and len(row) >= 2:
+            try:
+                data = json.loads(row[1]) if isinstance(row[1], str) else row[1]
+            except ValueError:
+                data = None
+            by_encounter.setdefault(row[0], []).append(data)
+    for pk in before:
+        state = (after or {}).get(pk) or {}
+        if member_values(state.get('user_values')) != member_values(state.get('context_values')):
+            problems.append(f'{pk}: after the close its saved values {member_values(state.get("user_values"))} are not '
+                            f'its context\'s {member_values(state.get("context_values"))}')
+        rows = by_encounter.get(pk, [])
+        fields = sorted((reverted.get(pk) or {}).keys())
+        if len(rows) != 1 or not isinstance(rows[0], dict) or sorted(rows[0].get('fields') or ()) != fields:
+            problems.append(f'{pk}: {len(rows)} context.rollback_reverted row(s) ({rows}), not one naming {fields}')
+    listed = (note or {}).get('update_pending') if isinstance(note, dict) else None
+    want = sorted({pk for name in UPDATE_REASON_OF for pk in declared.get(name, [])})
+    if not isinstance(listed, list) or not set(want) <= set(listed):
+        problems.append(f'the switch-back note lists update_pending {listed}, not every pending encounter {want}')
+    if isinstance(note, dict) and (note.get('reverted') or {}) != reverted:
+        problems.append('the switch-back note does not list the reverted values the close answered')
+    wanted = declared.get('resave')
+    if wanted:
+        got = resave or {}
+        if got.get('via') != 'details':
+            problems.append('the value was not saved again through the previous web\'s details panel (POST '
+                            '/api/encounters/<id>/details), the save whose comparison with Encounter.user_values the '
+                            'revert exists for (AMENDMENT-1 9.4 [R:legacy-L7])')
+        elif got.get('row') is None:
+            problems.append(f'the previous web\'s details panel offers no {wanted.get("field")} row for '
+                            f'{wanted.get("encounter")} (it asks {got.get("panel_facts")}), so the value could not be '
+                            'saved again as a member saves it there: build that encounter so that its panel asks the '
+                            'field (U17)')
+        elif got.get('status') != 201 or not (type(got.get('saved')) is int and got['saved'] >= 1):
+            problems.append(f'the value saved again on the previous web was not saved there (it answered '
+                            f'{got.get("status")}, saved {got.get("saved")}, unchanged {got.get("unchanged")}): the '
+                            'hazard of AMENDMENT-1 9.4 [R:legacy-L7]')
+        elif got.get('context_after') == got.get('context_before') or got.get('value_after') != wanted.get('value'):
+            problems.append(f'the value saved again on the previous web did not take effect there (context '
+                            f'{got.get("context_before")} -> {got.get("context_after")}, {wanted.get("field")} '
+                            f'{got.get("value_after")!r})')
+    return problems
+
+
 def assertion(number, title, problems, evidence) -> dict:
     return {'assertion': number, 'title': title, 'result': 'PASS' if not problems else 'FAIL',
             'problems': problems, 'evidence': evidence}
@@ -439,13 +628,15 @@ class Instance:
         self.calls[-1]['answer'] = answer
         return answer
 
-    def transport(self, installer, images: dict):
+    def transport(self, installer, images: dict, *, read_only=False):
         """A stand-in for ``installer.app_script`` with the installer's own signature: the image id it is given is run
-        as a one-shot on the test database (``images`` maps each image id this check runs to the tag it names)."""
+        as a one-shot on the test database (``images`` maps each image id this check runs to the tag it names);
+        ``read_only``: in a read-only session (design v2: the install reads, which write nothing)."""
         def app_script(image_id, env_bytes, body, params, *, what, timeout=180, mounts=(), user=None):  # noqa: ARG001
             if image_id not in images:
                 raise Refused(f'{what}: {image_id} is not an image of this check')
-            return self.app_script(installer, image_id, body, params, what=what, timeout=max(timeout, 900))
+            return self.app_script(installer, image_id, body, params, what=what, timeout=max(timeout, 900),
+                                   read_only=read_only)
         return app_script
 
     # the previous image's web and worker (testinst/stack.sh's pair)
@@ -660,12 +851,14 @@ def open_stages(instance, kinds) -> dict:
     run that is queued, running, or cancelled as the latest of its revision (UNRUNNABLE_STAGES' rule, read by SQL)."""
     known = ','.join(f"'{kind}'" for kind in sorted(kinds))
     interpret = instance.sql("select id, state from studio_job where kind = 'interpret' and state in ('queued', 'running')")
+    appraise = instance.sql("select id, state from studio_job where kind = 'appraise' and state in ('queued', 'running')")
     unknown = instance.sql(
         f"select j.id, j.kind, j.state from studio_job j join studio_encounter e on e.id = j.encounter_id "
         f"where j.kind not in ({known}) and (j.state in ('queued', 'running') or (j.state = 'cancelled' "
         f"and e.current_revision_id = j.revision_id and j.id = (select k.id from studio_job k where "
         f"k.revision_id = j.revision_id order by k.created_at desc, k.id desc limit 1)))")
-    return {'interpret_open': [row[0] for row in interpret], 'unrunnable_open': [row[:3] for row in unknown]}
+    return {'interpret_open': [row[0] for row in interpret], 'appraise_open': [row[0] for row in appraise],
+            'unrunnable_open': [row[:3] for row in unknown]}
 
 
 def load_views(directory: Path) -> tuple:
@@ -732,6 +925,8 @@ class Check:
         # the installer that would run the switch-back is the candidate's own; the previous revision's RECOMPUTE_STATES
         # is what an install of the previous revision runs (its app phase), read from its own ops/install.py
         self.installer = load_installer(self.candidate['revision'])
+        # design v2: a candidate whose installer knows pass 2's stage is judged on v2 records (assertions 7 and 8)
+        self.v2 = isinstance(getattr(self.installer, 'APPRAISE_KIND', None), str)
         self.recompute_previous = literal(self.previous['revision'], INSTALLER_PATH, 'RECOMPUTE_STATES')
         self.recompute_candidate = literal(self.candidate['revision'], INSTALLER_PATH, 'RECOMPUTE_STATES')
         self.client = (literal(self.previous['revision'], CLIENT_CONTRACT_PATH, 'HEADER'),
@@ -744,7 +939,8 @@ class Check:
             installer={'revision': self.candidate['revision'],
                        'scripts_sha256': {name: sha(getattr(self.installer, name)) for name in (
                            'UNDO_HAZARDS_READ', 'CLOSE_STAGES', 'UNRUNNABLE_STAGES', 'RECOMPUTE_STATES',
-                           'INTERPRETATION_MADE', 'APP_SCRIPT_PRELUDE')},
+                           'INTERPRETATION_MADE', 'APP_SCRIPT_PRELUDE', 'V1_ROWS', 'INSTALL_COUNTS')
+                           if isinstance(getattr(self.installer, name, None), str)},
                        'previous_recompute_sha256': sha(self.recompute_previous),
                        'recompute_identical_in_both_revisions': self.recompute_previous == self.recompute_candidate},
             declared=self.declared)
@@ -759,6 +955,41 @@ class Check:
         states = self.instance.sql('select state, count(*) from studio_job group by 1 order by 1')
         return {'rows': {name: int(count) for name, count in rows}, 'job_states': {s: int(n) for s, n in states}}
 
+    def scenario(self) -> dict:
+        """FINAL-V2 6.4: {key: count} of each record kind SCENARIO_V2 names, by SQL (an error text where one failed)."""
+        found = {}
+        for key, _, statement in SCENARIO_V2:
+            try:
+                found[key] = int(self.instance.sql(statement)[0][0])
+            except (RuntimeError, IndexError, ValueError) as error:
+                found[key] = f'{type(error).__name__}: {error}'[:300]
+        return found
+
+    def install_reads(self, images) -> dict:
+        """The candidate's FINAL-V2 6.2 assertion and AMENDMENT-1 9.5 counts on this database (read-only), where its
+        installer has them: evidence of what its app phase reads, never a verdict of this check."""
+        installer, out = self.installer, {}
+        if not all(callable(getattr(installer, name, None)) for name in ('v1_rows', 'v1_rows_refusal', 'install_counts')):
+            return {'read': False, 'why': 'the candidate\'s installer has no design v2 install reads'}
+        with mock.patch.object(installer, 'app_script', self.instance.transport(installer, images, read_only=True)):
+            try:
+                out['v1_rows'] = installer.v1_rows(self.candidate['id'], self.instance.env_bytes)
+                out['v1_refusal'] = installer.v1_rows_refusal(out['v1_rows'])
+            except Exception as error:  # noqa: BLE001 - recorded: evidence, never this check's verdict
+                out['v1_rows'] = f'{type(error).__name__}: {error}'[:300]
+            out['install_counts'] = installer.install_counts(self.candidate['id'], self.instance.env_bytes)
+        return out
+
+    def update_rows(self, encounters) -> dict:
+        """{encounter: {'user_values', 'context', 'context_values'}} by SQL (AMENDMENT-1 9.4's revert is judged on them)."""
+        encounters = [pk for pk in encounters if isinstance(pk, str) and UUID.fullmatch(pk)]  # never other text in SQL
+        if not encounters:
+            return {}
+        rows = self.instance.sql('select e.id, e.user_values::text, e.current_context_id, c.user_values::text from '
+                                 'studio_encounter e left join studio_encountercontext c on c.id = e.current_context_id '
+                                 'where e.id in (' + ','.join(f"'{pk}'" for pk in encounters) + ')')
+        return {row[0]: {'user_values': row[1], 'context': row[2], 'context_values': row[3]} for row in rows}
+
     # 1. the switch-back, as the candidate's installer runs it (P-1)
     def switch_back(self):
         inst, installer = self.instance, self.installer
@@ -766,6 +997,13 @@ class Check:
         images = {cand['id']: cand['tag'], prev['id']: prev['tag']}
         record = self.record.setdefault('switch_back', {})
         record['census_before'] = self.census()
+        # design v2 (FINAL-V2 6.4): the records the run holds, counted before anything is closed (assertion 7); the
+        # candidate's own install reads on this database (read-only); the declared update encounters as they stand
+        record['scenario_v2'] = self.scenario()
+        record['install_reads'] = self.install_reads(images)
+        update = (self.declared or {}).get('update') if isinstance(self.declared, dict) else None
+        watched = sorted({pk for name in UPDATE_SETS for pk in ((update or {}).get(name) or ())})
+        record['update_before'] = self.update_rows(watched)
         with mock.patch.object(installer, 'app_script', inst.transport(installer, images)):
             # phase_switch_back's first check: a hazard refuses before anything is started or stopped - read raw, then
             # as DECISIONS D51 filters it (what the previous revision reads; encounters this revision wrote since)
@@ -792,10 +1030,17 @@ class Check:
                 "select id, kind, encounter_id, left(error, 60) from studio_job where error like 'Closed by the installer:%' "
                 f"and finished_at >= '{record['close_started_at']}' order by kind, id")
             record['put_back'] = installer.put_back_states(close, prev['id'], cand['id'], inst.env_bytes)
-            # read as the switch-back reads it: after the close, in this revision's own image
+            # read as the switch-back reads it: after the close, in this revision's own image - with what the close did
+            # for the update (design v2: with_update_note, where the candidate's installer has it)
             record['note'] = installer.interpretation_note(cand['id'], inst.env_bytes, cand['revision'])
+            if callable(getattr(installer, 'with_update_note', None)):
+                record['note'] = installer.with_update_note(record['note'], [close])
         record['independent'] = independent_new_path(inst)
         record['open_after_close'] = open_stages(inst, kinds)
+        record['update'] = {'update_pending': (close or {}).get('update_pending'), 'reverted': (close or {}).get('reverted'),
+                            'reading_closed': (close or {}).get('reading_closed'), 'after': self.update_rows(watched),
+                            'audits': inst.sql("select encounter_id, data from studio_auditevent where event = "
+                                               "'context.rollback_reverted' order by created_at, id")}
         stuck = inst.app_script(installer, prev['id'], installer.UNRUNNABLE_STAGES, {}, read_only=True,
                                 what='UNRUNNABLE_STAGES after the close (previous image)')
         record['unrunnable_after_close'] = stuck
@@ -905,6 +1150,41 @@ class Check:
         self.log(f'RECOMPUTE_STATES: declared {len(declared)}, read-only changed '
                  f'{len((record["read_only"]["answer"] or {}).get("changed") or {})}, applied changed {len(changed)}')
 
+    def resave(self, member, wanted) -> dict:
+        """AMENDMENT-1 U17 [R:legacy-L7]: the declared pending encounter's value saved again on the previous web as a
+        member saves it there - through the details panel's own save (POST /api/encounters/<id>/details, the previous
+        release's answers.save_details, which compares the save with Encounter.user_values: the comparison the revert
+        exists for), with the row that encounter's own details panel offers for the field (GET /api/encounters/<id>:
+        details_needed, the row whose fact is the field). Never through /context: the previous release's api.context
+        makes a new context whatever Encounter.user_values holds, so a save there passed whether or not the close had
+        reverted anything (refutation 6b-r1 P4). A panel with no row for the field is recorded ('row' None, with the
+        facts it asks): the clause was not exercised, which assertion 8 fails. ``wanted``'s encounter is a UUID and its
+        field a context field (the caller's check): no other text reaches SQL."""
+        inst = self.instance
+        pk, field = wanted['encounter'], wanted['field']
+        record = {'encounter': pk, 'field': field, 'value': wanted.get('value'), 'via': 'details', 'row': None}
+        status, body, _ = member.call('GET', f'/api/encounters/{pk}')
+        rows = body.get('details_needed') if isinstance(body, dict) else None
+        rows = [item for item in rows if isinstance(item, dict)] if isinstance(rows, list) else []
+        row = next((item for item in rows if item.get('fact') == field and isinstance(item.get('id'), str)
+                    and item['id']), None)
+        record['panel_status'] = status
+        if row is None:
+            record['panel_facts'] = sorted({str(item.get('fact')) for item in rows})
+            return record
+        record['row'] = row['id']
+        before = inst.sql(f"select current_context_id from studio_encounter where id = '{pk}'")
+        status, body, _ = member.call('POST', f'/api/encounters/{pk}/details',
+                                      {'answers': [{'id': row['id'], 'fact': field, 'value': wanted.get('value')}]})
+        after = inst.sql(f"select e.current_context_id, c.user_values->>'{field}' from studio_encounter e left join "
+                         f"studio_encountercontext c on c.id = e.current_context_id where e.id = '{pk}'")
+        record.update(status=status, saved=body.get('saved') if isinstance(body, dict) else None,
+                      unchanged=body.get('unchanged') if isinstance(body, dict) else None,
+                      context_before=before[0][0] if before else None, context_after=after[0][0] if after else None,
+                      value_after=after[0][1] if after else None,
+                      error=body.get('error') if isinstance(body, dict) else None)
+        return record
+
     # 4. the previous image's web and worker, over HTTP
     def http(self):
         inst, args = self.instance, self.args
@@ -964,6 +1244,12 @@ class Check:
             record.setdefault('resume_probes', {})[pk] = {'status': status,
                                                           'error': body.get('error') if isinstance(body, dict) else None}
         record['previous_reports'] = created
+        # AMENDMENT-1 U17 [R:legacy-L7]: the first pending encounter's value saved again on the previous web takes effect
+        # there (its own save path: a new legacy context with it)
+        wanted = ((self.declared or {}).get('update') or {}).get('resave') if isinstance(self.declared, dict) else None
+        if (isinstance(wanted, dict) and isinstance(wanted.get('encounter'), str) and UUID.fullmatch(wanted['encounter'])
+                and wanted.get('field') in CONTEXT_FIELDS):  # never other text in SQL
+            record['resave'] = self.resave(member, wanted)
         # one Resume of a stage the previous web stopped, run by the previous worker - started only now, once the
         # switch-back has closed every stage it cannot run (assertion 6)
         resume = record.setdefault('resume', {'encounter': args.resume})
@@ -980,6 +1266,9 @@ class Check:
         worker['open_at_start'] = open_stages(inst, self.kinds)
         worker['interpret_jobs_at_start'] = inst.sql(
             "select id, state, finished_at, left(error, 80) from studio_job where kind = 'interpret' "
+            "and state <> 'succeeded' order by created_at")
+        worker['reading_jobs_at_start'] = inst.sql(  # design v2: pass 2's stages beside pass 1's
+            "select id, kind, state, finished_at, left(error, 80) from studio_job where kind in ('interpret', 'appraise') "
             "and state <> 'succeeded' order by created_at")
         worker['started_at'] = utc_now()
         inst.start('worker', self.previous['id'], args.port)
@@ -1100,6 +1389,19 @@ class Check:
             a6.append(f'interpret stages still open at the worker start: {settled}')
         if not settled_before(worker.get('interpret_jobs_at_start'), worker.get('started_at')):
             a6.append('no interpret stage was settled by CLOSE_STAGES before the previous worker started')
+        # design v2 (FINAL-V2 6.4): the appraise stages too - none open at the start, each settled by the close
+        if start.get('appraise_open'):
+            a6.append(f'appraise stages open when the previous worker started: {start.get("appraise_open")}')
+        reading = worker.get('reading_jobs_at_start') or []
+        if self.v2 and not reading_settled_before(reading, worker.get('started_at')):
+            a6.append('the interpret and appraise stages were not each settled by CLOSE_STAGES before the previous '
+                      'worker started')
+        a7 = scenario_problems(sb.get('scenario_v2')) if self.v2 else []
+        update = (self.declared or {}).get('update') if isinstance(self.declared, dict) else None
+        upd = sb.get('update') or {}
+        a8 = (update_problems(update, {'update_pending': upd.get('update_pending'), 'reverted': upd.get('reverted')},
+                              sb.get('note'), upd.get('after'), upd.get('audits'), http_rec.get('resave'))
+              if self.v2 else [])
         rec['assertions'] = [
             assertion(1, 'no exception and no HTTP 500 anywhere', a1, {
                 'one_shots': len(self.instance.calls), 'failed_one_shots': failed_calls, 'render_errors': render_errors,
@@ -1128,7 +1430,15 @@ class Check:
                            'open_after_close': sb.get('open_after_close'),
                            'unrunnable_after_close': sb.get('unrunnable_after_close'),
                            'interpret_jobs_at_start': worker.get('interpret_jobs_at_start'),
+                           'reading_jobs_at_start': worker.get('reading_jobs_at_start'),
                            'worker_started_at': worker.get('started_at'), 'worker': worker.get('at_end')}),
+            assertion(7, 'FINAL-V2 6.4: the run holds each v2 record kind', a7,
+                      {'v2_candidate': self.v2, 'scenario_v2': sb.get('scenario_v2'),
+                       'install_reads': sb.get('install_reads')}),
+            assertion(8, 'AMENDMENT-1 U17: the pending updates named, the unapplied saves reverted and listed, the value '
+                         'saved again taking effect on the previous web', a8,
+                      {'v2_candidate': self.v2, 'declared': update, 'update': upd, 'note': sb.get('note'),
+                       'resave': http_rec.get('resave'), 'update_before': sb.get('update_before')}),
         ]
         rec['calls'] = self.instance.calls
         rec['finished_at'] = utc_now()
@@ -1148,7 +1458,10 @@ class Check:
                    f'{len((sb.get("note") or {}).get("encounters") or ())} encounters, context_only '
                    f'{(sb.get("note") or {}).get("context_only")}; exact: {not note_issues}; refusing reasons {reasons}',
                 6: f'closed {[row[1] for row in sb.get("closed_stages") or ()]}; open at the worker start '
-                   f'{worker.get("open_at_start")}'}
+                   f'{worker.get("open_at_start")}',
+                7: f'v2 candidate {self.v2}; record kinds {sb.get("scenario_v2")}',
+                8: f'named {sorted(((sb.get("update") or {}).get("update_pending") or {}))}, reverted '
+                   f'{sorted(((sb.get("update") or {}).get("reverted") or {}))}, resave {http_rec.get("resave")}'}
         for item in rec['assertions']:
             summary.append(f'  {item["assertion"]}. {item["result"]}  {item["title"]}')
             summary.append(f'       evidence: {said[item["assertion"]]}')
@@ -1185,7 +1498,101 @@ def parse(argv=None):
     return parser.parse_args(argv)
 
 
+def parse_counts(argv):
+    parser = argparse.ArgumentParser(description='AMENDMENT-1 9.5: the candidate\'s install reads on a test database '
+                                                 '(read-only one-shots).')
+    parser.add_argument('--db', required=True)
+    parser.add_argument('--candidate', required=True, help='the image the install would bring (a tag)')
+    parser.add_argument('--out', required=True, help='a new directory for counts.json')
+    parser.add_argument('--db-env-file', required=True,
+                        help='0600 env file: CPT_STUDIO_SECRET_KEY, CPT_STUDIO_DB_USER, CPT_STUDIO_DB_PASSWORD')
+    parser.add_argument('--pg-container', default='gi4-cpt-test-pg')
+    parser.add_argument('--pg-port', type=int, default=55461)
+    return parser.parse_args(argv)
+
+
+COUNTS_COPY_SUFFIX = '_counts'  # the copy `counts` migrates and reads: --db is never written (refutation 6b-r1 P3)
+
+
+def counts_main(argv) -> int:
+    """`rollback_check.py counts ...`: V1_ROWS and INSTALL_COUNTS of the candidate's installer on --db, a fresh restored
+    dump of live - the counts the owner is told before the install (AMENDMENT-1 9.5) - into <out>/counts.json.
+
+    The dump is never written, and is never read as it stands: live has no EventInventory, ProviderHold or
+    ProviderHoldRelease table and none of 0014's or 0015's columns (FINAL-V2 6.3: neither is applied on live), and
+    testinst/make_db.sh restores it unmigrated, so both reads would fail on it (refutation 6b-r1 P3). The install reads
+    them in its app phase, AFTER its migrate phase, so the command does what the install does: it copies --db to a new
+    test database (<db>_counts), migrates the copy with the candidate's own migrations (`manage migrate --noinput` in
+    the candidate image; 0014 and 0015 are additive and write no row, so every row the reads count is the dump's), then
+    runs the two reads on the copy in read-only sessions. The copy is left for the operator to drop (it holds the dump's
+    rows; counts.json names it).
+
+    Refused, exit 2, before anything runs on the live database, port or containers, on an --out that exists, on a
+    copy name that is no test database name or that exists already. Whatever fails once --out is made - the copy, the
+    migration, a read that raises - is written into counts.json ('failed') and exits 1, as does a count that was not
+    read (install_counts' 'counted' false); a rerun needs a new --out."""
+    args = parse_counts(argv)
+    problems = [problem for problem in target_problems(1024, args.pg_port, args.pg_container, args.db)]  # no web port
+    copy = f'{args.db}{COUNTS_COPY_SUFFIX}'
+    if not problems and not TEST_DB.fullmatch(copy):
+        problems.append(f'{copy!r} (the copy of --db the counts read) is not a test database name: give a shorter --db')
+    out = Path(args.out)
+    if out.exists():
+        problems.append(f'{out} exists')
+    if problems:
+        print(f'refused: {"; ".join(problems)}', file=sys.stderr)
+        return 2
+    try:
+        env_file = Path(args.db_env_file)
+        if env_file.stat().st_mode & 0o077:
+            raise Refused('the database env file must not be readable by others (0600)')
+        candidate = image_info(args.candidate)
+        installer = load_installer(candidate['revision'])
+        if not all(callable(getattr(installer, name, None)) for name in ('v1_rows', 'v1_rows_refusal', 'install_counts')):
+            raise Refused('the candidate\'s installer has no design v2 install reads')
+        env_bytes = env_file.read_bytes()
+        instance = Instance(db=args.db, pg_container=args.pg_container, pg_port=args.pg_port, env_bytes=env_bytes,
+                            files_volume=f'cptg-files-{args.db}', log=print)
+        if instance.sql(f"select count(*) from pg_database where datname = '{copy}'") != [['0']]:
+            raise Refused(f'{copy} exists: drop it, or restore the dump under another name')
+    except (Refused, OSError, RuntimeError, subprocess.CalledProcessError) as exc:
+        print(f'refused: {exc}', file=sys.stderr)
+        return 2
+    out.mkdir(parents=True)
+    reads = Instance(db=copy, pg_container=args.pg_container, pg_port=args.pg_port, env_bytes=env_bytes,
+                     files_volume=f'cptg-files-{args.db}', log=print)
+    record = {'schema': SCHEMA, 'label': 'install counts (AMENDMENT-1 9.5)', 'db': args.db, 'copy': copy,
+              'candidate': candidate, 'at': utc_now(), 'db_written': False}
+    try:
+        instance.copy_database(args.db, copy)
+        record['copied_at'] = utc_now()
+        migrated = reads.oneshot(candidate['id'], ['manage', 'migrate', '--noinput'], db=copy,
+                                 what='Migrating the copy with the candidate (as the install\'s migrate phase)')
+        record['migrate'] = {'exit': migrated.returncode,
+                             'tail': (migrated.stdout + migrated.stderr).decode('utf-8', 'replace')[-2000:]}
+        if migrated.returncode:
+            raise Refused(f'the copy {copy} could not be migrated with the candidate (exit {migrated.returncode}); '
+                          'nothing was read')
+        with mock.patch.object(installer, 'app_script', reads.transport(installer, {candidate['id']: args.candidate},
+                                                                        read_only=True)):
+            record['v1_rows'] = installer.v1_rows(candidate['id'], env_bytes)
+            record['v1_refusal'] = installer.v1_rows_refusal(record['v1_rows'])
+            record['install_counts'] = installer.install_counts(candidate['id'], env_bytes)
+    except Exception as exc:  # noqa: BLE001 - written into counts.json, never left unsaid behind an --out that exists
+        record['failed'] = f'{type(exc).__name__}: {exc}'[:2000]
+    record['calls'] = instance.calls + reads.calls
+    (out / 'counts.json').write_text(json.dumps(record, indent=1, sort_keys=True, default=str) + '\n', encoding='utf-8')
+    counts = record.get('install_counts') if isinstance(record.get('install_counts'), dict) else {}
+    print(json.dumps({'counted': counts.get('counted'), 'report': counts.get('report'),
+                      'v1_refusal': record.get('v1_refusal'), 'failed': record.get('failed'), 'copy': copy,
+                      'out': str(out / 'counts.json')}, indent=1))
+    return 1 if record.get('failed') or counts.get('counted') is not True else 0
+
+
 def main(argv=None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv[:1] == ['counts']:
+        return counts_main(argv[1:])
     args = parse(argv)
     check = Check(args)
     try:

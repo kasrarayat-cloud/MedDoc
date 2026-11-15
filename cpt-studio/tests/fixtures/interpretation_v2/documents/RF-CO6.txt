@@ -1,0 +1,8 @@
+SYNTHETIC COLONOSCOPY REPORT
+Date of service: 03/14/2031
+Endoscopist: Corvin Ashdale, MD (fictional)
+
+Procedure: The colonoscope was inserted into the rectum.
+Findings: The colonoscope was advanced through the colon.
+Biopsies of the cecum were taken with cold forceps.
+Impression: The colonoscope reached the cecum.

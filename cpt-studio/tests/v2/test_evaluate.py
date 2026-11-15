@@ -23,11 +23,42 @@ test_row_7_an_examination_that_may_be_*, the office variant test_row_7_an_office
 (Exclusion.test_condition_5_an_unlisted_act_*), T1 (Binding.test_rule_3_*), T2
 (SupportRows.test_row_6_route_b_needs_every_*); F2, F3 and the items' sentences: tests/v2/test_questions.py Worded;
 repair_fixtures() feeds every shape to OneItem and P-MONO.
+
+The refutation of repair r4a (build-v2/w56r/refute-r4a-r1), round 2: F1 (an unlisted doubt read as a possibly performed
+act by every absence condition: UnlistedDoubts, Properties.test_p_mono_an_unlisted_act_told_as_a_doubt_never_releases),
+F4 (every witness under its own fact's attribute: OwnAttribute), F7 (LOWER's approach beside its reach: LowerApproach,
+CodeRows.test_lower), the same-duct question about the counterpart whose status is unknown (SameDuctCounterpart, beside
+F6), F5's unit-less entry still held with one item (UnitlessEntries); r4a2_fixtures() feeds every shape to OneItem and
+P-MONO; the sentences are tests/v2/test_questions.py RefutedSentences.
+
+Repair r4a of round w7r (DECISIONS D232, D240; refute-r4a-r2 N1, 6c B): row 7 reads a synthetic examination only in an
+act-only session - p41's unlisted doubt of kind examination, carded to the colonoscopy or to none, leaves 45385 READY
+beside the colonoscopy's done examination and holds nothing beside an EGD's, while the base code keeps 3.2.6 rule 4's
+pair (D232Row7); evaluate's code rows read only the supporting acts within the code's SITE class - "The distal
+esophageal stricture was dilated with a balloon. The duodenal bulb stricture was dilated with a balloon." gives 43249 on
+the esophageal act and 43245 on the duodenal one (D240SiteFit). w7r_fixtures() feeds every shape to OneItem and P-MONO;
+the sentences (D232's naming, D246's items) are tests/v2/test_questions.py D232Sentences and D246Items. Its refutation
+refute-r4a-r1 (repair r4a-2): P1, a digital examination (FINAL 5.6 E13) never makes a session non-act-only, its device
+weakened neither (P-MONO), and P5, act_only read per session (R4a2Repairs; their shapes join w7r_fixtures()); the
+sentences are tests/v2/test_questions.py R4a2Sentences.
+
+Repair r4a of round w8r (DECISIONS D253, D258): row 7's ``done`` excepts the digital examination as ``act_only`` does -
+refute-r4a-r2 A2's shapes (a2, a2b, a2c, a2d: a DRE filed as the colonoscopy's examination beside the history or a
+plan filed in it) hold 45385 with the DRE line exactly as without it, through assess too, and a device claiming manual
+stays digital under weakening (D253Row7, QE13 option (a)); R4a2Repairs' no-card doubt is restated for D258
+(UNLISTED_SCOPE, the DRE's sentence never quoted as the colonoscopy's). w8r_fixtures() feeds A2's, D258's and r4c Q1's
+shapes to OneItem and P-MONO; the sentences are tests/v2/test_questions.py D258UnlistedScope, D253Items, D254Fill and
+D257BaseWithin. Its refutation refute-r4a-r1 (repair r4a-2 of round w8r): P1 (critical), a digital examination (FINAL
+5.6 E13) never supports an examination group - the DRE alone no longer makes 45378 or 45330 READY, the code is held
+with the item the same document gets without the DRE line, a device claiming manual never supports either, and the
+DRE stays a candidate so 4.6 reads what it read (DigitalSupport); w8r_refuted_fixtures() feeds its shapes, P3's and
+P4's to OneItem and P-MONO; the sentences are tests/v2/test_questions.py D253Items and RefutedW8rItems.
 """
 from __future__ import annotations
 
 import ast
 import dataclasses
+import itertools
 import os
 import subprocess
 import sys
@@ -43,10 +74,12 @@ from studio.interpretation.engine import facts as facts_module
 from studio.interpretation.engine import questions as Q
 from studio.interpretation.engine import requirements as rq
 from studio.interpretation.engine.requirements_table import Tag
-from studio.interpretation.engine.types import Cover, Evaluation, FactSet, HeldFact, Id, ItemKind, Span
-from tests.v2.evaluate_fixtures import (DC, EARLIER, ON, TEAM, Doc, E, L, Landmark, Owner, Performer, SessionKind,
-                                        Status, X, Y, colonoscopy, contra, doubted, egd, neg, statement_source, sup,
-                                        unit, unlisted, unres)
+from studio.interpretation.engine.types import (Cover, Evaluation, FactSet, HeldFact, Id, ItemKind, Span,
+                                                UnlistedStatement)
+from tests.v2.evaluate_fixtures import (DC, DRE_CLAIMING, DRE_KEPT, DRE_OTHERS, DRE_REACHES, DRE_SESSIONS,
+                                        DRE_STATEMENTS, EARLIER, ON, TEAM, Doc, E, L, Landmark, Owner, Performer,
+                                        SessionKind, Status, X, Y, colonoscopy, contra, doubted, dre_grid, egd, neg,
+                                        statement_source, sup, unit, unlisted, unres, without_events)
 from tests.v2.test_types import measure_4
 
 APP = Path(__file__).resolve().parents[2]
@@ -105,11 +138,14 @@ class SupportRows(SimpleTestCase):
         self.assertEqual(set(truths('45385', colonoscopy().build(), E(2)).values()), {T})
 
     def test_row_1_kind(self):
+        """Restated for DECISIONS D267 (repair r4a of round w9r; r4a-2 Q1 QK option (b): "test_evaluate's pin follows"):
+        the contradicted kind's conflict is keyed conflict:other - an act whose kind is not supported is "another act",
+        never "the snare removal" (before: conflict:snare, the code's group's kind)."""
         cases = {
             'umbrella': (sup(Kind.REMOVAL), [('act_method', 9, QUESTION, rule(Q.Rule.UMBRELLA))]),
             'unresolved': (unres(Kind.SNARE), [('performed_status', 4, QUESTION, 'appraisal:unclear')]),
             'doubted': (doubted(Kind.SNARE, Kind.BIOPSY), [('performed_status', 4, QUESTION, 'reading_unknown')]),
-            'contradicted': (contra(Kind.SNARE, Kind.BIOPSY), [('conflict:snare', 1, QUESTION,
+            'contradicted': (contra(Kind.SNARE, Kind.BIOPSY), [('conflict:other', 1, QUESTION,
                                                                 'reading_contradicted')]),
         }
         for name, (kind, expected) in cases.items():
@@ -366,9 +402,10 @@ class SupportRows(SimpleTestCase):
         doc.event(3, kind=sup(Kind.REMOVAL), status=doubted(Status.PERFORMED), session=sup(X(1)), date=sup(ON))
         self.assertEqual(keys(self.held('45385', doc.build()))[0],
                          ('statement_scope', 3, QUESTION, 'relation:possible_statement'))
-        doc = colonoscopy()  # an unlisted denial: statement_scope, cause unlisted (3.2.6 rule 4)
+        # an unlisted denial: performed_status at RANK row 2, cause unlisted (3.2.6 rule 4; DECISIONS D228 DQ3)
+        doc = colonoscopy()
         doc.unlisted.append(unlisted(ct.UnlistedWhat.DENIAL, Kind.SNARE, None, Span(900, 950)))
-        self.assertEqual(keys(self.held('45385', doc.build())), [('statement_scope', 3, QUESTION, 'unlisted')])
+        self.assertEqual(keys(self.held('45385', doc.build())), [('performed_status', 2, QUESTION, 'unlisted')])
 
     def test_row_8_an_independent_statement_holds_nothing(self):
         """HO-2: one established difference sets a statement apart ("At the 2024 colonoscopy ... no dilation was
@@ -599,19 +636,30 @@ class CodeRows(SimpleTestCase):
         self.assertEqual([entry[:3] for entry in keys(decide('45341', lower()))], [('extent', 14, QUESTION)])
         self.assertTrue(ready(decide('44406', lower(sup(Extent.STOMA), approach=sup(ct.Approach.THROUGH_STOMA),
                                                     stoma=True))))
+        # D225 (refute-4a-r2 P5): with the reach met, the stoma class's approach is asked as the approach - RANK row 8,
+        # procedure ("approach for a class") - never as R6's extent question
         for name, R in {'no stoma entry': lower(sup(Extent.STOMA), approach=sup(ct.Approach.THROUGH_STOMA)),
                         'the approach not stated': lower(sup(Extent.STOMA), stoma=True),
                         'the approach not established': lower(sup(Extent.STOMA), approach=unres(ct.Approach.ORAL),
                                                               stoma=True)}.items():
             with self.subTest(name):
-                self.assertEqual([entry[:3] for entry in keys(decide('44406', R))], [('extent', 14, QUESTION)])
-        # the refutation's F4: an approach established otherwise is the misfit, the class explanation (4.3 LOWER)
-        for name, approach in {'oral supported': sup(ct.Approach.ORAL),
-                               'through a stoma denied': neg(ct.Approach.THROUGH_STOMA)}.items():
-            with self.subTest(name):
-                R = lower(sup(Extent.STOMA), approach=approach, stoma=True)
-                self.assertEqual(keys(decide('44406', R)), [('extent', 14, EXPLANATION, rule(Q.Rule.LOWER))])
-                self.assertEqual(item('44406', R).message, Q.MessageId.EXAMINATION_CLASS)
+                self.assertEqual([entry[:3] for entry in keys(decide('44406', R))], [('procedure', 8, QUESTION)])
+                self.assertEqual(item('44406', R).message, Q.MessageId.EXAMINATION_ROUTE)
+        # the refutation's F4: an approach established otherwise is the misfit - named as the approach (P5) when one is
+        # supported; through a stoma denied names none, and stays the class explanation (the step's NOTES, Q6)
+        R = lower(sup(Extent.STOMA), approach=sup(ct.Approach.ORAL), stoma=True)
+        self.assertEqual(keys(decide('44406', R)), [('procedure', 8, EXPLANATION, rule(Q.Rule.LOWER))])
+        self.assertEqual(item('44406', R).message, Q.MessageId.EXAMINATION_APPROACH)
+        R = lower(sup(Extent.STOMA), approach=neg(ct.Approach.THROUGH_STOMA), stoma=True)
+        self.assertEqual(keys(decide('44406', R)), [('extent', 14, EXPLANATION, rule(Q.Rule.LOWER))])
+        self.assertEqual(item('44406', R).message, Q.MessageId.EXAMINATION_CLASS)
+        # the reach not established is still R6's extent question (the reach IS what is unknown), recorded beside the
+        # approach's when that is unknown too (refute-r4a-r1 F7: HO-8, every unresolved fact held; RANK then asks the
+        # approach, row 8) - and alone once the approach is established through the documented stoma
+        self.assertEqual([entry[:3] for entry in keys(decide('44406', lower(unres(Extent.STOMA), stoma=True)))],
+                         [('extent', 14, QUESTION), ('procedure', 8, QUESTION)])
+        R = lower(unres(Extent.STOMA), stoma=True, approach=sup(ct.Approach.THROUGH_STOMA))
+        self.assertEqual([entry[:3] for entry in keys(decide('44406', R))], [('extent', 14, QUESTION)])
 
     def ercp(self, *acts):
         return ercp_doc(*acts)
@@ -1249,14 +1297,17 @@ class Binding(SimpleTestCase):
         self.assertEqual(free.bindings, {(Kind.SNARE,): E(3)})  # (2) no kept span: rank across the candidates
         self.assertEqual(item('45385', R).held.fact, 'conflict:snare')
 
-    def test_ho8_case_2_the_esophageal_dilation_with_an_unstated_device_is_asked_before_the_duodenal_explained(self):
+    def test_ho8_case_2_the_esophageal_dilation_with_an_unstated_device_is_asked_and_the_duodenal_one_is_not_read(self):
+        """HO-8's second case under D240 (D29's installed reading): the esophageal dilation with an unstated device is
+        asked about its device; the duodenal one with a balloon, established outside the esophageal class beside an act
+        established within it, is no supporting act of 43249 - it leaves E* and its another-site explanation is no longer
+        raised (it was the second held fact before D240). The item is the same."""
         doc = dilation(sup(Landmark.DISTAL_ESOPHAGUS), device=None)
         dilation(sup(Landmark.DUODENUM), number=3, doc=doc)
         R = doc.build()
         evaluation = decide('43249', R)
-        self.assertEqual(evaluation.supporting, (E(2), E(3)))
-        self.assertEqual(keys(evaluation), [('technique', 10, QUESTION, 'reading_unknown'),
-                                            ('act_target', 11, EXPLANATION, rule(Q.Rule.SITE))])
+        self.assertEqual(evaluation.supporting, (E(2),))
+        self.assertEqual(keys(evaluation), [('technique', 10, QUESTION, 'reading_unknown')])
         found = item('43249', R)
         self.assertEqual((found.held.fact, found.kind, found.held.subject), ('technique', QUESTION, E(2)))
 
@@ -1297,14 +1348,22 @@ class UnlistedOnEvidence(SimpleTestCase):
         return doc.build()
 
     def test_the_exchange_sentence_cited_holds_43274(self):
+        """Rule 2's hold, and since D216 XCHG's: the unlisted removal is a synthetic counterpart of the placement in its
+        session. The item is rule 2's, worded as the unlisted entry (D225 P11: its own kind and unit)."""
         R = self.exchange()
         evaluation = decide('43274', R, kept=(unit(2),))
         self.assertEqual(evaluation.supporting, (E(2),))
-        self.assertEqual(keys(evaluation), [('performed_status', 2, QUESTION, 'unlisted')])
-        self.assertEqual((evaluation.held_facts[0].spans, evaluation.held_facts[0].result), ((unit(2),), None))
+        self.assertEqual(keys(evaluation), [('act_target', 11, QUESTION, rule(Q.Rule.EXCHANGE)),
+                                            ('performed_status', 2, QUESTION, 'unlisted')])
+        self.assertEqual((evaluation.held_facts[1].spans, evaluation.held_facts[1].result), ((unit(2),), None))
         found = item('43274', R, kept=(unit(2),))
-        self.assertEqual((found.held.rank, found.message, found.fill.statements), (2, Q.MessageId.DOUBT, ((unit(2),),)))
-        self.assertTrue(ready(decide('43274', R, kept=(unit(1),))))  # evidence elsewhere: rule 2 reads none
+        self.assertEqual((found.held.rank, found.message, found.fill.statements, found.fill.unlisted_what,
+                          found.fill.unlisted_kind),
+                         (2, Q.MessageId.UNLISTED_EVIDENCE, ((unit(2),),), ct.UnlistedWhat.ACT, Kind.STENT_REMOVAL))
+        # evidence elsewhere: rule 2 reads none, and XCHG still reads the synthetic removal (D216): never READY
+        evaluation = decide('43274', R, kept=(unit(1),))
+        self.assertEqual(keys(evaluation), [('act_target', 11, QUESTION, rule(Q.Rule.EXCHANGE))])
+        self.assertEqual(item('43274', R, kept=(unit(1),)).message, Q.MessageId.SAME_DUCT)
 
     def test_every_entry_on_the_evidence_holds_whatever_its_nature_or_kind(self):
         for what in ct.UnlistedWhat:
@@ -1316,7 +1375,7 @@ class UnlistedOnEvidence(SimpleTestCase):
     def test_an_unlisted_unit_on_a_cited_denial_is_asked_never_excluded(self):
         """"No polyps were removed." cited by 45385 excludes; an unlisted doubt of another kind (no doubt of the code's
         kinds: condition 5 holds) found in that very sentence holds it instead - the denial's scope asked, and rule 2's
-        doubt, worded with the unit as its words (no act)."""
+        doubt, worded as the unlisted entry: its own nature and kind, its own unit (D225, refute-4a-r2 P11)."""
         doc = colonoscopy(snare=False)
         denial_event(doc, kind=Kind.REMOVAL)
         self.assertIsNotNone(decide('45385', doc.build(), kept=(Span(300, 325),)).exclusion)
@@ -1328,7 +1387,9 @@ class UnlistedOnEvidence(SimpleTestCase):
                          [('performed_status', 2, QUESTION, 'unlisted'),
                           ('statement_scope', 3, QUESTION, rule(Q.Rule.STATEMENT_SCOPE))])
         found = item('45385', R, kept=(Span(300, 325),))
-        self.assertEqual((found.held.rank, found.message, found.fill.words), (2, Q.MessageId.DOUBT, (unit(3),)))
+        self.assertEqual((found.held.rank, found.message, found.fill.statements, found.fill.unlisted_what,
+                          found.fill.unlisted_kind),
+                         (2, Q.MessageId.UNLISTED_EVIDENCE, ((unit(3),),), ct.UnlistedWhat.DOUBT, Kind.BIOPSY))
 
     def test_route_d_and_d80_keep_their_one_explanation(self):
         """Route (d) and D80 return before any group (4.4): never READY already, their item their own explanation."""
@@ -1401,6 +1462,1291 @@ class Boundary(SimpleTestCase):
         self.assertIn('Success: no issues found in 2 source files', result.stdout)
 
 
+# --- repair r4a (refute-4a-r2; DECISIONS D216, D225's engine half, D226, D229's 4a P2, P3, P4, P8, P9) -----------------
+
+
+def stent_placement(removal=None, *, duct=sup(ct.Duct.BILIARY), session=X(1)) -> Doc:
+    """refute-4a-r2 p10: "The existing biliary stent was removed. A new 10 Fr plastic stent was placed." - an ERCP X1
+    (its examination E1), the placement E2 filed (its duct ``duct``), 43274 citing only unit 2. ``removal``: the
+    removal kept as an unlisted ACT (unit 5) with this session card, or filed (E5) with these facts."""
+    doc = Doc()
+    doc.session(1, SessionKind.ERCP)
+    doc.exam(1)
+    doc.act(2, Kind.STENT, duct=duct)
+    if isinstance(removal, dict):
+        doc.act(5, Kind.STENT_REMOVAL, **removal)
+    elif removal is not None:
+        doc.unlisted.append(unlisted(ct.UnlistedWhat.ACT, removal, session, unit(5)))
+    return doc
+
+
+def act_only_colonoscopy() -> Doc:
+    """A colonoscopy X1 with no examination filed: its cold snare E2 only (row 7's act-only arm)."""
+    doc = Doc()
+    doc.session(1, SessionKind.COLONOSCOPY, reached=[sup(Extent.CECUM)])
+    doc.act(2, Kind.SNARE, places=[sup(Landmark.SIGMOID_COLON)], device=sup(Device.COLD_SNARE))
+    return doc
+
+
+class AbsenceConditions(SimpleTestCase):
+    """D216 (refute-4a-r2 P1, critical): every rule whose condition is the ABSENCE of a possibly performed act reads
+    3.2.6 rule 3's synthetic doubted act - a kept unlisted ACT - as possibly performed, as the same act filed in doubt
+    reads. The absence conditions of evaluate.py (the step's NOTES list each): XCHG's counterparts (43274, 43275);
+    43276's pair candidates; row 7's possible examinations; 4.6 condition 5 (its clip or injection as a possible bleeding
+    control, and a possible exchange of two synthetic acts). An unlisted doubt reads as a possibly performed act too
+    (refute-r4a-r1 F1: UnlistedDoubts); an unlisted denial does not (question Q1)."""
+
+    def test_xchg_reads_an_unlisted_removal_never_ready(self):
+        """p10: 43274 is held with one item, the duct question naming the unlisted removal - as the removal filed in
+        doubt, or with its duct unknown, holds it; never READY."""
+        for name, removal in {'unlisted, card X1': Kind.STENT_REMOVAL,
+                              'filed in doubt': dict(status=doubted(Status.PERFORMED)),
+                              'filed, its duct unknown': {}}.items():
+            with self.subTest(name):
+                R = stent_placement(removal).build()
+                evaluation = decide('43274', R, kept=(unit(2),))
+                self.assertFalse(ready(evaluation))
+                self.assertEqual(keys(evaluation), [('act_target', 11, QUESTION, rule(Q.Rule.EXCHANGE))])
+                found = item('43274', R, kept=(unit(2),))
+                self.assertEqual((found.message, found.fill.act, found.fill.words, found.fill.whole,
+                                  found.fill.whole_words),
+                                 (Q.MessageId.SAME_DUCT, Kind.STENT_REMOVAL, (unit(5),), Kind.STENT, (unit(2),)))
+        self.assertTrue(ready(decide('43274', stent_placement(None).build(), kept=(unit(2),))))  # the control
+
+    def test_xchg_reads_an_unlisted_act_of_every_session_it_may_be_in(self):
+        """No session card, or a card the FactSet does not hold (4.11), is possibly the placement's session; a card
+        naming another session the FactSet holds sets the act apart, as two supported sessions set filed acts apart. An
+        act of umbrella kind covering the removal may be the removal; so may an act of no kind - beside the ERCP's
+        examination established done it adds nothing to row 7 (D232), so the placement supports and XCHG asks the duct
+        about it as about any counterpart. An unlisted DOUBT is a possibly performed act too (refute-r4a-r1 F1: 4.2, a
+        doubt is never an absence); an unlisted DENIAL is a statement only (the step's NOTES, question Q1)."""
+        for name, (entry, held) in {
+                'no card': (unlisted(ct.UnlistedWhat.ACT, Kind.STENT_REMOVAL, None, unit(5)), True),
+                'a card naming no session': (unlisted(ct.UnlistedWhat.ACT, Kind.STENT_REMOVAL, X(9), unit(5)), True),
+                'no kind': (unlisted(ct.UnlistedWhat.ACT, None, X(1), unit(5)), True),
+                'an intervention': (unlisted(ct.UnlistedWhat.ACT, Kind.INTERVENTION, X(1), unit(5)), True),
+                'a stent exchange': (unlisted(ct.UnlistedWhat.ACT, Kind.STENT_EXCHANGE, X(1), unit(5)), True),
+                'another session': (unlisted(ct.UnlistedWhat.ACT, Kind.STENT_REMOVAL, X(2), unit(5)), False),
+                'a biopsy': (unlisted(ct.UnlistedWhat.ACT, Kind.BIOPSY, X(1), unit(5)), False),
+                'an unlisted denial': (unlisted(ct.UnlistedWhat.DENIAL, Kind.STENT_REMOVAL, X(1), unit(5)), False),
+                'an unlisted doubt': (unlisted(ct.UnlistedWhat.DOUBT, Kind.STENT_REMOVAL, X(1), unit(5)), True),
+        }.items():
+            with self.subTest(name):
+                doc = stent_placement(None)
+                doc.session(2, SessionKind.ERCP)
+                doc.unlisted.append(entry)
+                evaluation = decide('43274', doc.build(), kept=(unit(2),))
+                self.assertEqual(not ready(evaluation), held)
+                if held:
+                    self.assertEqual(keys(evaluation), [('act_target', 11, QUESTION, rule(Q.Rule.EXCHANGE))])
+                    duct = evaluation.held_facts[0]
+                    self.assertEqual((duct.subject, duct.result, duct.spans), (None, None, (unit(2), unit(5))))
+
+    def test_xchg_43275_reads_an_unlisted_placement(self):
+        doc = Doc()
+        doc.session(1, SessionKind.ERCP)
+        doc.exam(1)
+        doc.act(2, Kind.STENT_REMOVAL, duct=sup(ct.Duct.BILIARY))
+        self.assertTrue(ready(decide('43275', doc.build())))
+        doc.unlisted.append(unlisted(ct.UnlistedWhat.ACT, Kind.STENT, X(1), unit(5)))
+        found = item('43275', doc.build())
+        self.assertEqual((found.message, found.fill.act, found.fill.whole), (Q.MessageId.SAME_DUCT, Kind.STENT,
+                                                                            Kind.STENT_REMOVAL))
+
+    def test_43276_reads_a_synthetic_part_as_a_pair_candidate(self):
+        """43276's pair candidates: a filed placement beside an unlisted removal is a possible exchange - held, bound
+        on the placement, its one item the synthetic removal's witness (rank 2; SYNTHETIC_ACT for a kept unlisted act,
+        D246) - never "not documented", and never excluded by a cited exchange denial (as with the removal filed in
+        doubt)."""
+        R = stent_placement(Kind.STENT_REMOVAL).build()
+        evaluation = decide('43276', R)
+        self.assertEqual(evaluation.supporting, ())
+        self.assertEqual(evaluation.bindings, {(Kind.STENT_EXCHANGE,): E(2)})
+        self.assertIn(('performed_status', 2, QUESTION, 'unlisted'), keys(evaluation))
+        self.assertIn(('act_target', 11, QUESTION, rule(Q.Rule.EXCHANGE)), keys(evaluation))
+        found = item('43276', R)
+        self.assertEqual((found.message, found.fill.act, found.fill.words),
+                         (Q.MessageId.SYNTHETIC_ACT, Kind.STENT_REMOVAL, (unit(5),)))
+        for removal in (Kind.STENT_REMOVAL, dict(status=doubted(Status.PERFORMED))):
+            with self.subTest(removal=removal):
+                doc = stent_placement(removal)
+                denial_event(doc, number=6, kind=Kind.STENT_EXCHANGE)
+                evaluation = decide('43276', doc.build(), kept=(Span(600, 625),))
+                self.assertIsNone(evaluation.exclusion)
+                self.assertFalse(ready(evaluation))
+
+    def test_condition_5_reads_two_synthetic_parts_and_an_unlisted_clip(self):
+        """Condition 5: two kept unlisted acts that may be a removal and a placement of one session doubt 43276 (a
+        possible exchange with no id to bind: no exclusion, held); one alone does not (excluded, as one filed part
+        alone is). An unlisted clip or injection, whose purpose no card states, may be a bleeding control (D157(2)):
+        a cited bleeding-control denial is asked, never decided, beside it."""
+        def exchange_denied(*entries):
+            doc = Doc()
+            doc.session(1, SessionKind.ERCP)
+            doc.exam(1)
+            denial_event(doc, number=6, kind=Kind.STENT_EXCHANGE)
+            doc.unlisted.extend(entries)
+            return decide('43276', doc.build(), kept=(Span(600, 625),))
+
+        both = exchange_denied(unlisted(ct.UnlistedWhat.ACT, Kind.STENT_REMOVAL, X(1), unit(4)),
+                               unlisted(ct.UnlistedWhat.ACT, Kind.STENT, X(1), unit(5)))
+        self.assertIsNone(both.exclusion)
+        self.assertFalse(ready(both))
+        alone = exchange_denied(unlisted(ct.UnlistedWhat.ACT, Kind.STENT_REMOVAL, X(1), unit(4)))
+        self.assertIsNotNone(alone.exclusion)
+
+        def bleeding_denied(*entries):
+            doc = egd()
+            denial_event(doc, number=6, kind=Kind.BLEEDING_CONTROL)
+            doc.unlisted.extend(entries)
+            return decide('43255', doc.build(), kept=(Span(600, 625),))
+
+        self.assertIsNotNone(bleeding_denied().exclusion)
+        for kind in (Kind.CLIP, Kind.INJECTION):
+            with self.subTest(kind=kind):
+                evaluation = bleeding_denied(unlisted(ct.UnlistedWhat.ACT, kind, X(1), unit(5)))
+                self.assertIsNone(evaluation.exclusion)
+                self.assertEqual([entry[:3] for entry in keys(evaluation)], [('statement_scope', 3, QUESTION)])
+
+    def test_row_7_reads_a_synthetic_examination(self):
+        """Row 7: an act-only session beside a kept unlisted examination act of it (or of no session, or of no kind) is
+        not done - held, its one item the synthetic act's witness naming the act's own kind and quoting its own unit
+        (SYNTHETIC_ACT for a kept unlisted act: D246) - as beside the same examination filed in doubt; a card naming
+        another session, or an office visit's session (no examination), holds nothing."""
+        for name, entry in {'card X1': unlisted(ct.UnlistedWhat.ACT, Kind.EXAMINATION, X(1), unit(5)),
+                            'no card': unlisted(ct.UnlistedWhat.ACT, Kind.EXAMINATION, None, unit(5)),
+                            'no kind': unlisted(ct.UnlistedWhat.ACT, None, X(1), unit(5))}.items():
+            with self.subTest(name):
+                doc = act_only_colonoscopy()
+                doc.unlisted.append(entry)
+                evaluation = self.held_by_row_7(doc.build())
+                self.assertEqual(keys(evaluation), [('performed_status', 2, QUESTION, 'unlisted')])
+                self.assertEqual((evaluation.held_facts[0].subject, evaluation.held_facts[0].spans), (X(1), (unit(5),)))
+                found = item('45385', doc.build())
+                self.assertEqual((found.message, found.fill.words),
+                                 (Q.MessageId.SYNTHETIC_ACT, (unit(5),)))
+                self.assertEqual(found.fill.act, Kind.EXAMINATION if entry.kind else Kind.OTHER)
+        doc = act_only_colonoscopy()  # the filed analog: the same examination filed in doubt holds too
+        doc.event(5, kind=sup(Kind.EXAMINATION), status=doubted(Status.PERFORMED), session=sup(X(1)))
+        self.assertFalse(ready(decide('45385', doc.build())))
+        doc = act_only_colonoscopy()
+        doc.session(2, SessionKind.EGD)
+        doc.unlisted.append(unlisted(ct.UnlistedWhat.ACT, Kind.EXAMINATION, X(2), unit(5)))
+        self.assertTrue(ready(decide('45385', doc.build())))
+        doc = Doc()
+        doc.session(1, SessionKind.OFFICE_EM, encounter=sup(ct.EncounterRelation.THIS_ENCOUNTER))
+        doc.act(1, Kind.EM_VISIT, basis=sup(ct.EmBasis.TOTAL_TIME))
+        doc.unlisted.append(unlisted(ct.UnlistedWhat.ACT, Kind.EXAMINATION, X(1), unit(5)))
+        self.assertEqual(EV.synthetic_examinations(doc.build(), X(1)), ())
+        self.assertEqual(truths('99213', doc.build(), E(1))[rq.Requirement.SUP_SESSION_DONE], T)
+
+    def test_row_7_a_synthetic_examination_beside_the_sessions_done_one_adds_nothing(self):
+        """D232 (rules the earlier NOTES' question Q2, option (b)): beside an examination established as the session's,
+        a synthetic examination adds nothing - row 7 reads it only in an act-only session - so 45385 is READY, row 7
+        T. (The base code keeps 3.2.6 rule 3's base_included hold: step 4d's combination.)"""
+        doc = colonoscopy()
+        doc.unlisted.append(unlisted(ct.UnlistedWhat.ACT, Kind.EXAMINATION, X(1), unit(5)))
+        self.assertTrue(ready(decide('45385', doc.build())))
+        self.assertEqual(truths('45385', doc.build(), E(2))[rq.Requirement.SUP_SESSION_DONE], T)
+
+    def held_by_row_7(self, R):
+        evaluation = decide('45385', R)
+        self.assertFalse(ready(evaluation))
+        self.assertEqual(truths('45385', R, E(2))[rq.Requirement.SUP_SESSION_DONE], U)
+        return evaluation
+
+
+class BindingCount(SimpleTestCase):
+    """4a P2 (step 1f's hand-off R9(e)): the binding's "fewest non-T requirements" counts over requirements_of(code) -
+    the code-specific rows (TECH, SITE, ...) included - so the item names the act closest to READY."""
+
+    def test_p11_the_act_that_can_never_support_is_not_bound(self):
+        """p11: two balloon dilations under 43249, neither supporting. E2 (distal esophagus): its date relation and
+        performer unresolved, TECH and SITE met - 2 rows not T. E3 (duodenum): its date relation unresolved, SITE F -
+        2 rows not T, counted over requirements_of('43249'). Rank and kind tie, so document order binds E2."""
+        doc = egd()
+        doc.act(2, Kind.DILATION, places=[sup(Landmark.DISTAL_ESOPHAGUS)], device=sup(Device.BALLOON), date=unres(ON),
+                performer=unres(TEAM))
+        doc.act(3, Kind.DILATION, places=[sup(Landmark.DUODENUM)], device=sup(Device.BALLOON), date=unres(ON))
+        R = doc.build()
+        group = (Kind.DILATION,)
+        self.assertEqual([EV.unmet('43249', group, R, EV.support('43249', group, R, event)) for event in (E(2), E(3))],
+                         [2, 2])
+        self.assertEqual(decide('43249', R).bindings, {group: E(2)})
+        found = item('43249', R)
+        self.assertEqual((found.held.subject, found.fill.place), (E(2), Landmark.DISTAL_ESOPHAGUS))
+        # E3's SITE failure alone (its date established) still counts: 1 against E2's 2 - E3 is closer to READY
+        doc.act(3, Kind.DILATION, places=[sup(Landmark.DUODENUM)], device=sup(Device.BALLOON), date=sup(ON),
+                performer=unres(TEAM))
+        self.assertEqual(EV.unmet('43249', group, doc.build(), EV.support('43249', group, doc.build(), E(3))), 2)
+
+
+class Row7Repairs(SimpleTestCase):
+    """4a P3, P8, P9: row 7's family gate on the established arm (P-MONO), "done" by an examination established as the
+    session's (MR3), and the dangling-id arm of _may_be_in (MR4)."""
+
+    @staticmethod
+    def office(tie):
+        """p12b: an office visit E1 (99213) and "Colonoscopy in 2019 was normal." filed as an examination E2 (performed,
+        an earlier date), its session tie ``tie``."""
+        doc = Doc()
+        doc.session(1, SessionKind.OFFICE_EM, encounter=sup(ct.EncounterRelation.THIS_ENCOUNTER))
+        doc.act(1, Kind.EM_VISIT, basis=sup(ct.EmBasis.TOTAL_TIME))
+        over = dict(kind=sup(Kind.EXAMINATION), status=sup(Status.PERFORMED), date=sup(EARLIER))
+        if tie is not None:
+            over['session'] = tie
+        doc.event(2, **over)
+        return doc.build()
+
+    def test_p3_an_office_visits_session_holds_no_examination_whatever_its_tie(self):
+        """P3 (P-MONO): the established tie is gated by the family too, so the visit is READY with the tie supported,
+        weakened or silent - never HELD on the supported tie and READY on its weakening. The feeding-tube family the
+        same (p12: an examination in doubt filed in a tube replacement's session)."""
+        for tie in (sup(X(1)), unres(X(1)), None):
+            with self.subTest(tie=tie and tie.result):
+                R = self.office(tie)
+                self.assertEqual(EV.examinations(R, X(1)), ())
+                self.assertTrue(ready(decide('99213', R)))
+        for tie in (sup(X(1)), unres(X(1))):
+            with self.subTest(family='feeding_tube', tie=tie.result):
+                doc = Doc()
+                doc.session(1, SessionKind.FEEDING_TUBE)
+                doc.act(1, Kind.TUBE_REPLACEMENT)
+                doc.event(2, kind=sup(Kind.EXAMINATION), session=tie, status=unres(Status.PERFORMED), date=sup(ON),
+                          performer=sup(TEAM), entry=sup(DC))
+                self.assertTrue(ready(decide('43762', doc.build())))
+        # the session's kind not established leaves an examination possible, whatever its tie: held (fail-closed)
+        doc = Doc()
+        doc.session(1, unres(SessionKind.OFFICE_EM), encounter=sup(ct.EncounterRelation.THIS_ENCOUNTER))
+        doc.act(1, Kind.EM_VISIT, basis=sup(ct.EmBasis.TOTAL_TIME))
+        doc.event(2, kind=sup(Kind.EXAMINATION), status=sup(Status.PERFORMED), date=sup(EARLIER), session=sup(X(1)))
+        self.assertEqual(EV.examinations(doc.build(), X(1)), (E(2),))
+
+    def test_p8_done_needs_an_examination_established_as_the_sessions(self):
+        """p16 (MR3): an act-only colonoscopy X1, a sessionless examination E5 done today by the team (it may be X1's or
+        another session's) and a sessionless plan E4. E5 passing rows 2-5 is not X1's own done examination, so the
+        plan may be X1's only one: held, every witness on the plan."""
+        doc = act_only_colonoscopy()
+        doc.event(5, kind=sup(Kind.EXAMINATION), status=sup(Status.PERFORMED), date=sup(ON), performer=sup(TEAM),
+                  entry=sup(DC))
+        doc.event(4, kind=sup(Kind.EXAMINATION), status=sup(Status.PLANNED), date=sup(ct.DateRelation.LATER_DATE))
+        R = doc.build()
+        self.assertEqual(EV.examinations(R, X(1)), (E(5), E(4)))
+        evaluation = decide('45385', R)
+        self.assertFalse(ready(evaluation))
+        self.assertEqual({held.subject for held in evaluation.held_facts}, {E(4)})
+        doc.event(5, kind=sup(Kind.EXAMINATION), status=sup(Status.PERFORMED), date=sup(ON), performer=sup(TEAM),
+                  entry=sup(DC), session=sup(X(1)))  # the control: E5 established as X1's own done examination
+        self.assertTrue(ready(decide('45385', doc.build())))
+
+    def test_p9_an_examination_tied_to_a_missing_session_may_be_any_sessions(self):
+        """MR4 (4.11): K2 leaves a tie naming a session the FactSet does not hold unresolved, still claiming it. Such an
+        examination may be any session's: in an act-only session it holds; beside the session's done examination,
+        in doubt, it holds too."""
+        for name, base in {'act-only': act_only_colonoscopy, 'beside its done examination': colonoscopy}.items():
+            with self.subTest(name):
+                doc = base()
+                doc.event(5, kind=sup(Kind.EXAMINATION), status=doubted(Status.PERFORMED), session=unres(X(9)),
+                          date=sup(ON), performer=sup(TEAM), entry=sup(DC))
+                R = doc.build()
+                self.assertIn(E(5), EV.examinations(R, X(1)))
+                evaluation = decide('45385', R)
+                self.assertFalse(ready(evaluation))
+                self.assertIn(E(5), {held.subject for held in evaluation.held_facts})
+
+
+class UpperStations(SimpleTestCase):
+    """4a P4: STATIONS and LIMITED read only the members that may name an upper station; an unestablished station
+    outside the upper tract (the jejunum) holds nothing."""
+
+    @staticmethod
+    def eus(extra, kind=None, reached=(sup(Extent.SECOND_PORTION_DUODENUM),)):
+        """p14: an upper EUS X1, its three upper stations supported examined and ``extra`` members, reaching the second
+        portion of the duodenum (its examination E1; with ``kind``, an act E2 of it)."""
+        doc = Doc()
+        doc.session(1, SessionKind.EUS, tract=sup(ct.Tract.UPPER), reached=list(reached),
+                    stations=[sup(Station.ESOPHAGUS), sup(Station.STOMACH), sup(Station.DUODENUM), *extra])
+        doc.exam(1, places=[sup(Landmark.PANCREAS)])
+        if kind is not None:
+            doc.act(2, kind, places=[sup(Landmark.PANCREAS)])
+        return doc.build()
+
+    def test_p14_an_unestablished_jejunum_holds_nothing(self):
+        for name, jejunum in {'unresolved': unres(Station.JEJUNUM), 'doubted': doubted(Station.JEJUNUM),
+                              'supported': sup(Station.JEJUNUM), 'negated': neg(Station.JEJUNUM)}.items():
+            with self.subTest(name):
+                self.assertTrue(ready(decide('43259', self.eus([jejunum]))))
+                self.assertTrue(ready(decide('43242', self.eus([jejunum], Kind.FNA))))
+        # a member that may name an upper station is still read: the stomach's doubted reading holds
+        self.assertFalse(ready(decide('43259', self.eus([doubted(Station.JEJUNUM, Station.STOMACH)]))))
+
+    def test_limited_never_rests_on_the_jejunum(self):
+        """43231 (a reach short of the duodenum needed) with no reach stated: its question rests on no station outside
+        the upper tract - before, the unresolved jejunum was the witness."""
+        R = eus_fna([unres(Station.JEJUNUM)], reached=())
+        evaluation = decide('43231', R)
+        self.assertEqual([entry[:3] for entry in keys(evaluation)], [('exam_stations', 13, QUESTION)])
+        self.assertIsNone(evaluation.held_facts[0].result)
+
+
+class TractD226(SimpleTestCase):
+    """D226: an EUS session filed pancreatobiliary fits every upper EUS code's TRACT row; the lower EUS codes still need
+    lower."""
+
+    def test_pancreatobiliary_is_upper_for_an_eus(self):
+        every = [sup(Station.ESOPHAGUS), sup(Station.STOMACH), sup(Station.DUODENUM)]
+        R = eus_fna(every, tract=sup(ct.Tract.PANCREATOBILIARY))
+        for code in ('43259', '43242'):
+            with self.subTest(code=code):
+                self.assertTrue(ready(decide(code, R)))
+        self.assertEqual([row.truth for row in EV.code_rows('43259', (Kind.EXAMINATION,), R, E(1))
+                          if row.requirement is Tag.TRACT], [T])
+        doc = Doc()
+        doc.session(1, SessionKind.EUS, tract=sup(ct.Tract.PANCREATOBILIARY), reached=[sup(Extent.SIGMOID_COLON)])
+        doc.exam(1)
+        self.assertEqual(keys(decide('45341', doc.build())), [('procedure', 8, EXPLANATION, rule(Q.Rule.TRACT))])
+        R = eus_fna(every, tract=unres(ct.Tract.PANCREATOBILIARY))
+        self.assertEqual([entry[:3] for entry in keys(decide('43259', R))], [('procedure', 8, QUESTION)])
+
+
+# --- repair r4a, round 2 (refute-r4a-r1: F1, F4, F7; F6's doubted counterpart; F5's unit-less entry) ------------------
+
+
+def stent_doubt(kind=Kind.STENT_REMOVAL, session=X(1), number=5):
+    """p20: "It is unclear whether the old biliary stent was removed." kept as an unlisted DOUBT (kind ``kind``, card
+    ``session``) in its own unit."""
+    return unlisted(ct.UnlistedWhat.DOUBT, kind, session, unit(number))
+
+
+def bleeding(**over) -> FactSet:
+    """An EGD X1 with a bleeding control E2 (its kind supported) and ``over``'s facts: 43255."""
+    doc = egd()
+    doc.act(2, Kind.BLEEDING_CONTROL, places=[sup(Landmark.STOMACH)], **over)
+    return doc.build()
+
+
+def lower_eus(*reached, approach=None, stoma=True) -> FactSet:
+    """refute-r4a-r1 p29: a lower EUS X1 (its examination E1) of the stoma class's code 44406, its reach ``reached``,
+    its approach ``approach``, an anatomy entry of type stoma supported (``stoma``)."""
+    doc = Doc()
+    doc.session(1, SessionKind.EUS, tract=sup(ct.Tract.LOWER), reached=list(reached), approach=approach)
+    if stoma:
+        doc.entry(1, type=sup(ct.AnatomyType.STOMA))
+    doc.exam(1)
+    return doc.build()
+
+
+class UnlistedDoubts(SimpleTestCase):
+    """refute-r4a-r1 F1 (critical; built fail-closed, the step's NOTES question Q1): an unlisted DOUBT about an act
+    leaves the act possibly performed (4.2 [R:HO-1]: a doubt is never an absence), so every absence condition reads it
+    as it reads the stated act (D216) - the weaker statement never releases what the stated act holds (P6). An unlisted
+    DENIAL is a statement only (3.2.6 rule 4; condition 5)."""
+
+    def test_p20_an_unlisted_doubt_of_the_removal_holds_43274_never_ready(self):
+        """p20: the placement E2 (biliary) filed and "It is unclear whether the old biliary stent was removed." kept as
+        an unlisted doubt (card X1, no card, or a card naming no session): 43274 held with one item - the duct question
+        naming the removal it doubts, quoting its own unit - as the stated act holds it; never READY. A card naming
+        another session the FactSet holds sets the doubt apart, as it sets a filed act apart."""
+        for name, entry in {'card X1': stent_doubt(), 'no card': stent_doubt(session=None),
+                            'a card naming no session': stent_doubt(session=X(9)),
+                            'the stated act': unlisted(ct.UnlistedWhat.ACT, Kind.STENT_REMOVAL, X(1), unit(5))}.items():
+            with self.subTest(name):
+                doc = stent_placement(None)
+                doc.unlisted.append(entry)
+                R = doc.build()
+                evaluation = decide('43274', R, kept=(unit(2),))
+                self.assertFalse(ready(evaluation))
+                self.assertEqual(keys(evaluation), [('act_target', 11, QUESTION, rule(Q.Rule.EXCHANGE))])
+                found = item('43274', R, kept=(unit(2),))
+                self.assertEqual((found.message, found.fill.act, found.fill.words, found.fill.whole),
+                                 (Q.MessageId.SAME_DUCT, Kind.STENT_REMOVAL, (unit(5),), Kind.STENT))
+        doc = stent_placement(None)
+        doc.session(2, SessionKind.ERCP)
+        doc.unlisted.append(stent_doubt(session=X(2)))
+        self.assertTrue(ready(decide('43274', doc.build(), kept=(unit(2),))))
+        doc = Doc()  # 43275: an unlisted doubt of the placement beside the filed removal
+        doc.session(1, SessionKind.ERCP)
+        doc.exam(1)
+        doc.act(2, Kind.STENT_REMOVAL, duct=sup(ct.Duct.BILIARY))
+        doc.unlisted.append(stent_doubt(Kind.STENT))
+        self.assertEqual(keys(decide('43275', doc.build())), [('act_target', 11, QUESTION, rule(Q.Rule.EXCHANGE))])
+
+    def test_an_unlisted_denial_is_no_possibly_performed_act(self):
+        """Question Q1's built reading: "The old stent was not removed." kept as an unlisted DENIAL leaves 43274 READY
+        (4.3 XCHG's X1: the removal negated, 43274 can be READY); condition 5 still reads it, so 43276 is never excluded
+        beside it."""
+        doc = stent_placement(None)
+        doc.unlisted.append(unlisted(ct.UnlistedWhat.DENIAL, Kind.STENT_REMOVAL, X(1), unit(5)))
+        R = doc.build()
+        self.assertEqual(EV.synthetic_possible(R), ())
+        self.assertTrue(ready(decide('43274', R, kept=(unit(2),))))
+        self.assertEqual(EV.synthetic_possible(stent_placement(Kind.STENT_REMOVAL).build()),
+                         (unlisted(ct.UnlistedWhat.ACT, Kind.STENT_REMOVAL, X(1), unit(5)),))
+
+    def test_every_absence_condition_reads_an_unlisted_doubt(self):
+        """43276's pair candidates: a filed placement beside an unlisted doubt of the removal is a possible exchange -
+        bound on the placement, its one item the doubt (rank 2) naming the removal, true for a doubt - and a cited
+        exchange denial beside them excludes nothing (p31: the first patch EXCLUDED 43276 there). 4.6 condition 5:
+        two unlisted doubts that may be one session's removal and placement keep a cited exchange denial from excluding
+        43276. Row 7: an act-only colonoscopy beside an unlisted doubt of its examination (or of no kind) is not done;
+        a doubt carded to another session holds nothing."""
+        doc = stent_placement(None)
+        doc.unlisted.append(stent_doubt())
+        evaluation = decide('43276', doc.build())
+        self.assertEqual(evaluation.bindings, {(Kind.STENT_EXCHANGE,): E(2)})
+        self.assertIn(('performed_status', 2, QUESTION, 'unlisted'), keys(evaluation))
+        found = item('43276', doc.build())
+        self.assertEqual((found.message, found.fill.act, found.fill.words), (Q.MessageId.DOUBT, Kind.STENT_REMOVAL,
+                                                                            (unit(5),)))
+        denial_event(doc, number=6, kind=Kind.STENT_EXCHANGE)
+        evaluation = decide('43276', doc.build(), kept=(Span(600, 625),))
+        self.assertIsNone(evaluation.exclusion)
+        self.assertFalse(ready(evaluation))
+        doc = Doc()
+        doc.session(1, SessionKind.ERCP)
+        doc.exam(1)
+        denial_event(doc, number=6, kind=Kind.STENT_EXCHANGE)
+        doc.unlisted += [stent_doubt(number=4), stent_doubt(Kind.STENT)]
+        evaluation = decide('43276', doc.build(), kept=(Span(600, 625),))
+        self.assertIsNone(evaluation.exclusion)
+        self.assertFalse(ready(evaluation))
+        for name, kind in {'kind examination': Kind.EXAMINATION, 'no kind': None}.items():
+            with self.subTest(name):
+                doc = act_only_colonoscopy()
+                doc.unlisted.append(unlisted(ct.UnlistedWhat.DOUBT, kind, X(1), unit(5)))
+                R = doc.build()
+                self.assertEqual(truths('45385', R, E(2))[rq.Requirement.SUP_SESSION_DONE], U)
+                self.assertIn(('performed_status', 2, QUESTION, 'unlisted'), keys(decide('45385', R)))
+        doc = act_only_colonoscopy()
+        doc.session(2, SessionKind.EGD)
+        doc.unlisted.append(unlisted(ct.UnlistedWhat.DOUBT, Kind.EXAMINATION, X(2), unit(5)))
+        self.assertTrue(ready(decide('45385', doc.build())))
+
+    def test_row_7_beside_the_sessions_done_examination_adds_nothing_for_an_act_or_a_doubt(self):
+        """F2 / question Q2, ruled by D232 (option (b)): beside the session's own done examination a synthetic
+        examination adds nothing - the stated act and the doubt alike (the doubt still never releases what the act
+        holds: neither holds row 7 here, and both do in an act-only session, test_every_absence_condition_*)."""
+        for what in (ct.UnlistedWhat.ACT, ct.UnlistedWhat.DOUBT):
+            with self.subTest(what=what):
+                doc = colonoscopy()
+                doc.unlisted.append(unlisted(what, Kind.EXAMINATION, X(1), unit(7)))
+                self.assertTrue(ready(decide('45385', doc.build())))
+
+
+class OwnAttribute(SimpleTestCase):
+    """refute-r4a-r1 F4 (D225 P7; r3c-2's request R5): every witness rests on the fact that is not T under that fact's
+    own attribute - a contradicted purpose is no conflict about the cause, a contradicted reach none about the stations,
+    a contradicted target lesion none about where the act was done (p22, p26)."""
+
+    def witnesses(self, code, R):
+        return [(held.fact, held.attribute, held.subject, held.result) for held in decide(code, R).held_facts]
+
+    def test_cause_rests_on_the_purpose_or_the_cause(self):
+        """p22 (1): 43255, the bleeding control's purpose contradicted hemostasis / prophylaxis and its cause supported:
+        the conflict is about the purpose; the cause contradicted: about the cause."""
+        hemostasis = ct.Purpose.HEMOSTASIS
+        R = bleeding(purpose=contra(hemostasis, ct.Purpose.PROPHYLAXIS), cause=sup(ct.Cause.PRE_EXISTING_LESION))
+        self.assertEqual(self.witnesses('43255', R),
+                         [('conflict:bleeding_control', A.PURPOSE, E(2), Res.CONTRADICTED)])
+        R = bleeding(purpose=sup(hemostasis), cause=contra(ct.Cause.PRE_EXISTING_LESION, ct.Cause.SPONTANEOUS))
+        self.assertEqual(self.witnesses('43255', R), [('conflict:bleeding_control', A.CAUSE, E(2), Res.CONTRADICTED)])
+
+    def test_stations_and_limited_rest_on_the_reach_or_the_station(self):
+        """p22 (2), p26 (43237): the three stations supported and the reach contradicted - the conflict is about the
+        reach (the session's, its examination's key); a station contradicted - about the stations; a reach not
+        established (no conflict) - its question rests on the reach too."""
+        every = [sup(Station.ESOPHAGUS), sup(Station.STOMACH), sup(Station.DUODENUM)]
+        reach = (contra(Extent.SECOND_PORTION_DUODENUM, Extent.STOMACH),)
+        for code, stations in (('43259', every), ('43242', every), ('43237', every[:2])):
+            with self.subTest(code=code):
+                R = eus_fna(stations, reached=reach)
+                self.assertEqual(self.witnesses(code, R), [('conflict:examination', A.REACHED, X(1), Res.CONTRADICTED)])
+        R = eus_fna([sup(Station.ESOPHAGUS), contra(Station.STOMACH, Station.DUODENUM)])
+        self.assertEqual(self.witnesses('43242', R), [('conflict:examination', A.STATIONS, X(1), Res.CONTRADICTED)])
+        R = eus_fna(every, reached=(unres(Extent.SECOND_PORTION_DUODENUM),))
+        self.assertEqual([(fact, attribute) for fact, attribute, _, _ in self.witnesses('43242', R)],
+                         [('exam_stations', A.REACHED)])
+        R = eus_fna([sup(Station.ESOPHAGUS), unres(Station.STOMACH)], reached=())
+        self.assertEqual([(fact, attribute) for fact, attribute, _, _ in self.witnesses('43231', R)],
+                         [('exam_stations', A.STATIONS)])
+
+    def test_site_rests_on_the_lesion_the_acts_places_or_the_lesions_places(self):
+        """p26: 43249, a balloon dilation at the distal esophagus whose target lesion is contradicted L1 / L2 (both at
+        the distal esophagus): the conflict is about the lesion; the act's own place contradicted - about where it was
+        done; its supported lesion's place contradicted - about where the lesion lies."""
+        doc = dilation(sup(Landmark.DISTAL_ESOPHAGUS), lesion=contra(L(1), L(2)))
+        doc.lesion(1, lesion_places=[sup(Landmark.DISTAL_ESOPHAGUS)])
+        doc.lesion(2, lesion_places=[sup(Landmark.DISTAL_ESOPHAGUS)])
+        self.assertEqual(self.witnesses('43249', doc.build()),
+                         [('conflict:dilation', A.TARGET_LESION, E(2), Res.CONTRADICTED)])
+        R = dilation(contra(Landmark.DISTAL_ESOPHAGUS, Landmark.STOMACH)).build()
+        self.assertEqual(self.witnesses('43249', R), [('conflict:dilation', A.TARGET_PLACES, E(2), Res.CONTRADICTED)])
+        doc = dilation(sup(Landmark.DISTAL_ESOPHAGUS), lesion=sup(L(1)))
+        doc.lesion(1, lesion_places=[contra(Landmark.DISTAL_ESOPHAGUS, Landmark.STOMACH)])
+        self.assertEqual(self.witnesses('43249', doc.build()),
+                         [('conflict:dilation', A.PLACES, E(2), Res.CONTRADICTED)])
+
+
+class LowerApproach(SimpleTestCase):
+    """refute-r4a-r1 F7 (HO-8, 4.8): LOWER records the stoma class's approach beside its reach whenever either is not
+    T, so an unestablished reach never hides the RANK row 8 approach - the item asks the approach first."""
+
+    def test_p29_the_approach_is_recorded_beside_an_open_reach(self):
+        """p29: 44406, reached [sigmoid colon supported, descending colon unresolved], the approach silent, a stoma
+        entry supported: the extent question AND the approach question are held; the item is the approach (row 8)."""
+        R = lower_eus(sup(Extent.SIGMOID_COLON), unres(Extent.DESCENDING_COLON))
+        evaluation = decide('44406', R)
+        self.assertEqual([(held.fact, held.rank, held.kind, held.attribute) for held in evaluation.held_facts],
+                         [('extent', 14, QUESTION, A.REACHED), ('procedure', 8, QUESTION, A.APPROACH)])
+        self.assertEqual(item('44406', R).message, Q.MessageId.EXAMINATION_ROUTE)
+
+    def test_every_reach_beside_every_approach(self):
+        """The reach's witness and the approach's are each recorded when not T; the row is F when either rests on an
+        established failure. A reach outside the class beside an approach established oral: two explanations, the
+        approach's asked first (row 8); no reach stated beside through_stoma with no stoma entry: two questions; the
+        reach met beside through_stoma and a stoma entry: READY."""
+        R = lower_eus(sup(Extent.DUODENUM), approach=sup(ct.Approach.ORAL))
+        self.assertEqual(keys(decide('44406', R)), [('extent', 14, EXPLANATION, rule(Q.Rule.LOWER)),
+                                                    ('procedure', 8, EXPLANATION, rule(Q.Rule.LOWER))])
+        self.assertEqual([row.truth for row in EV.code_rows('44406', (Kind.EXAMINATION,), R, E(1))
+                          if row.requirement is Tag.LOWER], [F])
+        self.assertEqual(item('44406', R).message, Q.MessageId.EXAMINATION_APPROACH)
+        R = lower_eus(approach=sup(ct.Approach.THROUGH_STOMA), stoma=False)
+        self.assertEqual([entry[:3] for entry in keys(decide('44406', R))],
+                         [('extent', 14, QUESTION), ('procedure', 8, QUESTION)])
+        self.assertEqual([row.truth for row in EV.code_rows('44406', (Kind.EXAMINATION,), R, E(1))
+                          if row.requirement is Tag.LOWER], [U])
+        self.assertTrue(ready(decide('44406', lower_eus(sup(Extent.STOMA), approach=sup(ct.Approach.THROUGH_STOMA)))))
+        # a non-stoma class reads no approach (45341: the sigmoidoscopic class)
+        doc = Doc()
+        doc.session(1, SessionKind.EUS, tract=sup(ct.Tract.LOWER), reached=[unres(Extent.SIGMOID_COLON)],
+                    approach=sup(ct.Approach.ORAL))
+        doc.exam(1)
+        self.assertEqual([entry[:3] for entry in keys(decide('45341', doc.build()))], [('extent', 14, QUESTION)])
+
+
+class SameDuctCounterpart(SimpleTestCase):
+    """D225 beside refute-r4a-r1 F6: a stent act beside a filed counterpart in the same duct whose status is not
+    established is held by whether the two were one exchange, ABOUT THE COUNTERPART - the act whose performance is
+    unknown - never about the code's own act, whose status is supported. Both established (F6's p28) stays about the
+    code's own act (question Q7: no id words "the two are one exchange")."""
+
+    def test_the_doubted_removal_is_named(self):
+        R = stent_placement(dict(status=doubted(Status.PERFORMED), duct=sup(ct.Duct.BILIARY))).build()
+        evaluation = decide('43274', R, kept=(unit(2),))
+        self.assertEqual([(held.fact, held.rank, held.subject, held.result) for held in evaluation.held_facts],
+                         [('performed_status', 4, E(5), Res.UNKNOWN)])
+        found = item('43274', R, kept=(unit(2),))
+        self.assertEqual((found.message, found.fill.act, found.fill.words), (Q.MessageId.STATUS, Kind.STENT_REMOVAL,
+                                                                            (unit(5),)))
+        R = stent_placement(dict(duct=sup(ct.Duct.BILIARY))).build()  # p28: both established
+        self.assertEqual([(held.subject, held.result) for held in decide('43274', R, kept=(unit(2),)).held_facts],
+                         [(E(2), None)])
+
+
+class UnitlessEntries(SimpleTestCase):
+    """refute-r4a-r1 F5: a kept unlisted act or doubt with no units (pass 2 named no unit the reader knows) is still
+    read by every absence condition - fail-closed, never READY - and its held code still carries exactly one item; that
+    item quotes nothing of the entry (it has no words), which wording's SYNTHETIC_ACT, DOUBT and SAME_DUCT name without
+    a quote since D246 (repair r3c; D160 (3)'s rule; tests/v2/test_questions.py OneItem builds each)."""
+
+    def test_a_unitless_entry_still_holds_with_one_item(self):
+        doc = act_only_colonoscopy()
+        doc.unlisted.append(UnlistedStatement(units=(), what=ct.UnlistedWhat.ACT, kind=Kind.EXAMINATION, session=X(1)))
+        R = doc.build()
+        self.assertFalse(ready(decide('45385', R)))
+        found = item('45385', R)
+        self.assertEqual((found.message, found.fill.act, found.fill.words),
+                         (Q.MessageId.SYNTHETIC_ACT, Kind.EXAMINATION, ()))
+        doc = stent_placement(None)
+        doc.unlisted.append(UnlistedStatement(units=(), what=ct.UnlistedWhat.DOUBT, kind=Kind.STENT_REMOVAL,
+                                              session=X(1)))
+        R = doc.build()
+        self.assertFalse(ready(decide('43274', R, kept=(unit(2),))))
+        found = item('43274', R, kept=(unit(2),))
+        self.assertEqual((found.message, found.fill.act, found.fill.words), (Q.MessageId.SAME_DUCT, Kind.STENT_REMOVAL,
+                                                                            ()))
+
+
+# --- repair r4a of round w7r (DECISIONS D232, D240) -------------------------------------------------------------------
+
+
+def p41(what=ct.UnlistedWhat.DOUBT, card=X(1), egd_beside=False, kind=Kind.EXAMINATION) -> Doc:
+    """refute-r4a-r2 p41 (N1): a colonoscopy X1 to the cecum, its examination E1 established done, the cold snare E2 of
+    L1 at the sigmoid colon, every fact established; pass 2's ONE kept unlisted entry of kind examination in unit 9 -
+    with card X1 (e.g. "It is unclear whether the colonoscopy was complete.") or none (e.g. "It is not known whether
+    she had a colonoscopy before."). ``egd_beside``: also an EGD X2 (its examination E3 done, a biopsy E4 at the
+    stomach)."""
+    doc = colonoscopy()
+    if egd_beside:
+        doc.session(2, SessionKind.EGD, reached=[sup(Extent.SECOND_PORTION_DUODENUM)])
+        doc.exam(3, session=X(2))
+        doc.act(4, Kind.BIOPSY, session=X(2), places=[sup(Landmark.STOMACH)])
+    if what is not None:
+        doc.unlisted.append(unlisted(what, kind, card, unit(9)))
+    return doc
+
+
+class D232Row7(SimpleTestCase):
+    """D232 (refute-r4a-r2 N1, high; the earlier NOTES' question Q2, option (b)): beside an examination established as
+    the session's, a synthetic examination adds nothing - row 7 reads it only in an act-only session (``act_only``:
+    combination.session_done's act-only arm, D227's one derivation). The base code keeps 3.2.6 rule 3's base_included
+    hold (step 4d's) and an unlisted doubt keeps 3.2.6 rule 4's pairing with the possibly positive acts of its kinds
+    (row 8); F1's reading of a removal doubt (XCHG, 43274 and 43276) stays (UnlistedDoubts). The sentences
+    (D232's naming): tests/v2/test_questions.py D232Sentences."""
+
+    def test_p41_an_unlisted_doubt_beside_the_colonoscopys_done_examination_leaves_45385_ready(self):
+        """p41: one kept unlisted doubt (or act) of kind examination, card X1 or none, beside the colonoscopy's done
+        examination - 45385 READY, row 7 T (the first patch's outcome; r4a round 2 held it). An act of no kind adds
+        nothing either; a doubt of no kind still holds 45385, through 3.2.6 rule 4 alone (row 8: it pairs with every
+        possibly positive act of every session, the snare E2 included), never through row 7."""
+        for what in (ct.UnlistedWhat.DOUBT, ct.UnlistedWhat.ACT):
+            for card in (X(1), None):
+                for kind in (Kind.EXAMINATION, None):
+                    with self.subTest(what=what, card=card, kind=kind):
+                        R = p41(what, card, kind=kind).build()
+                        self.assertEqual(truths('45385', R, E(2))[rq.Requirement.SUP_SESSION_DONE], T)
+                        if what is ct.UnlistedWhat.DOUBT and kind is None:
+                            self.assertEqual(truths('45385', R, E(2))[rq.Requirement.SUP_CLEAN], U)
+                            self.assertEqual([(held.rank, held.cause, held.subject)
+                                              for held in decide('45385', R).held_facts], [(2, 'unlisted', E(2))])
+                            continue
+                        self.assertTrue(ready(decide('45385', R)))
+                        self.assertIsNone(item('45385', R))
+
+    def test_p41_beside_an_egd_the_unlisted_doubt_holds_nothing_through_row_7(self):
+        """p41's no-card variant: beside an EGD X2 whose examination E3 is done, 43239 (the biopsy E4) and 45385 are
+        READY - row 7 no longer names "the upper endoscopy" in doubt for a sentence about another examination."""
+        R = p41(card=None, egd_beside=True).build()
+        for code, act in (('43239', E(4)), ('45385', E(2))):
+            with self.subTest(code=code):
+                self.assertTrue(ready(decide(code, R)))
+                self.assertEqual(truths(code, R, act)[rq.Requirement.SUP_SESSION_DONE], T)
+
+    def test_the_base_code_keeps_3_2_6_rule_4s_pair_with_the_examination(self):
+        """An unlisted doubt keeps 3.2.6 rule 4: of kind examination, it pairs with each session's examination
+        (card X1: the colonoscopy's E1; no card: every session's) - 45378 (and, with no card, 43235) held, its item
+        rule 4's pair at RANK row 2 (D228), cause unlisted, about the examination, never row 7's synthetic doubt; never
+        READY. (The other session's examination is a candidate of another family, row 6: its witness is kept, HO-8.)
+        Carded X1, the doubt never pairs with the EGD's examination: 43235 READY. An unlisted act is no rule-4
+        statement (row 8 reads denials and doubts), so beside the done examination it holds 45378 only through step
+        4d's base_included."""
+        for card in (X(1), None):
+            with self.subTest(card=card):
+                R = p41(card=card, egd_beside=True).build()
+                for code, examination in (('45378', E(1)), ('43235', E(3))):
+                    evaluation = decide(code, R)
+                    self.assertFalse([held for held in evaluation.held_facts
+                                      if held.cause == 'unlisted' and held.subject in (X(1), X(2))])
+                    if code == '43235' and card == X(1):
+                        self.assertTrue(ready(evaluation))
+                        continue
+                    found = item(code, R)
+                    self.assertEqual((found.held.fact, found.held.rank, found.held.cause, found.held.subject),
+                                     ('performed_status', 2, 'unlisted', examination))
+        self.assertTrue(ready(decide('45378', p41(ct.UnlistedWhat.ACT, None).build())))
+
+    def test_an_examination_established_but_not_done_reads_no_synthetic_one(self):
+        """"Row 7 reads it only in an act-only session": beside an examination established as the session's that is not
+        done (its date not established), the session is held by that examination's own witness, never by the synthetic
+        act's doubt (no ``unlisted`` cause)."""
+        doc = colonoscopy()
+        doc.exam(1, date=unres(ON))
+        doc.unlisted.append(unlisted(ct.UnlistedWhat.ACT, Kind.EXAMINATION, X(1), unit(9)))
+        evaluation = decide('45385', doc.build())
+        self.assertEqual(keys(evaluation), [('event_time', 6, QUESTION, 'appraisal:unclear')])
+        self.assertEqual(evaluation.held_facts[0].subject, E(1))
+
+    def test_an_act_only_session_still_reads_it_and_a_weakened_tie_makes_a_session_act_only(self):
+        """The act-only arm: no event established as the session's examination - a colonoscopy whose examination's kind
+        or session is not established (weakened) is act-only, so the synthetic examination holds again (monotone under
+        9.4: weakening never establishes an examination)."""
+        doc = act_only_colonoscopy()
+        doc.unlisted.append(unlisted(ct.UnlistedWhat.DOUBT, Kind.EXAMINATION, None, unit(9)))
+        self.assertTrue(EV.act_only(doc.build(), X(1)))
+        self.assertIn(('performed_status', 2, QUESTION, 'unlisted'), keys(decide('45385', doc.build())))
+        R = p41(ct.UnlistedWhat.DOUBT, X(1)).build()
+        self.assertFalse(EV.act_only(R, X(1)))
+        for name, kind, session in (('kind', unres(Kind.EXAMINATION), sup(X(1))),
+                                    ('session', sup(Kind.EXAMINATION), unres(X(1)))):
+            with self.subTest(weakened=name):
+                doc = p41(ct.UnlistedWhat.DOUBT, X(1))
+                doc.act(1, kind, session=session)
+                self.assertTrue(EV.act_only(doc.build(), X(1)))
+                self.assertFalse(ready(decide('45385', doc.build())))
+
+
+def site_fit(second=sup(Landmark.DUODENAL_BULB), device=sup(Device.BALLOON)) -> FactSet:
+    """6c B (D240): "The distal esophageal stricture was dilated with a balloon. The duodenal bulb stricture was dilated
+    with a balloon." - an EGD X1 (its examination E3), the esophageal dilation E1 (balloon, the distal esophagus) and the
+    duodenal one E2 (``device``, ``second`` its place), every fact established."""
+    doc = Doc()
+    doc.session(1, SessionKind.EGD, reached=[sup(Extent.SECOND_PORTION_DUODENUM)])
+    doc.exam(3)
+    doc.act(1, Kind.DILATION, places=[sup(Landmark.DISTAL_ESOPHAGUS)], device=sup(Device.BALLOON))
+    doc.act(2, Kind.DILATION, places=[second] if second is not None else [], device=device)
+    return doc.build()
+
+
+class D240SiteFit(SimpleTestCase):
+    """D240 (6c B, high; D29's installed reading kept: "A verified target outside the class does not support"):
+    evaluate's code rows read only the supporting acts within the code's SITE class - beside an act established within
+    the class, one established outside it leaves E* and no code row reads it (``_site_fit``). Combination's half (the
+    claims, step r4d) and gate 6's CORPUS entry (6c) are not this step's."""
+
+    def test_the_site_fit_input_gives_43249_on_the_esophageal_act_and_43245_on_the_duodenal_one(self):
+        R = site_fit()
+        for code, act in (('43249', E(1)), ('43245', E(2))):
+            with self.subTest(code=code):
+                evaluation = decide(code, R)
+                self.assertTrue(ready(evaluation))
+                self.assertEqual(evaluation.supporting, (act,))
+                self.assertIsNone(item(code, R))
+
+    def test_an_act_outside_the_class_holds_nothing_through_the_codes_other_rows(self):
+        """The duodenal dilation with a wire-guided bougie: its another-technique misfit is never read for 43249 (it is
+        no supporting act of 43249, whose rows read the esophageal act alone: READY); 43245, which has no technique
+        row, is READY on it."""
+        R = site_fit(device=sup(Device.WIRE_BOUGIE))
+        self.assertIsNone(rq.spec('43245').row.technique)
+        for code, act in (('43249', E(1)), ('43245', E(2))):
+            with self.subTest(code=code):
+                evaluation = decide(code, R)
+                self.assertTrue(ready(evaluation))
+                self.assertEqual(evaluation.supporting, (act,))
+
+    def test_an_act_whose_site_is_not_established_stays_and_is_read(self):
+        """The step's NOTES, question QB (built: the design's SITE row, and monotone): a dilation whose place is not
+        established beside the esophageal one stays in E* and asks which structure was dilated - held, never READY;
+        an anastomosis likewise (a surgically made place is never "outside")."""
+        for second in (None, unres(Landmark.DUODENAL_BULB), sup(Landmark.ANASTOMOSIS)):
+            with self.subTest(second=second.value if second is not None else None):
+                evaluation = decide('43249', site_fit(second=second))
+                self.assertEqual(evaluation.supporting, (E(1), E(2)))
+                self.assertEqual([(held.fact, held.rank, held.kind, held.subject) for held in evaluation.held_facts],
+                                 [('act_target', 11, QUESTION, E(2))])
+
+    def test_with_no_act_within_the_class_every_act_stays_as_before(self):
+        """No act established within the class: every supporting act is read, as before D240 - the another-site
+        explanation of the one outside it, and the site question of one not established (asked first)."""
+        doc_only_outside = Doc()
+        doc_only_outside.session(1, SessionKind.EGD, reached=[sup(Extent.SECOND_PORTION_DUODENUM)])
+        doc_only_outside.exam(3)
+        doc_only_outside.act(2, Kind.DILATION, places=[sup(Landmark.DUODENAL_BULB)], device=sup(Device.BALLOON))
+        evaluation = decide('43249', doc_only_outside.build())
+        self.assertEqual((evaluation.supporting, keys(evaluation)),
+                         ((E(2),), [('act_target', 11, EXPLANATION, rule(Q.Rule.SITE))]))
+        doc = Doc()
+        doc.session(1, SessionKind.EGD, reached=[sup(Extent.SECOND_PORTION_DUODENUM)])
+        doc.exam(3)
+        doc.act(1, Kind.DILATION, places=[unres(Landmark.DISTAL_ESOPHAGUS)], device=sup(Device.BALLOON))
+        doc.act(2, Kind.DILATION, places=[sup(Landmark.DUODENAL_BULB)], device=sup(Device.BALLOON))
+        evaluation = decide('43249', doc.build())
+        self.assertEqual(evaluation.supporting, (E(1), E(2)))
+        self.assertEqual([(held.fact, held.kind, held.subject) for held in evaluation.held_facts],
+                         [('act_target', QUESTION, E(1)), ('act_target', EXPLANATION, E(2))])
+        self.assertEqual((item('43249', doc.build()).held.kind, item('43249', doc.build()).held.subject),
+                         (QUESTION, E(1)))
+
+    def test_codes_with_no_site_row_keep_every_supporting_act(self):
+        """A code with no SITE row reads every supporting act, as before (45386's balloon dilations at two places)."""
+        doc = colonoscopy(snare=False)
+        doc.act(2, Kind.DILATION, places=[sup(Landmark.ANASTOMOSIS)], device=sup(Device.BALLOON))
+        doc.act(3, Kind.DILATION, places=[sup(Landmark.SIGMOID_COLON)], device=sup(Device.BALLOON))
+        self.assertEqual(decide('45386', doc.build()).supporting, (E(2), E(3)))
+
+
+def digital_colonoscopy(what=ct.UnlistedWhat.DOUBT, card=X(1), device=sup(Device.MANUAL)) -> Doc:
+    """refute-r4a-r1 P1: a colonoscopy X1 to the cecum told through its acts - the digital rectal examination E1 filed as
+    its examination (kind examination, ``device`` - manual: FINAL 5.6 E13 - session X1, every fact established: D100's
+    attested filing) and the cold snare E2 of L1 at the sigmoid colon - and pass 2's ONE kept unlisted ``what`` of kind
+    examination in unit 9 with ``card`` (the D216 shape: "The colonoscope was advanced to the cecum." missed by pass 1,
+    kept by pass 2); ``what`` None: no unlisted entry."""
+    doc = colonoscopy(snare=True)
+    doc.exam(1, device=device)
+    if what is not None:
+        doc.unlisted.append(unlisted(what, Kind.EXAMINATION, card, unit(9)))
+    return doc
+
+
+def act_only_egd_beside(what=ct.UnlistedWhat.DOUBT, card=X(2)) -> Doc:
+    """refute-r4a-r1 P5: the colonoscopy X1 (its examination E1 done, the snare E2) beside an EGD X2 told only through
+    its biopsy E4 (no examination filed: act-only), and pass 2's ONE kept unlisted ``what`` of kind examination in unit
+    9 with ``card``."""
+    doc = colonoscopy()
+    doc.session(2, SessionKind.EGD, reached=[sup(Extent.SECOND_PORTION_DUODENUM)])
+    doc.act(4, Kind.BIOPSY, session=X(2), places=[sup(Landmark.STOMACH)])
+    doc.unlisted.append(unlisted(what, Kind.EXAMINATION, card, unit(9)))
+    return doc
+
+
+class R4a2Repairs(SimpleTestCase):
+    """Repair r4a-2 of round w7r, evaluate.py's half of refute-r4a-r1: P1 (critical) - a digital examination (FINAL 5.6
+    E13: device manual) never makes a session non-act-only, as combination.session_done's act-only arm excepts it
+    (D227's one derivation), and its device weakened never does either (P-MONO); P5 - act_only is read per session."""
+
+    def test_p1_a_digital_examination_beside_the_acts_leaves_the_session_act_only(self):
+        """P1's input: the digital rectal examination E1 is no examination of the colonoscopy, so X1 is act-only and
+        pass 2's unlisted examination (a doubt or an act, carded X1 or none) holds 45385 with its own item - as the
+        same document without the DRE line does (the first patch: READY in all four, a false READY). With no unlisted
+        entry the DRE holds nothing (the snare's session is the act's own: READY). The item (restated for D258, repair
+        r4a of round w8r): the act SYNTHETIC_ACT, the doubt carded X1 DOUBT - each quoting its own unit - and the doubt
+        with no card UNLISTED_SCOPE, the colonoscopy's examination asked with no words of its own: the DRE's sentence is
+        never quoted as the colonoscopy's (E13: no session's examination, questions.digital_examination)."""
+        self.assertTrue(ready(decide('45385', digital_colonoscopy(what=None).build())))
+        for what in (ct.UnlistedWhat.DOUBT, ct.UnlistedWhat.ACT):
+            for card in (X(1), None):
+                with self.subTest(what=what, card=card):
+                    R = digital_colonoscopy(what, card).build()
+                    self.assertTrue(EV.act_only(R, X(1)))
+                    evaluation = decide('45385', R)
+                    self.assertFalse(ready(evaluation))
+                    self.assertIn(('performed_status', 2, QUESTION, 'unlisted'), keys(evaluation))
+                    found = item('45385', R)
+                    scope = what is ct.UnlistedWhat.DOUBT and card is None
+                    self.assertEqual((found.held.subject, found.fill.act, found.fill.words),
+                                     (X(1), Kind.EXAMINATION, () if scope else (unit(9),)))
+                    self.assertEqual(found.message, Q.MessageId.SYNTHETIC_ACT if what is ct.UnlistedWhat.ACT
+                                     else Q.MessageId.UNLISTED_SCOPE if scope else Q.MessageId.DOUBT)
+                    if scope:
+                        self.assertEqual(found.fill.statements, ((unit(9),),))
+
+    def test_p1_a_weakened_manual_device_still_claims_it_and_another_device_does_not(self):
+        """P-MONO (9.4): the DRE's device weakened - unresolved, doubted, contradicted - keeps its manual claim, so the
+        session stays act-only and 45385 held (combination's reading of a SUPPORTED manual device alone would make the
+        weakened DRE the session's done examination and release 45385). A device silent - the endoscopic examination's
+        usual filing, D232's N1 shape -, established as another device, or manual negated claims none: that examination
+        is the session's, and the unlisted examination adds nothing (READY)."""
+        for name, device in (('unresolved', unres(Device.MANUAL)), ('doubted', doubted(Device.MANUAL)),
+                             ('contradicted', contra(Device.MANUAL, Device.ENDOSCOPE))):
+            with self.subTest(device=name):
+                R = digital_colonoscopy(device=device).build()
+                self.assertTrue(EV.act_only(R, X(1)))
+                self.assertFalse(ready(decide('45385', R)))
+        for name, device in (('silent', None), ('endoscope', sup(Device.ENDOSCOPE)), ('manual negated',
+                                                                                      neg(Device.MANUAL))):
+            with self.subTest(device=name):
+                R = digital_colonoscopy(device=device).build()
+                self.assertFalse(EV.act_only(R, X(1)))
+                self.assertTrue(ready(decide('45385', R)))
+
+    def test_p5_act_only_is_read_per_session(self):
+        """P5's input: an established examination of the colonoscopy X1 never makes the EGD X2 - told only through its
+        biopsy - non-act-only: pass 2's unlisted examination carded X2, or with no card, holds 43239 (row 7 on the
+        biopsy E4: the synthetic doubt, its subject X2); 45385 stays READY beside X1's done examination."""
+        for what in (ct.UnlistedWhat.DOUBT, ct.UnlistedWhat.ACT):
+            for card in (X(2), None):
+                with self.subTest(what=what, card=card):
+                    R = act_only_egd_beside(what, card).build()
+                    self.assertEqual((EV.act_only(R, X(1)), EV.act_only(R, X(2))), (False, True))
+                    self.assertEqual(truths('43239', R, E(4))[rq.Requirement.SUP_SESSION_DONE], U)
+                    self.assertFalse(ready(decide('43239', R)))
+                    self.assertEqual(item('43239', R).held.subject, X(2))
+                    self.assertTrue(ready(decide('45385', R)))
+
+
+A2_OTHERS = ('history', 'plan', 'plan, session empty')
+
+
+def dre_colonoscopy(other, *, dre=True, what=None, card=X(1), device=sup(Device.MANUAL)) -> Doc:
+    """refute-r4a-r2 A2 (DECISIONS D253): a colonoscopy X1 to the cecum told through its cold snare E2 of L1 at the
+    sigmoid colon; with ``dre`` its digital rectal examination E1 filed as X1's examination (kind examination,
+    ``device`` - manual: FINAL 5.6 E13 -, done today, every fact established); ``other`` an examination E3 of another
+    occasion: 'history' - "Colonoscopy in 2019 was normal." filed in X1, its session supported and its date established
+    earlier (a2, a2b); 'plan' - "Repeat colonoscopy in 3 years." filed in X1, its session supported and its status
+    planned (a2c; F1's 'a plan filed in the session'); 'plan, session empty' - the same with its session slot empty and
+    a later date (a2d, the builder's QX (i)); and pass 2's kept unlisted ``what`` of kind examination in unit 9 with
+    ``card`` (D216's missed "The colonoscope was advanced to the cecum."; ``what`` None: no entry)."""
+    doc = Doc()
+    doc.session(1, SessionKind.COLONOSCOPY, encounter=sup(ct.EncounterRelation.THIS_ENCOUNTER),
+                reached=[sup(Extent.CECUM)])
+    if dre:
+        doc.exam(1, device=device)
+    doc.lesion(1, lesion_places=[sup(Landmark.SIGMOID_COLON)])
+    doc.act(2, Kind.SNARE, places=[sup(Landmark.SIGMOID_COLON)], lesion=sup(L(1)), device=sup(Device.COLD_SNARE))
+    if other == 'history':
+        doc.exam(3, date=sup(EARLIER))
+    elif other == 'plan':
+        doc.exam(3, status=sup(Status.PLANNED))
+    else:
+        doc.event(3, kind=sup(Kind.EXAMINATION), status=sup(Status.PLANNED), date=sup(ct.DateRelation.LATER_DATE))
+    if what is not None:
+        doc.unlisted.append(unlisted(what, Kind.EXAMINATION, card, unit(9)))
+    return doc
+
+
+A2_ENTRIES = ((None, None), (ct.UnlistedWhat.DOUBT, X(1)), (ct.UnlistedWhat.DOUBT, None), (ct.UnlistedWhat.ACT, X(1)),
+              (ct.UnlistedWhat.ACT, None))
+
+
+class D253Row7(SimpleTestCase):
+    """DECISIONS D253 (refute-r4a-r2 A2, critical; QE13 option (a)): row 7's ``done`` excepts the digital examination
+    (``_digital``: FINAL 5.6 E13, a device CLAIMING manual) as ``act_only`` does, so a digital examination never counts
+    as the session's done examination - beside it an examination of another occasion filed in (or possibly in) the
+    session holds the code exactly as it does without the DRE line, and row 7's two readings of "the session's
+    examination" agree with D227's session_done. A fact E13 says never counts releases nothing. The sentences of the
+    unlisted entries (D258): tests/v2/test_questions.py D258UnlistedScope."""
+
+    def test_a2_45385_is_held_with_the_dre_line_as_without_it(self):
+        """refute-r4a-r2's a2, a2c and a2d shapes (A2_OTHERS) with no unlisted entry, an unlisted doubt or act of kind
+        examination carded X1 or none: 45385 HELD in every DRE variant (the final tree of round w7r: READY, a false
+        READY), with the same held facts and the same item as the same document without the DRE line; row 7 is not T
+        on the snare."""
+        for other in A2_OTHERS:
+            for what, card in A2_ENTRIES:
+                with self.subTest(other=other, what=what, card=card):
+                    with_dre = dre_colonoscopy(other, what=what, card=card).build()
+                    without = dre_colonoscopy(other, dre=False, what=what, card=card).build()
+                    evaluation = decide('45385', with_dre)
+                    self.assertFalse(ready(evaluation))
+                    self.assertIsNone(evaluation.exclusion)
+                    self.assertNotEqual(truths('45385', with_dre, E(2))[rq.Requirement.SUP_SESSION_DONE], T)
+                    self.assertEqual(evaluation.held_facts, decide('45385', without).held_facts)
+                    self.assertEqual(item('45385', with_dre), item('45385', without))
+
+    def test_a2_row_7_agrees_with_d227s_session_done(self):
+        """Row 7's two readings of the session's examination - ``done`` and ``act_only`` - read E13 as D227's
+        session_done does: on a2 and a2c (the examination of another occasion filed in X1) the DRE is no done
+        examination of X1 for either, so neither says the session is done, with the DRE line or without it."""
+        from studio.interpretation.engine import combination
+        for other in ('history', 'plan'):
+            for dre in (True, False):
+                with self.subTest(other=other, dre=dre):
+                    R = dre_colonoscopy(other, dre=dre).build()
+                    self.assertFalse(combination.session_done(R, X(1)))
+                    self.assertFalse(EV.act_only(R, X(1)))
+                    self.assertEqual(truths('45385', R, E(2))[rq.Requirement.SUP_SESSION_DONE], F)
+
+    def test_a2b_through_assess_45385_is_held_with_the_same_item(self):
+        """a2b: the history shape through engine/assess (the proposal provider selecting 45385 on the snare's unit):
+        needs_clarification with the DRE line and without it, the one item the same (the history's own question)."""
+        from tests.v2 import test_assess as TA
+        for what, card in A2_ENTRIES[:4]:
+            with self.subTest(what=what, card=card):
+                found = [TA.by_code(TA.run(dre_colonoscopy('history', dre=dre, what=what, card=card).build(),
+                                           ('45385', 2)))['45385'] for dre in (True, False)]
+                self.assertEqual([entry.status.value for entry in found], ['needs_clarification'] * 2)
+                self.assertEqual(found[0].item, found[1].item)
+                self.assertEqual(found[0].item.held.subject, E(3))
+
+    def test_qe13_a_device_claiming_manual_is_never_the_done_examination_and_another_device_is(self):
+        """QE13 option (a), in ``done`` as in ``act_only``: the DRE's device weakened - unresolved, doubted,
+        contradicted - still claims manual, so beside the plan or the history 45385 stays held (P-MONO; a supported-only
+        reading would release it). A device silent (the endoscopic examination's usual filing), established as another
+        device, or manual negated claims none: E1 is the session's own done examination, and the examination of another
+        occasion adds nothing (READY, F1's reading)."""
+        for other in ('history', 'plan'):
+            for name, device in (('unresolved', unres(Device.MANUAL)), ('doubted', doubted(Device.MANUAL)),
+                                 ('contradicted', contra(Device.MANUAL, Device.ENDOSCOPE))):
+                with self.subTest(other=other, device=name):
+                    self.assertFalse(ready(decide('45385', dre_colonoscopy(other, device=device).build())))
+            for name, device in (('silent', None), ('endoscope', sup(Device.ENDOSCOPE)),
+                                 ('manual negated', neg(Device.MANUAL))):
+                with self.subTest(other=other, device=name):
+                    R = dre_colonoscopy(other, device=device).build()
+                    self.assertTrue(ready(decide('45385', R)))
+                    self.assertEqual(truths('45385', R, E(2))[rq.Requirement.SUP_SESSION_DONE], T)
+
+
+def dre_alone(family=SessionKind.COLONOSCOPY, reach=Extent.CECUM, *, device=sup(Device.MANUAL), dre=True,
+              endoscopic=None) -> Doc:
+    """refute-r4a-r1 P1 of round w8r: a session X1 of ``family`` (a colonoscopy to the cecum, or a flexible
+    sigmoidoscopy to the sigmoid colon) whose only filed event is E1, kind examination, ``device`` (manual: FINAL 5.6
+    E13's digital rectal examination, D100's attested filing), done today by the documenting team, every fact
+    established; ``dre`` False: no event at all. ``endoscopic``: also E2, an examination of X1 with these facts (its
+    device silent: the endoscopic examination's usual filing, "The colonoscope was advanced to the cecum.")."""
+    doc = Doc()
+    doc.session(1, family, encounter=sup(ct.EncounterRelation.THIS_ENCOUNTER), reached=[sup(reach)])
+    if dre:
+        doc.exam(1, device=device)
+    if endoscopic is not None:
+        doc.exam(2, **endoscopic)
+    return doc
+
+
+class DigitalSupport(SimpleTestCase):
+    """refute-r4a-r1 P1 of round w8r (critical; FINAL 5.6 E13, DECISIONS D253: "A fact E13 says never counts can never
+    release a code"; v1's events.supports, D100): a digital examination - its device claiming manual - is no session's
+    examination, so it never supports an examination group (45378, 45330, every code of catalogue.requirements'
+    (examination,)): row 1 is never T on it. The digital rectal examination filed as the colonoscopy's only examination
+    no longer makes 45378 READY (nor 45330 for a flexible sigmoidoscopy): the code is held with the item the same
+    document gets without the DRE line. The DRE stays a candidate, so 4.6's exclusion reads what it read (9.4)."""
+
+    CASES = ((SessionKind.COLONOSCOPY, Extent.CECUM, '45378'), (SessionKind.FLEX_SIG, Extent.SIGMOID_COLON, '45330'))
+
+    def test_p1_a_digital_examination_alone_never_supports_the_base_code(self):
+        """P1's input: 45378 (45330) on the DRE alone - the round's first patch: READY, a false READY. Now held, never
+        excluded, nothing supporting; row 1 F on E1 (its device established manual), its witness the not-documented
+        question, kept among the held facts. Restated for DECISIONS D265 (repair r4a of round w9r): the DRE never takes
+        the binding, so the one item IS the item without the DRE line - the code-level not-documented question (no
+        subject, no attribute, the kept spans), held fact, message and Fill alike (before: the DRE's own witness, subject
+        E1, attribute technique.device, with the same message and Fill)."""
+        for family, reach, code in self.CASES:
+            with self.subTest(code=code):
+                R = dre_alone(family, reach).build()
+                evaluation = decide(code, R)
+                self.assertFalse(ready(evaluation))
+                self.assertIsNone(evaluation.exclusion)
+                self.assertEqual(evaluation.supporting, ())
+                self.assertEqual(dict(evaluation.bindings), {})
+                self.assertEqual(truths(code, R, E(1))[rq.Requirement.SUP_KIND], F)
+                self.assertIn(('performed_status', 4, QUESTION, rule(Q.Rule.NOT_DOCUMENTED)), keys(evaluation))
+                found, without = item(code, R), item(code, dre_alone(family, reach, dre=False).build())
+                self.assertEqual((found.message, without.message), (Q.MessageId.NOT_DOCUMENTED,) * 2)
+                self.assertEqual(found, without)
+                self.assertEqual((found.held.subject, found.held.attribute), (None, None))
+
+    def test_p1_a_device_claiming_manual_never_supports_and_another_device_does(self):
+        """QE13 option (a), the one predicate (questions.digital_examination): a device that claims manual without
+        establishing it - unresolved, doubted, contradicted - never supports either (row 1 U: the device's own
+        question; P-MONO: a weakened manual device keeps its claim); a device silent, established as another device,
+        or manual negated claims none: E1 is the session's examination and supports the code (READY)."""
+        for family, reach, code in self.CASES:
+            for name, device in (('unresolved', unres(Device.MANUAL)), ('doubted', doubted(Device.MANUAL)),
+                                 ('contradicted', contra(Device.MANUAL, Device.ENDOSCOPE))):
+                with self.subTest(code=code, device=name):
+                    R = dre_alone(family, reach, device=device).build()
+                    self.assertFalse(ready(decide(code, R)))
+                    self.assertEqual(truths(code, R, E(1))[rq.Requirement.SUP_KIND], U)
+            for name, device in (('silent', None), ('endoscope', sup(Device.ENDOSCOPE)),
+                                 ('manual negated', neg(Device.MANUAL))):
+                with self.subTest(code=code, device=name):
+                    evaluation = decide(code, dre_alone(family, reach, device=device).build())
+                    self.assertTrue(ready(evaluation))
+                    self.assertEqual(evaluation.supporting, (E(1),))
+
+    def test_p1_beside_an_endoscopic_examination_only_that_one_supports(self):
+        """The common report: the DRE E1 and the colonoscope's examination E2 both filed as X1's examination - 45378
+        READY on E2 alone (the DRE never in E*); E2 established not done (status planned) leaves 45378 held, never
+        READY on the DRE."""
+        R = dre_alone(endoscopic={}).build()
+        evaluation = decide('45378', R)
+        self.assertTrue(ready(evaluation))
+        self.assertEqual(evaluation.supporting, (E(2),))
+        evaluation = decide('45378', dre_alone(endoscopic=dict(status=sup(Status.PLANNED))).build())
+        self.assertFalse(ready(evaluation))
+        self.assertEqual(evaluation.supporting, ())
+
+    def test_p1_a_cited_denial_beside_the_dre_is_read_as_before(self):
+        """The DRE stays a candidate (row 1 only), so 4.6 reads what it read: a positive DRE holds the code beside a
+        denial of the colonoscopy that 45378 cites (never excluded beside a possibly performed examination), and the
+        DRE established of another date leaves the exclusion to the cited denial, as without the DRE line."""
+        for dre, expected in (({}, 'held'), (dict(date=sup(EARLIER)), 'excluded')):
+            with self.subTest(dre=dre):
+                doc = dre_alone(device=sup(Device.MANUAL), dre=False)
+                doc.exam(1, device=sup(Device.MANUAL), **dre)
+                denial_event(doc, number=3, kind=Kind.EXAMINATION)
+                evaluation = decide('45378', doc.build(), (Span(300, 325),))
+                status = 'excluded' if evaluation.exclusion is not None else 'ready' if ready(evaluation) else 'held'
+                self.assertEqual(status, expected)
+
+    def test_p1_through_assess_the_renderer_words_it_as_without_the_dre_line(self):
+        """Through engine/assess (45378 selected on the DRE's unit) and the renderer's own call, jobs.word_item: held
+        needs_clarification, the question and the reason those of the same document without the DRE line."""
+        from studio import jobs
+        from tests.v2 import test_assess as TA
+        for family, reach, code in self.CASES:
+            with self.subTest(code=code):
+                worded = []
+                for dre in (True, False):
+                    R = dre_alone(family, reach, dre=dre).build()
+                    assessment = TA.run(R, (code, 1))
+                    found = TA.by_code(assessment)[code]
+                    self.assertEqual(found.status.value, 'needs_clarification')
+                    spec = jobs.word_item(found.item, found.key, assessment.combination, R, TA.TEXT)
+                    worded.append((spec.question, spec.reason))
+                self.assertEqual(worded[0], worded[1])
+
+
+def status_of(evaluation: Evaluation) -> str:
+    """A per-code decision's status: excluded, ready or held."""
+    if evaluation.exclusion is not None:
+        return 'excluded'
+    return 'ready' if ready(evaluation) else 'held'
+
+
+def assessed(R: FactSet, *codes) -> dict:
+    """engine/assess over ``R`` (tests/v2/test_assess.run, each code selected on its unit): {code: (status, item)}."""
+    from tests.v2 import test_assess as TA
+    return {found.code: (found.status.value, found.item) for found in TA.run(R, *codes).codes}
+
+
+def dre_codes(snare: bool, kept: int) -> tuple:
+    """The grid's codes: 45378 kept on ``kept``'s unit, and 45385 on the snare E3's when there is one."""
+    return (('45378', kept),) + ((('45385', 3),) if snare else ())
+
+
+class D265DigitalNeverWords(SimpleTestCase):
+    """DECISIONS D265 (repair r4a of round w9r; refute-r4a-r2 F1, F3, Q4+; r4a-2 Q4 QDRE; TRIAGE G1-02, G1-04, G2-19): a
+    digital examination (FINAL 5.6 E13: its device claiming manual) never words, binds or changes an item - every
+    code's status and item, and the binding that chooses it, equal the same FactSet's without the digital examination's
+    events and the relations that pair it, over refute-r4a-r2's grids (its probes/: F1's 104 rows, F3's 20, Q4's and
+    Q4+'s shapes, D253's A2 shapes). The DRE stays a candidate (repair r4a-2's DV1), so D253 stays: it never releases
+    a code, and a positive one is never excluded beside; a digital examination statement concerns no group."""
+
+    def test_the_whole_grid_through_assess_gives_every_code_the_item_without_the_dre(self):
+        """Every row of refute-r4a-r2's grid with a claiming DRE (8,064 rows, every code), through engine/assess: each
+        code's status and ONE item are the same FactSet's without E1. Where F1 (the claimed-manual DRE's device question
+        as "Was the colonoscopy (<the DRE's sentence>) done ...", 104 rows) and F3 (the DRE's rank-4 witness taking the
+        binding from the colonoscope's examination E2, 20 rows) were found - E2 with its performer open, planned or of an
+        earlier date (2,304 rows of 45378, 1,152 of 45385) - exactly equal; elsewhere exactly equal too, assess's R6
+        extent hold included: its spans quote the session's examinations (step 5a's _session_spans), never the digital
+        examination (engine/assess._examinations excepts it: this step's request R1, applied by the integration of
+        round w9r, which restated this test from "equal but for the DRE's unit" to exactly equal on every row)."""
+        rows = strict = 0
+        cache: dict = {}
+        for dre, where, other, snare, statement, reach, kept in itertools.product(
+                DRE_CLAIMING, DRE_SESSIONS, DRE_OTHERS, (False, True), DRE_STATEMENTS, DRE_REACHES, DRE_KEPT):
+            codes = dre_codes(snare, kept)
+            found = assessed(dre_grid(dre, where, other, snare, statement, reach), *codes)
+            key = (other, snare, statement, reach, kept)
+            if key not in cache:
+                cache[key] = assessed(dre_grid('none', 'X1', other, snare, statement, reach), *codes)
+            without = cache[key]
+            for code in found:
+                rows += 1
+                ours, theirs = found[code], without[code]
+                if other in ('performer_unres', 'planned', 'earlier'):  # F1's and F3's rows
+                    strict += 1
+                if ours != theirs:  # every row exactly equal
+                    with self.subTest(shape=(dre, where, other, snare, statement, reach, kept), code=code):
+                        self.assertEqual(ours, theirs)
+        self.assertEqual((rows, strict), (8064, 2304 + 1152))
+
+    def test_the_whole_grid_at_the_per_code_rule_gives_the_item_and_binding_without_the_dre(self):
+        """Every row of refute-r4a-r2's grid with a claiming DRE (8,064 rows, every code): engine/evaluate's decision -
+        its status, its supporting acts, its bindings - and its ONE item (questions.item over its held facts) equal the
+        same FactSet's without E1, held fact, message and Fill alike."""
+        rows = 0
+        cache: dict = {}
+
+        def decided(R, code, kept):
+            evaluation = decide(code, R, kept)
+            return (status_of(evaluation), evaluation.supporting, dict(evaluation.bindings),
+                    EV.item(code, tuple(kept), R, evaluation))
+
+        for dre, where, other, snare, statement, reach, kept in itertools.product(
+                DRE_CLAIMING, DRE_SESSIONS, DRE_OTHERS, (False, True), DRE_STATEMENTS, DRE_REACHES, DRE_KEPT):
+            R = dre_grid(dre, where, other, snare, statement, reach)
+            key = (other, snare, statement, reach)
+            if key not in cache:
+                cache[key] = dre_grid('none', 'X1', other, snare, statement, reach)
+            for code, at in dre_codes(snare, kept):
+                rows += 1
+                ours, theirs = decided(R, code, (unit(at),)), decided(cache[key], code, (unit(at),))
+                if ours != theirs:
+                    with self.subTest(shape=(dre, where, other, snare, statement, reach, kept), code=code):
+                        self.assertEqual(ours, theirs)
+        self.assertEqual(rows, 8064)
+
+    def test_f3_the_colonoscopes_examination_takes_the_binding(self):
+        """F3's shape: the DRE E1 (device manual, done) and E2, the colonoscope's examination, its performer (or date
+        relation, or entry, or status) open; 45378 kept on E2's unit, the DRE's or unit 7: the binding is E2 and the
+        item E2's own question - never "records no colonoscopy documented as done" on E1."""
+        for name, over in (('performer', dict(performer=unres(TEAM))), ('date', dict(date=unres(ON))),
+                           ('entry', dict(entry=unres(DC))), ('status', dict(status=unres(Status.PERFORMED)))):
+            for kept in (2, 1, 7):
+                with self.subTest(open=name, kept=kept):
+                    R = dre_alone(endoscopic=over).build()
+                    evaluation = decide('45378', R, (unit(kept),))
+                    self.assertEqual(dict(evaluation.bindings), {(Kind.EXAMINATION,): E(2)})
+                    found = EV.item('45378', (unit(kept),), R, evaluation)
+                    self.assertEqual(found.held.subject, E(2))
+                    self.assertNotEqual(found.message, Q.MessageId.NOT_DOCUMENTED)
+                    self.assertEqual(found, item('45378', without_events(R, E(1)), (unit(kept),)))
+
+    def test_q4_and_q4plus_an_examination_statement_never_pairs_with_the_dre(self):
+        """r4a-2 Q4: the DRE E1 as the colonoscopy's only examination beside "No colonoscopy was performed today." (E3:
+        examination, negated, all of its kind, today, X1) or the same statement doubted - before, the CONFLICT "The
+        record states the colonoscopy (manual) both as performed and as not performed". refute-r4a-r2 Q4+: the DRE
+        beside E2, whose status is unresolved - before, STATEMENT_SCOPE "Does <E2> apply to the colonoscopy (manual)
+        (<the DRE's sentence>)?". engine/pairing pairs neither statement with the DRE (the examination is no kind of a
+        digital act), and through engine/assess every code's status and item are the document's without E1, 45378
+        kept on the DRE's unit, the statement's or unit 7."""
+        from studio.interpretation.engine import pairing
+        shapes = []
+        for name, status in (('denial', neg(Status.PERFORMED)), ('doubted', doubted(Status.PERFORMED))):
+            for dre in (True, False):
+                doc = dre_alone(dre=dre)
+                denial_event(doc, number=3, kind=Kind.EXAMINATION, status=status)
+                shapes.append((f'Q4 {name}', dre, doc.build(), E(3)))
+        for dre in (True, False):
+            shapes.append(('Q4+', dre, dre_alone(dre=dre, endoscopic=dict(status=unres(Status.PERFORMED))).build(),
+                           E(2)))
+        found: dict = {}
+        for name, dre, R, statement in shapes:
+            if dre:
+                self.assertFalse(pairing.paired(R, statement, E(1)))
+                self.assertEqual(pairing.pairs_of(R, E(1)), ())
+            for kept in (1, 3, 7):
+                found[(name, dre, kept)] = assessed(R, ('45378', kept))
+        for name, dre, R, statement in shapes:
+            for kept in (1, 3, 7):
+                with self.subTest(shape=name, kept=kept):
+                    self.assertEqual(found[(name, True, kept)], found[(name, False, kept)])
+                    self.assertNotEqual(found[(name, True, kept)]['45378'][1].message, Q.MessageId.CONFLICT)
+
+    def test_d253_a2_shapes_every_code_has_the_item_without_the_dre(self):
+        """D253's A2 shapes (``dre_colonoscopy``: the DRE filed as the colonoscopy's examination beside "Colonoscopy in
+        2019 was normal." or a planned repeat filed in the session, with no unlisted entry or pass 2's doubt or act of
+        kind examination, carded X1 or none) through engine/assess: 45385 on the snare and 45378 on the DRE's, the
+        snare's or the other examination's unit - every status and item the same document's without the DRE line (D253
+        tested 45385 alone)."""
+        for other in A2_OTHERS:
+            for what, card in A2_ENTRIES:
+                for kept in (1, 2, 3):
+                    with self.subTest(other=other, what=what, card=card, kept=kept):
+                        codes = (('45385', 2), ('45378', kept))
+                        self.assertEqual(assessed(dre_colonoscopy(other, what=what, card=card).build(), *codes),
+                                         assessed(dre_colonoscopy(other, dre=False, what=what, card=card).build(),
+                                                  *codes))
+
+    def test_a_digital_examination_statement_never_excludes_nor_asks_its_scope(self):
+        """A digital examination is no session's examination as a statement either (``_concerns``, ``possibly_here``):
+        "No digital rectal examination was performed." (E1: examination, device manual, status negated, all of its
+        kind, today, X1) cited by 45378's kept evidence beside the colonoscopy's snare - before, 45378 EXCLUDED by it;
+        a digital rectal examination of an earlier date cited - before, EXCLUDED by its date; the denial with its
+        session not established - before, its statement_scope question. Each is the document's without the DRE line:
+        held, the code-level not-documented question."""
+        cases = (('denial', dict(status=neg(Status.PERFORMED), breadth=sup(Breadth.ALL_OF_KIND))),
+                 ('earlier', dict(date=sup(EARLIER))),
+                 ('denial, session open', dict(status=neg(Status.PERFORMED), breadth=sup(Breadth.ALL_OF_KIND),
+                                              session=unres(X(1)))))
+        for name, over in cases:
+            with self.subTest(case=name):
+                doc = colonoscopy(snare=True)
+                doc.act(1, Kind.EXAMINATION, device=sup(Device.MANUAL), kind_words=Span(103, 111),
+                        status_words=Span(100, 125), **over)
+                R = doc.build()
+                kept = (Span(100, 125),)
+                evaluation = decide('45378', R, kept)
+                self.assertIsNone(evaluation.exclusion)
+                self.assertEqual(status_of(evaluation), 'held')
+                found = EV.item('45378', kept, R, evaluation)
+                self.assertEqual(found, item('45378', without_events(R, E(1)), kept))
+                self.assertEqual(found.message, Q.MessageId.NOT_DOCUMENTED)
+
+    def test_a_positive_dre_beside_a_statement_4_6_would_exclude_by_asks_its_scope(self):
+        """The fail-closed side (repair r4a-2's DV1, P-MONO; the step's NOTES, question Q-R4A-EXCL): the DRE alone is a
+        positive candidate - its date on the date of service negated, so it doubts no exclusion through 4.6 condition
+        5 - beside "No colonoscopy was performed today." cited exactly: the same document without the DRE line
+        EXCLUDES 45378, and with it 45378 is held, never excluded, its item the statement's scope question (the
+        citation beside a doubt), never the DRE's. With the DRE possibly done today, condition 5 gives the same item."""
+        for name, over in (('date negated', dict(date=neg(ON))), ('done today', {})):
+            with self.subTest(dre=name):
+                doc = dre_alone(dre=False)
+                doc.exam(1, device=sup(Device.MANUAL), **over)
+                denial_event(doc, number=3, kind=Kind.EXAMINATION)
+                R = doc.build()
+                kept = (Span(300, 325),)
+                self.assertEqual(status_of(decide('45378', without_events(R, E(1)), kept)), 'excluded')
+                evaluation = decide('45378', R, kept)
+                self.assertEqual(status_of(evaluation), 'held')
+                found = EV.item('45378', kept, R, evaluation)
+                self.assertEqual((found.message, found.held.subject, found.held.cause),
+                                 (Q.MessageId.STATEMENT_SCOPE, E(3), rule(Q.Rule.STATEMENT_SCOPE)))
+
+
 class Properties(SimpleTestCase):
     """P-MONO and P-READSET at the per-code rule's level (9.4; step 6a owns the engine-wide properties), over every
     fixture of all_fixtures(): weakening one established fact to unresolved, or adding a doubt to one fact, never makes a
@@ -1443,6 +2789,25 @@ class Properties(SimpleTestCase):
                     with self.subTest(code=code, weakened=str(name)):
                         self.assertNotIn(after, ('ready', 'excluded'))
         self.assertGreater(count, 1000)
+
+    def test_p_mono_an_unlisted_act_told_as_a_doubt_never_releases(self):
+        """refute-r4a-r1 F1 (P6; 4.2 [R:HO-1]): every fixture's kept unlisted ACT told as a DOUBT instead - the weaker
+        statement - never turns HELD into READY or EXCLUDED: every absence condition reads the doubt as it reads the
+        act."""
+        count = 0
+        for code, R, kept in all_fixtures():
+            before = self.status(decide(code, R, kept))
+            for index, entry in enumerate(R.unlisted):
+                if entry.what is not ct.UnlistedWhat.ACT:
+                    continue
+                doubt = dataclasses.replace(entry, what=ct.UnlistedWhat.DOUBT)
+                weaker = dataclasses.replace(R, unlisted=(*R.unlisted[:index], doubt, *R.unlisted[index + 1:]))
+                after = self.status(decide(code, weaker, kept))
+                count += 1
+                if before == 'held':
+                    with self.subTest(code=code, entry=index):
+                        self.assertEqual(after, 'held')
+        self.assertGreaterEqual(count, 10)
 
     def test_p_readset_decide_reads_only_what_the_codes_requirements_read(self):
         real_fact, real_members = facts_module.fact, facts_module.members
@@ -1553,6 +2918,12 @@ def all_fixtures() -> list:
     denial_event(doc, session=unres(X(1)))
     out.append(('45386', doc.build(), (unit(1),)))
     out += repair_fixtures()
+    out += r4a_fixtures()
+    out += r4a2_fixtures()
+    out += w7r_fixtures()
+    out += w8r_fixtures()
+    out += w8r_refuted_fixtures()
+    out += w9r_fixtures()
     return out
 
 
@@ -1600,4 +2971,271 @@ def repair_fixtures() -> list:
     doc = colonoscopy(snare=False)  # T2
     doc.act(2, Kind.BAND_LIGATION, places=[sup(Landmark.ANAL_CANAL), sup(Landmark.SIGMOID_COLON)])
     out.append(('46221', doc.build(), ()))
+    return out
+
+
+def r4a_fixtures() -> list:
+    """(code, FactSet, kept) for repair r4a's shapes (refute-4a-r2 p10-p17, D216, D225, D226): OneItem builds each held
+    code's one item (D182) and P-MONO weakens each - READY shapes included, whose weakenings must stay out of
+    EXCLUDED."""
+    out = []
+    for removal in (Kind.STENT_REMOVAL, None, dict(status=doubted(Status.PERFORMED)), {}):  # p10, P6
+        if removal is None:
+            doc = stent_placement(None)
+            doc.unlisted.append(unlisted(ct.UnlistedWhat.ACT, None, X(1), unit(5)))
+        else:
+            doc = stent_placement(removal)
+        out += [('43274', doc.build(), (unit(2),)), ('43276', doc.build(), (unit(2),))]
+    doc = stent_placement(dict(duct=sup(ct.Duct.BILIARY)), duct=None)  # P6: the placement's duct the unknown one
+    out.append(('43274', doc.build(), ()))
+    doc = egd()  # p11, P2
+    doc.act(2, Kind.DILATION, places=[sup(Landmark.DISTAL_ESOPHAGUS)], device=sup(Device.BALLOON), date=unres(ON),
+            performer=unres(TEAM))
+    doc.act(3, Kind.DILATION, places=[sup(Landmark.DUODENUM)], device=sup(Device.BALLOON), date=unres(ON))
+    out.append(('43249', doc.build(), ()))
+    for tie in (sup(X(1)), unres(X(1))):  # p12b, P3
+        out.append(('99213', Row7Repairs.office(tie), ()))
+    for kind, stations in (('43259', [unres(Station.JEJUNUM)]), ('43242', [doubted(Station.JEJUNUM)])):  # p14, P4
+        out.append((kind, UpperStations.eus(stations, Kind.FNA if kind == '43242' else None), ()))
+    for approach, stoma in ((None, True), (unres(ct.Approach.THROUGH_STOMA), True), (sup(ct.Approach.THROUGH_STOMA),
+                                                                                    False)):  # p13, P5
+        doc = Doc()
+        doc.session(1, SessionKind.EUS, tract=sup(ct.Tract.LOWER), reached=[sup(Extent.SIGMOID_COLON)],
+                    approach=approach)
+        if stoma:
+            doc.entry(1, type=sup(ct.AnatomyType.STOMA))
+        doc.exam(1)
+        out.append(('44406', doc.build(), ()))
+    doc = colonoscopy(date=contra(ON, EARLIER, spans=(unit(2),)))  # p15, P7
+    out.append(('45385', doc.build(), ()))
+    doc = colonoscopy(status=contra(Status.PERFORMED, Status.PLANNED, spans=(unit(2),)))
+    out.append(('45385', doc.build(), ()))
+    doc = dilation(sup(Landmark.DISTAL_ESOPHAGUS), device=contra(Device.BALLOON, Device.BOUGIE, spans=(unit(2),)))
+    out.append(('43249', doc.build(), ()))
+    out.append(('43242', eus_fna([sup(Station.ESOPHAGUS), contra(Station.STOMACH, Station.DUODENUM,
+                                                                 spans=(unit(1),))]), ()))
+    doc = act_only_colonoscopy()  # p16, P8
+    doc.event(5, kind=sup(Kind.EXAMINATION), status=sup(Status.PERFORMED), date=sup(ON), performer=sup(TEAM),
+              entry=sup(DC))
+    doc.event(4, kind=sup(Kind.EXAMINATION), status=sup(Status.PLANNED), date=sup(ct.DateRelation.LATER_DATE))
+    out.append(('45385', doc.build(), ()))
+    doc = act_only_colonoscopy()  # P9: a tie naming a missing session
+    doc.event(5, kind=sup(Kind.EXAMINATION), status=doubted(Status.PERFORMED), session=unres(X(9)), date=sup(ON),
+              performer=sup(TEAM), entry=sup(DC))
+    out.append(('45385', doc.build(), ()))
+    for places in ([Landmark.PANCREAS, Landmark.BILE_DUCT], [Landmark.BILE_DUCT, Landmark.PANCREAS]):  # p17, P10
+        doc = Doc()
+        doc.session(1, SessionKind.EUS, tract=sup(ct.Tract.UPPER), reached=[sup(Extent.DUODENUM)])
+        doc.exam(1)
+        doc.act(2, Kind.DRAINAGE, structure=sup(ct.Structure.PANCREATIC_FLUID_COLLECTION),
+                places=[sup(place) for place in places], route=sup(ct.Route.EUS_TRANSMURAL))
+        out.append(('43240', doc.build(), ()))
+    for entry in (unlisted(ct.UnlistedWhat.ACT, Kind.EXAMINATION, X(1), unit(5)),
+                  unlisted(ct.UnlistedWhat.ACT, None, None, unit(5))):  # D216, row 7
+        doc = act_only_colonoscopy()
+        doc.unlisted.append(entry)
+        out.append(('45385', doc.build(), ()))
+        doc = colonoscopy()
+        doc.unlisted.append(entry)
+        out.append(('45385', doc.build(), ()))
+    doc = egd()  # D216, condition 5: an unlisted clip beside a cited bleeding-control denial
+    denial_event(doc, number=6, kind=Kind.BLEEDING_CONTROL)
+    doc.unlisted.append(unlisted(ct.UnlistedWhat.ACT, Kind.CLIP, X(1), unit(5)))
+    out.append(('43255', doc.build(), (Span(600, 625),)))
+    doc = Doc()  # D216, condition 5: two synthetic parts beside a cited exchange denial
+    doc.session(1, SessionKind.ERCP)
+    doc.exam(1)
+    denial_event(doc, number=6, kind=Kind.STENT_EXCHANGE)
+    doc.unlisted += [unlisted(ct.UnlistedWhat.ACT, Kind.STENT_REMOVAL, X(1), unit(4)),
+                     unlisted(ct.UnlistedWhat.ACT, Kind.STENT, X(1), unit(5))]
+    out.append(('43276', doc.build(), (Span(600, 625),)))
+    out.append(('43259', eus_fna([sup(Station.ESOPHAGUS), sup(Station.STOMACH), sup(Station.DUODENUM)],
+                                 tract=sup(ct.Tract.PANCREATOBILIARY)), ()))  # D226
+    return out
+
+
+def r4a2_fixtures() -> list:
+    """(code, FactSet, kept) for repair r4a round 2's shapes (refute-r4a-r1 p20, p22, p25, p26, p29 and their variants):
+    OneItem builds each held code's one item (D182) and P-MONO weakens each - READY shapes included."""
+    out = []
+    for session in (X(1), None):  # p20, F1: the removal kept as an unlisted doubt
+        doc = stent_placement(None)
+        doc.unlisted.append(stent_doubt(session=session))
+        out += [('43274', doc.build(), (unit(2),)), ('43276', doc.build(), (unit(2),))]
+    doc = stent_placement(None)  # F1, p31: the placement and the doubt beside a cited exchange denial
+    doc.unlisted.append(stent_doubt())
+    denial_event(doc, number=6, kind=Kind.STENT_EXCHANGE)
+    out.append(('43276', doc.build(), (Span(600, 625),)))
+    doc = Doc()  # F1: 43275 beside an unlisted doubt of the placement
+    doc.session(1, SessionKind.ERCP)
+    doc.exam(1)
+    doc.act(2, Kind.STENT_REMOVAL, duct=sup(ct.Duct.BILIARY))
+    doc.unlisted.append(stent_doubt(Kind.STENT))
+    out.append(('43275', doc.build(), ()))
+    doc = Doc()  # F1: two unlisted doubts beside a cited exchange denial
+    doc.session(1, SessionKind.ERCP)
+    doc.exam(1)
+    denial_event(doc, number=6, kind=Kind.STENT_EXCHANGE)
+    doc.unlisted += [stent_doubt(number=4), stent_doubt(Kind.STENT)]
+    out.append(('43276', doc.build(), (Span(600, 625),)))
+    for kind in (Kind.EXAMINATION, None):  # F1, row 7: an unlisted doubt of the examination (or of no kind)
+        doc = act_only_colonoscopy()
+        doc.unlisted.append(unlisted(ct.UnlistedWhat.DOUBT, kind, X(1), unit(5)))
+        out.append(('45385', doc.build(), ()))
+    doc = colonoscopy()  # F2 / Q2, ruled by D232: beside the session's done examination (READY)
+    doc.unlisted.append(unlisted(ct.UnlistedWhat.DOUBT, Kind.EXAMINATION, X(1), unit(7)))
+    out.append(('45385', doc.build(), ()))
+    hemostasis = ct.Purpose.HEMOSTASIS  # F4: p22 (1), the purpose and the cause
+    out += [('43255', bleeding(purpose=contra(hemostasis, ct.Purpose.PROPHYLAXIS, spans=(unit(2),)),
+                               cause=sup(ct.Cause.PRE_EXISTING_LESION)), ()),
+            ('43255', bleeding(purpose=sup(hemostasis), cause=contra(ct.Cause.PRE_EXISTING_LESION, ct.Cause.SPONTANEOUS,
+                                                                     spans=(unit(2),))), ())]
+    every = [sup(Station.ESOPHAGUS), sup(Station.STOMACH), sup(Station.DUODENUM)]
+    reach = (contra(Extent.SECOND_PORTION_DUODENUM, Extent.STOMACH, spans=(unit(1),)),)
+    out += [('43259', eus_fna(every, reached=reach), ()), ('43237', eus_fna(every[:2], reached=reach), ()),
+            ('43242', eus_fna(every, reached=(unres(Extent.SECOND_PORTION_DUODENUM),)), ())]  # F4: p22 (2), p26
+    doc = dilation(sup(Landmark.DISTAL_ESOPHAGUS), lesion=contra(L(1), L(2), spans=(unit(2),)))  # F4: p26
+    doc.lesion(1, lesion_places=[sup(Landmark.DISTAL_ESOPHAGUS)])
+    doc.lesion(2, lesion_places=[sup(Landmark.DISTAL_ESOPHAGUS)])
+    out.append(('43249', doc.build(), ()))
+    doc = dilation(sup(Landmark.DISTAL_ESOPHAGUS), lesion=sup(L(1)))
+    doc.lesion(1, lesion_places=[contra(Landmark.DISTAL_ESOPHAGUS, Landmark.STOMACH, spans=(unit(2),))])
+    out.append(('43249', doc.build(), ()))
+    out += [('44406', lower_eus(sup(Extent.SIGMOID_COLON), unres(Extent.DESCENDING_COLON)), ()),  # F7: p29
+            ('44406', lower_eus(sup(Extent.DUODENUM), approach=sup(ct.Approach.ORAL)), ()),
+            ('44406', lower_eus(approach=sup(ct.Approach.THROUGH_STOMA), stoma=False), ())]
+    out.append(('43274', stent_placement(dict(status=doubted(Status.PERFORMED), duct=sup(ct.Duct.BILIARY))).build(),
+                (unit(2),)))  # D225 beside F6: the doubted removal in the same duct
+    return out
+
+
+def w7r_fixtures() -> list:
+    """(code, FactSet, kept) for repair r4a of round w7r (D232, D240): OneItem builds each held code's one item (D182) and
+    P-MONO weakens each - the READY shapes included, whose weakenings must stay out of READY-from-HELD and EXCLUDED."""
+    out = []
+    for what in (ct.UnlistedWhat.DOUBT, ct.UnlistedWhat.ACT):  # D232: p41 beside the colonoscopy's done examination
+        for card in (X(1), None):
+            R = p41(what, card).build()
+            out += [('45385', R, ()), ('45378', R, ())]
+    R = p41(card=None, egd_beside=True).build()  # p41's EGD variant: 43239 READY, 43235 held by rule 4's pair
+    out += [('43239', R, ()), ('43235', R, ()), ('45385', R, ())]
+    for card in (X(1), None):  # D232: the act-only session still reads the synthetic examination (doubt)
+        doc = act_only_colonoscopy()
+        doc.unlisted.append(unlisted(ct.UnlistedWhat.DOUBT, Kind.EXAMINATION, card, unit(9)))
+        out.append(('45385', doc.build(), ()))
+    doc = colonoscopy()  # D232: an examination established but not done beside a synthetic one
+    doc.exam(1, date=unres(ON))
+    doc.unlisted.append(unlisted(ct.UnlistedWhat.ACT, Kind.EXAMINATION, X(1), unit(9)))
+    out.append(('45385', doc.build(), ()))
+    R = site_fit()  # D240: the site-fit input (before D240 its weakenings released 43249: the step's NOTES, QM)
+    out += [('43249', R, ()), ('43245', R, ())]
+    out.append(('43249', site_fit(device=sup(Device.WIRE_BOUGIE)), ()))
+    for what, card in ((ct.UnlistedWhat.DOUBT, X(1)), (ct.UnlistedWhat.ACT, None)):  # refute-r4a-r1 P1: E13's DRE
+        out.append(('45385', digital_colonoscopy(what, card).build(), ()))
+    out.append(('45385', digital_colonoscopy(device=unres(Device.MANUAL)).build(), ()))
+    for card in (X(2), None):  # refute-r4a-r1 P5: act_only read per session
+        R = act_only_egd_beside(card=card).build()
+        out += [('43239', R, ()), ('45385', R, ())]
+    # Not here: D240's shapes in which a supporting act holds the code only through its code-specific rows beside an
+    # act that meets every row (site_fit(second=None), a second esophageal dilation of an unstated device) - 9.4's
+    # weakening of that act's SUPPORT rows moves it out of E* and releases the code, a class of 4.4's outcome function
+    # that predates this repair (measured on the base tree: the step's NOTES, question QM); D240SiteFit pins them.
+    return out
+
+
+def ileal_attempt(card=None) -> Doc:
+    """r4c-2's question Q1 (DECISIONS D258): an ileal enteroscopy X1 (oral, reaching the ileum) whose examination E1 is
+    established begun and not completed, beside an EGD X2 whose examination E3 is done; pass 2's ONE kept unlisted
+    DOUBT of kind examination in unit 9 with ``card`` (none, or a session the FactSet does not hold)."""
+    doc = Doc()
+    doc.session(1, SessionKind.ENTEROSCOPY, approach=sup(ct.Approach.ORAL, spans=(unit(4),)),
+                reached=[sup(Extent.ILEUM, spans=(unit(6),))])
+    doc.exam(1, status=sup(Status.ATTEMPTED_NOT_COMPLETED))
+    doc.session(2, SessionKind.EGD, reached=[sup(Extent.SECOND_PORTION_DUODENUM)])
+    doc.exam(3, session=X(2))
+    doc.unlisted.append(unlisted(ct.UnlistedWhat.DOUBT, Kind.EXAMINATION, card, unit(9)))
+    return doc
+
+
+def w8r_fixtures() -> list:
+    """(code, FactSet, kept) for repair r4a of round w8r (D253, D258): OneItem builds each held code's one item (D182)
+    and P-MONO weakens each - the READY shapes included, whose weakenings must stay out of READY-from-HELD and
+    EXCLUDED."""
+    out = []
+    for other in A2_OTHERS:  # D253: refute-r4a-r2 A2's shapes, with and without the DRE line
+        for what, card in A2_ENTRIES[:3]:
+            for dre in (True, False):
+                out.append(('45385', dre_colonoscopy(other, dre=dre, what=what, card=card).build(), ()))
+    out.append(('45385', dre_colonoscopy('plan', device=unres(Device.MANUAL)).build(), ()))  # QE13 (a)
+    out.append(('45385', dre_colonoscopy('history', device=None).build(), ()))  # READY: E1 the session's own
+    R = p41(ct.UnlistedWhat.DENIAL, None, egd_beside=True).build()  # D258, QD: the no-card denial
+    out += [('45378', R, ()), ('43235', R, ()), ('45385', R, ())]
+    for card in (None, X(9)):  # D258: the act-only session's synthetic examination doubt naming no held session
+        doc = act_only_colonoscopy()
+        doc.unlisted.append(unlisted(ct.UnlistedWhat.DOUBT, Kind.EXAMINATION, card, unit(9)))
+        out.append(('45385', doc.build(), ()))
+        out.append(('45385', digital_colonoscopy(ct.UnlistedWhat.DOUBT, card).build(), ()))
+    for card in (None, X(9), X(1)):  # D258, r4c Q1: the ileal input
+        R = ileal_attempt(card).build()
+        out += [('44376', R, ()), ('43235', R, ())]
+    return out
+
+
+def w8r_refuted_fixtures() -> list:
+    """(code, FactSet, kept) for the shapes of repair r4a of round w8r's refutation (refute-r4a-r1): OneItem builds each
+    held code's one item (D182) and P-MONO weakens each - the READY shapes included (a weakened manual-negated device
+    claims manual and holds: never READY-from-HELD, never EXCLUDED)."""
+    out = []
+    for family, reach, code in DigitalSupport.CASES:  # P1: the DRE alone, its device established, claimed or not
+        for device in (sup(Device.MANUAL), unres(Device.MANUAL), neg(Device.MANUAL), None):
+            out.append((code, dre_alone(family, reach, device=device).build(), ()))
+    out.append(('45378', dre_alone(endoscopic={}).build(), ()))  # READY on the colonoscope's examination alone
+    for what in (ct.UnlistedWhat.DOUBT, ct.UnlistedWhat.DENIAL):  # P3: the DRE held against a statement
+        for card in (None, X(1)):
+            R = digital_colonoscopy(what, card).build()
+            out += [('45378', R, ()), ('45378', R, (unit(1),))]
+    for kind in (None, contra(Kind.STENT_REMOVAL, Kind.BIOPSY, spans=(unit(5),))):  # P4: a counterpart no kind names
+        doc = stent_placement(None)
+        doc.act(5, kind if kind is not None else facts_module.SILENT)
+        out.append(('43274', doc.build(), (unit(2),)))
+    return out
+
+
+def w9r_fixtures() -> list:
+    """(code, FactSet, kept) for repair r4a of round w9r (DECISIONS D265, D266, D267): OneItem builds each held code's one
+    item (D182) and P-MONO weakens each - the DRE's shapes (a claimed device beside the colonoscope's examination with
+    its performer open, the DRE alone beside a statement, Q4's and Q4+'s, a digital examination statement cited, a
+    positive DRE beside a cited denial), D266's examinations of another occasion beside an unlisted statement, and
+    D267's kinds not supported."""
+    out = []
+    for device in (sup(Device.MANUAL), unres(Device.MANUAL), doubted(Device.MANUAL)):  # F1, F3
+        R = dre_alone(device=device, endoscopic=dict(performer=unres(TEAM))).build()
+        out += [('45378', R, (unit(1),)), ('45378', R, (unit(2),))]
+    for statement in ('doubt_nocard', 'denial_X1', 'filed_denial'):  # F1's DRE alone beside a statement; F2's E2
+        for other in ('none', 'planned', 'earlier'):
+            R = dre_grid('unres', 'X1', other, True, statement, 'cecum')
+            out += [('45378', R, (unit(1),)), ('45385', R, (unit(3),))]
+    for status in (neg(Status.PERFORMED), doubted(Status.PERFORMED)):  # Q4
+        doc = dre_alone()
+        denial_event(doc, number=3, kind=Kind.EXAMINATION, status=status)
+        out.append(('45378', doc.build(), (unit(1),)))
+    out.append(('45378', dre_alone(endoscopic=dict(status=unres(Status.PERFORMED))).build(), (unit(1),)))  # Q4+
+    doc = colonoscopy(snare=True)  # a digital examination's denial cited
+    doc.act(1, Kind.EXAMINATION, device=sup(Device.MANUAL), status=neg(Status.PERFORMED),
+            breadth=sup(Breadth.ALL_OF_KIND), kind_words=Span(103, 111), status_words=Span(100, 125))
+    out.append(('45378', doc.build(), (Span(100, 125),)))
+    doc = dre_alone(dre=False)  # a positive DRE, its date negated, beside a cited denial (Q-R4A-EXCL)
+    doc.exam(1, device=sup(Device.MANUAL), date=neg(ON))
+    denial_event(doc, number=3, kind=Kind.EXAMINATION)
+    out.append(('45378', doc.build(), (Span(300, 325),)))
+    for over in (dict(date=neg(ON)), dict(performer=neg(TEAM))):  # D266: an examination not possibly done today
+        for card in (None, X(1)):
+            doc = colonoscopy(snare=False)
+            doc.exam(1, **over)
+            doc.unlisted.append(unlisted(ct.UnlistedWhat.DENIAL, Kind.EXAMINATION, card, unit(9)))
+            out.append(('45378', doc.build(), ()))
+    for kind in (neg(Kind.SNARE), doubted(Kind.SNARE, Kind.BIOPSY), unres(Kind.SNARE)):  # D267: refute-5c-r1 P2
+        out.append(('45385', colonoscopy(kind=kind).build(), ()))
+    out.append(('45385', colonoscopy(kind=facts_module.SILENT,  # QK: conflict:other
+                                     status=contra(Status.PERFORMED, Status.PLANNED)).build(), ()))
     return out

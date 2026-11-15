@@ -145,7 +145,9 @@ class CortiProvider:
             token = self._authenticate(session, credentials, deadline)
             return self._predict(session, credentials, token, body, deadline)
         except _NotSent as exc:
-            return not_sent(str(exc))
+            # FINAL-V2 amendment 1, 7.3 (A20 [R2:truth-RT1]): the token endpoint's refusal status is recorded on the
+            # not-sent exchange (http_status, sent False), so the provider hold reads a field, never this sentence
+            return RawExchange(outcome='not_sent', sent=False, http_status=exc.http_status, error=str(exc))
         finally:
             with suppress(Exception):
                 session.close()
@@ -187,7 +189,8 @@ class CortiProvider:
                 with suppress(Exception):
                     response.close()
         if status != 200:
-            raise _NotSent(f'Corti authentication was refused (HTTP {status}); no coding request was sent.')
+            raise _NotSent(f'Corti authentication was refused (HTTP {status}); no coding request was sent.',
+                           http_status=status)
         token = _access_token(raw)
         if token is None:
             raise _NotSent('Corti authentication returned no usable bearer token; no coding request was sent.')
@@ -247,7 +250,12 @@ NOT_SENT_AT_DEADLINE = 'The deadline passed before the coding request was sent; 
 
 
 class _NotSent(Exception):
-    """Raised inside send() while the coding request provably has not been written."""
+    """Raised inside send() while the coding request provably has not been written. ``http_status``: the status the
+    token endpoint answered when it refused (FINAL-V2 amendment 1, 7.3: recorded on the not-sent exchange), else None."""
+
+    def __init__(self, message: str, *, http_status: Optional[int] = None):
+        super().__init__(message)
+        self.http_status = http_status
 
 
 class _BodyError(Exception):

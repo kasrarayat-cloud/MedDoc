@@ -56,6 +56,34 @@ FAIL-CLOSED. Whatever keeps the deny set from being computed exactly as pinned, 
 positive control from firing leaves the sentinel failed, with the reason (status). The failure stands for the process -
 the deny set is not walked again on every scope - and a failed process refuses every new-path write. Only an install
 attempted before Django's app registry is ready is not a failure: it changes nothing, and a later call installs.
+
+DESIGN V2: THE RETIRED KIND (docs/gemini-migration/FINAL-V2.md 5.0 and 5.7 measures 1-3; step 6a of its 8.1). The 17 v1
+interpretation modules stay in the tree unchanged and are denied WHOLE (RETIRED_MODULES: studio.interpretation's prompt,
+schema, read, normalize, verify, literals, identity, lexicon, relations, mapping, classes, ercp, facts, events, coverage,
+combination and assess): every function in them is off the new path, not only the named readers. They are armed by the
+same machinery as the legacy deny set - code objects computed at install (nested ones included; their lru_cache
+wrappers in test mode), PY_START set locally, the ContextVar labels, forked children merged - and carry a kind of their
+own, RETIRED (``kind_of``; the legacy deny set's is LEGACY), so the D22 record (``record``) reports ``retired_calls``
+apart from ``legacy_calls``, and a scope that counted either refuses its new-path writes (the gate reads every new_path
+execution, of both kinds). ``expected_retired`` reads the list from the files: glob(studio/interpretation/*.py) minus
+KEPT; the install refuses unless RETIRED_MODULES equals it, so a new top-level module there, neither kept nor retired,
+refuses the install, and new code goes under contract/ or engine/ (NEW_PACKAGES; a subpackage beside them refuses too,
+the fail-closed reading of "new code must go under contract/ or engine/"). Each retired file's code-object count is
+pinned in PINNED_SIZES beside the legacy files' (RETIRED_SIZES, summed as RETIRED_SIZE; DENY_SIZE stays the legacy deny
+set's, the D22 record's ``deny_size``). A second positive control runs at install beside the first:
+PROBE_CALL_RETIRED, lexicon.negation('no'), whose code object must be counted EXACTLY ONCE under the probe label; any
+failure leaves the process failed, refusing every new-path write. ``retired_unarmed`` is the test-only v1 chain's seam
+(tests/v1_chain.py): while it is open the retired code objects are not armed, so the record of v1's mechanics counts what
+v1 counted; nothing in the application calls it (tests/test_guard_static.py pins that), and the record made inside it
+has v1's five keys. ``strict`` (tests only) opens the same seam by default, as v1's instrument for v1's own tests (S08
+runs v1's events engine under it); ``strict(retired=True)`` measures both kinds. In TEST MODE the RETIRED kind has a
+regex class too (refutation 6a-r1 F7; 5.7 measures 1 and 8: a positive control per class): every compiled pattern a
+retired module's globals hold is a denied pattern (denied_patterns), counted when the app's own code reads it, and of the
+RETIRED kind (``kind_of``) unless a legacy location holds the same object; the seam leaves them out as it leaves the
+retired codes unarmed. Their twins are pinned as the legacy ones are (EXEMPT_PATTERNS: the date-literal patterns
+contract/date_literals copies for L1, 5.6's allowlist, and the bare ISO date shape the participants and the reference
+tools compile from the same source), so a new-path read of any other retired pattern - lexicon's, literals' size, a
+normalize or verify vocabulary - is counted and refuses its write.
 """
 from __future__ import annotations
 
@@ -73,6 +101,7 @@ import threading
 import traceback
 import types
 from pathlib import Path
+from collections.abc import Callable, Iterator
 from typing import Optional
 
 log = logging.getLogger(__name__)
@@ -87,6 +116,8 @@ SCOPE_LABELS = (NEW_PATH, LEGACY_RECORD, OTHER)
 LABELS = (NEW_PATH, LEGACY_RECORD, OTHER, UNSCOPED)
 CODE, REGEX, CACHE = 'code', 'regex', 'cache'  # what a counted execution was: a denied code object, a denied pattern, a
 # denied cache wrapper (the last two only in test mode)
+LEGACY, RETIRED = 'legacy', 'retired'  # the kind of denied code a counted execution was (kind_of): the legacy reader's
+# (DENY_MODULES, checks.py by function, the archived jobs stages) or a retired v1 interpretation module's (FINAL-V2 5.0)
 TRIPPED = 'sentinel.tripped'  # AuditEvent.event of a refused write or a recorded read
 MAX_ENTRIES = 10  # entry points kept per scope (a trip's evidence; the counts are complete)
 
@@ -183,6 +214,25 @@ EXEMPT_PATTERNS = {
                                    'return the one object to both',
     'studio.gi.context.MONTH_YEAR': 'a month-and-year date literal that studio.interpretation.literals compiles from the '
                                     'same source (EB1 reads date literals); re\'s cache can return the one object to both',
+    # the RETIRED kind's regex class (test mode; refutation 6a-r1 F7): the twins new code compiles from a retired
+    # module's source, each the date literal L1 transcribes (contract/date_literals copies v1's literals for L1 alone,
+    # FINAL-V2 5.0 and 5.6's allowlist) or the bare ISO date shape the participants and the reference tools check
+    'studio.interpretation.literals.BARE_YEAR': 'a bare year literal contract/date_literals compiles from the same source '
+                                                '(L1, FINAL-V2 5.6); re\'s cache can return the one object to both',
+    'studio.interpretation.literals.FULL_DATE': 'a full date literal contract/date_literals compiles from the same source '
+                                                '(L1, FINAL-V2 5.6); re\'s cache can return the one object to both',
+    'studio.interpretation.literals.MONTH_YEAR': 'a month-and-year literal contract/date_literals compiles from the same '
+                                                 'source (L1, FINAL-V2 5.6); re\'s cache can return the one object to '
+                                                 'both',
+    "studio.interpretation.literals._STORED['day']": 'a stored day-precision date shape contract/date_literals compiles '
+                                                     'from the same source (L1, FINAL-V2 5.6)',
+    "studio.interpretation.literals._STORED['month']": 'a stored month-precision date shape contract/date_literals '
+                                                       'compiles from the same source (L1, FINAL-V2 5.6)',
+    "studio.interpretation.literals._STORED['year']": 'a stored year-precision date shape contract/date_literals compiles '
+                                                      'from the same source (L1, FINAL-V2 5.6)',
+    'studio.interpretation.read._DATE': 'a bare ISO date shape the participants\' readers and the reference tools compile '
+                                        'from the same source (a tool\'s date argument, never document text); re\'s '
+                                        'cache can return the one object to both',
 }
 # Denied code objects per file (a nested function, lambda or generator expression is its own code object), measured on
 # Python 3.12 (the image's and CI's): a different interpreter compiles a different number of code objects, and the
@@ -190,7 +240,7 @@ EXEMPT_PATTERNS = {
 # studio/code_shapes.py, imported back with identity preserved: engine.py 457 -> 452 (_listable, participant_listable,
 # participant_unlisted_count and its generator expression, participant_unlisted_codes), reconcile.py 109 -> 107
 # (act_label, kind_label), review_view.py 47 -> 45 (_field, service_answers).
-PINNED_SIZES = {
+LEGACY_SIZES = {
     'studio/gi/__init__.py': 0,
     'studio/gi/clauses.py': 31,
     'studio/gi/context.py': 219,
@@ -208,11 +258,50 @@ PINNED_SIZES = {
     'studio/validation/checks.py': 164,
     'studio/jobs.py': 5,
 }
-DENY_SIZE = sum(PINNED_SIZES.values())
+DENY_SIZE = sum(LEGACY_SIZES.values())  # the legacy deny set: the D22 record's deny_size
+
+# --- design v2: the RETIRED kind (FINAL-V2 5.0, 5.7 measures 1-3) ----------------------------------------------------------
+
+INTERPRETATION = 'studio.interpretation'
+# The kept modules of studio/interpretation (FINAL-V2 5.0), edited where they imported a retired one; every other module
+# file there is retired (expected_retired).
+KEPT = ('__init__', 'adapter', 'holds', 'sentinel', 'readers', 'overlay', 'store', 'wording', 'report', 'replay', 'dates')
+# FINAL-V2 5.0: the 17 v1 interpretation modules, denied whole, in its order
+RETIRED_NAMES = ('prompt', 'schema', 'read', 'normalize', 'verify', 'literals', 'identity', 'lexicon', 'relations',
+                 'mapping', 'classes', 'ercp', 'facts', 'events', 'coverage', 'combination', 'assess')
+RETIRED_MODULES = tuple(f'{INTERPRETATION}.{name}' for name in RETIRED_NAMES)
+NEW_PACKAGES = ('contract', 'engine')  # where the new path's code lives (FINAL-V2 5.0): no other subpackage
+# Code objects per retired file, measured on Python 3.12 as the legacy files' are (FINAL-V2 5.7 measure 1: "Each retired
+# file's code-object count is pinned"); a changed retired file - which no step may edit (8.0) - fails the install.
+RETIRED_SIZES = {
+    'studio/interpretation/prompt.py': 4,
+    'studio/interpretation/schema.py': 10,
+    'studio/interpretation/read.py': 13,
+    'studio/interpretation/normalize.py': 79,
+    'studio/interpretation/verify.py': 45,
+    'studio/interpretation/literals.py': 29,
+    'studio/interpretation/identity.py': 36,
+    'studio/interpretation/lexicon.py': 32,
+    'studio/interpretation/relations.py': 60,
+    'studio/interpretation/mapping.py': 47,
+    'studio/interpretation/classes.py': 36,
+    'studio/interpretation/ercp.py': 85,
+    'studio/interpretation/facts.py': 22,
+    'studio/interpretation/events.py': 171,
+    'studio/interpretation/coverage.py': 72,
+    'studio/interpretation/combination.py': 27,
+    'studio/interpretation/assess.py': 139,
+}
+RETIRED_SIZE = sum(RETIRED_SIZES.values())
+# Every denied file's pin, both kinds (FINAL-V2 5.7 measure 1: PINNED_SIZES and RETIRED_SIZE)
+PINNED_SIZES = {**LEGACY_SIZES, **RETIRED_SIZES}
 
 # The positive control's real call: a pure denied function, executed once under the probe label at install, so the code
 # object armed is shown to be the code object that runs.
 PROBE_CALL = ('studio.gi.cues', 'page_number_line', ('3',))
+# The RETIRED kind's own positive control (FINAL-V2 5.7 measure 3): its code object counted exactly once under the probe
+# label at install, beside PROBE_CALL.
+PROBE_CALL_RETIRED = ('studio.interpretation.lexicon', 'negation', ('no',))
 
 MESSAGES = {
     'executed': 'Nothing was saved: during this step the server ran code it keeps only for earlier records, so its result '
@@ -249,9 +338,12 @@ class _State:
         self.installed = False
         self.failed = ''  # why the install failed ('' when it did not, or none was tried); a failure stands
         self.positive_control = 'not run'
-        self.deny = {}  # id(code) -> code
+        self.retired_control = 'not run'  # PROBE_CALL_RETIRED's (FINAL-V2 5.7 measure 3)
+        self.deny = {}  # id(code) -> code: the legacy deny set
+        self.retired = {}  # id(code) -> code: the RETIRED kind's code objects (FINAL-V2 5.7 measure 1)
+        self.retired_keys: frozenset[int] = frozenset()  # the ids counted as RETIRED: its codes and cache wrappers
         self.sizes = {}  # file key -> count
-        self.wrappers = {}  # id(wrapper) -> the lru_cache wrapper of a denied function
+        self.wrappers = {}  # id(wrapper) -> the lru_cache wrapper of a denied function (either kind)
         self.checks = {}  # the checks split, by name
         self.errors = 0  # callback failures in this process
         # a read in a process that cannot count says so once (FINAL 10.2): logged, and recorded on the first read that
@@ -268,8 +360,12 @@ _UNSCOPED = _TOTALS[UNSCOPED]
 _NAMES = {}  # id -> a readable name ('studio/gi/detect.py:120 route', 'studio.gi.cues.PAGE_NUMBER_LINE')
 _KINDS = {}  # id -> CODE, REGEX or CACHE
 _CALLS = {'depth': 0, 'exempt': {}}
-_PATTERNS = frozenset()  # test mode: ids of the denied patterns
-_WRAPPERS = frozenset()  # test mode: ids of the denied cache wrappers
+_UNARMED = {'depth': 0}  # retired_unarmed's nesting (tests only: the v1 chain's seam)
+_PATTERNS = frozenset()  # test mode: ids of the denied patterns (a retired one left out while retired_unarmed)
+_RETIRED_PATTERNS: frozenset[int] = frozenset()  # test mode: ids of the denied patterns of the RETIRED kind (kind_of;
+# kept once computed: a pattern is a module global, never collected, so a counted id keeps its kind after the block)
+_ALL_PATTERNS: frozenset[int] = frozenset()  # test mode: every denied pattern's id, what _PATTERNS is when no seam is open
+_WRAPPERS = frozenset()  # test mode: ids of the denied cache wrappers (a retired one left out while retired_unarmed)
 _RE_FUNCTIONS = frozenset({re.search, re.match, re.fullmatch, re.finditer, re.findall, re.sub, re.subn, re.split})
 _METHOD_DESCRIPTOR = type(re.Pattern.search)
 # A builtin function or bound builtin method: 3.12 binds a pattern's methods as 'builtin_method' (PyCMethod), a subtype
@@ -346,6 +442,18 @@ class Scope:
             out[_KINDS.get(key, CODE)] += n
         return out
 
+    def by_set(self, label: str = NEW_PATH) -> dict[str, int]:
+        """{LEGACY, RETIRED: executions} under ``label`` in this scope alone (FINAL-V2 5.7 measure 1: the RETIRED kind
+        counted apart from the legacy deny set)."""
+        out = {LEGACY: 0, RETIRED: 0}
+        for key, n in self.hits.get(label, {}).items():
+            out[kind_of(key)] += n
+        return out
+
+    def total_of(self, kind: str, label: str = NEW_PATH) -> int:
+        """The executions of ``kind`` (LEGACY or RETIRED) under ``label`` in this scope and every scope enclosing it."""
+        return sum(item.by_set(label)[kind] for item in self.chain())  # type: ignore[no-untyped-call]
+
     def describe(self, label: str = NEW_PATH) -> list:
         """'<name> x<count>' for each denied thing counted under ``label``, most first, then the entry points: what a
         failing test prints (FINAL 10.4(1): the file, the qualname and the first new-path frame)."""
@@ -356,7 +464,7 @@ class Scope:
         if len(self.entries) >= MAX_ENTRIES:
             return
         caller = frame
-        while caller is not None and id(caller.f_code) in _STATE.deny:
+        while caller is not None and (id(caller.f_code) in _STATE.deny or id(caller.f_code) in _STATE.retired):
             caller = caller.f_back
         where = _where(caller) if caller is not None else 'no calling frame'
         self.entries.append(f'{where} -> {what}')
@@ -390,6 +498,13 @@ def _relative(filename: str) -> str:
 
 def _code_name(code) -> str:
     return f'{_relative(code.co_filename)}:{code.co_firstlineno} {code.co_qualname}'
+
+
+def kind_of(key: int) -> str:
+    """RETIRED when ``key`` (a counted id: a code object, a cache wrapper, a pattern) is the RETIRED kind's - a retired
+    module's code object or its cache wrapper (FINAL-V2 5.7 measure 1), or in test mode a pattern only a retired module
+    holds (``retired_patterns``; refutation 6a-r1 F7) - else LEGACY."""
+    return RETIRED if key in _STATE.retired_keys or key in _RETIRED_PATTERNS else LEGACY
 
 
 # --- the callbacks (kept small: every denied execution in the process runs one) ----------------------------------------
@@ -480,7 +595,8 @@ def install() -> dict:
             _require_ready()
             _import_deny_modules()
             check_module_list()
-            deny, sizes, checks, names = _compute()
+            check_retired_list()
+            deny, retired, sizes, checks, names = _compute()
             _check_pins(sizes, checks)
             monitoring = sys.monitoring
             holder = monitoring.get_tool(TOOL_ID)
@@ -490,27 +606,34 @@ def install() -> dict:
                 monitoring.use_tool_id(TOOL_ID, TOOL_NAME)
             acquired = True
             monitoring.register_callback(TOOL_ID, monitoring.events.PY_START, _on_start)
-            for code in deny.values():
+            for code in (*deny.values(), *retired.values()):
                 monitoring.set_local_events(TOOL_ID, code, monitoring.events.PY_START)
-            _STATE.deny, _STATE.sizes, _STATE.checks = deny, sizes, checks
-            _STATE.wrappers = _denied_wrappers(deny)
+            _STATE.deny, _STATE.retired, _STATE.sizes, _STATE.checks = deny, retired, sizes, checks
+            _STATE.wrappers = _denied_wrappers({**deny, **retired})
+            retired_wrappers = {key for key, wrapper in _STATE.wrappers.items()
+                                if id(getattr(_unwrap(wrapper), '__code__', None)) in retired}
+            _STATE.retired_keys = frozenset(retired) | frozenset(retired_wrappers)
             _NAMES.update(names)
-            _KINDS.update({key: CODE for key in deny})
+            _KINDS.update({key: CODE for key in (*deny, *retired)})
             for key, wrapper in _STATE.wrappers.items():
                 _NAMES[key] = f'{getattr(wrapper, "__module__", "?")}.{getattr(wrapper, "__qualname__", "?")} (cache)'
                 _KINDS[key] = CACHE
-            _positive_control(deny)
+            _positive_control(deny, retired)
         except _NotReady:
             return status()  # nothing was changed: a later call (AppConfig.ready, a new_path scope) installs
         except Exception as exc:  # noqa: BLE001 - any failure leaves the process refusing new-path writes, with why
             reason = str(exc) if isinstance(exc, _Refused) else f'{type(exc).__name__}: {exc}'
             if acquired:
                 _disarm()
-            _STATE.installed, _STATE.failed, _STATE.positive_control = False, reason, 'failed'
-            _STATE.deny, _STATE.wrappers = {}, {}
+            _STATE.installed, _STATE.failed = False, reason
+            _STATE.positive_control = _STATE.retired_control = 'failed'
+            _STATE.deny, _STATE.retired, _STATE.retired_keys, _STATE.wrappers = {}, {}, frozenset(), {}
             log.error('the legacy-call sentinel is not installed: %s; this process refuses new-path writes', reason)
             return status()
-        _STATE.installed, _STATE.failed, _STATE.positive_control = True, '', 'ok'
+        _STATE.installed, _STATE.failed = True, ''
+        _STATE.positive_control = _STATE.retired_control = 'ok'
+        if _UNARMED['depth']:  # installed inside the v1 chain's seam (tests only): its retired codes stay unarmed
+            _arm_retired(False)
         return status()
 
 
@@ -524,9 +647,39 @@ def _require_ready():
 
 
 def _import_deny_modules():
-    """R-1: the pinned modules, imported here and now, before anything is walked."""
-    for name in DENY_MODULES + (CHECKS_MODULE, JOBS_MODULE):
+    """R-1: the pinned modules, imported here and now, before anything is walked - the retired v1 modules too (FINAL-V2
+    5.7 measure 1; importing is not calling, D17)."""
+    for name in DENY_MODULES + (CHECKS_MODULE, JOBS_MODULE) + RETIRED_MODULES:
         importlib.import_module(name)
+
+
+def expected_retired(root: Path = STUDIO_DIR) -> set[str]:
+    """FINAL-V2 5.7 measure 1's list, read from the files under ``root`` (the studio package): every
+    studio/interpretation/*.py but KEPT, as module names. Raises _Refused when studio/interpretation holds a subpackage
+    other than NEW_PACKAGES (contract/ and engine/), or when a kept module's file is missing (the kept list would then
+    name nothing and could hide a rename)."""
+    folder = root / 'interpretation'
+    found = {f'{INTERPRETATION}.{path.stem}' for path in folder.glob('*.py') if path.stem not in KEPT}
+    absent = sorted(name for name in KEPT if not (folder / f'{name}.py').is_file())
+    if absent:
+        raise _Refused(f'studio/interpretation has no kept module {absent}')
+    stray = sorted(str(path.relative_to(root)) for path in folder.glob('*/**/*.py')
+                   if '__pycache__' not in path.parts and path.relative_to(folder).parts[0] not in NEW_PACKAGES)
+    if stray:
+        raise _Refused(f'studio/interpretation holds code outside contract/ and engine/: {stray}')
+    return found
+
+
+def check_retired_list(root: Path = STUDIO_DIR, modules: Optional[tuple[str, ...]] = None) -> None:
+    """FINAL-V2 5.7 measure 1: ``modules`` (RETIRED_MODULES, read when called) names each module once and equals
+    expected_retired(root), so a new top-level module of studio/interpretation that is neither kept nor retired refuses
+    the install; _Refused otherwise."""
+    modules = RETIRED_MODULES if modules is None else modules
+    expected = expected_retired(root)
+    if len(set(modules)) != len(modules) or set(modules) != expected:
+        missing, extra = sorted(expected - set(modules)), sorted(set(modules) - expected)
+        raise _Refused(f'the retired modules differ from the files: neither kept nor retired {missing}, not a file '
+                       f'{extra}')
 
 
 def expected_modules(root: Path = STUDIO_DIR) -> set:
@@ -571,7 +724,7 @@ def _tree(code, out: dict) -> dict:
     return out
 
 
-def _unwrap(value):
+def _unwrap(value: object) -> object:
     for _ in range(16):
         inner = getattr(value, '__wrapped__', None)
         if inner is None:
@@ -758,18 +911,26 @@ def _split_patterns(module, trees: dict, allowed) -> dict:
 
 
 def _compute():
-    """(deny {id: code}, sizes {file key: n}, checks split by name, names {id: readable name})."""
+    """(deny {id: code}, retired {id: code}, sizes {file key: n}, checks split by name, names {id: readable name}):
+    the legacy deny set and the RETIRED kind's code objects (FINAL-V2 5.7 measure 1), each walked the same way."""
     modules = [sys.modules[name] for name in DENY_MODULES]
+    retired_modules = [sys.modules[name] for name in RETIRED_MODULES]
     checks_module, jobs = sys.modules[CHECKS_MODULE], sys.modules[JOBS_MODULE]
-    live = _live_codes({module.__file__ for module in modules + [checks_module]}, modules + [checks_module])
-    deny, sizes = {}, {}
+    walked = modules + [checks_module] + retired_modules
+    live = _live_codes({module.__file__ for module in walked}, walked)
+    deny, retired, sizes = {}, {}, {}
+    for module in retired_modules:
+        codes = live[module.__file__]
+        retired.update(codes)
+        sizes[_module_key(module)] = len(codes)
     for module in modules:
         codes = live[module.__file__]
         deny.update(codes)
         sizes[_module_key(module)] = len(codes)
     split = checks_split(checks_module, live[checks_module.__file__])
+    before = len(deny)
     deny.update(split.pop('codes'))
-    sizes[_module_key(checks_module)] = len(deny) - sum(sizes.values())
+    sizes[_module_key(checks_module)] = len(deny) - before
     archived = {}
     for name in ARCHIVED_JOBS:
         fn = _unwrap(getattr(jobs, name, None))
@@ -778,7 +939,7 @@ def _compute():
         _tree(fn.__code__, archived)
     deny.update(archived)
     sizes[_module_key(jobs)] = len(archived)
-    return deny, sizes, split, {key: _code_name(code) for key, code in deny.items()}
+    return deny, retired, sizes, split, {key: _code_name(code) for key, code in (*deny.items(), *retired.items())}
 
 
 def _check_pins(sizes: dict, checks: dict):
@@ -804,12 +965,15 @@ def _denied_wrappers(deny: dict) -> dict:
     return out
 
 
-def _positive_control(deny: dict):
-    """FINAL 10.2-10.4: an instrument that never fires proves nothing. Every denied code object armed; the PY_START
-    callback the sentinel's; a sentinel-owned code object, armed as a denied one is, counted exactly once under the probe
-    label; and one real denied function counted when it runs."""
+def _positive_control(deny: dict, retired: Optional[dict] = None):  # type: ignore[no-untyped-def,type-arg]
+    """FINAL 10.2-10.4: an instrument that never fires proves nothing. Every denied code object armed (the retired ones
+    too); the PY_START callback the sentinel's; a sentinel-owned code object, armed as a denied one is, counted exactly
+    once under the probe label; one real denied function counted when it runs; and (FINAL-V2 5.7 measure 3) one real
+    retired function - PROBE_CALL_RETIRED - whose code object is counted EXACTLY ONCE under the probe label, as the
+    RETIRED kind's."""
+    retired = retired or {}
     monitoring = sys.monitoring
-    unarmed = sum(1 for code in deny.values()
+    unarmed = sum(1 for code in (*deny.values(), *retired.values())
                   if not monitoring.get_local_events(TOOL_ID, code) & monitoring.events.PY_START)
     if unarmed:
         raise _Refused(f'{unarmed} denied code objects are not armed')
@@ -831,11 +995,29 @@ def _positive_control(deny: dict):
         fn(*PROBE_CALL[2])
     if not scope_.hits.get(PROBE, {}).get(id(fn.__code__)):
         raise _Refused(f'the positive control {PROBE_CALL[0]}.{PROBE_CALL[1]} ran and was not counted')
+    fn = _probe_function(PROBE_CALL_RETIRED)
+    if id(fn.__code__) not in retired or id(fn.__code__) in deny:
+        raise _Refused(f'the retired positive control {PROBE_CALL_RETIRED[0]}.{PROBE_CALL_RETIRED[1]} is not of the '
+                       'RETIRED kind')
+    counted = _retired_probe_count(fn)
+    if counted != 1:
+        raise _Refused(f'the retired positive control {PROBE_CALL_RETIRED[0]}.{PROBE_CALL_RETIRED[1]} ran and was '
+                       f'counted {counted} times, not exactly once')
 
 
-def _probe_function():
-    module, name, _ = PROBE_CALL
-    return getattr(sys.modules[module], name)
+def _retired_probe_count(fn: Callable[..., object]) -> int:
+    """How many times PROBE_CALL_RETIRED's own code object is counted under the probe label when it runs once (FINAL-V2
+    5.7 measure 3: exactly once), in a private scope that joins nothing."""
+    with _private() as scope_:
+        fn(*PROBE_CALL_RETIRED[2])
+    counted: int = scope_.hits.get(PROBE, {}).get(id(fn.__code__), 0)
+    return counted
+
+
+def _probe_function(call: tuple[str, str, tuple[str, ...]] = PROBE_CALL) -> Callable[..., object]:
+    module, name, _ = call
+    fn: Callable[..., object] = getattr(sys.modules[module], name)
+    return fn
 
 
 @contextlib.contextmanager
@@ -855,21 +1037,31 @@ def trip_test() -> dict:
     private new_path scope the rule refuses nothing. Neither scope joins any total, and nothing is recorded. {'tripped',
     'clean', 'counted', 'ok'}; ok only when installed, tripped and clean."""
     if not _STATE.installed:
-        return {'tripped': False, 'clean': False, 'counted': 0, 'ok': False}
+        return {'tripped': False, 'clean': False, 'counted': 0, 'retired_tripped': False, 'retired_counted': 0,
+                'ok': False}
     fn = _probe_function()
     with _private(NEW_PATH) as dirty:
         fn(*PROBE_CALL[2])
+    # FINAL-V2 5.7 measures 2-3: a retired execution trips the gate's rule as a legacy one does, counted as RETIRED
+    # (while the test-only v1 chain's seam leaves the retired codes unarmed, nothing is counted, and it does not trip)
+    fn = _probe_function(PROBE_CALL_RETIRED)
+    with _private(NEW_PATH) as retired:
+        fn(*PROBE_CALL_RETIRED[2])
     with _private(NEW_PATH) as clean:
         pass
     tripped, unrefused = refusal(dirty) == 'executed', refusal(clean) is None
-    return {'tripped': tripped, 'clean': unrefused, 'counted': dirty.count(NEW_PATH), 'ok': tripped and unrefused}
+    retired_tripped = refusal(retired) == 'executed' and retired.by_set(NEW_PATH)[RETIRED] > 0 \
+        and retired.by_set(NEW_PATH)[LEGACY] == 0
+    return {'tripped': tripped, 'clean': unrefused, 'counted': dirty.count(NEW_PATH),
+            'retired_tripped': retired_tripped, 'retired_counted': retired.by_set(NEW_PATH)[RETIRED],
+            'ok': tripped and unrefused and retired_tripped}
 
 
 def _disarm():
     monitoring = sys.monitoring
     if monitoring.get_tool(TOOL_ID) != TOOL_NAME:
         return  # freed, or held by another tool: nothing of tool 4 can be changed (a freed id refuses every call)
-    for code in _STATE.deny.values():
+    for code in (*_STATE.deny.values(), *_STATE.retired.values()):
         monitoring.set_local_events(TOOL_ID, code, 0)
     monitoring.set_events(TOOL_ID, 0)
     monitoring.register_callback(TOOL_ID, monitoring.events.PY_START, None)
@@ -880,24 +1072,29 @@ def _disarm():
 def uninstall():
     """TESTS ONLY: disarm, free tool 4 and forget the install (or its failure), so a test can install from nothing or
     fail one. Never called by the application: a process never stops counting once it has started."""
-    global _PATTERNS, _WRAPPERS
+    global _PATTERNS, _WRAPPERS, _ALL_PATTERNS
     with _LOCK:
         if hasattr(sys, 'monitoring'):
             _disarm()
         _CALLS['depth'] = 0
-        _PATTERNS = _WRAPPERS = frozenset()
+        _PATTERNS = _WRAPPERS = _ALL_PATTERNS = frozenset()
         state = _State()
         state.errors = _STATE.errors
         _STATE.__dict__.update(state.__dict__)
 
 
 def status() -> dict:
-    """This process's sentinel, as the D22 report and the operator read it."""
+    """This process's sentinel, as the D22 report and the operator read it. FINAL-V2 5.7 measures 1, 3 and 9: the
+    RETIRED kind's size against its pin, its positive control, and whether its code objects are armed now
+    (``retired_armed``: False only before the install, after a failed one, or inside the test-only v1 chain's seam)."""
     state = 'ok' if _STATE.installed else 'failed' if _STATE.failed else 'not installed'
     return {'state': state, 'reason': _STATE.failed, 'tool': TOOL, 'tool_id': TOOL_ID, 'tool_name': TOOL_NAME,
             'deny_size': len(_STATE.deny), 'pinned_deny_size': DENY_SIZE, 'sizes': dict(_STATE.sizes),
             'checks_denied': len(_STATE.checks.get('denied', ())), 'caches': len(_STATE.wrappers),
             'positive_control': _STATE.positive_control, 'callback_errors': _STATE.errors,
+            'retired_size': len(_STATE.retired), 'pinned_retired_size': RETIRED_SIZE,
+            'retired_modules': len(RETIRED_MODULES), 'retired_control': _STATE.retired_control,
+            'retired_armed': retired_armed(),
             'python': '.'.join(str(part) for part in sys.version_info[:3])}
 
 
@@ -906,8 +1103,57 @@ def installed() -> bool:
 
 
 def deny_set() -> dict:
-    """{id: code} of the armed deny set (empty unless installed)."""
+    """{id: code} of the armed legacy deny set (empty unless installed)."""
     return dict(_STATE.deny)
+
+
+def retired_set() -> dict[int, types.CodeType]:
+    """{id: code} of the RETIRED kind's code objects (empty unless installed; FINAL-V2 5.7 measure 1)."""
+    return dict(_STATE.retired)
+
+
+def retired_armed() -> bool:
+    """Whether the RETIRED kind's code objects are armed now: installed, and outside the test-only v1 chain's seam."""
+    return _STATE.installed and not _UNARMED['depth']
+
+
+def _arm_retired(armed: bool) -> None:
+    """PY_START on (or off) every retired code object (``retired_unarmed``'s; under _LOCK, tool 4 held)."""
+    monitoring = sys.monitoring
+    if monitoring.get_tool(TOOL_ID) != TOOL_NAME:
+        return
+    events = monitoring.events.PY_START if armed else 0
+    for code in _STATE.retired.values():
+        monitoring.set_local_events(TOOL_ID, code, events)
+
+
+@contextlib.contextmanager
+def retired_unarmed() -> Iterator[None]:
+    """TESTS ONLY - the seam of the test-only v1 chain (tests/v1_chain.py), never called by the application
+    (tests/test_guard_static.py pins that no module outside tests/ names it). The v1 chain puts v1's one-pass reading back
+    for the mechanics suites recorded against v1 (FINAL-V2 8.1 step 5b), so its stages run the 17 retired modules as
+    v1 did; while this block is open their code objects are not armed (and test mode's CALL checks leave their cache
+    wrappers out), so that record counts what v1's sentinel counted - the legacy reader - and the D22 record made inside
+    it has v1's five keys (``record``). Nested blocks nest; the retired codes are armed again when the outermost closes,
+    if the sentinel is installed and tool 4 is still its own."""
+    global _WRAPPERS, _PATTERNS
+    with _LOCK:
+        _UNARMED['depth'] += 1
+        if _UNARMED['depth'] == 1 and _STATE.installed:
+            _arm_retired(False)
+            if _CALLS['depth']:
+                _WRAPPERS = frozenset(key for key in _WRAPPERS if key not in _STATE.retired_keys)
+                _PATTERNS = frozenset(key for key in _PATTERNS if key not in _RETIRED_PATTERNS)
+    try:
+        yield
+    finally:
+        with _LOCK:
+            _UNARMED['depth'] -= 1
+            if _UNARMED['depth'] == 0 and _STATE.installed:
+                _arm_retired(True)
+                if _CALLS['depth']:
+                    _WRAPPERS = frozenset(_STATE.wrappers)
+                    _PATTERNS = _ALL_PATTERNS
 
 
 def names() -> dict:
@@ -1145,7 +1391,10 @@ def _trip(entry: str, reason: str, scope_: Optional[Scope], *, refused: bool) ->
     return {'entry': entry, 'reason': reason, 'refused': refused, 'scope': scope_.entry if scope_ else '',
             'label': scope_.label if scope_ else UNSCOPED, 'counts': counts, 'entry_points': entries,
             'executed': executed[:MAX_ENTRIES], 'install': 'ok' if _STATE.installed else (_STATE.failed or 'not installed'),
-            'deny_size': len(_STATE.deny)}
+            'deny_size': len(_STATE.deny),
+            # FINAL-V2 5.7 measures 1-2: the new_path executions by kind, so a trip names the RETIRED kind apart
+            'new_path_by_kind': {kind: (scope_.total_of(kind) if scope_ is not None else 0)
+                                 for kind in (LEGACY, RETIRED)}}
 
 
 def _audit(encounter, actor, data: dict):
@@ -1159,13 +1408,20 @@ def _audit(encounter, actor, data: dict):
 
 def record(scope_: Optional[Scope] = None, *, name: Optional[str] = None) -> dict:
     """The D22 record of a new-path assessment (FINAL 10.3; Assessment.interpretation['sentinel']): {legacy_calls,
-    scope, tool, deny_size, positive_control}. legacy_calls is the new_path executions of the scope and the scopes
-    enclosing it."""
+    scope, tool, deny_size, positive_control} and, while the RETIRED kind is armed (FINAL-V2 5.7 measures 1 and 9),
+    {retired_calls, retired_size, retired_control}. legacy_calls is the new_path executions of the legacy deny set in
+    the scope and the scopes enclosing it, retired_calls those of the RETIRED kind: reported apart, and a write gate
+    refuses on either. Inside the test-only v1 chain's seam (retired_unarmed), where nothing retired is counted, the
+    record is v1's five keys (interpretation/report.py's v1 record takes exactly those)."""
     scope_ = scope_ if scope_ is not None else current()
     if scope_ is None:
         raise ValueError('The sentinel record is made inside the scope whose work it records.')
-    return {'legacy_calls': scope_.total(NEW_PATH), 'scope': name or scope_.entry, 'tool': TOOL,
-            'deny_size': len(_STATE.deny), 'positive_control': _STATE.positive_control}
+    found = {'legacy_calls': scope_.total_of(LEGACY), 'scope': name or scope_.entry, 'tool': TOOL,
+             'deny_size': len(_STATE.deny), 'positive_control': _STATE.positive_control}
+    if retired_armed():
+        found.update(retired_calls=scope_.total_of(RETIRED), retired_size=len(_STATE.retired),
+                     retired_control=_STATE.retired_control)
+    return found
 
 
 # --- test mode: CALL-level checks (FINAL 10.2; R-3) ----------------------------------------------------------------------
@@ -1175,7 +1431,7 @@ def call_checks():
     """TESTS ONLY. While open, CALL events are on for every code object in the process and a call from the app's own code
     that reads a denied pattern or a denied cache wrapper is counted under the current label (kinds REGEX and CACHE).
     Raises RuntimeError when the sentinel cannot be installed."""
-    global _PATTERNS, _WRAPPERS
+    global _PATTERNS, _WRAPPERS, _RETIRED_PATTERNS, _ALL_PATTERNS
     if not install()['state'] == 'ok':
         raise RuntimeError(f'The sentinel is not installed: {_STATE.failed or "the app registry is not ready"}')
     monitoring = sys.monitoring
@@ -1186,7 +1442,11 @@ def call_checks():
             for key, (pattern, where) in patterns.items():
                 _NAMES[key] = where
                 _KINDS[key] = REGEX
-            _PATTERNS, _WRAPPERS = frozenset(patterns), frozenset(_STATE.wrappers)
+            _RETIRED_PATTERNS = _RETIRED_PATTERNS | (frozenset(patterns) & retired_patterns())
+            _ALL_PATTERNS = frozenset(patterns)
+            _PATTERNS = frozenset(key for key in patterns if not (_UNARMED['depth'] and key in _RETIRED_PATTERNS))
+            _WRAPPERS = frozenset(key for key in _STATE.wrappers
+                                  if not (_UNARMED['depth'] and key in _STATE.retired_keys))
             _CALLS['exempt'] = {key: where for key, (where, _) in exempt.items()}  # names only: no pattern is kept
             monitoring.register_callback(TOOL_ID, monitoring.events.CALL, _on_call)
             monitoring.set_events(TOOL_ID, monitoring.events.CALL)
@@ -1202,11 +1462,26 @@ def call_checks():
 
 
 @contextlib.contextmanager
-def strict(entry: str = 'strict'):
+def strict(entry: str = 'strict', *, retired: bool = False) -> Iterator[Scope]:
     """TESTS ONLY (FINAL 15, S08: "the sentinel in strict mode shows zero denied executions"): a new_path scope with the
     CALL-level checks on. Yields the scope; on a clean exit raises AssertionError naming every denied execution it
-    counted (the file, the qualname and the first new-path frame), if any."""
-    with call_checks(), scope(NEW_PATH, entry=entry) as opened:
+    counted (the file, the qualname and the first new-path frame), if any.
+
+    By default it stays v1's instrument and measures v1's deny set, the legacy reader: the RETIRED kind is unarmed while
+    it is open (``retired_unarmed``). v1's own tests run v1's events engine - the 17 retired modules - inside it
+    (tests/test_interpretation_assess.py's S08) and read the scope's count themselves; they keep running as the record of
+    v1's behaviour (FINAL-V2 5.0) and no step edits them (8.0). ``retired=True`` measures both kinds (5.7 measure 1): a
+    retired execution fails it like a legacy one, and it refuses to open where the RETIRED kind is not armed (inside the
+    seam, or after a failed install), so it cannot pass by measuring nothing. The application never calls it
+    (tests/test_guard_static.py pins that)."""
+    with contextlib.ExitStack() as stack:
+        if not retired:
+            stack.enter_context(retired_unarmed())
+        stack.enter_context(call_checks())
+        opened = stack.enter_context(scope(NEW_PATH, entry=entry))
+        if retired and not retired_armed():
+            raise AssertionError('strict(retired=True) needs the RETIRED kind armed: the sentinel is not installed, '
+                                 'or the test-only seam (retired_unarmed) is open')
         yield opened
     if opened.count(NEW_PATH):
         raise AssertionError('denied executions in a new_path scope:\n  ' + '\n  '.join(opened.describe(NEW_PATH)))
@@ -1215,7 +1490,8 @@ def strict(entry: str = 'strict'):
 def denied_patterns() -> tuple:
     """({id: (pattern, where)} of the denied patterns; {id: (where, why)} of the pinned exemptions). Denied: every
     compiled pattern a denied module's globals hold - directly, in a container, a class of the module or an instance of
-    one - and every pattern of checks.py's denied globals (checks_patterns), but never one its allowed globals hold too
+    one - a retired module's included (the RETIRED kind's regex class, ``retired_patterns``; refutation 6a-r1 F7), and
+    every pattern of checks.py's denied globals (checks_patterns), but never one its allowed globals hold too
     (code_scope reads SCOPE_FORMATS on the new path). Exempt: a pattern any of whose denied locations EXEMPT_PATTERNS
     names, and nothing else - whichever module holds a pattern, it stays denied, so a module that imports a legacy
     pattern cannot exempt it, and a new exemption is a deliberate edit of the pin."""
@@ -1236,7 +1512,7 @@ def _denied_locations() -> dict:
     def add(pattern, where):
         found.setdefault(id(pattern), (pattern, []))[1].append(where)
 
-    for name in DENY_MODULES:
+    for name in DENY_MODULES + RETIRED_MODULES:
         for located in _pattern_globals(sys.modules[name]).values():
             for where, pattern in located.items():
                 add(pattern, where)
@@ -1253,6 +1529,24 @@ def _denied_locations() -> dict:
     return found
 
 
+def retired_patterns() -> frozenset[int]:
+    """The ids of the compiled patterns of the RETIRED kind (test mode): every pattern a retired module's globals hold
+    (as ``_denied_locations`` walks them) that no legacy location - a denied module's globals or checks.py's denied
+    globals - holds too, the legacy reading winning a shared object (refutation 6a-r1 F7)."""
+    retired, legacy = set(), set()
+    for name in RETIRED_MODULES:
+        retired |= {id(pattern) for located in _pattern_globals(sys.modules[name]).values()
+                    for pattern in located.values()}
+    for name in DENY_MODULES:
+        legacy |= {id(pattern) for located in _pattern_globals(sys.modules[name]).values()
+                   for pattern in located.values()}
+    checks = sys.modules[CHECKS_MODULE]
+    split = _STATE.checks if 'patterns_denied' in _STATE.checks else checks_patterns(checks)
+    held = _pattern_globals(checks)
+    legacy |= {id(pattern) for name in split['patterns_denied'] for pattern in held[name].values()}
+    return frozenset(retired - legacy)
+
+
 def twins() -> dict:
     """TESTS ONLY (the pin of EXEMPT_PATTERNS): {location: [denied locations]} for every compiled pattern a loaded
     PRODUCTION module holds - the application's own packages (HOLDERS) outside the denied modules, this module and
@@ -1267,7 +1561,7 @@ def twins() -> dict:
     out = {}
     for name, module in sorted(sys.modules.items()):
         if (module is None or name.partition('.')[0] not in HOLDERS or name in DENY_MODULES
-                or name == __name__):
+                or name in RETIRED_MODULES or name == __name__):
             continue
         for held, located in _pattern_globals(module).items():
             if name == CHECKS_MODULE and held not in allowed:

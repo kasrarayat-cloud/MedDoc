@@ -1,0 +1,8 @@
+SYNTHETIC UPPER ENDOSCOPY REPORT
+Date of service: 03/14/2031
+Endoscopist: Corvin Ashdale, MD (fictional)
+
+Findings: The gastroscope was advanced to the second portion of the duodenum.
+A 15 mm ulcer was seen in the duodenal bulb.
+A hemostatic injection of dilute epinephrine was given into the ulcer base.
+No other injection was given.

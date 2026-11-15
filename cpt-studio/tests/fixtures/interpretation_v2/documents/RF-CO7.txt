@@ -1,0 +1,19 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+COLONOSCOPY REPORT
+Facility: Pinecrest Endoscopy Center (fictional)
+Patient: Harold Imbrie (fictional)
+Date of service: November 3, 2026
+Endoscopist: Beatrix Lowenthal, MD (fictional)
+Indication: Intermittent bright red blood per rectum.
+History: The last colonoscopy, in August 2021, showed small internal hemorrhoids only.
+No polypectomy was performed at the last colonoscopy; none was performed today either.
+Procedure: The colonoscope was advanced to the cecum and into the terminal ileum.
+Bowel preparation was good.
+Findings:
+- Terminal ileum: normal.
+- Colon: normal mucosa throughout; no polyps, masses or sites of bleeding.
+- Rectum: small non-bleeding internal hemorrhoids on retroflexion.
+Impression:
+1. Small internal hemorrhoids, the likely source of the bleeding.
+2. Otherwise normal colonoscopy to the terminal ileum.
+Plan: Fiber supplementation; clinic follow-up as needed.

@@ -210,7 +210,8 @@ class LabelTests(SimpleTestCase):
                 'PURPOSE', 'JOB_KIND', 'ENGINE_VERSION', 'CONTEXT_VERSION', 'ROUTING_VERSION')},
             {'INTERPRETATION_VERSION': 'gemini-events@1', 'INVENTORY_VERSION': 'gemini-inventory@1',
              'LABEL': 'gemini-events@1+inventory@1', 'ADAPTER_VERSION': 'gemini-generate@cptstudio-1',
-             'MODEL': 'gemini-4-argon', 'PROVIDER': 'gemini', 'PURPOSE': 'interpretation', 'JOB_KIND': 'interpret',
+             # DECISIONS D230 (2026-11-13): the model of every request built; v1's recordings stay gemini-4-argon's
+             'MODEL': 'gemini-4-carbon', 'PROVIDER': 'gemini', 'PURPOSE': 'interpretation', 'JOB_KIND': 'interpret',
              'ENGINE_VERSION': 'cpt-studio-events@1', 'CONTEXT_VERSION': 'gemini-context@1',
              'ROUTING_VERSION': 'gemini-routing@1'})
         self.assertEqual((len(interpretation.LABEL), len(interpretation.ADAPTER_VERSION)), (27, 27))

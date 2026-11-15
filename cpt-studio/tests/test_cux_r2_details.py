@@ -148,7 +148,8 @@ class DateSettledAtUploadTests(PipelineCase):
         before = self.counts(encounter_id)
         response = self.save(encounter_id, row, '2026-10-21')
         self.assertEqual(response.status_code, 201, response.content)
-        self.assertEqual(response.json(), {'saved': 1, 'unchanged': 0, 'answer_ids': [], 'reassessing': False})
+        self.assertEqual(response.json(), {'saved': 1, 'unchanged': 0, 'answer_ids': [], 'reassessing': False,
+                                           'restored': False})  # FINAL-V2 amendment 1, 1.3: 'restored' added
         self.assertEqual(self.counts(encounter_id), before)  # no context, no stage, nothing sent
         (event,) = self.date_events(encounter_id)
         encounter = self.encounter(encounter_id)

@@ -18,6 +18,7 @@ import copy
 import hashlib
 from unittest import mock
 
+from studio import interpretation
 from studio.interpretation import adapter, holds
 from studio.interpretation.contract import appraise_read, extract_read
 from studio.interpretation.replay import USAGE_BASIS, ReplayInterpreter, ReplayInterpreterV2
@@ -58,7 +59,7 @@ class BothPurposesTests(ReplayCase):
                                   exchange.response_sha256, exchange.usage, exchange.usage_basis, exchange.endpoint,
                                   exchange.requested_model, exchange.returned_model, exchange.response_id),
                                  ('succeeded', False, None, raw, hashlib.sha256(raw).hexdigest(), {}, USAGE_BASIS, '',
-                                  'gemini-4-argon', 'gemini-4-argon', 'synthetic-response-0001'))
+                                  'gemini-4-carbon', 'gemini-4-carbon', 'synthetic-response-0001'))
                 recorded = []
                 with participants_loop.recording(recorded.append):
                     outcome = self.replay.send_loop(request, deadline_s=540, client_request_id='run',
@@ -98,8 +99,10 @@ class BothPurposesTests(ReplayCase):
 
     def test_a_replayed_cut_off_or_substituted_answer_is_classified_as_a_live_one(self):
         for raw, kind, hold in ((encoded(with_parts({'text': '{'}, finish='MAX_TOKENS')), adapter.TOO_LONG, ''),
-                                (encoded(envelope(modelVersion='gemini-4-argon-preview')), adapter.HOLD,
-                                 adapter.MODEL_HOLD)):
+                                (encoded(envelope(modelVersion=f'{interpretation.MODEL}-preview')), adapter.HOLD,
+                                 adapter.MODEL_HOLD),
+                                # gemini-4-argon, the model until DECISIONS D230: another model for a v2 request
+                                (encoded(envelope(modelVersion='gemini-4-argon')), adapter.HOLD, adapter.MODEL_HOLD)):
             for request in (self.extracted, self.appraised.request):
                 with self.subTest(kind=kind, purpose=self.replay.purpose(request)):
                     path = self.record(request, raw)
@@ -123,7 +126,7 @@ class RefusalTests(ReplayCase):
             with self.subTest(purpose=self.replay.purpose(request)):
                 exchange = self.replay.send(request, deadline_s=5)
                 self.assertEqual((exchange.outcome, exchange.sent, exchange.error, exchange.requested_model),
-                                 ('not_sent', False, 'No recorded response for this request.', 'gemini-4-argon'))
+                                 ('not_sent', False, 'No recorded response for this request.', 'gemini-4-carbon'))
                 target = write_file(self.tmp / f'elsewhere-{request.canonical_sha256[:8]}.json', self.answer)
                 (self.folder / f'{request.canonical_sha256}.json').symlink_to(target)
                 self.assertEqual(self.replay.send(request, deadline_s=5).error,

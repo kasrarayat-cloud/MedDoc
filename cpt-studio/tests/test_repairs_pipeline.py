@@ -422,7 +422,7 @@ class ConcurrentContextTests(OperatorReads, TransactionTestCase):
             release.set()
             a.join(10)
             b.join(10)
-        self.assertIsInstance(results['A'], models.EncounterContext)
+        self.assertIsInstance(results['A'].context, models.EncounterContext)  # a ContextSave (amendment 1, 2.7)
         self.assertIsInstance(results['B'], jobs.Refused)
         self.encounter.refresh_from_db()
         self.assertEqual(self.encounter.user_values, {'service_date': '2026-10-22'})

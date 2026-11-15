@@ -35,7 +35,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import install  # noqa: E402
 from test_install import (TemporaryDirectoryTest, guard_host, release_host, rendered,  # noqa: E402
-                          HOST_GUARD_ATTEMPTS)
+                          HOST_GUARD_ATTEMPTS, pre_switch_answer)
 
 APP_ROOT = Path(__file__).resolve().parents[1]
 REVISION = 'a' * 40            # the revision being installed
@@ -100,6 +100,10 @@ class BlueGreenWorld:
         self.oneshots = []          # (image, command, keyword arguments) of every one-shot, in order
         # ADJUDICATION P-1: what INTERPRETATION_MADE answers in this revision's image (an exception: it raises that)
         self.interpretation_answer = {'interpretation': {'assessments': 0, 'encounters': [], 'context_only': []}}
+        # design v2 (refutation 6b-r1 P2): what REAPPLY_REVERTED answers (None: every encounter asked is put back, and
+        # the first reading stage each update owes is queued again - refutation 6b-r2 DQ1, DECISIONS D247; an
+        # exception: it raises that), and every P['reverted'] it was given, in order
+        self.reapply_answer, self.reapplies = None, []
         # DECISIONS D51: what the previous image's models read (TARGET_MODEL_READS: an old revision reads neither), and
         # the encounters this revision wrote a record for since its pair was created (TOUCHED_SINCE_READ: every one the
         # tests name, so the time filter drops nothing unless a test says so)
@@ -350,6 +354,9 @@ class BlueGreenWorld:
         if body == install.UNRUNNABLE_STAGES:
             self.act('unrunnable', image_id)
             return self.done({'known': self.stage_kinds.get(image_id, KINDS_OLD), 'stuck': 0, 'kinds': []})
+        if pre_switch_answer(body) is not None:  # design v2's reads before the switch (step 6b)
+            self.act('v1_rows' if body == install.V1_ROWS else 'install_counts', image_id)
+            return self.done(pre_switch_answer(body))
         if body == install.TARGET_MODEL_READS:
             self.act('target_reads', image_id)
             return self.done({'reads': list(self.target_model_reads)})
@@ -366,6 +373,15 @@ class BlueGreenWorld:
             if isinstance(self.interpretation_answer, BaseException):
                 raise self.interpretation_answer
             return self.done(json.loads(json.dumps(self.interpretation_answer)))
+        if body == install.REAPPLY_REVERTED:  # design v2 (refutation 6b-r1 P2): an undo that kept this web serving
+            self.act('reapply', image_id)
+            self.reapplies.append(json.loads(json.dumps(params['reverted'])))
+            if isinstance(self.reapply_answer, BaseException):
+                raise self.reapply_answer
+            return self.done(json.loads(json.dumps(self.reapply_answer)) if self.reapply_answer is not None else {
+                'reapplied': {pk: sorted(fields) for pk, fields in params['reverted'].items()}, 'not_reapplied': {},
+                'requeued': {pk: {'kind': 'interpret', 'job': f'job-{pk}'} for pk in params['reverted']},
+                'coalesced': {}, 'not_requeued': {}})
         raise AssertionError('unexpected in-image script')
 
     def oneshot(self, image_id, command, env_bytes, **kwargs):
@@ -2880,8 +2896,11 @@ class D110SinceCountsEveryAppReceiptTests(TemporaryDirectoryTest):
                 for event in (('rename', WORKER, WORKER + '-previous'), ('rename', WEB, WEB + '-previous'),
                               ('run', 'web', WEB, 9150, IMAGE)):  # this revision's web on the HTTPS stage's port
                     self.assertIn(event, world.events)
-                # what the receipt records: the undo's close, and no 'replaced' (D95 counted only one that has one)
-                self.assertEqual(sorted(first['details']), ['hazards', 'stages_closed', 'states_put_back'])
+                # what the receipt records: the undo's close, and no 'replaced' (D95 counted only one that has one);
+                # design v2 (step 6b): and the install counts read before the switch (amendment 1, 9.5: printed into
+                # the transcript whatever the phase's outcome)
+                self.assertEqual(sorted(first['details']), ['hazards', 'install_counts', 'stages_closed',
+                                                            'states_put_back'])
                 self.assertEqual(world.names(), {WEB: (OLD_IMAGE, 9150, True), WORKER: (OLD_IMAGE, None, False)})
                 world.unhealthy.discard(WORKER)
                 world.checking = True

@@ -44,6 +44,7 @@ from django.test import SimpleTestCase, override_settings
 from studio import jobs, models, reports, review
 from studio.types import sha256_json
 from tests import test_harness2_api as h2
+from tests import v2_documents, v2_replay
 from tests.legacy_chain import applied
 from tests.test_frontend import HARNESS2_SCENARIOS, _fixture
 from tests.test_harness2_pipeline import (EMPTY_PEER, HEAD, TWO_EXTENTS, TWO_EXTENTS_INTERPRETATIONS, ColonCase,
@@ -235,10 +236,15 @@ class CodeQuestionTests(RecordedInterpretation, ColonCase):
     codes."""
     # On the production chain (design/FINAL.md 14.6; slice S15): Gemini reads every document the class uploads from its
     # recorded synthetic interpretation.
+    # DECISIONS D243 class C: the test rejects through the product, which reads event_coding@2 only (FINAL-V2 6.5): its
+    # rows are design v2's, in replay (tests/v2_replay.py), from TWO_EXTENTS with its endoscopist named
+    # (tests/v2_documents.TWO_EXTENTS) - never the v1 chain's.
     interpretations = TWO_EXTENTS_INTERPRETATIONS
+    v2_interpretations = ((v2_documents.TWO_EXTENTS, v2_documents.two_extents_answer),)
 
+    @v2_replay.applied  # DECISIONS D243 class C
     def test_a_question_about_a_code_holds_that_code_which_can_still_be_rejected(self):
-        encounter_id = self.create(TWO_EXTENTS)
+        encounter_id = self.create(v2_documents.TWO_EXTENTS)
         drain()
         encounter = self.encounter(encounter_id)
         final = encounter.current_assessment

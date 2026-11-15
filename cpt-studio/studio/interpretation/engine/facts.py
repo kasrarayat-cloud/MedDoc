@@ -18,7 +18,8 @@ reads D's statement-linked target and timing words as the ``at`` spans (the unit
 from (claim.inherited_from; None for the act's own slot), so 4.5's performer row reads "D's own statement names a
 performer" as a performer fact that is not silent and has no ``inherited_from``. Its ``counter`` holds the spans of the
 evidence units of a contradicts or qualified verdict (3.2.5, quoted in the hold question; a supports verdict that names
-qualifiers is read as qualified, DECISIONS D186), each once, in the verdict's order. An anchor's ``units`` are its
+a qualifier but approximate is read as qualified, DECISIONS D186 - approximate never lowers, D224), each once, in the
+verdict's order. An anchor's ``units`` are its
 units' spans and its kind and status words their located offsets. A single-valued slot is one Fact (a silent one is
 state None, result unknown, reason silent: 3.3 row 3); a multi-valued attribute is one Fact per member, and an empty
 list is no member, which a rule reads as unknown, never as an absence (P3). Each inherited fact is the stored per-act
@@ -32,6 +33,22 @@ attribute of the object and is skipped); and the value of its contrary control w
 [R:HO-3]). An established fact has none. The doubt rule reads the objects a doubt names, not 1b's DOUBT_ATTRIBUTES row:
 every reading so attached is one settle may have applied, so it can only widen what is possible, never narrow it.
 
+**A session K3 demoted** (DECISIONS D244, question Q-N1 option (b)): an event's session fact that is not established and
+carries ``session_unreachable`` - K3 found a place of the act in a region its claimed session's family cannot reach, and
+nothing was moved (3.1 K3) - is possibly any session whose reach holds the act's place, not its claimed session alone.
+The builder adds to that fact's options every other session of the row that may be of a family whose reach holds a place
+the act may be at, as K3 reads a reach: catalogue.FAMILY_REACH, the regions a session of each family can reach
+(DECISIONS D192), against engine/anatomy.region. A family the table does not list, and a place in no region, are judged
+by no reach (K3 never demotes on them), so they hold it (the fail-closed reading: this repair's question R2D-K3). A
+place the act may be at is a supported member's value or an open member's value and options (a negated member names
+none), and a session is added when its reach holds ANY of them (question R2D-K3P); when no place is known (no member
+names one, or a member that is not negated names none), every session's reach may hold it (P3). A session may be of its
+supported kind, every other family when its kind is negated, and possibly's families otherwise. So ``possibly`` reads
+the widened fact (and every rule that reads the fact's options reads the same sessions): "an EGD and a push enteroscopy;
+on withdrawal, a polypectomy of a gastric body polyp" filed in the enteroscopy is possibly the EGD's act. The options
+are fixed when the row is read: 9.4's weakenings, which act on the FactSet, leave them as they were, so a weakening
+never narrows the sessions.
+
 **The predicates** (4.2): ``holds``, ``denied``, ``established``, ``possibly`` - with the status arm: a status that is
 not established leaves every status possible [R:HO-1][R:HO-3] - and ``possibly_of_family``, the kind arm a statement
 (4.5) and an exclusion's condition 5 (4.6) read: a kind that is not established leaves every kind of its session's
@@ -40,7 +57,18 @@ and every kind when the session or its kind is not established [R:HO-5]. As a ca
 is read by ``possibly`` alone: its claimed value, its readings and its control's sibling. ``apart_by_lesion``
 and ``apart_by_place`` set two objects apart only on established, different (disjoint) targets AND rejected pair
 controls in both directions: a short list never sets anything apart, and a pair control that was not generated is not
-rejected [R:SC-B].
+rejected [R:SC-B]. ``apart_by_place`` reads every pair control between the two objects, whatever place it asks about
+(``apart_by_controls``, DECISIONS D220, kept by D236): "apart" needs every such control rejected and every current
+member of the other object asked by a rejected control. A stored pair control names the object it asks and the value
+it asks about, never the object whose value it was (the claim's identity; the FactSet's key), so for a multi-valued
+list every pair control asked of either object is read as one between them (fail-closed): under 9.4's weakening - a
+member deleted from a list, the pair controls left as they were - the deleted member's unrejected control still keeps
+the pair together, and so does an unrejected control another object's place made (repair r2d's question Q1, ruled by
+D236: as built, named in 6a's P-MONO). ``apart_by_lesion`` reads only the lesion pair controls between the two objects
+as their target lesions name them, (a, lb) and (b, la) (DECISIONS D235): target.lesion is single-valued and no 9.4
+weakening deletes or changes it, so these two are exactly the controls between the pair, and a control about a lesion
+only a third object names, made for another pair, is not read - 4.2's lesion reading. The every-control scan stays for
+the multi-valued sets (place lists here, a statement's listed lesions in engine/pairing.py).
 
 **effective(inventory, effective_date)** (4.2, 6.5): L1 re-judged on the timing facts - an event's date relation and a
 section's occasion - from the literals L1 stored with each (checks.literals: for an act's inherited date relation, its
@@ -56,17 +84,17 @@ a second implementation, because engine/ cannot import date_literals; tests/v2/t
 the grid relation x precision x literal x service date (D193).
 
 **The text-free boundary** (P1, 5.7 measures 4 and 5): this module imports the standard library, contract/types.py and
-engine's types, anatomy and requirements_table only - no retired v1 module, none of contract's text modules, not
-store.py (its caller hands it store.textfree_v2's view) - and holds no word list (every module-level collection holds
-enumeration members). No public function here returns a string (the private readers of the stored JSON do), and
-``mypy --strict`` passes over it. A row this builder cannot read whole raises FactSetError (a ValueError); nothing is
-ever read as an empty inventory.
+engine's types, anatomy, catalogue (FAMILY_REACH, which requirements_table already imports) and requirements_table only
+(no retired v1 module, none of contract's text modules, not store.py: its caller hands it store.textfree_v2's view), and
+holds no word list (every module-level collection holds enumeration members). No public function here returns a string
+(the private readers of the stored JSON do), and ``mypy --strict`` passes over it. A row this builder cannot read whole
+raises FactSetError (a ValueError); nothing is ever read as an empty inventory.
 """
 from __future__ import annotations
 
 import datetime
-from collections.abc import Iterator, Mapping, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Iterable, Iterator, Mapping, Sequence
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from types import MappingProxyType
 from typing import TypeVar
@@ -79,7 +107,7 @@ from studio.interpretation.contract.types import (AccessOutcome, AnastomosisSubt
                                                   Qualifier2, Reason, RestatementRole, Result, Route, SectionRole,
                                                   Separate, SessionKind, Station, Status, Structure, Tract,
                                                   UnlistedWhat, VerdictValue)
-from studio.interpretation.engine import anatomy, requirements_table
+from studio.interpretation.engine import anatomy, catalogue, requirements_table
 from studio.interpretation.engine.types import (Anchor, Cited, Fact, FactSet, Id, IdFamily, IsoDate, Span,
                                                 UnlistedStatement, Value)
 
@@ -160,6 +188,9 @@ OPEN: frozenset[Result] = frozenset({Result.UNRESOLVED, Result.CONTRADICTED, Res
 # What L1 wants of a timing fact's literal, compared with the effective date at the literal's precision (3.1 L1).
 _WANTS: Mapping[DateRelation, int] = MappingProxyType({DateRelation.ON_DATE_OF_SERVICE: 0,
                                                        DateRelation.EARLIER_DATE: -1, DateRelation.LATER_DATE: 1})
+# The attributes a pair control asks about (3.2.3 [R:SC-B]): the builder refuses a pair control of any other, and
+# apart_by_controls reads one of these (DECISIONS D220).
+PAIR_ATTRIBUTES: frozenset[Attribute] = frozenset({Attribute.TARGET_PLACES, Attribute.TARGET_LESION})
 # The timing facts L1 re-judges at assess and read time (an inherited date relation is stored per act, 1.5).
 TIMING: frozenset[tuple[IdFamily, Attribute]] = frozenset({(_E, _A.DATE_RELATION), (_N, _A.OCCASION)})
 
@@ -333,8 +364,9 @@ class _Context:
     def counter(self, appraisal: object, where: str) -> tuple[Span, ...]:
         """The spans of the evidence units of a contradicts or qualified verdict (3.2.5: kept as COUNTER sources and
         quoted in the hold question; DECISIONS D188), each once, in the verdict's order; a supports verdict that names
-        a qualifier is read as qualified (DECISIONS D186). An evidence unit the row does not have locates nothing and
-        is skipped (the verdict demotes all the same, 3.2.5). Empty for any other verdict, or for no appraisal."""
+        a qualifier but approximate is read as qualified (DECISIONS D186; approximate is recorded and never lowers,
+        1.3 and D224). An evidence unit the row does not have locates nothing and is skipped (the verdict demotes
+        all the same, 3.2.5). Empty for any other verdict, or for no appraisal."""
         if appraisal is None:
             return ()
         record = _mapping(appraisal, where)
@@ -344,7 +376,7 @@ class _Context:
         evidence = _sequence(_field(record, 'evidence', where), f'{where}.evidence')
         verdict = None if raw is None else _enum(VerdictValue, raw, f'{where}.verdict')
         countered = verdict is VerdictValue.CONTRADICTS or verdict is VerdictValue.QUALIFIED or (
-            verdict is VerdictValue.SUPPORTS and bool(qualifiers))
+            verdict is VerdictValue.SUPPORTS and any(item is not Qualifier2.APPROXIMATE for item in qualifiers))
         out: list[Span] = []
         for index, unit in enumerate(evidence):
             span = self.units.get(_string(unit, f'{where}.evidence[{index}]'))
@@ -610,7 +642,7 @@ def _pair_controls(context: _Context) -> dict[tuple[Id, Attribute, Value], bool]
         subject = _id(_field(claim, 'subject', where), f'{where}.subject')
         attribute = _enum(Attribute, _field(claim, 'attribute', where), f'{where}.attribute')
         domain = DOMAINS.get((subject.family, attribute))
-        if domain is None or attribute not in (Attribute.TARGET_PLACES, Attribute.TARGET_LESION):
+        if domain is None or attribute not in PAIR_ATTRIBUTES:
             raise FactSetError(f'The stored inventory is not readable: {where} is a pair control of no target.')
         asked = _value(_string(_field(claim, 'value', where), f'{where}.value'), domain, f'{where}.value')
         verdict = _field(claim, 'verdict', where)
@@ -638,6 +670,70 @@ def _unlisted(events: Mapping[str, object], context: _Context) -> tuple[Unlisted
         session = None if raw_session is None else _id(raw_session, f'{where}.session')
         out.append(UnlistedStatement(units=tuple(spans), what=what, kind=kind, session=session))
     return tuple(out)
+
+
+# --- a session K3 demoted (DECISIONS D244 Q-N1 option (b); module docstring) ------------------------------------------
+
+
+def _reach_holds(family: SessionKind, place: Landmark) -> bool:
+    """Whether a session of ``family`` may hold an act at ``place`` as K3 reads a reach (3.1 K3; DECISIONS D192):
+    unless the place lies in a region (engine/anatomy.region) that the family's reach (catalogue.FAMILY_REACH) is
+    stated to leave out. A family the table does not list, and a place in no region, are judged by no reach: K3 never
+    demotes on them, so they hold it (this repair's question R2D-K3)."""
+    region = anatomy.region(place)
+    reach = catalogue.FAMILY_REACH.get(family)
+    return region is None or reach is None or region in reach
+
+
+def _families(kind: Fact) -> frozenset[SessionKind]:
+    """The families a session may be of, by its kind fact: its supported kind; every other family when it is negated;
+    possibly's families otherwise (every family for an empty slot)."""
+    if kind.result is Result.SUPPORTED and isinstance(kind.value, SessionKind):
+        return frozenset({kind.value})
+    if kind.result is Result.NEGATED:
+        return frozenset(family for family in SessionKind if family != kind.value)
+    return frozenset(family for family in SessionKind if possibly(kind, family))
+
+
+def _places(members: Sequence[Fact]) -> tuple[Landmark, ...] | None:
+    """The places an act may be at, by its target place members: a supported member's value, an open member's value
+    and options (possibly's); a negated member names none. None when no place is known: no member names one (an empty
+    list, or negated members only - where the act was not done says nothing of where it was), or a member that is not
+    negated names none (an empty list is unknown, never an absence, P3)."""
+    out: list[Landmark] = []
+    for member in members:
+        if member.result is Result.NEGATED:
+            continue
+        values = (member.value,) if member.result is Result.SUPPORTED else (member.value, *member.options)
+        found = [value for value in values if isinstance(value, Landmark)]
+        if not found:
+            return None
+        out.extend(value for value in found if value not in out)
+    return tuple(out) if out else None
+
+
+def _k3_widened(sessions: Mapping[Id, Mapping[Attribute, tuple[Fact, ...]]],
+                held: Mapping[Attribute, tuple[Fact, ...]]) -> Mapping[Attribute, tuple[Fact, ...]]:
+    """One event's facts with its session fact widened when K3 demoted it (DECISIONS D244 Q-N1 option (b)): a session
+    fact that is not established and carries ``session_unreachable`` gains, after its own options, every other session
+    of ``sessions`` (in pass 1's order) that may be of a family whose reach holds any place the act may be at
+    (``_reach_holds``, ``_families``, ``_places``; questions R2D-K3 and R2D-K3P). Any other event's facts are returned
+    as they are."""
+    found = held.get(Attribute.SESSION, ())
+    if not found or found[0].result not in OPEN or Reason.SESSION_UNREACHABLE not in found[0].reasons:
+        return held
+    session = found[0]
+    places = _places(held.get(Attribute.TARGET_PLACES, ()))
+    added: list[Value] = []
+    for candidate, facts_of in sessions.items():
+        if candidate == session.value or candidate in session.options:
+            continue
+        kind = facts_of.get(Attribute.KIND, (SILENT,))[0]
+        if places is None or any(_reach_holds(family, place) for family in _families(kind) for place in places):
+            added.append(candidate)
+    if not added:
+        return held
+    return {**held, Attribute.SESSION: (replace(session, options=session.options + tuple(added)),)}
 
 
 def _build(inventory: object, rejudge: bool, service: datetime.date | None) -> FactSet:
@@ -668,6 +764,8 @@ def _build(inventory: object, rejudge: bool, service: datetime.date | None) -> F
                     completeness[subject] = _enum(Result, _field(_mapping(check, f'{where}.completeness'), 'result',
                                                                  f'{where}.completeness'), f'{where}.completeness.result')
         objects[family] = found
+    # a session fact K3 demoted is possibly any session whose reach holds the act's place (DECISIONS D244 Q-N1)
+    objects[_E] = {subject: _k3_widened(objects[_X], held) for subject, held in objects[_E].items()}
     return FactSet(encounter=encounter, people=objects[_P], sections=objects[_N], sessions=objects[_X],
                    anatomy=objects[_Y], lesions=objects[_L], events=objects[_E], anchors=anchors,
                    unlisted=_unlisted(events, context), pair_controls=_pair_controls(context),
@@ -887,11 +985,49 @@ def _supported(R: FactSet, subject: Id, attribute: Attribute) -> tuple[Value, ..
     return values or None
 
 
+def apart_by_controls(R: FactSet, a: Id, b: Id, attribute: Attribute, of_a: Iterable[Value],
+                      of_b: Iterable[Value]) -> bool:
+    """DECISIONS D220 (FINAL-V2 4.2, 3.2.3 [R:SC-B]): whether the pair controls on ``attribute`` (target.places or
+    target.lesion) set ``a`` and ``b`` apart - EVERY pair control between the two objects rejected, whatever place or
+    lesion it asks about, and every current member of each object covered by a rejected control asked of the other
+    (each of ``of_b`` asked of ``a``, each of ``of_a`` asked of ``b``). A control that was not generated is not
+    rejected.
+
+    It is the reading for MULTI-VALUED sets (DECISIONS D235): a place list (apart_by_place), a statement's listed
+    lesions (engine/pairing.py). A stored pair control names the object it asks and the value it asks about, never the
+    object whose value it was (store's claim identity; the FactSet's key, engine/types.FactSet), so for a list, whose
+    members 9.4's weakening may delete, which controls are "between" two objects cannot be told from the FactSet: every
+    pair control asked of either object about ``attribute`` is read as one between them (fail-closed). An unrejected one
+    keeps the pair together - the control of a member 9.4's weakening deleted from the other's list (the pair controls
+    left as they were), and equally one another object's place made, which on a settled FactSet holds a pair 4.2's
+    reading set apart (repair r2d's question Q1; DECISIONS D236, as built). A single-valued target lesion names its
+    between controls itself, and apart_by_lesion reads only those (D235). So it is never more apart than 4.2's reading,
+    and under 9.4's weakenings it only loses apartness: a deleted member whose control was generated removes only a
+    coverage requirement and leaves its control read, and a control not rejected or a member demoted removes an
+    apartness. (A deleted member whose control was never generated removes a coverage requirement that could not be met,
+    so the call it was given may answer apart after the deletion - refute-r2d-r2 RD1; through apart_by_place it is
+    unreachable, as claims.pair()'s rule is symmetric. What a deletion changes outside the controls - the disjointness
+    of the lists, and whether a list is established - is apart_by_place's: r2d's questions Q2 and Q3, ruled by D245.)
+    ValueError for an attribute no pair control asks about."""
+    if attribute not in PAIR_ATTRIBUTES:
+        raise ValueError(f'{attribute.value} is no attribute a pair control asks about.')
+    asked = (a, b)
+    if any(not rejected for (subject, about, _value), rejected in R.pair_controls.items()
+           if about is attribute and subject in asked):
+        return False
+    return (all(R.pair_controls.get((a, attribute, value)) is True for value in of_b)
+            and all(R.pair_controls.get((b, attribute, value)) is True for value in of_a))
+
+
 def apart_by_lesion(R: FactSet, a: Id, b: Id) -> bool:
-    """FINAL-V2 4.2 [R:SC-B]: both target lesions established (supported) and different, distinct_from established
-    (supported) between them in either lesion's list, and the lesion pair controls rejected in both directions ("This
-    act was done to lesion {L}." asked of each object about the other's lesion). A pair control that was not generated
-    is not rejected."""
+    """FINAL-V2 4.2 [R:SC-B], DECISIONS D235: both target lesions established (supported) and different, distinct_from
+    established (supported) between them in either lesion's list, and the lesion pair controls BETWEEN the two objects,
+    as their target lesions name them, rejected: ``a`` asked about ``b``'s lesion and ``b`` about ``a``'s ("This act was
+    done to lesion {L}."), (a, lb) and (b, la). target.lesion is single-valued and no 9.4 weakening deletes or changes
+    it, so these two are exactly the lesion controls between the pair: a lesion control asked of either object about a
+    lesion only a third object names was made for another pair and is not read (refute-r2d-r2 RL1: one unclear control
+    made for (E4, E5) held the biopsy E4 against the snare E3, established apart by lesion). A control that was not
+    generated is not rejected. The every-control scan (``apart_by_controls``) stays for the multi-valued sets."""
     first, second = fact(R, a, Attribute.TARGET_LESION), fact(R, b, Attribute.TARGET_LESION)
     if first.result is not Result.SUPPORTED or second.result is not Result.SUPPORTED:
         return False
@@ -905,11 +1041,17 @@ def apart_by_lesion(R: FactSet, a: Id, b: Id) -> bool:
 
 
 def apart_by_place(R: FactSet, a: Id, b: Id) -> bool:
-    """FINAL-V2 4.2 [R:SC-B]: both target place sets established (every member established, at least one supported)
-    and disjoint on the anatomy chain (engine/anatomy.disjoint, pairwise), and every pair control asking one object
-    about a place of the other rejected ("This act was done in the {place}.", both directions). A short list never
-    sets anything apart: the omitted place is exactly what a pair control asks, and one that was not generated is not
-    rejected."""
+    """FINAL-V2 4.2 [R:SC-B], DECISIONS D220 and D236: both target place sets established (every member established, at
+    least one supported) and disjoint on the anatomy chain (engine/anatomy.disjoint, pairwise), and the place pair
+    controls setting them apart (``apart_by_controls``): every place of each object asked of the other by a rejected
+    control ("This act was done in the {place}.", both directions), and every place pair control asked of either object
+    rejected, whatever place it asks about. A short list never sets anything apart: the omitted place is exactly what a
+    pair control asks, one that was not generated is not rejected, and a member deleted from a list leaves its
+    unrejected control read (9.4's weakening). Two deletions still set a pair apart, as the controls already do (repair
+    r2d's questions Q2 and Q3, ruled by D245): a deleted member that overlapped a place of the other without being
+    compatible with it (engine/anatomy: neither compatible nor disjoint), its control on the other rejected (Q2, named
+    in 6a's P-MONO); and a deleted member that was not established, its control (when one was made) rejected (Q3: 9.4's
+    deletion weakens an established member only, so that release is the removed doubt's own)."""
     first, second = _supported(R, a, Attribute.TARGET_PLACES), _supported(R, b, Attribute.TARGET_PLACES)
     if first is None or second is None:
         return False
@@ -919,5 +1061,4 @@ def apart_by_place(R: FactSet, a: Id, b: Id) -> bool:
         return False
     if not all(anatomy.disjoint(one, other) for one in places_a for other in places_b):
         return False
-    return (all(R.pair_controls.get((a, Attribute.TARGET_PLACES, place)) is True for place in places_b)
-            and all(R.pair_controls.get((b, Attribute.TARGET_PLACES, place)) is True for place in places_a))
+    return apart_by_controls(R, a, b, Attribute.TARGET_PLACES, places_a, places_b)
