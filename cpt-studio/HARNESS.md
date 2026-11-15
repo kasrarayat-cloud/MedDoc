@@ -4707,7 +4707,11 @@ the second Gemini call approved"), and in RULINGS.md; DECISIONS D183 applies it.
   - the implementation;
   - independent testing of wrong READYs and unnecessary holds;
   - the critical and materially incomplete findings;
-  - the pypdf security update and its checks;
+  - the pypdf security update and its checks; DONE 2026-11-14: PR #1494 merged into main as 56b70eb5 (pypdf 6.21.4
+    under a fail-closed 6.21.2 compatibility layer; round 9: 2,611 of 2,705 unique PDFs read identically to the
+    installed release, 90 S-limit constructions, 1 P-cost, 3 memory boundary, 0 unexplained; the identity lens's
+    444,140 runs found nothing; CI on 0ec8a9e8a green with pip_audit "No known vulnerabilities found"), merged into
+    the migration branch 2026-11-15;
   - the installation, with the current site kept available;
   - the actual website walk: upload, review, save, reload and downloads.
 

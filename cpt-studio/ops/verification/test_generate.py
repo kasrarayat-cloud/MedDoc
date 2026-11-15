@@ -20,6 +20,17 @@ from pypdf import PdfReader
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 
+# This suite reads the PDFs generate.py renders with pypdf, in this process: pypdf 6.21.4 is read as 6.21.2 reads, as
+# the extraction child (studio/ingest/_child.py) and the tests package (tests/__init__.py) read it. CI discovers this
+# directory on its own, so the tests package never runs here (pypdf-r6 FC-1). The layer refuses, and this module
+# fails to import, when pypdf is not the proven 6.21.4.
+sys.path.insert(0, str(ROOT))
+try:
+    from studio.ingest import pypdf_compat as _pypdf_compat
+finally:
+    sys.path.remove(str(ROOT))
+_pypdf_compat.apply()
+
 
 def _load(name, path):
     spec = importlib.util.spec_from_file_location(name, path)
@@ -318,6 +329,17 @@ class GeneratedOutputTests(unittest.TestCase):
             if doc['delivery']['format'] in {'txt', 'paste'}:
                 with self.subTest(doc=doc['id']):
                     self.assertEqual(self.output(doc['id']), (HERE / doc['source']).read_bytes())
+
+    def test_the_pdf_layer_reads_this_suites_pdfs(self):
+        # The PDFs below are read in this process with pypdf, as the extraction child reads them (pypdf-r6 FC-1).
+        sys.path.insert(0, str(ROOT))
+        try:
+            from studio.ingest import pypdf_compat
+        finally:
+            sys.path.remove(str(ROOT))
+        self.assertIsNotNone(pypdf_compat.applied(), 'pypdf is read here without the compatibility layer')
+        import pypdf._cmap
+        self.assertTrue(pypdf._cmap._parse_encoding.__code__.co_filename.startswith('<pypdf_compat '))
 
     def test_pdf_text_layer_reproduces_the_source(self):
         for doc in MANIFEST['documents']:

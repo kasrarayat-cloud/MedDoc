@@ -811,6 +811,223 @@ the reader to tell a dropped section or a hit limit from damage, from pypdf's wa
 6.21.2's refusals for strings it cannot decode as the font says (TXT-2, n-2), and its literal glyph names where a
 decoded one would be dropped (TXT-3).
 
+### pypdf 6.21.4 is taken under a compatibility layer (round 6, repaired in rounds 7 and 9; 2026-11-13)
+
+This supersedes the decision above. CPT Studio pins pypdf 6.21.4. The reader stays byte-identical to installed
+c2e53f8e except in three named places. The extraction child applies the layer before it imports the reader
+(`studio/ingest/_child.py`). `studio/ingest/pdf.py` names the two advisory limits it can meet when it opens a file.
+And the PDF child's address-space limit is raised by what the layer itself occupies (`studio/ingest/extract.py`).
+
+**The round 1-5 rewrite is set aside.** It adapted the reader to 6.21.4's reading changes, and it did not converge.
+Round 5's refutation confirmed 20 regressions against installed, 6 of them blocking. The rewrite is kept unmerged as a
+record on branch `fix/cpt-studio-pypdf-6.21.4-20261112` (merge 1c3854a24).
+
+**What the layer does.** `studio/ingest/pypdf_compat.py` replaces 11 pypdf functions and restores one import
+binding. Each replacement is an exact edit of 6.21.4's own source, never a wrapper.
+- Of the 104 hunks of the 6.21.2-to-6.21.4 diff, it restores the 9 B hunks (except the version string, H93) and the 4
+  A hunks. The 22 S (advisory), 6 P (performance only) and 16 M (MemoryError only) hunks are kept. The 47 U hunks are
+  unreachable by the reader.
+- Two of the replacements edit an advisory fix's lines and keep the fix:
+  - #4265: a MemoryError inside a dictionary is raised as itself, so the reader names it as it names every memory
+    failure.
+  - #4269, a negative /Index count: it takes part in the clamp's arithmetic as in 6.21.2, then reads and counts no
+    entry. Every entry pypdf reads still counts toward the limit.
+- #4269's count is pypdf 6.21.4's, unchanged. It counts a cross-reference stream's entries at every read of the
+  stream, so a stream that an older trailer's /XRefStm or the /Prev or startxref chain names again is read again and
+  counted again. When the count passes 2,000,000, `pdf.py` refuses the document as LIMIT_REACHED, whatever its
+  distinct entries, and `ops/verify_passages.py` cannot check it (CannotCheck, exit 2). That refusal is the named
+  class S-limit below. pypdf 6.21.2 read such a file, since its re-reads added no entry. Plain 6.21.4, past the limit,
+  leaves out the section whose read passed it and reads on, so a distinct section can be missing at status ok (round
+  6's V3: plain 6.21.4 reads it ok without the annotation only that section lists). The refusal keeps a reading from
+  ever being partial.
+- Rounds 7 and 8 kept a record of the streams a read of the sections had read, so that a stream named again was
+  neither read nor counted again. Their refutations confirmed six findings each in that record. Round 7's: a stream
+  named again through the /Prev or startxref chain was still counted twice (RG-1, FC7-1, RG-2); the skipped re-read
+  also skipped 6.21.2's re-cache (RG-3); the record kept a replaced table alive (RG-4, FC7-2). Round 8's: a repeat was
+  served where 6.21.2's re-parse fails (RG8-W1); a failure was replayed where 6.21.2 re-reads (RG8-W2); a comment
+  split one stream's key (RG8-K); failures were kept for the reader's life (FC8-1, FC8-2); and no test bounded what a
+  read kept (FC8-3). A record cannot reproduce 6.21.2's re-reads without re-reading, and re-reading without counting
+  reopens #4269's bound. So the record is withdrawn. Round 7's statement that a stream named by several trailers
+  reads as installed below the limits holds only while its reads, counted each time, stay at or below 2,000,000.
+- It refuses unless pypdf is the proven 6.21.4. The checks are its version and the sha256 of all 59 source files.
+  For each replaced function, and for six advisory functions it keeps unchanged, they also cover the source's sha256
+  and the loaded code. The six are `PdfReader.__init__`, `_read_xref_tables_and_trailers`, `_read_xref` and
+  `_read_pdf15_xref_stream` (#4269), and `PdfDocCommon._flatten` and `_flatten_leaf_page` (#4290). Every binding is
+  checked, and no replaced function may still be reachable. The source of each function is read as a line range of
+  the proven file, never through `inspect` or `linecache`.
+- It applies wherever CPT Studio reads a PDF with pypdf: the extraction child, `ops/verify_passages.py`, the tests
+  package (`tests/__init__.py`) and `ops/verification/test_generate.py`. CI discovers that last suite on its own. The
+  web and worker processes import pypdf's code tables but never build a PdfReader.
+
+**A refusal.** The document fails with "The PDF could not be read on this server: its PDF library is not the one the
+PDF reader was checked with." Nothing is read. The reason is recorded for operators in the result's
+`engine['pypdf_compat']`, on a refusal only, so no successful read's record changes. The image phase of
+`ops/install.py` reads one synthetic guard PDF through the image's own extraction child, as the image's user on its
+read-only root. It refuses the install unless the reading is installed 6.21.2's (the status and the text's sha256),
+and the error names the refusal's reason. No other image check (`manage check`, the WSGI import) starts the child.
+
+**The table above under the layer.** Measured through the real child against installed:
+- Every TXT and n row, and parser-03 and -08 to -11, reads as installed: 130 of the old record's 134 shapes, measured
+  again in round 9; the other four are parser-01, -02, -05 and -06.
+- parser-01 and -02 (#4269) and parser-05 and -06 (#4290) are refused and named: "The PDF could not be read: its
+  structure goes past a limit this server applies to uploaded files". So are the other files past either limit that
+  round 6's refutation built: kids, an /Encrypt dictionary or an /ID held only in the left-out section, and nothing
+  hidden at all. A file past #4269 is named as soon as pypdf's constructor returns, before the password test and before
+  any page is read. The constructor reads the cross-reference sections and, for an encrypted file, the trailer's /ID
+  and /Encrypt and what the encryption dictionary refers to. Each of those that only the left-out section listed is
+  searched for through the whole file. That is 27 objects at most as measured (pypdf-r9 FC9-W1): 10.0 s and 125 MB in
+  the child at the 15 MiB upload limit, against 4.5 s and 95 MB for the file's at-limit control. None is named damaged
+  or password-protected, and none is read with a section left out.
+- A stream named by several trailers, or again through the /Prev or startxref chain, is read and counted at each
+  naming, as plain 6.21.4 reads and counts it. While the count stays at or below 2,000,000 the document reads as
+  installed: round 6's V1c (200,001 x 9) and V2c (20,001 x 99), and every at-limit control of rounds 6 to 8 (1,000,000
+  named twice through each route, 40,000 x 50, 2,000 x 1,000). Past it the document is refused: C1 (1,000,001 x 2),
+  V1 (200,001 x 10), V2 (20,001 x 100), V3 (a distinct section after a repeat) and the other double counts below. C2
+  (C1 with a page tree one level deeper than pypdf allows) is named LIMIT_REACHED where installed calls it damaged,
+  since the count is tested before the page tree is read.
+- parser-07 (a memory failure inside a dictionary) always gives the memory message.
+
+**Measured in round 9** (real child, one fresh parent per file and side; I is installed on 6.21.2, II is installed on
+plain 6.21.4, III is the branch before round 9 with round 7's record, A9 is the branch with round 9's repair):
+- Rounds 6, 7 and 8's finding inputs and controls (320 files under their judges' and lenses' inputs; every SHA256SUMS
+  line checked, 540 of 540): A9 reads 230 as installed. 87 are S-limit: 45 are past the limit only because a stream is
+  named again (each confirmed in process: 2,001 to 1,999,999 distinct entries, counted 2,000,002 to 6,001,996,999),
+  39 have more than 2,000,000 distinct entries, and 3 are past #4290. 3 are on the memory boundary. None is
+  unexplained. Every double-count input of rounds 6 to 8 is LIMIT_REACHED but one at the deadline: round 8's
+  `stress-prev-x3000-1999999` was refused in 219 s once and, run alone, stopped at 240 s with installed's reading.
+  Every other input reads as installed: RG-3's four shadow files and their controls, RG-4's and FC7-2's retain files
+  (where round 7's branch gave the memory message on three), and all of RG8-W1, RG8-W2 and FC8-1. FC8-2's four
+  past-limit files are named LIMIT_REACHED, not the memory message.
+- The kept corpora: 2,705 unique PDFs, every PDF under round 6's reconciler inputs, the designer's 184 shapes, the
+  inputs of rounds 6, 7 and 8's lenses and judges, rounds 7 and 8's repair inputs, and `cptpdf`, `cptpdf-r2`, `-r3`
+  and `-r4`, deduplicated by sha256. 2,611 read as installed. 90 are S-limit, each confirmed in process: 45 double
+  counts, 39 with more than 2,000,000 distinct entries and 6 past #4290. 1 is P-cost and 3 are on the memory
+  boundary. 12 are deadline-bound and read the same on both sides (10 stop at 240 s, 2 finish just inside it). None is
+  unexplained. Every row near the deadline was run again alone, and those are the rows counted; the memory rows ran
+  one child at a time. Round 8's installed rows were reused for the files no fresh installed row covers, after 150 of
+  them, chosen at random, gave the same key read again.
+- How far documents are from the refusal (in process on the layer, every file of the corpora that installed reads
+  ok): no real writer's document and no cptpdf document names a cross-reference stream more than once. The largest
+  count is 720 among pypdf's own sample PDFs (WPS, LibreOffice, pdfTeX, Word, Acrobat, Skia, ImageMagick, cairo; 38
+  read ok, 11 hold a cross-reference stream; p50 0, p99 720), at `issue-914-xmp-data.pdf`, 2,778 times below the
+  limit; it is 27 in the cptpdf corpora without their denial-of-service files (207 read ok, 3 hold a stream; p50 0,
+  p99 27), at `cairo-notdef-bare.pdf`. Every member of the class is a construction; its double counts are 2 to 3,001
+  namings of streams of 2,001 to 1,999,999 entries.
+- The 29 #4269 members the round-7 judge listed are LIMIT_REACHED, in three runs one child at a time: 28 in under
+  1 s (0.56-0.99 s), and a4269-prev-chain-5x1.5M in 3.31-3.52 s at a load of about 15 from another session. That
+  file reads a whole first stream of 1,500,000 entries before the second passes the limit, the same work round 7's
+  branch and plain 6.21.4 do: at a load of about 5 it took 2.77-2.85 s on the layer, 3.01-3.14 s on round 7's branch
+  and 2.87-2.96 s on plain 6.21.4 (which reads it partly), three runs each. So it is under 3 s only on a quiet host.
+- The suites, on the repaired branch with venv 6.21.4: `tests.test_ingest` and `tests.test_pypdf_compat`, 111 tests;
+  the 35 modules that import `studio.ingest` or read PDFs, 1,073; the whole `tests` package, 6,638; `ops`, 527;
+  `ops/verification`, 44. All pass. In the 35-module run one timing test of the validation engine, which reads no
+  PDF, failed at a load of 24-33 from another session; it failed the same way on round 7's branch at that load, and
+  passed on both at a load of 5 (and in the whole package). The skips are the OCR tools, which this host lacks.
+
+**Named exception classes** (the only inputs where A9 may read differently from I), each with its measured members:
+1. S-limit (#4269, #4290). More than 2,000,000 cross-reference-stream entries as #4269 counts them, at every read of a
+   stream, so that a stream named again counts again; or more than 2,000,000 page-dictionary entries while the page
+   tree is flattened. The outcome is LIMIT_REACHED. Members (90 in the corpora, each confirmed in process):
+   - past #4269 only because a stream is named again (45): round 6's C1, C2, V1, V2, V3 and F2's seven (jf2-reread
+     1,000,001 x 2, 100,001 x 20, 2,001 x 1,000, jf2-hybrid 40,001 x 50, and the identity lens's three s4269-reread
+     forms); round 7's RG-1 and RG-2 (r1A, r1B, r1E, r1C1x named twice, -d101, -pw, -encnd), FC7-1 (a1, a1b), the
+     judge's jA, jB, jE and jstress pair, the repairer's r1-repeated, -alias and -then-distinct; round 8's RG8-K (K2x,
+     KP, Ksame, jk-main, jk-same), the alias lens's alias-direct, and the repairer's chain-A, chain-E, two-headers,
+     named-at-open (password and /Encrypt) and five stress files (1,999,999 entries named 10, 100 or 3,000 times).
+     A sixth, `stress-prev-x3000-1999999`, is refused in about 220-240 s, so at the 240 s deadline it is S-limit or
+     deadline-bound by the moment (class 6);
+   - past #4269 with more than 2,000,000 distinct entries (39): parser-01 and -02 (as `o-parser-*`), E11a and
+     r6-S4269-prev-over-limit; the advisory lens's a4269 (30M entries; /Prev chains of 12 x 5M and 5 x 1.5M); the
+     limits lens's A1, A1p, A2, A2p, A3, A3p, A3s, A4, A4p, A5, A5p, A12, D1 and D2, and its earlier-run copies F1,
+     F1p, F2, F2p and F12c; the identity lens's k144, k597 and k648; round 7's repair inputs
+     r1-distinct-1000000-1000001-control, r2-past-annotation, -kids, -password, r3-past-encrypt and
+     r4-negative-count-escape-2000000; round 8's FC8-2 files fp-text-s10-b1m-past2000001, fp-text-s800-b1m-past2000001,
+     jfc-past and jfc-past-1350;
+   - past #4290 (6): parser-05 and -06 (as `o-parser-*`), E12a and the advisory lens's three a4290 files.
+2. S-memory (#4265). A MemoryError inside a dictionary gives the memory message. Measured by fault injection only
+   (round 6).
+3. S-stuck (#4289) and S-page-count (#4270). These are reached by `ops/verify_passages.py` only. On 6.21.2 the tool
+   loops with no result, or reads a forged /Count as "list index out of range". On the layer they are CannotCheck, or
+   the file is read.
+4. M-memory (#4265's side effect). A MemoryError inside a handler 6.21.2 made broad gives the memory message. No
+   member in round 9: no file of the corpora gives the memory message on A9 where installed reads it.
+5. P-cost (#4273 and every faster path). A document 6.21.2 cannot finish within the 240 s deadline is read. Member:
+   `dos-cmap-bfchar-99000-pairs-one-line-5-pages` (#4273): installed stopped at 240.1 s when run alone; the layer
+   reads it in 3.8 s. The stress files that were P-cost in round 8 (one 1,999,999-entry stream named 100 or 3,000
+   times), which installed cannot finish, are S-limit now: the layer refuses them, those of 3,000 namings only just
+   inside the deadline (class 6).
+6. Deadline-bound. A document that needs about 240 s of CPU on any version. Its outcome depends on the moment, and the
+   readings are identical when time allows. Members that stopped at 240 s on both sides with the same key: A3m,
+   `ctx-form-invoked-N700-font-baseenc-in-undecodable-objstm`, and round 6's H2 files `h2-baseenc-objstm-bomb-K1000`,
+   `-K1000-3pages`, `-K3000`, `jh2-K1000`, `jsym-K1000`, `juse-K1000` and `jxo-K1000`, and round 8's
+   `stress-prev-x3000-1999999` (class 1). Read on both sides just inside the deadline when run alone:
+   `k621-m1-size-shift` (installed 237.6 s, the layer 233.8 s; in a parallel run the layer stopped at 240.2 s) and
+   `m1-private-74M` (236.8 s, 237.1 s). With a 400 s deadline, installed, round 7's branch and the layer read both
+   with the same key after 239 to 252 s each.
+7. Memory boundary. A document whose memory need lies within a few hundred KiB above installed's limit may read on the
+   layer where installed gives the memory message (below). Members: round 6's judge's bisection files `J10337500`
+   and `J10336621`, and `T10443750`. Installed gives the memory message on each and the layer reads it, one child at
+   a time (plain 6.21.4 and round 7's branch read the J files too). T10443750 read on installed in round 7, so the
+   boundary is not a stable oracle.
+
+**What it leaves:**
+- **Restored costs, equal to installed.**
+  - Round 6's H2 restore (`_parse_encoding`'s broad except) retries a failing object-stream decode once per font
+    name, as 6.21.2 does. A crafted 90 KB file runs to the 240 s deadline on the layer, as on installed, where plain
+    6.21.4 stops in 1.5 s. Plain 6.21.4 reaches the same deadline through three sibling files (round 6).
+  - With 6.21.2's arithmetic for a negative /Index count, a later subsection reads entries past the stream's data, as
+    on 6.21.2. Those entries are counted, so at most 2,000,000 are read. 1,999,990 took 72 s on installed, 76 s on
+    the layer and 0.5 s on plain 6.21.4 in round 7 (round 9: 74.5 s on installed, 73.4 s on round 7's branch, 96.9 s
+    on the repaired branch at a load of about 30). Plain 6.21.4 spends the same time on 1,999,990 real entries that
+    point nowhere, so the limit bounds both the same way.
+- **A stream named again costs what it costs on plain 6.21.4.** It is parsed and its data decoded at each naming, as
+  on 6.21.2 and plain 6.21.4 (6.21.2 also walked its entries each time). Past 2,000,000 no further entry is read, but
+  each later naming is still parsed and decoded before it is counted, and `pdf.py` refuses only once the constructor
+  has finished. One 1,999,999-entry stream named 3,000 times: installed stops at the 240 s deadline, plain 6.21.4
+  reads it in 219-230 s with the later namings left out, and the layer refuses it in 218-239 s run alone, or stops at
+  240 s with installed's reading (round 8's `stress-prev-x3000-1999999` alone; plain 6.21.4 stopped there too); round
+  7's and round 8's records read or refused it in about 4-6 s. Named 100 times, installed still stops at 240 s, and
+  plain 6.21.4 reads it and the layer refuses it in about 11 s; named 10 times, installed reads it in 38-39 s, and
+  plain 6.21.4 reads it and the layer refuses it in 7-9 s. These files were P-cost in round 8 (the record read them
+  in seconds); without the record the layer spends plain 6.21.4's time on them, never more than installed's.
+- **The memory boundary moves with layout, on every version.** The layer's own address space is the smallest
+  RLIMIT_AS at which the real child reads a guard PDF, with the layer and with it stubbed out. It measured 176 to
+  516 KiB in round 7 as only comments in `extract.py` changed; in round 9, 396 KiB on the repaired branch and 460 KiB
+  on round 7's, one child at a time. Installed's own boundary moves as much with any edit. The PDF child is given
+  768 KiB back, the largest measurement rounded up to 256 KiB. So a document that needs a few hundred KiB more than
+  installed's limit can read on the layer where installed gives the memory message (round 7 put it at up to about
+  600-700 KiB; the three memory-boundary members above are such documents), and none was found the other way. A test
+  fails if the measured cost passes the allowance; reading the sources through `inspect` again, as round 6 did,
+  measures 1.52 MiB and fails it.
+- **What a read keeps.** Nothing beyond what plain 6.21.4 keeps: the layer holds no record of the streams a read has
+  seen. Round 7's record kept a replaced table alive (RG-4, FC7-2) and round 8's kept every failure's arguments
+  (FC8-1, FC8-2), and each gave the memory message where installed read. Measured one child at a time in round 9:
+  retain-M1900000, retain-prev-M1900000 and m23x read as installed (round 7's branch: the memory message); FC8-1's
+  fb-text-s800-b1m, -s200-b6m, jfc-main and jfc-main-1350 read as installed; no file of the corpora gives the memory
+  message on the layer where installed reads it.
+- **Availability.** Every measurement ran in host venvs on Python 3.12.3. The production image is Python 3.12.15
+  (`deploy/Dockerfile`), installing into system site-packages. One manual in-image run on 3.12.15 read the 8 guard
+  PDFs equal to installed; that is the integration owner's scratch evidence and is not repeated here. The install
+  gates every image on the guard PDF's reading through the image's own child, and refuses it otherwise. CI runs the
+  layer's tests on setup-python 3.12, and the address-space test there was not measured here.
+- **What the checks are for.** They catch a pypdf that is not the proven one by accident: another version, a changed,
+  missing or extra file, a stale or foreign .pyc for a replaced or checked function, or an unknown binding. They are
+  not a defence against bytecode forged into site-packages. A module's other loaded code is not compared, and
+  whoever can write there can change pypdf without the layer noticing, as they could without the layer.
+- **ops/verify_passages** refuses to check a PDF past #4269 or #4290: CannotCheck, exit 2. In round 6, such a file
+  could hide a page or a form's text, so a check that installed FAILs passed on plain 6.21.4 and on the round 6
+  branch. Measured in round 9: D1 and D2 exit 2 on the layer, where installed exits 1 and plain 6.21.4 exits 0; their
+  controls at the limit exit 1 on every side. A stream named again past the limit is CannotCheck on the layer too: C1,
+  C2, V1, V2, V3, round 7's chain files (jA, jB, jE, r1B, a1), round 8's two-headers file, and the test equivalents,
+  where installed and plain 6.21.4 return their pages (C2's: "could not be read", its page-tree depth). Every
+  at-limit or named-once control returns installed's pages, and the two shared-number files return installed's pages
+  (round 7's branch returned the other stream's).
+- **S-memory is stricter than 6.21.2.** A memory failure inside any dictionary fails the whole document with the
+  memory message, where 6.21.2 kept a partial dictionary.
+- **fontTools absence is assumed, not asserted.** With fontTools installed both versions take the CFF path, whose
+  only changed lines are M and restored lines.
+- **OCR.** Identity on pages routed to OCR was measured with the stand-in tools only (round 6).
+
 ## Core repair, refutation round 2 (2026-11-04): false READYs the installed revision gives too
 
 The core repair (branch `feat/cpt-studio-core-ux-20261103`) holds the register's false READYs (R8 D1 to D10, D12, D13,

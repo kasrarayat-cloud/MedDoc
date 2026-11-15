@@ -414,6 +414,9 @@ class MigrationReceiptTests(TemporaryDirectoryTest):
                 return SimpleNamespace(returncode=0, stdout=b'tesseract 5.3.4\n', stderr=b'')
             if 'pdftoppm' in args:
                 return SimpleNamespace(returncode=0, stdout=b'', stderr=b'pdftoppm version 24.02.0\n')
+            if install.PDF_GATE_SCRIPT in args:  # the image reads the guard PDF as installed pypdf 6.21.2 reads it
+                return SimpleNamespace(returncode=0, stderr=b'', stdout=json.dumps(
+                    {'pdf_sha256': install.PDF_GATE_PDF_SHA256, **install.PDF_GATE_READING}).encode())
             return SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
         receipts = self.tmp / 'receipts'
         stdout = io.StringIO()
@@ -432,6 +435,7 @@ class MigrationReceiptTests(TemporaryDirectoryTest):
         self.assertEqual(code, 0, stdout.getvalue())
         self.assertEqual(built[0], 'build')  # the gate passed: the build ran
         record = json.loads(Path(json.loads(stdout.getvalue())['receipt']).read_text())
+        self.assertEqual(record['details']['pdf_reading']['status'], 'ok')  # the image's PDF reading gate ran
         migrations = record['details']['migrations']
         self.assertEqual(migrations['baseline'], '0005')
         # the core repair's three additive migrations (2026-11-03: decision modifiers, operator grants and report

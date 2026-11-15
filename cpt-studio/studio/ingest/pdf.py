@@ -69,7 +69,10 @@ What a page shows is read, or the result says what was not read:
   (studio.ingest.pdfcontent).
 
 A document is never truncated: too many pages or too much text fails the
-whole document.
+whole document. Nor is it read past a limit pypdf 6.21.4 added as an advisory
+fix (#4269: 2,000,000 cross-reference stream entries, counted at every read
+of a stream, so a stream named again counts again; #4290: page entries): it
+fails with LIMIT_REACHED, never read with a section left out (advisory_limit).
 """
 from __future__ import annotations
 
@@ -86,7 +89,7 @@ from typing import TYPE_CHECKING
 
 import pypdf
 from pypdf import PasswordType
-from pypdf.errors import DependencyError
+from pypdf.errors import DependencyError, LimitReachedError
 from pypdf.generic import DictionaryObject, NullObject, StreamObject
 from pypdf.generic._font import Font
 
@@ -179,6 +182,12 @@ OBJECTS_DAMAGED = ('The PDF is damaged: a compressed block of its objects could 
                    'text may be missing or wrong.')
 XFA = ('The PDF contains an XFA form; XFA content is not read, so form content that an XFA-capable viewer shows '
        'may be missing from the text.')
+# Limits pypdf 6.21.4 added as advisory fixes (#4269: cross-reference stream entries, CVE-2026-119209; #4290: page
+# dictionary entries copied while flattening the page tree, CVE-2026-119204). Reading past them is what the
+# advisories exploit, so such a file is refused and named, never read with a section left out, never called damaged.
+LIMIT_REACHED = ('The PDF could not be read: its structure goes past a limit this server applies to uploaded files '
+                 '(such as the number of its cross-reference or page entries).')
+ADVISORY_LIMITS = ('Maximum XRef stream entry limit reached', 'Maximum page tree page entry limit exceeded')
 # pypdf reports these through logging, not exceptions, and then reads less than the page holds.
 DECODING_LOGGERS = ('pypdf.filters',)
 DECODING_WARNINGS = ('Impossible to decode XFormObject', 'Detected cyclic form XObject', 'Expected StreamObject')
@@ -310,18 +319,50 @@ def _open(data: bytes) -> tuple[pypdf.PdfReader | None, str]:
     if b'startxref' in data[:end] and b'startxref' not in data[data.rfind(b'%%EOF', 0, end) + 1:end]:
         # The last revision has no startxref of its own: a parser would fall back to an earlier one.
         return None, UNANCHORED
+    # Bound before its constructor runs, so that when the constructor raises after pypdf left a cross-reference
+    # stream out at #4269's limit, the limit is still seen (pypdf-r6 L2: an encryption dictionary held only there).
+    reader = pypdf.PdfReader.__new__(pypdf.PdfReader)
     try:
         # pypdf reads the file as it ends at that revision's marker: the padding carries no PDF data.
-        reader = pypdf.PdfReader(io.BytesIO(data[:end + len(b'%%EOF')]))
+        reader.__init__(io.BytesIO(data[:end + len(b'%%EOF')]))
+        # As soon as the constructor returns, before the password test and the first page: past the limit a section
+        # was left out, each object it held would cost a search of the whole file (pypdf-r6 L1), and an /ID it held
+        # could fail the password test (L3). The constructor has read only the cross-reference sections and, for an
+        # encrypted file, the trailer's /ID and /Encrypt and what the encryption dictionary refers to, each searched
+        # for through the whole file when only the left-out section listed it (pypdf-r9 FC9-W1: 27 at most, measured).
+        # Only read() counts, so the count is final here.
+        if advisory_limit(None, reader):
+            return None, LIMIT_REACHED
         if reader.is_encrypted and reader.decrypt('') == PasswordType.NOT_DECRYPTED:
             return None, PASSWORD
         with contextlib.suppress(IndexError):  # no pages at all: reported by _page_list
             reader.get_page(0)  # flattens the page tree: a broken one fails here, not mid-document
     except (DependencyError, MemoryError):
         raise
-    except Exception:  # any parser error on untrusted bytes means the file is unreadable
-        return None, DAMAGED
+    except Exception as exc:  # any parser error on untrusted bytes means the file is unreadable
+        return None, LIMIT_REACHED if advisory_limit(exc, reader) else DAMAGED
     return reader, ''
+
+
+def advisory_limit(exc, reader) -> bool:
+    """Whether pypdf stopped at one of ADVISORY_LIMITS: raised (``exc`` or one of its causes), or met while reading
+    a cross-reference stream it then left out (pypdf only logs that the section could not be read): #4269's counter
+    is past its limit. pypdf 6.21.4 counts a cross-reference stream's entries at every read of it, so a stream that
+    an older trailer or the /Prev or startxref chain names again counts again, and a document whose reads add up past
+    2,000,000 entries is refused (LIMIT_REACHED) whatever its distinct entries: the named class S-limit. pypdf 6.21.2
+    read such a file; plain 6.21.4 leaves out the section whose read passed the limit and reads on, so a distinct
+    section can be missing at status ok (pypdf-r6 V3). The refusal keeps a reading from ever being partial.
+    ``reader`` may be one whose constructor raised. ops/verify_passages.py asks the same question (CannotCheck,
+    exit 2)."""
+    for _ in range(16):
+        if exc is None:
+            break
+        if isinstance(exc, LimitReachedError) and str(exc).startswith(ADVISORY_LIMITS):
+            return True
+        exc = exc.__cause__ or exc.__context__
+    counted = getattr(reader, '_xref_stream_entry_count', 0)
+    limit = getattr(reader, '_xref_stream_maximum_entries', None)
+    return isinstance(counted, int) and isinstance(limit, int) and counted > limit
 
 
 def _padding(data: bytes) -> bool:
