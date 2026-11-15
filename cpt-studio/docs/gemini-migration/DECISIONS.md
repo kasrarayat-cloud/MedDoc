@@ -15822,3 +15822,27 @@ from 73a48ad3c and w9r/final/final.diff (sha256 6e5a62e2...), byte-equal to the 
   compares them with adapter.ARGON (cb's text, option (a)): the only change to a retired module's test that D230's swap
   needs. FINAL-V2 8.0 and D243 otherwise stand. The integration owner applies it in the integration commit; with it the
   module runs 18 tests OK on the lead's tree. The round's other findings are ruled after the lead's triage, from D275.
+
+## Step 8's first paid batches, and the owner's switch to Claude Fable 5.2 (2026-11-15, session 31dfc45d)
+
+D1 (batches D1-D1w) found that design v2's request does not run on gemini-4-carbon as specified: Google refuses the
+pass-1 response schema (first its empty enumeration members, then its complexity: 1,200 nodes against the ~120-node
+sections it accepts alone), thinking level high spends Carbon's whole 32,768-token response, and long notes do not fit
+one response. D2 compared Gemini's low and medium levels on ten development notes; an owner-approved probe read the same
+ten notes with Claude Fable 5.2 (PLAN.md 2026-11-15; build-v2/amend2/BRIEF.md).
+
+- **D275 The interpreter is Claude Fable 5.2 (owner directive 2026-11-15, verbatim in docs/foundation/rulings/
+  2026-10-23-cpt-studio-gi.md; RULINGS.md).**
+  - The interpreter's model is `claude-fable-5-2` through the Anthropic Messages API, effort `high`, with CPT Studio's
+    existing Anthropic credential. No sampling parameter, no prefill, no fallback model: an answer is read only when
+    Anthropic reports `claude-fable-5-2` (D13's exactness); a refusal is a hold, never re-asked of another model.
+  - AMENDMENT-2 (a design round, refuted, then a build round) designs and builds: the Fable connector for both passes
+    (requests, response reading and classification, usage and cost at $8 / $40 per million tokens, recording and replay,
+    Stop and resume, the reconcile); the answer form and size (long notes must fit, or be read in parts, or be refused
+    truthfully); the single-value slot rule (a slot that cannot be read holds that attribute, fail-closed, instead of
+    refusing the whole answer, unless the design shows that unsafe); the measured unnecessary holds; and the wrong READY
+    on A-v5 45380 that both Gemini medium and Fable produced, investigated first-hand before the design round reads it.
+  - D230 and D272 (gemini-4-carbon) stay in the code until AMENDMENT-2's build lands and is measured; they then retire
+    from the interpreter's path by a DECISIONS entry. Gemini's recordings stay labelled as Gemini's.
+  - Before the acceptance run is sent, the owner receives its total at Fable's measured cost per document and decides
+    (class d; FINAL-V2 7.6). The w9r triage (build-v2/lead-verify-w9r/TRIAGE.md) is ruled with AMENDMENT-2's build.

@@ -3369,3 +3369,57 @@ is a hold that is never retried (D39), and the cap is the owner's decision (clas
 (f) **When.** No Gemini call happens before step 8's first recording. The code change lands right after the running build
 (wf_0d97cbf6-b97) integrates, before that recording, because the build's steps are editing the same files now. DECISIONS
 D230 records it.
+
+## Owner directive, 2026-11-15 — the interpreter's model switched from gemini-4-carbon to Claude Fable 5.2
+
+Received 2026-11-15 in session 31dfc45d, as the owner's answer to a choice put to him after step 8's first paid batches
+(the D1 probes, the D2 comparison at Gemini's low and medium reasoning, and an owner-approved probe of Claude Fable 5.2 on
+the same ten development notes). The question, verbatim:
+
+> Fable 5.2 read better than Gemini but costs ~10x more, and all three models hit the same design problems (long notes too big, single-value rule, engine caution). How do you want to proceed?
+
+The owner chose, verbatim, the option:
+
+> Switch to Fable now — Commit to Fable 5.2 as the interpreter and build its connector alongside the redesign. Best reading so far, but the acceptance run would cost roughly $1,000 at current sizes.
+
+What had been put before him (PLAN.md, 2026-11-15 entries; the same ten notes, design v2 as built):
+- notes fully read: 4 (Gemini low), 1 (Gemini medium), 6 (Fable 5.2 at effort high);
+- the two 19 KB notes cut at the per-response limit by all three (Carbon 32,768 tokens; Fable 64,000 as sent);
+- single-value refusals 4 / 1 / 2, Fable's on the same two notes Gemini low refused;
+- READY-expected codes found READY 0 of 4 / 0 of 1 / 3 of 8;
+- one wrong READY (A-v5 45380) from Gemini medium and from Fable, the same row;
+- cost for the ten notes $1.72 / $4.28 / $18.32; time per short note 1-2 / 5-10 / 2.5-4.5 minutes.
+
+### Session interpretation, 2026-11-15 (31dfc45d, on receipt) — recorded, not owner-ruled
+
+(a) **The switch.** The interpreter's model becomes Anthropic's `claude-fable-5-2`, through the Anthropic Messages API,
+with CPT Studio's existing Anthropic credential (the key the installed site's Fable 5.1 second reader already uses; the
+worker's bind source /etc/cpt-studio/anthropic-credentials.env). Facts (the claude-api reference, cached 2026-11-03):
+$8.00 input and $40.00 output (thinking included) per million tokens; 1M-token context; 128K maximum output; thinking is
+always on and its depth is set by `output_config.effort` (low, medium, high, xhigh, max) - the owner chose high, the
+recommended starting level; no sampling parameter is accepted (temperature is a 400); no assistant prefill; a decline
+returns `stop_reason: refusal`; the model requires 30-day data retention, which the account already meets (it serves
+Fable 5.1 today).
+
+(b) **No fallback model.** An answer is read only when Anthropic reports `claude-fable-5-2` (D13's exactness, carried to
+the new provider); a refusal is a hold, never answered by another model. The reference recommends server-side fallbacks
+by default; for the interpreter the provenance rule governs. Recorded so the owner can revisit it.
+
+(c) **What carries over and what is built.** Design v2's contract - the local schemas, the readers, settle, the engine,
+the store and read time - is provider-independent and stays. Built next (AMENDMENT-2, a design round and a build round):
+the Fable connector (requests, response reading and classification, usage and cost, recording and replay, Stop and
+resume), and the fixes step 8 measured on every model: the answer format too large for long notes, the single-value slot
+rule that refuses a whole answer, the engine's caution (unnecessary holds), and the shared wrong READY on A-v5 45380,
+investigated first-hand.
+
+(d) **Gemini.** The Gemini connector and D230's Carbon settings stay in the code until the Fable connector is built and
+measured, then retire from the interpreter's path by DECISIONS. The Gemini recordings stay labelled as Gemini's; D1 and D2
+are evidence.
+
+(e) **Cost.** Measured: about $1.2-1.7 per short note for both passes at effort high. The acceptance run at today's sizes
+would be roughly $1,000, as the owner was told. Google's ~$300 cap does not cover Anthropic spend; the Anthropic
+account's limits are the owner's. Before the acceptance run is sent, the owner receives its total and decides (class d),
+as FINAL-V2 7.6 requires.
+
+(f) **The installed site** is unchanged until the install; its Fable 5.1 second reader is unaffected. DECISIONS D275
+records it.
