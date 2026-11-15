@@ -3484,3 +3484,22 @@ blind (an author, an independent coder, an adjudicator) and sealed until each pa
 statistically (READY recall at least 70%, unnecessary holds at most 15%, zero wrong READY in every run). The evidence for
 the install becomes the free replays of every recording through the built engine, the ten pairs and the walk. Expected
 spend about $40-50, reported pair by pair.
+
+## Owner answer, 2026-11-15 — the Anthropic account's headroom for the ten-pair test
+
+Received 2026-11-15 in session 31dfc45d. Asked (DECISIONS D279 item 4) whether the Anthropic account that the installed
+site's Fable 5.1 second reader shares has at least about $60 of headroom for the ten pairs (about $40-50 expected), the
+owner answered, verbatim:
+
+> yes i have $200 budget in api account
+
+### Session interpretation, 2026-11-15 (31dfc45d, on receipt) — recorded, not owner-ruled
+
+(a) D279 item 4 is satisfied; the first pair may be sent once the build lands.
+
+(b) Each pair's batch carries D277's per-pair cap (about twice its modelled cost). A test-total stop protects the site:
+before any send that could take the test's recorded spend past $100, the sends stop and the owner is asked, so at least
+about $100 of the $200 stays for the site's reader.
+
+(c) The probes of 2026-11-15 ($42.17 by the harness's upper bound) were sent on the same account before this answer;
+whether the $200 is counted before or after them is not known, and either way the test fits.

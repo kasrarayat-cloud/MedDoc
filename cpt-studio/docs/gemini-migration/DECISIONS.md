@@ -15902,3 +15902,415 @@ RULINGS.md).
   6. CONN-1's request-bound holds are built as the judge decided; a decline still holds the installation (D275). Holding
      only the declined document would be an owner decision (class a), not raised.
   7. The w9r triage (build-v2/lead-verify-w9r/TRIAGE.md) is ruled before the build round launches, from a draft.
+
+## Repair round w9r's triage ruled (2026-11-15, session 31dfc45d)
+
+The w9r tree left 66 open entries and 13 closed ones (build-v2/lead-verify-w9r/TRIAGE.md, G1-01 to G5-13, cited below by
+entry; its numbering restarts, so "w8r G…" cites the previous digest). Six drafters drafted rulings on copies of
+step8-195e06e90 (build-v2/lead-verify-w9r/rulings/g1 to g4). Two refutation lenses attacked the drafts: safety (four
+findings, RS-1 high) and consistency (fifteen, C1 and C2 high). Before ruling, the lead re-ran every finding's probe on
+fresh copies of the built tree - the tree itself, ruling C's prototype, g1's combined prototype, ruling A's, ruling C
+with G3-24's option (b) on the established device, and g1's with G3-10's denial form - and read every text finding's
+cited lines: each reproduces, none is refused (rulings/REFUTATIONS.md). The order of readings is D216's (repeated under
+w7r's rulings above). Every FIX is a rule over the data model for a class of inputs, justified by the design or a ruling
+(D276), and carries D276's proofs (D291). D277's ten pairs - S01-S10 short and L01-L10 realistic, the owner's "10 short
+and 10 realistic", more only on the evidence - carry no member answer and no reviewer decision: a FIX that changes an
+assessment's status, item or customer sentence is built before the first pair; one that needs an answer, a decision or
+stored data, before the install. Only G2-04 concerns Gemini's request, timing or classification alone (MOOT, D289); the
+engine, read time and member answers serve the Fable reading unchanged (A2:19-23).
+
+- **D280 A digital examination established as one never words, binds or changes an item; one only claimed keeps QD2's
+  hold, asked as D258 asks (refute-r4a-r1 N1, N2, N4; r4a Q-R4A-QD2, Q-R4A-DRES, Q-R4A-EXCL; refute-safety RS-1, RS-2;
+  refute-consistency C1, C2, C3, C13; TRIAGE G3-09, G3-24, G3-25, G1-05 (iii), G1-06).**
+  - The defect: a colonoscopy X1, the colonoscope's examination E3 done, a cold snare E2 (45385), and a DRE E1 filed as
+    X1's examination with one own row open (status negated, unresolved or contradicted; date, performer or entry open).
+    Without the DRE line 45385 is READY (D265's item). As built, 45385 is held "Was the colonoscopy (“<E3>”) done on the
+    date of service?" / "CPT Studio could not confirm from the document that the colonoscopy was done.", untrue of E3,
+    which is done; the entry and conflict forms name the snare removal or the colonoscopy with the DRE's facts (N1, N2;
+    lead's runs, judge/logs/qd2_steer-tree.out, residual_dre-tree.out).
+  - The drafts' wordings ask about the DRE itself: "Was the examination (“<the DRE's sentence>”) done ...?" (ruling C
+    as drafted) and "The examination (manual) is documented only in the nursing entry (“<DRE>”). Was it performed ...?"
+    (G1-05 (iii)). The door offers "Not documented" and "Cannot confirm" on every such row (studio/answers.py:666-669):
+    every held item, explanation or question, is a proposal clarification (studio/jobs.py:4323-4347, :4430-4434). Either
+    answer excludes 45385, not reinstatable (engine/assess.py:1723-1777). So the truthful answer about a deferred DRE
+    excludes a code the document supports: D258's ruled defect (lead's runs, qd2_steer-g309.out, residual_answer-g309.out,
+    qd2_steer-g1all.out).
+  - With ruling C's row-7 exception alone, an established DRE that is a statement still holds 45378 by its pairing with
+    E2, where the document without it is READY: statement_scope, or "Which technique was used for the colonoscopy
+    (“<E2>”)?" (g324_dre_statement-g309.out, dre_statement-g309.out).
+  - G1-05/G1-06 and ruling C pinned opposite statuses for one input (residual_dre-g1all.out held, -g309.out READY), in
+    the same lines (questions.py:969-972; ruling C's hunk is refused on g1's prototype).
+  - The ruling:
+    1. Row 7 (engine/evaluate.py `_row_done`, :822-825) reads no examination established as a digital examination: kind
+       supported examination and device supported manual, E13's established reading (D227, D253). Such an examination
+       is neither the session's done examination nor one whose rows 2-5 must pass. This is ruling C part 1, as drafted.
+    2. A statement established as a digital examination concerns no examination act (engine/pairing.statement_kinds,
+       :398), so it pairs with no examination as with the session's. This is G3-24's option (b), read on the
+       established device (RS-2).
+       - With 1, an established DRE, act or statement, never words, binds or changes an item: every item is the one the
+         same document gets without its lines and the relations that pair it (D265).
+       - A 9.4 weakening never creates a supported device. So neither rule releases under a weakening, and neither needs
+         a P-MONO name: D245 and D264 name releases that weakenings make.
+       - Lead's run of the whole tests.v2 package on ruling C plus this rule: Ran 2,496, FAILED 9 - exactly the eight
+         D265Items QD2 pins of the replaced reading and test_pairing's statement-side pin (tests/v2/test_pairing.py:2006).
+         Every PMono, Pairing and Independence class is green (judge/logs/t-g324b-testsv2.log).
+    3. An examination whose device claims manual without establishing it keeps QD2's hold (D271, w8r G2-28). That is,
+       pairing.digital_examination holds and the device is not supported manual; AMENDMENT-2 4.3.3 c's overfilled
+       device is included.
+       - Every item resting on it is asked as D258 asks. This covers its status, date, performer, entry, doubt, a
+         conflict over its own facts, and its device.
+       - The question names the held session's examination by its service and asks whether that examination is
+         documented as performed on the date of service (D281's words). It quotes only an examination of the session
+         established as an examination, not claimed as digital and possibly done today (questions._quotable and
+         _quoted_examination, :1111-1131, D266); else it quotes nothing. Its subject is the session's performance - what
+         QD2's hold is about while the examination may be the session's - never the examination's technique (D265's
+         open device row).
+       - The reason quotes the examination's own words as a statement whose technique CPT Studio could not confirm from
+         the document, and states its open fact. That fact is one of: not established done on the date of service; its
+         date or performer not established; told only in <owner>'s entry; left in doubt; the document's statements about
+         it disagreeing, with its sides quoted; more than one technique stated.
+       - It never asks about that examination itself: a truthful "Not documented" or "Cannot confirm" about it would
+         exclude the code (D258). It never names it by the session's service (D265).
+       - The held facts, rank and status are unchanged. The clarification keeps the held fact's key, so an answer binds
+         as today; a message may take its key from the item (wording.fact_key).
+       - This replaces ruling C part 2 and the DRE wording of G1-05 (iii) and G1-06. G1-05's "ANOTHER_ENTRY is an
+         explanation ..., so naming the DRE changes no member's answer path" is struck (above).
+    4. G3-25 stays as built (ACCEPT), its stated reason corrected (C13).
+       - The case: a positive DRE act beside a denial the code cites. It holds the code with the denial's statement-scope
+         question, where the document without the DRE line excludes it. The input is rare, and the held state's question
+         has a truthful answer that gives the correct exclusion: D216's fourth reading.
+       - An exclusion keyed to the established manual device would need no P-MONO name (as in 1 and 2). It is built only
+         if D291's replay counts show the input common.
+  - Effects (lead's runs):
+    - Every established-DRE row of the refuters' grids gives the no-DRE document's item: 45385 and 45378 READY
+      (qd2_steer-g324b.out, residual_dre-g309.out, dre_statement-g324b.out, g324_dre_statement-g324b.out).
+    - Every claimed-device row stays held, worded by 3.
+    - G3-25's six shapes are unchanged (g325-tree.out, -g309.out, -g324b.out).
+  - Tests (F3):
+    - Pins, each established-DRE row's status, item and held facts equal to the no-DRE document's: D265's grids (F1's 104
+      rows, F3's 20, Q4 and Q4+, D253's A2 shapes); refute-r4a-r1's v9_dre_own_rows, v9_dre_own_rows2 and
+      v9_dre_conflict; refute-safety's qd2_steer and dre_statement; refute-consistency's residual_dre; g3b's G3-24 grid.
+    - Each claimed-device row held: its question names the session's examination and quotes none of the claimed
+      examination's words; its reason quotes them.
+    - D265Items' eight QD2 rows and test_pairing's statement-side pin restated: established, READY and not paired;
+      claimed, held and paired. G2-28's input pinned held: a colonoscope examination whose device is doubted
+      endoscope|manual.
+    - Mutants: the claimed device (`_digital`) read in 1 or 2 in place of the established one (G2-28's pin fails); the
+      residual question asking about the claimed examination (the residual pins fail).
+    - D276's proofs (D291).
+  - Owner F3: engine/evaluate.py, engine/questions.py and interpretation/wording.py by D291; engine/pairing.py by A2
+    section 10. Before the ten-pair test: a DRE line is in most colonoscopy reports (refute-r4a-r2, as quoted in the w8r
+    digest), and a deferred or unclear one is a realistic input; its frequency is unmeasured, and D291's replay counts
+    it.
+
+- **D281 An item names the act whose fact it states; D258's routing reads the claimed kind; a rule-4 denial does not
+  assert its scope; a question about the session's examination says row 7's "done" (refute-r4a-r1 N1 (case B), N3, N5;
+  refute-r3c-r1 V9R3C1-1; r3c Q1; r4a Q-R4A-DONE; refute-safety RS-3; refute-consistency C4; TRIAGE G1-05 (i)-(ii),
+  G1-07, G3-10, G3-27).**
+  - G1-05 (i) and (ii), as drafted (g1/DRAFT.md:300-340): an item that states the entry an act is told in
+    (ANOTHER_ENTRY).
+    - No Fill carries one event's words beside another event's facts. Where the held act's words are not quoted, its
+      owner goes with its device, place and lesion (`_session_named`, questions.py:1133-1144).
+    - The code's group ("the snare removal this code accounts for") is named for the code's own act. A held session
+      examination with no group is named by the Fill's act (wording.py:1400-1412).
+    - Case B, the colonoscope's examination told only in the nursing entry: "The colonoscopy is documented only in the
+      nursing entry (“<E1>”) ...".
+    - (iii) is D280.3's.
+  - G1-07, as drafted (g1/DRAFT.md:399-420): a rank-2 unlisted hold resting on an act whose claimed kind is the
+    examination is the held session's examination's hold.
+    - The claimed kind is the examination when supported, or as the claimed value of an unresolved or doubted kind. A
+      silent or contradicted kind claims none.
+    - The hold is UNLISTED_SCOPE for a statement that names no session (D258), and the session's DOUBT for one carded to
+      it (D232, D266).
+    - act_kind names, and never routes. An act whose kind is not established is never quoted as the session's
+      examination.
+    - Its denial rows take G3-10's reason (C4): the "states that the colonoscopy was not done" that G1-07 pinned is the
+      sentence G3-10 rules untrue (lead's run, judge/logs/g107-g1all-g310.out).
+  - G3-10, ruling D:
+    - Every DOUBT item whose unlisted_what is DENIAL comes from 3.2.6 rule 4's pair, which is unresolved statement_scope
+      by construction.
+    - Its reason reads "The document states “<denial>”, a statement that an act was not done; CPT Studio could not
+      confirm from the document whether it is about <the act>." With no statement units: "The document states that an
+      act was not done; ...".
+    - D266's denial wording ("a statement that the act was not done") is read so for the rule-4 pair. It is never
+      "leaves ... in doubt". The question, the held fact and the status are unchanged.
+  - G3-27: the quote stands as built (option (a)). D266's "possibly done" is row 7's done, begun included
+    (questions.py:1095-1108; evaluate._done_rows; combination.session_done). RS-3 is accepted in part, for the verb:
+    - The steer: a member asked whether "the colonoscopy (“<a begun, not completed examination>”) is documented as done"
+      can truthfully answer "Not documented". That excludes 45378, which the engine supports with its 52|53
+      consideration (lead's run, judge/logs/begun_scope-tree.out): D258's mechanism.
+    - The rule: whenever a question asks whether the held session's examination was done on the date of service, its
+      words say row 7's done: "documented as performed, in full or in part, on the date of service". This covers
+      UNLISTED_SCOPE (wording.py:2437), the session's DOUBT (wording.py:1297) and D280.3's form. The words may be one
+      form for every state, or that form whenever the examination is established begun and not completed; either is
+      true.
+    - Option (c), dropping the quote, is refused: the steer is the verb, not the quote.
+  - Tests (F3):
+    - G1-05: D265Items' entry rows and case B in test_wording.
+    - G1-07: the grid of supported, unresolved, doubted examination|snare and silent kinds, by no-card doubt and denial,
+      by carded X1, with the denial rows in G3-10's form.
+    - G3-10: its D266 rows restated, and an engine-to-renderer test over refute-r4a-r1's v9_denial_pairs and
+      v9_denial_same_unit and refute-r3c-r1's two-session input.
+    - G3-27: begun_scope's shape pinned (the question says "in part"); D266Quotes' 'begun' row kept.
+    - Mutants: routing by act_kind; the owner kept in `_session_named`; DENIAL_STATED restored; "documented as done"
+      restored for a begun examination.
+  - Owner F3 (questions.py and wording.py, D291). Before the ten-pair test: these are sentences a pair's rows show.
+    D277 judges statuses.
+
+- **D282 r3c's and r4a's other wording questions, as built (r3c Q2, Q4-Q7; r4a Q-R4A-FALLBACK, Q-R4A-EUSROUTE; 5b Q2;
+  TRIAGE G3-19 to G3-23, G3-26, G3-29, G3-34).** As drafted (g3b/DRAFT.md:347-386; g3c/DRAFT.md:166-199, :438-454).
+  - G3-19 (a): DOUBT words an unlisted ACT by SYNTHETIC_ACT's sentence over the entry's own kind; no Fill gives it
+    (D254 rules 1 and 4; D225).
+  - G3-20 (a): a route marked possible reads "possibly through a <anatomy>" (D267, D225).
+  - G3-21 (a): EXAMINATION_ROUTE words a stoma marked possible as "could not confirm ... that the patient has a stoma"
+    (D267, D225).
+  - G3-22 (a): held-fact conflict labels are the item's own (D267's heading).
+  - G3-23 (a): BUNDLED words the code when given, and "this code" otherwise (D267, D254 rule 1).
+  - G3-26 (a): UNLISTED_SCOPE and the carded DOUBT quote the held act when it may be quoted, else the session's first
+    established examination that may be, else nothing (D266, D258). They never quote an examination that claims manual
+    (questions._quotable, :1111-1117; D265), which D280.3 relies on and the build keeps pinned.
+  - G3-29, ACCEPT (a): EXAMINATION_ROUTE's Fill names a stoma only when established, so a stoma is never "the documented
+    stoma" otherwise. A possible stoma, marked, would word the same sentence (the drafter's run: identical in all four
+    rows). It becomes a FIX only if G3-21 is ever given a "possibly" form.
+  - G3-34 (a): the held-fact message is recorded as wording.Message's value, the only form a JSON support record holds
+    (D267).
+  - No change. DECIDED, but G3-29 (ACCEPT).
+
+- **D283 Assess and read time read member answers by one implementation (the integration's S1-S4; refute-5a-r1 P-1,
+  P-2, P-4; refute-5c-r1 P2, P4-P6; refute-5b-r1 R2; 5a Q1-Q3; 5c Q1, Q4-Q6, R1, R4; 5b Q1; refute-safety RS-4;
+  refute-consistency C5, C7, C8; TRIAGE G1-01 to G1-04, G3-16, G3-17, G3-31 to G3-33).**
+  - G1-01, option (c), as drafted: an answer to the competing question binds nothing at assess or at read time. It is
+    recorded and listed not_applied; the competing hold is settled by the reviewer's rejection (D270 DQ-3).
+  - G1-02 option (a) and G1-03 (5a Q3 option (b), both answer values), with C7's correction:
+    1. In each pass of the answers:
+       - the ADDON count leaves out every code an engine-read answer excluded, and every primary that an overlay-bound
+         answer of either value binds, accumulated over the passes so that they end;
+       - the competition leaves out every code an overlay-bound "Not documented" binds in that pass;
+       - a code whose ADDON row the pass moves is read again, and its answer binds only the item it then presents. An
+         answer that no longer binds is recorded, and listed, no longer asked.
+    2. Read time's answer passes (overlay.review_view's loop, :1333-1372) apply the same rule, "a code whose ADDON row
+       moves is read again" included. Today's loop does not: an answer that binds there stands (:1344-1349).
+       - Both halves call one implementation (engine/assess, as overlay already calls compete_without). So the stored
+         record, read time over it, and read time over the record made before the answers (the AGAIN not yet run) give
+         one view (D252, D270).
+       - Without this, g1's prototype applies a member's answer before the AGAIN and not after it. Lead's two-module run
+         of refute-5a-r1's fuzz with G1-03's input: 4 "read before vs with differs", a test_gate6 scene with 99417 and
+         99215 each answered on separate_em (judge/logs/f10c-g1all-2mod.json). The same run on the built tree gives 0
+         (f10c-tree-2mod.json).
+       - It also makes the record call an answer no longer asked while read time applies it (judge/logs/
+         g102_g103-g1all.out, g102_debug-g1all.out): D270 G1-01's defect.
+    3. The reproduction derives G1-03's uncounted set from the stored record by one function. Every recount that
+       reproduces a record reads it: overlay._recount_or_none (:1238-1249), readers.py:323, the seam harness's recount,
+       and the test callers tests/v2/test_overlay.py:209, :1526, tests/v2/test_jobs.py:364, :936,
+       tests/v2/test_readers.py:211 and tests/v2/test_assess.py:1966. Without it the fuzz reports 12 spurious
+       RecordMismatch on 99417 (C8; judge/logs/f10b-g1all-2mod.json); with it, 0.
+  - G1-04, option (a), as drafted: a rival that a counted code's open competing question names offers REJECT (REVOKE
+    once decided), though a member's answer leaves it detail unavailable.
+  - G3-16, option (b), as drafted: assess binds a service answer as read time binds it, by the first service question's
+    fingerprint of its (family, fact).
+  - G3-17 (5c R4), with RS-4's and C5's correction: an assessment that read a member's answer holds readiness at
+    STALE_ANSWER_BLOCKER, once that answer no longer stands, until the recompute.
+    - Assess read the answer when it closed a question with it, excluded a code by it, or took a code out of its
+      competition by an overlay-bound "Not documented" (D270 DQ-2). It also read it when it left a primary out of the
+      ADDON count by an overlay-bound answer of either value (above).
+    - One helper beside assessed_out names those answers. It is the same derivation that item 3 above reads, and
+      review._reads_a_withdrawn_answer reads it.
+    - An answer assess did not read moves nothing: one asked differently, no longer asked, one to the competing
+      question, or a "Cannot confirm" that binds no primary.
+  - G3-31, ACCEPT (as built): D270 DQ-2's record is the member answers' 'earlier' entries. The drafter's fuzz on
+    195e06e90: 4,618 runs, 0 RecordMismatch.
+  - G3-32, option (b), as drafted: `_RECOMPUTED` (overlay.py:226) takes every cause read time recomputes - base, within,
+    competing, same-day and ADDON. A stored hold that the engine's own counted set does not give is a RecordMismatch.
+    Its text is corrected: `_unchecked`'s exemptions are G1-02's ({COMPETING} for a taken code), not "unchanged" (C8).
+  - G3-33, as built for the competition (D270 DQ-2, D260, DQ-3): an overlay-bound "Cannot confirm" moves nothing in the
+    competition. For the ADDON row it is read as above (C5: g1's prototype holds 99417 on it, judge/logs/g103-g1all.out).
+    The sentence "moves nothing at assess" is struck.
+  - Tests: as each draft lists (g1/DRAFT.md sections 2-5; g3b G3-16 and G3-17; g3c G3-32), plus:
+    - refute-5a-r1's overlay fuzz through the build's own seam harness, with G3-32's widening: 0 RecordMismatch, 0 "read
+      before vs with differs", and no "view differs from the record" of G1-03's class;
+    - named scenes: S1-S4; test_gate6's 99417/99215 separate_em scene; test_combination's 99215 base_included scene; C7's
+      office visit, prolonged time and same-day flexible sigmoidoscopy with "Not documented" to both separate_em items;
+      a withdrawn answer read for the ADDON row, which holds readiness until the recompute;
+    - AnswerPassTests: the passes end on every answer combination of em_chain, office_prolonged and C7's scene.
+  - Owners: engine/assess.py is F3's (the passes, `_apply_answers`, `_close_services`). overlay.py, readers.py and
+    review.py are F6's (the loop calling F3's function, recount, the helper, `_actions`, answer_states). The seam harness
+    is the integration owner's.
+    - F3 and F6 land G1-02/G1-03 in one integration step, through the seam check, before the next merge.
+    - Before the install, since these need answers or decisions; G3-32 before the build's seam check.
+
+- **D284 An add-on held by its ADDON row is worded by its own message; the held-fact sentences (refute-5c-r1 P3; 5c
+  Q2, Q3; refute-r3c-r1 V9R3C1-2, V9R3C1-3; r3c Q3; 5b Q3; D251 O9; refute-consistency C10; TRIAGE G3-15, G1-08, G3-18,
+  G3-30).**
+  - G3-15, option (b), as drafted: a new message ADDON, appended to wording.Message and mirrored in questions.MessageId.
+    - It is TEXT_FREE, from codes alone: it quotes nothing and asks for no fact of the add-on's act.
+    - Read time words it (overlay TEXT_FREE; `recomputed`, not `stale`), and the customer reads a fixed sentence chosen by
+      the message.
+    - Its fact key and rank stay (performed_status, row 4; F2 4.3's ADDON row, "as today").
+    - Corrected (C10): the item's fingerprint changes with its message and its Fill, since engine/assess.question_
+      fingerprint hashes both (assess.py:768-775). No installed v2 answer binds one (D267), so no stored binding moves.
+  - G1-08, as drafted (latent): an explanation's held-fact sentence names the class the code describes (D267). It is
+    built with G3-15, in the same file (customer_api.py).
+  - G3-18, ACCEPT (a): the record and the reader stand, and no surface lists held facts. A surface that does is built
+    only with G1-08.
+  - G3-30, ACCEPT (a): `coding_rule:ADDON` is operator data; no dotted id. A2's routing "report.py: G3-30" needs nothing.
+  - Owners F3 (wording.py, questions.py and customer_api.py, D291) and F6 (overlay.py).
+    - G3-15 before the ten-pair test: an add-on with no counted primary is a common input (D255: 99213 beside 99417).
+    - G1-08 before the install.
+
+- **D285 D269's count, not_done_today and Q-CARDEXAM; r4d's carried questions (refute-r4d-r1 V9R4D1-1 to V9R4D1-3,
+  V9R4D1-5; r4d Q-COUNT, Q-NDT, Q-CARDEXAM, Q-P1K2, Q-F8, Q-RULE5, Q-N3, Q-UMBRELLA; refute-consistency C11; TRIAGE
+  G3-02, G3-03, G3-11, G4-02, G3-35 to G3-39).**
+  - Ruling A, as drafted (g3a/DRAFT.md:418-450):
+    1. Q-COUNT: beside the held session, D269's count counts only a session that one of its own filed events establishes
+       as performed today, and whose own established examinations do not establish it not done today
+       (combination._one_session, :1208-1220).
+    2. Q-NDT (a): not_done_today (:1427-1442) keeps its second arm for the exemption.
+    3. Q-CARDEXAM (b): the second arm reads a kept unlisted act or doubt of kind examination or none, carded to S. It
+       lands only with 1.
+    4. Q-UNNAMED is counted in D291's replays.
+    - It is built with AMENDMENT-2 4.3.3 c's `_claims_session` change, in one commit. The safety lens found nothing
+      against it (its section 2).
+  - G4-02, as drafted, its consequence corrected (C11): an event whose session fact is a negated claim, established or
+    not, claims no session. test_combination's q_ndt list gains the row.
+    - With ruling A.1 the count no longer reads `_claims_session`. Under mutant MA, 45378 stays held base_included on
+      ruling A's prototype (judge/logs/negated_claim-g3a6.out).
+    - So the row pins the whole side: an EGD beside a planned EUS, with an examination "not in X2" (a negated claim not
+      established), is never held within it. Under MA it is (judge/logs/negated_claim-tree.out, -g3a6.out).
+  - G3-35 to G3-39, as decided (D271, D262); the drafter re-ran each unchanged. Q-F8's consequence is counted in D291's
+    replays.
+  - Owner F3 (combination.py and its tests). Before the ten-pair test.
+
+- **D286 The add-on's kind in its session; a part asks no code only beside a done whole; an empty slot's doubt names its
+  whole in both modules (refute-r4d-r1 V9R4D1-4; refute-r4b-r1 V9R4B1-1, V9R4B1-2; r4b Q1; refute-consistency C9, C12;
+  TRIAGE G3-12, G3-13, G3-14).**
+  - G3-12, ruling E, amends D268's narrowing (C12). D268 narrowed w8r G2-08's option (b) to "the add-on's supporting
+    act". It is read again by kind, with option (b)'s own condition:
+    - the base rules (b) and (c) read no act of a kind that a counted add-on code of the same session covers, and that no
+      non-add-on code of the session's family covers (catalogue profiles). The act may be filed with its kind supported,
+      or a kept unlisted entry by its named kind;
+    - on this catalogue only office_em (em_prolonged, 99417) and ERCP (cholangioscopy, 43273) have both, and each kind is
+      covered by its add-on alone (lead's run, judge/logs/addon_covers-tree.out). A catalogue test pins that, so a
+      catalogue change fails the gate;
+    - without the add-on counted, the rules read as built (D268).
+  - G3-13, ruling F, as drafted: coverage.inclusion_asks_no_code (:2203-2209) answers no unless the including session
+    is done.
+  - G3-14, option (a), as drafted, its text corrected (C9): combination.wholes (:1481), `_named_wholes` (:1515) and
+    coverage._part_of_session (:1860) read one set, with D269's not_done_today.
+    - The set is a not-established part_of_session's claimed value and options, an empty slot's doubt included, never a
+      session nothing names.
+    - G3-13's done-whole filter is inclusion_asks_no_code's alone, and never filters this set: filtering it would
+      release 43235 beside a C3 whole told by nothing, the reading G3-13 refused.
+    - coverage's new value/options comparison is one of AMENDMENT-2 4.3.3's claimed-value reads, routed by F3's list.
+  - Owner F3 (combination.py, coverage.py). Before the ten-pair test.
+
+- **D287 Every conflict key names its act by its one label (r4a Q-R4A-KEYS; TRIAGE G3-28).** As drafted
+  (g3c/DRAFT.md:188-200), D267's heading and D254 rule 2:
+  - whenever a fact key names an act, it names facts.established_kind: the catalogue kind of its supported kind with its
+    supported purpose, else Kind.OTHER;
+  - questions.act_kind (:766), evaluate's key (:480), coverage's (`_kind_of`, :429) and classes' (`_conflict_kind`,
+    :495) all read that one derivation;
+  - a relation's conflict over an act whose label is OTHER is keyed conflict:other in coverage, as in evaluate.
+  No status moves (the drafter's tests.v2 on the prototype: 2,496 OK). Owner F3 (facts.py, coverage.py, classes.py;
+  questions.py by D291). Before the ten-pair test.
+
+- **D288 The gate's red id and 6a's questions on D264 (O7 = cb R2; refute-cb-r1 CB1-4; 6a QA, QS1, QR, QD; refute-6a-r1
+  F3, F4; TRIAGE G3-01, G3-04 to G3-08).**
+  - G3-01 is D274, applied: 18 tests OK on 195e06e90, and AMENDMENT-2 leaves adapter.py unedited.
+  - Ruling B, as drafted (g3a/DRAFT.md:452-468):
+    - QA (a), FIX (text): the module docstring and D264_CLEAN_TERMS are restated to the class the predicate accepts.
+      F3 owns test_properties.py; AMENDMENT-2's "sentinel.py: G3-04 to G3-08" is corrected.
+    - QS1 (a): as built (ACCEPT).
+    - QR (a), QD (a) and F4: decided by D264 (DEC:15698-15700, :15688-15689).
+  - G3-04 before the install (text).
+
+- **D289 The swap's timeout, stored-run, comment, read-path and price items under AMENDMENT-2 (refute-cb-r1 CB1-1 to
+  CB1-3; cb Q1 to Q3, R4; w9r O8; refute-consistency C15; TRIAGE G2-01 to G2-05).** As drafted (g2/DRAFT.md:24-82),
+  with C15's two corrections.
+  - G2-01, FIX: the timeout values are A2 1.12's (D279). The Gemini half is moot (A2 9); the shared path - the settings,
+    participants/http.post, the UNKNOWN reading of a cut read - serves Fable.
+    1. F0 restates the three Django guard modules in the commit that writes 1.12's settings, and F8 the installer's
+       test. The guard reads the cap from the module that sends it: `fable_adapter.MAX_TOKENS / 100 + 40` at most each
+       send deadline, the read timeout at most the deadline, the stage, stale and stop bounds above them. It is shown
+       to fail on a planted cap and a planted deadline.
+    2. F0's 1.12 rows land with F6's per-kind stale threshold, never before it.
+    3. T's harness reports each pair's slowest rate, longest gap and bytes per token. A breach stops the sends until
+       1.12's formula has re-derived the rows and the gate is green.
+    - Corrected: only the dormant adapter's module constants keep 480/510 (adapter.py:120-121, :752-753). Its configured
+      interpreters read the shared settings (:687-693, :1378-1386), and it sends nothing after the build.
+    - Before the ten-pair test.
+  - G2-02, DECIDED (A2 1.5, 8.5): no stored Gemini or v1 run is a source of a new hold; F1 and F6 pin it with the
+    probe's input and its v2 twin.
+  - G2-03, FIX (text): claims.py's CLAIM_BOUND comment (F3) and settings.py's timeout comments (F0, with 1.12's values).
+  - G2-04, MOOT: v1's read path (adapter.READ_MODELS, :108-109) is the Gemini adapter's alone. Fable's path reads
+    exactly claude-fable-5-2 (A2 1.6), and adapter.py is not edited (A2 9).
+    - The two untrue texts, HARNESS.md:4739-4742 and tests/test_interpretation_replay.py:8-10, are restated with G4-12's
+      edit (integration owner).
+    - D275's retirement entry is recorded after the ten pairs pass.
+  - G2-05, DECIDED (A2 1.7, 9): Gemini's dated rates stay, and F5 prices by run.requested_model with no fallback. Its
+    reason is corrected:
+    - report.window (report.py:502-563) is the operator report's estimate, read only by management/commands/
+      interpretation_report.py:61. It feeds no send cap: D277's cap is the harness's (A2 8.3);
+    - an unpriced Argon run would make that report under-state spend;
+    - with no fallback, a run that recorded no model is reported unpriced, never priced at another model's rates. This is
+      latent: every sent run records its model (jobs.py:1208, :1988).
+
+- **D290 Repair round w9r's tests and docs, and its closed items (refute-r4a-r1 L1; refute-r4d-r1 V9R4D1-5;
+  refute-r4b-r1 V9R4B1-3; refute-5a-r1 P-5; refute-5b-r1 R1, R3; refute-6a-r1 F1, F2; refute-q02-r1 V9Q021-1,
+  V9Q021-2; q02 Q1, Q2; refute-cb-r1 CB1-3 (i); w9r O6, O9, O10; TRIAGE G4-01 to G4-14, G5-01 to G5-13).** As drafted
+  (g4/DRAFT.md section 3; each new test shown to fail on its defect, g4/proposed.diff). Owners are D291's
+  (test_questions.py is F3's, so G4-01 is F3's), and G4-02's consequence is D285's.
+  - G4-01, FIX (test, F3): the synthetic DOUBT's unlisted_what is pinned at assess and at read time.
+  - G4-02, D285.
+  - G4-03, FIX (text, F3).
+  - G4-04, FIX (test, F3): assess._KEY_BOUND_FACTS is compared with requirements.KEY_BOUND.
+  - G4-05, FIX (test, F6).
+  - G4-06, FIX (text, F6).
+  - G4-07, FIX (text, F3), with its generator change.
+  - G4-08, FIX (test order, F3): the routed list is asserted before OPEN_RELEASES is empty. Before the ten-pair test.
+  - G4-09 and G4-10, FIX (text, integration owner).
+  - G4-11, DECIDED (D261).
+  - G4-12, FIX (text, integration owner): HARNESS.md, in one edit with G2-04's texts. adapter.py's comment is recorded,
+    not edited.
+  - G4-13, ACCEPT (not built): the frontend net refuses every gemini- and claude- id by pattern.
+  - G4-14, DECIDED (D230, D275, D279).
+  - G5-01 to G5-13 are confirmed as built: their closing tests are green, the integration's M1-M4 still fail, and C0
+    passes. I1, I2, A1 and A5 are confirmed; S1 and S2 stay with G1-01 and G1-02.
+
+- **D291 How the w9r rulings are built in AMENDMENT-2's round (refute-consistency C6, C14; D277's venues).**
+  - One owner per file (F2 8.0):
+    - F3 owns, besides its section-10 files, engine/evaluate.py, engine/questions.py, the whole of
+      interpretation/wording.py and studio/customer_api.py, with their test modules (tests/v2/test_evaluate.py,
+      test_questions.py, test_wording.py, test_update_customer.py). F2 8.0 pairs wording.py with customer_api.py, and
+      D280-D287 interlock across evaluate, questions, wording and pairing: two owners of questions.py refused each
+      other's change (C2).
+    - F6 keeps overlay.py, readers.py, review.py and jobs.py, with tests/v2/test_overlay.py, test_review_binding.py and
+      test_readers.py.
+    - The integration owner (F0) applies the texts in files no step owns (HARNESS.md, tests/v2_documents.py,
+      tests/test_readers_dispatch.py, tests/test_interpretation_replay.py), and G2-01's guards in tests/v2/
+      test_adapter.py, tests/v2/test_types.py and tests/test_interpretation_adapter.py.
+    - A2's routing (A2:1258-1261) is corrected: G1-04 and G3-17 are review.py's and overlay.py's (F6), G3-16 is
+      engine/assess.py's (F3), G3-04 to G3-08 are test_properties.py's (F3), and G3-30 needs nothing.
+  - D276's proofs for every FIX that moves a status, an item or a sentence:
+    - synthetic inputs outside the development set: one it must release or reword, one it must still hold;
+    - replay over every recorded batch with a complete pass 2 (F3all, F3long, F2high-p2, D2low, D2medium, D1v, D1w, each
+      through a copy of the tree that recorded it), reporting each status, item and sentence that moves;
+    - the whole tests.v2 package against a clean baseline, and refutation's generality lens.
+    - The replay is the only free measure of D216's second reading for the holds D285 adds and the releases D280 and
+      D286 make.
+  - D277 runs no D1-D3. So the measurements ruled "at D1-D3" or "at D2-D3" are counted in those replays and reported
+    with the install's evidence: Q-UNNAMED (D256), Q-F8's consequence (D271), R3D-NC and the 43255 count (D262), the
+    claimed-device DRE holds of D280.3, and G3-25's input.
+  - Timing:
+    - before the ten-pair test (S01-S10 and L01-L10, one pair per batch): D280, D281, D284's G3-15, D285, D286, D287,
+      G3-32, G2-01 and G4-08;
+    - before the install: the rest of D283, G1-08, and the texts.
+    - The build's integration runs the seam check (D252) with D283's named scenes, and the mandatory refutation of the
+      finished diff, before merge.
+
+- **D279 item 4, answered 2026-11-15 (owner, class d; rulings file, "Owner answer, 2026-11-15 — the Anthropic account's
+  headroom").** Asked whether the Anthropic account the installed site's Fable 5.1 second reader shares has at least
+  about $60 of headroom for the ten pairs, the owner answered "yes i have $200 budget in api account". The pairs run
+  with D277's per-pair cap (about twice the pair's modelled cost) and a test-total stop: before any send that could
+  take the test's recorded spend past $100, the sends stop and the owner is asked, so at least about $100 stays for the
+  site's reader. The probes of 2026-11-15 ($42.17 by the harness's upper bound) were sent on the same account before
+  the answer.
