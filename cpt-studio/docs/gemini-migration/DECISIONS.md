@@ -15846,3 +15846,59 @@ ten notes with Claude Fable 5.2 (PLAN.md 2026-11-15; build-v2/amend2/BRIEF.md).
     from the interpreter's path by a DECISIONS entry. Gemini's recordings stay labelled as Gemini's.
   - Before the acceptance run is sent, the owner receives its total at Fable's measured cost per document and decides
     (class d; FINAL-V2 7.6). The w9r triage (build-v2/lead-verify-w9r/TRIAGE.md) is ruled with AMENDMENT-2's build.
+
+## AMENDMENT-2 adopted, and the owner's directives on fixes and testing (2026-11-15, session 31dfc45d)
+
+The AMENDMENT-2 design round (build-v2/amend2/, workflow wf_e13a4dc8-aec) finished at 20:47Z: a designer, four
+refutation lenses (connector 7 findings, 1 critical; truth 9, 1 critical; replay 8; cost 8), a judge (30 accepted, 2 in
+part, none rejected). The same evening the owner gave three directives (docs/foundation/rulings/2026-10-23-cpt-studio-gi.md;
+RULINGS.md).
+
+- **D276 Accuracy fixes are general rules (owner directive 2026-11-15).**
+  - Every fix to the reading, the engine or the instruction is a rule over the reading's data model for a class of
+    inputs, written "whenever ...", justified by the design or a ruling; never keyed to a document (no case ids, offsets,
+    phrases or word lists from the development notes, no one-code exception the code's own rule does not demand).
+  - Each fix is proved beyond the notes it came from: synthetic inputs outside the development set (one it must
+    release, one it must still hold); replay over every recorded batch with a complete pass 2 (F3all, F3long, F2high-p2,
+    D2low, D2medium, D1v, D1w, each through a copy of the tree that recorded it); the whole `tests.v2` package against a
+    clean baseline. Refutation runs a generality lens.
+  - Instruction text is a general principle with a generic example; the two 2026-11-15 probe sentences (probe-fable52-v2)
+    are rewritten. The claim bound and the output maximum are sized from the provider's capacity for the size bound.
+
+- **D277 Paid testing is ten pairs, one pair at a time (owner directive 2026-11-15).**
+  - Not run: the acceptance run A and A' over the sealed set, and D1-D3. This amends D178 condition 1, FINAL-V2 7.6 and
+    9.x, and AMENDMENT-2 7.3-7.5 and 11.2-11.4.
+  - Run: ten pairs, each one short development note (pre-registered, PLAN.md 2026-11-15: S01-S10, the lowest file sha256 among
+    FRESH documents under 10,000 characters, read in no probe batch, with at least one expected READY, at most two per
+    family) and one realistic long note of about two pages
+    (L01-L10, written blind and sealed at gemini-migration/blind-long-20261115/), through the built Fable connector on the
+    test image, one pair per batch; every row is read before the next send.
+  - A pair passes when every code row is right: no wrong READY, no wrong exclusion, no hold its expectation does not ask
+    for. A failure stops the sends; the class is fixed per D276, re-checked free by replay, and testing continues on new
+    documents. Ten passing pairs end the testing; more only on the evidence, as the owner allows.
+  - Each pair's batch carries a cap checked before every send against the spend so far plus that send's worst case
+    (F-COST-2's mechanism, kept at pair scale). Expected spend about $40-50 in all, reported per pair.
+  - Given up, stated: ten pairs cannot establish the acceptance bar statistically. The evidence for the install is the
+    free replays of every recording through the built engine, the ten pairs and the walk.
+
+- **D278 Realistic length; the size bound unchanged (owner question 2026-11-15).**
+  - A GI note as physicians write it is about two pages; the 19 KB development notes (family n8, about five pages) are
+    stress material, not tested with money. INTERPRET_MAX_CHARS stays 20,000 and INTERPRET_MAX_PAGES 40: no capability
+    change. The build sizes the output maximum and the claim bound for that bound (F3long: a 19.4 KB note read fully at
+    max_tokens 128,000 with pass 2 over 756 claims).
+
+- **D279 AMENDMENT-2 is adopted as revised by its refutation** (AMENDMENT-2.md and AMEND2-REFUTATIONS.md, copied here),
+  with these amendments:
+  1. Section 5's hold rows are superseded by the hold-cause analysis (build-v2/holds/, workflow wf_15179ec7-ad0) under
+     D276, ruled when it is judged.
+  2. Every instruction text follows D276; the build writes the slot-rule and anatomy principles generally.
+  3. Sections 7.3-7.5 and 11.2-11.4 follow D277. The owner's figure for A is moot.
+  4. R5 / F-COST-4 (the test spends on the installed site's Anthropic account): the owner is asked to confirm the
+     account's headroom before the first pair (class d); without that word no pair is sent.
+  5. T1's pre-existing release is a defect of the built engine, repaired in the build: with pass 1's own contradicted
+     session, the claimed-value readers ignore the contradiction's sides. Reproduced first-hand on step8-195e06e90
+     (refute-truth-scripts/demo_within_contradicted.py: not_done_today(X2) True, base_within(43235) empty; the judge's
+     repair_check.py holds 43235 within X2 after the repair). Not installed: the installed release is c2e53f8e.
+  6. CONN-1's request-bound holds are built as the judge decided; a decline still holds the installation (D275). Holding
+     only the declined document would be an owner decision (class a), not raised.
+  7. The w9r triage (build-v2/lead-verify-w9r/TRIAGE.md) is ruled before the build round launches, from a draft.

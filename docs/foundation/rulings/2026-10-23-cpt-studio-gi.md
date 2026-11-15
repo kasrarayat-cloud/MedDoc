@@ -3423,3 +3423,64 @@ as FINAL-V2 7.6 requires.
 
 (f) **The installed site** is unchanged until the install; its Fable 5.1 second reader is unaffected. DECISIONS D275
 records it.
+
+## Owner directive, 2026-11-15 — accuracy fixes are general rules in the engine and the code, never per document
+
+Received 2026-11-15 in session 31dfc45d, while the hold-cause analysis of the Fable 5.2 ten-note probe was running,
+verbatim:
+
+> make sure you Fix the issues in cod and engine not only pdf by pdf u know what im saying?
+
+### Session interpretation, 2026-11-15 (31dfc45d, on receipt) — recorded, not owner-ruled
+
+(a) **A fix is a rule for a class of inputs.** Every fix to the reading, the engine or the instruction is stated as a
+rule over the reading's data model (fact states, a statement's scope and links, relation kinds, a coding rule's
+predicate), justified by the design or a ruling. It is never keyed to a document: no case ids, offsets, phrases or word
+lists taken from the development notes, and no exception for one code that the code's own rule does not demand.
+
+(b) **Proved beyond the notes it came from.** Synthetic inputs outside the development set (one the fix must release,
+one it must still hold), replay over every recorded batch (Gemini's readings included, as the cross-reader check), and
+the engine's whole `tests.v2` package against a clean baseline. A refutation lens attacks generality.
+
+(c) **Instructions and limits.** Instruction text is a general principle with a generic example. The two probe sentences
+of 2026-11-15 (probe tree probe-fable52-v2), which echo two development notes' words, are rewritten. The claim bound and
+the output maximum are sized from the provider's capacity for the size bound, never set to what two notes needed.
+
+## Owner directive, 2026-11-15 — no acceptance run of the sealed set; paid testing is one short and one realistic note at a time
+
+Received 2026-11-15 in session 31dfc45d, in four messages, after the owner asked what the acceptance run would cost (the
+answer given: 347 reads under D178 condition 1, about $510-540 with prompt caching, $616 without, $670 at the
+128,000-token worst; 645 reads about $920-1,250; a half-price Batches path not designed). Verbatim:
+
+> no dont do that test only 2 short and 2 long we dont have to test 216 doc
+
+> i havent seen any doctor has 5pGes for gi is it neccerly to test suck a long pdf like this?
+
+> no focus on short and realistic long pdf if 2 short and 2 relaistic gone failed or you need to run another test run one by one like one short kne relistic pdf vheck and then again but dont run like 200 seal at the same time we have limited budget so make sure you soing one by one and if you feelpdf gone good and works perfectly then move to the next step and stop twsting
+
+> to make sure do 10 short and 10 realistic then if you feel need more you can do it tho
+
+### Session interpretation, 2026-11-15 (31dfc45d, on receipt) — recorded, not owner-ruled
+
+(a) **What is not run.** The acceptance run A (and A') over the sealed set, and the development batches D1-D3.
+
+(b) **What is run.** Ten pairs, each one short development note and one realistic long note, sent one pair at a time
+through the built Fable connector on the test image. Every row is read before the next send.
+
+(c) **The bar per pair.** A pair passes when every code row is right: no wrong READY, no wrong exclusion, and no hold the
+expectation does not ask for. Any failure stops the sends; the class is fixed generally (the directive above), re-checked
+free by replaying that recording through the fixed engine, and testing continues on new documents (a document that drove
+a fix is no longer a test document). After ten passing pairs testing stops; more only when the evidence calls for it, as
+the owner allows.
+
+(d) **Realistic length.** A GI note as physicians write it is about two pages. The 19 KB development notes (about five
+pages) are stress material and are not tested with money. INTERPRET_MAX_CHARS stays 20,000 (no capability change); the
+build sizes the output maximum and the claim bound for it, as the long-note evidence of 2026-11-15 measured.
+
+(e) **The documents.** The short set is pre-registered by rule (PLAN.md, 2026-11-15). The ten long notes are written
+blind (an author, an independent coder, an adjudicator) and sealed until each pair's test.
+
+(f) **What is given up**, recorded so it is not mistaken later: ten pairs cannot establish the acceptance bar
+statistically (READY recall at least 70%, unnecessary holds at most 15%, zero wrong READY in every run). The evidence for
+the install becomes the free replays of every recording through the built engine, the ten pairs and the walk. Expected
+spend about $40-50, reported pair by pair.
