@@ -15664,3 +15664,146 @@ The record is build-v2/lead-verify-w7r/VERIFY.md. The order of readings is D216'
   - jobs._Integrity.word_runs returns it.
   assess.py does not change for D261. D263's step list moves D261 from 5a to 5b. q02's fixture is built on 5b's first
   patch.
+
+## Repair round w8r integrated: the integration owner's rulings on the refutations' findings (2026-11-15, session 31dfc45d)
+
+w8r (wf_d67e5c59-29b, build-v2/scripts/w8r-build-40c.js) finished with 25 of 25 agents and none failed (journal: 25
+started, 25 results, 0 failed). Every step's last refutation is clear: no critical or high defect. The integration's
+merge gate fails on one id, 6a-2's red-by-design `OpenQuestionsTests.test_no_release_waits_on_an_open_question` (Q6, Q7).
+The seam check (D252) took 12,469 fixture scenes and 103 named scenes end to end with no finding.
+
+Before ruling, the lead rebuilt the final tree from 454d62c61 and w8r/final/final.diff (sha256 a5ea5f51...). It is
+byte-equal to the integration's work tree, apart from the .hypothesis cache. On that tree the lead re-ran:
+- the merge gate (8 min 55 s): the same one red id, everything else green;
+- the seam check: 12,469 fixture scenes and 103 named scenes, 0 findings; the renderer sweep: 7,135 items, 0 refused;
+- refute-r4d-r1's probes for V8R4D1-1 and V8R4D1-3: both reproduce.
+The record is build-v2/lead-verify-w8r/ (PLAN.md's 2026-11-15 entry); the open items are digested, with every record
+cited, in build-v2/lead-verify-w8r/TRIAGE.md (entries G1-01 to G4-14, cited below by entry). The order of readings is
+D216's (repeated under w7r's rulings above).
+
+- **D264 The gate's red id: Q6 is D240's named release, Q7 is D228_STATUS's; every named release proves it is no false
+  READY (6a-2 Q4, Q6, Q7; refute-6a-r2 F1-F4; refute-6a-r1 F3, F5; w8r O4, O5; TRIAGE G2-01 to G2-07, G3-03, G3-04).**
+  - Q6 option (a): D240 keeps the installed site fit, and its preamble names the exception in 6a's property tests. A
+    weakening that deletes a member of an act's target.places, or of its target lesion's places, and so sets the act
+    outside a code's SITE class (D29's site fit) releases that code and shrinks the claims that drop the act. It is
+    named D264_SITE (with D240), and `check` accepts the shrunk claims under that name. w7r's O13 is built by this.
+    Option (b), repairing the site fit, would reverse D240: refused (O5 closed).
+  - Q7 option (a): a conflict doubt on an inherited act's status (CONTRADICTED) leaves the act's performance
+    unestablished, as UNRESOLVED and UNKNOWN do (6a Q1 as built). D228's arm reads all three alike: D262_STATUS names
+    the three results.
+  - 6a Q4 (refute-6a-r2 F2), option (c) then named: `_site_fit_weakening` is narrowed to what D262 accepted, r4a's QM
+    (one of the leaving act's own support rows weakened). The states the narrowed binding no longer accepts (F2's 36 on
+    QM's fixture, where the leaving act fails exactly SUP_CLEAN after its examination's status or a pair control is
+    weakened) are a class of their own, named D264_CLEAN, accepted only where the next rule holds; their count is pinned.
+  - Every named release (D262_STATUS, D262_QM, D262_NC, D228_DQ2, D264_SITE, D264_CLEAN) is accepted only when every act
+    still supporting the released code meets every row of evaluate's reading after the weakening: a named release can
+    never accept a false READY. A routed state that fails this, or that its name's shape does not cover, fails P-MONO.
+  - 6a Q2 (D228_DQ2) and 6a Q3 (R3D-NC for both the biopsy and the snare pair) as built, under that rule.
+  - The census (refute-6a-r2 F4): 6a's NOTES report, per fixture and pattern, how many states each name accepts at
+    depth 1 and 2, and every test that discards routed states says so in a comment that is true. OpenQuestionsTests
+    stays, empty, as the guard for the next unruled release.
+
+- **D265 A digital examination never words, binds or changes an item (refute-r4a-r2 F1, F3, Q4+; r4a-2 Q4 QDRE; TRIAGE
+  G1-02, G1-04, G2-19).** D253 says it never releases a code. Every item of a code, and the binding that chooses it, is
+  the item the same document gets without the digital examination's lines and the relations that pair it: the DRE's
+  sentence is never quoted as "the colonoscopy", its open device row never words the session's examination question,
+  its row-1 witness never takes the binding from the colonoscope's examination, and an examination statement is never
+  paired with it as with the session's examination (engine/pairing.py is r4a's file in round w9r for this). Tests: the
+  refuters' grids (F1's 104 rows, F3's 20, Q4's and Q4+'s shapes, D253's A2 shapes) give, for every row, the item of the
+  same FactSet without the DRE.
+
+- **D266 A question names the held session's examination and quotes only what it asks about; a denial is worded as a
+  denial (refute-r4a-r2 F2; refute-r3c-r1 F3; r4a-2 Q2 = refute-r4a-r1 P6; TRIAGE G1-03, G2-16).**
+  - D258's UNLISTED_SCOPE, and the carded DOUBT, quote an examination statement only when that examination is possibly
+    done on the date of service (not of another date, not planned, not by another performer, not negated). Otherwise
+    the question names the examination by its service with no quote.
+  - An unlisted denial, carded or not, of any kind, is worded as a statement that the act was not done, quoted, never
+    "leaves ... in doubt": r4a fills `unlisted_what` for the carded entry as for the no-card one, and r3c's DOUBT words
+    DENIAL by a form of its own. The held fact and the status are unchanged.
+
+- **D267 One label, and only known words, in every item, fact key and held-fact sentence (refute-5c-r1 P2 = 5c Q4; r4a-2
+  Q1 QK; refute-r3c-r1 F4, F6, F7 = r3c Q10; refute-r4a-r2 F5; r4a QA; TRIAGE G1-05 to G1-07, G2-17, G2-18, G2-22,
+  G2-24).**
+  - D254 rule 2 reaches every kind that is not SUPPORTED (negated, doubted, unresolved, contradicted, silent): such an
+    act is Kind.OTHER, "another act", in questions.act_kind (r4a), in overlay's slots (5c), and in evaluate's
+    `_conflict_kind`, so a conflict over it is keyed `conflict:other` (QK option (b); test_evaluate's pin follows).
+    customer_api words `conflict:other` with the same label (F4). There is no installed v2 data, so no stored key moves.
+  - BUNDLED with a group that names no act words the code itself, as `_not_documented` and `_method` do (F6).
+  - A route the document only possibly opens, or whose type is not established, is never "the documented pouch" or "the
+    documented stoma": the Fill marks it as possible and r3c words it as such (F5, D254 rule 1).
+  - The held-fact sentence of a procedure-keyed held fact names what its item asks (the route or the anatomy passed
+    through), never "in which procedure the act was done" where the procedure is known (F7, D253 QX (ii)): jobs.py
+    records the item's message with the held fact (5b), and customer_api.held_fact_words reads it, keeping v1's sentence
+    when no message is recorded (r3c).
+  - r4a QA option (b): an enteroscopy approach part whose only unknown is the route is asked by ENTEROSCOPY_ROUTE
+    (mouth, or the stoma or pouch), never "In which procedure was the enteroscopy done?" (D253 QX (ii)).
+
+- **D268 The add-on's own act, and the ADDON row at read time (refute-r4d-r1 V8R4D1-1, high; r4d Q-ADDON-ACT; TRIAGE
+  G2-08).**
+  - Option (b), narrowed: the base rules (b) and (c) read no act that a counted add-on code of the same session accounts
+    for as its supporting act (a cholangioscopy beside a counted 43273). 43260 beside 43273 with the cholangioscopy
+    documented is READY, and 43273 is READY: D255's stated effect, now reached on its realistic input. Without 43273
+    counted, the rules read as built.
+  - Read time applies the ADDON row as assess does (D260's agreement): a primary the reviewer rejects is no longer
+    counted, so an add-on whose every counted primary is rejected is held (coding_rule:ADDON), never approvable alone.
+    The lead's probe (43273 approved with 43260 rejected, no blocker) is the test.
+
+- **D269 A session established not done on the date of service is never possibly done and never a whole (r4d Q-P2DATE =
+  refute-r4d-r1 V8R4D1-6 = r4b Q3 = w8r O3; refute-r4b-r1 V8R4B1-3; the integration's I4 residual; refute-r4d-r1
+  V8R4D1-3; TRIAGE G2-04, G2-12, G2-14, G2-15).**
+  - Q-P2DATE option (c): every act possibly in a session S, placed or supported, is exempt when S is not_done_today (4.3
+    row 7). No act makes S possibly done, and S is never a whole for BASE_WITHIN, whatever the act's date or session
+    slot. This removes Q-P2DATE's release (O3 needs no naming), settles V8R4B1-3's two forms alike, and removes I4's
+    residual: a planned EUS is never named as the whole of today's EGD. r4d, with r4b's mirror, pin and docstrings.
+  - V8R4D1-3 option (a): D256's "a document that tells one session" counts the sessions that are not established not
+    done today. A planned repeat colonoscopy filed as a session of its own no longer turns the kindless one-session hold
+    off.
+
+- **D270 Assess, read time and the customer's account agree on answers (refute-5a-r2 DQ-2, DQ-3; refute-5b-r1 P1, P3;
+  5a-2 Q2, Q3; 5b Q1, Q2; TRIAGE G1-01, G2-09 to G2-11).**
+  - G1-01 option (b): an answer that a design v2 proposal records in `support['answered']` is applied, and
+    review.answer_states says so; the customer's earlier answers never say "no longer asked, so this answer is not
+    applied" beside a code that answer excluded (D225). answers.py is 5b's file in round w9r for this.
+  - DQ-3 option (c): the competition hold's own sentence is made true. When the reviewer rejects the rival, read time
+    releases the remaining code's competing hold, whatever the rival was answered ("Cannot confirm" included). D260's
+    stated effect ("Cannot confirm" keeps the hold until a decision) stands.
+  - DQ-2 option (b): assess reads an overlay-bound "Not documented" for the competition alone, as D260 reads an
+    engine-bound one, and read time restores the competition when a decision unbinds that answer.
+  - 5b P3 option (a): D259 extends to service questions. The renderer records each service question's engine fingerprint
+    where read time reads it, and the door and read time bind by it: one fingerprint.
+
+- **D271 The round's other findings and questions.**
+  - Confirmed as built: the integration's I1, I2, I3 and I4 (I4's residual by D269), and A5 (coverage calls
+    combination._digital).
+  - As built: TRIAGE G2-13 (Q-P1K2, the fail-closed admission equal to doubted_in's), G2-20 (5a-2 Q5: the installed rule
+    keeps an add-on's fingerprint while its status holds; 42 fuzz cases recorded), G2-21, G2-23, G2-25 to G2-39, G2-41 to
+    G2-45, G2-48; G2-40 (Q-F8) stays as built by D262, its w8r consequence (an office visit beside a kindless no-card
+    entry) measured with Q-UNNAMED at D2-D3.
+  - Not built (optional refactors): w8r O1 and O2.
+  - Tests and docs: r4a kills mutant W4 (G3-01); r4d pins `_digital`'s kind gate (G3-02); 5b annotates its two changed
+    functions for mypy --strict (G3-05); 5a corrects the "at most one pass per proposal" docstring (G3-07); q02 corrects
+    its module docstring and the door test's "red by design" text (G3-08, G3-09 = O6). wording.py's pre-existing mypy
+    errors (G3-06) are not this round's.
+
+- **D272 D230's code change is a step of round w9r.** Step cb builds the 2026-11-13 18:53Z checklist (PLAN.md) on the
+  integrated tree: MODEL `gemini-4-carbon`; both passes' generationConfig with thinkingConfig.thinkingLevel `high` and
+  maxOutputTokens 65,536; the price table; report.py's D13_MODEL and FINAL_ENDPOINT; the customer denylist's full ID
+  (never the bare word); every request-shape pin recomputed by its owning function; the Argon recordings replayed as
+  Argon's; no remaining `gemini-4-argon` used as the current model. No provider is called.
+
+- **D273 Repair round w9r: ten steps, then the integration with the seam check and the gate.**
+  - The steps (one owner per file):
+    - r3c (wording.py, customer_api.py): D266's denial form, D267's labels and held-fact sentence.
+    - r4a (evaluate.py, questions.py, and pairing.py this round): D265, D266's quoting and `unlisted_what`, D267's
+      act_kind, conflict key, route Fill and QA; G3-01. Built on r3c's first patch.
+    - r4d (combination.py): D268's base-rule filter, D269, G3-02.
+    - r4b (coverage.py): D269's mirror, pin and docstrings. Built on r4d's first patch.
+    - 5c (overlay.py): D267's slots, D268's read-time ADDON row, D270's DQ-3 release and DQ-2 restore.
+    - 5a (assess.py): D270's DQ-2 reading; G3-07.
+    - 5b (review.py, jobs.py, and answers.py this round): D270's G1-01 and P3, D267's held-fact message; G3-05.
+    - 6a (property tests): D264.
+    - q02 (tests/v2_documents.py and its class C modules): G3-08, G3-09.
+    - cb (the model swap's files): D272.
+  - Each step is built as a patch, refuted, given one fix round, and refuted again where needed. The integration runs the
+    seam check (D252) with named scenes for D265, D266, D268, D269 and D270's inputs added. The gate must be green; D250
+    stays.
