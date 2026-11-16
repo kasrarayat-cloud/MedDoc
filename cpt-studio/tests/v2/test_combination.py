@@ -2671,6 +2671,286 @@ class SiteFit(SimpleTestCase):
         self.assertEqual(C.claims('43239', R, ()), (E2,))
 
 
+# --- every reader of an act's target lesion's places reads its finding (DECISIONS D297 ENGB-1) -----------------------
+
+
+class R2BBFindingSiteTests(SimpleTestCase):
+    """DECISIONS D297 ENGB-1 (refute rf-eng-b's ENGB-1, reproduced by its verifier; repair round r2b): whenever a rule
+    reads an act's target lesion's places - E1j (engine/coverage), SITE's lesion arm (engine/evaluate._places_of),
+    D240's site fit (combination.site_outside) and the place SITE's explanation names (engine/questions._site_places)
+    - it reads the places of every entry of that lesion's FINDING: every lesion entry a same_as member in ANY state may
+    join to it, directly or through other entries, in either direction (facts.finding_places: ONE reader for all of
+    them); an entry without established places, or an id the FactSet does not hold, leaves the rule held and open -
+    never READY, never excluded. The scenes were written for this round, outside every development set: a peptic
+    stricture at the gastroesophageal junction that reaches into the gastric cardia, balloon-dilated (43249 the
+    esophageal class, 43245 the gastric or duodenal class), filed as one entry or as two entries joined by same_as, the
+    dilation naming one."""
+
+    GEJ, CARDIA = Landmark.GASTROESOPHAGEAL_JUNCTION, Landmark.GASTRIC_CARDIA
+    DE, PYL, BULB = Landmark.DISTAL_ESOPHAGUS, Landmark.PYLORUS, Landmark.DUODENAL_BULB
+    ANASTOMOSIS = Landmark.ANASTOMOSIS
+    L9 = Id(IdFamily.LESION, 9)  # an id the FactSet does not hold
+
+    @staticmethod
+    def entry(places, same=(), distinct=()) -> dict:
+        """One lesion entry: its places, its same_as and its distinct_from members (a landmark or an id is read
+        supported; a Fact as given)."""
+        def as_fact(value):
+            return value if isinstance(value, Fact) else sup(value)
+        return {A.PLACES: tuple(as_fact(place) for place in places), A.SAME_AS: tuple(as_fact(item) for item in same),
+                A.DISTINCT_FROM: tuple(as_fact(item) for item in distinct)}
+
+    @staticmethod
+    def scene(lesions, places=()) -> FactSet:
+        """An EGD X1 (its examination E1) and E3 a balloon dilation of L1, at its own ``places``."""
+        return build({E1: act(Kind.EXAMINATION, X1),
+                      E3: act(Kind.DILATION, X1, device=sup(Device.BALLOON), lesion=sup(L1),
+                              places=tuple(sup(place) for place in places))},
+                     {X1: session_of(SessionKind.EGD)}, lesions=lesions)
+
+    @staticmethod
+    def site(code, R, event=E3):
+        """evaluate's SITE row of ``event`` for ``code`` (one group)."""
+        rows = [row for row in EV.code_rows(code, rq.spec(code).groups[0], R, event) if row.requirement is Tag.SITE]
+        assert len(rows) == 1, code
+        return rows[0]
+
+    @staticmethod
+    def states(value) -> tuple:
+        """Every state a same_as member naming ``value`` can be in ("in any state")."""
+        return (('supported', sup(value)), ('negated, established', neg(value)), ('unresolved', unres(value)),
+                ('a negation left open', unres(value, state=State.NEGATED)), ('doubted', doubted(value)),
+                ('contradicted', contradicted(value, value)))
+
+    def split(self, on_l1, on_l2, partner_places) -> dict:
+        """The finding filed as two entries: L1 at the junction (the dilation's target) and L2 at ``partner_places``,
+        joined by the member given on L1 (naming L2) or on L2 (naming L1)."""
+        return {L1: self.entry((self.GEJ,), same=() if on_l1 is None else (on_l1,)),
+                L2: self.entry(partner_places, same=() if on_l2 is None else (on_l2,))}
+
+    def held_cases(self) -> list:
+        """(name, lesions) the rule must hold: the finding reaches the cardia through an entry joined by same_as (every
+        member state, either direction, a chain, a doubt's reading), or an entry of it has no established places, or
+        names an id the FactSet does not hold."""
+        unappraised = tuple(fact(Res.UNRESOLVED, place, State.SUPPORTED, reasons=(ct.Reason.UNAPPRAISED,))
+                            for place in (self.GEJ, self.CARDIA))
+        cases = []
+        for name, member_ in self.states(L2):
+            cases.append((f'L1 -> L2 {name}, L2 spans', self.split(member_, None, (self.GEJ, self.CARDIA))))
+        for name, member_ in self.states(L1):
+            cases.append((f'L2 -> L1 {name}, L2 spans', self.split(None, member_, (self.GEJ, self.CARDIA))))
+        return cases + [
+            ('L2 only the cardia', self.split(sup(L2), None, (self.CARDIA,))),
+            ('L2 places unappraised (no act names it)', self.split(sup(L2), None, unappraised)),
+            ('a chain L1 -> L2 -> L3, L3 the cardia', {L1: self.entry((self.GEJ,), same=(L2,)),
+                                                      L2: self.entry((self.GEJ,), same=(L3,)),
+                                                      L3: self.entry((self.CARDIA,))}),
+            ("a doubt's reading names L3, the cardia", {L1: self.entry((self.GEJ,), same=(doubted(L2, L3),)),
+                                                        L2: self.entry((self.GEJ,)), L3: self.entry((self.CARDIA,))}),
+            ('L2 with no place listed', self.split(sup(L2), None, ())),
+            ('L2 with only a negated place', self.split(sup(L2), None, (neg(self.CARDIA),))),
+            ('an id the FactSet does not hold', {L1: self.entry((self.GEJ,), same=(self.L9,))}),
+        ]
+
+    def test_a_finding_filed_as_two_entries_is_read_whole(self):
+        """The rule must change these: SITE reads the whole finding, so neither code's SITE row is met or failed (U:
+        held, act_target), D240's site fit no longer sets the dilation outside 43245's class, and the place SITE's
+        explanation would name is read from the same places (before: 43249 T on L1's junction alone, 43245 F)."""
+        for name, lesions in self.held_cases():
+            with self.subTest(name):
+                R = self.scene(lesions)
+                for code in ('43249', '43245'):
+                    row = self.site(code, R)
+                    self.assertIs(row.truth, EV.Truth.U, code)
+                    self.assertEqual({held.fact for held in row.witnesses}, {'act_target'})
+                    self.assertFalse(C.site_outside(code, R, E3), code)
+                places, _open = EV._places_of(R, E3)
+                self.assertEqual(Q._site_places(R, E3), [member_.value for member_ in places
+                                                         if member_.result is Res.SUPPORTED])
+
+    def test_an_entry_with_no_established_place_asks_where_the_lesion_lies(self):
+        """The witness of an entry with no established place, or of an id the FactSet does not hold: the lesion's
+        places (act_target, rank 11, the attribute ``places``), unknown (reading_unknown) - never an explanation."""
+        for name, lesions in (('L2 with no place listed', self.split(sup(L2), None, ())),
+                              ('L2 with only a negated place', self.split(sup(L2), None, (neg(self.CARDIA),))),
+                              ('an id the FactSet does not hold', {L1: self.entry((self.GEJ,), same=(self.L9,))})):
+            with self.subTest(name):
+                row = self.site('43249', self.scene(lesions))
+                self.assertEqual([(held.fact, held.kind, held.attribute, held.cause) for held in row.witnesses],
+                                 [('act_target', ItemKind.QUESTION, A.PLACES, Q.READING_UNKNOWN)])
+
+    def test_the_entry_the_act_names_without_an_established_place_holds_too(self):
+        """D297's rule names every entry of the finding, the one the dilation names included: its place list empty, only
+        negated, or its id one the FactSet does not hold - SITE held and open, never met or failed on the act's own
+        junction alone (before: 43249 T and 43245 F on the act's own place), and D240's site fit leaves the act
+        possibly within 43245's class."""
+        for name, lesions in (('L1 with no place listed', {L1: self.entry(())}),
+                              ('L1 with only a negated place', {L1: self.entry((neg(self.CARDIA),))})):
+            with self.subTest(name):
+                R = self.scene(lesions, places=(self.GEJ,))
+                self.assertEqual((self.site('43249', R).truth, self.site('43245', R).truth), (EV.Truth.U, EV.Truth.U))
+                self.assertFalse(C.site_outside('43245', R, E3))
+        R = build({E1: act(Kind.EXAMINATION, X1),
+                   E3: act(Kind.DILATION, X1, device=sup(Device.BALLOON), lesion=sup(self.L9),
+                           places=(sup(self.GEJ),))}, {X1: session_of(SessionKind.EGD)})
+        self.assertEqual((self.site('43249', R).truth, C.site_outside('43245', R, E3)), (EV.Truth.U, False))
+
+    def test_d240s_site_fit_keeps_the_act_a_finding_reaches_into_the_class(self):
+        """D240 through the finding: a balloon dilation E3 at the pylorus of L1 [pylorus], L1 same_as L2, which reaches
+        the distal esophagus - E3 may be in 43249's class, so 43249 claims it and competes with 43245 (before: set
+        outside on L1 alone, no competition, 43245 free). Its boundary: L2 at the duodenal bulb, every place outside
+        the esophageal class - set outside, as one entry [pylorus, duodenal bulb] is."""
+        members = (member('sel:0', '43245', supporting=(E3,)), member('sel:1', '43249'))
+        for name, partner, expected in (
+                ('L2 reaches the distal esophagus', (self.PYL, self.DE),
+                 (False, (E3,), {'sel:0': ('43249',), 'sel:1': ('43245',)})),
+                ('L2 at the duodenal bulb', (self.BULB,), (True, (), {}))):
+            for direction, lesions in (
+                    ('L1 -> L2', {L1: self.entry((self.PYL,), same=(L2,)), L2: self.entry(partner)}),
+                    ('L2 -> L1', {L1: self.entry((self.PYL,)), L2: self.entry(partner, same=(L1,))})):
+                with self.subTest(name, direction=direction):
+                    R = self.scene(lesions, places=(self.PYL,))
+                    self.assertEqual((C.site_outside('43249', R, E3), C.claims('43249', R, ()), compete(R, *members)),
+                                     expected)
+
+    def test_through_the_engine_the_split_finding_holds_either_site_code(self):
+        """Through engine/assess (tests/v2/evaluate_fixtures): the stricture filed as L1 at the junction same_as L2 over
+        the junction and the cardia, either direction, the dilation naming L1 - 43249 held on act_target (before:
+        READY); its mirror, L1 at the cardia same_as L2 over the cardia and the junction - 43245 held (before: READY).
+        Boundary: one entry at the junction alone - 43249 READY, and a split whose entries all lie at the junction or
+        in the distal esophagus - 43249 READY."""
+        from tests.v2 import evaluate_fixtures as EF
+        from tests.v2 import test_assess as TA
+
+        def run(lesions, code):
+            doc = EF.Doc()
+            doc.session(1, ct.SessionKind.EGD, reached=[sup(ct.Extent.SECOND_PORTION_DUODENUM)])
+            doc.exam(3)
+            for number, attributes in lesions.items():
+                doc.lesion(number, multiplicity=sup(ct.Multiplicity.SINGLE), **attributes)
+            doc.act(1, Kind.DILATION, places=[], lesion=sup(EF.L(1)), device=sup(Device.BALLOON))
+            found = TA.by_code(TA.run(TA.dated(doc.build()), (code, 1)))[code]
+            return found.status.value, None if found.item is None else found.item.held.fact
+
+        here, there = self.GEJ, self.CARDIA
+        for code, near, far in (('43249', here, there), ('43245', there, here)):
+            for direction, lesions in (
+                    ('L1 -> L2', {1: dict(lesion_places=[sup(near)], same_as=[sup(EF.L(2))]),
+                                  2: dict(lesion_places=[sup(near), sup(far)])}),
+                    ('L2 -> L1', {1: dict(lesion_places=[sup(near)]),
+                                  2: dict(lesion_places=[sup(near), sup(far)], same_as=[sup(EF.L(1))])})):
+                with self.subTest(code=code, direction=direction):
+                    self.assertEqual(run(lesions, code), ('needs_clarification', 'act_target'))
+        self.assertEqual(run({1: dict(lesion_places=[sup(here)])}, '43249'), ('ready', None))
+        self.assertEqual(run({1: dict(lesion_places=[sup(here)], same_as=[sup(EF.L(2))]),
+                              2: dict(lesion_places=[sup(here), sup(self.DE)])}, '43249'), ('ready', None))
+
+    def test_a_finding_wholly_within_or_outside_a_class_and_one_entry_are_left_alone(self):
+        """The boundary the rule must leave alone: one entry (at the junction; across the junction and the cardia; at
+        the pylorus beside the act's pylorus); a split whose every entry lies in the esophageal class (every member
+        state, either direction) or wholly outside it; entries that are NOT one finding (a distinct_from, no link) -
+        each read as before."""
+        T, U, F_ = EV.Truth.T, EV.Truth.U, EV.Truth.F
+        cases = [('one entry at the junction', {L1: self.entry((self.GEJ,))}, (), (T, F_), (False, True)),
+                 ('one entry across the junction and the cardia', {L1: self.entry((self.GEJ, self.CARDIA))}, (),
+                  (U, U), (False, False)),
+                 ('one entry at the pylorus', {L1: self.entry((self.PYL,))}, (self.PYL,), (F_, T), (True, False)),
+                 ('L1 distinct_from L2, L2 the cardia', {L1: self.entry((self.GEJ,), distinct=(L2,)),
+                                                          L2: self.entry((self.CARDIA,))}, (), (T, F_), (False, True)),
+                 ('no link, L2 the cardia', {L1: self.entry((self.GEJ,)), L2: self.entry((self.CARDIA,))}, (), (T, F_),
+                  (False, True)),
+                 ('a split wholly outside: the pylorus and the duodenal bulb',
+                  {L1: self.entry((self.PYL,), same=(L2,)), L2: self.entry((self.BULB,))}, (self.PYL,), (F_, T),
+                  (True, False))]
+        for name, member_ in self.states(L2):
+            cases.append((f'L1 -> L2 {name}, L2 the distal esophagus', self.split(member_, None, (self.DE,)), (),
+                          (T, F_), (False, True)))
+        for name, member_ in self.states(L1):
+            cases.append((f'L2 -> L1 {name}, L2 the distal esophagus', self.split(None, member_, (self.DE,)), (),
+                          (T, F_), (False, True)))
+        for name, lesions, places, truths, outside in cases:
+            with self.subTest(name):
+                R = self.scene(lesions, places=places)
+                self.assertEqual((self.site('43249', R).truth, self.site('43245', R).truth), truths)
+                self.assertEqual((C.site_outside('43249', R, E3), C.site_outside('43245', R, E3)), outside)
+
+    def test_one_reader_for_every_rule_and_the_two_site_readers_agree(self):
+        """One shared reading, never a copy: E1j, SITE, D240's site fit and SITE's explanation each read
+        facts.finding_places; and site_outside equals the SITE row failing over a grid of split findings (D240's one
+        rule, two readers, through the finding)."""
+        from studio.interpretation.engine import coverage
+        calls = []
+        real = F.finding_places
+
+        def spy(R_, lesion):
+            calls.append(lesion)
+            return real(R_, lesion)
+
+        R = self.scene(self.split(sup(L2), None, (self.GEJ, self.CARDIA)))
+        with mock.patch.object(F, 'finding_places', spy):
+            for name, read in (('SITE', lambda: self.site('43249', R)),
+                               ('site_outside', lambda: C.site_outside('43245', R, E3)),
+                               ("SITE's explanation", lambda: Q._site_places(R, E3))):
+                calls.clear()
+                read()
+                self.assertIn(L1, calls, name)
+            calls.clear()
+            removal = build({E1: act(Kind.EXAMINATION, X1),
+                             E2: act(Kind.SNARE, X1, lesion=sup(L1), places=(sup(Landmark.HEPATIC_FLEXURE),),
+                                     device=sup(Device.HOT_SNARE)),
+                             E3: act(Kind.BIOPSY, X1, places=(sup(Landmark.TRANSVERSE_COLON),),
+                                     device=sup(Device.COLD_FORCEPS))},
+                            {X1: session_of(SessionKind.COLONOSCOPY)},
+                            lesions={L1: self.entry((Landmark.HEPATIC_FLEXURE,))},
+                            controls={(E2, A.TARGET_PLACES, Landmark.TRANSVERSE_COLON): True})
+            self.assertTrue(coverage._biopsy_elsewhere(coverage._Asker(removal, E3, coverage.Reader.of(removal))))
+            self.assertIn(L1, calls, 'E1j')
+        answers = {True: 0, False: 0}
+        for mine in ((self.GEJ,), (self.PYL,), (self.DE,)):
+            for theirs in ((), (self.DE,), (self.PYL,), (self.CARDIA,), (self.GEJ, self.PYL), (unres(self.PYL),),
+                           (self.ANASTOMOSIS,)):
+                for name, member_ in self.states(L2):
+                    R = self.scene({L1: self.entry(mine, same=(member_,)), L2: self.entry(theirs)})
+                    for code in ('43249', '43245'):
+                        outside = C.site_outside(code, R, E3)
+                        self.assertEqual(outside, self.site(code, R).truth is EV.Truth.F, (code, mine, theirs, name))
+                        answers[outside] += 1
+        self.assertGreater(min(answers.values()), 20, answers)
+
+    def test_same_as_only_holds_the_site_rows(self):
+        """same_as stays a hold-only read (3.2.3's UNCONTROLLED; the request invariant): joining an entry to the act's
+        target lesion - in any member state, with any places - never moves SITE from U to met or failed, never from
+        met to failed or back, and never sets an act outside a class it was not set outside before. So requirements'
+        SITE read set is unchanged, and (lesion, same_as) is read on the hold path only, already in every site code's
+        closure through bundling."""
+        partner_places = ((), (self.GEJ,), (self.DE,), (self.CARDIA,), (self.PYL,), (self.GEJ, self.CARDIA),
+                          (unres(self.CARDIA),), (neg(self.CARDIA),))
+        moved = 0
+        for mine in ((), (self.GEJ,), (self.CARDIA,), (self.GEJ, self.CARDIA), (unres(self.GEJ),)):
+            for act_places in ((), (self.GEJ,), (self.PYL,)):
+                narrow = self.scene({L1: self.entry(mine), L2: self.entry((self.CARDIA,))}, places=act_places)
+                for theirs in partner_places:
+                    for name, member_ in self.states(L2):
+                        wide = self.scene({L1: self.entry(mine, same=(member_,)), L2: self.entry(theirs)},
+                                          places=act_places)
+                        for code in ('43249', '43245'):
+                            before, after = self.site(code, narrow).truth, self.site(code, wide).truth
+                            with self.subTest(mine=mine, act=act_places, theirs=theirs, member=name, code=code):
+                                self.assertIn(after, (before, EV.Truth.U))
+                                self.assertLessEqual(C.site_outside(code, wide, E3), C.site_outside(code, narrow, E3))
+                            moved += before is not after
+        self.assertGreater(moved, 0)
+        self.assertEqual({(read.role, read.attribute, read.paths) for read in rq.RULES[Tag.SITE].reads},
+                         {(rq.Role.ACT, A.TARGET_PLACES, frozenset({rq.Path.READY})),
+                          (rq.Role.ACT, A.TARGET_LESION, frozenset({rq.Path.READY})),
+                          (rq.Role.LESION, A.PLACES, frozenset({rq.Path.READY}))})
+        bundling = {(read.role, read.attribute): read.paths for read in rq.RULES[rq.Requirement.BUNDLING].reads}
+        self.assertEqual(bundling[(rq.Role.LESION, A.SAME_AS)], frozenset({rq.Path.HOLD}))
+        for code in (str(number) for number in sorted(catalogue.DILATION_SITES)):
+            with self.subTest(closure=code):
+                self.assertIn(A.SAME_AS, rq.dependencies(code).reads[rq.Role.LESION])
+
+
 # --- a part session beside the whole its claim names (DECISIONS D244 R-N3) -------------------------------------------
 
 

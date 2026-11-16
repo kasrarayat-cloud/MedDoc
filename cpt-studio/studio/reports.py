@@ -30,6 +30,7 @@ from .serializers import failure_note, peer_code_phases, retrieval_failed, shown
 from .types import CONTEXT_FACTS, sha256_json
 from .validation.checks import fact_label
 from .validation.engine import LISTED_NOT_PROPOSED
+from .validation.questions import answered_away
 
 DRAFT, REVIEWED = ReportArtifact.DRAFT, ReportArtifact.REVIEWED
 KINDS = (DRAFT, REVIEWED)
@@ -189,7 +190,8 @@ def _list_for(proposal, decision, kind, view=None):
         return 'excluded'  # a needed detail answered as unavailable: excluded by the review overlay, never approved
     if action == Decision.APPROVE and kind == REVIEWED:
         return 'approved'
-    if proposal.bucket == Proposal.EXCLUDED and action in (None, Decision.CONFIRM):
+    # r2b (DECISIONS D297, W2R-1): a code read as the selected code it was (review.reopened) is decided as one
+    if review.bucket_of(proposal, view) == Proposal.EXCLUDED and action in (None, Decision.CONFIRM):
         return 'excluded'
     return 'undecided'
 
@@ -198,10 +200,13 @@ def _check(check):
     return {key: str(check.get(key) or '') for key in ('id', 'label', 'status', 'detail', 'source')}
 
 
-def _reinstated(proposal, decision):
-    """An excluded proposal carrying a decision was reinstated, unless that decision confirms the exclusion."""
-    return (proposal.bucket == Proposal.EXCLUDED and decision is not None
-            and decision.action != Decision.CONFIRM)
+def _reinstated(proposal, decision, view=None):
+    """An excluded proposal carrying a decision was reinstated, unless that decision confirms the exclusion - never a
+    code read as the selected code it was (r2b, D297 W2R-1: review.bucket_of over its effective view), and r2d (D301,
+    RBWX-4) never a code engine/assess excluded by a member's answer (answered_away): an answer's exclusion is no
+    reinstatement, whatever the decision a reviewer took while it read as selected (review.reinstated's rule)."""
+    return (review.bucket_of(proposal, view) == Proposal.EXCLUDED and not answered_away(proposal)
+            and decision is not None and decision.action != Decision.CONFIRM)
 
 
 def _item(proposal, decision, kind, text, view=None):
@@ -215,8 +220,9 @@ def _item(proposal, decision, kind, text, view=None):
         'family_label': _family_label(proposal.family), 'profile_version': proposal.profile_version,
         'status': status, 'status_label': review.status_label(status),
         'exclusion_reason': proposal.exclusion_reason, 'reinstatable': proposal.reinstatable,
-        'reinstated': _reinstated(proposal, decision),
-        'reinstated_by': _decision(review.reinstatement_for(decision)) if _reinstated(proposal, decision) else None,
+        'reinstated': _reinstated(proposal, decision, view),
+        'reinstated_by': (_decision(review.reinstatement_for(decision)) if _reinstated(proposal, decision, view)
+                          else None),
         'units': proposal.units, 'rationale': proposal.rationale,
         'evidence': [{'start': s['start'], 'end': s['end'], 'text': s['text'], 'page': s.get('page')} for s in exact],
         'unmatched_evidence': len(proposal.evidence or []) - len(exact),

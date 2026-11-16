@@ -469,7 +469,11 @@ RULES: Mapping[Requirement | Tag, Rule] = MappingProxyType({
     # DEF: a supporting act of the defining kind; unmet "as SUPPORT"
     Tag.DEF: Rule((_e(_A.KIND, _BOTH),)),
     Tag.TECH: Rule((_e(_A.TECHNIQUE_DEVICE),), asks=(_TECHNIQUE,), explains=(_TECHNIQUE,)),
-    # SITE: every supported place of the act and of its supported lesion within the class
+    # SITE: every supported place of the act and of its supported lesion within the class. DECISIONS D297 ENGB-1: the
+    # lesion's places are its FINDING's (facts.finding_places: every entry a same_as member in any state may join), so
+    # SITE reads same_as to widen what it must find established - the hold direction only (a wider finding never meets
+    # or fails the row a narrower one left open); (lesion, same_as) is read on the hold path and already in every site
+    # code's closure through BUNDLING's read, so this read set is unchanged
     Tag.SITE: Rule((_e(_A.TARGET_PLACES), _e(_A.TARGET_LESION), _r(Role.LESION, _A.PLACES)),
                    asks=(_ACT_TARGET,), explains=(_ACT_TARGET,)),
     Tag.STRUCT_PFC: Rule((_e(_A.TARGET_STRUCTURE), _e(_A.TARGET_PLACES)), asks=(_TARGET,),

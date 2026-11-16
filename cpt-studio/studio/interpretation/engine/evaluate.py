@@ -101,8 +101,10 @@ a sentence (the step's NOTES, question Q4).
 TECH (technique.device in the code's class: another class an explanation, an unestablished or classless device a
 question); SITE (D29: every place of the act and its supported lesion established, its supported
 places within the class, at least one; every supported place outside the class, none surgically made or unplaced, is
-the "another site" explanation); STRUCT:pfc (43240: structure supported pancreatic_fluid_collection, no supported
-place biliary or hepatic: D120, D136, D145); ROUTE (43253: route supported eus_transmural; submucosal is the wall
+the "another site" explanation; the lesion is its FINDING - every entry a same_as member in any state may join to it,
+an entry without established places or an id the FactSet does not hold leaving the row open: DECISIONS D297 ENGB-1);
+STRUCT:pfc (43240: structure supported pancreatic_fluid_collection, no supported place biliary or hepatic: D120, D136,
+D145); ROUTE (43253: route supported eus_transmural; submucosal is the wall
 injection's explanation); TRACT (the session's tract, D171(2); an EUS filed pancreatobiliary fits the upper codes:
 D226); STATIONS (43242, 43259: the three upper stations supported examined and a reach at or beyond the duodenum, or an
 empty list with the completeness claim supported and that reach [R:SC-B]; a station negated is the class explanation;
@@ -922,18 +924,34 @@ def _row_technique(c: _Code, group: Sequence[Kind], R: FactSet, event: Id) -> Ro
                                  questions.coding_rule(_Rule.TECHNIQUE))])
 
 
+# The witness SITE rests on when an entry of the act's target lesion's finding has no established places, or the finding
+# holds an id the FactSet does not hold (DECISIONS D297 ENGB-1; facts.finding_places' ``unknown``): nothing established
+# says where that part of the lesion lies - unknown (reading_unknown), asked as the lesion's places (_site_attribute).
+_FINDING_UNKNOWN = Fact(result=Result.UNKNOWN, value=None, state=None, options=(), reasons=(Reason.SILENT,), spans=())
+
+
 def _places_of(R: FactSet, event: Id) -> tuple[tuple[Fact, ...], Fact | None]:
-    """SITE's places (D29): the act's place facts and its lesion's (when its target lesion is supported); and the first
-    fact among them, or its lesion fact, that is not established (None when every one is)."""
+    """SITE's places (D29): the act's place facts and its lesion's (when its target lesion is supported) - the places of
+    every entry of that lesion's FINDING (DECISIONS D297 ENGB-1, facts.finding_places: every lesion entry a same_as
+    member in any state may join to it, directly or through other entries, either direction; the entry the act names
+    first); and the first fact among them, or its lesion fact, that is not established (None when every one is) - else
+    ``_FINDING_UNKNOWN`` when an entry of the finding has no established places or the finding holds an id the FactSet
+    does not hold: the row held and open, never T and never F. A wider finding only adds places or opens the row, so
+    same_as only holds here (3.2.3's UNCONTROLLED; requirements' (lesion, same_as) stays on the hold path)."""
     places = list(_members(R, event, _A.TARGET_PLACES))
     lesion = _fact(R, event, _A.TARGET_LESION)
     open_: Fact | None = None if facts_.established(lesion) or facts_.silent(lesion) else lesion
     lesion_id = _id(lesion)
+    unknown = False
     if lesion_id is not None:
-        places += list(_members(R, lesion_id, _A.PLACES))
+        found = facts_.finding_places(R, lesion_id)
+        places += found.members
+        unknown = found.unknown is not None
     for member in places:
         if open_ is None and not facts_.established(member):
             open_ = member
+    if open_ is None and unknown:
+        open_ = _FINDING_UNKNOWN
     return tuple(places), open_
 
 
@@ -941,7 +959,9 @@ def _site_attribute(R: FactSet, event: Id, found: Fact) -> Attribute:
     """The attribute a SITE witness rests on, so its held fact names the fact that is actually unknown (D225 P7;
     refute-r4a-r1 F4: a contradicted target lesion is no conflict about where the act was done): the act's target
     lesion, one of the act's own places (target.places; and an empty place list, read as SILENT), or one of its
-    lesion's places (places)."""
+    lesion's places (places: a member of any entry of the lesion's finding, and ``_FINDING_UNKNOWN``)."""
+    if found is _FINDING_UNKNOWN:
+        return _A.PLACES
     if found is facts_.SILENT or any(found is member for member in _members(R, event, _A.TARGET_PLACES)):
         return _A.TARGET_PLACES
     if found is _fact(R, event, _A.TARGET_LESION):
@@ -1675,11 +1695,32 @@ def broad(c: _Code, group: Sequence[Kind], R: FactSet, statement: Id) -> bool:
             and facts_.holds(_fact(R, statement, _A.DATE_RELATION), DateRelation.ON_DATE_OF_SERVICE))
 
 
+def possibly_this_session(c: _Code, R: FactSet, statement: Id) -> bool:
+    """4.6's "possibly this session" (its last paragraph: a statement whose session or date relation is not established
+    is possibly this session, possibly today) - DECISIONS D301 RF-A2-2: the ONE reader 4.6's question
+    (``possibly_here``) and RD-2's count (``may_exclude``: condition 1's place, ``_may_place``, and the question's own
+    term in ``_may_exclude_by``) read, so a statement 4.6 asks a statement_scope question of is never one the ADDON row
+    reads as in no session of the code's family. Route (a): a statement whose session is not supported - negated,
+    unresolved, doubted, contradicted, an overfilled view, silent, or naming an id the FactSet does not hold (pass 2
+    established it in no one session) - is possibly this session, of the code's family; one whose session is supported
+    is when that session's kind is possibly the code's family. Route (b) (no family; condition 1 reads its places in the
+    code's regions) reads every statement as possibly its session. As built before D301, may_exclude read a session that
+    is not supported through facts.possibly (``_may_be_in``), so a denial whose session is negated, or claimed only in
+    an EGD beside the ERCP, was asked its scope by 4.6 while the ADDON row counted the primary it held. Monotone: a 9.4
+    weakening never makes a session supported and only widens what a session's kind may be, so it never turns this
+    False."""
+    if c.link.route is catalogue.LinkRoute.UNRECONCILED:
+        return True
+    held = _id(_fact(R, statement, _A.SESSION))
+    return held is None or facts_.possibly(_fact(R, held, _A.KIND), c.link.family)
+
+
 def possibly_here(c: _Code, group: Sequence[Kind], R: FactSet, statement: Id) -> bool:
     """4.6's last paragraph: a denial of the code's kinds (its kind possibly one of them, 4.2's widened arm) whose
-    session or date relation is not established - possibly this session (a session not established, or one possibly of
-    the code's family), possibly today - so a broad denial is never dropped. A digital examination's denial (FINAL 5.6
-    E13) denies no session's examination: its examination kind is not read (DECISIONS D265), any other it may be is."""
+    session or date relation is not established - possibly this session (``possibly_this_session``: a session not
+    supported, or one possibly of the code's family; DECISIONS D301 RF-A2-2's one reader), possibly today - so a broad
+    denial is never dropped. A digital examination's denial (FINAL 5.6 E13) denies no session's examination: its
+    examination kind is not read (DECISIONS D265), any other it may be is."""
     if not facts_.denied(_fact(R, statement, _A.STATUS), Status.PERFORMED):
         return False
     kinds = _possible_kinds(R, statement)
@@ -1689,10 +1730,8 @@ def possibly_here(c: _Code, group: Sequence[Kind], R: FactSet, statement: Id) ->
         return False
     session, timing = _fact(R, statement, _A.SESSION), _fact(R, statement, _A.DATE_RELATION)
     unplaced = not facts_.established(session) or not facts_.established(timing)
-    held = _id(session)
-    of_family = held is None or c.link.route is catalogue.LinkRoute.UNRECONCILED or facts_.possibly(
-        _fact(R, held, _A.KIND), c.link.family)
-    return unplaced and of_family and facts_.possibly(timing, DateRelation.ON_DATE_OF_SERVICE)
+    return (unplaced and possibly_this_session(c, R, statement)
+            and facts_.possibly(timing, DateRelation.ON_DATE_OF_SERVICE))
 
 
 @dataclass(frozen=True, slots=True)
@@ -1750,7 +1789,18 @@ def _surely_positive(R: FactSet, group: Sequence[Kind], event: Id) -> bool:
     established, which decides whether it is a bleeding control), its status supported performed or begun, and neither
     another date nor another performer possible for it (facts.possibly over its effective date relation and performer).
     Such an act stays a positive candidate however the rest is resolved, so 4.6 (a code with no supporting act and no
-    positive candidate) never excludes its group."""
+    positive candidate) never excludes its group.
+
+    DECISIONS D297 ENGA-F2: a digital examination of an examination group (``_digital_candidate``: FINAL 5.6 E13, its
+    device claiming manual or established manual) is never such an act, whatever its facts. Its group is read as the
+    same document without its lines (D265: ``_decide`` never binds it, and 4.6's own item is asked instead - a
+    statement 4.6 would exclude by is asked its scope, a statement_scope question), so the premise is read as
+    ``_decide`` reads the group: a primary held only by that question may be excluded, and an established digital
+    rectal examination line never makes the ADDON row count it (D253: a fact E13 says never counts can never release
+    a code). Monotone: the claimed-manual reading only grows under a 9.4 weakening, so this only narrows what is
+    surely positive."""
+    if _digital_candidate(group, R, event):
+        return False
     kind, status = _fact(R, event, _A.KIND), _fact(R, event, _A.STATUS)
     if kind.result is not Result.SUPPORTED or not isinstance(kind.value, Kind):
         return False
@@ -1765,75 +1815,134 @@ def _surely_positive(R: FactSet, group: Sequence[Kind], event: Id) -> bool:
             and not any(facts_.possibly(performer, value) for value in _OTHER_PERFORMERS))
 
 
-def _may_concern(c: _Code, group: Sequence[Kind], R: FactSet, statement: Id) -> bool:
-    """4.6 condition 1 (``_concerns``) read with the possibility readers: the statement's kind possibly one covering the
-    group (4.2's statement arm, ``_possible_kinds``; a digital examination's examination kind never, DECISIONS D265, as
-    ``possibly_here`` reads it), and possibly of the code's family - route (a): its session supported and that session's
-    kind possibly the family, or, not supported, some session it may be in (``_may_be_in``, an id the FactSet does not
-    hold included) whose kind may be the family; route (b): no supported place of it outside the code's regions."""
+def _may_be_of(group: Sequence[Kind], R: FactSet, statement: Id) -> bool:
+    """4.6 condition 1's kind (``_concerns``) read with the possibility readers: the statement's kind possibly one
+    covering the group (4.2's statement arm, ``_possible_kinds``), the examination kind of a digital examination
+    ESTABLISHED as one never (DECISIONS D265).
+
+    DECISIONS D297 ENGA-F1: E13's digital exception is read ESTABLISHED here (pairing.established_digital: kind
+    supported examination, device supported manual; D280.1/.2), never the claimed-manual reading (``_digital``) that
+    ``_concerns`` and ``possibly_here`` read. Subtracted from what a statement may be, a claimed reading would turn this
+    reader False exactly when a 9.4 weakening (an established device to unresolved, a doubt, pass 1's contradiction, an
+    overfilled view, a doubt reading manual) makes the device claim manual - so a weakened examination statement would
+    stop excluding and release the add-on. A 9.4 weakening never creates a supported device or kind, so the established
+    reading only narrows under one: this reader only widens, and stays wider than the kinds ``_concerns`` and
+    ``possibly_here`` read (every statement of a group's kinds for them is one for it)."""
     kinds = _possible_kinds(R, statement)
-    if _digital(R, statement):
+    if pairing.established_digital(R, statement):
         kinds -= {Kind.EXAMINATION}
-    if not any(_covers_group(kind, group) for kind in kinds):
-        return False
+    return any(_covers_group(kind, group) for kind in kinds)
+
+
+def _may_place(c: _Code, R: FactSet, statement: Id) -> bool:
+    """4.6 condition 1's place (``_in_family``) read with the possibility readers: route (a), possibly this session
+    (``possibly_this_session``, DECISIONS D301 RF-A2-2's one reader, the one 4.6's question reads: its session supported
+    and that session's kind possibly the code's family, or not supported - any session of the family); route (b), no
+    supported place of it outside the code's regions."""
     if c.link.route is catalogue.LinkRoute.UNRECONCILED:
         return not any(member.result is Result.SUPPORTED and isinstance(member.value, Landmark)
                        and not anatomy.in_regions(member.value, c.link.regions)
                        for member in _members(R, statement, _A.TARGET_PLACES))
-    found = _fact(R, statement, _A.SESSION)
-    held = _id(found)
-    if held is not None:
-        return facts_.possibly(_fact(R, held, _A.KIND), c.link.family)
-    named = (found.value, *found.options)
-    if found.result is not Result.NEGATED and any(isinstance(value, Id) and value not in R.sessions
-                                                  for value in named):
-        return True  # an id the FactSet does not hold may be any session, of any family (4.11; D227 R2-2)
-    return any(_may_be_in(R, statement, session) and facts_.possibly(_fact(R, session, _A.KIND), c.link.family)
-               for session in R.sessions)
+    return possibly_this_session(c, R, statement)
 
 
 def _may_exclude_by(c: _Code, group: Sequence[Kind], kept: Sequence[Span], R: FactSet,
                     kept_words: Sequence[Span] | None, statement: Id) -> bool:
     """Whether ``statement`` may exclude ``c``'s ``group`` - 4.6's conditions 1-4 read with the possibility readers,
-    condition 5 never read (a citation a doubt blocks still may exclude): it may concern the group (``_may_concern``);
-    and, the code covering it by citation or partly (an exclusion, a citation blocked only by doubt, or a statement_scope
-    question), a deciding fact possibly established - a plan, another date or another performer, which carries no
-    breadth (K1), or a denial (status negated performed) whose breadth is possibly not exceptive - or, the code not
-    covering it, a statement_scope question possible: a denial possibly of the date of service whose breadth may be
-    all_of_kind (4.10's broad denial) or whose session or date relation is not established (``possibly_here``). A fact
-    not established is read as each value it may take (facts.possibly), so a statement whose deciding fact, breadth,
-    session or date is not established but would exclude if it were may exclude."""
-    if not _may_concern(c, group, R, statement):
+    condition 5 never read (a citation a doubt blocks still may exclude), its kind possibly one of the group's
+    (``_may_be_of``) - by one of the statement_scope questions or exclusions 4.6 reads:
+
+    - 4.6's last paragraph (``possibly_here``), whatever the code's cover (DECISIONS D301 RF-A2-1): a denial (status
+      negated performed, or not established) possibly of the date of service whose session or date relation is not
+      established, possibly this session (``possibly_this_session``, the ONE reader 4.6's question reads: RF-A2-2) - any
+      breadth. As built before D301 only the uncited arm read it, so the same statement held the add-on when the code
+      did not cite it and released it when the code cited it or covered it partly;
+    - otherwise the statement possibly of the code's family (``_may_place``; with ``_may_be_of``, 4.6 condition 1 read
+      with the possibility readers, wider than ``_concerns``) and, the code covering it by citation or partly (an
+      exclusion, a citation blocked only by doubt, or a partial cover's statement_scope question), a deciding fact
+      possibly established - a plan, another date or another performer, which carries no breadth (K1), or a denial whose
+      breadth is possibly not exceptive; or, the code not covering it, 4.10's broad denial possible: a denial possibly
+      of the date of service whose breadth may be all_of_kind.
+
+    The cited arm is never narrower than the uncited arm for one statement: every term the uncited arm reads the cited
+    arm reads (a breadth possibly all_of_kind is possibly not exceptive). A fact not established is read as each value
+    it may take (facts.possibly), so a statement whose deciding fact, breadth, session or date is not established but
+    would exclude if it were may exclude; each term only widens under a 9.4 weakening, and the cover reads the anchor
+    and kept spans, which no weakening moves."""
+    if not _may_be_of(group, R, statement):
         return False
     status, date = _fact(R, statement, _A.STATUS), _fact(R, statement, _A.DATE_RELATION)
     breadth, performer = _fact(R, statement, _A.SCOPE_BREADTH), _fact(R, statement, _A.PERFORMER)
     denial = facts_.denied(status, Status.PERFORMED) or not facts_.established(status)
+    today = facts_.possibly(date, DateRelation.ON_DATE_OF_SERVICE)
+    unplaced = not facts_.established(_fact(R, statement, _A.SESSION)) or not facts_.established(date)
+    if denial and today and unplaced and possibly_this_session(c, R, statement):
+        return True  # 4.6's last paragraph read with the possibility readers, whatever the cover (D301 RF-A2-1)
+    if not _may_place(c, R, statement):  # with _may_be_of above: condition 1
+        return False
     unbroad = (facts_.holds(status, Status.PLANNED) or not facts_.established(status)
                or any(facts_.possibly(date, value) for value in _OTHER_DATES)
                or any(facts_.possibly(performer, value) for value in _OTHER_PERFORMERS))
     if cover(R, statement, kept, kept_words) is not Covered.NONE:
         return unbroad or (denial and any(facts_.possibly(breadth, value) for value in Breadth
                                           if value is not Breadth.EXCEPTIVE))
-    unplaced = not facts_.established(_fact(R, statement, _A.SESSION)) or not facts_.established(date)
-    return (denial and facts_.possibly(date, DateRelation.ON_DATE_OF_SERVICE)
-            and (facts_.possibly(breadth, Breadth.ALL_OF_KIND) or unplaced))
+    return denial and today and facts_.possibly(breadth, Breadth.ALL_OF_KIND)
+
+
+def _same_session(R: FactSet, one: Id, other: Id) -> bool:
+    """Both events' sessions supported and the same (``_same_duct``'s reading of the session: XCHG's counterparts set
+    two acts apart only by two supported sessions that differ, so two supported and equal can never be set apart)."""
+    first = _session(R, one)
+    return first is not None and first == _session(R, other)
+
+
+def _exchange_paired(c: _Code, group: Sequence[Kind], R: FactSet) -> bool:
+    """DECISIONS D301 RF-A2-3: 43276's group (XCHG, its stent_exchange group) supported or held under every reading by
+    its other way of being supported (4.3 XCHG, ``_pairs``): a stent removal and a stent placement, two events, each
+    surely positive for its part (``_surely_positive`` over _EXCHANGE_PARTS: kind supported, status supported performed
+    or begun, no other date or performer possible), the placement one of the removal's counterparts (``counterparts``,
+    as ``_pairs`` pairs them), that nothing can set apart - their ducts both supported and the same (``_same_duct``) and
+    their sessions both supported and the same (``_same_session``): XCHG's counterparts set two acts apart only by two
+    supported ducts or sessions that differ, and a supported fact is never resolved otherwise. ``_decide`` then finds
+    the pair (both supporting) or holds it pending (both positive, the placement one of the removal's counterparts)
+    whatever is resolved, and never reaches 4.6 for the group - as for a surely positive candidate (4.6's premise: no
+    supporting act and no positive candidate). A pair whose duct or session is not established may be set apart by a
+    reading, so its group is read as any other (fail-closed). Monotone: each term only narrows under a 9.4 weakening, so
+    a weakening never turns this on."""
+    if Kind.STENT_EXCHANGE not in group or not c.has(Tag.XCHG):
+        return False
+    removals = [event for event in candidates(R, _EXCHANGE_PARTS[0])
+                if _surely_positive(R, _EXCHANGE_PARTS[0], event)]
+    placements = [event for event in candidates(R, _EXCHANGE_PARTS[1])
+                  if _surely_positive(R, _EXCHANGE_PARTS[1], event)]
+    return any(removal != placement and _same_duct(R, removal, placement) and _same_session(R, removal, placement)
+               and placement in counterparts(R, removal) for removal in removals for placement in placements)
 
 
 def may_exclude(code: str, kept: Sequence[Span], R: FactSet, *, kept_words: Sequence[Span] | None = None) -> bool:
     """DECISIONS D294 RD-2: whether some statement MAY exclude ``code`` with its kept spans ``kept`` - 4.6 read with the
-    possibility readers. A group some act fills as a positive candidate whatever is resolved (``_surely_positive``) is
-    never excluded (4.6's premise); any other group may be, by a statement that may meet 4.6's conditions
-    (``_may_exclude_by``): a citation blocked only by doubt, a statement_scope question, or a statement whose deciding
-    fact, breadth, session or date is not established but would exclude if it were. What holds the code is never read
-    (its hold cause is never the test), and an excluded code may be excluded. Every fact it reads it reads through
-    facts.possibly, which only widens under a 9.4 weakening, so a weakening never turns it False: the ADDON row
-    (engine/assess) counts no primary for which it is True, and so a weakened exclusion never releases an add-on."""
+    possibility readers. A group 4.4 supports or holds under every reading - some act a positive candidate whatever is
+    resolved (``_surely_positive``), or 43276's removal and placement pair each surely positive and never set apart
+    (``_exchange_paired``, DECISIONS D301 RF-A2-3) - is never excluded and never asked 4.6's question (4.6's premise:
+    ``_decide`` never reaches it); any other group may be, by a statement that may meet 4.6's conditions
+    (``_may_exclude_by``): a citation blocked only by doubt, a statement_scope question 4.6 asks (a partial cover, a
+    broad denial the code does not cite, 4.6's last paragraph whatever the cover: D301 RF-A2-1), or a statement whose
+    deciding fact, breadth, session or date is not established but would exclude if it were. What holds the code is
+    never read (its hold cause is never the test), and an excluded code may be excluded. Every fact it reads it reads
+    through facts.possibly, which only widens under a 9.4 weakening, a session that is not supported as possibly this
+    session (``possibly_this_session``, the one reader 4.6's question reads: D301 RF-A2-2), and FINAL 5.6 E13's digital
+    examination in the direction that widens it too (DECISIONS D297): ESTABLISHED where it removes what a statement may
+    be (``_may_be_of``, ENGA-F1), CLAIMED where it removes an act from the premise (``_surely_positive``, ENGA-F2) - so
+    a weakening never turns it False: the ADDON row (engine/assess) counts no primary for which it is True, and so a
+    weakened exclusion never releases an add-on."""
     c = _code(code)
     groups_ = catalogue.requirements(c.link)
     if not c.link.linked or not groups_ or catalogue.recognised_only(c.link):
         return False
     for group in groups_:
         if any(_surely_positive(R, group, event) for event in candidates(R, group)):
+            continue
+        if _exchange_paired(c, group, R):
             continue
         if any(_may_exclude_by(c, group, kept, R, kept_words, statement) for statement in R.events):
             return True

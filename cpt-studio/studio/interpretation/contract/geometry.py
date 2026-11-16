@@ -53,6 +53,13 @@ sections before the first event is told - before D295, N0's span alone) and ever
 (the frame units);
 ``antecedent``: the source's units end before the first unit of the object's own statement starts (3.1 G1: it precedes
 the anchor), so the anaphoric frame inside the anchor is not its own antecedent; ``other_statement`` units exist.
+DECISIONS D299 (P3-PART): ``section`` also holds for a source lying inside the place of the start source of the
+containing section's PROCEDURE PART (``procedure_parts``) - the nearest section before it, in the answer's order, whose
+role pass 1 states as procedure, with no section between them, nor the containing section itself, whose role pass 1
+states or offers as procedure (the sections are flat: a part is its procedure section and the sections that follow it
+up to the next one) - so a findings part's act may cite its part's heading; a source in another part's heading still
+fails. DECISIONS D300 (RBFX-FRAME-1): whenever N0 passes G2 - D199's empty N0 of length zero included - the frame part
+starts at N0's start, so a note that opens with its first heading has a frame part as a titled note has.
 Failure: ``geometry_<link>``.
 
 **G3** (``target_reasons``, ``lesion_reasons``): a target fact with link ``statement`` has its words inside the anchor
@@ -88,11 +95,13 @@ module, compares with a string literal longer than one character, or calls a str
 Geometry reads offsets, unit ids, link types, restatement roles and the state of an event's claimed status (G5, D198) -
 enumeration members - and never what a word means. It reads no slot of the answer (AMENDMENT-2 4.3.3's "any slot read
 in geometry": none): its caller hands it sources, anchors and statuses, so an overfilled slot reaches it only as its
-written facts' sources, each measured as it is.
+written facts' sources, each measured as it is - and, for D299's procedure parts, the ids of the sections whose role
+pass 1 states as procedure and of those whose role it states or offers so (contract/checks.py reads the role slot
+through extract_read.merged; ``procedure_parts`` reads ids and section order only).
 """
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
 from studio.interpretation.contract import segment
@@ -585,13 +594,20 @@ def frame_part(sections: Sections, told: int | None) -> Span | None:
     joined with each following section in the answer's order while that section has its own G2 span, starts where the
     part so far ends (contiguous) and ends at or before ``told`` (``first_told``): the leading labelled parts of a
     header - a title, then a patient-information part and a procedure-details part, say - before the first event is
-    told. A section without a span, a gap or a section reaching past ``told`` ends the walk. None when N0 has no span
-    (DECISIONS D199: an empty or a failed opening part leaves no frame part, as before D295); N0's span alone when no
-    event is told (``told`` None). Offsets only."""
+    told. A section without a span, a gap or a section reaching past ``told`` ends the walk. N0's part alone when no
+    event is told (``told`` None).
+
+    DECISIONS D300 (RBFX-FRAME-1; D199's last bullet superseded for the frame part): whenever N0 passes G2 the part
+    starts at N0's start - its span when G2 gives it one, else a part of length zero at its start: D199's empty N0
+    before a section at the text's first character (a note that opens with its first heading), which then joins the
+    leading sections as D295 states; and an N0 whose end G2 cannot know (the next listed start unlocated), which joins
+    nothing, since that next section has no span. Only an N0 with a G2 reason (section_order, section_start_unlocated)
+    leaves no frame part (None). A part of length zero contains no source (every located place has a character).
+    Before D300: None whenever N0 had no span. Offsets only."""
     opening = sections.opening
-    if opening is None or opening.span is None:
+    if opening is None or opening.reasons or opening.start is None:
         return None
-    part = opening.span
+    part = opening.span if opening.span is not None else Span(opening.start, opening.start)
     if told is None:
         return part
     for place in sections.places[1:]:
@@ -602,19 +618,49 @@ def frame_part(sections: Sections, told: int | None) -> Span | None:
     return part
 
 
+def procedure_parts(sections: Sections, stated: Collection[str],
+                    possible: Collection[str]) -> dict[str, SectionPlace]:
+    """DECISIONS D299 (P3-PART): each section's PROCEDURE PART head, where it is another section - by section id, the
+    nearest section before it in the answer's order whose role pass 1 states as procedure (``stated``), with no section
+    between them, nor the section itself, whose role pass 1 states or offers as procedure (``possible``; the sections
+    are flat: a part is its procedure section and the sections that follow it up to the next one). The walk back from a
+    section stops at the first section ``possible`` names (or ``stated``): that section is the head only when ``stated``
+    names it, it has its G2 span and its start cites units; otherwise the section has no head (an offered or failed
+    procedure section may open another part). A section without a span has none (nothing attaches to it, G4), nor does
+    a section ``possible`` names (it is, or may be, the head of its own part, whose start the ``section`` link already
+    reads). ``stated`` and ``possible`` are section ids the caller reads from pass 1's role slot (contract/checks.py);
+    this reads ids, spans and the answer's order only."""
+    heads: dict[str, SectionPlace] = {}
+    places = sections.places
+    for index, place in enumerate(places):
+        if place.span is None or place.id in possible or place.id in stated:
+            continue
+        for earlier in reversed(places[:index]):
+            if earlier.id in possible or earlier.id in stated:
+                if earlier.id in stated and earlier.span is not None and earlier.start_units:
+                    heads[place.id] = earlier
+                break
+    return heads
+
+
 def link_reasons(layout: Layout, sections: Sections, subject: Subject, source: Source,
-                 frame: frozenset[str] = frozenset(), part: Span | None = None) -> tuple[Reason, ...]:
+                 frame: frozenset[str] = frozenset(), part: Span | None = None,
+                 procedure: Mapping[str, SectionPlace] | None = None) -> tuple[Reason, ...]:
     """G1 on one source of a fact about ``subject``: () when its link's geometry holds, else (geometry_<link>,). The
-    geometry of each link is the module's docstring; ``frame`` is ``frame_units``; ``part`` is ``frame_part`` (when not
-    given, N0's span - which is also frame_part's own value whenever N0 has no span). Only offsets and unit ids are
-    read."""
+    geometry of each link is the module's docstring; ``frame`` is ``frame_units``; ``part`` is ``frame_part``, which
+    check() always passes (when not given, N0's span: the reading before D295, never wider than frame_part's value -
+    nothing holds when N0 has no span, DECISIONS D300); ``procedure`` is ``procedure_parts`` (DECISIONS D299: a
+    ``section`` source may also lie in the start of the containing section's procedure part; when not given, no section
+    has one). Only offsets and unit ids are read."""
     units = tuple(source.units)
     known = bool(units) and all(layout.unit(unit_id) is not None for unit_id in units)
     link = source.link
     if link is Link.STATEMENT:
         holds = known and (subject.anywhere or all(unit_id in subject.statement for unit_id in units))
-    elif link is Link.SECTION:
-        holds = known and subject.section is not None and _cites_section(layout, subject.section, source)
+    elif link is Link.SECTION:  # DECISIONS D299: or the start of the containing section's procedure part
+        holds = known and subject.section is not None and (
+            _cites_section(layout, subject.section, source)
+            or _cites_start(layout, (procedure or {}).get(subject.section.id), source))
     elif link is Link.FRAME:
         holds = subject.section is not None and _within(locate(layout, source).place, subject.section.span)
     elif link is Link.PLACING:
@@ -776,6 +822,14 @@ def _cites_section(layout: Layout, section: SectionPlace, source: Source) -> boo
     if section.start_units and _within(place, section.opening):
         return True
     return any(_within(place, closer) for closer in section.closers)
+
+
+def _cites_start(layout: Layout, head: SectionPlace | None, source: Source) -> bool:
+    """DECISIONS D299: the source's place lies inside the place of ``head``'s start source (a procedure part's heading,
+    ``procedure_parts``), by offsets, as ``_cites_section`` reads a start; False when there is no head."""
+    if head is None or not head.start_units:
+        return False
+    return _within(locate(layout, source).place, head.opening)
 
 
 def _word_char(char: str) -> bool:

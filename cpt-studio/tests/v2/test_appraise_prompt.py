@@ -85,7 +85,13 @@ FINAL_V2 = APP / 'docs' / 'gemini-migration' / 'FINAL-V2.md'
 # 6b2b09cc7f388489f75b5b46bd6c36a44b405cc3b79a27ea7314463a2d0256fb.
 # DECISIONS D296 (2026-11-16): FINAL-V2 4.2's apart_by_lesion amended (the lesion pair claim); the scanned sections
 # 2.1-2.4 again byte for byte unchanged. Was 1d182de3013a550dede0e8f2ca6d7f4dc1e83d88cb99404b1ce4fe31cd596b96.
-FINAL_V2_SHA256 = '5067cf6518cc0614c34b10c26f8a7dfe1ff5e47ef0270db4a27bbcd8b78f6b92'
+# DECISIONS D299 and D300 (2026-11-16, round r2c): FINAL-V2's LINKS rows for section and document_frame and the 3.1 G1
+# row gain dated notes (the procedure part; the frame part from N0's start); the scanned sections 2.1-2.4 byte for byte
+# unchanged (22,480 characters). Was 5067cf6518cc0614c34b10c26f8a7dfe1ff5e47ef0270db4a27bbcd8b78f6b92.
+# DECISIONS D300 (2026-11-16, round r2c): FINAL-V2 1.7, 1.8, 4.2 and 4.7's modifier review row amended with dated notes
+# (RF-L1 to RF-L6); the scanned sections 2.1-2.4 byte for byte unchanged. Was
+# 5067cf6518cc0614c34b10c26f8a7dfe1ff5e47ef0270db4a27bbcd8b78f6b92.
+FINAL_V2_SHA256 = 'c6a26382e57016fe697caa2e1ec32abd71d906bcdb7e1d254c1be3331ed06177'
 DEV_EXCLUSION = APP / 'docs' / 'gemini-migration' / 'acceptance-a1' / 'DEV-EXCLUSION.sha256'
 EVIDENCE = Path(os.environ.get('CPT_STUDIO_DESIGN_EVIDENCE', '/home/claude/cpt-studio-completion-20261106'))
 SURVEY_4 = EVIDENCE / 'gemini-migration' / 'design-v2' / 'survey' / 'failures.md'

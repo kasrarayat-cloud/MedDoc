@@ -147,16 +147,20 @@ READ_PROVIDERS = (PROVIDER_V3, PROVIDER)
 INSTRUCTIONS_SHA256_V3 = '43e49a7ad6da1d8ba2300e772085783196517ae1bea64dadd09932697c77d4fb'
 # pass 2 (APPRAISAL_VERSION_V3) - the three objects DECISIONS D292 changes after 8.2 was written:
 # claims.TEMPLATES, whose reached_anatomy claim D292's U3 restates: step f3s (claims.templates_document under
-# gemini-appraisal@2, by step f2's appraise_prompt.pins_fable)
-TEMPLATES_SHA256_V3 = '2938e85b242524e72581cc6e509328b808958c03c2b79b6961243532e78bfc4e'
+# gemini-appraisal@2, by step f2's appraise_prompt.pins_fable). DECISIONS D300 RF-L3 (2026-11-16, round r2c): the
+# lesion pair's membership forms added to TEMPLATES_V3 (gemini-appraisal@2 is unshipped, so its pin moves under it),
+# recomputed by the same function; was 2938e85b242524e72581cc6e509328b808958c03c2b79b6961243532e78bfc4e.
+TEMPLATES_SHA256_V3 = '59ce8ca7c093f88808c82d909f3ca09e64df488a122ae93c0a8075cdefc5143c'
 # claims.STATEMENT_TEMPLATES, a doubted kind's statements in kind-neutral forms (D292's U1): step f3s (by step f2's
 # appraise_prompt.pins_fable)
 STATEMENT_TEMPLATES_SHA256_V3 = '0fcd3bd3e630762ef293196298621a9565559adfd2d4af1878ac36e52e183106'
 # the claims.CONTROLS generator with its tables, D244's shared reached_anatomy control restated (D292's U3): step f3s
 # (session_others included; by step f2's appraise_prompt.pins_fable). DECISIONS D296 (2026-11-16): the lesion pair claim
 # and its control added to the document (gemini-appraisal@2 is unshipped, so its pin moves under it), recomputed by the
-# same function; was 570e24d654adee656a518ee047a16ed653494dd4c7b5d15a80bf92471982a9dc.
-CONTROLS_SHA256_V3 = '89d7e3fe0c0da5592860b965cf223cf69a88faca66c4d41caf7d5636ee31178e'
+# same function; was 570e24d654adee656a518ee047a16ed653494dd4c7b5d15a80bf92471982a9dc. DECISIONS D300 (2026-11-16, round
+# r2c): the lesion pair as amended (RF-L1's join, RF-L3's forms and their rule, RF-L5's drop) stated in the document,
+# recomputed by the same function; was 89d7e3fe0c0da5592860b965cf223cf69a88faca66c4d41caf7d5636ee31178e.
+CONTROLS_SHA256_V3 = '0c1cd127572a7aa1ba497cf6f570f5b0ac671e04e9091183794bb185ab7308cc'
 # the per-request claim bound claims.CLAIM_BOUND_V3, sized for the size bound (D278; 8.2 names 1,000 claims, whose pin
 # is 3fe08a5c8ec23575e2df78032d5b4b18dcff0927ce1c628743c47946b9415628): step f3s (claims.claim_bound_document under
 # gemini-appraisal@2, by step f2's appraise_prompt.pins_fable)

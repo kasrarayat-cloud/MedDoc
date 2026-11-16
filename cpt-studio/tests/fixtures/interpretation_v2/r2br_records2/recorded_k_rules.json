@@ -1,0 +1,3561 @@
+{
+"cases": {
+"k1_status_time/e2_status=-performed/e2_rel=": [],
+"k1_status_time/e2_status=-performed/e2_rel=-earlier_date": [],
+"k1_status_time/e2_status=-performed/e2_rel=-later_date": [],
+"k1_status_time/e2_status=-performed/e2_rel=-on_date_of_service": [],
+"k1_status_time/e2_status=-performed/e2_rel=earlier_date": [],
+"k1_status_time/e2_status=-performed/e2_rel=later_date": [],
+"k1_status_time/e2_status=-performed/e2_rel=later_date|earlier_date": [],
+"k1_status_time/e2_status=-performed/e2_rel=on_date_of_service": [],
+"k1_status_time/e2_status=-performed/e2_rel=on_date_of_service|earlier_date": [],
+"k1_status_time/e2_status=-performed/e2_rel=on_date_of_service|later_date": [],
+"k1_status_time/e2_status=-planned/e2_rel=": [],
+"k1_status_time/e2_status=-planned/e2_rel=-earlier_date": [],
+"k1_status_time/e2_status=-planned/e2_rel=-later_date": [],
+"k1_status_time/e2_status=-planned/e2_rel=-on_date_of_service": [],
+"k1_status_time/e2_status=-planned/e2_rel=earlier_date": [],
+"k1_status_time/e2_status=-planned/e2_rel=later_date": [],
+"k1_status_time/e2_status=-planned/e2_rel=later_date|earlier_date": [],
+"k1_status_time/e2_status=-planned/e2_rel=on_date_of_service": [],
+"k1_status_time/e2_status=-planned/e2_rel=on_date_of_service|earlier_date": [],
+"k1_status_time/e2_status=-planned/e2_rel=on_date_of_service|later_date": [],
+"k1_status_time/e2_status=attempted_not_completed/e2_rel=": [],
+"k1_status_time/e2_status=attempted_not_completed/e2_rel=-earlier_date": [],
+"k1_status_time/e2_status=attempted_not_completed/e2_rel=-later_date": [],
+"k1_status_time/e2_status=attempted_not_completed/e2_rel=-on_date_of_service": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+]
+],
+"k1_status_time/e2_status=attempted_not_completed/e2_rel=earlier_date": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+]
+],
+"k1_status_time/e2_status=attempted_not_completed/e2_rel=later_date": [
+[
+"events",
+"E2",
+"date_relation",
+0,
+[
+"structure_status_time"
+]
+],
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+],
+[
+"events",
+"E2",
+"status",
+0,
+[
+"structure_status_time"
+]
+]
+],
+"k1_status_time/e2_status=attempted_not_completed/e2_rel=later_date|earlier_date": [],
+"k1_status_time/e2_status=attempted_not_completed/e2_rel=on_date_of_service": [],
+"k1_status_time/e2_status=attempted_not_completed/e2_rel=on_date_of_service|earlier_date": [],
+"k1_status_time/e2_status=attempted_not_completed/e2_rel=on_date_of_service|later_date": [],
+"k1_status_time/e2_status=performed/e2_rel=": [],
+"k1_status_time/e2_status=performed/e2_rel=-earlier_date": [],
+"k1_status_time/e2_status=performed/e2_rel=-later_date": [],
+"k1_status_time/e2_status=performed/e2_rel=-on_date_of_service": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+]
+],
+"k1_status_time/e2_status=performed/e2_rel=earlier_date": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+]
+],
+"k1_status_time/e2_status=performed/e2_rel=later_date": [
+[
+"events",
+"E2",
+"date_relation",
+0,
+[
+"structure_status_time"
+]
+],
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+],
+[
+"events",
+"E2",
+"status",
+0,
+[
+"structure_status_time"
+]
+]
+],
+"k1_status_time/e2_status=performed/e2_rel=later_date|earlier_date": [],
+"k1_status_time/e2_status=performed/e2_rel=on_date_of_service": [],
+"k1_status_time/e2_status=performed/e2_rel=on_date_of_service|earlier_date": [],
+"k1_status_time/e2_status=performed/e2_rel=on_date_of_service|later_date": [],
+"k1_status_time/e2_status=performed|attempted_not_completed/e2_rel=": [],
+"k1_status_time/e2_status=performed|attempted_not_completed/e2_rel=-earlier_date": [],
+"k1_status_time/e2_status=performed|attempted_not_completed/e2_rel=-later_date": [],
+"k1_status_time/e2_status=performed|attempted_not_completed/e2_rel=-on_date_of_service": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+]
+],
+"k1_status_time/e2_status=performed|attempted_not_completed/e2_rel=earlier_date": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+]
+],
+"k1_status_time/e2_status=performed|attempted_not_completed/e2_rel=later_date": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+]
+],
+"k1_status_time/e2_status=performed|attempted_not_completed/e2_rel=later_date|earlier_date": [],
+"k1_status_time/e2_status=performed|attempted_not_completed/e2_rel=on_date_of_service": [],
+"k1_status_time/e2_status=performed|attempted_not_completed/e2_rel=on_date_of_service|earlier_date": [],
+"k1_status_time/e2_status=performed|attempted_not_completed/e2_rel=on_date_of_service|later_date": [],
+"k1_status_time/e2_status=performed|planned/e2_rel=": [],
+"k1_status_time/e2_status=performed|planned/e2_rel=-earlier_date": [],
+"k1_status_time/e2_status=performed|planned/e2_rel=-later_date": [],
+"k1_status_time/e2_status=performed|planned/e2_rel=-on_date_of_service": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+]
+],
+"k1_status_time/e2_status=performed|planned/e2_rel=earlier_date": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+]
+],
+"k1_status_time/e2_status=performed|planned/e2_rel=later_date": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+]
+],
+"k1_status_time/e2_status=performed|planned/e2_rel=later_date|earlier_date": [],
+"k1_status_time/e2_status=performed|planned/e2_rel=on_date_of_service": [],
+"k1_status_time/e2_status=performed|planned/e2_rel=on_date_of_service|earlier_date": [],
+"k1_status_time/e2_status=performed|planned/e2_rel=on_date_of_service|later_date": [],
+"k1_status_time/e2_status=planned/e2_rel=": [],
+"k1_status_time/e2_status=planned/e2_rel=-earlier_date": [],
+"k1_status_time/e2_status=planned/e2_rel=-later_date": [],
+"k1_status_time/e2_status=planned/e2_rel=-on_date_of_service": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+]
+],
+"k1_status_time/e2_status=planned/e2_rel=earlier_date": [
+[
+"events",
+"E2",
+"date_relation",
+0,
+[
+"structure_status_time"
+]
+],
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+],
+[
+"events",
+"E2",
+"status",
+0,
+[
+"structure_status_time"
+]
+]
+],
+"k1_status_time/e2_status=planned/e2_rel=later_date": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+]
+],
+"k1_status_time/e2_status=planned/e2_rel=later_date|earlier_date": [],
+"k1_status_time/e2_status=planned/e2_rel=on_date_of_service": [],
+"k1_status_time/e2_status=planned/e2_rel=on_date_of_service|earlier_date": [],
+"k1_status_time/e2_status=planned/e2_rel=on_date_of_service|later_date": [],
+"k1_status_time/e2_status=planned|attempted_not_completed/e2_rel=": [],
+"k1_status_time/e2_status=planned|attempted_not_completed/e2_rel=-earlier_date": [],
+"k1_status_time/e2_status=planned|attempted_not_completed/e2_rel=-later_date": [],
+"k1_status_time/e2_status=planned|attempted_not_completed/e2_rel=-on_date_of_service": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+]
+],
+"k1_status_time/e2_status=planned|attempted_not_completed/e2_rel=earlier_date": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+]
+],
+"k1_status_time/e2_status=planned|attempted_not_completed/e2_rel=later_date": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+]
+],
+"k1_status_time/e2_status=planned|attempted_not_completed/e2_rel=later_date|earlier_date": [],
+"k1_status_time/e2_status=planned|attempted_not_completed/e2_rel=on_date_of_service": [],
+"k1_status_time/e2_status=planned|attempted_not_completed/e2_rel=on_date_of_service|earlier_date": [],
+"k1_status_time/e2_status=planned|attempted_not_completed/e2_rel=on_date_of_service|later_date": [],
+"k2_date_ids/e2_session=-X1/x1_exam=-E1/e2_rel=earlier_date": [],
+"k2_date_ids/e2_session=-X1/x1_exam=-E1/e2_rel=on_date_of_service|earlier_date": [],
+"k2_date_ids/e2_session=-X1/x1_exam=/e2_rel=earlier_date": [],
+"k2_date_ids/e2_session=-X1/x1_exam=/e2_rel=on_date_of_service|earlier_date": [],
+"k2_date_ids/e2_session=-X1/x1_exam=E1/e2_rel=earlier_date": [],
+"k2_date_ids/e2_session=-X1/x1_exam=E1/e2_rel=on_date_of_service|earlier_date": [],
+"k2_date_ids/e2_session=-X1/x1_exam=E1|E3/e2_rel=earlier_date": [],
+"k2_date_ids/e2_session=-X1/x1_exam=E1|E3/e2_rel=on_date_of_service|earlier_date": [],
+"k2_date_ids/e2_session=-X1/x1_exam=E2/e2_rel=earlier_date": [
+[
+"sessions",
+"X1",
+"examination",
+0,
+[
+"session_inconsistent"
+]
+]
+],
+"k2_date_ids/e2_session=-X1/x1_exam=E2/e2_rel=on_date_of_service|earlier_date": [
+[
+"sessions",
+"X1",
+"examination",
+0,
+[
+"session_inconsistent"
+]
+]
+],
+"k2_date_ids/e2_session=-X1/x1_exam=E3/e2_rel=earlier_date": [],
+"k2_date_ids/e2_session=-X1/x1_exam=E3/e2_rel=on_date_of_service|earlier_date": [],
+"k2_date_ids/e2_session=/x1_exam=-E1/e2_rel=earlier_date": [],
+"k2_date_ids/e2_session=/x1_exam=-E1/e2_rel=on_date_of_service|earlier_date": [],
+"k2_date_ids/e2_session=/x1_exam=/e2_rel=earlier_date": [],
+"k2_date_ids/e2_session=/x1_exam=/e2_rel=on_date_of_service|earlier_date": [],
+"k2_date_ids/e2_session=/x1_exam=E1/e2_rel=earlier_date": [],
+"k2_date_ids/e2_session=/x1_exam=E1/e2_rel=on_date_of_service|earlier_date": [],
+"k2_date_ids/e2_session=/x1_exam=E1|E3/e2_rel=earlier_date": [],
+"k2_date_ids/e2_session=/x1_exam=E1|E3/e2_rel=on_date_of_service|earlier_date": [],
+"k2_date_ids/e2_session=/x1_exam=E2/e2_rel=earlier_date": [],
+"k2_date_ids/e2_session=/x1_exam=E2/e2_rel=on_date_of_service|earlier_date": [],
+"k2_date_ids/e2_session=/x1_exam=E3/e2_rel=earlier_date": [],
+"k2_date_ids/e2_session=/x1_exam=E3/e2_rel=on_date_of_service|earlier_date": [],
+"k2_date_ids/e2_session=X1/x1_exam=-E1/e2_rel=earlier_date": [],
+"k2_date_ids/e2_session=X1/x1_exam=-E1/e2_rel=on_date_of_service|earlier_date": [],
+"k2_date_ids/e2_session=X1/x1_exam=/e2_rel=earlier_date": [],
+"k2_date_ids/e2_session=X1/x1_exam=/e2_rel=on_date_of_service|earlier_date": [],
+"k2_date_ids/e2_session=X1/x1_exam=E1/e2_rel=earlier_date": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+]
+],
+"k2_date_ids/e2_session=X1/x1_exam=E1/e2_rel=on_date_of_service|earlier_date": [],
+"k2_date_ids/e2_session=X1/x1_exam=E1|E3/e2_rel=earlier_date": [],
+"k2_date_ids/e2_session=X1/x1_exam=E1|E3/e2_rel=on_date_of_service|earlier_date": [],
+"k2_date_ids/e2_session=X1/x1_exam=E2/e2_rel=earlier_date": [],
+"k2_date_ids/e2_session=X1/x1_exam=E2/e2_rel=on_date_of_service|earlier_date": [],
+"k2_date_ids/e2_session=X1/x1_exam=E3/e2_rel=earlier_date": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+]
+],
+"k2_date_ids/e2_session=X1/x1_exam=E3/e2_rel=on_date_of_service|earlier_date": [],
+"k2_date_ids/e2_session=X1|X2/x1_exam=-E1/e2_rel=earlier_date": [],
+"k2_date_ids/e2_session=X1|X2/x1_exam=-E1/e2_rel=on_date_of_service|earlier_date": [],
+"k2_date_ids/e2_session=X1|X2/x1_exam=/e2_rel=earlier_date": [],
+"k2_date_ids/e2_session=X1|X2/x1_exam=/e2_rel=on_date_of_service|earlier_date": [],
+"k2_date_ids/e2_session=X1|X2/x1_exam=E1/e2_rel=earlier_date": [],
+"k2_date_ids/e2_session=X1|X2/x1_exam=E1/e2_rel=on_date_of_service|earlier_date": [],
+"k2_date_ids/e2_session=X1|X2/x1_exam=E1|E3/e2_rel=earlier_date": [],
+"k2_date_ids/e2_session=X1|X2/x1_exam=E1|E3/e2_rel=on_date_of_service|earlier_date": [],
+"k2_date_ids/e2_session=X1|X2/x1_exam=E2/e2_rel=earlier_date": [],
+"k2_date_ids/e2_session=X1|X2/x1_exam=E2/e2_rel=on_date_of_service|earlier_date": [],
+"k2_date_ids/e2_session=X1|X2/x1_exam=E3/e2_rel=earlier_date": [],
+"k2_date_ids/e2_session=X1|X2/x1_exam=E3/e2_rel=on_date_of_service|earlier_date": [],
+"k2_date_ids/e2_session=X2/x1_exam=-E1/e2_rel=earlier_date": [],
+"k2_date_ids/e2_session=X2/x1_exam=-E1/e2_rel=on_date_of_service|earlier_date": [],
+"k2_date_ids/e2_session=X2/x1_exam=/e2_rel=earlier_date": [],
+"k2_date_ids/e2_session=X2/x1_exam=/e2_rel=on_date_of_service|earlier_date": [],
+"k2_date_ids/e2_session=X2/x1_exam=E1/e2_rel=earlier_date": [],
+"k2_date_ids/e2_session=X2/x1_exam=E1/e2_rel=on_date_of_service|earlier_date": [],
+"k2_date_ids/e2_session=X2/x1_exam=E1|E3/e2_rel=earlier_date": [],
+"k2_date_ids/e2_session=X2/x1_exam=E1|E3/e2_rel=on_date_of_service|earlier_date": [],
+"k2_date_ids/e2_session=X2/x1_exam=E2/e2_rel=earlier_date": [
+[
+"sessions",
+"X1",
+"examination",
+0,
+[
+"session_inconsistent"
+]
+]
+],
+"k2_date_ids/e2_session=X2/x1_exam=E2/e2_rel=on_date_of_service|earlier_date": [
+[
+"sessions",
+"X1",
+"examination",
+0,
+[
+"session_inconsistent"
+]
+]
+],
+"k2_date_ids/e2_session=X2/x1_exam=E3/e2_rel=earlier_date": [],
+"k2_date_ids/e2_session=X2/x1_exam=E3/e2_rel=on_date_of_service|earlier_date": [],
+"k2_date_inherited/e2_rel=-earlier_date/n1_occ=": [],
+"k2_date_inherited/e2_rel=-earlier_date/n1_occ=-earlier_date": [],
+"k2_date_inherited/e2_rel=-earlier_date/n1_occ=-on_date_of_service": [],
+"k2_date_inherited/e2_rel=-earlier_date/n1_occ=earlier_date": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+]
+],
+"k2_date_inherited/e2_rel=-earlier_date/n1_occ=earlier_date|later_date": [],
+"k2_date_inherited/e2_rel=-earlier_date/n1_occ=later_date": [],
+"k2_date_inherited/e2_rel=-earlier_date/n1_occ=on_date_of_service": [],
+"k2_date_inherited/e2_rel=-earlier_date/n1_occ=on_date_of_service|earlier_date": [],
+"k2_date_inherited/e2_rel=-on_date_of_service/n1_occ=": [],
+"k2_date_inherited/e2_rel=-on_date_of_service/n1_occ=-earlier_date": [],
+"k2_date_inherited/e2_rel=-on_date_of_service/n1_occ=-on_date_of_service": [],
+"k2_date_inherited/e2_rel=-on_date_of_service/n1_occ=earlier_date": [],
+"k2_date_inherited/e2_rel=-on_date_of_service/n1_occ=earlier_date|later_date": [],
+"k2_date_inherited/e2_rel=-on_date_of_service/n1_occ=later_date": [],
+"k2_date_inherited/e2_rel=-on_date_of_service/n1_occ=on_date_of_service": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+]
+],
+"k2_date_inherited/e2_rel=-on_date_of_service/n1_occ=on_date_of_service|earlier_date": [],
+"k2_date_inherited/e2_rel=/n1_occ=": [],
+"k2_date_inherited/e2_rel=/n1_occ=-earlier_date": [],
+"k2_date_inherited/e2_rel=/n1_occ=-on_date_of_service": [],
+"k2_date_inherited/e2_rel=/n1_occ=earlier_date": [],
+"k2_date_inherited/e2_rel=/n1_occ=earlier_date|later_date": [],
+"k2_date_inherited/e2_rel=/n1_occ=later_date": [],
+"k2_date_inherited/e2_rel=/n1_occ=on_date_of_service": [],
+"k2_date_inherited/e2_rel=/n1_occ=on_date_of_service|earlier_date": [],
+"k2_date_inherited/e2_rel=earlier_date/n1_occ=": [],
+"k2_date_inherited/e2_rel=earlier_date/n1_occ=-earlier_date": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+]
+],
+"k2_date_inherited/e2_rel=earlier_date/n1_occ=-on_date_of_service": [],
+"k2_date_inherited/e2_rel=earlier_date/n1_occ=earlier_date": [],
+"k2_date_inherited/e2_rel=earlier_date/n1_occ=earlier_date|later_date": [],
+"k2_date_inherited/e2_rel=earlier_date/n1_occ=later_date": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+]
+],
+"k2_date_inherited/e2_rel=earlier_date/n1_occ=on_date_of_service": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+]
+],
+"k2_date_inherited/e2_rel=earlier_date/n1_occ=on_date_of_service|earlier_date": [],
+"k2_date_inherited/e2_rel=earlier_date|later_date/n1_occ=": [],
+"k2_date_inherited/e2_rel=earlier_date|later_date/n1_occ=-earlier_date": [],
+"k2_date_inherited/e2_rel=earlier_date|later_date/n1_occ=-on_date_of_service": [],
+"k2_date_inherited/e2_rel=earlier_date|later_date/n1_occ=earlier_date": [],
+"k2_date_inherited/e2_rel=earlier_date|later_date/n1_occ=earlier_date|later_date": [],
+"k2_date_inherited/e2_rel=earlier_date|later_date/n1_occ=later_date": [],
+"k2_date_inherited/e2_rel=earlier_date|later_date/n1_occ=on_date_of_service": [],
+"k2_date_inherited/e2_rel=earlier_date|later_date/n1_occ=on_date_of_service|earlier_date": [],
+"k2_date_inherited/e2_rel=later_date/n1_occ=": [
+[
+"events",
+"E2",
+"date_relation",
+0,
+[
+"structure_status_time"
+]
+],
+[
+"events",
+"E2",
+"status",
+0,
+[
+"structure_status_time"
+]
+]
+],
+"k2_date_inherited/e2_rel=later_date/n1_occ=-earlier_date": [
+[
+"events",
+"E2",
+"date_relation",
+0,
+[
+"structure_status_time"
+]
+],
+[
+"events",
+"E2",
+"status",
+0,
+[
+"structure_status_time"
+]
+]
+],
+"k2_date_inherited/e2_rel=later_date/n1_occ=-on_date_of_service": [
+[
+"events",
+"E2",
+"date_relation",
+0,
+[
+"structure_status_time"
+]
+],
+[
+"events",
+"E2",
+"status",
+0,
+[
+"structure_status_time"
+]
+]
+],
+"k2_date_inherited/e2_rel=later_date/n1_occ=earlier_date": [
+[
+"events",
+"E2",
+"date_relation",
+0,
+[
+"structure_status_time"
+]
+],
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+],
+[
+"events",
+"E2",
+"status",
+0,
+[
+"structure_status_time"
+]
+]
+],
+"k2_date_inherited/e2_rel=later_date/n1_occ=earlier_date|later_date": [
+[
+"events",
+"E2",
+"date_relation",
+0,
+[
+"structure_status_time"
+]
+],
+[
+"events",
+"E2",
+"status",
+0,
+[
+"structure_status_time"
+]
+]
+],
+"k2_date_inherited/e2_rel=later_date/n1_occ=later_date": [
+[
+"events",
+"E2",
+"date_relation",
+0,
+[
+"structure_status_time"
+]
+],
+[
+"events",
+"E2",
+"status",
+0,
+[
+"structure_status_time"
+]
+]
+],
+"k2_date_inherited/e2_rel=later_date/n1_occ=on_date_of_service": [
+[
+"events",
+"E2",
+"date_relation",
+0,
+[
+"structure_status_time"
+]
+],
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+],
+[
+"events",
+"E2",
+"status",
+0,
+[
+"structure_status_time"
+]
+]
+],
+"k2_date_inherited/e2_rel=later_date/n1_occ=on_date_of_service|earlier_date": [
+[
+"events",
+"E2",
+"date_relation",
+0,
+[
+"structure_status_time"
+]
+],
+[
+"events",
+"E2",
+"status",
+0,
+[
+"structure_status_time"
+]
+]
+],
+"k2_date_inherited/e2_rel=on_date_of_service/n1_occ=": [],
+"k2_date_inherited/e2_rel=on_date_of_service/n1_occ=-earlier_date": [],
+"k2_date_inherited/e2_rel=on_date_of_service/n1_occ=-on_date_of_service": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+]
+],
+"k2_date_inherited/e2_rel=on_date_of_service/n1_occ=earlier_date": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+]
+],
+"k2_date_inherited/e2_rel=on_date_of_service/n1_occ=earlier_date|later_date": [],
+"k2_date_inherited/e2_rel=on_date_of_service/n1_occ=later_date": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+]
+],
+"k2_date_inherited/e2_rel=on_date_of_service/n1_occ=on_date_of_service": [],
+"k2_date_inherited/e2_rel=on_date_of_service/n1_occ=on_date_of_service|earlier_date": [],
+"k2_date_inherited/e2_rel=on_date_of_service|earlier_date/n1_occ=": [],
+"k2_date_inherited/e2_rel=on_date_of_service|earlier_date/n1_occ=-earlier_date": [],
+"k2_date_inherited/e2_rel=on_date_of_service|earlier_date/n1_occ=-on_date_of_service": [],
+"k2_date_inherited/e2_rel=on_date_of_service|earlier_date/n1_occ=earlier_date": [],
+"k2_date_inherited/e2_rel=on_date_of_service|earlier_date/n1_occ=earlier_date|later_date": [],
+"k2_date_inherited/e2_rel=on_date_of_service|earlier_date/n1_occ=later_date": [],
+"k2_date_inherited/e2_rel=on_date_of_service|earlier_date/n1_occ=on_date_of_service": [],
+"k2_date_inherited/e2_rel=on_date_of_service|earlier_date/n1_occ=on_date_of_service|earlier_date": [],
+"k2_date_own/e2_rel=-earlier_date/e1_rel=": [],
+"k2_date_own/e2_rel=-earlier_date/e1_rel=-earlier_date": [],
+"k2_date_own/e2_rel=-earlier_date/e1_rel=-on_date_of_service": [],
+"k2_date_own/e2_rel=-earlier_date/e1_rel=earlier_date": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+]
+],
+"k2_date_own/e2_rel=-earlier_date/e1_rel=earlier_date|later_date": [],
+"k2_date_own/e2_rel=-earlier_date/e1_rel=later_date": [
+[
+"events",
+"E1",
+"date_relation",
+0,
+[
+"structure_status_time"
+]
+],
+[
+"events",
+"E1",
+"status",
+0,
+[
+"structure_status_time"
+]
+]
+],
+"k2_date_own/e2_rel=-earlier_date/e1_rel=on_date_of_service": [],
+"k2_date_own/e2_rel=-earlier_date/e1_rel=on_date_of_service|earlier_date": [],
+"k2_date_own/e2_rel=-on_date_of_service/e1_rel=": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+]
+],
+"k2_date_own/e2_rel=-on_date_of_service/e1_rel=-earlier_date": [],
+"k2_date_own/e2_rel=-on_date_of_service/e1_rel=-on_date_of_service": [],
+"k2_date_own/e2_rel=-on_date_of_service/e1_rel=earlier_date": [],
+"k2_date_own/e2_rel=-on_date_of_service/e1_rel=earlier_date|later_date": [],
+"k2_date_own/e2_rel=-on_date_of_service/e1_rel=later_date": [
+[
+"events",
+"E1",
+"date_relation",
+0,
+[
+"structure_status_time"
+]
+],
+[
+"events",
+"E1",
+"status",
+0,
+[
+"structure_status_time"
+]
+]
+],
+"k2_date_own/e2_rel=-on_date_of_service/e1_rel=on_date_of_service": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+]
+],
+"k2_date_own/e2_rel=-on_date_of_service/e1_rel=on_date_of_service|earlier_date": [],
+"k2_date_own/e2_rel=/e1_rel=": [],
+"k2_date_own/e2_rel=/e1_rel=-earlier_date": [],
+"k2_date_own/e2_rel=/e1_rel=-on_date_of_service": [],
+"k2_date_own/e2_rel=/e1_rel=earlier_date": [],
+"k2_date_own/e2_rel=/e1_rel=earlier_date|later_date": [],
+"k2_date_own/e2_rel=/e1_rel=later_date": [
+[
+"events",
+"E1",
+"date_relation",
+0,
+[
+"structure_status_time"
+]
+],
+[
+"events",
+"E1",
+"status",
+0,
+[
+"structure_status_time"
+]
+]
+],
+"k2_date_own/e2_rel=/e1_rel=on_date_of_service": [],
+"k2_date_own/e2_rel=/e1_rel=on_date_of_service|earlier_date": [],
+"k2_date_own/e2_rel=earlier_date/e1_rel=": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+]
+],
+"k2_date_own/e2_rel=earlier_date/e1_rel=-earlier_date": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+]
+],
+"k2_date_own/e2_rel=earlier_date/e1_rel=-on_date_of_service": [],
+"k2_date_own/e2_rel=earlier_date/e1_rel=earlier_date": [],
+"k2_date_own/e2_rel=earlier_date/e1_rel=earlier_date|later_date": [],
+"k2_date_own/e2_rel=earlier_date/e1_rel=later_date": [
+[
+"events",
+"E1",
+"date_relation",
+0,
+[
+"structure_status_time"
+]
+],
+[
+"events",
+"E1",
+"status",
+0,
+[
+"structure_status_time"
+]
+],
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+]
+],
+"k2_date_own/e2_rel=earlier_date/e1_rel=on_date_of_service": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+]
+],
+"k2_date_own/e2_rel=earlier_date/e1_rel=on_date_of_service|earlier_date": [],
+"k2_date_own/e2_rel=earlier_date|later_date/e1_rel=": [],
+"k2_date_own/e2_rel=earlier_date|later_date/e1_rel=-earlier_date": [],
+"k2_date_own/e2_rel=earlier_date|later_date/e1_rel=-on_date_of_service": [],
+"k2_date_own/e2_rel=earlier_date|later_date/e1_rel=earlier_date": [],
+"k2_date_own/e2_rel=earlier_date|later_date/e1_rel=earlier_date|later_date": [],
+"k2_date_own/e2_rel=earlier_date|later_date/e1_rel=later_date": [
+[
+"events",
+"E1",
+"date_relation",
+0,
+[
+"structure_status_time"
+]
+],
+[
+"events",
+"E1",
+"status",
+0,
+[
+"structure_status_time"
+]
+]
+],
+"k2_date_own/e2_rel=earlier_date|later_date/e1_rel=on_date_of_service": [],
+"k2_date_own/e2_rel=earlier_date|later_date/e1_rel=on_date_of_service|earlier_date": [],
+"k2_date_own/e2_rel=later_date/e1_rel=": [
+[
+"events",
+"E2",
+"date_relation",
+0,
+[
+"structure_status_time"
+]
+],
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+],
+[
+"events",
+"E2",
+"status",
+0,
+[
+"structure_status_time"
+]
+]
+],
+"k2_date_own/e2_rel=later_date/e1_rel=-earlier_date": [
+[
+"events",
+"E2",
+"date_relation",
+0,
+[
+"structure_status_time"
+]
+],
+[
+"events",
+"E2",
+"status",
+0,
+[
+"structure_status_time"
+]
+]
+],
+"k2_date_own/e2_rel=later_date/e1_rel=-on_date_of_service": [
+[
+"events",
+"E2",
+"date_relation",
+0,
+[
+"structure_status_time"
+]
+],
+[
+"events",
+"E2",
+"status",
+0,
+[
+"structure_status_time"
+]
+]
+],
+"k2_date_own/e2_rel=later_date/e1_rel=earlier_date": [
+[
+"events",
+"E2",
+"date_relation",
+0,
+[
+"structure_status_time"
+]
+],
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+],
+[
+"events",
+"E2",
+"status",
+0,
+[
+"structure_status_time"
+]
+]
+],
+"k2_date_own/e2_rel=later_date/e1_rel=earlier_date|later_date": [
+[
+"events",
+"E2",
+"date_relation",
+0,
+[
+"structure_status_time"
+]
+],
+[
+"events",
+"E2",
+"status",
+0,
+[
+"structure_status_time"
+]
+]
+],
+"k2_date_own/e2_rel=later_date/e1_rel=later_date": [
+[
+"events",
+"E1",
+"date_relation",
+0,
+[
+"structure_status_time"
+]
+],
+[
+"events",
+"E1",
+"status",
+0,
+[
+"structure_status_time"
+]
+],
+[
+"events",
+"E2",
+"date_relation",
+0,
+[
+"structure_status_time"
+]
+],
+[
+"events",
+"E2",
+"status",
+0,
+[
+"structure_status_time"
+]
+]
+],
+"k2_date_own/e2_rel=later_date/e1_rel=on_date_of_service": [
+[
+"events",
+"E2",
+"date_relation",
+0,
+[
+"structure_status_time"
+]
+],
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+],
+[
+"events",
+"E2",
+"status",
+0,
+[
+"structure_status_time"
+]
+]
+],
+"k2_date_own/e2_rel=later_date/e1_rel=on_date_of_service|earlier_date": [
+[
+"events",
+"E2",
+"date_relation",
+0,
+[
+"structure_status_time"
+]
+],
+[
+"events",
+"E2",
+"status",
+0,
+[
+"structure_status_time"
+]
+]
+],
+"k2_date_own/e2_rel=on_date_of_service/e1_rel=": [],
+"k2_date_own/e2_rel=on_date_of_service/e1_rel=-earlier_date": [],
+"k2_date_own/e2_rel=on_date_of_service/e1_rel=-on_date_of_service": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+]
+],
+"k2_date_own/e2_rel=on_date_of_service/e1_rel=earlier_date": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+]
+],
+"k2_date_own/e2_rel=on_date_of_service/e1_rel=earlier_date|later_date": [],
+"k2_date_own/e2_rel=on_date_of_service/e1_rel=later_date": [
+[
+"events",
+"E1",
+"date_relation",
+0,
+[
+"structure_status_time"
+]
+],
+[
+"events",
+"E1",
+"status",
+0,
+[
+"structure_status_time"
+]
+],
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_conflict"
+]
+]
+],
+"k2_date_own/e2_rel=on_date_of_service/e1_rel=on_date_of_service": [],
+"k2_date_own/e2_rel=on_date_of_service/e1_rel=on_date_of_service|earlier_date": [],
+"k2_date_own/e2_rel=on_date_of_service|earlier_date/e1_rel=": [],
+"k2_date_own/e2_rel=on_date_of_service|earlier_date/e1_rel=-earlier_date": [],
+"k2_date_own/e2_rel=on_date_of_service|earlier_date/e1_rel=-on_date_of_service": [],
+"k2_date_own/e2_rel=on_date_of_service|earlier_date/e1_rel=earlier_date": [],
+"k2_date_own/e2_rel=on_date_of_service|earlier_date/e1_rel=earlier_date|later_date": [],
+"k2_date_own/e2_rel=on_date_of_service|earlier_date/e1_rel=later_date": [
+[
+"events",
+"E1",
+"date_relation",
+0,
+[
+"structure_status_time"
+]
+],
+[
+"events",
+"E1",
+"status",
+0,
+[
+"structure_status_time"
+]
+]
+],
+"k2_date_own/e2_rel=on_date_of_service|earlier_date/e1_rel=on_date_of_service": [],
+"k2_date_own/e2_rel=on_date_of_service|earlier_date/e1_rel=on_date_of_service|earlier_date": [],
+"k2_kind/e2_kind=-snare/e2_session=-X1/x1_kind=-egd": [],
+"k2_kind/e2_kind=-snare/e2_session=-X1/x1_kind=egd": [],
+"k2_kind/e2_kind=-snare/e2_session=-X1/x1_kind=egd|ercp": [],
+"k2_kind/e2_kind=-snare/e2_session=-X1/x1_kind=ercp": [],
+"k2_kind/e2_kind=-snare/e2_session=/x1_kind=-egd": [],
+"k2_kind/e2_kind=-snare/e2_session=/x1_kind=egd": [],
+"k2_kind/e2_kind=-snare/e2_session=/x1_kind=egd|ercp": [],
+"k2_kind/e2_kind=-snare/e2_session=/x1_kind=ercp": [],
+"k2_kind/e2_kind=-snare/e2_session=X1/x1_kind=-egd": [],
+"k2_kind/e2_kind=-snare/e2_session=X1/x1_kind=egd": [],
+"k2_kind/e2_kind=-snare/e2_session=X1/x1_kind=egd|ercp": [],
+"k2_kind/e2_kind=-snare/e2_session=X1/x1_kind=ercp": [],
+"k2_kind/e2_kind=-snare/e2_session=X1|X2/x1_kind=-egd": [],
+"k2_kind/e2_kind=-snare/e2_session=X1|X2/x1_kind=egd": [],
+"k2_kind/e2_kind=-snare/e2_session=X1|X2/x1_kind=egd|ercp": [],
+"k2_kind/e2_kind=-snare/e2_session=X1|X2/x1_kind=ercp": [],
+"k2_kind/e2_kind=-snare/e2_session=X2/x1_kind=-egd": [],
+"k2_kind/e2_kind=-snare/e2_session=X2/x1_kind=egd": [],
+"k2_kind/e2_kind=-snare/e2_session=X2/x1_kind=egd|ercp": [],
+"k2_kind/e2_kind=-snare/e2_session=X2/x1_kind=ercp": [],
+"k2_kind/e2_kind=snare/e2_session=-X1/x1_kind=-egd": [],
+"k2_kind/e2_kind=snare/e2_session=-X1/x1_kind=egd": [],
+"k2_kind/e2_kind=snare/e2_session=-X1/x1_kind=egd|ercp": [],
+"k2_kind/e2_kind=snare/e2_session=-X1/x1_kind=ercp": [],
+"k2_kind/e2_kind=snare/e2_session=/x1_kind=-egd": [],
+"k2_kind/e2_kind=snare/e2_session=/x1_kind=egd": [],
+"k2_kind/e2_kind=snare/e2_session=/x1_kind=egd|ercp": [],
+"k2_kind/e2_kind=snare/e2_session=/x1_kind=ercp": [],
+"k2_kind/e2_kind=snare/e2_session=X1/x1_kind=-egd": [],
+"k2_kind/e2_kind=snare/e2_session=X1/x1_kind=egd": [],
+"k2_kind/e2_kind=snare/e2_session=X1/x1_kind=egd|ercp": [],
+"k2_kind/e2_kind=snare/e2_session=X1/x1_kind=ercp": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_inconsistent"
+]
+]
+],
+"k2_kind/e2_kind=snare/e2_session=X1|X2/x1_kind=-egd": [],
+"k2_kind/e2_kind=snare/e2_session=X1|X2/x1_kind=egd": [],
+"k2_kind/e2_kind=snare/e2_session=X1|X2/x1_kind=egd|ercp": [],
+"k2_kind/e2_kind=snare/e2_session=X1|X2/x1_kind=ercp": [],
+"k2_kind/e2_kind=snare/e2_session=X2/x1_kind=-egd": [],
+"k2_kind/e2_kind=snare/e2_session=X2/x1_kind=egd": [],
+"k2_kind/e2_kind=snare/e2_session=X2/x1_kind=egd|ercp": [],
+"k2_kind/e2_kind=snare/e2_session=X2/x1_kind=ercp": [],
+"k2_kind/e2_kind=snare|sphincterotomy/e2_session=-X1/x1_kind=-egd": [],
+"k2_kind/e2_kind=snare|sphincterotomy/e2_session=-X1/x1_kind=egd": [],
+"k2_kind/e2_kind=snare|sphincterotomy/e2_session=-X1/x1_kind=egd|ercp": [],
+"k2_kind/e2_kind=snare|sphincterotomy/e2_session=-X1/x1_kind=ercp": [],
+"k2_kind/e2_kind=snare|sphincterotomy/e2_session=/x1_kind=-egd": [],
+"k2_kind/e2_kind=snare|sphincterotomy/e2_session=/x1_kind=egd": [],
+"k2_kind/e2_kind=snare|sphincterotomy/e2_session=/x1_kind=egd|ercp": [],
+"k2_kind/e2_kind=snare|sphincterotomy/e2_session=/x1_kind=ercp": [],
+"k2_kind/e2_kind=snare|sphincterotomy/e2_session=X1/x1_kind=-egd": [],
+"k2_kind/e2_kind=snare|sphincterotomy/e2_session=X1/x1_kind=egd": [],
+"k2_kind/e2_kind=snare|sphincterotomy/e2_session=X1/x1_kind=egd|ercp": [],
+"k2_kind/e2_kind=snare|sphincterotomy/e2_session=X1/x1_kind=ercp": [],
+"k2_kind/e2_kind=snare|sphincterotomy/e2_session=X1|X2/x1_kind=-egd": [],
+"k2_kind/e2_kind=snare|sphincterotomy/e2_session=X1|X2/x1_kind=egd": [],
+"k2_kind/e2_kind=snare|sphincterotomy/e2_session=X1|X2/x1_kind=egd|ercp": [],
+"k2_kind/e2_kind=snare|sphincterotomy/e2_session=X1|X2/x1_kind=ercp": [],
+"k2_kind/e2_kind=snare|sphincterotomy/e2_session=X2/x1_kind=-egd": [],
+"k2_kind/e2_kind=snare|sphincterotomy/e2_session=X2/x1_kind=egd": [],
+"k2_kind/e2_kind=snare|sphincterotomy/e2_session=X2/x1_kind=egd|ercp": [],
+"k2_kind/e2_kind=snare|sphincterotomy/e2_session=X2/x1_kind=ercp": [],
+"k2_kind/e2_kind=sphincterotomy/e2_session=-X1/x1_kind=-egd": [],
+"k2_kind/e2_kind=sphincterotomy/e2_session=-X1/x1_kind=egd": [],
+"k2_kind/e2_kind=sphincterotomy/e2_session=-X1/x1_kind=egd|ercp": [],
+"k2_kind/e2_kind=sphincterotomy/e2_session=-X1/x1_kind=ercp": [],
+"k2_kind/e2_kind=sphincterotomy/e2_session=/x1_kind=-egd": [],
+"k2_kind/e2_kind=sphincterotomy/e2_session=/x1_kind=egd": [],
+"k2_kind/e2_kind=sphincterotomy/e2_session=/x1_kind=egd|ercp": [],
+"k2_kind/e2_kind=sphincterotomy/e2_session=/x1_kind=ercp": [],
+"k2_kind/e2_kind=sphincterotomy/e2_session=X1/x1_kind=-egd": [],
+"k2_kind/e2_kind=sphincterotomy/e2_session=X1/x1_kind=egd": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_inconsistent"
+]
+]
+],
+"k2_kind/e2_kind=sphincterotomy/e2_session=X1/x1_kind=egd|ercp": [],
+"k2_kind/e2_kind=sphincterotomy/e2_session=X1/x1_kind=ercp": [],
+"k2_kind/e2_kind=sphincterotomy/e2_session=X1|X2/x1_kind=-egd": [],
+"k2_kind/e2_kind=sphincterotomy/e2_session=X1|X2/x1_kind=egd": [],
+"k2_kind/e2_kind=sphincterotomy/e2_session=X1|X2/x1_kind=egd|ercp": [],
+"k2_kind/e2_kind=sphincterotomy/e2_session=X1|X2/x1_kind=ercp": [],
+"k2_kind/e2_kind=sphincterotomy/e2_session=X2/x1_kind=-egd": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_inconsistent"
+]
+]
+],
+"k2_kind/e2_kind=sphincterotomy/e2_session=X2/x1_kind=egd": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_inconsistent"
+]
+]
+],
+"k2_kind/e2_kind=sphincterotomy/e2_session=X2/x1_kind=egd|ercp": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_inconsistent"
+]
+]
+],
+"k2_kind/e2_kind=sphincterotomy/e2_session=X2/x1_kind=ercp": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_inconsistent"
+]
+]
+],
+"k2_link/x1_exam=-E1/e1_session=-X1/e3_session=": [],
+"k2_link/x1_exam=-E1/e1_session=-X1/e3_session=-X1": [],
+"k2_link/x1_exam=-E1/e1_session=-X1/e3_session=X1": [],
+"k2_link/x1_exam=-E1/e1_session=-X1/e3_session=X1|X2": [],
+"k2_link/x1_exam=-E1/e1_session=-X2/e3_session=": [],
+"k2_link/x1_exam=-E1/e1_session=-X2/e3_session=-X1": [],
+"k2_link/x1_exam=-E1/e1_session=-X2/e3_session=X1": [],
+"k2_link/x1_exam=-E1/e1_session=-X2/e3_session=X1|X2": [],
+"k2_link/x1_exam=-E1/e1_session=/e3_session=": [],
+"k2_link/x1_exam=-E1/e1_session=/e3_session=-X1": [],
+"k2_link/x1_exam=-E1/e1_session=/e3_session=X1": [],
+"k2_link/x1_exam=-E1/e1_session=/e3_session=X1|X2": [],
+"k2_link/x1_exam=-E1/e1_session=X1/e3_session=": [],
+"k2_link/x1_exam=-E1/e1_session=X1/e3_session=-X1": [],
+"k2_link/x1_exam=-E1/e1_session=X1/e3_session=X1": [],
+"k2_link/x1_exam=-E1/e1_session=X1/e3_session=X1|X2": [],
+"k2_link/x1_exam=-E1/e1_session=X1|X2/e3_session=": [],
+"k2_link/x1_exam=-E1/e1_session=X1|X2/e3_session=-X1": [],
+"k2_link/x1_exam=-E1/e1_session=X1|X2/e3_session=X1": [],
+"k2_link/x1_exam=-E1/e1_session=X1|X2/e3_session=X1|X2": [],
+"k2_link/x1_exam=-E1/e1_session=X2/e3_session=": [],
+"k2_link/x1_exam=-E1/e1_session=X2/e3_session=-X1": [],
+"k2_link/x1_exam=-E1/e1_session=X2/e3_session=X1": [],
+"k2_link/x1_exam=-E1/e1_session=X2/e3_session=X1|X2": [],
+"k2_link/x1_exam=-E1/e1_session=X2|X1/e3_session=": [],
+"k2_link/x1_exam=-E1/e1_session=X2|X1/e3_session=-X1": [],
+"k2_link/x1_exam=-E1/e1_session=X2|X1/e3_session=X1": [],
+"k2_link/x1_exam=-E1/e1_session=X2|X1/e3_session=X1|X2": [],
+"k2_link/x1_exam=/e1_session=-X1/e3_session=": [],
+"k2_link/x1_exam=/e1_session=-X1/e3_session=-X1": [],
+"k2_link/x1_exam=/e1_session=-X1/e3_session=X1": [],
+"k2_link/x1_exam=/e1_session=-X1/e3_session=X1|X2": [],
+"k2_link/x1_exam=/e1_session=-X2/e3_session=": [],
+"k2_link/x1_exam=/e1_session=-X2/e3_session=-X1": [],
+"k2_link/x1_exam=/e1_session=-X2/e3_session=X1": [],
+"k2_link/x1_exam=/e1_session=-X2/e3_session=X1|X2": [],
+"k2_link/x1_exam=/e1_session=/e3_session=": [],
+"k2_link/x1_exam=/e1_session=/e3_session=-X1": [],
+"k2_link/x1_exam=/e1_session=/e3_session=X1": [],
+"k2_link/x1_exam=/e1_session=/e3_session=X1|X2": [],
+"k2_link/x1_exam=/e1_session=X1/e3_session=": [],
+"k2_link/x1_exam=/e1_session=X1/e3_session=-X1": [],
+"k2_link/x1_exam=/e1_session=X1/e3_session=X1": [],
+"k2_link/x1_exam=/e1_session=X1/e3_session=X1|X2": [],
+"k2_link/x1_exam=/e1_session=X1|X2/e3_session=": [],
+"k2_link/x1_exam=/e1_session=X1|X2/e3_session=-X1": [],
+"k2_link/x1_exam=/e1_session=X1|X2/e3_session=X1": [],
+"k2_link/x1_exam=/e1_session=X1|X2/e3_session=X1|X2": [],
+"k2_link/x1_exam=/e1_session=X2/e3_session=": [],
+"k2_link/x1_exam=/e1_session=X2/e3_session=-X1": [],
+"k2_link/x1_exam=/e1_session=X2/e3_session=X1": [],
+"k2_link/x1_exam=/e1_session=X2/e3_session=X1|X2": [],
+"k2_link/x1_exam=/e1_session=X2|X1/e3_session=": [],
+"k2_link/x1_exam=/e1_session=X2|X1/e3_session=-X1": [],
+"k2_link/x1_exam=/e1_session=X2|X1/e3_session=X1": [],
+"k2_link/x1_exam=/e1_session=X2|X1/e3_session=X1|X2": [],
+"k2_link/x1_exam=E1/e1_session=-X1/e3_session=": [
+[
+"sessions",
+"X1",
+"examination",
+0,
+[
+"session_inconsistent"
+]
+]
+],
+"k2_link/x1_exam=E1/e1_session=-X1/e3_session=-X1": [
+[
+"sessions",
+"X1",
+"examination",
+0,
+[
+"session_inconsistent"
+]
+]
+],
+"k2_link/x1_exam=E1/e1_session=-X1/e3_session=X1": [
+[
+"sessions",
+"X1",
+"examination",
+0,
+[
+"session_inconsistent"
+]
+]
+],
+"k2_link/x1_exam=E1/e1_session=-X1/e3_session=X1|X2": [
+[
+"sessions",
+"X1",
+"examination",
+0,
+[
+"session_inconsistent"
+]
+]
+],
+"k2_link/x1_exam=E1/e1_session=-X2/e3_session=": [
+[
+"sessions",
+"X1",
+"examination",
+0,
+[
+"session_inconsistent"
+]
+]
+],
+"k2_link/x1_exam=E1/e1_session=-X2/e3_session=-X1": [
+[
+"sessions",
+"X1",
+"examination",
+0,
+[
+"session_inconsistent"
+]
+]
+],
+"k2_link/x1_exam=E1/e1_session=-X2/e3_session=X1": [
+[
+"sessions",
+"X1",
+"examination",
+0,
+[
+"session_inconsistent"
+]
+]
+],
+"k2_link/x1_exam=E1/e1_session=-X2/e3_session=X1|X2": [
+[
+"sessions",
+"X1",
+"examination",
+0,
+[
+"session_inconsistent"
+]
+]
+],
+"k2_link/x1_exam=E1/e1_session=/e3_session=": [],
+"k2_link/x1_exam=E1/e1_session=/e3_session=-X1": [],
+"k2_link/x1_exam=E1/e1_session=/e3_session=X1": [],
+"k2_link/x1_exam=E1/e1_session=/e3_session=X1|X2": [],
+"k2_link/x1_exam=E1/e1_session=X1/e3_session=": [],
+"k2_link/x1_exam=E1/e1_session=X1/e3_session=-X1": [],
+"k2_link/x1_exam=E1/e1_session=X1/e3_session=X1": [],
+"k2_link/x1_exam=E1/e1_session=X1/e3_session=X1|X2": [],
+"k2_link/x1_exam=E1/e1_session=X1|X2/e3_session=": [],
+"k2_link/x1_exam=E1/e1_session=X1|X2/e3_session=-X1": [],
+"k2_link/x1_exam=E1/e1_session=X1|X2/e3_session=X1": [],
+"k2_link/x1_exam=E1/e1_session=X1|X2/e3_session=X1|X2": [],
+"k2_link/x1_exam=E1/e1_session=X2/e3_session=": [
+[
+"sessions",
+"X1",
+"examination",
+0,
+[
+"session_inconsistent"
+]
+]
+],
+"k2_link/x1_exam=E1/e1_session=X2/e3_session=-X1": [
+[
+"sessions",
+"X1",
+"examination",
+0,
+[
+"session_inconsistent"
+]
+]
+],
+"k2_link/x1_exam=E1/e1_session=X2/e3_session=X1": [
+[
+"sessions",
+"X1",
+"examination",
+0,
+[
+"session_inconsistent"
+]
+]
+],
+"k2_link/x1_exam=E1/e1_session=X2/e3_session=X1|X2": [
+[
+"sessions",
+"X1",
+"examination",
+0,
+[
+"session_inconsistent"
+]
+]
+],
+"k2_link/x1_exam=E1/e1_session=X2|X1/e3_session=": [],
+"k2_link/x1_exam=E1/e1_session=X2|X1/e3_session=-X1": [],
+"k2_link/x1_exam=E1/e1_session=X2|X1/e3_session=X1": [],
+"k2_link/x1_exam=E1/e1_session=X2|X1/e3_session=X1|X2": [],
+"k2_link/x1_exam=E1|E3/e1_session=-X1/e3_session=": [],
+"k2_link/x1_exam=E1|E3/e1_session=-X1/e3_session=-X1": [],
+"k2_link/x1_exam=E1|E3/e1_session=-X1/e3_session=X1": [],
+"k2_link/x1_exam=E1|E3/e1_session=-X1/e3_session=X1|X2": [],
+"k2_link/x1_exam=E1|E3/e1_session=-X2/e3_session=": [],
+"k2_link/x1_exam=E1|E3/e1_session=-X2/e3_session=-X1": [],
+"k2_link/x1_exam=E1|E3/e1_session=-X2/e3_session=X1": [],
+"k2_link/x1_exam=E1|E3/e1_session=-X2/e3_session=X1|X2": [],
+"k2_link/x1_exam=E1|E3/e1_session=/e3_session=": [],
+"k2_link/x1_exam=E1|E3/e1_session=/e3_session=-X1": [],
+"k2_link/x1_exam=E1|E3/e1_session=/e3_session=X1": [],
+"k2_link/x1_exam=E1|E3/e1_session=/e3_session=X1|X2": [],
+"k2_link/x1_exam=E1|E3/e1_session=X1/e3_session=": [],
+"k2_link/x1_exam=E1|E3/e1_session=X1/e3_session=-X1": [],
+"k2_link/x1_exam=E1|E3/e1_session=X1/e3_session=X1": [],
+"k2_link/x1_exam=E1|E3/e1_session=X1/e3_session=X1|X2": [],
+"k2_link/x1_exam=E1|E3/e1_session=X1|X2/e3_session=": [],
+"k2_link/x1_exam=E1|E3/e1_session=X1|X2/e3_session=-X1": [],
+"k2_link/x1_exam=E1|E3/e1_session=X1|X2/e3_session=X1": [],
+"k2_link/x1_exam=E1|E3/e1_session=X1|X2/e3_session=X1|X2": [],
+"k2_link/x1_exam=E1|E3/e1_session=X2/e3_session=": [],
+"k2_link/x1_exam=E1|E3/e1_session=X2/e3_session=-X1": [],
+"k2_link/x1_exam=E1|E3/e1_session=X2/e3_session=X1": [],
+"k2_link/x1_exam=E1|E3/e1_session=X2/e3_session=X1|X2": [],
+"k2_link/x1_exam=E1|E3/e1_session=X2|X1/e3_session=": [],
+"k2_link/x1_exam=E1|E3/e1_session=X2|X1/e3_session=-X1": [],
+"k2_link/x1_exam=E1|E3/e1_session=X2|X1/e3_session=X1": [],
+"k2_link/x1_exam=E1|E3/e1_session=X2|X1/e3_session=X1|X2": [],
+"k2_link/x1_exam=E3/e1_session=-X1/e3_session=": [],
+"k2_link/x1_exam=E3/e1_session=-X1/e3_session=-X1": [
+[
+"sessions",
+"X1",
+"examination",
+0,
+[
+"session_inconsistent"
+]
+]
+],
+"k2_link/x1_exam=E3/e1_session=-X1/e3_session=X1": [],
+"k2_link/x1_exam=E3/e1_session=-X1/e3_session=X1|X2": [],
+"k2_link/x1_exam=E3/e1_session=-X2/e3_session=": [],
+"k2_link/x1_exam=E3/e1_session=-X2/e3_session=-X1": [
+[
+"sessions",
+"X1",
+"examination",
+0,
+[
+"session_inconsistent"
+]
+]
+],
+"k2_link/x1_exam=E3/e1_session=-X2/e3_session=X1": [],
+"k2_link/x1_exam=E3/e1_session=-X2/e3_session=X1|X2": [],
+"k2_link/x1_exam=E3/e1_session=/e3_session=": [],
+"k2_link/x1_exam=E3/e1_session=/e3_session=-X1": [
+[
+"sessions",
+"X1",
+"examination",
+0,
+[
+"session_inconsistent"
+]
+]
+],
+"k2_link/x1_exam=E3/e1_session=/e3_session=X1": [],
+"k2_link/x1_exam=E3/e1_session=/e3_session=X1|X2": [],
+"k2_link/x1_exam=E3/e1_session=X1/e3_session=": [],
+"k2_link/x1_exam=E3/e1_session=X1/e3_session=-X1": [
+[
+"sessions",
+"X1",
+"examination",
+0,
+[
+"session_inconsistent"
+]
+]
+],
+"k2_link/x1_exam=E3/e1_session=X1/e3_session=X1": [],
+"k2_link/x1_exam=E3/e1_session=X1/e3_session=X1|X2": [],
+"k2_link/x1_exam=E3/e1_session=X1|X2/e3_session=": [],
+"k2_link/x1_exam=E3/e1_session=X1|X2/e3_session=-X1": [
+[
+"sessions",
+"X1",
+"examination",
+0,
+[
+"session_inconsistent"
+]
+]
+],
+"k2_link/x1_exam=E3/e1_session=X1|X2/e3_session=X1": [],
+"k2_link/x1_exam=E3/e1_session=X1|X2/e3_session=X1|X2": [],
+"k2_link/x1_exam=E3/e1_session=X2/e3_session=": [],
+"k2_link/x1_exam=E3/e1_session=X2/e3_session=-X1": [
+[
+"sessions",
+"X1",
+"examination",
+0,
+[
+"session_inconsistent"
+]
+]
+],
+"k2_link/x1_exam=E3/e1_session=X2/e3_session=X1": [],
+"k2_link/x1_exam=E3/e1_session=X2/e3_session=X1|X2": [],
+"k2_link/x1_exam=E3/e1_session=X2|X1/e3_session=": [],
+"k2_link/x1_exam=E3/e1_session=X2|X1/e3_session=-X1": [
+[
+"sessions",
+"X1",
+"examination",
+0,
+[
+"session_inconsistent"
+]
+]
+],
+"k2_link/x1_exam=E3/e1_session=X2|X1/e3_session=X1": [],
+"k2_link/x1_exam=E3/e1_session=X2|X1/e3_session=X1|X2": [],
+"k2_link/x1_exam=E9/e1_session=-X1/e3_session=": [],
+"k2_link/x1_exam=E9/e1_session=-X1/e3_session=-X1": [],
+"k2_link/x1_exam=E9/e1_session=-X1/e3_session=X1": [],
+"k2_link/x1_exam=E9/e1_session=-X1/e3_session=X1|X2": [],
+"k2_link/x1_exam=E9/e1_session=-X2/e3_session=": [],
+"k2_link/x1_exam=E9/e1_session=-X2/e3_session=-X1": [],
+"k2_link/x1_exam=E9/e1_session=-X2/e3_session=X1": [],
+"k2_link/x1_exam=E9/e1_session=-X2/e3_session=X1|X2": [],
+"k2_link/x1_exam=E9/e1_session=/e3_session=": [],
+"k2_link/x1_exam=E9/e1_session=/e3_session=-X1": [],
+"k2_link/x1_exam=E9/e1_session=/e3_session=X1": [],
+"k2_link/x1_exam=E9/e1_session=/e3_session=X1|X2": [],
+"k2_link/x1_exam=E9/e1_session=X1/e3_session=": [],
+"k2_link/x1_exam=E9/e1_session=X1/e3_session=-X1": [],
+"k2_link/x1_exam=E9/e1_session=X1/e3_session=X1": [],
+"k2_link/x1_exam=E9/e1_session=X1/e3_session=X1|X2": [],
+"k2_link/x1_exam=E9/e1_session=X1|X2/e3_session=": [],
+"k2_link/x1_exam=E9/e1_session=X1|X2/e3_session=-X1": [],
+"k2_link/x1_exam=E9/e1_session=X1|X2/e3_session=X1": [],
+"k2_link/x1_exam=E9/e1_session=X1|X2/e3_session=X1|X2": [],
+"k2_link/x1_exam=E9/e1_session=X2/e3_session=": [],
+"k2_link/x1_exam=E9/e1_session=X2/e3_session=-X1": [],
+"k2_link/x1_exam=E9/e1_session=X2/e3_session=X1": [],
+"k2_link/x1_exam=E9/e1_session=X2/e3_session=X1|X2": [],
+"k2_link/x1_exam=E9/e1_session=X2|X1/e3_session=": [],
+"k2_link/x1_exam=E9/e1_session=X2|X1/e3_session=-X1": [],
+"k2_link/x1_exam=E9/e1_session=X2|X1/e3_session=X1": [],
+"k2_link/x1_exam=E9/e1_session=X2|X1/e3_session=X1|X2": [],
+"k3_reach/e2_session=-X1/x1_kind=-egd/e2_places=": [],
+"k3_reach/e2_session=-X1/x1_kind=-egd/e2_places=-cecum": [],
+"k3_reach/e2_session=-X1/x1_kind=-egd/e2_places=cecum": [],
+"k3_reach/e2_session=-X1/x1_kind=-egd/e2_places=stomach": [],
+"k3_reach/e2_session=-X1/x1_kind=-egd/e2_places=stomach,cecum": [],
+"k3_reach/e2_session=-X1/x1_kind=colonoscopy/e2_places=": [],
+"k3_reach/e2_session=-X1/x1_kind=colonoscopy/e2_places=-cecum": [],
+"k3_reach/e2_session=-X1/x1_kind=colonoscopy/e2_places=cecum": [],
+"k3_reach/e2_session=-X1/x1_kind=colonoscopy/e2_places=stomach": [],
+"k3_reach/e2_session=-X1/x1_kind=colonoscopy/e2_places=stomach,cecum": [],
+"k3_reach/e2_session=-X1/x1_kind=egd/e2_places=": [],
+"k3_reach/e2_session=-X1/x1_kind=egd/e2_places=-cecum": [],
+"k3_reach/e2_session=-X1/x1_kind=egd/e2_places=cecum": [],
+"k3_reach/e2_session=-X1/x1_kind=egd/e2_places=stomach": [],
+"k3_reach/e2_session=-X1/x1_kind=egd/e2_places=stomach,cecum": [],
+"k3_reach/e2_session=-X1/x1_kind=egd|colonoscopy/e2_places=": [],
+"k3_reach/e2_session=-X1/x1_kind=egd|colonoscopy/e2_places=-cecum": [],
+"k3_reach/e2_session=-X1/x1_kind=egd|colonoscopy/e2_places=cecum": [],
+"k3_reach/e2_session=-X1/x1_kind=egd|colonoscopy/e2_places=stomach": [],
+"k3_reach/e2_session=-X1/x1_kind=egd|colonoscopy/e2_places=stomach,cecum": [],
+"k3_reach/e2_session=/x1_kind=-egd/e2_places=": [],
+"k3_reach/e2_session=/x1_kind=-egd/e2_places=-cecum": [],
+"k3_reach/e2_session=/x1_kind=-egd/e2_places=cecum": [],
+"k3_reach/e2_session=/x1_kind=-egd/e2_places=stomach": [],
+"k3_reach/e2_session=/x1_kind=-egd/e2_places=stomach,cecum": [],
+"k3_reach/e2_session=/x1_kind=colonoscopy/e2_places=": [],
+"k3_reach/e2_session=/x1_kind=colonoscopy/e2_places=-cecum": [],
+"k3_reach/e2_session=/x1_kind=colonoscopy/e2_places=cecum": [],
+"k3_reach/e2_session=/x1_kind=colonoscopy/e2_places=stomach": [],
+"k3_reach/e2_session=/x1_kind=colonoscopy/e2_places=stomach,cecum": [],
+"k3_reach/e2_session=/x1_kind=egd/e2_places=": [],
+"k3_reach/e2_session=/x1_kind=egd/e2_places=-cecum": [],
+"k3_reach/e2_session=/x1_kind=egd/e2_places=cecum": [],
+"k3_reach/e2_session=/x1_kind=egd/e2_places=stomach": [],
+"k3_reach/e2_session=/x1_kind=egd/e2_places=stomach,cecum": [],
+"k3_reach/e2_session=/x1_kind=egd|colonoscopy/e2_places=": [],
+"k3_reach/e2_session=/x1_kind=egd|colonoscopy/e2_places=-cecum": [],
+"k3_reach/e2_session=/x1_kind=egd|colonoscopy/e2_places=cecum": [],
+"k3_reach/e2_session=/x1_kind=egd|colonoscopy/e2_places=stomach": [],
+"k3_reach/e2_session=/x1_kind=egd|colonoscopy/e2_places=stomach,cecum": [],
+"k3_reach/e2_session=X1/x1_kind=-egd/e2_places=": [],
+"k3_reach/e2_session=X1/x1_kind=-egd/e2_places=-cecum": [],
+"k3_reach/e2_session=X1/x1_kind=-egd/e2_places=cecum": [],
+"k3_reach/e2_session=X1/x1_kind=-egd/e2_places=stomach": [],
+"k3_reach/e2_session=X1/x1_kind=-egd/e2_places=stomach,cecum": [],
+"k3_reach/e2_session=X1/x1_kind=colonoscopy/e2_places=": [],
+"k3_reach/e2_session=X1/x1_kind=colonoscopy/e2_places=-cecum": [],
+"k3_reach/e2_session=X1/x1_kind=colonoscopy/e2_places=cecum": [],
+"k3_reach/e2_session=X1/x1_kind=colonoscopy/e2_places=stomach": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_unreachable"
+]
+]
+],
+"k3_reach/e2_session=X1/x1_kind=colonoscopy/e2_places=stomach,cecum": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_unreachable"
+]
+]
+],
+"k3_reach/e2_session=X1/x1_kind=egd/e2_places=": [],
+"k3_reach/e2_session=X1/x1_kind=egd/e2_places=-cecum": [],
+"k3_reach/e2_session=X1/x1_kind=egd/e2_places=cecum": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_unreachable"
+]
+]
+],
+"k3_reach/e2_session=X1/x1_kind=egd/e2_places=stomach": [],
+"k3_reach/e2_session=X1/x1_kind=egd/e2_places=stomach,cecum": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_unreachable"
+]
+]
+],
+"k3_reach/e2_session=X1/x1_kind=egd|colonoscopy/e2_places=": [],
+"k3_reach/e2_session=X1/x1_kind=egd|colonoscopy/e2_places=-cecum": [],
+"k3_reach/e2_session=X1/x1_kind=egd|colonoscopy/e2_places=cecum": [],
+"k3_reach/e2_session=X1/x1_kind=egd|colonoscopy/e2_places=stomach": [],
+"k3_reach/e2_session=X1/x1_kind=egd|colonoscopy/e2_places=stomach,cecum": [],
+"k3_reach/e2_session=X1|X2/x1_kind=-egd/e2_places=": [],
+"k3_reach/e2_session=X1|X2/x1_kind=-egd/e2_places=-cecum": [],
+"k3_reach/e2_session=X1|X2/x1_kind=-egd/e2_places=cecum": [],
+"k3_reach/e2_session=X1|X2/x1_kind=-egd/e2_places=stomach": [],
+"k3_reach/e2_session=X1|X2/x1_kind=-egd/e2_places=stomach,cecum": [],
+"k3_reach/e2_session=X1|X2/x1_kind=colonoscopy/e2_places=": [],
+"k3_reach/e2_session=X1|X2/x1_kind=colonoscopy/e2_places=-cecum": [],
+"k3_reach/e2_session=X1|X2/x1_kind=colonoscopy/e2_places=cecum": [],
+"k3_reach/e2_session=X1|X2/x1_kind=colonoscopy/e2_places=stomach": [],
+"k3_reach/e2_session=X1|X2/x1_kind=colonoscopy/e2_places=stomach,cecum": [],
+"k3_reach/e2_session=X1|X2/x1_kind=egd/e2_places=": [],
+"k3_reach/e2_session=X1|X2/x1_kind=egd/e2_places=-cecum": [],
+"k3_reach/e2_session=X1|X2/x1_kind=egd/e2_places=cecum": [],
+"k3_reach/e2_session=X1|X2/x1_kind=egd/e2_places=stomach": [],
+"k3_reach/e2_session=X1|X2/x1_kind=egd/e2_places=stomach,cecum": [],
+"k3_reach/e2_session=X1|X2/x1_kind=egd|colonoscopy/e2_places=": [],
+"k3_reach/e2_session=X1|X2/x1_kind=egd|colonoscopy/e2_places=-cecum": [],
+"k3_reach/e2_session=X1|X2/x1_kind=egd|colonoscopy/e2_places=cecum": [],
+"k3_reach/e2_session=X1|X2/x1_kind=egd|colonoscopy/e2_places=stomach": [],
+"k3_reach/e2_session=X1|X2/x1_kind=egd|colonoscopy/e2_places=stomach,cecum": [],
+"k3_reach/e2_session=X2/x1_kind=-egd/e2_places=": [],
+"k3_reach/e2_session=X2/x1_kind=-egd/e2_places=-cecum": [],
+"k3_reach/e2_session=X2/x1_kind=-egd/e2_places=cecum": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_unreachable"
+]
+]
+],
+"k3_reach/e2_session=X2/x1_kind=-egd/e2_places=stomach": [],
+"k3_reach/e2_session=X2/x1_kind=-egd/e2_places=stomach,cecum": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_unreachable"
+]
+]
+],
+"k3_reach/e2_session=X2/x1_kind=colonoscopy/e2_places=": [],
+"k3_reach/e2_session=X2/x1_kind=colonoscopy/e2_places=-cecum": [],
+"k3_reach/e2_session=X2/x1_kind=colonoscopy/e2_places=cecum": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_unreachable"
+]
+]
+],
+"k3_reach/e2_session=X2/x1_kind=colonoscopy/e2_places=stomach": [],
+"k3_reach/e2_session=X2/x1_kind=colonoscopy/e2_places=stomach,cecum": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_unreachable"
+]
+]
+],
+"k3_reach/e2_session=X2/x1_kind=egd/e2_places=": [],
+"k3_reach/e2_session=X2/x1_kind=egd/e2_places=-cecum": [],
+"k3_reach/e2_session=X2/x1_kind=egd/e2_places=cecum": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_unreachable"
+]
+]
+],
+"k3_reach/e2_session=X2/x1_kind=egd/e2_places=stomach": [],
+"k3_reach/e2_session=X2/x1_kind=egd/e2_places=stomach,cecum": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_unreachable"
+]
+]
+],
+"k3_reach/e2_session=X2/x1_kind=egd|colonoscopy/e2_places=": [],
+"k3_reach/e2_session=X2/x1_kind=egd|colonoscopy/e2_places=-cecum": [],
+"k3_reach/e2_session=X2/x1_kind=egd|colonoscopy/e2_places=cecum": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_unreachable"
+]
+]
+],
+"k3_reach/e2_session=X2/x1_kind=egd|colonoscopy/e2_places=stomach": [],
+"k3_reach/e2_session=X2/x1_kind=egd|colonoscopy/e2_places=stomach,cecum": [
+[
+"events",
+"E2",
+"session",
+0,
+[
+"session_unreachable"
+]
+]
+],
+"k4_absent/y1_type=-surgically_absent/y1_organ=-stomach/e2_places=": [],
+"k4_absent/y1_type=-surgically_absent/y1_organ=-stomach/e2_places=-stomach": [],
+"k4_absent/y1_type=-surgically_absent/y1_organ=-stomach/e2_places=gastric_antrum": [],
+"k4_absent/y1_type=-surgically_absent/y1_organ=-stomach/e2_places=stomach": [],
+"k4_absent/y1_type=-surgically_absent/y1_organ=/e2_places=": [],
+"k4_absent/y1_type=-surgically_absent/y1_organ=/e2_places=-stomach": [],
+"k4_absent/y1_type=-surgically_absent/y1_organ=/e2_places=gastric_antrum": [],
+"k4_absent/y1_type=-surgically_absent/y1_organ=/e2_places=stomach": [],
+"k4_absent/y1_type=-surgically_absent/y1_organ=colon/e2_places=": [],
+"k4_absent/y1_type=-surgically_absent/y1_organ=colon/e2_places=-stomach": [],
+"k4_absent/y1_type=-surgically_absent/y1_organ=colon/e2_places=gastric_antrum": [],
+"k4_absent/y1_type=-surgically_absent/y1_organ=colon/e2_places=stomach": [],
+"k4_absent/y1_type=-surgically_absent/y1_organ=stomach/e2_places=": [],
+"k4_absent/y1_type=-surgically_absent/y1_organ=stomach/e2_places=-stomach": [],
+"k4_absent/y1_type=-surgically_absent/y1_organ=stomach/e2_places=gastric_antrum": [],
+"k4_absent/y1_type=-surgically_absent/y1_organ=stomach/e2_places=stomach": [],
+"k4_absent/y1_type=-surgically_absent/y1_organ=stomach|esophagus/e2_places=": [],
+"k4_absent/y1_type=-surgically_absent/y1_organ=stomach|esophagus/e2_places=-stomach": [],
+"k4_absent/y1_type=-surgically_absent/y1_organ=stomach|esophagus/e2_places=gastric_antrum": [],
+"k4_absent/y1_type=-surgically_absent/y1_organ=stomach|esophagus/e2_places=stomach": [],
+"k4_absent/y1_type=anastomosis/y1_organ=-stomach/e2_places=": [],
+"k4_absent/y1_type=anastomosis/y1_organ=-stomach/e2_places=-stomach": [],
+"k4_absent/y1_type=anastomosis/y1_organ=-stomach/e2_places=gastric_antrum": [],
+"k4_absent/y1_type=anastomosis/y1_organ=-stomach/e2_places=stomach": [],
+"k4_absent/y1_type=anastomosis/y1_organ=/e2_places=": [],
+"k4_absent/y1_type=anastomosis/y1_organ=/e2_places=-stomach": [],
+"k4_absent/y1_type=anastomosis/y1_organ=/e2_places=gastric_antrum": [],
+"k4_absent/y1_type=anastomosis/y1_organ=/e2_places=stomach": [],
+"k4_absent/y1_type=anastomosis/y1_organ=colon/e2_places=": [],
+"k4_absent/y1_type=anastomosis/y1_organ=colon/e2_places=-stomach": [],
+"k4_absent/y1_type=anastomosis/y1_organ=colon/e2_places=gastric_antrum": [],
+"k4_absent/y1_type=anastomosis/y1_organ=colon/e2_places=stomach": [],
+"k4_absent/y1_type=anastomosis/y1_organ=stomach/e2_places=": [],
+"k4_absent/y1_type=anastomosis/y1_organ=stomach/e2_places=-stomach": [],
+"k4_absent/y1_type=anastomosis/y1_organ=stomach/e2_places=gastric_antrum": [],
+"k4_absent/y1_type=anastomosis/y1_organ=stomach/e2_places=stomach": [],
+"k4_absent/y1_type=anastomosis/y1_organ=stomach|esophagus/e2_places=": [],
+"k4_absent/y1_type=anastomosis/y1_organ=stomach|esophagus/e2_places=-stomach": [],
+"k4_absent/y1_type=anastomosis/y1_organ=stomach|esophagus/e2_places=gastric_antrum": [],
+"k4_absent/y1_type=anastomosis/y1_organ=stomach|esophagus/e2_places=stomach": [],
+"k4_absent/y1_type=surgically_absent/y1_organ=-stomach/e2_places=": [],
+"k4_absent/y1_type=surgically_absent/y1_organ=-stomach/e2_places=-stomach": [],
+"k4_absent/y1_type=surgically_absent/y1_organ=-stomach/e2_places=gastric_antrum": [],
+"k4_absent/y1_type=surgically_absent/y1_organ=-stomach/e2_places=stomach": [],
+"k4_absent/y1_type=surgically_absent/y1_organ=/e2_places=": [],
+"k4_absent/y1_type=surgically_absent/y1_organ=/e2_places=-stomach": [],
+"k4_absent/y1_type=surgically_absent/y1_organ=/e2_places=gastric_antrum": [],
+"k4_absent/y1_type=surgically_absent/y1_organ=/e2_places=stomach": [],
+"k4_absent/y1_type=surgically_absent/y1_organ=colon/e2_places=": [],
+"k4_absent/y1_type=surgically_absent/y1_organ=colon/e2_places=-stomach": [],
+"k4_absent/y1_type=surgically_absent/y1_organ=colon/e2_places=gastric_antrum": [],
+"k4_absent/y1_type=surgically_absent/y1_organ=colon/e2_places=stomach": [],
+"k4_absent/y1_type=surgically_absent/y1_organ=stomach/e2_places=": [],
+"k4_absent/y1_type=surgically_absent/y1_organ=stomach/e2_places=-stomach": [],
+"k4_absent/y1_type=surgically_absent/y1_organ=stomach/e2_places=gastric_antrum": [
+[
+"anatomy",
+"Y1",
+"organ",
+0,
+[
+"anatomy_conflict"
+]
+],
+[
+"anatomy",
+"Y1",
+"type",
+0,
+[
+"anatomy_conflict"
+]
+],
+[
+"events",
+"E2",
+"target.places",
+0,
+[
+"anatomy_conflict"
+]
+]
+],
+"k4_absent/y1_type=surgically_absent/y1_organ=stomach/e2_places=stomach": [
+[
+"anatomy",
+"Y1",
+"organ",
+0,
+[
+"anatomy_conflict"
+]
+],
+[
+"anatomy",
+"Y1",
+"type",
+0,
+[
+"anatomy_conflict"
+]
+],
+[
+"events",
+"E2",
+"target.places",
+0,
+[
+"anatomy_conflict"
+]
+]
+],
+"k4_absent/y1_type=surgically_absent/y1_organ=stomach|esophagus/e2_places=": [],
+"k4_absent/y1_type=surgically_absent/y1_organ=stomach|esophagus/e2_places=-stomach": [],
+"k4_absent/y1_type=surgically_absent/y1_organ=stomach|esophagus/e2_places=gastric_antrum": [],
+"k4_absent/y1_type=surgically_absent/y1_organ=stomach|esophagus/e2_places=stomach": [],
+"k4_absent/y1_type=surgically_absent|anastomosis/y1_organ=-stomach/e2_places=": [],
+"k4_absent/y1_type=surgically_absent|anastomosis/y1_organ=-stomach/e2_places=-stomach": [],
+"k4_absent/y1_type=surgically_absent|anastomosis/y1_organ=-stomach/e2_places=gastric_antrum": [],
+"k4_absent/y1_type=surgically_absent|anastomosis/y1_organ=-stomach/e2_places=stomach": [],
+"k4_absent/y1_type=surgically_absent|anastomosis/y1_organ=/e2_places=": [],
+"k4_absent/y1_type=surgically_absent|anastomosis/y1_organ=/e2_places=-stomach": [],
+"k4_absent/y1_type=surgically_absent|anastomosis/y1_organ=/e2_places=gastric_antrum": [],
+"k4_absent/y1_type=surgically_absent|anastomosis/y1_organ=/e2_places=stomach": [],
+"k4_absent/y1_type=surgically_absent|anastomosis/y1_organ=colon/e2_places=": [],
+"k4_absent/y1_type=surgically_absent|anastomosis/y1_organ=colon/e2_places=-stomach": [],
+"k4_absent/y1_type=surgically_absent|anastomosis/y1_organ=colon/e2_places=gastric_antrum": [],
+"k4_absent/y1_type=surgically_absent|anastomosis/y1_organ=colon/e2_places=stomach": [],
+"k4_absent/y1_type=surgically_absent|anastomosis/y1_organ=stomach/e2_places=": [],
+"k4_absent/y1_type=surgically_absent|anastomosis/y1_organ=stomach/e2_places=-stomach": [],
+"k4_absent/y1_type=surgically_absent|anastomosis/y1_organ=stomach/e2_places=gastric_antrum": [],
+"k4_absent/y1_type=surgically_absent|anastomosis/y1_organ=stomach/e2_places=stomach": [],
+"k4_absent/y1_type=surgically_absent|anastomosis/y1_organ=stomach|esophagus/e2_places=": [],
+"k4_absent/y1_type=surgically_absent|anastomosis/y1_organ=stomach|esophagus/e2_places=-stomach": [],
+"k4_absent/y1_type=surgically_absent|anastomosis/y1_organ=stomach|esophagus/e2_places=gastric_antrum": [],
+"k4_absent/y1_type=surgically_absent|anastomosis/y1_organ=stomach|esophagus/e2_places=stomach": [],
+"k5_person/e2_performer=-documenting_team/e2_person=-P1/p1_role=-documenting_clinician/documenting=": [],
+"k5_person/e2_performer=-documenting_team/e2_person=-P1/p1_role=-documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=-P1/p1_role=-documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=-P1/p1_role=-documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=-P1/p1_role=-documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=-P1/p1_role=documenting_clinician/documenting=": [],
+"k5_person/e2_performer=-documenting_team/e2_person=-P1/p1_role=documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=-P1/p1_role=documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=-P1/p1_role=documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=-P1/p1_role=documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=-P1/p1_role=documenting_clinician|referring/documenting=": [],
+"k5_person/e2_performer=-documenting_team/e2_person=-P1/p1_role=documenting_clinician|referring/documenting=-P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=-P1/p1_role=documenting_clinician|referring/documenting=P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=-P1/p1_role=documenting_clinician|referring/documenting=P1|P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=-P1/p1_role=documenting_clinician|referring/documenting=P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=-P1/p1_role=nurse/documenting=": [],
+"k5_person/e2_performer=-documenting_team/e2_person=-P1/p1_role=nurse/documenting=-P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=-P1/p1_role=nurse/documenting=P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=-P1/p1_role=nurse/documenting=P1|P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=-P1/p1_role=nurse/documenting=P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=-P1/p1_role=referring/documenting=": [],
+"k5_person/e2_performer=-documenting_team/e2_person=-P1/p1_role=referring/documenting=-P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=-P1/p1_role=referring/documenting=P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=-P1/p1_role=referring/documenting=P1|P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=-P1/p1_role=referring/documenting=P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=/p1_role=-documenting_clinician/documenting=": [],
+"k5_person/e2_performer=-documenting_team/e2_person=/p1_role=-documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=/p1_role=-documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=/p1_role=-documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=/p1_role=-documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=/p1_role=documenting_clinician/documenting=": [],
+"k5_person/e2_performer=-documenting_team/e2_person=/p1_role=documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=/p1_role=documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=/p1_role=documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=/p1_role=documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=/p1_role=documenting_clinician|referring/documenting=": [],
+"k5_person/e2_performer=-documenting_team/e2_person=/p1_role=documenting_clinician|referring/documenting=-P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=/p1_role=documenting_clinician|referring/documenting=P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=/p1_role=documenting_clinician|referring/documenting=P1|P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=/p1_role=documenting_clinician|referring/documenting=P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=/p1_role=nurse/documenting=": [],
+"k5_person/e2_performer=-documenting_team/e2_person=/p1_role=nurse/documenting=-P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=/p1_role=nurse/documenting=P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=/p1_role=nurse/documenting=P1|P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=/p1_role=nurse/documenting=P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=/p1_role=referring/documenting=": [],
+"k5_person/e2_performer=-documenting_team/e2_person=/p1_role=referring/documenting=-P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=/p1_role=referring/documenting=P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=/p1_role=referring/documenting=P1|P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=/p1_role=referring/documenting=P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1/p1_role=-documenting_clinician/documenting=": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1/p1_role=-documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1/p1_role=-documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1/p1_role=-documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1/p1_role=-documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1/p1_role=documenting_clinician/documenting=": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1/p1_role=documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1/p1_role=documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1/p1_role=documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1/p1_role=documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1/p1_role=documenting_clinician|referring/documenting=": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1/p1_role=documenting_clinician|referring/documenting=-P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1/p1_role=documenting_clinician|referring/documenting=P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1/p1_role=documenting_clinician|referring/documenting=P1|P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1/p1_role=documenting_clinician|referring/documenting=P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1/p1_role=nurse/documenting=": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1/p1_role=nurse/documenting=-P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1/p1_role=nurse/documenting=P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1/p1_role=nurse/documenting=P1|P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1/p1_role=nurse/documenting=P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1/p1_role=referring/documenting=": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1/p1_role=referring/documenting=-P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1/p1_role=referring/documenting=P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1/p1_role=referring/documenting=P1|P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1/p1_role=referring/documenting=P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1|P2/p1_role=-documenting_clinician/documenting=": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1|P2/p1_role=-documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1|P2/p1_role=-documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1|P2/p1_role=-documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1|P2/p1_role=-documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1|P2/p1_role=documenting_clinician/documenting=": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1|P2/p1_role=documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1|P2/p1_role=documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1|P2/p1_role=documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1|P2/p1_role=documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1|P2/p1_role=documenting_clinician|referring/documenting=": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1|P2/p1_role=documenting_clinician|referring/documenting=-P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1|P2/p1_role=documenting_clinician|referring/documenting=P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1|P2/p1_role=documenting_clinician|referring/documenting=P1|P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1|P2/p1_role=documenting_clinician|referring/documenting=P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1|P2/p1_role=nurse/documenting=": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1|P2/p1_role=nurse/documenting=-P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1|P2/p1_role=nurse/documenting=P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1|P2/p1_role=nurse/documenting=P1|P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1|P2/p1_role=nurse/documenting=P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1|P2/p1_role=referring/documenting=": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1|P2/p1_role=referring/documenting=-P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1|P2/p1_role=referring/documenting=P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1|P2/p1_role=referring/documenting=P1|P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P1|P2/p1_role=referring/documenting=P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P2/p1_role=-documenting_clinician/documenting=": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P2/p1_role=-documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P2/p1_role=-documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P2/p1_role=-documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P2/p1_role=-documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P2/p1_role=documenting_clinician/documenting=": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P2/p1_role=documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P2/p1_role=documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P2/p1_role=documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P2/p1_role=documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P2/p1_role=documenting_clinician|referring/documenting=": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P2/p1_role=documenting_clinician|referring/documenting=-P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P2/p1_role=documenting_clinician|referring/documenting=P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P2/p1_role=documenting_clinician|referring/documenting=P1|P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P2/p1_role=documenting_clinician|referring/documenting=P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P2/p1_role=nurse/documenting=": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P2/p1_role=nurse/documenting=-P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P2/p1_role=nurse/documenting=P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P2/p1_role=nurse/documenting=P1|P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P2/p1_role=nurse/documenting=P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P2/p1_role=referring/documenting=": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P2/p1_role=referring/documenting=-P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P2/p1_role=referring/documenting=P1": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P2/p1_role=referring/documenting=P1|P2": [],
+"k5_person/e2_performer=-documenting_team/e2_person=P2/p1_role=referring/documenting=P2": [],
+"k5_person/e2_performer=/e2_person=-P1/p1_role=-documenting_clinician/documenting=": [],
+"k5_person/e2_performer=/e2_person=-P1/p1_role=-documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=/e2_person=-P1/p1_role=-documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=/e2_person=-P1/p1_role=-documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=/e2_person=-P1/p1_role=-documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=/e2_person=-P1/p1_role=documenting_clinician/documenting=": [],
+"k5_person/e2_performer=/e2_person=-P1/p1_role=documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=/e2_person=-P1/p1_role=documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=/e2_person=-P1/p1_role=documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=/e2_person=-P1/p1_role=documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=/e2_person=-P1/p1_role=documenting_clinician|referring/documenting=": [],
+"k5_person/e2_performer=/e2_person=-P1/p1_role=documenting_clinician|referring/documenting=-P1": [],
+"k5_person/e2_performer=/e2_person=-P1/p1_role=documenting_clinician|referring/documenting=P1": [],
+"k5_person/e2_performer=/e2_person=-P1/p1_role=documenting_clinician|referring/documenting=P1|P2": [],
+"k5_person/e2_performer=/e2_person=-P1/p1_role=documenting_clinician|referring/documenting=P2": [],
+"k5_person/e2_performer=/e2_person=-P1/p1_role=nurse/documenting=": [],
+"k5_person/e2_performer=/e2_person=-P1/p1_role=nurse/documenting=-P1": [],
+"k5_person/e2_performer=/e2_person=-P1/p1_role=nurse/documenting=P1": [],
+"k5_person/e2_performer=/e2_person=-P1/p1_role=nurse/documenting=P1|P2": [],
+"k5_person/e2_performer=/e2_person=-P1/p1_role=nurse/documenting=P2": [],
+"k5_person/e2_performer=/e2_person=-P1/p1_role=referring/documenting=": [],
+"k5_person/e2_performer=/e2_person=-P1/p1_role=referring/documenting=-P1": [],
+"k5_person/e2_performer=/e2_person=-P1/p1_role=referring/documenting=P1": [],
+"k5_person/e2_performer=/e2_person=-P1/p1_role=referring/documenting=P1|P2": [],
+"k5_person/e2_performer=/e2_person=-P1/p1_role=referring/documenting=P2": [],
+"k5_person/e2_performer=/e2_person=/p1_role=-documenting_clinician/documenting=": [],
+"k5_person/e2_performer=/e2_person=/p1_role=-documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=/e2_person=/p1_role=-documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=/e2_person=/p1_role=-documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=/e2_person=/p1_role=-documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=/e2_person=/p1_role=documenting_clinician/documenting=": [],
+"k5_person/e2_performer=/e2_person=/p1_role=documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=/e2_person=/p1_role=documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=/e2_person=/p1_role=documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=/e2_person=/p1_role=documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=/e2_person=/p1_role=documenting_clinician|referring/documenting=": [],
+"k5_person/e2_performer=/e2_person=/p1_role=documenting_clinician|referring/documenting=-P1": [],
+"k5_person/e2_performer=/e2_person=/p1_role=documenting_clinician|referring/documenting=P1": [],
+"k5_person/e2_performer=/e2_person=/p1_role=documenting_clinician|referring/documenting=P1|P2": [],
+"k5_person/e2_performer=/e2_person=/p1_role=documenting_clinician|referring/documenting=P2": [],
+"k5_person/e2_performer=/e2_person=/p1_role=nurse/documenting=": [],
+"k5_person/e2_performer=/e2_person=/p1_role=nurse/documenting=-P1": [],
+"k5_person/e2_performer=/e2_person=/p1_role=nurse/documenting=P1": [],
+"k5_person/e2_performer=/e2_person=/p1_role=nurse/documenting=P1|P2": [],
+"k5_person/e2_performer=/e2_person=/p1_role=nurse/documenting=P2": [],
+"k5_person/e2_performer=/e2_person=/p1_role=referring/documenting=": [],
+"k5_person/e2_performer=/e2_person=/p1_role=referring/documenting=-P1": [],
+"k5_person/e2_performer=/e2_person=/p1_role=referring/documenting=P1": [],
+"k5_person/e2_performer=/e2_person=/p1_role=referring/documenting=P1|P2": [],
+"k5_person/e2_performer=/e2_person=/p1_role=referring/documenting=P2": [],
+"k5_person/e2_performer=/e2_person=P1/p1_role=-documenting_clinician/documenting=": [],
+"k5_person/e2_performer=/e2_person=P1/p1_role=-documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=/e2_person=P1/p1_role=-documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=/e2_person=P1/p1_role=-documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=/e2_person=P1/p1_role=-documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=/e2_person=P1/p1_role=documenting_clinician/documenting=": [],
+"k5_person/e2_performer=/e2_person=P1/p1_role=documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=/e2_person=P1/p1_role=documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=/e2_person=P1/p1_role=documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=/e2_person=P1/p1_role=documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=/e2_person=P1/p1_role=documenting_clinician|referring/documenting=": [],
+"k5_person/e2_performer=/e2_person=P1/p1_role=documenting_clinician|referring/documenting=-P1": [],
+"k5_person/e2_performer=/e2_person=P1/p1_role=documenting_clinician|referring/documenting=P1": [],
+"k5_person/e2_performer=/e2_person=P1/p1_role=documenting_clinician|referring/documenting=P1|P2": [],
+"k5_person/e2_performer=/e2_person=P1/p1_role=documenting_clinician|referring/documenting=P2": [],
+"k5_person/e2_performer=/e2_person=P1/p1_role=nurse/documenting=": [],
+"k5_person/e2_performer=/e2_person=P1/p1_role=nurse/documenting=-P1": [],
+"k5_person/e2_performer=/e2_person=P1/p1_role=nurse/documenting=P1": [],
+"k5_person/e2_performer=/e2_person=P1/p1_role=nurse/documenting=P1|P2": [],
+"k5_person/e2_performer=/e2_person=P1/p1_role=nurse/documenting=P2": [],
+"k5_person/e2_performer=/e2_person=P1/p1_role=referring/documenting=": [],
+"k5_person/e2_performer=/e2_person=P1/p1_role=referring/documenting=-P1": [],
+"k5_person/e2_performer=/e2_person=P1/p1_role=referring/documenting=P1": [],
+"k5_person/e2_performer=/e2_person=P1/p1_role=referring/documenting=P1|P2": [],
+"k5_person/e2_performer=/e2_person=P1/p1_role=referring/documenting=P2": [],
+"k5_person/e2_performer=/e2_person=P1|P2/p1_role=-documenting_clinician/documenting=": [],
+"k5_person/e2_performer=/e2_person=P1|P2/p1_role=-documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=/e2_person=P1|P2/p1_role=-documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=/e2_person=P1|P2/p1_role=-documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=/e2_person=P1|P2/p1_role=-documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=/e2_person=P1|P2/p1_role=documenting_clinician/documenting=": [],
+"k5_person/e2_performer=/e2_person=P1|P2/p1_role=documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=/e2_person=P1|P2/p1_role=documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=/e2_person=P1|P2/p1_role=documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=/e2_person=P1|P2/p1_role=documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=/e2_person=P1|P2/p1_role=documenting_clinician|referring/documenting=": [],
+"k5_person/e2_performer=/e2_person=P1|P2/p1_role=documenting_clinician|referring/documenting=-P1": [],
+"k5_person/e2_performer=/e2_person=P1|P2/p1_role=documenting_clinician|referring/documenting=P1": [],
+"k5_person/e2_performer=/e2_person=P1|P2/p1_role=documenting_clinician|referring/documenting=P1|P2": [],
+"k5_person/e2_performer=/e2_person=P1|P2/p1_role=documenting_clinician|referring/documenting=P2": [],
+"k5_person/e2_performer=/e2_person=P1|P2/p1_role=nurse/documenting=": [],
+"k5_person/e2_performer=/e2_person=P1|P2/p1_role=nurse/documenting=-P1": [],
+"k5_person/e2_performer=/e2_person=P1|P2/p1_role=nurse/documenting=P1": [],
+"k5_person/e2_performer=/e2_person=P1|P2/p1_role=nurse/documenting=P1|P2": [],
+"k5_person/e2_performer=/e2_person=P1|P2/p1_role=nurse/documenting=P2": [],
+"k5_person/e2_performer=/e2_person=P1|P2/p1_role=referring/documenting=": [],
+"k5_person/e2_performer=/e2_person=P1|P2/p1_role=referring/documenting=-P1": [],
+"k5_person/e2_performer=/e2_person=P1|P2/p1_role=referring/documenting=P1": [],
+"k5_person/e2_performer=/e2_person=P1|P2/p1_role=referring/documenting=P1|P2": [],
+"k5_person/e2_performer=/e2_person=P1|P2/p1_role=referring/documenting=P2": [],
+"k5_person/e2_performer=/e2_person=P2/p1_role=-documenting_clinician/documenting=": [],
+"k5_person/e2_performer=/e2_person=P2/p1_role=-documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=/e2_person=P2/p1_role=-documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=/e2_person=P2/p1_role=-documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=/e2_person=P2/p1_role=-documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=/e2_person=P2/p1_role=documenting_clinician/documenting=": [],
+"k5_person/e2_performer=/e2_person=P2/p1_role=documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=/e2_person=P2/p1_role=documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=/e2_person=P2/p1_role=documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=/e2_person=P2/p1_role=documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=/e2_person=P2/p1_role=documenting_clinician|referring/documenting=": [],
+"k5_person/e2_performer=/e2_person=P2/p1_role=documenting_clinician|referring/documenting=-P1": [],
+"k5_person/e2_performer=/e2_person=P2/p1_role=documenting_clinician|referring/documenting=P1": [],
+"k5_person/e2_performer=/e2_person=P2/p1_role=documenting_clinician|referring/documenting=P1|P2": [],
+"k5_person/e2_performer=/e2_person=P2/p1_role=documenting_clinician|referring/documenting=P2": [],
+"k5_person/e2_performer=/e2_person=P2/p1_role=nurse/documenting=": [],
+"k5_person/e2_performer=/e2_person=P2/p1_role=nurse/documenting=-P1": [],
+"k5_person/e2_performer=/e2_person=P2/p1_role=nurse/documenting=P1": [],
+"k5_person/e2_performer=/e2_person=P2/p1_role=nurse/documenting=P1|P2": [],
+"k5_person/e2_performer=/e2_person=P2/p1_role=nurse/documenting=P2": [],
+"k5_person/e2_performer=/e2_person=P2/p1_role=referring/documenting=": [],
+"k5_person/e2_performer=/e2_person=P2/p1_role=referring/documenting=-P1": [],
+"k5_person/e2_performer=/e2_person=P2/p1_role=referring/documenting=P1": [],
+"k5_person/e2_performer=/e2_person=P2/p1_role=referring/documenting=P1|P2": [],
+"k5_person/e2_performer=/e2_person=P2/p1_role=referring/documenting=P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=-P1/p1_role=-documenting_clinician/documenting=": [],
+"k5_person/e2_performer=documenting_team/e2_person=-P1/p1_role=-documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=-P1/p1_role=-documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=-P1/p1_role=-documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=-P1/p1_role=-documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=-P1/p1_role=documenting_clinician/documenting=": [],
+"k5_person/e2_performer=documenting_team/e2_person=-P1/p1_role=documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=-P1/p1_role=documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=-P1/p1_role=documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=-P1/p1_role=documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=-P1/p1_role=documenting_clinician|referring/documenting=": [],
+"k5_person/e2_performer=documenting_team/e2_person=-P1/p1_role=documenting_clinician|referring/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=-P1/p1_role=documenting_clinician|referring/documenting=P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=-P1/p1_role=documenting_clinician|referring/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=-P1/p1_role=documenting_clinician|referring/documenting=P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=-P1/p1_role=nurse/documenting=": [],
+"k5_person/e2_performer=documenting_team/e2_person=-P1/p1_role=nurse/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=-P1/p1_role=nurse/documenting=P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=-P1/p1_role=nurse/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=-P1/p1_role=nurse/documenting=P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=-P1/p1_role=referring/documenting=": [],
+"k5_person/e2_performer=documenting_team/e2_person=-P1/p1_role=referring/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=-P1/p1_role=referring/documenting=P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=-P1/p1_role=referring/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=-P1/p1_role=referring/documenting=P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=/p1_role=-documenting_clinician/documenting=": [],
+"k5_person/e2_performer=documenting_team/e2_person=/p1_role=-documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=/p1_role=-documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=/p1_role=-documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=/p1_role=-documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=/p1_role=documenting_clinician/documenting=": [],
+"k5_person/e2_performer=documenting_team/e2_person=/p1_role=documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=/p1_role=documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=/p1_role=documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=/p1_role=documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=/p1_role=documenting_clinician|referring/documenting=": [],
+"k5_person/e2_performer=documenting_team/e2_person=/p1_role=documenting_clinician|referring/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=/p1_role=documenting_clinician|referring/documenting=P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=/p1_role=documenting_clinician|referring/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=/p1_role=documenting_clinician|referring/documenting=P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=/p1_role=nurse/documenting=": [],
+"k5_person/e2_performer=documenting_team/e2_person=/p1_role=nurse/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=/p1_role=nurse/documenting=P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=/p1_role=nurse/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=/p1_role=nurse/documenting=P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=/p1_role=referring/documenting=": [],
+"k5_person/e2_performer=documenting_team/e2_person=/p1_role=referring/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=/p1_role=referring/documenting=P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=/p1_role=referring/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=/p1_role=referring/documenting=P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1/p1_role=-documenting_clinician/documenting=": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1/p1_role=-documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1/p1_role=-documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1/p1_role=-documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1/p1_role=-documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1/p1_role=documenting_clinician/documenting=": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1/p1_role=documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1/p1_role=documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1/p1_role=documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1/p1_role=documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1/p1_role=documenting_clinician|referring/documenting=": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1/p1_role=documenting_clinician|referring/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1/p1_role=documenting_clinician|referring/documenting=P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1/p1_role=documenting_clinician|referring/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1/p1_role=documenting_clinician|referring/documenting=P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1/p1_role=nurse/documenting=": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1/p1_role=nurse/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1/p1_role=nurse/documenting=P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1/p1_role=nurse/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1/p1_role=nurse/documenting=P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1/p1_role=referring/documenting=": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=documenting_team/e2_person=P1/p1_role=referring/documenting=-P1": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=documenting_team/e2_person=P1/p1_role=referring/documenting=P1": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=documenting_team/e2_person=P1/p1_role=referring/documenting=P1|P2": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=documenting_team/e2_person=P1/p1_role=referring/documenting=P2": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=documenting_team/e2_person=P1|P2/p1_role=-documenting_clinician/documenting=": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1|P2/p1_role=-documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1|P2/p1_role=-documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1|P2/p1_role=-documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1|P2/p1_role=-documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1|P2/p1_role=documenting_clinician/documenting=": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1|P2/p1_role=documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1|P2/p1_role=documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1|P2/p1_role=documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1|P2/p1_role=documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1|P2/p1_role=documenting_clinician|referring/documenting=": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1|P2/p1_role=documenting_clinician|referring/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1|P2/p1_role=documenting_clinician|referring/documenting=P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1|P2/p1_role=documenting_clinician|referring/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1|P2/p1_role=documenting_clinician|referring/documenting=P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1|P2/p1_role=nurse/documenting=": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1|P2/p1_role=nurse/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1|P2/p1_role=nurse/documenting=P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1|P2/p1_role=nurse/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1|P2/p1_role=nurse/documenting=P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1|P2/p1_role=referring/documenting=": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1|P2/p1_role=referring/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1|P2/p1_role=referring/documenting=P1": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1|P2/p1_role=referring/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=P1|P2/p1_role=referring/documenting=P2": [],
+"k5_person/e2_performer=documenting_team/e2_person=P2/p1_role=-documenting_clinician/documenting=": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=documenting_team/e2_person=P2/p1_role=-documenting_clinician/documenting=-P1": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=documenting_team/e2_person=P2/p1_role=-documenting_clinician/documenting=P1": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=documenting_team/e2_person=P2/p1_role=-documenting_clinician/documenting=P1|P2": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=documenting_team/e2_person=P2/p1_role=-documenting_clinician/documenting=P2": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=documenting_team/e2_person=P2/p1_role=documenting_clinician/documenting=": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=documenting_team/e2_person=P2/p1_role=documenting_clinician/documenting=-P1": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=documenting_team/e2_person=P2/p1_role=documenting_clinician/documenting=P1": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=documenting_team/e2_person=P2/p1_role=documenting_clinician/documenting=P1|P2": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=documenting_team/e2_person=P2/p1_role=documenting_clinician/documenting=P2": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=documenting_team/e2_person=P2/p1_role=documenting_clinician|referring/documenting=": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=documenting_team/e2_person=P2/p1_role=documenting_clinician|referring/documenting=-P1": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=documenting_team/e2_person=P2/p1_role=documenting_clinician|referring/documenting=P1": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=documenting_team/e2_person=P2/p1_role=documenting_clinician|referring/documenting=P1|P2": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=documenting_team/e2_person=P2/p1_role=documenting_clinician|referring/documenting=P2": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=documenting_team/e2_person=P2/p1_role=nurse/documenting=": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=documenting_team/e2_person=P2/p1_role=nurse/documenting=-P1": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=documenting_team/e2_person=P2/p1_role=nurse/documenting=P1": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=documenting_team/e2_person=P2/p1_role=nurse/documenting=P1|P2": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=documenting_team/e2_person=P2/p1_role=nurse/documenting=P2": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=documenting_team/e2_person=P2/p1_role=referring/documenting=": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=documenting_team/e2_person=P2/p1_role=referring/documenting=-P1": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=documenting_team/e2_person=P2/p1_role=referring/documenting=P1": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=documenting_team/e2_person=P2/p1_role=referring/documenting=P1|P2": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=documenting_team/e2_person=P2/p1_role=referring/documenting=P2": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=-P1/p1_role=-documenting_clinician/documenting=": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=-P1/p1_role=-documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=-P1/p1_role=-documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=-P1/p1_role=-documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=-P1/p1_role=-documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=-P1/p1_role=documenting_clinician/documenting=": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=-P1/p1_role=documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=-P1/p1_role=documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=-P1/p1_role=documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=-P1/p1_role=documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=-P1/p1_role=documenting_clinician|referring/documenting=": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=-P1/p1_role=documenting_clinician|referring/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=-P1/p1_role=documenting_clinician|referring/documenting=P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=-P1/p1_role=documenting_clinician|referring/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=-P1/p1_role=documenting_clinician|referring/documenting=P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=-P1/p1_role=nurse/documenting=": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=-P1/p1_role=nurse/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=-P1/p1_role=nurse/documenting=P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=-P1/p1_role=nurse/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=-P1/p1_role=nurse/documenting=P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=-P1/p1_role=referring/documenting=": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=-P1/p1_role=referring/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=-P1/p1_role=referring/documenting=P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=-P1/p1_role=referring/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=-P1/p1_role=referring/documenting=P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=/p1_role=-documenting_clinician/documenting=": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=/p1_role=-documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=/p1_role=-documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=/p1_role=-documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=/p1_role=-documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=/p1_role=documenting_clinician/documenting=": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=/p1_role=documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=/p1_role=documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=/p1_role=documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=/p1_role=documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=/p1_role=documenting_clinician|referring/documenting=": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=/p1_role=documenting_clinician|referring/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=/p1_role=documenting_clinician|referring/documenting=P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=/p1_role=documenting_clinician|referring/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=/p1_role=documenting_clinician|referring/documenting=P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=/p1_role=nurse/documenting=": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=/p1_role=nurse/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=/p1_role=nurse/documenting=P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=/p1_role=nurse/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=/p1_role=nurse/documenting=P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=/p1_role=referring/documenting=": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=/p1_role=referring/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=/p1_role=referring/documenting=P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=/p1_role=referring/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=/p1_role=referring/documenting=P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1/p1_role=-documenting_clinician/documenting=": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1/p1_role=-documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1/p1_role=-documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1/p1_role=-documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1/p1_role=-documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1/p1_role=documenting_clinician/documenting=": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1/p1_role=documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1/p1_role=documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1/p1_role=documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1/p1_role=documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1/p1_role=documenting_clinician|referring/documenting=": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1/p1_role=documenting_clinician|referring/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1/p1_role=documenting_clinician|referring/documenting=P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1/p1_role=documenting_clinician|referring/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1/p1_role=documenting_clinician|referring/documenting=P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1/p1_role=nurse/documenting=": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1/p1_role=nurse/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1/p1_role=nurse/documenting=P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1/p1_role=nurse/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1/p1_role=nurse/documenting=P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1/p1_role=referring/documenting=": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1/p1_role=referring/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1/p1_role=referring/documenting=P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1/p1_role=referring/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1/p1_role=referring/documenting=P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1|P2/p1_role=-documenting_clinician/documenting=": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1|P2/p1_role=-documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1|P2/p1_role=-documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1|P2/p1_role=-documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1|P2/p1_role=-documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1|P2/p1_role=documenting_clinician/documenting=": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1|P2/p1_role=documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1|P2/p1_role=documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1|P2/p1_role=documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1|P2/p1_role=documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1|P2/p1_role=documenting_clinician|referring/documenting=": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1|P2/p1_role=documenting_clinician|referring/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1|P2/p1_role=documenting_clinician|referring/documenting=P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1|P2/p1_role=documenting_clinician|referring/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1|P2/p1_role=documenting_clinician|referring/documenting=P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1|P2/p1_role=nurse/documenting=": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1|P2/p1_role=nurse/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1|P2/p1_role=nurse/documenting=P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1|P2/p1_role=nurse/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1|P2/p1_role=nurse/documenting=P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1|P2/p1_role=referring/documenting=": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1|P2/p1_role=referring/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1|P2/p1_role=referring/documenting=P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1|P2/p1_role=referring/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P1|P2/p1_role=referring/documenting=P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P2/p1_role=-documenting_clinician/documenting=": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P2/p1_role=-documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P2/p1_role=-documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P2/p1_role=-documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P2/p1_role=-documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P2/p1_role=documenting_clinician/documenting=": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P2/p1_role=documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P2/p1_role=documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P2/p1_role=documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P2/p1_role=documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P2/p1_role=documenting_clinician|referring/documenting=": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P2/p1_role=documenting_clinician|referring/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P2/p1_role=documenting_clinician|referring/documenting=P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P2/p1_role=documenting_clinician|referring/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P2/p1_role=documenting_clinician|referring/documenting=P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P2/p1_role=nurse/documenting=": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P2/p1_role=nurse/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P2/p1_role=nurse/documenting=P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P2/p1_role=nurse/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P2/p1_role=nurse/documenting=P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P2/p1_role=referring/documenting=": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P2/p1_role=referring/documenting=-P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P2/p1_role=referring/documenting=P1": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P2/p1_role=referring/documenting=P1|P2": [],
+"k5_person/e2_performer=documenting_team|other_clinician/e2_person=P2/p1_role=referring/documenting=P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=-P1/p1_role=-documenting_clinician/documenting=": [],
+"k5_person/e2_performer=other_clinician/e2_person=-P1/p1_role=-documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=-P1/p1_role=-documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=-P1/p1_role=-documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=-P1/p1_role=-documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=-P1/p1_role=documenting_clinician/documenting=": [],
+"k5_person/e2_performer=other_clinician/e2_person=-P1/p1_role=documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=-P1/p1_role=documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=-P1/p1_role=documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=-P1/p1_role=documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=-P1/p1_role=documenting_clinician|referring/documenting=": [],
+"k5_person/e2_performer=other_clinician/e2_person=-P1/p1_role=documenting_clinician|referring/documenting=-P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=-P1/p1_role=documenting_clinician|referring/documenting=P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=-P1/p1_role=documenting_clinician|referring/documenting=P1|P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=-P1/p1_role=documenting_clinician|referring/documenting=P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=-P1/p1_role=nurse/documenting=": [],
+"k5_person/e2_performer=other_clinician/e2_person=-P1/p1_role=nurse/documenting=-P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=-P1/p1_role=nurse/documenting=P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=-P1/p1_role=nurse/documenting=P1|P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=-P1/p1_role=nurse/documenting=P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=-P1/p1_role=referring/documenting=": [],
+"k5_person/e2_performer=other_clinician/e2_person=-P1/p1_role=referring/documenting=-P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=-P1/p1_role=referring/documenting=P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=-P1/p1_role=referring/documenting=P1|P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=-P1/p1_role=referring/documenting=P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=/p1_role=-documenting_clinician/documenting=": [],
+"k5_person/e2_performer=other_clinician/e2_person=/p1_role=-documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=/p1_role=-documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=/p1_role=-documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=/p1_role=-documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=/p1_role=documenting_clinician/documenting=": [],
+"k5_person/e2_performer=other_clinician/e2_person=/p1_role=documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=/p1_role=documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=/p1_role=documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=/p1_role=documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=/p1_role=documenting_clinician|referring/documenting=": [],
+"k5_person/e2_performer=other_clinician/e2_person=/p1_role=documenting_clinician|referring/documenting=-P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=/p1_role=documenting_clinician|referring/documenting=P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=/p1_role=documenting_clinician|referring/documenting=P1|P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=/p1_role=documenting_clinician|referring/documenting=P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=/p1_role=nurse/documenting=": [],
+"k5_person/e2_performer=other_clinician/e2_person=/p1_role=nurse/documenting=-P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=/p1_role=nurse/documenting=P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=/p1_role=nurse/documenting=P1|P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=/p1_role=nurse/documenting=P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=/p1_role=referring/documenting=": [],
+"k5_person/e2_performer=other_clinician/e2_person=/p1_role=referring/documenting=-P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=/p1_role=referring/documenting=P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=/p1_role=referring/documenting=P1|P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=/p1_role=referring/documenting=P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1/p1_role=-documenting_clinician/documenting=": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1/p1_role=-documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1/p1_role=-documenting_clinician/documenting=P1": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=other_clinician/e2_person=P1/p1_role=-documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1/p1_role=-documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1/p1_role=documenting_clinician/documenting=": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=other_clinician/e2_person=P1/p1_role=documenting_clinician/documenting=-P1": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=other_clinician/e2_person=P1/p1_role=documenting_clinician/documenting=P1": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=other_clinician/e2_person=P1/p1_role=documenting_clinician/documenting=P1|P2": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=other_clinician/e2_person=P1/p1_role=documenting_clinician/documenting=P2": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=other_clinician/e2_person=P1/p1_role=documenting_clinician|referring/documenting=": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1/p1_role=documenting_clinician|referring/documenting=-P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1/p1_role=documenting_clinician|referring/documenting=P1": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=other_clinician/e2_person=P1/p1_role=documenting_clinician|referring/documenting=P1|P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1/p1_role=documenting_clinician|referring/documenting=P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1/p1_role=nurse/documenting=": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1/p1_role=nurse/documenting=-P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1/p1_role=nurse/documenting=P1": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=other_clinician/e2_person=P1/p1_role=nurse/documenting=P1|P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1/p1_role=nurse/documenting=P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1/p1_role=referring/documenting=": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1/p1_role=referring/documenting=-P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1/p1_role=referring/documenting=P1": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=other_clinician/e2_person=P1/p1_role=referring/documenting=P1|P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1/p1_role=referring/documenting=P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1|P2/p1_role=-documenting_clinician/documenting=": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1|P2/p1_role=-documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1|P2/p1_role=-documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1|P2/p1_role=-documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1|P2/p1_role=-documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1|P2/p1_role=documenting_clinician/documenting=": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1|P2/p1_role=documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1|P2/p1_role=documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1|P2/p1_role=documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1|P2/p1_role=documenting_clinician/documenting=P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1|P2/p1_role=documenting_clinician|referring/documenting=": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1|P2/p1_role=documenting_clinician|referring/documenting=-P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1|P2/p1_role=documenting_clinician|referring/documenting=P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1|P2/p1_role=documenting_clinician|referring/documenting=P1|P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1|P2/p1_role=documenting_clinician|referring/documenting=P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1|P2/p1_role=nurse/documenting=": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1|P2/p1_role=nurse/documenting=-P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1|P2/p1_role=nurse/documenting=P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1|P2/p1_role=nurse/documenting=P1|P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1|P2/p1_role=nurse/documenting=P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1|P2/p1_role=referring/documenting=": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1|P2/p1_role=referring/documenting=-P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1|P2/p1_role=referring/documenting=P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1|P2/p1_role=referring/documenting=P1|P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=P1|P2/p1_role=referring/documenting=P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=P2/p1_role=-documenting_clinician/documenting=": [],
+"k5_person/e2_performer=other_clinician/e2_person=P2/p1_role=-documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=P2/p1_role=-documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=P2/p1_role=-documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=P2/p1_role=-documenting_clinician/documenting=P2": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=other_clinician/e2_person=P2/p1_role=documenting_clinician/documenting=": [],
+"k5_person/e2_performer=other_clinician/e2_person=P2/p1_role=documenting_clinician/documenting=-P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=P2/p1_role=documenting_clinician/documenting=P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=P2/p1_role=documenting_clinician/documenting=P1|P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=P2/p1_role=documenting_clinician/documenting=P2": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=other_clinician/e2_person=P2/p1_role=documenting_clinician|referring/documenting=": [],
+"k5_person/e2_performer=other_clinician/e2_person=P2/p1_role=documenting_clinician|referring/documenting=-P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=P2/p1_role=documenting_clinician|referring/documenting=P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=P2/p1_role=documenting_clinician|referring/documenting=P1|P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=P2/p1_role=documenting_clinician|referring/documenting=P2": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=other_clinician/e2_person=P2/p1_role=nurse/documenting=": [],
+"k5_person/e2_performer=other_clinician/e2_person=P2/p1_role=nurse/documenting=-P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=P2/p1_role=nurse/documenting=P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=P2/p1_role=nurse/documenting=P1|P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=P2/p1_role=nurse/documenting=P2": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+],
+"k5_person/e2_performer=other_clinician/e2_person=P2/p1_role=referring/documenting=": [],
+"k5_person/e2_performer=other_clinician/e2_person=P2/p1_role=referring/documenting=-P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=P2/p1_role=referring/documenting=P1": [],
+"k5_person/e2_performer=other_clinician/e2_person=P2/p1_role=referring/documenting=P1|P2": [],
+"k5_person/e2_performer=other_clinician/e2_person=P2/p1_role=referring/documenting=P2": [
+[
+"events",
+"E2",
+"performer",
+0,
+[
+"person_conflict"
+]
+],
+[
+"events",
+"E2",
+"performer_person",
+0,
+[
+"person_conflict"
+]
+]
+]
+},
+"grid_sha256": "1829e3c19f9d0825eb1c9cac54856d908ab7e5a9910c5e83db832e36b2c36c54",
+"recorded_consistency_sha256": "9e31e5a4c91ea19722562589a6666972d7694ac9f83c5647cf1205ec07841cc6"
+}

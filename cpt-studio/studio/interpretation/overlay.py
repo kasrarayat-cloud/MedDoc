@@ -947,7 +947,8 @@ def _addon(record: Record, evaluation: Evaluation, counted: Collection[str]) -> 
 def recount(rows: Sequence[Stored], counted_keys: Iterable[str], engine_keys: Iterable[str],
             coding: Mapping[str, Any], R: FactSet, *, retrieval: Any = (),
             member: Optional[engine_assess.MemberContext] = None, out_of_competition: Iterable[str] = (),
-            answered: Iterable[str] = (), assessed: Iterable[str] = (), uncounted: Iterable[str] = ()) -> Recount:
+            answered: Iterable[str] = (), assessed: Iterable[str] = (), uncounted: Iterable[str] = (),
+            released: Iterable[str] = ()) -> Recount:
     """The read-time engine (module docstring) over ``rows`` (one assessment's stored rows), the reviewer's counted set
     ``counted_keys`` and the engine's own ``engine_keys`` (its selected codes and those it excluded by a member's
     answer): the per-code rule run again for each (engine/evaluate.decide), the combination over each set
@@ -978,7 +979,14 @@ def recount(rows: Sequence[Stored], counted_keys: Iterable[str], engine_keys: It
     Raises UnreadableRecord for a record it cannot read and RecordMismatch when the engine's own counted set does not
     reproduce a stored code's held facts: ONE rule for every hold read time recomputes (DECISIONS D283, G3-32 option
     (b); ``_RECOMPUTED``) - a stored base, base-within, competing, same-day or ADDON hold the engine's own counted set
-    does not give is never carried as a hold read time does not recompute."""
+    does not give is never carried as a hold read time does not recompute.
+
+    r2b (DECISIONS D297, W2R-1): ``released`` - the codes the engine excluded by a member's answer whose answer read
+    time no longer applies (review_view's fixed point) - are read on the reviewer's side as the selected codes they were:
+    in its competition (unless an answer or a rejection takes them out, as any code) and counted by its ADDON row -
+    unless D294 RD-2 leaves the code unsure (a statement may still exclude it) and the reviewer did not reinstate it
+    (D268, D297 Q3): a released answer never counts a primary assess would not count (DECISIONS D304). The engine's own
+    side reproduces the stored record as it is, their answer's exclusion included."""
     counted = [key for key in dict.fromkeys(counted_keys)]
     engine = [key for key in dict.fromkeys(engine_keys)]
     by_key = {p.key: p for p in rows}
@@ -1002,7 +1010,7 @@ def recount(rows: Sequence[Stored], counted_keys: Iterable[str], engine_keys: It
     before = engine_assess.compete_without(combination.combine(tuple(stored_members.values()), acts, R),
                                            stored_members, engine_out | taken, R)
     after = engine_assess.compete_without(combination.combine(tuple(members.values()), acts, R), members,
-                                          frozenset(out_of_competition) | engine_out, R)
+                                          frozenset(out_of_competition) | (engine_out - frozenset(released)), R)
     # DECISIONS D268: the codes the ADDON row counts - over the engine's own set its codes no answer excluded (assess's
     # last pass: the counted codes less those a member's answer excluded), over the reviewer's the counted codes no
     # answer takes out of review (the engine's marker or the overlay's own, ``answered``)
@@ -1016,7 +1024,9 @@ def recount(rows: Sequence[Stored], counted_keys: Iterable[str], engine_keys: It
     reinstated = frozenset(counted) - frozenset(engine)
     left_out = engine_answered | frozenset(uncounted) | unsure  # D283 G1-03: what assess left out of its ADDON count
     engine_addon = frozenset(found.code for key, found in stored_members.items() if key not in left_out)
-    gone = engine_answered | frozenset(answered) | (unsure - reinstated)
+    # r2b (D297, W2R-1): a code whose answer read time released counts on the reviewer's side - unless RD-2 leaves it
+    # unsure and the reviewer did not reinstate it (D304: the fail-closed ADDON reading governs read time too)
+    gone = (engine_answered - frozenset(released)) | frozenset(answered) | (unsure - reinstated)
     review_addon = frozenset(found.code for key, found in members.items() if key not in gone)
     live: dict[str, Live] = {}
     for record in records:
@@ -1344,15 +1354,88 @@ def _answerable(live: Live, stored: Sequence[Any]) -> list[Any]:
     return [fact for fact in stored if fact == live.item.held.fact]
 
 
-def _bound_form(p: Stored, live: Optional[Live], reworded: bool, fact: str) -> str:
+def _bound_form(p: Stored, live: Optional[Live], reworded: bool, fact: str, own: Sequence[Id] = (),
+                R: Optional[FactSet] = None) -> str:
     """r2 (DECISIONS D294): the member form of the question an answer to ``fact`` binds on ``p`` - the live item's where
     read time asks it (worded, or in fixed words where its released hold gave way: ``_answerable``), else the stored
     question's of that fact (wording.asked_form over the record's item), '' for a reinstatement's wait."""
-    if (live is not None and reworded and live.item is not None and fact == live.item.held.fact
-            and (live.worded is not None or _released_item(live))):
-        return _live_form(live)
+    if _asks_live(live, reworded, fact):
+        return _live_form(cast(Live, live), own, R)
     return next((wording.asked_form(q, p.support) for q in p.questions
                  if q.get('scope') == 'proposal' and q.get('fact') == fact), '')
+
+
+def _asks_live(live: Optional[Live], reworded: bool, fact: str) -> bool:
+    """Whether the question ``p`` presents under ``fact`` is its live item (read time asks it: worded, or in fixed words
+    where its released hold gave way) - ``_bound_form``'s, ``_bound_shown``'s and ``_presented``'s one reading."""
+    return (live is not None and reworded and live.item is not None and fact == live.item.held.fact
+            and (live.worded is not None or _released_item(live)))
+
+
+def _bound_shown(p: Stored, live: Optional[Live], reworded: bool, fact: str, own: Sequence[Id] = (),
+                 R: Optional[FactSet] = None) -> Optional[dict[str, Any]]:
+    """r2d (DECISIONS D301, RBWX-5): the question an answer to ``fact`` binds on ``p``, as its row showed it when asked -
+    the live item's (its message, form, act record and quoted passages: ``_live_named``) where read time asks it, else
+    the stored question of that fact (its row id, read through its record's item: wording.asked_form, asked_act and
+    asked_quoted); None for none (a reinstatement's wait shows the code's own passages)."""
+    if _asks_live(live, reworded, fact):
+        found = cast(Live, live)
+        item = cast(engine_questions.Item, found.item)
+        return {'id': '', 'scope': 'proposal', 'family': p.family, 'fact': fact, 'message': item.message.value,
+                'form': _live_form(found, own, R), **_live_named(found, own, R)}
+    return next((dict(q) for q in p.questions if q.get('scope') == 'proposal' and q.get('fact') == fact
+                 and q.get('id')), None)
+
+
+def live_fingerprint(code: str, live: Live) -> str:
+    """r2d (DECISIONS D301, RBWX-3): the fingerprint of a code's live item - engine/assess.question_fingerprint over the
+    item read time presents (the item the passes give over the counted set, as engine/assess words it), which is the
+    fingerprint engine/assess stores for that item and binds an answer to it by: an answer the door records to a live
+    question is read alike by read time and by the AGAIN that presents the same item. '' for no item."""
+    if live.item is None:
+        return ''
+    return engine_assess.question_fingerprint(code, live.member.family, live.item)
+
+
+def _presented(p: Stored, live: Optional[Live], reworded: bool, fact: str) -> str:
+    """r2d (DECISIONS D301, RBWX-3): the engine fingerprint of the question ``p`` presents under ``fact`` in a pass of
+    the answer passes - its live item's where read time asks it (``live_fingerprint``), else its stored item's
+    (support['question'], when the record's item is of that fact) - read as ``_bound_form`` reads the form; '' for a
+    question no engine item is (a reinstatement's wait: an answer to it binds by its key, as before)."""
+    if _asks_live(live, reworded, fact):
+        return live_fingerprint(p.code, cast(Live, live))
+    support = p.support if isinstance(p.support, Mapping) else {}
+    item, question = support.get('item'), support.get('question')
+    if isinstance(item, Mapping) and item.get('fact') == fact and isinstance(question, str):
+        return question
+    return ''
+
+
+def _binds(p: Stored, live: Optional[Live], reworded: bool, fact: str, reads: Collection[tuple[str, str, str]],
+           fingerprints: Mapping[tuple[str, str, str], str]) -> bool:
+    """r2d (DECISIONS D301, RBWX-3): whether the answer read time holds under ``p``'s key for ``fact`` binds the question
+    ``p`` presents under ``fact`` in this pass, as engine/assess's passes bind it (_apply_answers): an answer the engine
+    reads (``reads``: it carries its question's fingerprint) only the item whose fingerprint it carries (``_presented``;
+    a question no engine item is - a reinstatement's wait - by its key, as before); one the overlay binds by its key
+    (a key-bound fact, the earlier form) by its key."""
+    key = (p.code, p.family, fact)
+    if key not in reads:
+        return True
+    presented = _presented(p, live, reworded, fact)
+    return not presented or presented == fingerprints.get(key, '')
+
+
+def _answer_questions(answers: Any) -> dict[tuple[str, str, str], str]:
+    """{(code, family, fact): the fingerprint of the answer ``proposal_answers`` reads under that key} (r2d, D301
+    RBWX-3: the first answer per key that leaves its detail unavailable, as proposal_answers keeps it)."""
+    out: dict[tuple[str, str, str], str] = {}
+    for answer in answers or ():
+        code, value = _field(answer, 'code') or '', _field(answer, 'value') or ''  # type: ignore[no-untyped-call]
+        if code and value in UNAVAILABLE_ANSWERS:
+            key = (str(code), str(_field(answer, 'family') or ''),  # type: ignore[no-untyped-call]
+                   str(_field(answer, 'fact') or ''))  # type: ignore[no-untyped-call]
+            out.setdefault(key, str(_field(answer, 'question') or ''))  # type: ignore[no-untyped-call]
+    return out
 
 
 def _engine_form(p: Stored) -> str:
@@ -1363,6 +1446,15 @@ def _engine_form(p: Stored) -> str:
     return wording.recorded_form(item) if isinstance(item, Mapping) and item.get('fact') == fact else ''
 
 
+def _released_answer(live: Optional[Live], fact: str) -> bool:
+    """r2b (DECISIONS D297, W2R-1): whether read time's recount releases the hold the item a member's answer was bound
+    to rests on - the code's stored item (the one engine/assess bound the answer to by its fingerprint: its record's held
+    facts give it, of the answered ``fact``) is held by a hold the counted set no longer gives: the answer then excludes
+    nothing. False where nothing was recomputed for the code (no Live: fail-closed, the answer stands)."""
+    return (live is not None and live.stored_item is not None and live.stored_item.held.fact == fact
+            and live.stored_item.held not in live.held)
+
+
 def _released_item(live: Live) -> bool:
     """r2 (DECISIONS D294, WORDS-F2): whether the recount released the hold the stored item rests on - a cross-code hold
     of the stored record (the combination's or the ADDON row's) that the counted set no longer gives - while the code
@@ -1371,13 +1463,88 @@ def _released_item(live: Live) -> bool:
             and live.stored_item.held not in live.held)
 
 
-def _live_form(live: Live) -> str:
-    """The member form of the live item (wording.member_form over its message and the slots its Fill gives)."""
+def _live_form(live: Live, own: Sequence[Id] = (), R: Optional[FactSet] = None) -> str:
+    """The member form of the live item (wording.member_form over its message and the slots its Fill gives; r2b, D297
+    W2R-2: wording.item_record's, which reads ``own``, the acts the code binds, for an item about another act; r2d,
+    D301 RBWX-2: and whether its examination is the code's own session's, over ``R``: ``item_shown``)."""
     if live.item is None:
         return ''
-    fill = live.item.fill
-    return wording.member_form(wording.Message(live.item.message.value),
-                               wording.Slots(act=fill.act, family=fill.family))
+    return item_shown(live.item, own, R)[0]
+
+
+def _supported_session(R: FactSet, subject: Id) -> Optional[Id]:
+    found = facts_.fact(R, subject, Attribute.SESSION)
+    return found.value if found.result is Result.SUPPORTED and isinstance(found.value, Id) else None
+
+
+def own_session_examination(R: Optional[FactSet], item: engine_questions.Item, own: Sequence[Id]) -> Optional[bool]:
+    """r2d (DECISIONS D301, RBWX-2): whether the examination ``item`` names is the examination of the session the code is
+    matched to - the ONE rule the renderer (jobs._item_record) and read time read (wording.item_record's
+    ``own_session``). The code's session is the supported session of the acts it binds (``own``: its evaluation's
+    bindings and supporting acts). An item about no held object, or about an act the code binds, names the code's own
+    act; otherwise the session of the examination it names must be one of those sessions: the session its held subject
+    is (a session) or is supported in (an event), and - for DIGITAL_SCOPE, which names the held session's examination
+    when its claimed examination's session is not established - the held session engine/questions names
+    (_held_session, over the code's acts). Another session's examination (an E/M's same-day procedure's included) and
+    one whose session is not established are not. None without a FactSet (no reading: the slots alone)."""
+    if R is None:
+        return None
+    subject = item.held.subject
+    if subject is None or subject in tuple(own):
+        return True
+    sessions = {found for found in (_supported_session(R, act) for act in own) if found is not None}
+    family = getattr(subject, 'family', None)
+    if family is IdFamily.SESSION:
+        return subject in sessions
+    if family is not IdFamily.EVENT:
+        return False
+    named = _supported_session(R, subject)
+    if named is None and item.message is engine_questions.MessageId.DIGITAL_SCOPE:
+        rest = engine_questions._digital_rest(item.held, R)
+        named = engine_questions._held_session(R, rest, (), tuple(own)) if rest is not None else None
+    return named is not None and named in sessions
+
+
+def item_shown(item: engine_questions.Item, own: Sequence[Id], R: Optional[FactSet]
+               ) -> tuple[str, dict[str, object], list[list[int]]]:
+    """(form, act record, quoted passages) of an engine item as its member row shows it - the ONE reading the renderer
+    records (jobs._item_record) and read time words a live item by: wording.item_record over its message, slots, held
+    subject and ``own`` (the acts its code binds), with whether its examination is the code's own session's
+    (``own_session_examination`` over ``R``: r2d, D301 RBWX-2), and wording.quoted_record of its slots (every passage
+    its question quotes: r2d, D301 RBWX-1)."""
+    form, act_ref = wording.item_record(wording.Message(item.message.value), item.fill, item.held.subject, tuple(own),
+                                        own_session=own_session_examination(R, item, own), fact=item.held.fact)
+    return form, act_ref, wording.quoted_record(item.fill)
+
+
+def _own_acts(found: Optional[Recount], key: str) -> tuple[Id, ...]:
+    """The acts the code ``key`` binds over the recount (its evaluation's bindings and supporting acts), () when none."""
+    evaluation = found.evaluations.get(key) if found is not None else None
+    if evaluation is None:
+        return ()
+    return tuple(dict.fromkeys((*evaluation.bindings.values(), *evaluation.supporting)))
+
+
+def _live_named(live: Live, own: Sequence[Id], R: Optional[FactSet] = None) -> dict[str, Any]:
+    """r2b (DECISIONS D297, W2R-2): what a live question read time asks carries beside its message - its form where its
+    slots choose one its message alone does not give (the session's examination: wording.member_form), and the act its
+    item names where that is not the code's own act or its form names an act (wording.item_record: its spans and, for a
+    template form, its kinds) - so the member's row, the code's qualification and the door read the live item as they
+    read a stored one. {} for any other item (the pinned shape of a live question: D284's ADDON). r2d (DECISIONS D301):
+    read by ``item_shown`` over ``R`` (RBWX-2: whether its examination is the code's own session's), with the passages
+    its question quotes (``quoted``, RBWX-1) where it quotes any."""
+    if live.item is None:
+        return {}
+    message = wording.Message(live.item.message.value)
+    form, act_ref, quoted = item_shown(live.item, own, R)
+    out: dict[str, Any] = {}
+    if form != wording.member_form(message):
+        out['form'] = form
+    if act_ref:
+        out['act_ref'] = act_ref
+    if quoted:
+        out['quoted'] = quoted
+    return out
 
 
 # r2 (D294, WORDS-F2): each conflict key a held fact can carry (conflict:<kind>, RANK row 1), by its kind - read by key,
@@ -1385,16 +1552,20 @@ def _live_form(live: Live) -> str:
 _CONFLICT_KEYS: Mapping[str, Kind] = MappingProxyType({f'conflict:{kind.value}': kind for kind in Kind})
 
 
-def _fact_sentence(fact: str, form: str = '') -> str:
+def _fact_sentence(fact: str, form: str = '', act: str = '', whole: str = '') -> str:
     """CPT Studio's fixed sentence for a held fact's key, naming no cause and quoting nothing: what read time asks of an
     item it cannot word (``_unworded_question``) - an item of a member form by its form's own words
     (wording.FORM_MISSING: never its key's where the key's row asks something else, D294 - "in which procedure the act
     was done" is never said of a route or tract whose procedure is known, D267), else the fact in the member's own words
     (wording.MISSING for the facts of D181 and the new path, else studio.validation.questions.missing), a conflict's act
-    by its one label (D254 rule 2: 'another act' for a kind that names none)."""
+    by its one label (D254 rule 2: 'another act' for a kind that names none). r2b (DECISIONS D297): a form whose row
+    states what CPT Studio's reading records says that (wording.FORM_RECORDED), and a template form names the acts its
+    item records (``act``, ``whole``: wording.form_text)."""
+    if form in wording.FORM_RECORDED:
+        return wording.FORM_RECORDED[form]
     missing = wording.FORM_MISSING.get(form)
     if missing is not None:
-        return f'CPT Studio could not confirm from the document {missing}.'
+        return f'CPT Studio could not confirm from the document {wording.form_text(missing, act, whole)}.'
     kind = _CONFLICT_KEYS.get(fact)
     if kind is not None:
         about = (questions.missing('conflict:', wording.kind_words(kind)) if wording.named_kind(kind) else
@@ -1404,28 +1575,36 @@ def _fact_sentence(fact: str, form: str = '') -> str:
     return f'A detail is needed: {about}.'
 
 
-def _unworded_question(p: Stored, live: Live) -> dict[str, Any]:
+def _unworded_question(p: Stored, live: Live, own: Sequence[Id] = (), R: Optional[FactSet] = None) -> dict[str, Any]:
     """r2 (D294, WORDS-F2): the question of a live item read time cannot word, given way to by a released hold: its fact,
-    its message and its form, in CPT Studio's fixed sentence for its key (``_fact_sentence``)."""
+    its message and its form, in CPT Studio's fixed sentence for its key (``_fact_sentence``). r2b (D297, W2R-2): with
+    the act its item names (``_live_named``: ``own``, the acts the code binds), whose kinds a template form's sentence
+    names; r2d (D301, RBWX-1): and the passages its question quotes."""
     item = cast(engine_questions.Item, live.item)  # _released_item: a live item
-    form = _live_form(live)
-    words = _fact_sentence(item.held.fact, form)
+    form = _live_form(live, own, R)
+    named = _live_named(live, own, R)
+    act_ref, quoted = named.get('act_ref'), named.get('quoted')
+    act = wording.recorded_act(act_ref)
+    words = _fact_sentence(item.held.fact, form, *((act[1], act[2]) if act is not None else ()))
     return {'id': '', 'scope': 'proposal', 'family': p.family, 'fact': item.held.fact, 'question': words,
-            'reason': words, 'message': item.message.value, 'form': form}
+            'reason': words, 'message': item.message.value, 'form': form, **({'act_ref': act_ref} if act_ref else {}),
+            **({'quoted': quoted} if quoted else {})}
 
 
 def _recount_or_none(rows: Sequence[Stored], counted: Iterable[str], engine: Iterable[str],
                      coding: Optional[Mapping[str, Any]], facts: Optional[FactSet], retrieval: Any,
                      member: Optional[engine_assess.MemberContext], out: Iterable[str], answered: Iterable[str] = (),
-                     assessed: Iterable[str] = (), uncounted: Iterable[str] = ()) -> Optional[Recount]:
+                     assessed: Iterable[str] = (), uncounted: Iterable[str] = (),
+                     released: Iterable[str] = ()) -> Optional[Recount]:
     """recount, or None when the coding or the FactSet cannot be read, or a record cannot be read or is not reproduced
     by the engine's own counted set: nothing is then recomputed (fail-closed). ``uncounted``: assessed_uncounted of the
-    stored record (DECISIONS D283 item 3)."""
+    stored record (DECISIONS D283 item 3); ``released``: recount's (r2b, D297 W2R-1)."""
     if coding is None or facts is None:
         return None
     try:
         return recount(rows, counted, engine, coding, facts, retrieval=retrieval, member=member,
-                       out_of_competition=out, answered=answered, assessed=assessed, uncounted=uncounted)
+                       out_of_competition=out, answered=answered, assessed=assessed, uncounted=uncounted,
+                       released=released)
     except (ValueError, LookupError, TypeError):  # UnreadableRecord, RecordMismatch, a record the engine cannot read
         return None
 
@@ -1541,55 +1720,96 @@ def review_view(stored: Sequence[Stored], decisions: Mapping[str, Any], *, compl
     # ADDON row a pass moves is read again and its answer binds only the item it then presents (C7's correction: assess
     # and read time alike) - never "an answer that binds stands" for it.
     reads = _engine_read_keys(answers)
-    stands: dict[str, tuple[str, str]] = {p.key: answered_by_engine(p) for p in rows if answered_by_engine(p)[0]}
-    bound_now: dict[str, tuple[str, str]] = {}
-    # r2 (DECISIONS D294): the member form of the question each binding answers (``_bound_form``), which the view of a
-    # code an answer leaves detail_unavailable carries (View.answered_form) for the row that shows the answer in effect
-    answered_forms: dict[str, str] = {p.key: _engine_form(p) for p in rows if p.key in stands}
-    passed: Optional[engine_assess.AnswerPass] = None
-    found: Optional[Recount] = None
-    live_of: Mapping[str, Live] = {}
-    for _ in range(2 * len(rows) + 4):  # the passes end (bindings of an add-on are lost at most once); bounded anyway
-        passed = engine_assess.answer_pass(_values(stands), _values(bound_now), passed)
-        out = set(passed.out) | rejected_answered
-        # FINAL-V2 4.8: the read-time engine over the counted set, from the frozen inventory; a record or an inventory
-        # that cannot be read, or that the engine's own counted set does not reproduce, recomputes nothing (fail-closed)
-        found = _recount_or_none(rows, [p.key for p in candidates], engine_keys, coding, facts, retrieval, member, out,
-                                 passed.uncounted, assessed, uncounted_record)
-        live_of = found.live if found is not None and (counted_moved or _competition_moved(found)
-                                                       or _addon_moved(found)) else {}
-        # the codes whose item stays but whose words name what the decisions moved (a rejected code, a released act)
-        renamed_keys = ({key for key, live in live_of.items()
-                         if not live.moved and _renamed(live.item, key, found.stored_joined, found.joined, facts)}
-                        if found is not None and facts is not None else set())
-        # Member answers, bound to the item the code presents now, or to its stored questions where nothing was
-        # recomputed: an answer the engine reads stands once bound; an overlay-bound one is bound again each pass
-        next_stands: dict[str, tuple[str, str]] = dict(stands)
-        next_bound: dict[str, tuple[str, str]] = {}
-        for p in rows:
-            if p.key in stands:
-                continue
-            live = live_of.get(p.key)
-            open_facts = [q.get('fact') for q in p.questions if q.get('scope') == 'proposal']
-            if live is not None and (live.moved or p.key in renamed_keys):
-                open_facts = _answerable(live, open_facts)
-            if p.key in counted and p.bucket == EXCLUDED:
-                open_facts += [q['fact'] for q in _reinstatement_waits(p)]
-            # DECISIONS D283, G1-01 option (c): an answer to the competing question binds nothing, at assess or at
-            # read time (engine/assess.overlay_bound never reads one) - the competing hold is settled by the
-            # reviewer's rejection (D270 DQ-3), never by an answer
-            by = next(((fact, answered[(p.code, p.family, fact)]) for fact in open_facts
-                       if fact != COMPETING_FACT and answered.get((p.code, p.family, fact))), ('', ''))
-            if by[0]:
-                (next_stands if (p.code, p.family, by[0]) in reads else next_bound)[p.key] = by
-                answered_forms[p.key] = _bound_form(p, live, live is not None and (live.moved or p.key in renamed_keys),
-                                                    by[0])
-        settled = next_stands == stands and next_bound == bound_now
-        stands, bound_now = next_stands, next_bound
-        if found is None or settled:
+    # r2d (DECISIONS D301, RBWX-3): an answer the engine reads binds, in each pass, only the item whose fingerprint it
+    # carries, as engine/assess's passes bind it (``_binds``) - so a row's answer recorded with the fingerprint of the
+    # question the row shows (the effective view's) binds that question in the pass that presents it, never another item
+    # its code presents under the same fact key in an earlier pass
+    fingerprints = _answer_questions(answers)
+    # r2b (DECISIONS D297, W2R-1): the codes the engine excluded by a member's answer (its marker, the stored record) -
+    # each excluded by the answer it read, unless read time's recount under the current decisions releases the hold the
+    # answer's item rests on (``_released_answer``): that answer then excludes nothing at read time, whatever its order
+    # with the decision and whether or not the AGAIN has run (the AGAIN, decision-blind, records it again) - the code is
+    # read with its live holds, as the selected code it was, and the answer is listed no longer asked
+    # (review.answer_states). ``unfrozen`` is the reading's fixed point: the frozen codes whose answer's hold the passes
+    # over exactly that set release (from none; bounded; a set that never settles releases none - fail-closed).
+    frozen: dict[str, tuple[str, str]] = {p.key: answered_by_engine(p) for p in rows if answered_by_engine(p)[0]}
+    by_key = {p.key: p for p in rows}
+
+    def reading(unfrozen: frozenset[str]) -> SimpleNamespace:
+        """The answer passes with the frozen codes of ``unfrozen`` read as their record made before their answer."""
+        stands: dict[str, tuple[str, str]] = {key: value for key, value in frozen.items() if key not in unfrozen}
+        bound_now: dict[str, tuple[str, str]] = {}
+        # r2 (DECISIONS D294): the member form of the question each binding answers (``_bound_form``), which the view of
+        # a code an answer leaves detail_unavailable carries (View.answered_form) for the row that shows the answer
+        answered_forms: dict[str, str] = {key: _engine_form(by_key[key]) for key in stands}
+        # r2d (DECISIONS D301, RBWX-5): and the question it was bound to, as its row showed it (``_bound_shown``)
+        answered_shown: dict[str, Optional[dict[str, Any]]] = {}
+        passed: Optional[engine_assess.AnswerPass] = None
+        found: Optional[Recount] = None
+        live_of: Mapping[str, Live] = {}
+        renamed_keys: set[str] = set()
+        for _ in range(2 * len(rows) + 4):  # the passes end (bindings of an add-on are lost at most once); bounded
+            passed = engine_assess.answer_pass(_values(stands), _values(bound_now), passed)
+            out = set(passed.out) | rejected_answered
+            # FINAL-V2 4.8: the read-time engine over the counted set, from the frozen inventory; a record or an
+            # inventory that cannot be read, or that the engine's own counted set does not reproduce, recomputes nothing
+            # (fail-closed)
+            found = _recount_or_none(rows, [p.key for p in candidates], engine_keys, coding, facts, retrieval, member,
+                                     out, passed.uncounted, assessed, uncounted_record, unfrozen)
+            live_of = found.live if found is not None and (counted_moved or _competition_moved(found)
+                                                           or _addon_moved(found)) else {}
+            # the codes whose item stays but whose words name what the decisions moved (a rejected code, a released act)
+            renamed_keys = ({key for key, live in live_of.items()
+                             if not live.moved and _renamed(live.item, key, found.stored_joined, found.joined, facts)}
+                            if found is not None and facts is not None else set())
+            # Member answers, bound to the item the code presents now, or to its stored questions where nothing was
+            # recomputed: an answer the engine reads stands once bound; an overlay-bound one is bound again each pass
+            next_stands: dict[str, tuple[str, str]] = dict(stands)
+            next_bound: dict[str, tuple[str, str]] = {}
+            for p in rows:
+                if p.key in stands:
+                    continue
+                live = live_of.get(p.key)
+                reworded = live is not None and (live.moved or p.key in renamed_keys)
+                open_facts = [q.get('fact') for q in p.questions if q.get('scope') == 'proposal']
+                if reworded:
+                    open_facts = _answerable(cast(Live, live), open_facts)
+                if p.key in counted and p.bucket == EXCLUDED:
+                    open_facts += [q['fact'] for q in _reinstatement_waits(p)]
+                # DECISIONS D283, G1-01 option (c): an answer to the competing question binds nothing, at assess or at
+                # read time (engine/assess.overlay_bound never reads one) - the competing hold is settled by the
+                # reviewer's rejection (D270 DQ-3), never by an answer
+                by = next(((fact, answered[(p.code, p.family, fact)]) for fact in open_facts
+                           if fact != COMPETING_FACT and answered.get((p.code, p.family, fact))
+                           and _binds(p, live, reworded, fact, reads, fingerprints)), ('', ''))
+                if by[0]:
+                    (next_stands if (p.code, p.family, by[0]) in reads else next_bound)[p.key] = by
+                    answered_forms[p.key] = _bound_form(p, live, reworded, by[0], _own_acts(found, p.key), facts)
+                    answered_shown[p.key] = _bound_shown(p, live, reworded, by[0], _own_acts(found, p.key), facts)
+            settled = next_stands == stands and next_bound == bound_now
+            stands, bound_now = next_stands, next_bound
+            if found is None or settled:
+                break
+        else:  # not reached on a record the engine made (the passes end); fail-closed: nothing recomputed
+            found, live_of = None, {}
+        return SimpleNamespace(stands=stands, bound_now=bound_now, answered_forms=answered_forms, passed=passed,
+                               found=found, live_of=live_of, renamed_keys=renamed_keys, answered_shown=answered_shown)
+
+    unfrozen: frozenset[str] = frozenset()
+    passes = reading(unfrozen)
+    for _ in range(len(frozen) + 2):
+        now = frozenset(key for key, (fact, _) in frozen.items()
+                        if _released_answer(passes.live_of.get(key), fact))
+        if now == unfrozen:
             break
-    else:  # not reached on a record the engine made (the passes end); fail-closed: nothing recomputed
-        found, live_of = None, {}
+        unfrozen = now
+        passes = reading(unfrozen)
+    else:  # a set that never settles: every frozen code excluded by its answer, as stored (fail-closed)
+        unfrozen = frozenset()
+        passes = reading(unfrozen)
+    stands, bound_now, answered_forms = passes.stands, passes.bound_now, passes.answered_forms
+    answered_shown = passes.answered_shown
+    passed, found, live_of, renamed_keys = passes.passed, passes.found, passes.live_of, passes.renamed_keys
     # the pass the last binding leaves (the bindings of the last pass, which the loop ended on): the competition's and
     # the ADDON count's sets - kept so, where nothing was recomputed, a rival this pass's answers took out of the
     # competition still marks the stored hold that names it stale (``_rival_out``)
@@ -1618,6 +1838,9 @@ def review_view(stored: Sequence[Stored], decisions: Mapping[str, Any], *, compl
         d = decided.get(p.key)
         action = d.action if d is not None else ''
         chosen = tuple(d.modifiers) if d is not None and action == APPROVE else ()
+        # r2b (D297, W2R-1): a code whose engine-read answer read time no longer applies is the selected code it was
+        reopened = p.key in unfrozen
+        released_answer = frozen[p.key][0] if reopened else ''
         if p.key in unavailable:
             fact, value = unavailable[p.key]
             words = ANSWER_WORDS.get(value, 'unavailable')
@@ -1629,16 +1852,22 @@ def review_view(stored: Sequence[Stored], decisions: Mapping[str, Any], *, compl
                 blocker=(f'{p.code} was approved, but a detail it needs was answered as {words}: revoke the approval'
                          if action == APPROVE else ''),
                 recomputed=(), stale=(), modifier_review=None, modifiers=chosen, summary=summary(p),
-                answer=value, answered=fact, answered_form=answered_forms.get(p.key, ''))
+                answer=value, answered=fact, answered_form=answered_forms.get(p.key, ''),
+                answered_question=answered_shown.get(p.key),
+                released_answer=released_answer)
             continue
+        selected_like = p.bucket == SELECTED or reopened
         items = [dict(c) for c in p.checks]
         questions_ = [dict(q) for q in p.questions
                       if not (q.get('scope') != 'proposal' and (q.get('family'), q.get('fact')) in closed)]
         added, released, recomputed, stale = [], [], [], []
+        live_asked: list[tuple[str, str]] = []  # r2d (D301, RBWX-3): (fact, engine fingerprint) of each live question
         active = p.key in keys
         stored_clear = _reinstatement_clear(p)
         live = live_of.get(p.key) if active else None
-        status = p.status
+        # r2b (D297, W2R-1): a reopened code's own status is the selected code's it was - it presented an item (an answer
+        # bound it), so it was held - read with its live holds below
+        status = NEEDS_CLARIFICATION if reopened else p.status
         base_added = same_day = addon_held = False
         if live is not None:
             changed = (*live.added, *live.released)
@@ -1658,10 +1887,13 @@ def review_view(stored: Sequence[Stored], decisions: Mapping[str, Any], *, compl
                 # the live question carries its item's message (DECISIONS D284, build list B7: customer_api chooses the
                 # ADDON row's fixed sentence by it, never by the fact key it shares with the status row; r2, D294: so do
                 # the member's row and the door - a TEXT_FREE message's form is its message's, wording.asked_form)
+                # r2b (D297, W2R-2): with its slot-chosen form and the act it names, where they are not its message's
                 questions_ = _proposal_questions(questions_) + [{
                     'id': '', 'scope': 'proposal', 'family': p.family, 'fact': live.worded.fact,
                     'question': live.worded.question, 'reason': live.worded.reason,
-                    'message': live.item.message.value if live.item is not None else ''}]
+                    'message': live.item.message.value if live.item is not None else '',
+                    **_live_named(live, _own_acts(found, p.key), facts)}]
+                live_asked.append((live.worded.fact, live_fingerprint(p.code, live)))
                 recomputed += [_rule_id(held) for held in changed] or (
                     [_rule_id(live.item.held)] if live.item is not None else [])
             elif reworded and _released_item(live):
@@ -1672,7 +1904,9 @@ def review_view(stored: Sequence[Stored], decisions: Mapping[str, Any], *, compl
                 # row are chosen from the live holds: customer_api, answers), an answer binds to it (``_answerable``),
                 # and the released hold is listed recomputed, never stale (a hold the decisions ADDED, which read time
                 # cannot word, stays stale as before)
-                questions_ = _proposal_questions(questions_) + [_unworded_question(p, live)]
+                questions_ = _proposal_questions(questions_) + [_unworded_question(p, live, _own_acts(found, p.key),
+                                                                                   facts)]
+                live_asked.append((cast(engine_questions.Item, live.item).held.fact, live_fingerprint(p.code, live)))
                 recomputed += [_rule_id(held) for held in live.released]
                 stale += [_rule_id(held) for held in live.added]
             elif reworded:  # a changed item read time cannot word: the stored question stands, marked stale (held)
@@ -1680,7 +1914,7 @@ def review_view(stored: Sequence[Stored], decisions: Mapping[str, Any], *, compl
                     _stale_ids(p) or [BASE_CHECK] if live.moved or live.item is None else [_rule_id(live.item.held)])
             else:
                 recomputed += [_rule_id(held) for held in changed]
-            if p.bucket == SELECTED:
+            if selected_like:
                 status = NEEDS_CLARIFICATION if live.held else READY
                 if reworded and live.item is not None and live.worded is None:
                     status = NEEDS_CLARIFICATION
@@ -1697,14 +1931,14 @@ def review_view(stored: Sequence[Stored], decisions: Mapping[str, Any], *, compl
                 stale.append(ADDON_CHECK)
             if addon == 'held':
                 addon_held = True
-                if p.bucket == SELECTED:
+                if selected_like:
                     status = NEEDS_CLARIFICATION
         # a reinstated exclusion is asked what its stored gate says its approval waits for (refutation round 2, L3-8)
-        waits = _reinstatement_waits(p) if p.bucket == EXCLUDED and active else ()
+        waits = _reinstatement_waits(p) if p.bucket == EXCLUDED and active and not reopened else ()
         for wait in waits:
             questions_.append(dict(wait))
             added.append(wait['fact'])
-        if decidable(p):
+        if decidable(p) or reopened:
             at = _find(items, ENDOSCOPIC_CHECK)
             if at is not None and items[at].get('status') != 'not_verified':
                 row = pfs.get(p.code)
@@ -1719,15 +1953,15 @@ def review_view(stored: Sequence[Stored], decisions: Mapping[str, Any], *, compl
                         recomputed.append(ENDOSCOPIC_CHECK)
                 elif moved:
                     stale.append(ENDOSCOPIC_CHECK)
-        if p.bucket == EXCLUDED and active and (base_added or not stored_clear or (live is not None and live.held)
-                                                or addon_held):
+        if p.bucket == EXCLUDED and not reopened and active and (base_added or not stored_clear
+                                                                 or (live is not None and live.held) or addon_held):
             # a reinstated exclusion whose approval waits on a question, or that a hold of the counted set holds, needs
             # clarification: never ready
             status = NEEDS_CLARIFICATION
         withheld = ''
-        if p.bucket == SELECTED and active and not action and base_added and status == NEEDS_CLARIFICATION:
+        if selected_like and active and not action and base_added and status == NEEDS_CLARIFICATION:
             withheld = BASE_CHECK
-        elif p.bucket == EXCLUDED and action == REINSTATE:
+        elif p.bucket == EXCLUDED and not reopened and action == REINSTATE:
             withheld = (REINSTATEMENT_CHECK if not stored_clear else BASE_CHECK if base_added
                         else ADDON_CHECK if addon_held else SAME_DAY_EM_GATE if same_day else '')
         review = _modifier_review(p, effective_members, facts if found is not None else None, retrieval) \
@@ -1735,8 +1969,8 @@ def review_view(stored: Sequence[Stored], decisions: Mapping[str, Any], *, compl
         held = _base_of(live, found.joined if found is not None else None, p.key, facts)
         blocker = ''
         if action == APPROVE:
-            if (p.bucket == SELECTED and status == NEEDS_CLARIFICATION and held and base_added) or (
-                    p.bucket == EXCLUDED and base_added):
+            if (selected_like and status == NEEDS_CLARIFICATION and held and base_added) or (
+                    p.bucket == EXCLUDED and not reopened and base_added):
                 blocker = _held_blocker(p, held, candidates, service.get(p.key))
             elif status == NEEDS_CLARIFICATION:
                 blocker = f'{p.code} was approved, but it now needs clarification; revoke the approval'
@@ -1750,7 +1984,8 @@ def review_view(stored: Sequence[Stored], decisions: Mapping[str, Any], *, compl
             reinstatement_clear=stored_clear and not base_added and not addon_held, same_day_held=same_day,
             blocker=blocker, recomputed=tuple(dict.fromkeys(recomputed)), stale=tuple(dict.fromkeys(stale)),
             modifier_review=review,
-            modifiers=chosen, summary=summary(p), answer='')
+            modifiers=chosen, summary=summary(p), answer='', released_answer=released_answer,
+            live_fingerprints=tuple(item for item in live_asked if item[1]))
     return views
 
 

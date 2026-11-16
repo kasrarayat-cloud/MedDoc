@@ -112,7 +112,15 @@ different lesion, and pass 1 wrote no same_as or distinct_from between the two l
 set asks "Lesions {L} and {M} are different lesions." with its contrary "Lesions {L} and {M} are the same lesion." (the
 forms a written distinct_from and its control take), citing both lesions' description runs; each lesion pair once
 (``lesion_pair``; ClaimSet.lesion_pairs). Settle establishes the distinctness only on a supported claim with its
-control rejected, and only 4.2's apart_by_lesion reads it - to set two lesions apart, never to join them.
+control rejected, and only 4.2's apart_by_lesion reads it - to set two lesions apart, never to join them. DECISIONS
+D300 (round r2c): no pair is asked between two lesions pass 1's same_as may join through other entries, in any state
+(RF-L1: the P5 component, ``same_as_joins``); where either lesion is not claimed as one lesion - a group, or a
+multiplicity not claimed single - the claim asks MEMBERSHIP, "Lesion {M} is not one of the lesions of {L}." with its
+contrary "... is one of ...", or "No lesion of {M} is one of the lesions of {L}." where the act's lesion may itself be
+several (RF-L3: ``lesion_pair_form``, LESION_PAIR_FORMS); every reader of an established distinctness reads the
+appraised one as it reads a written distinct_from (RF-L2: engine/facts.established_distinct); and a set that would pass
+its bound drops the lesion pair claims - which can only release - first, never the document, each drop recorded
+(RF-L5: ``bounded``, ClaimSet.dropped_lesion_pairs).
 
 **What this module never does** (5.6, 5.7 measure 4; P1): it copies no text - cards and claims carry unit ids and
 spans, and the document reaches pass 2 through the framing - reads no word of the document, compares no value with
@@ -188,10 +196,18 @@ CLAIM_BOUND = 640
 #   at door 0 for its claim count at the measured rates, and a set at the bound fits 85% of the output maximum.
 # Measured: demand 780 (the long notes' 0.0390 claims per character; the line gives 755), capacity 1,061 (102.5 tokens
 # per claim), bound 1,000 - the value F3long ran under, whose pin is 8.2's 3fe08a5c... (CLAIM_BOUND_SHA256_V3).
+# DECISIONS D300 RF-L5 (2026-11-16, round r2c): the demand figures RE-MEASURED with every claim class the builder now
+# makes - each of the ten notes' recorded pass 1 replayed through its recording tree with this builder overlaid, and the
+# claim set the Fable path builds from it under gemini-appraisal@2 counted before any lesion pair is dropped (U1's and
+# U3's forms, D295's frame part, D296's lesion pairs as D300 amends them): the eight short notes unchanged, A-note8 756
+# -> 814 (23 lesion pairs) and C-C2MEM-023 711 -> 747 (12) - so demand 840 (0.0420 claims per character; the line
+# gives 803), capacity 1,061 and the bound 1,000 unchanged, its pin unchanged. The capacity's figures
+# (CLAIM_BOUND_PASS2) are pass 2's measured output on the sets sent then, and stay as measured. Was ((19_398, 756),
+# (19_460, 711)) for the two long notes.
 CLAIM_BOUND_SIZE_CHARACTERS = 20_000
 CLAIM_BOUND_NOTES: tuple[tuple[int, int], ...] = (  # (characters, claims): F3all's eight short notes, F3long's two
     (576, 47), (741, 41), (639, 67), (551, 70), (1_205, 76), (1_403, 104), (1_417, 108), (898, 77),
-    (19_398, 756), (19_460, 711))
+    (19_398, 814), (19_460, 747))
 # The length from which a note's claims per character are read as extrapolating to the size bound: the two 19 KB
 # notes, which D278 calls stress material (a realistic note, about two pages, is shorter). The name is kept as the
 # first build of step f3s defined it; it names a threshold of length, never a claim that those notes are realistic.
@@ -331,6 +347,13 @@ class TemplateId(Enum):
     LESION_PLACES = 'lesion.places'
     LESION_DISTINCT = 'lesion.distinct_from'
     LESION_SAME = 'lesion.same_as'
+    # DECISIONS D300 RF-L3 (gemini-appraisal@2 only): a lesion pair's membership forms, asked where either lesion is
+    # not claimed as one lesion - the act's lesion claimed single (NOT_MEMBER, MEMBER), or not (NONE_MEMBER,
+    # SOME_MEMBER)
+    LESION_NOT_MEMBER = 'lesion.not_member'
+    LESION_MEMBER = 'lesion.member'
+    LESION_NONE_MEMBER = 'lesion.not_member.any'
+    LESION_SOME_MEMBER = 'lesion.member.any'
     ENCOUNTER_DATE = 'encounter.date_of_service'
     STMT_BREADTH_ALL = 'statement.scope.breadth.all_of_kind'
     STMT_BREADTH_EXCEPTIVE = 'statement.scope.breadth.exceptive'
@@ -542,6 +565,13 @@ TEMPLATES_V3: Mapping[TemplateId, str] = MappingProxyType({
     T.STMT_BREADTH_TARGETED_ANY: 'This statement denies the act it names, of {target}.',
     T.STMT_BREADTH_EXCEPT_TARGETS_ANY: 'This statement denies only acts of the kind it names other than those of '
                                        '{target}.',
+    # DECISIONS D300 RF-L3: a lesion pair's membership claim and its contrary - the act's lesion ({other}) asked
+    # against the statement's lesions ({lesion}) - worded kind-neutrally, the cards naming the two lesions and the claim
+    # citing their description runs; the second pair where the act's lesion may itself be several
+    T.LESION_NOT_MEMBER: 'Lesion {other} is not one of the lesions of {lesion}.',
+    T.LESION_MEMBER: 'Lesion {other} is one of the lesions of {lesion}.',
+    T.LESION_NONE_MEMBER: 'No lesion of {other} is one of the lesions of {lesion}.',
+    T.LESION_SOME_MEMBER: 'A lesion of {other} is one of the lesions of {lesion}.',
 })
 STATEMENT_TEMPLATES_V3: Mapping[TemplateId, str] = MappingProxyType({
     **STATEMENT_TEMPLATES,
@@ -1599,7 +1629,10 @@ class LesionPair:
     of "Lesions {lesion} and {other} are different lesions."; control, the id of its contrary, "Lesions {lesion} and
     {other} are the same lesion."; lesion, the statement's target lesion; other, the act's. Settle establishes the two
     lesions distinct only when pass 2 supports the claim and rejects the control (settle.appraise's coherence table);
-    apart_by_lesion reads that as it reads a written distinct_from, the pair controls still rejected."""
+    apart_by_lesion reads that as it reads a written distinct_from, the pair controls still rejected. DECISIONS D300
+    RF-L3: where either lesion is not claimed as one lesion the claim asks membership instead (LESION_PAIR_FORMS' second
+    and third forms: "Lesion {other} is not one of the lesions of {lesion}.", with its contrary "... is one of ..."),
+    and only an established non-membership sets the two apart."""
     claim: str
     control: str
     lesion: str
@@ -1631,7 +1664,10 @@ class ClaimSet:
     (family, id); controls, the ids of the claims that serve as a control - a contrary control, a pair control, a
     completeness control or a lesion pair's sameness control - never the id of a real claim (DECISIONS D196: a control
     never asserts what a real claim about the same object asserts, and build() asserts it); seed, the order's seed;
-    lesion_pairs, the lesion pair claims (DECISIONS D296; none under gemini-appraisal@1)."""
+    lesion_pairs, the lesion pair claims (DECISIONS D296; none under gemini-appraisal@1); dropped_lesion_pairs, the
+    lesion pairs - (the statement's lesion, the act's) - left out because the set would have passed the claim bound
+    with them (DECISIONS D300 RF-L5: claims that can only release go first, never the document; settle records each as
+    unappraised, so a dropped pair releases nothing)."""
     cards: tuple[Card, ...]
     claims: tuple[Claim, ...]
     sentences: Mapping[str, str]
@@ -1644,6 +1680,7 @@ class ClaimSet:
     controls: frozenset[str]
     seed: str
     lesion_pairs: tuple[LesionPair, ...] = ()
+    dropped_lesion_pairs: tuple[tuple[str, str], ...] = ()
 
     def claim(self, claim_id: str) -> Claim | None:
         """The claim of that id, None when the set has none."""
@@ -1791,7 +1828,16 @@ _REF_SLOT: Mapping[TemplateId, tuple[Slot, xs.Family]] = MappingProxyType({
     T.SESSION_THROUGH: (Slot.ANATOMY, Family.ANATOMY), T.SESSION_REACHED_ANATOMY: (Slot.ANATOMY, Family.ANATOMY),
     T.SESSION_PART_OF_SESSION: (Slot.OTHER, Family.SESSION), T.ACT_CAUSE_EVENT: (Slot.ACT, Family.EVENT),
     T.STMT_COVERS: (Slot.ACT, Family.EVENT), T.ACT_PART_OF_NEGATED: (Slot.ACT, Family.EVENT),
-    T.LESION_DISTINCT: (Slot.OTHER, Family.LESION), T.LESION_SAME: (Slot.OTHER, Family.LESION)})
+    T.LESION_DISTINCT: (Slot.OTHER, Family.LESION), T.LESION_SAME: (Slot.OTHER, Family.LESION),
+    T.LESION_NOT_MEMBER: (Slot.OTHER, Family.LESION), T.LESION_MEMBER: (Slot.OTHER, Family.LESION),
+    T.LESION_NONE_MEMBER: (Slot.OTHER, Family.LESION), T.LESION_SOME_MEMBER: (Slot.OTHER, Family.LESION)})
+# A lesion pair's three forms (DECISIONS D296; D300 RF-L3), each (claim, control): the distinctness of two lesions pass 1
+# claims single; the membership of an act's lesion pass 1 claims single among a statement's lesions; and that no lesion
+# of an act's lesion is one of a statement's lesions. The engine reads each against the multiplicity it presumes
+# (engine/facts' lesion pairs).
+LESION_PAIR_FORMS: tuple[tuple[TemplateId, TemplateId], ...] = (
+    (T.LESION_DISTINCT, T.LESION_SAME), (T.LESION_NOT_MEMBER, T.LESION_MEMBER),
+    (T.LESION_NONE_MEMBER, T.LESION_SOME_MEMBER))
 # The anatomy entries' forms that say what kind of anatomy entry it is, so its type must be claimed with them.
 _TYPED_FORMS: frozenset[TemplateId] = frozenset({T.ANATOMY_ORGAN_ABSENT, T.ANATOMY_ORGAN_NOT_ABSENT,
                                                  T.ANATOMY_SUBTYPE, T.ANATOMY_JOINS})
@@ -1847,6 +1893,10 @@ class _Builder:
         # once (lesion_pairs_seen)
         self.lesion_pair_specs: list[tuple[_Spec, _Spec, str, str]] = []
         self.lesion_pairs_seen: set[frozenset[str]] = set()
+        # DECISIONS D300 RF-L5: the lesion pairs left out to keep the set within its bound (bounded)
+        self.dropped_pairs: list[tuple[str, str]] = []
+        # DECISIONS D300 RF-L1: pass 1's same_as components, built once (same_as_components)
+        self.same_as_found: tuple[dict[str, frozenset[str]], frozenset[str], bool] | None = None
         self.unclaimed: list[Unclaimed] = []
         # the claims of facts left unclaimed because their control cannot be written (Unclaimable.CONTROL)
         self.withdrawn: list[_Spec] = []
@@ -2109,7 +2159,8 @@ class _Builder:
         """The slots of ``form`` for one value, and the parameters its sentence renders beyond it."""
         if subject.family is Family.SESSION:
             slots.append((Slot.SESSION, subject))
-        if form in (T.LESION_MULTIPLICITY, T.LESION_PLACES, T.LESION_DISTINCT, T.LESION_SAME):
+        if form in (T.LESION_MULTIPLICITY, T.LESION_PLACES, T.LESION_DISTINCT, T.LESION_SAME) or any(
+                form in pair for pair in LESION_PAIR_FORMS):
             slots.append((Slot.LESION, subject))
         if form in _LABEL_SLOT:
             if form is T.ANATOMY_TYPE:
@@ -2499,7 +2550,23 @@ class _Builder:
         self.shared_claims()
         self.no_control_is_a_claim()
         self.completeness()
-        return self.finish()
+        return self.bounded(self.finish())
+
+    def bounded(self, built: ClaimSet) -> ClaimSet:
+        """DECISIONS D300 RF-L5: a set that would pass its bound (claim_bound: CLAIM_BOUND_V3 under gemini-appraisal@2)
+        with lesion pair claims - claims that can only release (D296: a pair not established sets nothing apart) -
+        drops them first, never the document for them: the last pairs asked go first, two claims each (a pair's claim
+        and its control, each a claim of its own by its role), until the set is within the bound or no pair is left,
+        and each pair dropped is recorded (ClaimSet.dropped_lesion_pairs; settle stores it unappraised, so it releases
+        nothing). A set still over the bound without them is refused as before (7.4 door 0): the other claims decide
+        and hold."""
+        bound = claim_bound(self.version)
+        while len(built.claims) > bound and self.lesion_pair_specs:
+            keep = max(0, len(self.lesion_pair_specs) - _ceiling(len(built.claims) - bound, 2))
+            self.dropped_pairs += [(lesion, other) for _claim, _control, lesion, other in self.lesion_pair_specs[keep:]]
+            self.lesion_pair_specs = self.lesion_pair_specs[:keep]
+            built = self.finish()
+        return built
 
     def shared_claims(self) -> None:
         """Facts told by one sentence - an exceptive breadth and each act it excepts, a segment's two places, part_of
@@ -2866,7 +2933,16 @@ class _Builder:
         pair control asserts a sameness of two lesions, so none is reused) - citing both lesions' description runs in
         their sentence closures. The cards name the lesions and nothing names a kind. Each lesion pair is asked once,
         whichever statements and acts meet it; a lesion with no description run gives no claim (fail-closed: the pair
-        then stays unestablished)."""
+        then stays unestablished).
+
+        DECISIONS D300: no pair is asked between two lesions pass 1's same_as may join through other entries (RF-L1,
+        lesion_identity_written reads the same_as component); and where either lesion is not claimed as one lesion - a
+        group, or a multiplicity pass 1 does not claim single - the claim asks MEMBERSHIP, in the form
+        lesion_pair_form chooses (RF-L3): "Lesion {other} is not one of the lesions of {lesion}." with its contrary
+        "Lesion {other} is one of the lesions of {lesion}.", or, where the act's lesion is not claimed single either,
+        "No lesion of {other} is one of the lesions of {lesion}." with "A lesion of {other} is one of the lesions of
+        {lesion}." - the act's lesion asked against the statement's, kind-neutrally, citing the same description
+        runs."""
         if self.version != interpretation.APPRAISAL_VERSION_V3:
             return
         for mine in self.lesions(statement):
@@ -2880,8 +2956,11 @@ class _Builder:
                 if first is None or second is None:
                     continue
                 units, subject = self.ordered((*first, *second)), Ref(Family.LESION, mine)
-                claim = self.render(_LES_C, _A.DISTINCT_FROM, FactState.SUPPORTED, theirs, subject, units)
-                control = self.render(_LES_C, _A.SAME_AS, FactState.SUPPORTED, theirs, subject, units)
+                claim_form, control_form = self.lesion_pair_form(mine, theirs)
+                claim = self.render(_LES_C, _A.DISTINCT_FROM, FactState.SUPPORTED, theirs, subject, units,
+                                    form=claim_form)
+                control = self.render(_LES_C, _A.SAME_AS, FactState.SUPPORTED, theirs, subject, units,
+                                      form=control_form)
                 if isinstance(claim, Unclaimable) or isinstance(control, Unclaimable):
                     continue
                 self.lesion_pair_specs.append((
@@ -2890,11 +2969,28 @@ class _Builder:
                     _Spec(control.template, control.subject, control.value, control.units, control.params,
                           control.slots, _LESION_PAIR_CONTROL_ROLE), mine, theirs))
 
+    def lesion_pair_form(self, mine: str, theirs: str) -> tuple[TemplateId, TemplateId]:
+        """DECISIONS D300 RF-L3: the (claim, control) forms of the lesion pair of the statement's lesion ``mine`` and the
+        act's ``theirs`` (LESION_PAIR_FORMS), by the multiplicity pass 1 claims for each (claimed_value: one supported
+        fact, claimable): both single, their distinctness (D296's forms); else, the act's lesion single, its membership
+        among the statement's lesions ("<the act's lesion> is not one of <the statement's lesions>"); else that no lesion
+        of the act's lesion is one of the statement's - so a group, or a lesion whose multiplicity is not claimed, is
+        always asked membership, whichever side it is on. The engine reads each form against the multiplicity it
+        presumes, settled (engine/facts' lesion pairs: the distinctness both lesions established single, the
+        membership the act's lesion established single, the third form neither)."""
+        single = Multiplicity.SINGLE.value
+        theirs_single = self.claimed_value(Family.LESION, theirs, _A.MULTIPLICITY) == single
+        if theirs_single and self.claimed_value(Family.LESION, mine, _A.MULTIPLICITY) == single:
+            return LESION_PAIR_FORMS[0]
+        return LESION_PAIR_FORMS[1] if theirs_single else LESION_PAIR_FORMS[2]
+
     def lesion_identity_written(self, one: str, other: str) -> bool:
         """Whether pass 1 wrote a same_as or distinct_from between two lesions - in either lesion's list, in any state
         (a contradicted one by any side's value) - or a doubt names either lesion's same_as or distinct_from: the
         identity is then pass 1's own fact, claimed, doubted or contradicted as it stands, and no lesion pair claim
-        asks it again (DECISIONS D296; fail-closed for a doubted identity)."""
+        asks it again (DECISIONS D296; fail-closed for a doubted identity). DECISIONS D300 RF-L1: equally whenever
+        pass 1's same_as may join the two through other entries (same_as_joins: the P5 component, as
+        engine/coverage._SameAs.join reads it, built here from pass 1's lists in any state)."""
         for first, second in ((one, other), (other, one)):
             for attribute in (_A.SAME_AS, _A.DISTINCT_FROM):
                 if self.is_doubted(Family.LESION, first, attribute):
@@ -2905,7 +3001,72 @@ class _Builder:
                     values += [getattr(option, 'value', '') for option in getattr(fact, 'options', ())]
                     if second in values:
                         return True
-        return False
+        return self.same_as_joins(one, other)
+
+    def same_as_components(self) -> tuple[dict[str, frozenset[str]], frozenset[str], bool]:
+        """Pass 1's same_as as the equivalence it states (P5), over its lists as written - every member in ANY state,
+        its value and each option (a supported member, a negation pass 2 may not establish, a contradicted one's sides),
+        and each reading of a doubt that names a lesion's same_as (a doubt's readings become the options of the facts
+        it names, 3.3 row 2) - as an undirected graph, built once: each id's component (an id no member names stands
+        alone); the ids whose component is OPEN - it holds an id the answer has no lesion of (4.11: it may be any one
+        lesion), or a lesion whose same_as a doubt names with no reading or malformed (it may be any lesion); and
+        whether a component holds two ids the answer has no lesion of (they may be any two)."""
+        if self.same_as_found is None:
+            lesions = set(self.ids[Family.LESION])
+            graph: dict[str, list[str]] = {}
+            doubted: set[str] = set()
+
+            def link(holder: str, value: object) -> None:
+                if isinstance(value, str) and value and value != holder:
+                    graph.setdefault(holder, []).append(value)
+                    graph.setdefault(value, []).append(holder)
+
+            for holder in self.ids[Family.LESION]:
+                for item in self.slot(Family.LESION, holder, _A.SAME_AS):
+                    fact = item.fact
+                    for value in (getattr(fact, 'value', ''),
+                                  *(getattr(option, 'value', '') for option in getattr(fact, 'options', ()))):
+                        link(holder, value)
+            for read in self.basis.answer.doubts:
+                for family, name in read.objects:
+                    if family is not Family.LESION or _A.SAME_AS not in read.named(family):
+                        continue
+                    if read.malformed or not read.doubt.readings:
+                        doubted.add(name)
+                    for value in read.doubt.readings:
+                        link(name, value)
+            components: dict[str, frozenset[str]] = {}
+            for start in sorted(graph):
+                if start in components:
+                    continue
+                seen, queue = {start}, [start]
+                while queue:
+                    for value in graph.get(queue.pop(), ()):
+                        if value not in seen:
+                            seen.add(value)
+                            queue.append(value)
+                for value in seen:
+                    components[value] = frozenset(seen)
+            open_: set[str] = set()
+            anywhere = False
+            for component in set(components.values()):
+                unknown = component - lesions
+                if unknown or component & doubted:
+                    open_ |= component
+                anywhere = anywhere or len(unknown) >= 2
+            open_ |= doubted
+            self.same_as_found = (components, frozenset(open_), anywhere)
+        return self.same_as_found
+
+    def same_as_joins(self, one: str, other: str) -> bool:
+        """DECISIONS D300 RF-L1: whether pass 1's same_as may join two lesions - directly or through other entries
+        (same_as_components: one component), or through an id the answer has no lesion of or a doubt's readings (either
+        lesion's component open), or because two such ids stand in one component anywhere - so no lesion pair is asked
+        between them and nothing may set them apart by lesion (engine/facts.possibly_one_finding reads the same join on
+        the settled facts)."""
+        components, open_, anywhere = self.same_as_components()
+        found = components.get(one)
+        return anywhere or one in open_ or other in open_ or (found is not None and other in found)
 
     def completeness(self) -> None:
         """The completeness claim (3.2.2 [R:SC-B]) for every upper EUS session whose station list is empty, cited at its
@@ -3007,7 +3168,8 @@ class _Builder:
             about=MappingProxyType(about), appraised=tuple(appraised), pair_controls=tuple(pairs),
             completeness=tuple(complete), unclaimed=tuple(unclaimed),
             objects=MappingProxyType({card_id: object_ for object_, card_id in card_of.items()}),
-            controls=frozenset(controls), seed=self.seed, lesion_pairs=tuple(lesion_pairs))
+            controls=frozenset(controls), seed=self.seed, lesion_pairs=tuple(lesion_pairs),
+            dropped_lesion_pairs=tuple(self.dropped_pairs))
 
     def cards(self, refs: list[Ref]) -> tuple[list[Card], dict[tuple[xs.Family, str], str]]:
         """One card per object named, numbered by type in document order (sections from N0, the others from 1); an
@@ -3296,6 +3458,21 @@ def controls_document(version: str = interpretation.APPRAISAL_VERSION) -> dict[s
                                  'same lesion (LESION_SAME), both citing the two lesions\' description runs in their '
                                  'closures; each lesion pair once; its content key carries its role (lesion_pair, '
                                  'lesion_pair_control)')
+        # DECISIONS D300 (round r2c, RF-L1, RF-L3, RF-L5): the lesion pair as amended, stated and pinned
+        found['lesion_pairs_d300'] = {
+            'joined': ("no lesion pair between two lesions pass 1's same_as may join, directly or through other "
+                       'entries: its lists in any state - each value and option - and the readings of a doubt naming '
+                       "a lesion's same_as, as one undirected graph; a component holding an id the answer has no "
+                       "lesion of, or a lesion whose same_as a doubt names with no reading or malformed, joins its "
+                       'lesions to any lesion, and two such ids in one component join any two'),
+            'forms': [[claim.value, control.value] for claim, control in LESION_PAIR_FORMS],
+            'form_rule': ('both lesions claimed single: their distinctness; else the act\'s lesion claimed single: its '
+                          "membership among the statement's lesions; else that no lesion of the act's lesion is one of "
+                          "the statement's lesions (a lesion claimed single: one supported multiplicity fact, "
+                          'claimable)'),
+            'bound': ('a set that would pass the claim bound drops lesion pairs first, the last asked first, until it '
+                      'is within the bound or none is left; each dropped pair is recorded, never asked'),
+        }
         # AMENDMENT-2 4.4 at the session's other objects (refute-f3s-r1 finding 3: the class stated and pinned)
         found['session_others'] = ("another lesion or another act of the act's session: when none exists by the "
                                    'values the slots establish, but one a card can show (none of the fact\'s own '

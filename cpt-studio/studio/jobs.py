@@ -4693,13 +4693,10 @@ def _render_code(found: _Assessed, *, combination: Any, R: Any, text: str, pages
                                                                       evaluation=found.evaluation), found.pfs),
                # r2 (D294, WORDS-F1/F3/F6): the form of the member's row that asks the item's question
                # (wording.member_form over the item's message and slots), which the details row, the code's
-               # qualification and the door read (wording.recorded_form)
-               'item': ({'message': found.item.message.value, 'fact': found.item.held.fact,
-                         'kind': found.item.held.kind.value,
-                         'form': wording.member_form(wording.Message(found.item.message.value),
-                                                     wording.Slots(act=found.item.fill.act,
-                                                                   family=found.item.fill.family))}
-                        if found.item is not None else None),
+               # qualification and the door read (wording.recorded_form); r2b (D297, W2R-2): and, where the item names
+               # an act the code does not bind or its form names an act, that act's record (``act_ref``: its spans and,
+               # for a template form, its kinds - wording.item_record), which the row's passages and words read
+               'item': _item_record(found, R),
                'question': found.question}
     if status == 'excluded' and found.reinstatable:
         # what a reviewer's reinstatement would wait for (refutation 5b-r1, X5): the installed release's gate - the
@@ -4738,6 +4735,25 @@ def _render_code(found: _Assessed, *, combination: Any, R: Any, text: str, pages
         checks=tuple(checks), modifier_considerations=tuple(considerations),
         units=found.units, fingerprint=found.fingerprint, clarifications=tuple(clarifications),
         support=_plain(support))  # type: ignore[no-untyped-call]
+
+
+def _item_record(found, R=None):
+    """The stored record of ``found``'s item (support['item']): its message, fact key, kind and member form, and r2b
+    (DECISIONS D297, W2R-2) the act it names where that is not the code's own act or its form names an act
+    (wording.item_record over its slots and the acts the code binds: evaluate's bindings and supporting acts); None for a
+    code with no item. r2d (DECISIONS D301): read by overlay.item_shown over ``R``, the FactSet it was assessed over -
+    the ONE reading read time words a live item by: whether its examination is the code's own session's (RBWX-2) and
+    every passage its question quotes (``quoted``, RBWX-1: its act's words, its counterpart's, its statements)."""
+    from .interpretation import overlay
+
+    item = found.item
+    if item is None:
+        return None
+    evaluation = found.evaluation
+    own = tuple(dict.fromkeys((*evaluation.bindings.values(), *evaluation.supporting))) if evaluation is not None else ()
+    form, act_ref, quoted = overlay.item_shown(item, own, R)
+    return {'message': item.message.value, 'fact': item.held.fact, 'kind': item.held.kind.value, 'form': form,
+            **({'act_ref': act_ref} if act_ref else {}), **({'quoted': quoted} if quoted else {})}
 
 
 REINSTATEMENT_DATE_WAIT = 'the date of service is not established for this encounter.'  # the installed release's words

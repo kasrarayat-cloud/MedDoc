@@ -920,12 +920,13 @@ def _named(held: HeldFact, groups: Sequence[Group], R: FactSet, acts: Sequence[I
 
 def _site_places(R: FactSet, event: Id) -> list[Landmark]:
     """SITE's supported places (D29), as engine/evaluate.py's SITE row reads them: the act's, then its supported
-    lesion's."""
+    lesion's - every entry of the lesion's finding, the entry the act names first (DECISIONS D297 ENGB-1,
+    facts.finding_places)."""
     places = [member.value for member in facts_.members(R, event, _A.TARGET_PLACES)
               if member.result is Result.SUPPORTED and isinstance(member.value, Landmark)]
     lesion = facts_.fact(R, event, _A.TARGET_LESION)
     if lesion.result is Result.SUPPORTED and isinstance(lesion.value, Id):
-        places += [member.value for member in facts_.members(R, lesion.value, _A.PLACES)
+        places += [member.value for member in facts_.finding_places(R, lesion.value).members
                    if member.result is Result.SUPPORTED and isinstance(member.value, Landmark)]
     return places
 

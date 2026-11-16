@@ -18,8 +18,15 @@ themselves (5.7 WordsNeverDecide, which binds them, is unchanged; this module is
   a section itself; the encounter and an anatomy entry anywhere. ``document_frame`` reads the frame units - every unit a
   source of the date of service, of the documenting clinician or of a session's kind cites (geometry.frame_units) - and
   the frame part those units must lie in (geometry.frame_part over geometry.first_told; DECISIONS D295: N0 and the
-  leading sections before the first event is told, where it was N0 alone). A source whose geometry fails is listed in
-  ``failed_links`` under its fact (settle stores its geometry from there).
+  leading sections before the first event is told, where it was N0 alone; DECISIONS D300: from N0's start whenever N0
+  passes G2, D199's empty N0 included). ``section`` also reads each section's procedure part (geometry.procedure_parts;
+  DECISIONS D299: a source in the start of the containing section's procedure part holds), from pass 1's section roles
+  read through extract_read.merged as every reader of a slot reads them (AMENDMENT-2 4.3.3): a part's head is a section
+  whose role is stated procedure (the view supported, the reader's own findings none, every source located, no
+  qualifier Q1 makes a finding of), and a section whose role states or offers procedure (ReadFact.asserted_values: a
+  supported value, a contradiction's side, an overfilled slot's written value) closes the part before it - the reading
+  that admits less. A source whose geometry fails is listed in ``failed_links`` under its fact (settle stores its
+  geometry from there).
 - G2 (geometry.Sections): section_order and section_start_unlocated on a section's owner, occasion and performer, the
   three facts 3.1 G2 names (DECISIONS D186).
 - G3 (geometry.target_reasons, lesion_reasons): target_detached on an event's target facts whose ``statement`` source
@@ -62,9 +69,10 @@ from typing import Any
 from studio import interpretation
 from studio.interpretation.contract import consistency, geometry, segment
 from studio.interpretation.contract import extract_schema as xs
-from studio.interpretation.contract.extract_read import Cited, DateOfService, FactKey, ReadAnswer, ReadFact
+from studio.interpretation.contract.extract_read import Cited, DateOfService, FactKey, ReadAnswer, ReadFact, merged
 from studio.interpretation.contract.types import (AnchorCitation, Attribute, Checked, Citation, Fact, FactState, Kind,
-                                                  Link, Reason, RestatementRole, SectionPlace, SessionKind, Source)
+                                                  Link, Qualifier, Reason, RestatementRole, SectionPlace, SectionRole,
+                                                  SessionKind, Source)
 from studio.interpretation.engine import anatomy, catalogue, requirements, requirements_table
 
 Family = xs.Family
@@ -100,7 +108,8 @@ def check(text: str, pages: Sequence[segment.Page], read: ReadAnswer, *,
     """Every check of 3.1 the reader does not run, over pass 1's answer ``read`` to the revision ``text`` and its
     ``pages`` (the module's docstring), as one Checked record, made for ``inventory_version`` - the inventory version
     the row they settle into is written at (gemini-inventory@3, the current path's, by default; consistency.check
-    applies that label's rules: DECISIONS D294 F2). Pure: equal arguments give an equal Checked in every process.
+    applies that label's rules, every K rule and L1 reading as the label was recorded: DECISIONS D294 F2, D297 R2RX-1,
+    D301 RBRX-1). Pure: equal arguments give an equal Checked in every process.
     ValueError when ``read`` was read against another segmentation than this text's (its unit count is not the number
     of units contract/segment.py cuts ``text`` into); TypeError and ValueError as geometry.Layout.of for a text or
     pages that are not a revision's."""
@@ -193,6 +202,8 @@ class _Check:
         self.frame = geometry.frame_units(self.frame_sources())
         # DECISIONS D295: the frame part a document_frame source lies in, from the events' located anchors
         self.part = geometry.frame_part(self.sections, geometry.first_told(self.layout, self.located.values()))
+        # DECISIONS D299: each section's procedure part head, from pass 1's section roles (computed once, as the part)
+        self.procedure = geometry.procedure_parts(self.sections, *self.procedure_roles())
 
     # -- reading the answer --
 
@@ -238,6 +249,31 @@ class _Check:
             for fact in self.facts.get((Family.SESSION, item['id'], A.KIND), []):
                 found += _sources_of(fact.fact)
         return found
+
+    def procedure_roles(self) -> tuple[frozenset[str], frozenset[str]]:
+        """DECISIONS D299: (the sections whose role pass 1 states as procedure, those whose role it states or offers
+        as procedure), each role read through extract_read.merged (AMENDMENT-2 4.3.3: never an overfilled slot's first
+        written fact). Stated: the reading is supported with the value procedure (the merged view of an overfilled slot
+        is contradicted, never stated), the reader gave it no finding, each of its sources locates (I1-I3) and it
+        carries no qualifier but approximate (Q1: every other qualifier is a qualified:<q> finding): what may head a
+        part, and so admit a source, is a statement the checks let stand. Possible: the reading states or offers
+        procedure in a fact that is not negated (asserted_values), whatever its findings: what closes a part is read
+        wide, so a section that may open another part keeps its heading from the part before it."""
+        stated: set[str] = set()
+        possible: set[str] = set()
+        for item in self.raw['sections']:
+            name = item['id']
+            found = merged(self.facts.get((Family.SECTION, name, A.ROLE), []))
+            if found is None or not isinstance(found.fact, Fact):
+                continue
+            if SectionRole.PROCEDURE.value in found.asserted_values:
+                possible.add(name)
+            if (found.fact.state is FactState.SUPPORTED and found.fact.value == SectionRole.PROCEDURE.value
+                    and not found.reasons and all(not self.cite(source).reasons and self.cite(source).place is not None
+                                                  for source in found.fact.sources)
+                    and all(qualifier is Qualifier.APPROXIMATE for qualifier in found.fact.qualifiers)):
+                stated.add(name)
+        return frozenset(stated), frozenset(possible | stated)
 
     def subject(self, family: xs.Family, name: str) -> geometry.Subject:
         """The object a fact is about, as G1 measures its sources (geometry's subject builders)."""
@@ -316,7 +352,8 @@ class _Check:
             self.add(key, self.cite(source).reasons)
         subject = self.subject(key.family, key.object)
         for source in sources:
-            failed = geometry.link_reasons(self.layout, self.sections, subject, source, self.frame, self.part)
+            failed = geometry.link_reasons(self.layout, self.sections, subject, source, self.frame, self.part,
+                                           self.procedure)
             if failed:
                 self.add(key, failed)
                 if source not in self.failed.setdefault(key, []):

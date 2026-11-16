@@ -7,10 +7,19 @@ counts and reports it and never requires it; every other kind stays required. Ev
 SCENARIO_V3 is classified by how a test instance makes it (rollback_check.MADE_BY), and a kind the table does not
 classify is required (fail-closed).
 
-F4 - whenever install.py's comments and docstrings state a container's stop bound (a ``docker stop --time N``, or the
-seconds a comment beside a stop_service_container call names), they state that role's STOP_SECONDS (the worker's 1,500 s
-since AMENDMENT-2 1.12), so a moved bound leaves no stale statement; INSTALL.md is read the same way. The other bounds
-that shared the old literal (the 600 s stale-stage sweep, the drain's 600 s) are left alone.
+F4 - whenever an ops text states a container's stop bound, it states that role's STOP_SECONDS (the worker's 1,500 s
+since AMENDMENT-2 1.12, the web's 30 s), so a moved bound leaves no stale statement. The guard reads the forms
+STOP_FORMS lists (DECISIONS D297 R2RX-4: it states the forms it reads) - ``--time N``, ``stop timeout N s``, ``N s
+outlasts``, ``up to N minutes``, the remaining stage time's ``up to N s``, ``the N s pass``, ``STOP_SECONDS['<role>'],
+N s``, the web's graceful stop ``(graceful, N s)``, and the seconds a comment beside a stop_service_container(...,
+'<role>') call names - in every ops text: install.py's and every other ops/*.py's comments, docstrings and strings, and
+INSTALL.md's prose, each with its whitespace collapsed so a wrapped statement is read whole. Its completeness check
+covers every bound it claims (DECISIONS D301 RBRX-2): every statement of EACH role's bound in any spelling (N s, N
+seconds, --time N, N/60 minutes) must lie in a listed form, so a statement in a new form fails until its form is
+listed; a stale value in a form not listed is the one statement it cannot read. A spelling of a role's bound that
+states another bound sharing its literal lies in a form OTHER_BOUNDS lists (systemctl reload's 30 s client timeout and
+the database's 30 s lock timeout share the web's), each of which must read a statement. The other bounds that shared
+the worker's old literal (the 600 s stale-stage sweep, the drain's 600 s) are left alone.
 
 Run from cpt-studio/:  python3 -B -m unittest discover -s ops -p 'test_r2r_*.py' -v
 """
@@ -135,6 +144,33 @@ class R2RAssertion7OnAReplayFilledDatabase(TI.FableRows):
 TIME = re.compile(r'--time\s+(\d[\d,]*)')
 SECONDS = re.compile(r'(\d[\d,]*)\s*s\b')
 STOP_CALL = re.compile(r"stop_service_container\([^)]*'(web|worker)'\)")
+NUMBER = r'(\d[\d,]*)'
+# Every form a statement of a container's stop bound takes in the ops texts (the module docstring, F4): (its name, its
+# pattern - the number its last group -, the seconds one unit of the number is, and how it names its role: the group
+# naming it (an int), the role the form itself states (a str: a graceful stop is the web's, stopped once its requests
+# are drained; the worker's stop lets its stage finish), or None). A form naming no role takes the role named nearest
+# before it within ROLE_WINDOW characters, else any role's bound.
+STOP_FORMS = (
+    ('--time N', re.compile(rf'--time\s+{NUMBER}'), 1, None),
+    ('stop timeout N s', re.compile(rf'stop timeout\W{{0,3}}{NUMBER}\s*s\b'), 1, None),
+    ('N s outlasts', re.compile(rf'{NUMBER}\s*s outlasts\b'), 1, None),
+    ('up to N minutes', re.compile(rf'\bup to {NUMBER} minutes\b'), 60, None),
+    ('the remaining stage time, up to N s', re.compile(rf'remaining stage time\W[^.;]*?\bup to {NUMBER}\s*s\b'), 1,
+     None),
+    ('the N s pass', re.compile(rf'\bthe {NUMBER}\s*s pass\b'), 1, None),
+    ("STOP_SECONDS['<role>'], N s", re.compile(rf"STOP_SECONDS\['(web|worker)'\],\s*{NUMBER}\s*s\b"), 1, 1),
+    ('(graceful, N s)', re.compile(rf'\(graceful,\s*{NUMBER}\s*s\)'), 1, 'web'),
+)
+ROLE = re.compile(r'\b(worker|web)\b')
+ROLE_WINDOW = 160
+# The other bounds a role's bound shares its literal with in the ops texts (DECISIONS D301 RBRX-2): (its name, its
+# pattern). A spelling of a role's bound inside one states that other bound, never a stop bound: the completeness check
+# leaves it alone, and each must read a statement (an entry that reads nothing is stale).
+OTHER_BOUNDS = (
+    ("systemctl reload's client timeout, 'gives up at the N s timeout'",
+     re.compile(rf'\bgives up at the {NUMBER}\s*s timeout\b')),
+    ("the database's lock timeout, \"lock_timeout = 'Ns'\"", re.compile(rf"\block_timeout = '{NUMBER}s'")),
+)
 
 
 def seconds(text: str) -> int:
@@ -162,7 +198,69 @@ def stated_stop_bounds(source: str) -> list:
     return found
 
 
+def prose(path: Path, text: str | None = None) -> str:
+    """What the forms are read over: a Python file's comments (without their '#') and string tokens, in order, or a
+    Markdown file's text - its whitespace collapsed, so a statement wrapped across lines or comment lines is one."""
+    text = path.read_text(encoding='utf-8') if text is None else text
+    if path.suffix == '.py':
+        kinds = {tokenize.COMMENT, tokenize.STRING}
+        if hasattr(tokenize, 'FSTRING_MIDDLE'):  # an f-string's text, tokenized apart since Python 3.12
+            kinds.add(tokenize.FSTRING_MIDDLE)
+        text = ' '.join(token.string.lstrip('#') for token in tokenize.generate_tokens(io.StringIO(text).readline)
+                        if token.type in kinds)
+    return ' '.join(text.split())
+
+
+def stop_statements(text: str) -> list:
+    """(form, (start, end), role or None, seconds) of every statement of a stop bound ``text`` (``prose``) holds in a
+    form of STOP_FORMS."""
+    found = []
+    for name, pattern, unit, names in STOP_FORMS:
+        for match in pattern.finditer(text):
+            if isinstance(names, int):
+                role = match.group(names)
+            elif isinstance(names, str):
+                role = names
+            else:
+                before = list(ROLE.finditer(text, max(0, match.start() - ROLE_WINDOW), match.start()))
+                role = before[-1].group(1) if before else None
+            found.append((name, match.span(), role, seconds(match.group(match.re.groups)) * unit))
+    return found
+
+
+def other_statements(text: str) -> list:
+    """(name, (start, end)) of every statement of another bound OTHER_BOUNDS lists that ``text`` (``prose``) holds."""
+    return [(name, match.span()) for name, pattern in OTHER_BOUNDS for match in pattern.finditer(text)]
+
+
+def unaccounted(text: str, bound: int) -> list:
+    """Every spelling of ``bound`` (``spellings``) in ``text`` (``prose``) that lies in no listed form - neither a
+    statement of a stop bound (STOP_FORMS) nor one of another bound sharing the literal (OTHER_BOUNDS) - with the words
+    around it."""
+    spans = [span for _, span, _, _ in stop_statements(text)] + [span for _, span in other_statements(text)]
+    return [text[max(0, match.start() - 40):match.end() + 10] for match in spellings(bound).finditer(text)
+            if not any(start <= match.start() < end for start, end in spans)]
+
+
+def spellings(bound: int) -> re.Pattern:
+    """Every spelling of ``bound`` seconds a statement may take: N s or N seconds (with or without the thousands
+    comma), --time N, and N/60 minutes when it is whole minutes."""
+    numbers = sorted({str(bound), f'{bound:,}'}, key=len, reverse=True)
+    alternatives = [rf'(?<![\d,]){re.escape(n)}\s*(?:s|seconds)\b' for n in numbers] + [rf'--time\s+{bound}\b']
+    if bound % 60 == 0:
+        alternatives.append(rf'(?<![\d,]){bound // 60} minutes\b')
+    return re.compile('|'.join(alternatives))
+
+
+def ops_texts() -> list:
+    """Every ops text the guard reads: INSTALL.md and every ops/*.py that is not a test module."""
+    return sorted(path for path in OPS.glob('*.py') if not path.name.startswith('test_')) + [OPS / 'INSTALL.md']
+
+
 class R2RStopBoundStated(unittest.TestCase):
+    """F4 (module docstring): the forms STOP_FORMS lists, in every ops text, state their role's bound, and every
+    statement of each role's bound is in a listed form (DECISIONS D301 RBRX-2)."""
+
     def test_every_stated_stop_bound_in_the_installer_is_its_roles(self):
         found = stated_stop_bounds((OPS / 'install.py').read_text(encoding='utf-8'))
         self.assertGreaterEqual(len([item for item in found if item[1] == 'worker']), 3)  # the scan reads something
@@ -179,6 +277,43 @@ class R2RStopBoundStated(unittest.TestCase):
                     with self.subTest(path=path.name, line=number):
                         self.assertIn(seconds(match.group(1)), set(install.STOP_SECONDS.values()))
 
+    def test_every_statement_in_a_listed_form_states_its_roles_bound(self):
+        read = 0
+        for path in ops_texts():
+            for name, span, role, value in stop_statements(prose(path)):
+                read += 1
+                with self.subTest(path=path.name, form=name, at=span):
+                    if role is None:
+                        self.assertIn(value, set(install.STOP_SECONDS.values()))
+                    else:
+                        self.assertEqual(value, install.STOP_SECONDS[role])
+        self.assertGreaterEqual(read, 15)  # the forms read the texts' statements (16 when the web's form was listed)
+
+    def test_every_statement_of_each_roles_bound_is_in_a_listed_form(self):
+        """DECISIONS D301 RBRX-2: the completeness check covers every bound the guard claims - each role's spellings,
+        not one role's (a spelling stating another bound that shares the literal lies in a form OTHER_BOUNDS lists)."""
+        for role, bound in install.STOP_SECONDS.items():
+            for path in ops_texts():
+                with self.subTest(role=role, path=path.name):
+                    self.assertEqual(unaccounted(prose(path), bound), [],
+                                     'a statement of the bound in a form STOP_FORMS does not list')
+
+    def test_each_other_bound_reads_a_statement_and_never_a_stop_statement(self):
+        """OTHER_BOUNDS states what the completeness check leaves alone: each form reads a statement in the texts, and
+        none lies inside a statement of a stop bound."""
+        for name, _ in OTHER_BOUNDS:
+            read = 0
+            for path in ops_texts():
+                text = prose(path)
+                stops = [span for _, span, _, _ in stop_statements(text)]
+                for other, (start, end) in other_statements(text):
+                    if other == name:
+                        read += 1
+                        with self.subTest(form=name, path=path.name, at=(start, end)):
+                            self.assertFalse(any(begin < end and start < finish for begin, finish in stops))
+            with self.subTest(form=name):
+                self.assertGreaterEqual(read, 1, 'an OTHER_BOUNDS form that reads no statement is stale')
+
     def test_the_scan_refuses_a_planted_stale_statement(self):
         stale = '--' + 'time 600'  # built, so this file states no stale bound itself (the scan above reads it)
         planted = ("def park():\n"
@@ -187,13 +322,17 @@ class R2RStopBoundStated(unittest.TestCase):
         self.assertEqual(stated_stop_bounds(planted), [(2, 'worker', 600), (3, 'worker', 600)])
 
     def test_the_other_bounds_of_600_s_are_left_alone(self):
-        """The boundary: the stale-stage sweep's and the drain's 600 s are other bounds, stated as before."""
+        """The boundary: the stale-stage sweep's and the drain's 600 s are other bounds, stated as before, and no
+        listed form reads them."""
         source = (OPS / 'install.py').read_text(encoding='utf-8')
         self.assertIn('STALE_RUNNING_SECONDS, 600 s', source)
         self.assertEqual(install.DRAIN_MAX_SECONDS, 600)
         said = ' '.join((OPS / 'INSTALL.md').read_text(encoding='utf-8').split())
         self.assertTrue('never longer than 600 s' in said, 'INSTALL.md no longer states the drain bound')
         self.assertEqual(install.STOP_SECONDS, {'web': 30, 'worker': 1500})
+        for path in ops_texts():
+            with self.subTest(path=path.name):
+                self.assertNotIn(600, {value for _, _, _, value in stop_statements(prose(path))})
 
 
 if __name__ == '__main__':

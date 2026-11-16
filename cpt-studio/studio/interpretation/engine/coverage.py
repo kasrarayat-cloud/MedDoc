@@ -46,12 +46,13 @@ sets them apart; with fewer than two sessions nothing can, as in 4.5's session r
   target.lesion is a pure empty slot and its place list is established, and one supported place of it, for EVERY
   removal the rule could pair it with, is disjoint from each of that removal's places (its target.places together with
   the established places of the removed FINDING - every lesion entry a same_as member, in ANY state, may join to its
-  target lesion, directly or through other entries: DECISIONS D294 G1), that removal was asked about it by a rejected
-  pair control, and no place pair control asked of the biopsy or of those removals is unrejected. A removal whose
-  lesion claim is neither a supported lesion whose finding's every entry has established places nor a pure empty slot,
-  a finding holding an id the FactSet does not hold, a removal whose places are not established landmarks, and a
-  synthetic removal (no place) leave the rule as it was. same_as is read there in the hold direction only (it can only
-  widen the finding, and a wider finding can only keep the rule as it was), so it stays a hold-only read of BUNDLING.
+  target lesion, directly or through other entries: DECISIONS D294 G1, read by facts.finding_places, which SITE and
+  D240's site fit read too: D297 ENGB-1), that removal was asked about it by a rejected pair control, and no place pair
+  control asked of the biopsy or of those removals is unrejected. A removal whose lesion claim is neither a supported
+  lesion whose finding's every entry has established places nor a pure empty slot, a finding holding an id the FactSet
+  does not hold, a removal whose places are not established landmarks, and a synthetic removal (no place) leave the
+  rule as it was. same_as is read there in the hold direction only (it can only widen the finding, and a wider finding
+  can only keep the rule as it was), so it stays a hold-only read of BUNDLING.
 - DRAINAGE_STEP (G3, D171, D177): a fine-needle aspiration whose part_of names a drainage, or of the same lesion as one;
   the drainage may be performed or begun.
 
@@ -713,28 +714,16 @@ def _member_ids(R: FactSet, member: Fact) -> tuple[Id, ...]:
     return tuple(dict.fromkeys(value for value in (member.value, *member.options) if isinstance(value, Id)))
 
 
-def _any_state_ids(R: FactSet, member: Fact) -> tuple[Id, ...]:
-    """The lesion ids a same_as member names in ANY state (DECISIONS D294 G1: the removed finding E1j reads): its
-    claimed value and its options whatever its result - a supported member, an established negation ("L1 is not the
-    same as L2") and one left open all name their value - and every lesion of the FactSet for a silent one, as
-    _member_ids reads it. No state of the member, and so no verdict of pass 2 on it, narrows what it names: read so,
-    same_as only widens the finding (3.2.3's UNCONTROLLED: it only joins, and joining bundles or holds)."""
-    if facts_.silent(member):
-        return tuple(R.lesions)
-    return tuple(dict.fromkeys(value for value in (member.value, *member.options) if isinstance(value, Id)))
-
-
-def _same_as_graph(R: FactSet, ids: Callable[[FactSet, Fact], tuple[Id, ...]] = _member_ids
-                   ) -> dict[Id, list[tuple[Id, _Link]]]:
+def _same_as_graph(R: FactSet) -> dict[Id, list[tuple[Id, _Link]]]:
     """same_as as the equivalence it states (P5: one id per distinct finding, and a same_as says two entries are one
     finding), as an undirected graph: each lesion of the FactSet linked, by each member of its same_as list, to every id
-    that member may name (``ids``: _member_ids, facts.possibly's reading, for the bundling identity; _any_state_ids for
-    the removed finding E1j reads, DECISIONS D294 G1) - an id the FactSet does not hold included. Built in the
-    FactSet's order, so a walk over it is deterministic."""
+    that member may name (_member_ids) - an id the FactSet does not hold included. Built in the FactSet's order, so a
+    walk over it is deterministic. (The removed finding E1j reads is facts.finding's: every id a member names in ANY
+    state - DECISIONS D294 G1, D297 ENGB-1.)"""
     graph: dict[Id, list[tuple[Id, _Link]]] = {}
     for holder in R.lesions:
         for member in facts_.members(R, holder, _A.SAME_AS):
-            for other in ids(R, member):
+            for other in _member_ids(R, member):
                 if other != holder:
                     graph.setdefault(holder, []).append((other, (holder, member)))
                     graph.setdefault(other, []).append((holder, (holder, member)))
@@ -781,10 +770,11 @@ class _SameAs:
     (DECISIONS D248 G5; refute-r4b-r2 G5: the walk ran once per (part, whole) pair, 388 s at FINAL-V2 1.8's bounds): a
     walk per start set, a join per (left, right) pair, the ids supported members join to a lesion (its supported
     component), and _join's third reaches (the components holding two ids the FactSet does not hold); and, for E1j, the
-    removed finding of a lesion (``finding``: DECISIONS D294 G1, over the graph of every id a member names in any state).
-    Read-only over a frozen FactSet: one per Reader (per asker outside one), never shared across FactSets."""
+    places of the removed finding of a lesion (``finding_places``: facts.finding_places, DECISIONS D294 G1 and D297
+    ENGB-1 - the one reading every rule that reads an act's target lesion's places shares, computed once per
+    FactSet). Read-only over a frozen FactSet: one per Reader (per asker outside one), never shared across FactSets."""
 
-    __slots__ = ('R', 'lesions', 'graph', '_walks', '_joins', '_components', '_third', '_any_state', '_findings')
+    __slots__ = ('R', 'lesions', 'graph', '_walks', '_joins', '_components', '_third')
 
     def __init__(self, R: FactSet, graph: Mapping[Id, Sequence[tuple[Id, _Link]]] | None = None) -> None:
         self.R = R
@@ -794,32 +784,18 @@ class _SameAs:
         self._joins: dict[tuple[frozenset[Id], frozenset[Id]], _Joined] = {}
         self._components: dict[Id, frozenset[Id]] = {}
         self._third: tuple[tuple[Id, tuple[_Link, ...]], ...] | None = None
-        self._any_state: Mapping[Id, Sequence[tuple[Id, _Link]]] | None = None
-        self._findings: dict[Id, frozenset[Id]] = {}
+
+    def finding_places(self, lesion: Id) -> facts_.FindingPlaces:
+        """facts.finding_places for ``lesion`` (DECISIONS D294 G1, D297 ENGB-1)."""
+        return facts_.finding_places(self.R, lesion)
 
     def finding(self, lesion: Id) -> frozenset[Id]:
-        """DECISIONS D294 G1: the removed FINDING E1j reads for a removal whose target lesion is ``lesion`` - every id a
-        same_as member in ANY state names (_any_state_ids: a negation, a member left open and a silent one included)
-        joined to it, directly or through other entries and in either direction, ``lesion`` included; an id the FactSet
-        does not hold among them is the caller's to read (E1j: the rule as it was). Every state of a member names at
-        least its value, so the set never narrows with a member's state: same_as is read in the hold direction only.
-        The graph is built once, and each finding once per component."""
-        found = self._findings.get(lesion)
-        if found is None:
-            if self._any_state is None:
-                self._any_state = _same_as_graph(self.R, _any_state_ids)
-            seen = {lesion}
-            queue = [lesion]
-            while queue:
-                node = queue.pop()
-                for other, _link in self._any_state.get(node, ()):
-                    if other not in seen:
-                        seen.add(other)
-                        queue.append(other)
-            found = frozenset(seen)
-            for node in found:
-                self._findings[node] = found
-        return found
+        """The removed FINDING E1j reads for a removal whose target lesion is ``lesion`` (facts.finding: every id a
+        same_as member in ANY state names - facts.any_state_ids: a negation, a member left open and a silent one
+        included - joined to it, directly or through other entries and in either direction, ``lesion`` included; an id
+        the FactSet does not hold among them leaves E1j as it was). Every state of a member names at least its value,
+        so the set never narrows with a member's state: same_as is read in the hold direction only."""
+        return frozenset(self.finding_places(lesion).entries)
 
     def walk(self, start: frozenset[Id]) -> _Reach:
         """_walk from ``start``, once per start set."""
@@ -970,9 +946,10 @@ def _may_be_one_finding(R: FactSet, part: Id, whole: Id, same: _SameAs) -> bool:
 
 
 def _apart(R: FactSet, part: Id, whole: Id, same: _SameAs) -> bool:
-    """The two acts' targets established apart (4.2 [R:SC-B]): by lesion (facts.apart_by_lesion: distinct_from and the
-    lesion pair controls, never while a same_as - directly or through other entries, _SameAs.join - may join the two
-    lesions) or by place (facts.apart_by_place: disjoint established places and their pair controls), never while the
+    """The two acts' targets established apart (4.2 [R:SC-B]): by lesion (facts.apart_by_lesion: distinct_from - or, by
+    DECISIONS D296 and D300 RF-L2, an established lesion pair claim, read as a written distinct_from by
+    facts.established_distinct - and the lesion pair controls, never while a same_as - directly or through other
+    entries, _SameAs.join - may join the two lesions) or by place (facts.apart_by_place: disjoint established places and their pair controls), never while the
     two acts' lesion claims may name one finding (_may_be_one_finding: DECISIONS D239's reading, which rules pairing's
     analogue - a supported equal lesion, or a lesion possibly equal, is never set apart by place). Read in that order
     and the guard last, only where the places set the acts apart (D248 G5's cost)."""
@@ -1351,7 +1328,8 @@ def _biopsy_elsewhere(ask: _Asker) -> bool:
       FactSet: a synthetic removal, read over its own FactSet, has no place established and keeps the rule as it was),
       that removal's places are established landmarks: its target.places TOGETHER WITH the established places of the
       removed FINDING when its lesion claim is supported - DECISIONS D294 G1: every lesion entry a same_as member in ANY
-      state may join to that lesion, directly or through other entries and in either direction (_SameAs.finding: the
+      state may join to that lesion, directly or through other entries and in either direction (facts.finding_places,
+      the one reading every rule that reads an act's target lesion's places shares, DECISIONS D297 ENGB-1: the
       engine's lesion is its same_as component, P5, and a finding filed as two entries is one finding), each entry's
       established places (a lesion claim neither supported nor a pure empty slot, an entry of the finding whose places
       are not established landmarks, and an id of the finding the FactSet does not hold keep the rule as it was: the
@@ -1389,11 +1367,12 @@ def _biopsy_elsewhere(ask: _Asker) -> bool:
             return False
         lesion = facts_.fact(R, other, _A.TARGET_LESION)
         if lesion.result is Result.SUPPORTED and isinstance(lesion.value, Id):
-            for entry in sorted(ask.same_as().finding(lesion.value), key=_id_order):  # DECISIONS D294 G1
-                held = _landmarks(facts_._supported(R, entry, _A.PLACES)) if entry in R.lesions else None
-                if held is None:
-                    return False
-                places += held  # 5.1 row 10: the removed finding's own places, every entry of it
+            found = ask.same_as().finding_places(lesion.value)  # DECISIONS D294 G1, D297 ENGB-1: the removed finding
+            held = _landmarks(tuple(member.value for member in found.members
+                                    if member.result is Result.SUPPORTED and member.value is not None))
+            if found.unknown is not None or held is None:
+                return False  # an entry without established places, or an id the FactSet does not hold
+            places += held  # 5.1 row 10: the removed finding's own places, every entry of it
         elif not _pure_silent(lesion):
             return False
         theirs[other] = places

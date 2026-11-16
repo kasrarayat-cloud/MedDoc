@@ -124,7 +124,7 @@ from studio.interpretation.contract.types import (Approach, Attribute, Device, E
 from studio.interpretation.engine import anatomy as engine_anatomy
 from studio.interpretation.engine import catalogue as engine_catalogue
 from studio.interpretation.engine import requirements as engine_requirements
-from studio.interpretation.engine.types import ItemKind
+from studio.interpretation.engine.types import IdFamily, ItemKind
 from studio.types import Check, sha256_json
 
 # --- labels (copied from reconcile.py:46-82; pinned equal) --------------------------------------------------------------
@@ -2783,6 +2783,29 @@ def explanation(message: Message, slots: Slots, text: str) -> str:
 # - ANOTHER_ENTRY: whether the act told only in another role's entry was performed in this procedure - never whose entry
 #   it is, which is established;
 # - BUNDLING_TARGET: whether the act was part of another act (the act_part key's own row, which its question asks).
+#
+# r2b (DECISIONS D297), the same rule read on the item's subject and on every message of a service fact:
+# - W2R-2: an item whose act is not the code's own act is worded naming THAT act, with that act's own passages, chosen by
+#   the item's slots - never "this act" over the code's own passage. The held session's examination (``session_examination``
+#   - its entry, date, performer or status, the row 7 an intervention code shares with its session's examination) is
+#   the examination of this procedure on every row it holds (SESSION_ENTRY, SESSION_TIME, SESSION_PERFORMER and
+#   SESSION_STATUS beside r2's session DOUBT); the same four keys about any other act the code does not bind name that
+#   act by its kind, as the item names it (ACT_ENTRY, ACT_TIME, ACT_PERFORMER, ACT_STATUS: an act no kind names is
+#   NO_KIND_LABEL); XCHG's two-act duct question (SAME_DUCT) names both acts by their kinds (FORM_TEMPLATES:
+#   ``form_text``), whichever of the two is the code's own; and every item whose held fact's subject is an act the code
+#   does not bind shows that act's passages (``act_record``: its slots' spans, recorded with the item).
+# - W2R-3: a service fact's row (answers.SERVICE_FACTS: one row for its service, L7-08) is shared only by the items that
+#   ask the service's one question - its own message (SERVICE_MESSAGES); every other message keyed by a service fact
+#   has a form, so it is its code's own row, its id naming that form: STRUCTURE (which structure a STRUCT:pfc act was done
+#   on) beside the explanations Q2 below gives a form; the class is pinned by a test over every message.
+# - Q2 (words Q2): an explanation whose row statement - "could not confirm <the key's fact>" - is untrue of the
+#   established fact that fails the code has a form saying what is true: WALL_INJECTION (the technique is established),
+#   ANOTHER_STRUCTURE and STRUCTURE_PLACE (the structure or place is established) and NOTHING_RETRIEVED (the yield is
+#   established) ask whether the procedure the code describes was performed (DESCRIBED); SEPARATE_EM_DENIED's row states
+#   the visit as CPT Studio's reading records it (VISIT_DENIED); ATTEMPTED asks whether the code describes an act begun and
+#   not completed (ATTEMPTED); the route-(d) explanations UNPROFILED, NOT_LINKED, RECOGNISED_ONLY and UNRECONCILED ask
+#   whether the code is supported by what was done (SUPPORTED) - their item's question - never whether "this procedure"
+#   was performed.
 FORM_DIGITAL_SCOPE = 'digital_scope'
 FORM_UNLISTED_SCOPE = 'unlisted_scope'
 FORM_SESSION_DOUBT = 'session_doubt'
@@ -2792,8 +2815,28 @@ FORM_ACCOUNTED = 'accounted'
 FORM_SEPARATE = 'separate'
 FORM_ANOTHER_ENTRY = 'another_entry'
 FORM_PART = 'part'
+FORM_SESSION_ENTRY = 'session_entry'
+FORM_SESSION_TIME = 'session_time'
+FORM_SESSION_PERFORMER = 'session_performer'
+FORM_SESSION_STATUS = 'session_status'
+FORM_SAME_DUCT = 'same_duct'
+FORM_STRUCTURE = 'structure'
+FORM_VISIT_DENIED = 'visit_denied'
+FORM_ATTEMPTED = 'attempted'
+FORM_SUPPORTED = 'supported'
+FORM_ACT_ENTRY = 'act_entry'
+FORM_ACT_TIME = 'act_time'
+FORM_ACT_PERFORMER = 'act_performer'
+FORM_ACT_STATUS = 'act_status'
 FORMS: frozenset[str] = frozenset({FORM_DIGITAL_SCOPE, FORM_UNLISTED_SCOPE, FORM_SESSION_DOUBT, FORM_ADDON,
-                                   FORM_DESCRIBED, FORM_ACCOUNTED, FORM_SEPARATE, FORM_ANOTHER_ENTRY, FORM_PART})
+                                   FORM_DESCRIBED, FORM_ACCOUNTED, FORM_SEPARATE, FORM_ANOTHER_ENTRY, FORM_PART,
+                                   FORM_SESSION_ENTRY, FORM_SESSION_TIME, FORM_SESSION_PERFORMER, FORM_SESSION_STATUS,
+                                   FORM_SAME_DUCT, FORM_STRUCTURE, FORM_VISIT_DENIED, FORM_ATTEMPTED, FORM_SUPPORTED,
+                                   FORM_ACT_ENTRY, FORM_ACT_TIME, FORM_ACT_PERFORMER, FORM_ACT_STATUS})
+# r2b (D297, W2R-2): the forms whose row names an act of the item's own and shows that act's passages, whoever binds it
+ACT_FORMS: frozenset[str] = frozenset({FORM_SESSION_DOUBT, FORM_SESSION_ENTRY, FORM_SESSION_TIME, FORM_SESSION_PERFORMER,
+                                       FORM_SESSION_STATUS, FORM_SAME_DUCT, FORM_ACT_ENTRY, FORM_ACT_TIME,
+                                       FORM_ACT_PERFORMER, FORM_ACT_STATUS})
 # What CPT Studio could not confirm, in each form's own words (true of every item of the form): the member's row
 # (studio/answers.py: its statement), the code's qualification (customer_api.FORM_WORDS) and read time's sentence for an
 # item it cannot word (overlay._fact_sentence) all read this ONE table, so they never say two things.
@@ -2808,6 +2851,30 @@ FORM_MISSING: Mapping[str, str] = MappingProxyType({
     FORM_SEPARATE: 'a separate act that this code accounts for',
     FORM_ANOTHER_ENTRY: 'that the act documented only in another entry was performed in this procedure',
     FORM_PART: MISSING['act_part'],
+    FORM_SESSION_ENTRY: 'whose entry the examination of this procedure is told in',
+    FORM_SESSION_TIME: 'whether the examination of this procedure was done at this encounter',
+    FORM_SESSION_PERFORMER: 'who performed the examination of this procedure',
+    FORM_SESSION_STATUS: 'that the examination of this procedure was performed, in full or in part, on the date of service',
+    FORM_SAME_DUCT: 'in which duct {act} was done',
+    FORM_STRUCTURE: 'on which structure the act this code describes was done',
+    FORM_VISIT_DENIED: 'a significant, separately identifiable visit beside the procedure',
+    FORM_ATTEMPTED: 'whether this code describes the act begun and not completed on the date of service',
+    FORM_SUPPORTED: 'that this code is supported by what was done on the date of service',
+    FORM_ACT_ENTRY: 'whose entry {act} is told in',
+    FORM_ACT_TIME: 'whether {act} was done at this encounter',
+    FORM_ACT_PERFORMER: 'who performed {act}',
+    FORM_ACT_STATUS: 'that {act} was performed on the date of service',
+})
+# r2b (D297, W2R-2): the slots a form's words name (``form_text``): XCHG's duct question names the act whose duct is not
+# established ({act}) and its counterpart ({whole}) by their kinds (kind_words, an act no kind names as NO_KIND_LABEL),
+# as the item names them, CPT Studio's own words - never a quote. Every other form's words are fixed.
+FORM_TEMPLATES: frozenset[str] = frozenset({FORM_SAME_DUCT, FORM_ACT_ENTRY, FORM_ACT_TIME, FORM_ACT_PERFORMER,
+                                           FORM_ACT_STATUS})
+# r2b (D297): the form whose row states what CPT Studio's reading records rather than what it could not confirm - the
+# established denial a VISIT_DENIED explanation rests on (its passages show it); the qualification says the same
+FORM_RECORDED: Mapping[str, str] = MappingProxyType({
+    FORM_VISIT_DENIED: ("CPT Studio's reading of the document records the visit as not a significant, separately "
+                        'identifiable visit beside the procedure.'),
 })
 # The forms a message gives whatever its slots; the session's DOUBT is the one form its slots choose (session_examination)
 _MESSAGE_FORMS: Mapping[Message, str] = MappingProxyType({
@@ -2819,20 +2886,60 @@ _MESSAGE_FORMS: Mapping[Message, str] = MappingProxyType({
     Message.STATION_CLASS: FORM_DESCRIBED,
     Message.ANOTHER_TECHNIQUE: FORM_ACCOUNTED, Message.ANOTHER_SITE: FORM_ACCOUNTED,
     Message.BUNDLED: FORM_SEPARATE, Message.ANOTHER_ENTRY: FORM_ANOTHER_ENTRY, Message.BUNDLING_TARGET: FORM_PART,
+    # r2b (D297): W2R-2's two-act duct question; W2R-3's STRUCTURE; Q2's explanations
+    Message.SAME_DUCT: FORM_SAME_DUCT, Message.STRUCTURE: FORM_STRUCTURE,
+    Message.WALL_INJECTION: FORM_DESCRIBED, Message.ANOTHER_STRUCTURE: FORM_DESCRIBED,
+    Message.STRUCTURE_PLACE: FORM_DESCRIBED, Message.NOTHING_RETRIEVED: FORM_DESCRIBED,
+    Message.SEPARATE_EM_DENIED: FORM_VISIT_DENIED, Message.ATTEMPTED: FORM_ATTEMPTED,
+    Message.UNPROFILED: FORM_SUPPORTED, Message.NOT_LINKED: FORM_SUPPORTED, Message.RECOGNISED_ONLY: FORM_SUPPORTED,
+    Message.UNRECONCILED: FORM_SUPPORTED,
+})
+# r2b (D297, W2R-2): the forms the item's slots choose - an item about the held session's examination
+# (``session_examination``), whichever code it holds; any other slots leave the message's key row
+_SESSION_FORMS: Mapping[Message, str] = MappingProxyType({
+    Message.DOUBT: FORM_SESSION_DOUBT, Message.ENTRY: FORM_SESSION_ENTRY, Message.TIME: FORM_SESSION_TIME,
+    Message.PERFORMER: FORM_SESSION_PERFORMER, Message.STATUS: FORM_SESSION_STATUS,
+})
+# r2b (D297, W2R-2): the forms the same four keys take for an act the code does not bind that its slots do not name as the
+# held session's examination (``item_record``: the item names another act) - that act by its kind
+_OTHER_ACT_FORMS: Mapping[Message, str] = MappingProxyType({
+    Message.ENTRY: FORM_ACT_ENTRY, Message.TIME: FORM_ACT_TIME, Message.PERFORMER: FORM_ACT_PERFORMER,
+    Message.STATUS: FORM_ACT_STATUS,
+})
+# r2d (DECISIONS D301, RBWX-2): an item's examination is "the examination of this procedure" only when it is the
+# examination of the session the code is matched to (``item_record``'s ``own_session``). The forms whose words name it
+# so - the session's (``_SESSION_FORMS``), DIGITAL_SCOPE's and UNLISTED_SCOPE's (the held session's examination) - are
+# given to an item about the examination of any other session (an E/M's same-day procedure included), or of a session
+# that is not established, as the form naming that examination as another act, by its kind and with its own passages,
+# chosen by the item's fact key (its row's key: an entry, a date, a performer, a status); a key no such form asks (a
+# conflict's: its key row names the act by its kind) keeps its key's row
+EXAMINATION_FORMS: frozenset[str] = frozenset({FORM_SESSION_DOUBT, FORM_SESSION_ENTRY, FORM_SESSION_TIME,
+                                               FORM_SESSION_PERFORMER, FORM_SESSION_STATUS, FORM_DIGITAL_SCOPE,
+                                               FORM_UNLISTED_SCOPE})
+_OTHER_SESSION_FORMS: Mapping[str, str] = MappingProxyType({
+    'event_entry': FORM_ACT_ENTRY, 'event_time': FORM_ACT_TIME, 'event_performer': FORM_ACT_PERFORMER,
+    'performed_status': FORM_ACT_STATUS,
+})
+# r2b (D297, W2R-3): each service fact's one question - the message of the item a service's row asks for every code of
+# the service (answers.SERVICE_FACTS, L7-08): engine/assess's R6 rows and the member context's rows
+SERVICE_MESSAGES: Mapping[str, Message] = MappingProxyType({
+    'target': Message.TARGET, 'extent': Message.EXTENT, 'cannulation': Message.CANNULATION,
+    'em_basis': Message.EM_BASIS, 'setting': Message.SETTING, 'patient_status': Message.PATIENT_STATUS,
 })
 
 
 def member_form(message: object, slots: Optional[Slots] = None) -> str:
     """The form of the member's row that asks an item's question (the comment above): '' where its fact key's fixed row
     asks it. ``message``: a Message or its value (anything else has no form); ``slots``: the item's slots, which choose
-    the session's DOUBT (``session_examination``) - None where they are not known (a record made before forms were
-    recorded), which reads the message alone."""
+    the session's DOUBT (``session_examination``) - and r2b (D297, W2R-2) the session's examination's entry, date,
+    performer and status - None where they are not known (a record made before forms were recorded), which reads the
+    message alone."""
     found = message if isinstance(message, Message) else next(
         (member for member in Message if member.value == message), None) if isinstance(message, str) else None
     if found is None:
         return ''
-    if found is Message.DOUBT:
-        return FORM_SESSION_DOUBT if slots is not None and session_examination(slots) else ''
+    if found in _SESSION_FORMS:  # r2's session DOUBT, and r2b (D297, W2R-2) every row-7 key of the session's examination
+        return _SESSION_FORMS[found] if slots is not None and session_examination(slots) else ''
     return _MESSAGE_FORMS.get(found, '')
 
 
@@ -2862,3 +2969,153 @@ def recorded_form(item: object) -> str:
     if isinstance(form, str):
         return form if form in FORMS else ''
     return member_form(item.get('message'))
+
+
+# --- r2b (DECISIONS D297, W2R-2): the act an item names, as its member row shows it ----------------------------------
+
+def form_text(text: str, act: str = '', whole: str = '') -> str:
+    """A form's words (FORM_MISSING, answers.FORM_PROMPTS, customer_api.FORM_WORDS) with the acts a template form names
+    (FORM_TEMPLATES) filled: ``act`` and ``whole`` are the recorded kinds (Kind values: ``act_record``), each named by
+    kind_words with its article (an act no kind names, or a kind not recorded, as NO_KIND_LABEL) - CPT Studio's own
+    words, never a quote. Words with no slot are returned as they are."""
+    if '{' not in text:
+        return text
+    return text.format(act=_kind_named(act), whole=_kind_named(whole))
+
+
+def _kind_named(value: str) -> str:
+    kind = next((member for member in Kind if member.value == value), None)
+    return _the(kind_words(kind), named_kind(kind))
+
+
+def act_record(form: str, other: bool, words: Sequence[object], whole_words: Sequence[object],
+               act: Optional[Kind], whole: Optional[Kind]) -> dict[str, object]:
+    """The record of the act an item names (W2R-2), text-free, for its member row: ``spans``, the item's own act's spans
+    (its slots' ``words`` and ``whole_words``: the act it quotes and its counterpart), shown in place of the code's own
+    passages, and for a template form (FORM_TEMPLATES) ``act`` and ``whole``, the kinds its words name. Recorded only
+    where the row names an act that may not be the code's own - a form of ACT_FORMS, or an item whose held fact's
+    subject is an act the code does not bind (``other``) - else {} (the row shows the code's own passages, as before)."""
+    if not (other or form in ACT_FORMS):
+        return {}
+    spans: list[list[int]] = []
+    for span in (*words, *whole_words):
+        start, end = getattr(span, 'start', None), getattr(span, 'end', None)
+        if type(start) is int and type(end) is int and [start, end] not in spans:
+            spans.append([start, end])
+    out: dict[str, object] = {'spans': spans}
+    if form in FORM_TEMPLATES:
+        out.update(act=act.value if act is not None else '', whole=whole.value if whole is not None else '')
+    return out
+
+
+def item_record(message: object, fill: object, subject: object, own: object,
+                own_session: Optional[bool] = None, fact: str = '') -> tuple[str, dict[str, object]]:
+    """(form, act record) of an engine item (W2R-2) - ``message`` its Message (or value), ``fill`` its Fill (the slots,
+    field for field), ``subject`` its held fact's subject and ``own`` the acts its code binds (evaluate's bindings and
+    supporting acts): the form its slots choose (``member_form``) - or, for an entry, date, performer or status of an
+    act the code does not bind that is not the session's examination, the form naming that act by its kind - and its
+    act record (``act_record``), the item naming another act when its subject is an event the code does not bind. The
+    ONE reading the renderer records and read time words a live item by.
+
+    r2d (DECISIONS D301, RBWX-2): ``own_session`` - whether the examination the item names is the examination of the
+    session the code is matched to (the caller's established reading: overlay.own_session_examination, the ONE rule
+    the renderer and read time read) - and ``fact``, its held fact's key ('' reads its message's). The forms whose
+    words say "the examination of this procedure" (``EXAMINATION_FORMS``) are given only where it is; an item about the
+    examination of any OTHER session - an E/M's same-day procedure included - or of a session that is not established
+    is named as another act by its kind, with that act's own passages (``_OTHER_SESSION_FORMS`` by its key). None (no
+    reading given) reads the slots alone, as before."""
+    act, family = getattr(fill, 'act', None), getattr(fill, 'family', None)
+    found = message if isinstance(message, Message) else next(
+        (member for member in Message if member.value == message), None) if isinstance(message, str) else None
+    form = member_form(message, Slots(act=act, family=family))
+    other = (getattr(subject, 'family', None) is IdFamily.EVENT
+             and subject not in tuple(own if isinstance(own, (tuple, list, set, frozenset)) else ()))
+    if own_session is False and form in EXAMINATION_FORMS:  # RBWX-2: another session's examination: another act
+        key = fact or (MESSAGES[found].fact if found is not None and found in MESSAGES else '')
+        form = _OTHER_SESSION_FORMS.get(key, '')
+    if not form and other:  # an act the code does not bind, not the session's examination: named by its kind
+        form = _OTHER_ACT_FORMS.get(found, '') if found is not None else ''
+    return form, act_record(form, other, getattr(fill, 'words', ()) or (), getattr(fill, 'whole_words', ()) or (),
+                            act, getattr(fill, 'whole', None))
+
+
+# --- r2d (DECISIONS D301, RBWX-1): every passage an item's question quotes, as its member row shows them ------------
+#
+# A details row shows every passage its item's question quotes: the act's words, its counterpart's and the statements
+# it quotes (a denial, a scope statement, a conflict's sides, an unlisted entry) - recorded with the item, text-free
+# (``quoted_record``: support['item']['quoted'], a live question's 'quoted'), beside the act's own passages: those of an
+# act the code does not bind (its act record's spans, W2R-2), else the code's own (studio.validation.questions'
+# question_passages, which stays the one reading of the code's passages). An act record that holds no span therefore
+# never empties a row: the code's own passages stay, and the statements its question quotes are shown beside them.
+
+def quoted_record(fill: object) -> list[list[int]]:
+    """The spans of every passage an item's sentence quotes, text-free - its act's words (``words``), its counterpart's
+    (``whole_words``) and each statement it quotes (``statements``) - each once, in that order; [] for none."""
+    out: list[list[int]] = []
+    spans = [*(getattr(fill, 'words', ()) or ()), *(getattr(fill, 'whole_words', ()) or ())]
+    for statement in getattr(fill, 'statements', ()) or ():
+        spans += list(statement or ())
+    for span in spans:
+        start, end = getattr(span, 'start', None), getattr(span, 'end', None)
+        if type(start) is int and type(end) is int and 0 <= start < end and [start, end] not in out:
+            out.append([start, end])
+    return out
+
+
+def recorded_quoted(record: object) -> tuple[tuple[int, int], ...]:
+    """The spans of a quoted record (``quoted_record``: a stored item's ``support['item']['quoted']`` or a live
+    question's ``quoted``); () where there is none or it is not in that shape."""
+    if not isinstance(record, list):
+        return ()
+    out = []
+    for pair in record:
+        if not (isinstance(pair, list) and len(pair) == 2 and all(type(value) is int for value in pair)
+                and 0 <= pair[0] < pair[1]):
+            return ()
+        out.append((pair[0], pair[1]))
+    return tuple(out)
+
+
+def asked_quoted(question: object, support: object) -> tuple[tuple[int, int], ...]:
+    """The passages a question a view shows quotes (RBWX-1), read as ``asked_act`` reads its act: a question read time
+    words carries its own ``quoted``; a stored question (it has a row id) is its record's item's when that item is of
+    its fact; () for any other."""
+    if not isinstance(question, Mapping):
+        return ()
+    if 'form' in question or 'message' in question:
+        return recorded_quoted(question.get('quoted'))
+    item = support.get('item') if isinstance(support, Mapping) else None
+    if not (question.get('id') and question.get('scope', 'proposal') == 'proposal' and isinstance(item, Mapping)
+            and item.get('fact') == question.get('fact')):
+        return ()
+    return recorded_quoted(item.get('quoted'))
+
+
+def asked_act(question: object, support: object) -> tuple[tuple[tuple[int, int], ...], str, str] | None:
+    """The act a question a view shows names (W2R-2), read as ``asked_form`` reads its form: a question read time words
+    carries its own ``act_ref``; a stored question (it has a row id) is its record's item's when that item is of its
+    fact; None for any other (the row shows the code's own passages)."""
+    if not isinstance(question, Mapping):
+        return None
+    if 'form' in question or 'message' in question:
+        return recorded_act(question.get('act_ref'))
+    item = support.get('item') if isinstance(support, Mapping) else None
+    if not (question.get('id') and question.get('scope', 'proposal') == 'proposal' and isinstance(item, Mapping)
+            and item.get('fact') == question.get('fact')):
+        return None
+    return recorded_act(item.get('act_ref'))
+
+
+def recorded_act(record: object) -> tuple[tuple[tuple[int, int], ...], str, str] | None:
+    """(spans, act, whole) of an act record (``act_record``: a stored item's ``support['item']['act_ref']`` or a live
+    question's ``act_ref``), None where there is none or it is not in that shape (the code's own passages are shown)."""
+    if not isinstance(record, Mapping) or not isinstance(record.get('spans'), list):
+        return None
+    spans = []
+    for pair in record['spans']:
+        if not (isinstance(pair, list) and len(pair) == 2 and all(type(value) is int for value in pair)
+                and 0 <= pair[0] < pair[1]):
+            return None
+        spans.append((pair[0], pair[1]))
+    act, whole = record.get('act', ''), record.get('whole', '')
+    return tuple(spans), act if isinstance(act, str) else '', whole if isinstance(whole, str) else ''

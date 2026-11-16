@@ -122,7 +122,8 @@ the grid relation x precision x literal x service date (D193).
 **The text-free boundary** (P1, 5.7 measures 4 and 5): this module imports the standard library, contract/types.py and
 engine's types, anatomy, catalogue (FAMILY_REACH, which requirements_table already imports) and requirements_table only
 (no retired v1 module, none of contract's text modules, not store.py: its caller hands it store.textfree_v2's view), and
-holds no word list (every module-level collection holds enumeration members). No public function here returns a string
+holds no word list (every module-level collection holds enumeration members - but ``_FINDINGS``, the findings memo of a
+few FactSets, DECISIONS D297 ENGB-1). No public function here returns a string
 (the private readers of the stored JSON do), and ``mypy --strict`` passes over it. A row this builder cannot read whole
 raises FactSetError (a ValueError); nothing is ever read as an empty inventory.
 """
@@ -723,13 +724,43 @@ def _claims(events: Mapping[str, object]) -> dict[str, Mapping[str, object]]:
     return out
 
 
-def _lesion_pairs(events: Mapping[str, object]) -> dict[tuple[Id, Attribute, Value], bool]:
+def _lesion_pair_presumes(claim: Mapping[str, object], where: str) -> int:
+    """DECISIONS D300 RF-L3: how many of a lesion pair's two lesions its stored claim's form presumes single, by its
+    template (contract/claims.LESION_PAIR_FORMS; the store binds the claim to one of them): 2 for D296's distinctness
+    ("Lesions {lesion} and {other} are different lesions."), 1 for the membership of the act's lesion
+    ("Lesion {other} is not one of the lesions of {lesion}."), 0 for "No lesion of {other} is one of the lesions of
+    {lesion}.". FactSetError for any other form."""
+    template = _string(_field(claim, 'template', where), f'{where}.template')
+    if template == 'lesion.distinct_from':
+        return 2
+    if template == 'lesion.not_member':
+        return 1
+    if template == 'lesion.not_member.any':
+        return 0
+    raise FactSetError(f'The stored inventory is not readable: {where} is no lesion pair claim.')
+
+
+def _single(lesions: Mapping[Id, Mapping[Attribute, tuple[Fact, ...]]], lesion: Id) -> bool:
+    """A lesion established as one lesion: its multiplicity supported single."""
+    found = lesions.get(lesion, _NOTHING).get(Attribute.MULTIPLICITY, ())
+    return len(found) == 1 and holds(found[0], Multiplicity.SINGLE)
+
+
+def _lesion_pairs(events: Mapping[str, object], context: _Context,
+                  lesions: Mapping[Id, Mapping[Attribute, tuple[Fact, ...]]]) -> dict[tuple[Id, Attribute, Value], bool]:
     """DECISIONS D296: each settled lesion pair claim of the row (the @3 pair's ``lesion_pairs``; an older row has
-    none), keyed (the statement's lesion, distinct_from, the act's lesion) in FactSet.pair_controls: True when settle
-    established the two lesions distinct (the claim supported, its sameness control rejected), False otherwise. One
-    lesion pair asked twice is established only when every asking was (fail-closed). Read by ``appraised_distinct``
-    alone, so only ever to set two lesions apart, never to join them; every reader of pair_controls by an event's
-    place or lesion ignores these keys (another family's subject, another attribute)."""
+    none, and a row stored before D296 reads as none: DECISIONS D300 RF-L6), keyed (the statement's lesion,
+    distinct_from, the act's lesion) in FactSet.pair_controls: True when settle established the two lesions distinct
+    (the claim supported, its sameness control rejected), False otherwise. One lesion pair asked twice is established
+    only when every asking was (fail-closed). Read by ``appraised_distinct`` alone, so only ever to set two lesions
+    apart, never to join them; every reader of pair_controls by an event's place or lesion ignores these keys (another
+    family's subject, another attribute).
+
+    DECISIONS D300 RF-L3: a pair is established only with the multiplicity its claim's form presumes established too
+    (``_lesion_pair_presumes``): D296's distinctness both lesions single, the membership of the act's lesion that lesion
+    single, the third form neither - so a group, or a lesion not established as one, is set apart only by an
+    established non-membership, and a row settled before D300 asked distinctness of a group reads as not established.
+    A pair the claim set dropped to keep within its bound (RF-L5: no claim) is not established."""
     out: dict[tuple[Id, Attribute, Value], bool] = {}
     found = events.get('lesion_pairs')
     if found is None:
@@ -742,8 +773,17 @@ def _lesion_pairs(events: Mapping[str, object]) -> dict[tuple[Id, Attribute, Val
         if lesion.family is not _L or other.family is not _L or lesion == other:
             raise FactSetError(f'The stored inventory is not readable: {where} is no pair of two lesions.')
         result = _enum(Result, _field(record, 'result', where), f'{where}.result')
+        claim_id = _field(record, 'claim', where)
+        established = False
+        if claim_id is not None and result is Result.SUPPORTED:
+            claim = context.claims.get(_string(claim_id, f'{where}.claim'))
+            if claim is None:
+                raise FactSetError(f'The stored inventory is not readable: {where} names a claim the row does not '
+                                   'hold.')
+            presumed = (lesion, other)[2 - _lesion_pair_presumes(claim, f'{where}.claim'):]
+            established = all(_single(lesions, entry) for entry in presumed)
         key = (lesion, Attribute.DISTINCT_FROM, other)
-        out[key] = out.get(key, True) and result is Result.SUPPORTED
+        out[key] = out.get(key, True) and established
     return out
 
 
@@ -924,7 +964,7 @@ def _build(inventory: object, rejudge: bool, service: datetime.date | None) -> F
     return FactSet(encounter=encounter, people=objects[_P], sections=objects[_N], sessions=objects[_X],
                    anatomy=objects[_Y], lesions=objects[_L], events=objects[_E], anchors=anchors,
                    unlisted=_unlisted(events, context),
-                   pair_controls={**_pair_controls(context), **_lesion_pairs(events)},
+                   pair_controls={**_pair_controls(context), **_lesion_pairs(events, context, objects[_L])},
                    completeness=completeness)
 
 
@@ -1257,9 +1297,123 @@ def apart_by_controls(R: FactSet, a: Id, b: Id, attribute: Attribute, of_a: Iter
 def appraised_distinct(R: FactSet, one: Id, other: Id) -> bool:
     """DECISIONS D296: two lesions established distinct by a lesion pair claim - its claim supported and its sameness
     control rejected (settle's coherence table) - in either orientation (R.pair_controls keyed (lesion, distinct_from,
-    lesion), True). Read only where 4.2's apart_by_lesion reads distinct_from, to set two lesions apart."""
+    lesion), True). Read only where 4.2's apart_by_lesion reads distinct_from, to set two lesions apart: through
+    ``established_distinct``, every reader of an established distinctness (DECISIONS D300 RF-L2). A membership pair
+    (D300 RF-L3) is True only as an established non-membership, the multiplicity its form presumes established too
+    (``_lesion_pairs``)."""
     return (R.pair_controls.get((one, Attribute.DISTINCT_FROM, other)) is True
             or R.pair_controls.get((other, Attribute.DISTINCT_FROM, one)) is True)
+
+
+# --- lesion identity: the same_as join (P5) and an established distinctness (DECISIONS D300 RF-L1, RF-L2) ----------
+
+
+def _possible_ids(R: FactSet, member: Fact) -> tuple[Id, ...]:
+    """The lesion ids a same_as member may name, as engine/coverage's _member_ids reads it (``possibly``): supported, its
+    value; an established negation ("L1 is not the same as L2"), none; not established, its claimed value and its
+    options; every lesion of the FactSet for a silent one."""
+    if member.result is Result.NEGATED:
+        return ()
+    if member.result is Result.SUPPORTED:
+        return (member.value,) if isinstance(member.value, Id) else ()
+    if silent(member):
+        return tuple(R.lesions)
+    return tuple(dict.fromkeys(value for value in (member.value, *member.options) if isinstance(value, Id)))
+
+
+@dataclass(frozen=True, slots=True)
+class _Joins:
+    """A FactSet's same_as join (``possibly_one_finding``): ``component``, each id a member may join to another - each
+    lesion, by each member of its same_as list, to every id that member may name (``_possible_ids``), an id the
+    FactSet does not hold included, either way - mapped to its component (an id joined to none is in none); ``unknown``,
+    each component's ids the FactSet does not hold; ``anywhere``, whether one component holds two of them."""
+    component: Mapping[Id, frozenset[Id]]
+    unknown: Mapping[frozenset[Id], frozenset[Id]]
+    anywhere: bool
+
+
+def _joins(R: FactSet) -> _Joins:
+    graph: dict[Id, list[Id]] = {}
+    for holder in R.lesions:
+        for member in members(R, holder, Attribute.SAME_AS):
+            for other in _possible_ids(R, member):
+                if other != holder:
+                    graph.setdefault(holder, []).append(other)
+                    graph.setdefault(other, []).append(holder)
+    component: dict[Id, frozenset[Id]] = {}
+    for start in graph:
+        if start in component:
+            continue
+        seen, stack = {start}, [start]
+        while stack:
+            for other in graph.get(stack.pop(), ()):
+                if other not in seen:
+                    seen.add(other)
+                    stack.append(other)
+        for node in seen:
+            component[node] = frozenset(seen)
+    unknown = {found: frozenset(node for node in found if node not in R.lesions) for found in component.values()}
+    return _Joins(component=component, unknown=unknown,
+                  anywhere=any(len(found) >= 2 for found in unknown.values()))
+
+
+# Each FactSet's same_as join, computed once (the target row reads it per statement and act; engine/coverage's _SameAs
+# memoizes the bundling's per Reader, DECISIONS D248 G5's cost). Keyed by the FactSet's id, each entry holding the
+# FactSet itself, so the id cannot name another FactSet while its entry stands; the _JOINS_KEPT FactSets read last, the
+# one read longest ago dropped first (a dropped one is computed again). A FactSet never changes, so an entry never goes
+# stale. Not a word list: it holds FactSets and their joins.
+_JOINS: dict[int, tuple[FactSet, _Joins]] = {}
+_JOINS_KEPT = 8
+
+
+def _joins_of(R: FactSet) -> _Joins:
+    entry = _JOINS.pop(id(R), None)
+    if entry is None or entry[0] is not R:
+        entry = (R, _joins(R))
+        while len(_JOINS) >= _JOINS_KEPT:
+            del _JOINS[next(iter(_JOINS))]
+    _JOINS[id(R)] = entry
+    return entry[1]
+
+
+def possibly_one_finding(R: FactSet, one: Id, other: Id) -> bool:
+    """DECISIONS D300 RF-L1 (P5: one id per distinct finding, and a same_as says two entries are one finding): whether
+    same_as members, in any state that leaves them possible, may join two lesion ids - the same id; one component of the
+    same_as graph, directly or through other entries (``_joins``: each member read by ``possibly``, as
+    engine/coverage._SameAs.join reads it); an id the FactSet does not hold in either one's component, other than the
+    id itself (4.11: it may be the other lesion); or two such ids in one component anywhere (they may be both). The
+    same answer as ``coverage._SameAs(R).join((one,), (other,)) is not None``, which tests/v2 pins: one reading, two
+    callers (engine/pairing cannot import engine/coverage). Read so, nothing sets the two apart by lesion
+    (``established_distinct``) and no lesion pair claim is asked between them (contract/claims.same_as_joins, its
+    claim-time twin over pass 1's lists in any state). Every 9.4 weakening of a member widens what it may name, so a
+    weakening never turns it False: same_as stays a hold-only read (3.2.3's UNCONTROLLED)."""
+    if one == other:
+        return True
+    joins = _joins_of(R)
+    found = joins.component.get(one)
+    if found is not None and other in found:
+        return True
+    for side in (one, other):
+        reach = joins.component.get(side)
+        if reach is not None and joins.unknown[reach] - {side}:
+            return True
+    return joins.anywhere
+
+
+def established_distinct(R: FactSet, one: Id, other: Id) -> bool:
+    """DECISIONS D300 RF-L2 (with RF-L1): THE reading of two lesions established distinct, which every reader of an
+    established distinctness reads - 4.2's apart_by_lesion and so its callers (engine/pairing's single target row,
+    engine/coverage._apart's bundling identity, engine/combination.one_stricture's D118), engine/pairing's listed,
+    segment and own arms, and the separate-lesion modifier review (engine/combination.lesions_distinct, 59/XS): two
+    different ids, distinct_from supported between them in either lesion's list, or a lesion pair claim established
+    (``appraised_distinct``: D296, read as a written distinct_from) - and never while same_as may join them
+    (``possibly_one_finding``). Two readers read pass 1's written distinct_from as pass 1's own claim, never this:
+    engine/coverage._SameAs.denials (a contradiction is pass 1's own) and the event coding's distinct_from list."""
+    if one == other:
+        return False
+    written = any(holds(member, other) for member in members(R, one, Attribute.DISTINCT_FROM)) or any(
+        holds(member, one) for member in members(R, other, Attribute.DISTINCT_FROM))
+    return (written or appraised_distinct(R, one, other)) and not possibly_one_finding(R, one, other)
 
 
 def apart_by_lesion(R: FactSet, a: Id, b: Id) -> bool:
@@ -1271,16 +1425,16 @@ def apart_by_lesion(R: FactSet, a: Id, b: Id) -> bool:
     it, so these two are exactly the lesion controls between the pair: a lesion control asked of either object about a
     lesion only a third object names was made for another pair and is not read (refute-r2d-r2 RL1: one unclear control
     made for (E4, E5) held the biopsy E4 against the snare E3, established apart by lesion). A control that was not
-    generated is not rejected. The every-control scan (``apart_by_controls``) stays for the multi-valued sets."""
+    generated is not rejected. The every-control scan (``apart_by_controls``) stays for the multi-valued sets.
+    DECISIONS D300: the distinctness is ``established_distinct`` - the one reading every reader of it shares (RF-L2),
+    never while same_as may join the two lesions, directly or through other entries (RF-L1)."""
     first, second = fact(R, a, Attribute.TARGET_LESION), fact(R, b, Attribute.TARGET_LESION)
     if first.result is not Result.SUPPORTED or second.result is not Result.SUPPORTED:
         return False
     la, lb = first.value, second.value
     if not isinstance(la, Id) or not isinstance(lb, Id) or la == lb:
         return False
-    distinct = any(holds(member, lb) for member in members(R, la, Attribute.DISTINCT_FROM)) or any(
-        holds(member, la) for member in members(R, lb, Attribute.DISTINCT_FROM)) or appraised_distinct(R, la, lb)
-    return (distinct and R.pair_controls.get((a, Attribute.TARGET_LESION, lb)) is True
+    return (established_distinct(R, la, lb) and R.pair_controls.get((a, Attribute.TARGET_LESION, lb)) is True
             and R.pair_controls.get((b, Attribute.TARGET_LESION, la)) is True)
 
 
@@ -1306,3 +1460,122 @@ def apart_by_place(R: FactSet, a: Id, b: Id) -> bool:
     if not all(anatomy.disjoint(one, other) for one in places_a for other in places_b):
         return False
     return apart_by_controls(R, a, b, Attribute.TARGET_PLACES, places_a, places_b)
+
+
+# --- the finding an act's target lesion stands for (DECISIONS D294 G1, D297 ENGB-1) -----------------------------------
+
+
+def any_state_ids(R: FactSet, member: Fact) -> tuple[Id, ...]:
+    """The lesion ids a same_as member names in ANY state (DECISIONS D294 G1): its claimed value and its options,
+    whatever its result - a supported member, an established negation ("L1 is not the same as L2") and one left open
+    all name their value - and every lesion of the FactSet for a silent one (an empty slot leaves every value
+    possible). No state of the member, and so no verdict of pass 2 on one, narrows what it names: read so, same_as only
+    widens a finding (3.2.3's UNCONTROLLED: it only joins, and joining bundles or holds)."""
+    if silent(member):
+        return tuple(R.lesions)
+    return tuple(dict.fromkeys(value for value in (member.value, *member.options) if isinstance(value, Id)))
+
+
+@dataclass(frozen=True, slots=True)
+class FindingPlaces:
+    """The places of the finding a lesion belongs to (``finding_places``; DECISIONS D297 ENGB-1). ``entries``: the
+    finding, the lesion first (``finding``). ``members``: every place member of each entry the FactSet holds, entry by
+    entry in ``entries``' order, each entry's in pass 1's order. ``unknown``: the first entry whose places are not
+    established (``_supported``: no member, a member not established, or none supported) or that the FactSet does not
+    hold (a dangling id); None when every entry of the finding has established places."""
+    entries: tuple[Id, ...]
+    members: tuple[Fact, ...]
+    unknown: Id | None
+
+
+def _components(R: FactSet) -> dict[Id, frozenset[Id]]:
+    """Every id the same_as graph joins - each lesion linked, by each member of its same_as list, to every id that
+    member names in ANY state (``any_state_ids``), an id the FactSet does not hold included, either way - mapped to its
+    component; an id no member names and whose list is empty is in none (it stands alone). Built in the FactSet's
+    order."""
+    graph: dict[Id, list[Id]] = {}
+    for holder in R.lesions:
+        for member in members(R, holder, Attribute.SAME_AS):
+            for other in any_state_ids(R, member):
+                if other != holder:
+                    graph.setdefault(holder, []).append(other)
+                    graph.setdefault(other, []).append(holder)
+    components: dict[Id, frozenset[Id]] = {}
+    for start in graph:
+        if start in components:
+            continue
+        seen = {start}
+        stack = [start]
+        while stack:
+            node = stack.pop()
+            for other in graph.get(node, ()):
+                if other not in seen:
+                    seen.add(other)
+                    stack.append(other)
+        component = frozenset(seen)
+        for node in component:
+            components[node] = component
+    return components
+
+
+# Each FactSet's findings, computed once (DECISIONS D248 G5's cost, as engine/coverage's _SameAs memoizes per Reader:
+# SITE and D240's site fit read a finding per code and act and hold no Reader - a dense same_as graph at FINAL-V2 1.8's
+# bounds took one assessment from 22 s to 148 s unmemoized). Keyed by the FactSet's id, each entry holding the FactSet
+# itself, so the id cannot name another FactSet while its entry stands; the _FINDINGS_KEPT FactSets read last, the one
+# read longest ago dropped first (a dropped one is computed again). A FactSet never changes, so an entry never goes
+# stale. The engine runs one assessment per process at a time (gunicorn's sync workers, the jobs' stage processes).
+_FINDINGS: dict[int, tuple[FactSet, dict[Id, frozenset[Id]], dict[Id, FindingPlaces]]] = {}
+_FINDINGS_KEPT = 8
+
+
+def _findings_of(R: FactSet) -> tuple[dict[Id, frozenset[Id]], dict[Id, FindingPlaces]]:
+    """``R``'s components (``_components``) and its finding places read so far, computed once per FactSet; ``R``
+    becomes the FactSet read last."""
+    entry = _FINDINGS.pop(id(R), None)
+    if entry is None or entry[0] is not R:
+        entry = (R, _components(R), {})
+        while len(_FINDINGS) >= _FINDINGS_KEPT:
+            del _FINDINGS[next(iter(_FINDINGS))]
+    _FINDINGS[id(R)] = entry
+    return entry[1], entry[2]
+
+
+def finding(R: FactSet, lesion: Id) -> tuple[Id, ...]:
+    """The FINDING ``lesion`` belongs to (DECISIONS D294 G1, D297 ENGB-1; P5: one id per distinct finding, so the
+    engine's lesion is its same_as component and a finding filed as two entries is one finding): every lesion entry a
+    same_as member in ANY state (``any_state_ids``) may join to ``lesion``, directly or through other entries and in
+    either direction (a member of either entry's list), together with every id such a member names that the FactSet
+    does not hold (a dangling id, which the caller reads as unknown) - ``lesion`` first, then the others by number.
+    Every state of a member names at least its value, so the finding never narrows with a member's state: same_as is
+    read in the hold direction only. Computed from the FactSet alone, once per FactSet, so it is deterministic."""
+    component = _findings_of(R)[0].get(lesion, frozenset({lesion}))
+    return (lesion, *sorted(component - {lesion}, key=lambda entry: entry.number))
+
+
+def finding_places(R: FactSet, lesion: Id) -> FindingPlaces:
+    """The places an act whose target lesion is ``lesion`` stands at, as EVERY rule that reads an act's target lesion's
+    places reads them (DECISIONS D297 ENGB-1, the class rule of D294 G1): E1j (engine/coverage._biopsy_elsewhere: the
+    removed lesion's places), SITE's lesion arm (engine/evaluate._places_of), D240's site fit
+    (engine/combination.site_outside) and the place SITE's explanation names (engine/questions._site_places) - one
+    reading, never a copy. They are the places of every entry of the lesion's FINDING (``finding``: every lesion entry a
+    same_as member in any state may join to it, directly or through other entries, either direction); and an entry
+    whose places are not established, or an id the FactSet does not hold (``unknown``), leaves each such rule held and
+    open - never READY, never excluded: a place nobody established may be anywhere (4.2, 4.11; P3: an empty list is
+    unknown, never an absence). Read so, a same_as member only adds entries, and each entry adds established places or
+    leaves the rule open, so a wider finding never releases or excludes what a narrower one held: same_as stays a
+    hold-only read (3.2.3's UNCONTROLLED) and no claim, control or pass-2 request changes."""
+    read = _findings_of(R)[1]
+    cached = read.get(lesion)
+    if cached is not None:
+        return cached
+    entries = finding(R, lesion)
+    found: list[Fact] = []
+    unknown: Id | None = None
+    for entry in entries:
+        held = entry in R.lesions
+        if held:
+            found.extend(members(R, entry, Attribute.PLACES))
+        if unknown is None and (not held or _supported(R, entry, Attribute.PLACES) is None):
+            unknown = entry
+    places = read[lesion] = FindingPlaces(entries, tuple(found), unknown)
+    return places

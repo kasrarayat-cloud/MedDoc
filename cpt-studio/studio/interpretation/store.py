@@ -1095,14 +1095,23 @@ class _V2Map(_V2Spec):
 
 class _V2Obj(_V2Spec):
     """An object with exactly its fields; ``check(value, path)`` runs once they are well-shaped. When it has an ``id``,
-    that id is the subject of the facts inside it."""
+    that id is the subject of the facts inside it. ``defaults``: the fields a stored object may lack, each read as the
+    JSON value given - a field a version gained whose empty value means exactly what its absence meant (DECISIONS D300
+    RF-L6: the @3 inventory's lesion_pairs, which a row stored before DECISIONS D296 lacks, reads as no pair asked);
+    the check reads the object with them filled in. An object with none describes itself as before."""
 
-    def __init__(self, fields: dict, check=None) -> None:
-        self.fields, self.check = fields, check
+    def __init__(self, fields: dict, check=None, defaults: Optional[dict] = None) -> None:
+        self.fields, self.check, self.defaults = fields, check, dict(defaults or {})
+
+    def filled(self, value: dict) -> dict:
+        """``value`` with each absent defaulted field given its default (a copy; ``value`` itself is never changed)."""
+        absent = {key: copy.deepcopy(item) for key, item in self.defaults.items() if key not in value}
+        return {**value, **absent} if absent else value
 
     def problem(self, value, path):
         if not isinstance(value, dict):
             return f'{path} is not an object'
+        value = self.filled(value)
         for key in self.fields:
             if key not in value:
                 return f'{path} lacks the field {key}'
@@ -1116,13 +1125,15 @@ class _V2Obj(_V2Spec):
         return self.check(value, path) if self.check is not None else ''
 
     def facts(self, value, path, subject):
+        value = self.filled(value)
         subject = value['id'] if 'id' in self.fields else subject
         for key, spec in self.fields.items():
             yield from spec.facts(value[key], f'{path}.{key}', subject)
 
     def describe(self):
-        return ['object', {key: spec.describe() for key, spec in self.fields.items()},
-                None if self.check is None else self.check.__name__]
+        described = ['object', {key: spec.describe() for key, spec in self.fields.items()},
+                     None if self.check is None else self.check.__name__]
+        return described + [{'defaults': self.defaults}] if self.defaults else described
 
 
 _V2_STR = _V2Test(lambda value: isinstance(value, str), 'a string')
@@ -1600,12 +1611,15 @@ def _v2_build() -> None:
             'claims': _V2Claims(), 'unlisted': _V2List(_V2_UNLISTED),
         }
         if lesion_pairs:  # DECISIONS D296: each lesion pair claim with its settled outcome, bound to its two claims
+            # DECISIONS D300: a pair the claim set dropped to keep within its bound names no claim (RF-L5); a row stored
+            # before D296, which lacks the field, reads it as the empty list (RF-L6)
             inventory['lesion_pairs'] = _V2List(_V2Obj({
-                'lesion': _v2_object_id('L'), 'other': _v2_object_id('L'), 'claim': _V2_CLAIM_ID,
-                'control': _V2_CLAIM_ID,
+                'lesion': _v2_object_id('L'), 'other': _v2_object_id('L'), 'claim': _V2Nullable(_V2_CLAIM_ID),
+                'control': _V2Nullable(_V2_CLAIM_ID),
                 'result': _V2Closed({ct.Result.SUPPORTED.value, ct.Result.UNRESOLVED.value}),
                 'reasons': _V2List(_V2Closed(reasons))}, check=_v2_lesion_pair))
-        events = _V2Obj(inventory, check=_v2_lesion_pairs_bound if lesion_pairs else None)
+        events = _V2Obj(inventory, check=_v2_lesion_pairs_bound if lesion_pairs else None,
+                        defaults={'lesion_pairs': []} if lesion_pairs else None)
         # settle's report records, field for field (contract/types' DoubtApplied, Health, Coherence and Usage; P9: no
         # free-form JSON is stored; DECISIONS D229, hand-off 1d#2)
         doubt_applied = _V2Obj({'index': _V2_INT, 'about': _V2Closed(_v2_values(ct.DoubtAbout)),
@@ -1665,9 +1679,17 @@ def _v2_build() -> None:
 
 def _v2_lesion_pair(value, path) -> str:
     """One stored lesion pair (DECISIONS D296): two different lesions, two different claims, and an outcome its
-    reasons agree with - supported with none (the coherence table established it), unresolved with one at least."""
+    reasons agree with - supported with none (the coherence table established it), unresolved with one at least. A pair
+    the claim set dropped to keep within its bound (DECISIONS D300 RF-L5) names neither claim and is unresolved for
+    exactly ``unappraised``: nothing was asked, so nothing is established."""
     if value['lesion'] == value['other']:
         return f'{path} pairs a lesion with itself'
+    if (value['claim'] is None) is not (value['control'] is None):
+        return f'{path} names a claim without its control, or a control without its claim'
+    if value['claim'] is None:
+        if value['result'] != ct.Result.UNRESOLVED.value or value['reasons'] != [ct.Reason.UNAPPRAISED.value]:
+            return f'{path} names no claim and is not unresolved for want of an appraisal'
+        return ''
     if value['claim'] == value['control']:
         return f'{path} is its own control'
     if (value['result'] == ct.Result.SUPPORTED.value) == bool(value['reasons']):
@@ -1675,13 +1697,25 @@ def _v2_lesion_pair(value, path) -> str:
     return ''
 
 
+# The forms a stored lesion pair's claim and control take (contract/claims.LESION_PAIR_FORMS, by template id): D296's
+# distinctness and D300 RF-L3's two membership forms, each (claim, control).
+_V2_LESION_PAIR_FORMS = (('lesion.distinct_from', 'lesion.same_as'), ('lesion.not_member', 'lesion.member'),
+                         ('lesion.not_member.any', 'lesion.member.any'))
+
+
 def _v2_lesion_pairs_bound(value, path) -> str:
     """The @3 inventory's lesion pairs bound to what the row holds (DECISIONS D296): each pair's lesions are lesions of
-    the inventory, each lesion pair once, its claim stored in the claim role as "Lesions {lesion} and {other} are
-    different lesions." and its control in the control role as "... the same lesion.", both about the pair's first lesion
-    and naming its second - so an outcome is never read for a claim the row does not hold."""
+    the inventory, each lesion pair once, its claim stored in the claim role and its control in the control role, of one
+    of the pair forms together (_V2_LESION_PAIR_FORMS: D296's "Lesions {lesion} and {other} are different lesions." /
+    "... the same lesion.", or D300 RF-L3's membership forms), both about the pair's first lesion and naming its
+    second - so an outcome is never read for a claim the row does not hold. DECISIONS D300 RF-L4: a supported pair -
+    the outcome that can release - is read only when the verdicts the row stores for its claim and control establish it
+    (3.2.3's coherence table, as _v2_appraisal_establishes reads a fact's: the claim supported with no qualifier but
+    approximate, attached yes, on evidence units of the row; the control contradicted): a row whose stored verdicts
+    refute its supported pair is refused."""
     lesions = {item['id'] for item in value['lesions']}
     claims = {item['id']: item for item in value['claims']}
+    units = {unit['id'] for unit in value['units']}
     seen: set = set()
     for index, item in enumerate(value['lesion_pairs']):
         where = f'{path}.lesion_pairs[{index}]'
@@ -1691,12 +1725,24 @@ def _v2_lesion_pairs_bound(value, path) -> str:
         if key in seen:
             return f'{where} repeats a lesion pair'
         seen.add(key)
-        for name, role, template in (('claim', ct.ClaimRole.CLAIM.value, 'lesion.distinct_from'),
-                                     ('control', ct.ClaimRole.CONTROL.value, 'lesion.same_as')):
-            found = claims.get(item[name])
-            if (found is None or found['role'] != role or found['template'] != template
-                    or found['subject'] != item['lesion'] or found['value'] != item['other']):
-                return f'{where} names as its {name} no stored claim of that form'
+        if item['claim'] is None:
+            continue  # dropped to keep within the bound (DECISIONS D300 RF-L5): unresolved, unappraised
+        found, other = claims.get(item['claim']), claims.get(item['control'])
+        forms = [form for form in _V2_LESION_PAIR_FORMS if found is not None and found['template'] == form[0]]
+        if (found is None or other is None or not forms or other['template'] != forms[0][1]
+                or found['role'] != ct.ClaimRole.CLAIM.value or other['role'] != ct.ClaimRole.CONTROL.value
+                or any(stored['subject'] != item['lesion'] or stored['value'] != item['other']
+                       for stored in (found, other))):
+            return f'{where} names as its claim and its control no stored pair of claims of one lesion pair form'
+        if item['result'] == ct.Result.SUPPORTED.value:
+            verdict, control = found['verdict'], other['verdict']
+            if (verdict is None or control is None or verdict['verdict'] != ct.VerdictValue.SUPPORTS.value
+                    or any(qualifier != ct.Qualifier2.APPROXIMATE.value for qualifier in verdict['qualifiers'])
+                    or verdict['attached'] != ct.Attached.YES.value or not verdict['evidence']
+                    or not set(verdict['evidence']) <= units
+                    or control['verdict'] != ct.VerdictValue.CONTRADICTS.value):
+                return (f'{where} is supported, and the verdicts the row stores for its claim and its control do not '
+                        'establish it (FINAL-V2 3.2.3; DECISIONS D300 RF-L4)')
     return ''
 
 

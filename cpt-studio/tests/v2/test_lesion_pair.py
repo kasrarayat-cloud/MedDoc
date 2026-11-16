@@ -201,12 +201,15 @@ class R2LClaimsTests(SimpleTestCase):
         cards = {object_: card for card, object_ in self.claim_set.objects.items()}
         for pair in pairs:
             claim, control = self.claim_set.claim(pair.claim), self.claim_set.claim(pair.control)
-            self.assertEqual((claim.template, control.template), ('lesion.distinct_from', 'lesion.same_as'))
+            # DECISIONS D300 RF-L3 (round r2c): L3 is a group and the removed L1 and L2 single, so the pair asks the
+            # membership of the act's lesion among the statement's (D296's distinctness forms before D300)
+            self.assertEqual((claim.template, control.template), ('lesion.not_member', 'lesion.member'))
             self.assertEqual((claim.subject, claim.value, control.subject, control.value),
                              (pair.lesion, pair.other, pair.lesion, pair.other))
             first, second = cards[(xs.Family.LESION, pair.lesion)], cards[(xs.Family.LESION, pair.other)]
-            self.assertEqual(self.claim_set.sentences[pair.claim], f'Lesions {first} and {second} are different lesions.')
-            self.assertEqual(self.claim_set.sentences[pair.control], f'Lesions {first} and {second} are the same lesion.')
+            self.assertEqual(self.claim_set.sentences[pair.claim],
+                             f'Lesion {second} is not one of the lesions of {first}.')
+            self.assertEqual(self.claim_set.sentences[pair.control], f'Lesion {second} is one of the lesions of {first}.')
             self.assertIn(pair.control, self.claim_set.controls)
             self.assertNotIn(pair.claim, self.claim_set.controls)
             # both lesions' description runs, nothing of any act
@@ -219,8 +222,8 @@ class R2LClaimsTests(SimpleTestCase):
         self.assertEqual(len(lone.lesion_pairs), 2)
         self.assertEqual(len({pair.claim for pair in self.claim_set.lesion_pairs}), 2)
         self.assertEqual(len(self.claim_set.claims) - len(lone.claims) > 0, True)  # E5's own claims, no lesion pair more
-        lesion_claims = [claim for claim in self.claim_set.claims
-                         if claim.template in ('lesion.distinct_from', 'lesion.same_as')]
+        lesion_claims = [claim for claim in self.claim_set.claims  # D300 RF-L3: the membership forms (L3 a group)
+                         if claim.template in ('lesion.not_member', 'lesion.member')]
         self.assertEqual(len(lesion_claims), 4)
 
     def test_a_written_same_as_or_distinct_from_asks_none(self):

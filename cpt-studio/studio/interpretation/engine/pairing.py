@@ -95,6 +95,9 @@ supported device, so neither reading releases under a weakening.
   - a statement-filed event whose breadth is not established: set apart by nothing.
   A lesion possibly the same as the act's (same_as, in any state that leaves it possible) is never set apart by lesion,
   in any arm: same_as only joins (3.2.3's UNCONTROLLED), and read by possibly, weakening it never releases (P-MONO).
+  DECISIONS D300: "possibly the same" reads same_as directly or through other entries (RF-L1: the P5 component,
+  facts.possibly_one_finding, as engine/coverage's join reads it), and every arm reads one established distinctness -
+  a written distinct_from or an established lesion pair claim alike (RF-L2: facts.established_distinct).
   Otherwise SAME when the same lesion (equal ids, or same_as supported) or overlapping places
   (engine/anatomy.compatible) are established on both sides, and UNRESOLVED: an unknown target never proves
   independence (4.11).
@@ -114,7 +117,19 @@ supported device, so neither reading releases under a weakening.
   (DEVICE_CURRENT: always, may or never deliver high-frequency current; contract/claims.py's device labels and
   contract/extract_schema.py's Device list) - DEVICE_CONTAINS' electrocautery row is the "always" members, DEVICE_MAY_BE
   the "may" members (a catheter and a device of another kind among them) - and a member the table does not classify
-  is read as "may" (UNRESOLVED, never INDEPENDENT by omission), which tests/v2/test_pairing.py turns red.
+  is read as "may" (UNRESOLVED, never INDEPENDENT by omission), which tests/v2/test_pairing.py turns red. DECISIONS
+  D297 ("a catheter may be a device delivered through a catheter, a needle may be an injection device") and D301
+  (RB2-1/2: "two Device members whose definitions both admit one physical device - an injection needle as a needle or
+  an injection device, a needle-knife as a needle or a sphincterotome, a device delivered through a catheter - keep the
+  technique row UNRESOLVED"): EVERY pair of Device members is classified from the two contract definitions. Each member
+  but the two energies is read for the physical devices its definition admits, each as used in one act (ADMITS: the
+  part that does the act, and for a catheter the device it delivers - Instrument's members are the builder's examples,
+  named so in tests/v2/test_pairing.py); two members whose definitions admit one Instrument may name one device. The two
+  energies read DEVICE_CURRENT (ENERGIES): electrocautery may be a "may" member (D294 G2), radiofrequency energy an
+  "always" or a "may" member (D222: high-frequency current is radiofrequency energy - argon plasma coagulation delivers
+  it), so the needle stays apart from both (D294 G2: "a needle" carries no current). A member that reads no
+  definition is read as possibly every device (UNRESOLVED, never INDEPENDENT by omission). DEVICE_MAY_BE is that
+  relation, one row per member: never covered, never INDEPENDENT by a negation of either.
 
 **The relation** (4.5): INDEPENDENT when at least one row proves it, unless the pair is ``claimed`` (D's scope.covers
 names A, in any state), which is UNRESOLVED instead - Gemini says D applies to A while the facts say apart, and the
@@ -277,23 +292,159 @@ def _current(device: Device) -> Current:
     return DEVICE_CURRENT.get(device, Current.MAY)
 
 
+@unique
+class Instrument(Enum):
+    """A physical device as used in one act (DECISIONS D301, RB2-1/2: "two Device members whose definitions both admit
+    one physical device"): the part that does the act - and, for a catheter, the device it delivers (DECISIONS D297: "a
+    catheter may be a device delivered through a catheter"). Each member is the builder's example of a device some
+    Device member's contract definition admits (round r2d's eng-b3; tests/v2/test_pairing.py names them the builder's,
+    apart from the rulings' own examples); the engine reads no document's words for one (ADMITS)."""
+    SCOPE = 'scope'  # an endoscope with an insertion tube: a gastroscope, colonoscope, duodenoscope or enteroscope
+    DIRECT_CHOLANGIOSCOPE = 'direct_cholangioscope'  # an ultraslim endoscope passed into a duct
+    CATHETER_CHOLANGIOSCOPE = 'catheter_cholangioscope'  # a single-operator cholangioscope, passed as a catheter
+    VIDEO_CAPSULE = 'video_capsule'
+    SNARE_COLD = 'snare_cold'  # a snare used without current
+    SNARE_HOT = 'snare_hot'  # a snare used with current
+    FORCEPS_COLD = 'forceps_cold'  # forceps used without current
+    FORCEPS_HOT = 'forceps_hot'  # forceps used with current: hot biopsy forceps, coagulation graspers
+    INJECTION_NEEDLE = 'injection_needle'  # an injection needle in its catheter sheath (D301: "an injection needle")
+    EUS_NEEDLE = 'eus_needle'  # an EUS fine needle, used to sample or to inject
+    NEEDLE_KNIFE = 'needle_knife'  # a needle-knife sphincterotome, a catheter with a needle electrode (D301)
+    NEEDLE_TYPE_KNIFE = 'needle_type_knife'  # a needle-type electrosurgical knife (ESD, POEM)
+    WATER_JET_KNIFE = 'water_jet_knife'  # an electrosurgical knife with a water jet, used to inject
+    ELECTROSURGICAL_KNIFE = 'electrosurgical_knife'  # an electrosurgical knife of another kind (D294 G2's example)
+    DILATING_BALLOON = 'dilating_balloon'  # a dilating balloon on its catheter
+    WIRE_GUIDED_BOUGIE = 'wire_guided_bougie'  # bougie dilators passed over a guide wire
+    BOUGIE = 'bougie'  # a bougie passed without a guide wire
+    CLIP_ON_CATHETER = 'clip_on_catheter'  # a clip on its delivery catheter
+    OVER_THE_SCOPE_CLIP = 'over_the_scope_clip'  # a clip mounted on the endoscope's tip
+    BAND_LIGATOR = 'band_ligator'  # a band ligator mounted on the endoscope's tip
+    ARGON_PLASMA_PROBE = 'argon_plasma_probe'  # an argon plasma probe, passed as a catheter
+    CRYOTHERAPY_CATHETER = 'cryotherapy_catheter'  # a cryotherapy spray catheter
+    CRYOABLATION_BALLOON = 'cryoablation_balloon'  # a cryoablation balloon on its catheter: a device of another kind
+    HEATER_PROBE = 'heater_probe'  # passed as a catheter
+    BIPOLAR_PROBE = 'bipolar_probe'  # passed as a catheter
+    STENT_ON_CATHETER = 'stent_on_catheter'  # a stent on its delivery catheter
+    BASKET_CATHETER = 'basket_catheter'
+    LITHOTRIPSY_BASKET = 'lithotripsy_basket'  # a mechanical lithotripsy basket, a basket catheter
+    LITHOTRIPSY_FIBRE = 'lithotripsy_fibre'  # an electrohydraulic probe or a laser fibre, passed through a catheter
+    EXTRACTION_BALLOON = 'extraction_balloon'  # a stone extraction balloon catheter
+    SPHINCTEROTOME = 'sphincterotome'  # a catheter with a cutting wire
+    POWDER_APPLICATOR = 'powder_applicator'  # a hemostatic powder applicator, through its catheter
+    PLAIN_CATHETER = 'plain_catheter'  # a catheter used as itself: to cannulate, drain or spray
+    OTHER_DEVICE = 'other_device'  # a device of another kind not passed as a catheter: an overtube, a suturing device
+    HAND = 'hand'  # manual pressure or handling, without a device
+
+
+_I = Instrument
+# DECISIONS D301 (RB2-1/2, with D297 and D294 G2): EVERY Device member but the two energies (ENERGIES), read from its
+# contract definition (contract/claims.py's device labels, contract/extract_schema.py's Device list) for the devices it
+# admits, each as used in one act (tests/v2/test_pairing.py pins each row beside its label, fails on a member left
+# unread, and checks the technique row over every device pair). A carrier is read as the device it delivers only where
+# a ruling reads it so - "a catheter" (D297); "an endoscope" and "a cholangioscope" name the scope, never what passes
+# through its channel (every channel-passed device would otherwise possibly be a scope). A device of two parts doing two
+# acts (a bipolar probe with an injection needle, a sphincterotome with a balloon) is two devices, one per act:
+# - "an endoscope": a scope with an insertion tube, a cholangioscope among them - never a capsule (contract/claims.py's
+#   ANOTHER_DEVICE, D213's contraries, sets a scope against a capsule);
+# - "a needle": an injection needle (D297, D301), an EUS fine needle and a needle-knife (D301) - the sphincterotome's
+#   and the electrosurgical knife used in ESD; never electrocautery or radiofrequency energy (ENERGIES: D294 G2);
+# - "an injection device": an injection needle, an EUS needle used to inject, a water-jet knife used to inject;
+# - "dilators passed over a guide wire" (the Device list's wire_bougie): bougie dilators - a balloon passed over a wire
+#   is "a dilating balloon" (FINAL-V2 3.2.3's sibling class balloon/wire_bougie);
+# - "a catheter": every device delivered through a catheter or passed as one - a cholangioscope, an injection needle, a
+#   needle-knife, a dilating balloon, a clip, an argon plasma probe, a cryotherapy catheter or balloon, a heater or a
+#   bipolar probe, a stent, a basket (a mechanical lithotripsy basket among them), an electrohydraulic probe or a laser
+#   fibre, an extraction balloon, a sphincterotome, a powder applicator, a catheter used as itself; never a snare or
+#   forceps (each passed in its own sheath), a bougie, a band ligator or a scope;
+# - "a device of another kind": a device whose own kind no other member names - an electrosurgical knife (D294 G2), the
+#   needle-type and the water-jet knife, a cryoablation balloon, a powder applicator, an overtube or a suturing device;
+# - "manual pressure or handling, without a device": no device.
+ADMITS: Mapping[Device, frozenset[Instrument]] = MappingProxyType({
+    Device.ENDOSCOPE: frozenset({_I.SCOPE, _I.DIRECT_CHOLANGIOSCOPE, _I.CATHETER_CHOLANGIOSCOPE}),
+    Device.COLD_SNARE: frozenset({_I.SNARE_COLD}),
+    Device.HOT_SNARE: frozenset({_I.SNARE_HOT}),
+    Device.SNARE: frozenset({_I.SNARE_COLD, _I.SNARE_HOT}),
+    Device.COLD_FORCEPS: frozenset({_I.FORCEPS_COLD}),
+    Device.HOT_FORCEPS: frozenset({_I.FORCEPS_HOT}),
+    Device.FORCEPS: frozenset({_I.FORCEPS_COLD, _I.FORCEPS_HOT}),
+    Device.NEEDLE: frozenset({_I.INJECTION_NEEDLE, _I.EUS_NEEDLE, _I.NEEDLE_KNIFE, _I.NEEDLE_TYPE_KNIFE}),
+    Device.INJECTION: frozenset({_I.INJECTION_NEEDLE, _I.EUS_NEEDLE, _I.WATER_JET_KNIFE}),
+    Device.BALLOON: frozenset({_I.DILATING_BALLOON}),
+    Device.WIRE_BOUGIE: frozenset({_I.WIRE_GUIDED_BOUGIE}),
+    Device.BOUGIE: frozenset({_I.BOUGIE}),
+    Device.CLIP: frozenset({_I.CLIP_ON_CATHETER, _I.OVER_THE_SCOPE_CLIP}),
+    Device.BAND: frozenset({_I.BAND_LIGATOR}),
+    Device.ARGON_PLASMA: frozenset({_I.ARGON_PLASMA_PROBE}),
+    Device.CRYOTHERAPY: frozenset({_I.CRYOTHERAPY_CATHETER, _I.CRYOABLATION_BALLOON}),
+    Device.THERMAL_PROBE: frozenset({_I.HEATER_PROBE, _I.BIPOLAR_PROBE}),
+    Device.STENT: frozenset({_I.STENT_ON_CATHETER}),
+    Device.BASKET: frozenset({_I.BASKET_CATHETER, _I.LITHOTRIPSY_BASKET}),
+    Device.EXTRACTION_BALLOON: frozenset({_I.EXTRACTION_BALLOON}),
+    Device.SPHINCTEROTOME: frozenset({_I.SPHINCTEROTOME, _I.NEEDLE_KNIFE}),
+    Device.LITHOTRIPTER: frozenset({_I.LITHOTRIPSY_BASKET, _I.LITHOTRIPSY_FIBRE}),
+    Device.CHOLANGIOSCOPE: frozenset({_I.DIRECT_CHOLANGIOSCOPE, _I.CATHETER_CHOLANGIOSCOPE}),
+    Device.CAPSULE: frozenset({_I.VIDEO_CAPSULE}),
+    Device.CATHETER: frozenset({
+        _I.CATHETER_CHOLANGIOSCOPE, _I.INJECTION_NEEDLE, _I.NEEDLE_KNIFE, _I.DILATING_BALLOON, _I.CLIP_ON_CATHETER,
+        _I.ARGON_PLASMA_PROBE, _I.CRYOTHERAPY_CATHETER, _I.CRYOABLATION_BALLOON, _I.HEATER_PROBE, _I.BIPOLAR_PROBE,
+        _I.STENT_ON_CATHETER, _I.BASKET_CATHETER, _I.LITHOTRIPSY_BASKET, _I.LITHOTRIPSY_FIBRE, _I.EXTRACTION_BALLOON,
+        _I.SPHINCTEROTOME, _I.POWDER_APPLICATOR, _I.PLAIN_CATHETER}),
+    Device.MANUAL: frozenset({_I.HAND}),
+    Device.OTHER: frozenset({_I.ELECTROSURGICAL_KNIFE, _I.NEEDLE_TYPE_KNIFE, _I.WATER_JET_KNIFE,
+                             _I.CRYOABLATION_BALLOON, _I.POWDER_APPLICATOR, _I.OTHER_DEVICE}),
+})
+# DECISIONS D294 G2 and D222: the two members whose definitions name an energy, each read through DEVICE_CURRENT - it
+# may name a device whose class is in its set: electrocautery a "may" member (its "always" members it covers:
+# DEVICE_CONTAINS), radiofrequency energy an "always" or a "may" member (high-frequency current is radiofrequency
+# energy, D222: argon plasma coagulation delivers it; electrocautery covers radiofrequency) - eng-b2's question Q2
+# (argon plasma, a thermal probe, a hot snare, hot forceps), built under D301's rule.
+ENERGIES: Mapping[Device, frozenset[Current]] = MappingProxyType({
+    Device.ELECTROCAUTERY: frozenset({Current.MAY}),
+    Device.RADIOFREQUENCY: frozenset({Current.ALWAYS, Current.MAY}),
+})
+
+
+def _admits(device: Device) -> frozenset[Instrument]:
+    """The instruments a member's definition admits (ADMITS); a member it does not read is read as admitting every one
+    - the hold direction: possibly every device, never INDEPENDENT by omission (DECISIONS D301, as D294 G2's
+    ``_current``)."""
+    found = ADMITS.get(device)
+    return frozenset(Instrument) if found is None else found
+
+
 # A device's own kinds: v1's relations.DEVICE_CONTAINS by value - a snare covers the cold and the hot snare, forceps the
 # cold and the hot forceps - and DECISIONS D292's E5j, the departure tests/v2/test_pairing.py names: electrocautery
 # covers the devices that deliver high-frequency current by definition (D222: argon plasma coagulation delivers it) -
 # the hot snare, the hot forceps, argon plasma and radiofrequency: since DECISIONS D294 G2 the ALWAYS members of
-# DEVICE_CURRENT but electrocautery itself.
+# DEVICE_CURRENT but electrocautery itself. Two members that may name one device (DECISIONS D297, D301) never cover each
+# other, so ADMITS adds no row.
 DEVICE_CONTAINS: Mapping[Device, frozenset[Device]] = MappingProxyType({
     Device.SNARE: frozenset({Device.COLD_SNARE, Device.HOT_SNARE}),
     Device.FORCEPS: frozenset({Device.COLD_FORCEPS, Device.HOT_FORCEPS}),
     Device.ELECTROCAUTERY: frozenset(device for device in Device
                                      if device is not Device.ELECTROCAUTERY and _current(device) is Current.ALWAYS),
 })
-# The devices that MAY be one of another's kinds (DECISIONS D292's E5j; D294 G2: the MAY members of DEVICE_CURRENT, an
-# unclassified member among them): each may be electrocautery - never covered by it, never INDEPENDENT of it in the
-# technique row (``_may_be``), and left possible by a negated electrocautery.
+
+
+def _one_device(first: Device, second: Device) -> bool:
+    """DECISIONS D301 (RB2-1/2): whether two members' contract definitions both admit one physical device, neither
+    covering the other (DEVICE_CONTAINS) - an energy (ENERGIES) beside a member whose DEVICE_CURRENT class it reads, any
+    other two members beside an Instrument both admit (``_admits``: a member ADMITS does not read admits every one)."""
+    if first is second or second in DEVICE_CONTAINS.get(first, frozenset()) \
+            or first in DEVICE_CONTAINS.get(second, frozenset()):
+        return False
+    for energy, device in ((first, second), (second, first)):
+        if energy in ENERGIES:
+            return _current(device) in ENERGIES[energy]
+    return bool(_admits(first) & _admits(second))
+
+
+# The devices each member MAY name as well - every member's row, read either way (``_may_be``): never covered by it,
+# never INDEPENDENT of it in the technique row, and left possible by its negation. DECISIONS D292's E5j and D294 G2:
+# electrocautery's row is DEVICE_CURRENT's "may" members (an unclassified member among them); DECISIONS D297 and D301:
+# every row is the members whose definitions admit one physical device with it (``_one_device``).
 DEVICE_MAY_BE: Mapping[Device, frozenset[Device]] = MappingProxyType({
-    Device.ELECTROCAUTERY: frozenset(device for device in Device if _current(device) is Current.MAY),
-})
+    device: frozenset(other for other in Device if _one_device(device, other)) for device in Device})
 # The other date relations and performers (reading.OTHER_DATES and OTHER_PERFORMERS): a statement's "established as
 # another" (4.5), and the documenting values whose negation establishes another.
 OTHER_DATES: frozenset[DateRelation] = frozenset({DateRelation.EARLIER_DATE, DateRelation.LATER_DATE})
@@ -662,23 +813,22 @@ def _same_lesion(R: FactSet, one: Id, other: Id) -> bool:
 
 
 def _possibly_same(R: FactSet, one: Id, other: Id) -> bool:
-    """Possibly one lesion: the same id, or a same_as member in either lesion's list that possibly names the other
-    (facts.possibly_written: supported, or not established with it as its claimed value or one of its options - a
-    list's member, which DECISIONS D294 RD-3's open denial does not reach). The guard against setting such a pair apart
-    by lesion: same_as is UNCONTROLLED because it only joins (3.2.3), so it may hold and never release, and read by
-    possibly a weakened same_as still holds (P-MONO). The same lesion in SAME reads _same_lesion (established)."""
-    return one == other or any(facts_.possibly_written(member, other)
-                               for member in facts_.members(R, one, _A.SAME_AS)) or any(
-        facts_.possibly_written(member, one) for member in facts_.members(R, other, _A.SAME_AS))
+    """Possibly one lesion: the same id, or same_as members, in any state that leaves them possible, that may join the
+    two - one member in either lesion's list or a chain of them through other entries (DECISIONS D300 RF-L1:
+    facts.possibly_one_finding, the P5 component as engine/coverage._SameAs.join reads it; the reading before D300 read
+    only the two lesions' own members, so a chain L3 -> L2 -> L1 set L3 apart from L1). The guard against setting such a
+    pair apart by lesion in every arm: same_as is UNCONTROLLED because it only joins (3.2.3), so it may hold and never
+    release, and read by possibly a weakened same_as still holds (P-MONO). The same lesion in SAME reads _same_lesion
+    (established)."""
+    return facts_.possibly_one_finding(R, one, other)
 
 
 def _distinct(R: FactSet, one: Id, other: Id) -> bool:
-    """distinct_from supported between two lesions, in either lesion's list, or the two established distinct by a
-    lesion pair claim (DECISIONS D296: facts.appraised_distinct) - facts.apart_by_lesion's arm, read by the listed,
-    segment and own targets to set two lesions apart, never to join them."""
-    return any(facts_.holds(member, other) for member in facts_.members(R, one, _A.DISTINCT_FROM)) or any(
-        facts_.holds(member, one) for member in facts_.members(R, other, _A.DISTINCT_FROM)) or \
-        facts_.appraised_distinct(R, one, other)
+    """Two lesions established distinct (facts.established_distinct, DECISIONS D300 RF-L2: distinct_from supported
+    between them in either lesion's list, or a lesion pair claim established - DECISIONS D296's, read as a written
+    distinct_from - and never while same_as may join them) - facts.apart_by_lesion's arm, read by the listed, segment
+    and own targets to set two lesions apart, never to join them."""
+    return facts_.established_distinct(R, one, other)
 
 
 def _disjoint(first: frozenset[Landmark] | None, second: frozenset[Landmark] | None) -> bool:
@@ -856,8 +1006,11 @@ def _technique_row(R: FactSet, p: _Context) -> RowResult:
 def _may_be(one: Fact, other: Fact) -> bool:
     """DECISIONS D292's E5j: two SUPPORTED devices one of which may be the other's kind (DEVICE_MAY_BE, either way: a
     MAY member of DEVICE_CURRENT beside electrocautery - a thermal probe, a sphincterotome, a catheter, a device of
-    another kind: D294 G2). Read only to keep the technique row UNRESOLVED where the two device sets are disjoint; it
-    never covers, so a negated electrocautery leaves such a device possible."""
+    another kind: D294 G2; and, DECISIONS D297 and D301, any two members whose contract definitions both admit one
+    physical device - an injection needle as a needle or an injection device, a needle-knife as a needle or a
+    sphincterotome, a device delivered through a catheter beside a catheter: ``_one_device``). Read only to keep the
+    technique row UNRESOLVED where the two device sets are disjoint; it never covers, so a negated device leaves every
+    device that may be its kind possible."""
     if one.result is not Result.SUPPORTED or other.result is not Result.SUPPORTED:
         return False
     first, second = one.value, other.value

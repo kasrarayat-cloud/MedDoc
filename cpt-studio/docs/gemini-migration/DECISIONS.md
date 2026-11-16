@@ -16568,3 +16568,171 @@ four refutation lenses (false READY, design, reproduction, generality: 40 findin
   - Order: int1 = the lead tree + P1-FRAME + P1-LESION + r2's five patches + tools (product parts) and the tools/v2
     patch, integrated and tested; pair 2 is sent on int1's test image (r2b changes no request); r2b builds on copies of
     int1; the final refutation runs over the whole diff from the lead tree before any merge.
+- **D298 Pair 2 passes; rows of wrong_ready kind 'act' are adjudicated by reading (session 31dfc45d, 2026-11-16).**
+  - Pair 2 (S02 C/W1-u30a-reg-p23-guard-handoff-027, L02 aaadf1eb01d5, an EGD) on cpt-studio-test:b424db5511e4 (int1:
+    P1-FRAME, P1-LESION, r2): 4 sends, no stream breach, $3.813735; the test's spend $7.110102. Scored by replay through
+    trees/int1-b424db5511e4 (both case-runs reproduced): S02 45385 READY, correct; L02 43235, 43249 and 43252 held,
+    correct (expected not READY); 43239 READY where READY is expected, scored wrong_ready of kind 'act': its act E8
+    [4542, 4737] is not the expectation's [5297, 5565].
+  - Adjudicated by reading both spans: E8 is a performed biopsy in the same EGD (four cold-forceps biopsies of the
+    salmon-colored mucosa, specimen C); the expectation's span is the gastric biopsies (specimens A and B). 43239 is
+    one unit per EGD, and either act supports it: the READY is correct. The expectation names one of two supporting
+    acts. Pair 2: 5 of 5 rows correct (READY recall 2/2, no unnecessary hold, no wrong READY, no wrong exclusion).
+  - The rule, for every pair: score_v2 already files a READY on an act other than the expected one as wrong_ready of
+    kind 'act' (never silently right, since a READY anchored on a planned or historical act looks the same). Each such
+    row is read first-hand; it counts correct only when the engine's act is a performed act of the code's kind in the
+    code's session on the date of service, and the code reads no act-specific fact the expected act would decide
+    otherwise. The adjudication is recorded per row. No tool change.
+- **D299 Pair 3 fails; its class P3-PART: a section fact may cite its procedure part's heading (session 31dfc45d,
+  2026-11-16).**
+  - Pair 3 (S03 C/PAIR-5-O1, L03 da6f50ab69a0, an EGD and a colonoscopy in one note) on cpt-studio-test:b424db5511e4:
+    4 sends, no stream breach, $4.751807; the test's spend $11.861909. Scored by replay through int1 (both case-runs
+    reproduced): S03 45385 READY, correct; L03 43235, 45382, 45384 held, correct; 43239, 45380 and 45385 held where
+    READY is expected (unnecessary holds: unestablished:geometry_section, item "procedure" on E8, E13, E11). No wrong
+    READY, no wrong exclusion. The pair fails; the sends stop until the class is fixed (D277).
+  - Cause: L03 is written in parts - "PART 1: ESOPHAGOGASTRODUODENOSCOPY" (N8, role procedure), "FINDINGS:" (N9),
+    "EGD IMPRESSION:" (N10), "PART 2: COLONOSCOPY" (N11), "FINDINGS:" (N12) - and pass 1 sources each act's session to
+    its part's heading with link section. G1's section geometry accepts only the containing section's own start or
+    closing source (the acts lie in N9 and N12), so every act's session settles unresolved (geometry_section) and every
+    code of both procedures is held on "In which procedure was this act done?". A note in procedure parts with
+    findings subsections is common.
+  - Rule (P3-PART): G1's `section` link also holds for a source lying in the start of the containing section's
+    PROCEDURE PART - the nearest section before the containing section whose role pass 1 states as procedure, with no
+    other procedure-role section between them (the sections are flat: a part is its procedure section and the sections
+    that follow it up to the next procedure section). Every other G1 rule stands; a source in another part's heading
+    still fails; the fact it admits becomes a claim pass 2 appraises, so the release rests on pass 2's support. Like
+    D295 it changes the claim set (the pass-2 request) of a document it reaches - named here.
+  - Re-check: L03's recorded pass 1 with a faithful pass 2 (free); confirmed by the next pair on an image that carries
+    the fix.
+- **D300 The first refutation of P1-FRAME and P1-LESION (round r2b's rf-frame and rf-lesion, findings reproduced),
+  and round r2c's rulings (session 31dfc45d, 2026-11-16).**
+  - P1-FRAME, RBFX-FRAME-1 (medium, reproduced; a design question on D199's last bullet versus D295): a note that opens
+    with its first heading and no title line gets D199's empty, zero-length N0 (no G2 reason), so D295's walk found no
+    frame part and every frame fact failed G1 (45385 held; the same text with a title line READY). Ruled: D199's last
+    bullet is superseded for the frame part - whenever N0 passes G2, its empty zero-length form included, the frame part
+    starts at N0's start and joins the leading sections as D295 states; only an N0 with a G2 reason leaves no frame part.
+    RBFX-FRAME-2 (low test gap): the told offset counts every event pass 1 filed, denials and anchors that fail to
+    locate included; check()-level tests pin both.
+  - P1-LESION: RF-L1 (medium, reproduced, false READY): the pair claim was asked between two lesions a same_as chain
+    may join through other entries (L3 same_as L2 same_as L1), and its distinctness released 45385. Ruled: whenever
+    same_as members, in any state that leaves them possible, join the statement's lesion to the act's lesion directly
+    or through other entries (the P5 component, coverage._SameAs.join), no lesion pair claim is asked and nothing sets
+    them apart by lesion. RF-L3 (medium, reproduced, false READY; a design question): for a group, "a different lesion"
+    does not test membership - a removed polyp may be one of a denied group although the group is not that polyp.
+    Ruled: whenever either lesion of a pair is not established as one lesion (a group, or multiplicity not
+    established), the pair claim asks membership - "<the act's lesion> is not one of <the statement's lesions>", with
+    the contrary control "... is one of ..." - and only an established non-membership (claim supported, control
+    rejected) sets them apart; for two single lesions the claim stays distinctness. RF-L2 (verified low): every reader
+    of an established distinctness reads the appraised one as it reads a written distinct_from (the modifier review's
+    lesions_distinct included), with a test per reader. RF-L4 (low): the store checks a releasing outcome against the
+    verdicts stored for its claim and control and refuses a row they refute. RF-L5 (low): claims that can only release
+    (the lesion pair claims) are dropped first, never the document, when a set would pass the bound, and the drop is
+    recorded (a dropped pair releases nothing). RF-L6 (low): at the @3 pair a stored row without lesion_pairs reads as
+    the empty list. RF-L7 (low): a P-MONO/P-INDEP fixture carries a lesion pair.
+  - Round r2c (on int1): builder r2c-geom (D299 P3-PART, RBFX-FRAME-1, RBFX-FRAME-2) and builder r2c-lesion (RF-L1-L7),
+    each refuted, its serious findings reproduced; then int2 integrates int1, r2b's five fix-ups and r2c; then the
+    final refutation over the whole diff from the lead tree. Pair 4 waits for an image with r2c (its classes change the
+    pass-2 request).
+- **D301 Round r2b's results (wf_3dadf353-391: five fix-ups, each refuted; the first refutation of P1-FRAME and
+  P1-LESION) and round r2d's rulings (session 31dfc45d, 2026-11-16).**
+  - Built and green on their r2 trees: eng-a2 (ENGA-F1..F4), eng-b2 (ENGB-1 through one shared reader,
+    facts.finding_places, memoized per FactSet; the may-be relation for catheter and needle), words2 (W2R-1..4, Q2,
+    Q5; Q3 named, Q4 a question), tools2 (F2-F5), records2 (R2RX-1..4, records Q1-Q3). The P1-FRAME/P1-LESION findings
+    are D300's (round r2c).
+  - Refuted again, to be fixed in round r2d as class rules: words2's RBWX-1 (medium, reproduced: an item about another
+    act whose act record has no span empties the row's passages - 190 such items in the corpus; a row shows every
+    passage its item's question quotes, and an act record never empties it), RBWX-2 (medium, reproduced: another
+    session's examination, an E/M's same-day procedure included, is named "the examination of this procedure"; only
+    the examination of the code's own session is), RBWX-3 (medium, reproduced: an answer saved on a row whose binding
+    reading asks nothing under the key is recorded with question '' and listed no longer asked; a row's answer is
+    recorded with the fingerprint of the question the row shows - the effective view with the standing answers - and
+    bound by read time as the passes bind it), RBWX-4/5 (low: reinstated codes read through review.bucket_of over the
+    effective view; a row with an answer in effect shows the bound item's words and passages); eng-a2's RF-A2-1
+    (verified low: a statement 4.6 asks statement_scope of may exclude whatever the primary's cover), RF-A2-2 (verified
+    low: one reader of "possibly this session" for possibly_here and may_exclude), RF-A2-3 (low: may_exclude skips a
+    group 4.4 supports under every reading, XCHG's included), RF-A2-4 (medium test gap, reproduced) and RF-A2-5..7
+    (test gaps: a fixture or pinned twin per term of may_exclude and its premise, each deciding value); eng-b2's RB2-1/2
+    (low: two Device members whose definitions both admit one physical device - an injection needle as a needle or an
+    injection device, a needle-knife as a needle or a sphincterotome, a device delivered through a catheter - keep the
+    technique row UNRESOLVED; classified from the definitions, the tests quoting the ruling's words exactly, RB2-3);
+    tools2's RBTX-1/2 (low: a test root binds only to a registered root, by a batch or an operator act, never by an
+    omitted --ledger-root's default, and no binding restarts the test's recorded spend); records2's RBRX-1/2 (low:
+    every check AMENDMENT-2 4.3.3 changed, L1's date reading included, reads as recorded under gemini-inventory@2; the
+    bound guard's completeness covers every role's bound).
+  - Questions ruled: eng-a2's plan fixture with an exceptive breadth ratified; eng-b2 Q1 (an entry without established
+    places, the act's own included, leaves the rule held and open) confirmed, Q2 (more pairs) built under RB2-1's rule,
+    Q3 (the findings memo, identity-checked and bounded) accepted; words2 Q3/Q4 named (no recount reaches them; an
+    outranked answered item is not a released hold) - the residuals are listed in the release record; tools2 Q1 built
+    under RBTX-1/2; records2 QL1 built under RBRX-1.
+- **D302 Round r2c's results (wf_4004bc28-107) and the rulings that follow (session 31dfc45d, 2026-11-16).**
+  - Built and green on int1: r2c-geom (D299 P3-PART; D300 RBFX-FRAME-1, RBFX-FRAME-2; tests.v2 3,022 OK; the v1
+    suite's only failures the known CoverageCostTests wall-clock bound under load, identical on the base) and r2c-lesion
+    (D300 RF-L1..RF-L7, the membership claim for a group; tests.v2 3,025 OK; 11 mutants killed). Re-checks with the
+    recorded pass 1 and a faithful pass 2: L01 5/5 (three membership pairs established), L02 and S01-S03 unchanged, L03
+    43239 and 45385 held -> READY (correct); the rig moves 0 of 84 rows and no request. The request moves only where the
+    rules reach (L01, L03).
+  - Refuted: RF2C-L1 (medium, reproduced: a WRITTEN distinct_from between a group or an unestablished multiplicity and
+    a lesion sets them apart, while the appraised one correctly needs non-membership) - ruled: one reading of a
+    distinctness, whoever wrote it: "different lesions" sets two lesions apart only when both are established single;
+    for a group or an unestablished multiplicity only an established non-membership does, in every reader of
+    established_distinct. RF2C-L2 (verified low; a design question) - ruled: a same_as member, in any state, whose value
+    is empty or unreadable opens its holder's component as an unknown id does, at claim time, in possibly_one_finding
+    and in coverage's join alike. RF2C-L3 (low): the store re-derives a releasing outcome from every input settle reads
+    (3.2.5 attachment included) and refuses a row whose stored result differs. RCG-T1..T3 (low test gaps): check()-level
+    tests per subject family for P3-PART; the part head's closers and words outside its start source never hold.
+  - r2c-lesion Q1 accepted: where the act's lesion is itself not one lesion, the membership claim asks "No lesion of
+    <the act's> is one of the lesions of <the statement's>".
+  - New class from the L03 re-check (r2c-geom's question; engine-only, no request change): two acts told in one sentence
+    are indistinct cards (cards_indistinct), so each card's places settle unresolved, and E1j cannot read the biopsy as
+    elsewhere (45380 held, act_target reading_unknown). Ruled (P3-CARDS): for the possibility readers of an
+    indistinct card's places, a card's possible places are the union of the places stated for its indistinct group;
+    E1j sets the biopsy elsewhere only when EVERY possible place is disjoint from every place of the removed finding;
+    nothing is ever stated or established by the union (it reads possibility only).
+  - Order: int2a = int1 + r2c (geom, lesion) + r2b's five fix-ups, integrated and checked; pair 4 on int2a's image (the
+    request-moving rules are all in it); then round r2e (RF2C-L1..L3, RCG-T1..T3, P3-CARDS, and round r2d's findings) on
+    int2a, int2b, the final refutation, the quiet gate.
+- **D303 Round r2d's results (wf_1969177f-367) and round r2e: the member words by one structural invariant, measured
+  over the corpus (session 31dfc45d, 2026-11-16).**
+  - Built and green on their r2b trees: words3 (RBWX-1..5; seam 25,955 + 8,474 scenes, 0 findings), eng-a3 (RF-A2-1..7),
+    eng-b3 (RB2-1..3), tools3 (RBTX-1/2), records3 (RBRX-1/2). The engine, tools and records refuters found lows only
+    (eng-a3's RFA3-1 verified low: test gaps per widening term; eng-b3 RF3-1/2; tools3 TX3-1 verified low, TX3-2;
+    records3 RDRX-1/2): those classes have converged.
+  - The member words have not: words3's refuter found WX3-1 (reproduced, medium: naming another session's examination
+    "as another act" also changed WHAT is asked - a session DOUBT item's DONE_IN_PART question became act_status's, and
+    the door bound the DOUBT item's fingerprint from that row; 45385 excluded), WX3-2 (reproduced, medium: the same
+    move on DIGITAL_SCOPE; 99213 excluded; 338 such moves in the survey) and WX3-3 (reproduced, medium: a reinstated
+    add-on with no supporting act gets no ADDON row at read time and is approvable alone; D268 and D284 ask the hold).
+    Three rounds (W2R, RBWX, WX3) each fixed the named cases and opened new mismatches between the question a row shows
+    and the question an answer binds to.
+  - Ruled, round r2e's words item, ONE structural invariant over the whole member surface, built as a seam-harness
+    invariant and measured on the corpus (the 25,955 fixture scenes, the 8,474 named scenes, and every scene of every
+    words refuter since r2: W2R, RBWX, WX3, and the earlier WORDS-F1..F7): (I1) every item a row binds asks exactly the
+    question the row shows (prompt, statement, missing and qualification derived from the item's own message and
+    slots; renaming an act changes its name only, never what is asked); (I2) items whose questions differ never share a
+    row; (I3) the door records an answer only against items whose question equals the row's shown question, and read
+    time binds it only to items the current reading still asks (by fingerprint); (I4) every item's passages are the
+    passages its question quotes; (I5) an add-on counted at read time - selected, reinstated or reopened - is read over
+    the counted set (WX3-3). The invariant is checked by code over every scene, not by examples; a builder's change is
+    accepted only when the invariant holds on the whole corpus and every refuter scene behaves as its finding asks.
+  - Round r2e's other items (all engine or tests, no request change): D302's RF2C-L1 (one reading of a distinctness,
+    written or appraised), RF2C-L2, RF2C-L3, RCG-T1..T3, P3-CARDS (an indistinct card's possible places are its group's
+    union; E1j reads possibility only); eng-a3's RFA3-1..4 (a must-change test per widening term, or the grid's converse
+    property); eng-b3's RF3-1/2, tools3's TX3-1/2 and records3's RDRX-1/2 as their refuters state them (lows, built where
+    cheap, otherwise named in the release record).
+  - Order: int2 (integrating now) -> pair 4 on int2's image (r2e changes no request) -> round r2e on int2 -> int3 ->
+    the final refutation over the whole diff from the lead tree -> the quiet gate -> commit, CI, merge, install.
+- **D304 int2 (int1 + r2c + r2b + r2d), and the W2R-1 / RD-2 conflict (session 31dfc45d, 2026-11-16).**
+  - int2 integrated (wf_097511b8-46f): ten patches and three tools diffs on int1, four hand resolutions (test docstrings,
+    a pin comment, overlay.recount's union of W2R-1 and RD-2); the independent checker found the merge faithful (every
+    hunk present, 29/29 pins equal their owners, 20/20 rule mutants killed, every builder's test count equal, the tools
+    diff equal to its builders'). tests.v2 3,188 with one failure, v1 8,830 OK, ops 822, verification 69, node 154,
+    tools 231; the rig moves 0 of 84 rows and no request; pairs 1-3 replay as before (S01-S03 and L02 reproduced and
+    correct; L01 and L03 change their pass-2 request by D295/D296/D299/D300, as ruled).
+  - The one failure, a semantic conflict: words2's test expected that read time's release of a member's answer counts
+    the released primary for its add-on's ADDON row; int1's D294 RD-2 leaves a primary uncounted while a statement may
+    still exclude it (there, the visit's own status is unresolved, so assess holds 99417 on ADDON with no answer at
+    all). Ruled: RD-2's fail-closed reading governs read time as it governs assess - a released answer never counts a
+    primary assess would not count; only the reviewer's reinstatement counts such a primary (D268, D297 Q3). The test's
+    expectation is amended (renamed test_rbw_a_released_primary_a_statement_may_exclude_still_holds_the_addon) and
+    overlay.recount's docstring and comment state the rule; no code changes. tests.v2.test_r2bw_words and test_overlay:
+    119 OK. A twin where nothing may exclude the released primary (so it counts) is round r2e's (D303 I5).

@@ -706,8 +706,9 @@ def placeholders(sentence):
 
 class TemplateTests(SimpleTestCase):
     def test_every_template_is_in_one_table_and_fills_only_its_slots(self):
-        # gemini-appraisal@1's tables hold every template but D292 U1's kind-neutral forms, which only @2's hold
-        neutral = set(claims.KIND_NEUTRAL.values())
+        # gemini-appraisal@1's tables hold every template but D292 U1's kind-neutral forms, which only @2's hold - and,
+        # since DECISIONS D300 RF-L3 (round r2c), the lesion pair's membership forms, which only @2's hold too
+        neutral = set(claims.KIND_NEUTRAL.values()) | {form for pair in claims.LESION_PAIR_FORMS[1:] for form in pair}
         self.assertEqual(set(claims.TEMPLATES) | set(claims.STATEMENT_TEMPLATES), set(claims.TemplateId) - neutral)
         self.assertFalse(set(claims.TEMPLATES) & set(claims.STATEMENT_TEMPLATES))
         self.assertEqual(set(claims.TEMPLATES_V3) | set(claims.STATEMENT_TEMPLATES_V3), set(claims.TemplateId))
@@ -3181,8 +3182,11 @@ class RulingOutcomeTests(SimpleTestCase):
                 text, data = overlap(name)
                 _claim_set, events, _factset = settled(text, data, faithful_oracle(frozenset(true_of)))
                 self.assertEqual(at(events, 'E2', attribute).result.value, 'supported')
-        # and P5 in the pairing: the argon plasma ablation beside "No radiofrequency ablation was performed." is set
-        # apart by its technique
+        # and P5 in the pairing: the argon plasma ablation beside "No radiofrequency ablation was performed." - set apart
+        # by its technique (INDEPENDENT) until DECISIONS D301 (round r2d: eng-b2's Q2 pairs "built under RB2-1's rule").
+        # D222's own reading (radiofrequency energy is true of argon plasma coagulation's high-frequency current: the
+        # oracle below supports it) makes both definitions admit the argon plasma probe, so the technique row asks
+        # (UNRESOLVED on technique), never INDEPENDENT - a hold D301 adds, named in round r2d's notes
         data = frame_answer('egd', [
             examination(words='gastroscope'),
             event('E2', ['S5'], 'ablated', 'was ablated', 'ablation', session=[fact('X1', src(['S5']))],
@@ -3197,7 +3201,7 @@ class RulingOutcomeTests(SimpleTestCase):
         _claim_set, events, factset = settled(APC, data, faithful_oracle(frozenset({'This act used radiofrequency '
                                                                                     'energy.'})))
         pair = relation(factset, 'E3', 'E2')
-        self.assertEqual((pair.relation.value, pair.row.value), ('independent', 'technique'))
+        self.assertEqual((pair.relation.value, pair.row.value), ('unresolved', 'technique'))
 
     def test_an_ablation_with_no_bleeding_stated_is_established_and_its_code_ready(self):
         # DECISIONS D233 (refute-r2c-r1 RF3): "The antral vascular ectasia was ablated with argon plasma coagulation." -
@@ -4226,9 +4230,12 @@ class ReachedAnatomyTests(SimpleTestCase):
 
 # The figures CLAIM_BOUND_V3 is derived from, restated from the frozen batches' MANIFESTs (AMENDMENT-2 E.1; F3all
 # 2026-11-15T19:18:05Z, F3long 19:38:01Z): (characters, claims) of the ten notes, and F3long's pass-2 output per note.
+# DECISIONS D300 RF-L5 (round r2c): the claim counts re-measured with every claim class under gemini-appraisal@2
+# (claims.py's comment; build-v2/a2b/r2c/r2c-lesion/probes/measure_bound.py): the long notes' were (19398, 756) and
+# (19460, 711), the MANIFESTs' gemini-appraisal@1 counts.
 MEASURED_NOTES = {'A-v2': (576, 47), 'A-v6': (741, 41), 'A-v3': (639, 67), 'A-v5': (551, 70), 'B-fb02': (1205, 76),
-                  'B-fb05': (1403, 104), 'B-fb10': (1417, 108), 'C-PAIR-4-W2': (898, 77), 'A-note8': (19398, 756),
-                  'C-C2MEM-023': (19460, 711)}
+                  'B-fb05': (1403, 104), 'B-fb10': (1417, 108), 'C-PAIR-4-W2': (898, 77), 'A-note8': (19398, 814),
+                  'C-C2MEM-023': (19460, 747)}
 MEASURED_PASS2 = {'A-note8': (77483, 756), 'C-C2MEM-023': (70263, 711)}
 
 
@@ -4256,10 +4263,11 @@ class ClaimBoundTests(SimpleTestCase):
                                 if chars >= claims.CLAIM_BOUND_REALISTIC_CHARACTERS), [19_398, 19_460])
         per_claim = max(tokens / claims_ for tokens, claims_ in MEASURED_PASS2.values())
         capacity = 0.85 * 128_000 / per_claim
-        self.assertEqual(derived.demand_line, -(-int(line * 1000) // 1000))  # 754.3 claims, rounded up: 755
+        self.assertEqual(derived.demand_line, -(-int(line * 1000) // 1000))  # 802.7 claims, rounded up: 803
+        # D300 RF-L5: the demand re-measured with every claim class (was (755, 780, 1061, 1000), rate 779.46)
         self.assertEqual((derived.demand_line, derived.demand_rate, derived.capacity, derived.bound),
-                         (755, 780, 1061, 1000))
-        self.assertAlmostEqual(rate, 779.46, places=2)
+                         (803, 840, 1061, 1000))
+        self.assertAlmostEqual(rate, 839.26, places=2)
         self.assertAlmostEqual(capacity, 1061.56, places=2)
         self.assertEqual(derived.bound, int(capacity) // 100 * 100)
         self.assertLessEqual(derived.demand, derived.bound)  # no note inside the size bound refused at door 0

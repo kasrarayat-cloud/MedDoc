@@ -491,6 +491,83 @@ def addon_beside_its_excluded_primary():
 
 ADDON_CODES = (('43264', EvidenceSpan(0, 600, 660, TA.TEXT[600:660], True)), ('43273', 3))
 
+# DECISIONS D297 ENGA-F3: the deciding fact of each ADDON fixture's statement E6 beside the denial's - its kind, its one
+# deciding fact (the others not deciding: the builder's performed status, date of service and documenting team), the
+# primary its kind words cite; a plan carries the breadth pass 1 wrote exceptive, which a plan never reads (K1)
+ADDON_DECIDING = {
+    'a plan': (Kind.STONE_EXTRACTION, dict(status=sup(ct.Status.PLANNED), breadth=sup(ct.Breadth.EXCEPTIVE)), '43264'),
+    'another date': (Kind.STONE_EXTRACTION, dict(date=sup(ct.DateRelation.EARLIER_DATE)), '43264'),
+    'another performer': (Kind.STENT, dict(performer=sup(ct.Performer.OTHER_FACILITY)), '43274'),
+}
+
+
+def addon_beside_a_primary_excluded_by(deciding: str):
+    """DECISIONS D297 ENGA-F3's P-MONO fixtures (repair round r2b, builder R2BA), one per deciding fact 4.6 reads beside
+    ADDON_FIXTURE's denial: test_assess's ERCP (no stone act; 43273 on E3's cholangioscopy) and E6 an act of the bile
+    duct (ADDON_DECIDING) whose kind and status words its primary cites, excluded by ``deciding`` alone - a plan (status
+    planned, today, by the team, its breadth written exceptive: a plan carries none, K1), another date (performed, an
+    earlier date, by the team) or another performer (performed, today, at another facility: a stent placement, so the
+    census is not keyed to 43264). Each arm engine/evaluate.may_exclude reads - the denial, the plan with its status not
+    established, another date, another performer, in _may_exclude_by and in _surely_positive - holds 43273 in one of
+    the four fixtures alone, so a mutant dropping any arm, or one term of it, releases the add-on under a single
+    weakening and fails the census (as built in r2, the date and performer arms survived every test: the r2 refuter's
+    F3)."""
+    kind, facts, _primary = ADDON_DECIDING[deciding]
+    doc = TA.ercp(stone=False)
+    doc.act(6, kind, duct=sup(ct.Duct.BILIARY), kind_words=Span(600, 630), status_words=Span(630, 660), **facts)
+    return doc.build()
+
+
+def addon_deciding_codes(deciding: str) -> tuple:
+    """The proposals of ``deciding``'s ADDON fixture: its primary on E6's kind and status words, 43273 on E3."""
+    return ((ADDON_DECIDING[deciding][2], ADDON_CODES[0][1]), ADDON_CODES[1])
+
+
+# DECISIONS D301 RF-A2-5: the deciding values 4.6 condition 2 names beside ADDON_DECIDING's earlier date and other
+# facility - a later date and another clinician - each the one deciding fact of an ADDON fixture's statement E6 (its
+# kind, its deciding fact, the primary its kind and status words cite), so a reader of one value fails the census
+R2DA_DECIDING = {
+    'a later date': (Kind.STONE_EXTRACTION, dict(date=sup(ct.DateRelation.LATER_DATE)), '43264'),
+    'another clinician': (Kind.STENT, dict(performer=sup(ct.Performer.OTHER_CLINICIAN)), '43274'),
+}
+# DECISIONS D301 RF-A2-4: E6 a denial 43264 does NOT cite (43264 on E4's unit) that holds it by 4.6's statement_scope
+# question - 4.10's broad denial, and 4.6's last paragraph (a single-target denial whose session is not established) -
+# so the census weakens an uncited denial's status beside an add-on
+R2DA_UNCITED = {
+    'a broad denial': dict(),
+    'an unplaced single-target denial': dict(breadth=sup(ct.Breadth.SINGLE_TARGET), session=EF.unres(EF.X(1))),
+}
+R2DA_UNCITED_CODES = (('43264', 4), ('43273', 3))
+
+
+def r2da_addon_beside_a_primary_excluded_by(deciding: str):
+    """DECISIONS D301 RF-A2-5's P-MONO fixtures (repair round r2d, builder R2DA): as
+    ``addon_beside_a_primary_excluded_by`` (test_assess's ERCP with no stone act, 43273 on E3; E6 an act of the bile
+    duct whose kind and status words its primary cites) with E6 excluded by R2DA_DECIDING's value alone - a stone
+    extraction performed at a LATER date by the team, or a stent placement performed today by ANOTHER CLINICIAN. Beside
+    ADDON_DECIDING's earlier date and other facility, a mutant reading one value of 4.6's "another date" or "another
+    performer" - in _may_exclude_by's cited arm or in _surely_positive - releases the add-on under a single weakening
+    and fails the census (as built, the r2b refuter's M-DATE-EARLIER-ONLY, M-PERF-FACILITY-ONLY, S-DATE-EARLIER-ONLY and
+    S-PERF-FACILITY-ONLY survived every test)."""
+    kind, facts, _primary = R2DA_DECIDING[deciding]
+    doc = TA.ercp(stone=False)
+    doc.act(6, kind, duct=sup(ct.Duct.BILIARY), kind_words=Span(600, 630), status_words=Span(630, 660), **facts)
+    return doc.build()
+
+
+def r2da_addon_beside_an_uncited_denial(shape: str):
+    """DECISIONS D301 RF-A2-4's P-MONO fixtures (repair round r2d, builder R2DA): test_assess's ERCP with no stone act
+    (43273 on E3) and E6 a stone-extraction denial (negated performed, all_of_kind, today, X1, the team; R2DA_UNCITED's
+    ``shape`` replaces its facts) that 43264, on E4's unit, does not cite: 4.6 holds 43264 by its statement_scope
+    question (4.10, or its last paragraph) and 43273 is held by ADDON. A weakening of E6's status leaves its denial
+    possible - the uncited arm's "or not established" term alone, which the cited arm repeats - so the census fails a
+    mutant dropping that term (as built, the r2b refuter's U-DENIAL-UNEST survived the whole package)."""
+    doc = TA.ercp(stone=False)
+    facts = dict(status=EF.neg(ct.Status.PERFORMED), breadth=sup(ct.Breadth.ALL_OF_KIND))
+    facts.update(R2DA_UNCITED[shape])
+    doc.act(6, Kind.STONE_EXTRACTION, **facts)
+    return doc.build()
+
 
 def denial_of_a_kind():
     """DECISIONS D294 RD-3's P-MONO fixture (repair r2, builder R2A): test_assess's enriched() two sessions with the
@@ -501,6 +578,25 @@ def denial_of_a_kind():
     found = R.events[EF.E(1)][A.KIND][0]
     denial = replace(found, result=Res.NEGATED, state=ct.FactState.NEGATED, value=Kind.EXAMINATION)
     return replace(R, events={**R.events, EF.E(1): {**R.events[EF.E(1)], A.KIND: (denial,)}})
+
+
+def a_denial_on_a_group_beside_a_removal():
+    """DECISIONS D300 RF-L7's P-MONO and P-INDEP fixture (round r2c, builder r2c-lesion): EF.colonoscopy's cold snare E2
+    of L1 (single) in the sigmoid colon, and E3, a denial of any snare polypectomy on L3 - a group of polyps with no
+    places (pair 1's L01 shape, D296) - with the lesion pair between them established: FactSet.pair_controls' (L3,
+    distinct_from, L1) True, as engine/facts reads a settled membership pair whose claim pass 2 supported and whose
+    control it rejected, L1 established single (D300 RF-L3). 45385 is READY on E2 by that pair alone (the release path
+    D296 adds); 9.4's weakenings make it not established like any pair control, and a fact the pair reads weakened."""
+    doc = EF.colonoscopy()
+    doc.lesions[L(1)] = {**doc.lesions[L(1)], A.MULTIPLICITY: (sup(ct.Multiplicity.SINGLE),)}
+    doc.lesion(3, multiplicity=sup(ct.Multiplicity.GROUP))
+    doc.act(3, Kind.SNARE, status=EF.neg(ct.Status.PERFORMED), breadth=sup(ct.Breadth.SINGLE_TARGET), lesion=sup(L(3)),
+            kind_words=Span(300, 330), status_words=Span(330, 360))
+    R = paired(doc.build())
+    return replace(R, pair_controls={**R.pair_controls, (L(3), A.DISTINCT_FROM, L(1)): True})
+
+
+LESION_PAIR_FIXTURE = 'a denial on a group of polyps beside a removal, set apart by a lesion pair claim (D300 RF-L7)'
 
 
 def fixtures():
@@ -514,9 +610,15 @@ def fixtures():
     full (D238's production shape) - with D245's case (b) where pair controls exist; and DECISIONS D264's D264_SITE:
     refute-6a-r1 F3's dilation filed in two site classes (6a's Q6), on its own places and on its target lesion's places
     (D264_CLEAN's states are r4a QM's fixture under drawn verdicts); and DECISIONS D294's two (repair r2): an add-on whose
-    only primary a cited denial excludes (RD-2) and an established denial of a kind (RD-3). Each is dated here, once
-    (``assessed`` never re-dates a FactSet)."""
+    only primary a cited denial excludes (RD-2) and an established denial of a kind (RD-3); and DECISIONS D297's three
+    (repair round r2b, ENGA-F3): the add-on beside a primary a cited plan, a cited act of another date and one of
+    another performer exclude, so one exclusion per deciding fact 4.6 reads holds an add-on; and DECISIONS D301's four
+    (repair round r2d): the add-on beside a primary a cited act of a later date and one of another clinician exclude
+    (RF-A2-5: every deciding value 4.6 names), and beside a primary an uncited broad denial and an uncited unplaced
+    denial hold by their scope (RF-A2-4). Each is dated here, once (``assessed`` never re-dates a FactSet)."""
     return (
+        # DECISIONS D300 RF-L7 (round r2c): the release path of D296's lesion pair claim, carried by a fixture
+        (LESION_PAIR_FIXTURE, TA.dated(a_denial_on_a_group_beside_a_removal()), (('45385', 2), ('45378', 1))),
         ('two sessions', TA.dated(TA.two_sessions().build()), TA.TWO),
         ('enriched', TA.dated(TA.enriched().build()), TA.TWO),
         ('egd dilation', TA.dated(TA.egd_dilation().build()), (('43249', 2), ('43239', 3), ('43235', 1))),
@@ -558,6 +660,12 @@ def fixtures():
          (('43249', 2), ('43245', 1))),
         (ADDON_FIXTURE, TA.dated(addon_beside_its_excluded_primary()), ADDON_CODES),
         (KIND_DENIAL_FIXTURE, TA.dated(denial_of_a_kind()), TA.TWO),
+        *((ADDON_DECIDING_FIXTURES[deciding], TA.dated(addon_beside_a_primary_excluded_by(deciding)),
+           addon_deciding_codes(deciding)) for deciding in ADDON_DECIDING),
+        *((R2DA_DECIDING_FIXTURES[deciding], TA.dated(r2da_addon_beside_a_primary_excluded_by(deciding)),
+           ((R2DA_DECIDING[deciding][2], ADDON_CODES[0][1]), ADDON_CODES[1])) for deciding in R2DA_DECIDING),
+        *((R2DA_UNCITED_FIXTURES[shape], TA.dated(r2da_addon_beside_an_uncited_denial(shape)), R2DA_UNCITED_CODES)
+          for shape in R2DA_UNCITED),
     )
 
 
@@ -565,7 +673,21 @@ F3_FIXTURE = 'a dilation filed in two site classes beside one within (refute-6a-
 LESION_SITE_FIXTURE = 'a dilation of a stricture filed in two site classes beside one within (D264, its lesion places)'
 QM_FIXTURE = 'two esophageal dilations and a duodenal one (D262, r4a QM)'
 ADDON_FIXTURE = 'an add-on whose only primary a cited denial excludes (D294 RD-2)'
+ADDON_DECIDING_FIXTURES = {
+    'a plan': 'an add-on whose only primary a cited plan excludes (D297 ENGA-F3)',
+    'another date': 'an add-on whose only primary a cited act of another date excludes (D297 ENGA-F3)',
+    'another performer': 'an add-on whose only primary a cited act of another performer excludes (D297 ENGA-F3)',
+}
 KIND_DENIAL_FIXTURE = 'an established denial of a kind (D294 RD-3)'
+R2DA_DECIDING_FIXTURES = {
+    'a later date': 'an add-on whose only primary a cited act of a later date excludes (D301 RF-A2-5)',
+    'another clinician': 'an add-on whose only primary a cited act of another clinician excludes (D301 RF-A2-5)',
+}
+R2DA_UNCITED_FIXTURES = {
+    'a broad denial': 'an add-on whose only primary an uncited broad denial holds by its scope (D301 RF-A2-4)',
+    'an unplaced single-target denial': ('an add-on whose only primary an uncited unplaced denial holds by its scope '
+                                         '(D301 RF-A2-4)'),
+}
 
 
 def fixture(name):
@@ -1176,9 +1298,10 @@ def _target_lesion(R, event):
 
 def _site_deletion(label, what, R):
     """D264_SITE's weakening: 9.4's deletion of an ESTABLISHED member of an act's target.places, or of a lesion's places
-    (the places of every act whose target lesion it is, as evaluate's SITE row and combination.site_outside read them),
-    that sets one of the acts whose places it shortened outside a code's SITE class (``set_outside`` for one of
-    SITE_CODES). (the acts whose places it shortened, the weakened FactSet), or None for any other weakening."""
+    (the places of every act whose target lesion's FINDING holds that lesion - DECISIONS D297 ENGB-1, facts.finding: as
+    evaluate's SITE row and combination.site_outside read them), that sets one of the acts whose places it shortened
+    outside a code's SITE class (``set_outside`` for one of SITE_CODES). (the acts whose places it shortened, the
+    weakened FactSet), or None for any other weakening."""
     if _how(label) != 'deleted' or not isinstance(what, tuple) or len(what) != 4 or what[3].result not in ESTABLISHED:
         return None
     subject, attribute = what[0], what[1]
@@ -1186,7 +1309,8 @@ def _site_deletion(label, what, R):
     if attribute is A.TARGET_PLACES and family is IdFamily.EVENT:
         shortened = [subject]
     elif attribute is A.PLACES and family is IdFamily.LESION:
-        shortened = [event for event in R.events if _target_lesion(R, event) == subject]
+        shortened = [event for event in R.events if _target_lesion(R, event) is not None
+                     and subject in F.finding(R, _target_lesion(R, event))]
     else:
         return None
     weak = weakened_state(label, what, R)
@@ -1531,6 +1655,58 @@ def random_states(data):
         return (name, base, codes), (label, what, once), None
     label2, twice, what2 = data.draw(st.sampled_from(second), label='second')
     return (name, base, codes), (label, what, once), (label2, what2, twice)
+
+
+def r2bb_split_site_fixture(form: str):
+    """DECISIONS D297 ENGB-1 (repair round r2b): D264's LESION_SITE fixture (a dilation E1 of unstated device with no
+    place of its own on a stricture filed [distal esophagus, duodenal bulb], beside E2, a mid-esophageal balloon
+    dilation; an EGD X1, its examination E3) with the stricture filed as TWO entries joined by same_as - ``form``
+    'L1 -> L2' (L1 [distal esophagus] same_as L2 [distal esophagus, duodenal bulb]), 'L2 -> L1', or 'chain' (L1 -> L2 ->
+    L3, L3 the spanning entry) - E1 naming L1. Written for this round, outside every development set."""
+    doc = EF.Doc()
+    doc.session(1, ct.SessionKind.EGD, reached=[sup(Extent.SECOND_PORTION_DUODENUM)])
+    doc.exam(3)
+    near, span = [sup(Landmark.DISTAL_ESOPHAGUS)], [sup(Landmark.DISTAL_ESOPHAGUS), sup(Landmark.DUODENAL_BULB)]
+    if form == 'L1 -> L2':
+        doc.lesion(1, lesion_places=near, same_as=[sup(L(2))])
+        doc.lesion(2, lesion_places=span)
+    elif form == 'L2 -> L1':
+        doc.lesion(1, lesion_places=near)
+        doc.lesion(2, lesion_places=span, same_as=[sup(L(1))])
+    else:
+        doc.lesion(1, lesion_places=near, same_as=[sup(L(2))])
+        doc.lesion(2, lesion_places=near, same_as=[sup(L(3))])
+        doc.lesion(3, lesion_places=span)
+    doc.act(1, Kind.DILATION, places=[], lesion=sup(L(1)), device=None)
+    doc.act(2, Kind.DILATION, places=[sup(Landmark.MID_ESOPHAGUS)], device=sup(ct.Device.BALLOON))
+    return TA.dated(doc.build())
+
+
+class R2BBSplitSiteMonotoneTests(SimpleTestCase):
+    """DECISIONS D297 ENGB-1 under 9.4: P-MONO (every single weakening, erasing included, every named ruling of
+    PMonoTests.check) over D264's LESION_SITE fixture with its stricture filed as two entries joined by same_as. SITE
+    and D240's site fit read the whole finding, so no weakening releases a code here (the one-entry fixture releases
+    43249 and 43245 when its distal esophagus is deleted, D264_SITE), and the one shrunk claim - 43245's dropping E1
+    when the spanning entry's duodenal bulb is deleted - is D264_SITE's, its deletion read on the finding the act's
+    lesion belongs to (_site_deletion). Before the rule SITE read L1 alone: 43249 was released by the weakenings of
+    E1's support facts."""
+
+    CODES = (('43249', 1), ('43245', 1), ('43249', 2))
+
+    def test_no_weakening_of_a_split_finding_releases_a_site_code(self):
+        checker = PMonoTests()
+        for form, spanning in (('L1 -> L2', 'L2'), ('L2 -> L1', 'L2'), ('chain', 'L3')):
+            with self.subTest(form=form):
+                R = r2bb_split_site_fixture(form)
+                base = assessed(R, self.CODES)
+                named, waiting, shrinks, counted = [], [], [], 0
+                for label, changed, what in weakenings(R):
+                    counted += 1
+                    named += checker.check(base, assessed(changed, self.CODES), label, what, R, waiting=waiting,
+                                           shrinks=shrinks)
+                self.assertGreater(counted, 150)
+                self.assertEqual((named, waiting), ([], []))
+                self.assertEqual(shrinks, [('43245', D264_SITE, f'deleted {spanning} places[1]')])
 
 
 class PMonoTests(SimpleTestCase):
@@ -4238,3 +4414,175 @@ class R2APMonoFixtureTests(SimpleTestCase):
         stated = F.fact(R, EF.E(2), A.KIND)
         self.assertEqual(_weakened_fact(stated, 'doubt conflict').state, ct.FactState.CONTRADICTED)
         self.assertEqual(erased_fact(stated, 'contradiction', Kind.BIOPSY).options, (stated.value, Kind.BIOPSY))
+
+
+class R2BAPMonoTests(SimpleTestCase):
+    """DECISIONS D297, repair round r2b (builder R2BA): ENGA-F3 - the ADDON P-MONO fixtures carry one exclusion per
+    deciding fact 4.6 reads (a denial: ADDON_FIXTURE; a plan, another date, another performer:
+    ADDON_DECIDING_FIXTURES), each its statement's only deciding fact, so a mutant dropping any arm of
+    engine/evaluate.may_exclude fails the census (``PMonoTests.test_every_single_weakening_of_every_fixture`` runs
+    every one, and passes with no new named release); here each fixture's shape and weakenings are asserted directly,
+    so such a mutant also fails by name. And ENGA-F1 - the census's own check over an add-on beside a primary an
+    examination statement excludes, every single weakening of it: a device weakened into a manual claim never drops
+    the statement's examination kind (pairing.established_digital)."""
+
+    def test_each_addon_fixture_is_excluded_by_its_one_deciding_fact(self):
+        """Each ADDON fixture: its primary EXCLUDED by E6 through the deciding fact it is named for (the Exclusion's
+        fact), no other deciding fact of E6 established (engine/evaluate: a status negated performed or planned, another
+        date, another performer), and 43273 held by its ADDON row alone."""
+        from studio.interpretation.engine import evaluate
+
+        wanted = {ADDON_FIXTURE: (A.STATUS, '43264'), ADDON_DECIDING_FIXTURES['a plan']: (A.STATUS, '43264'),
+                  ADDON_DECIDING_FIXTURES['another date']: (A.DATE_RELATION, '43264'),
+                  ADDON_DECIDING_FIXTURES['another performer']: (A.PERFORMER, '43274')}
+        for name, (attribute, primary) in wanted.items():
+            with self.subTest(fixture=name):
+                R, codes = fixture(name)
+                found = TA.by_code(assessed(R, codes))
+                self.assertEqual((found[primary].evaluation.exclusion.event, found[primary].evaluation.exclusion.fact),
+                                 (EF.E(6), attribute))
+                status = F.fact(R, EF.E(6), A.STATUS)
+                deciding = {A.STATUS: F.denied(status, ct.Status.PERFORMED) or F.holds(status, ct.Status.PLANNED),
+                            A.DATE_RELATION: evaluate.other_date(R, EF.E(6)),
+                            A.PERFORMER: evaluate.other_performer(R, EF.E(6))}
+                self.assertEqual([key for key, decides in deciding.items() if decides], [attribute])
+                self.assertEqual([held.cause for held in found['43273'].held_facts], [AS.ADDON_CAUSE])
+
+    def test_no_single_weakening_of_a_deciding_fact_fixture_releases_the_add_on(self):
+        """Every single weakening (the classic four, deletions, the value-erasing forms) of the plan's, another date's
+        and another performer's fixture, through the census's own check (``PMonoTests.check``): nothing released and
+        nothing named (the census Counter is unchanged), 43273 never READY, and wherever the primary is no longer
+        excluded a statement still may exclude it (engine/assess.addon_uncounted)."""
+        for deciding, name in ADDON_DECIDING_FIXTURES.items():
+            R, codes = fixture(name)
+            primary = ADDON_DECIDING[deciding][2]
+            base = assessed(R, codes)
+            checked = 0
+            for label, changed, what in weakenings(R):
+                with self.subTest(fixture=name, weakening=label):
+                    after = assessed(changed, codes)
+                    self.assertEqual(PMonoTests.check(self, base, after, label, what, R), [])
+                    found = TA.by_code(after)
+                    self.assertNotEqual(found['43273'].status, Outcome.READY)
+                    if found[primary].evaluation is not None and found[primary].evaluation.exclusion is None:
+                        self.assertTrue(AS.addon_uncounted(primary, found[primary].evidence.kept, changed,
+                                                           found[primary].evidence.runs))
+                    checked += 1
+            self.assertGreater(checked, 200, name)
+
+    def test_no_weakening_of_an_excluding_examination_statement_releases_the_add_on(self):
+        """ENGA-F1: test_assess's two ERCPs (r2ba_two_ercps: X2's examination statement E1 a cited all_of_kind denial
+        that excludes 43260; 43273 held by ADDON) with E1's device manual negated, or an endoscope supported - every
+        single weakening of the scene through the census's own check releases nothing (as built in r2, the four classic
+        weakenings of the negated manual device made it claim manual and released 43273, named by no ruling)."""
+        for device in (EF.neg(ct.Device.MANUAL), sup(ct.Device.ENDOSCOPE)):
+            R = TA.dated(TA.r2ba_two_ercps(device).build())
+            base = assessed(R, TA.R2BA_DIAGNOSTIC)
+            self.assertEqual(TA.by_code(base)['43273'].status, Outcome.NEEDS_CLARIFICATION)
+            checked = 0
+            for label, changed, what in weakenings(R):
+                with self.subTest(device=device.value.value, weakening=label):
+                    after = assessed(changed, TA.R2BA_DIAGNOSTIC)
+                    self.assertEqual(PMonoTests.check(self, base, after, label, what, R), [])
+                    checked += 1
+            self.assertGreater(checked, 150)
+
+
+class R2DAPMonoTests(SimpleTestCase):
+    """DECISIONS D301, repair round r2d (builder R2DA): RF-A2-4 - the ADDON P-MONO fixtures carry a primary an UNCITED
+    denial holds by 4.6's statement_scope question (4.10's broad denial; 4.6's last paragraph), so the census weakens an
+    uncited denial's status beside an add-on and a mutant dropping the uncited arm's "or not established" term fails;
+    RF-A2-5 - they carry every deciding value 4.6 names (an earlier date and a LATER date, another facility and ANOTHER
+    CLINICIAN), so a reader of one value fails the census; and RF-A2-3's pair under every single weakening. The census
+    (``PMonoTests.test_every_single_weakening_of_every_fixture``) runs over the four new fixtures with every other and
+    passes with no new named release; here each fixture's shape and weakenings are asserted directly, so such a mutant
+    also fails by name."""
+
+    def test_each_new_addon_fixture_has_its_shape(self):
+        """The deciding fixtures: the primary EXCLUDED by E6 through the value it is named for (E6's date relation
+        supported later_date; its performer supported other_clinician), no other deciding fact of E6 established, 43273
+        held by ADDON alone. The uncited fixtures: E6 not covered by 43264 (cover NONE), 43264 held by the
+        statement_scope question about E6, addon_uncounted True, 43273 held by ADDON alone."""
+        from studio.interpretation.engine import evaluate
+
+        wanted = {'a later date': (A.DATE_RELATION, ct.DateRelation.LATER_DATE),
+                  'another clinician': (A.PERFORMER, ct.Performer.OTHER_CLINICIAN)}
+        for deciding, name in R2DA_DECIDING_FIXTURES.items():
+            with self.subTest(fixture=name):
+                R, codes = fixture(name)
+                primary, (attribute, value) = R2DA_DECIDING[deciding][2], wanted[deciding]
+                found = TA.by_code(assessed(R, codes))
+                exclusion = found[primary].evaluation.exclusion
+                self.assertEqual((exclusion.event, exclusion.fact), (EF.E(6), attribute))
+                self.assertTrue(F.holds(F.fact(R, EF.E(6), attribute), value))
+                status = F.fact(R, EF.E(6), A.STATUS)
+                deciding_facts = {A.STATUS: F.denied(status, ct.Status.PERFORMED) or F.holds(status, ct.Status.PLANNED),
+                                  A.DATE_RELATION: evaluate.other_date(R, EF.E(6)),
+                                  A.PERFORMER: evaluate.other_performer(R, EF.E(6))}
+                self.assertEqual([key for key, decides in deciding_facts.items() if decides], [attribute])
+                self.assertEqual([held.cause for held in found['43273'].held_facts], [AS.ADDON_CAUSE])
+        for shape, name in R2DA_UNCITED_FIXTURES.items():
+            with self.subTest(fixture=name):
+                R, codes = fixture(name)
+                found = TA.by_code(assessed(R, codes))
+                kept = found['43264'].evidence.kept
+                self.assertIs(evaluate.cover(R, EF.E(6), kept), evaluate.Covered.NONE)
+                self.assertIsNone(found['43264'].evaluation.exclusion)
+                self.assertEqual([(held.cause, held.subject) for held in found['43264'].held_facts],
+                                 [('coding_rule:statement_scope', EF.E(6))])
+                self.assertTrue(AS.addon_uncounted('43264', kept, R, found['43264'].evidence.runs))
+                self.assertEqual([held.cause for held in found['43273'].held_facts], [AS.ADDON_CAUSE])
+
+    def test_no_single_weakening_of_a_new_fixture_releases_the_add_on(self):
+        """Every single weakening (the classic four, deletions, the value-erasing forms) of the four new fixtures,
+        through the census's own check (``PMonoTests.check``): nothing released and nothing named, 43273 never READY,
+        and wherever the primary is not excluded a statement still may exclude it (engine/assess.addon_uncounted). In
+        the uncited fixtures the four classic weakenings of E6's status - which leave E6 a denial only by "not
+        established"
+        - are among them, each keeping the add-on held."""
+        names = [*((name, R2DA_DECIDING[deciding][2]) for deciding, name in R2DA_DECIDING_FIXTURES.items()),
+                 *((name, '43264') for name in R2DA_UNCITED_FIXTURES.values())]
+        for name, primary in names:
+            R, codes = fixture(name)
+            base = assessed(R, codes)
+            checked, status_weakened = 0, 0
+            for label, changed, what in weakenings(R):
+                with self.subTest(fixture=name, weakening=label):
+                    after = assessed(changed, codes)
+                    self.assertEqual(PMonoTests.check(self, base, after, label, what, R), [])
+                    found = TA.by_code(after)
+                    self.assertNotEqual(found['43273'].status, Outcome.READY)
+                    if found[primary].evaluation is not None and found[primary].evaluation.exclusion is None:
+                        self.assertTrue(AS.addon_uncounted(primary, found[primary].evidence.kept, changed,
+                                                           found[primary].evidence.runs))
+                    if what[:2] == (EF.E(6), A.STATUS) and label.split(' ')[0] in ('unresolved', 'doubt'):
+                        self.assertFalse(F.established(F.fact(changed, EF.E(6), A.STATUS)))
+                        status_weakened += 1
+                    checked += 1
+            self.assertGreater(checked, 200, name)
+            self.assertEqual(status_weakened, len(HOWS), name)
+
+    def test_no_single_weakening_of_an_exchange_pair_releases_the_add_on(self):
+        """RF-A2-3: test_assess's exchange scene (r2da_exchange: a biliary stent removal E5 and placement E6 beside a
+        planned exchange told in E5's unit; 43276 on E5's unit, 43273 on E3) - the pair surely done (43273 READY: the
+        pair's group is never 4.6's) and the pair with the removal's duct unresolved (a reading may set it apart: 43273
+        held) - under every single weakening no code grows READY or EXCLUDED (P-MONO's release conditions), and the held
+        43273 is never released: the premise's pair only narrows under a weakening. (The census's third condition, a
+        claim that shrinks, is not asserted here: 43276's claim on the pair shrinks under 115 weakenings of the scene on
+        the tree before r2d too - the pair found turns pending - releasing nothing; the census carries no XCHG pair.)"""
+        for name, doc, status in (('the pair surely done', TA.r2da_exchange(), Outcome.READY),
+                                  ('the removal duct unresolved',
+                                   TA.r2da_exchange(removal=dict(duct=EF.unres(ct.Duct.BILIARY))),
+                                   Outcome.NEEDS_CLARIFICATION)):
+            R = TA.dated(doc.build())
+            base = assessed(R, TA.R2DA_EXCHANGE_CODES)
+            self.assertEqual(TA.by_code(base)['43273'].status, status, name)
+            checked = 0
+            for label, changed, _what in weakenings(R):
+                with self.subTest(scene=name, weakening=label):
+                    after = assessed(changed, TA.R2DA_EXCHANGE_CODES)
+                    self.assertEqual(_release(base, after)[:2], (frozenset(), frozenset()))
+                    if status is not Outcome.READY:
+                        self.assertNotEqual(TA.by_code(after)['43273'].status, Outcome.READY)
+                    checked += 1
+            self.assertGreater(checked, 200, name)

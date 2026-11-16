@@ -141,6 +141,20 @@ class View:
     # r2 (DECISIONS D294): the member form of that question (studio.interpretation.wording.member_form; '' for its fact
     # key's own row), so the row that shows the answer in effect asks what the member answered
     answered_form: str = ''
+    # r2b (DECISIONS D297, W2R-1): the fact of the member answer the engine excluded the code by (its stored marker) when
+    # read time's recount releases the hold that answer's item rests on - the answer then excludes nothing at read time:
+    # the code is read as the selected code it was, with its live holds, and every reader that reads the stored bucket
+    # reads it so (review.reopened) - '' otherwise
+    released_answer: str = ''
+    # r2d (DECISIONS D301, RBWX-5): the question the answer that left it detail_unavailable was bound to at read time,
+    # as its row showed it when asked - a live question's dict (its message, form, act record and quoted passages) or
+    # the stored question (its row id: read through the record's item) - so the row that shows the answer in effect
+    # shows that question's words and passages; None otherwise (an answer engine/assess applied is read from its record)
+    answered_question: Optional[Mapping] = None
+    # r2d (DECISIONS D301, RBWX-3): (fact, fingerprint) of each question read time asks live (id ''): the fingerprint
+    # engine/assess stores for that item (overlay.live_fingerprint), which the details door records with an answer to
+    # it and read time binds the answer by, so the AGAIN that presents the same item binds it alike
+    live_fingerprints: tuple = ()
 
 
 def stored_from(proposal, clarifications=None) -> Stored:

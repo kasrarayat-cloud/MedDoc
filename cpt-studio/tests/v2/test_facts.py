@@ -2282,6 +2282,45 @@ class R2ANegatedClaimOpenTests(SimpleTestCase):
                 self.assertEqual(F.possibly(f, kind), F.possibly_written(f, kind))
 
 
+class R2BADoubtOfferedOnAStatementTests(SimpleTestCase):
+    """DECISIONS D297 ENGA-F1 (repair round r2b, builder R2BA), on RD-1's own input through the REAL builder: the device
+    view [manual N, manual N] of test_facts' stored row beside a doubt naming the act that reads manual CLAIMS manual
+    (D294 RD-1), and transplanted onto an examination STATEMENT that excludes a primary, that claim must never release
+    the add-on beside it - RD-2's may_exclude reads E13's exception established (pairing.established_digital), never the
+    claimed reading (as built in r2, adding the doubt - a weakening - turned 43273 READY where the tree before RD-1 held
+    it; the r2 refuter's F1, probe x3)."""
+
+    def device_view(self, readings=None):
+        written = [written_fact('negated', 'manual', units=('S5',)), written_fact('negated', 'manual', units=('S5',))]
+        row = planted(view(colonoscopy()), IdFamily.EVENT, 'E1', A.TECHNIQUE_DEVICE, written)
+        if readings is not None:
+            row = r2a_doubted(row, ['E1'], readings)
+        return dataclasses.replace(F.fact(F.factset(row), E1, A.TECHNIQUE_DEVICE), spans=(), cited=(), counter=())
+
+    def test_the_doubt_offering_manual_never_releases_the_add_on(self):
+        """test_assess's two ERCPs (r2ba_two_ercps: X2's examination statement E1 a cited all_of_kind denial, 43260 on
+        its words, 43273 on X1's cholangioscopy) with E1's device the builder's view: with no doubt (D293 N2's T2:
+        manual only denied) 43260 is EXCLUDED and 43273 held by ADDON; beside the doubt reading manual the view claims
+        manual - 43260 is no longer excluded (a digital examination's statement concerns no group: D265), and 43273
+        stays held, 43260 being a primary that statement may exclude."""
+        from studio.interpretation.engine import assess as AS
+        from studio.interpretation.engine.types import Outcome
+        from tests.v2 import test_assess as TA
+
+        M = ct.Device.MANUAL
+        alone, offered = self.device_view(), self.device_view(['manual'])
+        self.assertEqual((alone.negated_values, offered.negated_values), ((M,), ()))  # RD-1, as built
+        for name, device, excluded in (('no doubt', alone, True), ('a doubt reading manual', offered, False)):
+            with self.subTest(name):
+                R = TA.r2ba_two_ercps(device).build()
+                found = TA.by_code(TA.run(R, *TA.R2BA_DIAGNOSTIC))
+                self.assertIs(found['43260'].evaluation.exclusion is not None, excluded)
+                self.assertTrue(AS.addon_uncounted('43260', found['43260'].evidence.kept, TA.dated(R),
+                                                   found['43260'].evidence.runs))
+                self.assertEqual(found['43273'].status, Outcome.NEEDS_CLARIFICATION)
+                self.assertEqual([held.cause for held in found['43273'].held_facts], [AS.ADDON_CAUSE])
+
+
 class EstablishedKindTests(SimpleTestCase):
     """DECISIONS D287 (G3-28; build list B9): facts.established_kind, the one label of an act - questions.act_kind's
     event branch moved here, which every conflict key reads."""
@@ -2530,6 +2569,120 @@ class RefusalTests(SimpleTestCase):
 PUBLIC_FACTS = ('factset', 'effective', 'encounter_dates', 'fact', 'members', 'holds', 'denied', 'established',
                 'silent', 'possibly', 'family_kinds', 'session_family', 'possibly_of_family', 'possible_kinds',
                 'apart_by_lesion', 'apart_by_place', 'apart_by_controls', 'iso_value', 'as_date', 'compare', 'rejudged')
+
+
+class R2BBFindingTests(SimpleTestCase):
+    """DECISIONS D297 ENGB-1 (repair round r2b): the ONE reading every rule that reads an act's target lesion's places
+    shares - facts.finding (every lesion entry a same_as member in ANY state may join to a lesion, directly or through
+    other entries, either direction; the lesion first; a dangling id kept) and facts.finding_places (each entry's place
+    members, and the first entry whose places are not established, or that the FactSet does not hold). Written for this
+    round, outside every development set."""
+
+    L3, L4, L9 = Id(IdFamily.LESION, 3), Id(IdFamily.LESION, 4), Id(IdFamily.LESION, 9)  # L9: never held
+    GEJ, CARDIA = ct.Landmark.GASTROESOPHAGEAL_JUNCTION, ct.Landmark.GASTRIC_CARDIA
+
+    @staticmethod
+    def fact_(result, value, state, options=(), reasons=()) -> Fact:
+        return Fact(result=result, value=value, state=state, options=tuple(options), reasons=tuple(reasons), spans=())
+
+    def sup(self, value) -> Fact:
+        return self.fact_(ct.Result.SUPPORTED, value, ct.FactState.SUPPORTED)
+
+    def entry(self, places=(), same=()) -> dict:
+        return {A.PLACES: tuple(place if isinstance(place, Fact) else self.sup(place) for place in places),
+                A.SAME_AS: tuple(item if isinstance(item, Fact) else self.sup(item) for item in same)}
+
+    @staticmethod
+    def factset(lesions) -> FactSet:
+        return FactSet(encounter={}, people={}, sections={}, sessions={}, anatomy={}, lesions=lesions, events={},
+                       anchors={}, unlisted=(), pair_controls={}, completeness={})
+
+    def test_the_finding_reads_every_member_state_either_way_and_through_other_entries(self):
+        R = self.factset({
+            L1: self.entry(same=(self.fact_(ct.Result.NEGATED, L2, ct.FactState.NEGATED),)),  # "not the same": joins
+            L2: self.entry(),
+            self.L3: self.entry(same=(self.fact_(ct.Result.CONTRADICTED, None, ct.FactState.CONTRADICTED,
+                                                 options=(L2, self.L9)),)),
+            self.L4: self.entry()})
+        self.assertEqual(F.finding(R, L1), (L1, L2, self.L3, self.L9))
+        self.assertEqual(F.finding(R, self.L9), (self.L9, L1, L2, self.L3))  # the other direction, a dangling start
+        self.assertEqual(F.finding(R, self.L4), (self.L4,))  # an entry no member names stands alone
+        doubt = self.fact_(ct.Result.UNKNOWN, L2, ct.FactState.SUPPORTED, options=(self.L4,),
+                           reasons=(ct.Reason.DOUBT_UNCLEAR,))
+        self.assertEqual(F.finding(self.factset({L1: self.entry(same=(doubt,)), L2: self.entry(),
+                                                 self.L4: self.entry()}), L1), (L1, L2, self.L4))
+        silent = self.factset({L1: {A.PLACES: (), A.SAME_AS: (F.SILENT,)}, L2: self.entry(), self.L3: self.entry()})
+        self.assertEqual(F.finding(silent, L2), (L2, L1, self.L3))  # a silent member names every lesion
+        self.assertEqual(F.any_state_ids(silent, F.SILENT), (L1, L2, self.L3))
+        distinct = self.factset({L1: {A.PLACES: (), A.SAME_AS: (), A.DISTINCT_FROM: (self.sup(L2),)},
+                                 L2: self.entry()})
+        self.assertEqual(F.finding(distinct, L1), (L1,))
+
+    def test_the_finding_places_and_the_first_entry_left_unknown(self):
+        unresolved = self.fact_(ct.Result.UNRESOLVED, self.CARDIA, ct.FactState.SUPPORTED,
+                                reasons=(ct.Reason.UNAPPRAISED,))
+        negated = self.fact_(ct.Result.NEGATED, self.CARDIA, ct.FactState.NEGATED)
+        cases = (('every entry established', {L1: self.entry((self.GEJ,), same=(L2,)), L2: self.entry((self.CARDIA,))},
+                  (self.GEJ, self.CARDIA), None),
+                 ('a place left unresolved', {L1: self.entry((self.GEJ,), same=(L2,)), L2: self.entry((unresolved,))},
+                  (self.GEJ, self.CARDIA), L2),
+                 ('a partner with no place', {L1: self.entry((self.GEJ,), same=(L2,)), L2: self.entry()},
+                  (self.GEJ,), L2),
+                 ('a partner with a negated place only', {L1: self.entry((self.GEJ,), same=(L2,)),
+                                                          L2: self.entry((negated,))}, (self.GEJ, self.CARDIA), L2),
+                 ('a dangling id', {L1: self.entry((self.GEJ,), same=(self.L9,))}, (self.GEJ,), self.L9),
+                 ('the lesion itself with no place', {L1: self.entry()}, (), L1),
+                 ('one entry', {L1: self.entry((self.GEJ, self.CARDIA))}, (self.GEJ, self.CARDIA), None))
+        for name, lesions, places, unknown in cases:
+            with self.subTest(name):
+                found = F.finding_places(self.factset(lesions), L1)
+                self.assertEqual(found.entries[0], L1)
+                self.assertEqual((tuple(member.value for member in found.members), found.unknown), (places, unknown))
+
+    def test_the_findings_are_computed_once_per_factset(self):
+        """D248 G5's cost, for readers that hold no Reader (SITE and D240's site fit read a finding per code and act): a
+        dense same_as graph - every lesion naming every other, a doubt's readings and an id the FactSet does not hold -
+        has its components built ONCE however often its findings and their places are read, and a FactSet built equal
+        but apart gets its own."""
+        missing = Id(IdFamily.LESION, 99)  # never held
+        lesions = {Id(IdFamily.LESION, n): self.entry(
+            (self.GEJ,), same=tuple(self.fact_(ct.Result.UNRESOLVED, Id(IdFamily.LESION, (n + k) % 24 + 1),
+                                               ct.FactState.SUPPORTED, options=(missing,),
+                                               reasons=(ct.Reason.APPRAISAL_UNCLEAR,)) for k in range(1, 9)))
+            for n in range(1, 25)}
+        R = self.factset(lesions)
+        built = []
+        real = F._components
+
+        def counting(R_):
+            built.append(R_)
+            return real(R_)
+
+        with mock.patch.object(F, '_components', counting):
+            for _round in range(3):
+                for lesion in lesions:
+                    self.assertEqual(F.finding_places(R, lesion).unknown, missing)
+                    self.assertEqual(len(F.finding(R, lesion)), 25)
+            self.assertEqual(len(built), 1)
+            twin = self.factset(lesions)
+            self.assertEqual(F.finding(twin, L1), F.finding(R, L1))
+            self.assertEqual([found is R for found in built], [True, False])
+            # the memo keeps the FactSets read last, at most _FINDINGS_KEPT: the one read longest ago goes first
+            others = [self.factset({L1: self.entry((self.GEJ,))}) for _number in range(F._FINDINGS_KEPT + 2)]
+            for other in others:
+                F.finding(other, L1)
+            self.assertLessEqual(len(F._FINDINGS), F._FINDINGS_KEPT)
+            built.clear()
+            F.finding(others[-1], L1)
+            F.finding(others[1], L1)
+            self.assertEqual([found is others[1] for found in built], [True])
+
+    def test_no_reader_of_the_finding_returns_a_string(self):
+        for function in (F.any_state_ids, F.finding, F.finding_places):
+            with self.subTest(function=function.__name__):
+                self.assertNotIn(str, _leaves(typing.get_type_hints(function).get('return')))
+        self.assertNotIn(str, {leaf for hint in typing.get_type_hints(F.FindingPlaces).values()
+                               for leaf in _leaves(hint)})
 
 
 class BoundaryTests(SimpleTestCase):

@@ -169,7 +169,8 @@ shrink"). A code claims, whatever its state:
   every such act of the code's family. D29'S SITE FIT (DECISIONS D240: the installed reading kept, "A verified target
   outside the class does not support"): no arm claims, for a site-specific dilation code (catalogue.site_class), an act
   whose target is established outside its class (``site_outside``, evaluate's SITE row failing: the lesion and every
-  place established, every supported place outside the class, none surgically made or unplaced) - "The distal
+  place established - its lesion's FINDING's every entry's, DECISIONS D297 ENGB-1 - every supported place outside the
+  class, none surgically made or unplaced) - "The distal
   esophageal stricture was dilated with a balloon. The duodenal bulb stricture was dilated with a balloon." gives
   43249 the esophageal act and 43245 the duodenal one, and they never compete. A place or a lesion not established
   leaves the act claimed (fail-closed), and a dilation listed at the distal esophagus and the pylorus is claimed by
@@ -270,7 +271,9 @@ silences another visit's statement (FRESH-2 fb10's shape) -; else the first deni
 supported"): a code's own acts (E*) of a distinct-lesion kind (catalogue kind supported in DISTINCT_LESION_KINDS) on
 supported lesions, beside another counted code of its session, of another code, whose own such acts' lesions are each
 supported distinct (distinct_from supported in either lesion's list) from every one of its own. An unknown identity
-never pairs (4.11).
+never pairs (4.11). DECISIONS D300 RF-L2: "supported distinct" is facts.established_distinct, the one reading every
+reader of an established distinctness shares - an established lesion pair claim (D296) reads as a written
+distinct_from, so a release it makes carries the same review, and two lesions same_as may join never pair (RF-L1).
 
 **endoscopic_rows**: code -> PFS row of every (code, PFS row or None) pair that has a row (unchanged).
 
@@ -986,10 +989,13 @@ def site_outside(code: str, R: FactSet, event: Id) -> bool:
     """DECISIONS D29 as D240 keeps it ("A verified target outside the class does not support"): whether ``event``'s
     target is ESTABLISHED outside ``code``'s site class (catalogue.site_class; never for a code with none) - evaluate's
     SITE row failing, read the same way (evaluate._places_of and _row_site, step 4a's; the module docstring): the act's
-    target lesion established or an empty slot; every place of the act, and of that lesion when it is supported,
-    established; at least one place supported; and every supported place outside the class, none surgically made or
-    unplaced (UNPLACED_SITES: D29's "an unverified or ambiguous target (an anastomosis) holds"). A place or a lesion not
-    established leaves the act possibly within the class (4.2), so weakening a fact only ever undoes this; only a
+    target lesion established or an empty slot; every place of the act, and of that lesion when it is supported -
+    every entry of its FINDING (DECISIONS D297 ENGB-1, facts.finding_places: every lesion entry a same_as member in any
+    state may join to it; an entry without established places, or an id the FactSet does not hold, leaves the act
+    possibly within the class) - established; at least one place supported; and every supported place outside the
+    class, none surgically made or unplaced (UNPLACED_SITES: D29's "an unverified or ambiguous target (an anastomosis)
+    holds"). A place or a lesion not established leaves the act possibly within the class (4.2), so weakening a fact
+    only ever undoes this, and a wider finding only adds places or leaves it undone (same_as only holds); only a
     deleted place member can make it hold (D240's named release; the module docstring)."""
     site = catalogue.site_class(code)
     if site is None:
@@ -999,7 +1005,10 @@ def site_outside(code: str, R: FactSet, event: Id) -> bool:
         return False
     places = list(facts_.members(R, event, _A.TARGET_PLACES))
     if lesion.result is Result.SUPPORTED and isinstance(lesion.value, Id):
-        places += facts_.members(R, lesion.value, _A.PLACES)
+        found = facts_.finding_places(R, lesion.value)  # DECISIONS D297 ENGB-1: the finding's places
+        if found.unknown is not None:
+            return False
+        places += found.members
     if not all(facts_.established(member) for member in places):
         return False
     supported = [member.value for member in places
@@ -1076,7 +1085,9 @@ def one_stricture(R: FactSet, first: Id, second: Id) -> bool:
     two acts' lesions possibly the same (a lesion both may name); else neither set apart by lesion
     (facts.apart_by_lesion: both supported and different, distinct_from supported, the lesion pair controls rejected)
     nor by place (facts.apart_by_place: established, disjoint, the pair controls rejected). An unknown identity never
-    sets two acts apart (4.11)."""
+    sets two acts apart (4.11). DECISIONS D300: apart_by_lesion's distinctness is facts.established_distinct - a written
+    distinct_from or an established lesion pair claim alike (RF-L2), never while same_as may join the two lesions
+    (RF-L1)."""
     if _possible_lesion_values(_fact(R, first, _A.TARGET_LESION)) & _possible_lesion_values(
             _fact(R, second, _A.TARGET_LESION)):
         return True
@@ -1880,11 +1891,12 @@ def _distinct_lesion_act(R: FactSet, event: Id) -> Id | None:
 
 
 def lesions_distinct(R: FactSet, first: Id, second: Id) -> bool:
-    """Two supported lesions established distinct: different ids, distinct_from supported in either lesion's list."""
-    if first == second:
-        return False
-    return (any(facts_.holds(member, second) for member in facts_.members(R, first, _A.DISTINCT_FROM))
-            or any(facts_.holds(member, first) for member in facts_.members(R, second, _A.DISTINCT_FROM)))
+    """Two supported lesions established distinct: different ids, distinct_from supported in either lesion's list - and,
+    by DECISIONS D300 RF-L2, read as every reader of an established distinctness reads it (facts.established_distinct):
+    a lesion pair claim established (DECISIONS D296) as a written distinct_from, so its release carries the same 59/XS
+    review, and never while same_as may join the two (RF-L1). The reading before D300 was the written distinct_from
+    alone."""
+    return facts_.established_distinct(R, first, second)
 
 
 def _lesion_acts(R: FactSet, events: Sequence[Id]) -> tuple[tuple[Id, ...], tuple[Id, ...]]:

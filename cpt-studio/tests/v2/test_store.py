@@ -93,8 +93,11 @@ PAIR_V3 = (INTERPRETATION_PAIR_V3, INVENTORY_VERSION_V3)
 SHAPE_PINS = {(INTERPRETATION_PAIR, INVENTORY_VERSION_V2):
               'fdef536fe56facd4d52c4e4b79af37796ade63dec1acb22f36ded684212ac613',
               # DECISIONS D296 (2026-11-16): the @3 pair (unshipped) stores the settled lesion pair claims; restated by
-              # store.shape_signature_v2, was f799cafabd486937cb0a9502a1aae91783beabbcb1b9fed1e3015f7a704cfd9b
-              PAIR_V3: '8a4213496d8533a860947b79a2623b6a461db2e50d30063db6f674d04b4ee581'}
+              # store.shape_signature_v2, was f799cafabd486937cb0a9502a1aae91783beabbcb1b9fed1e3015f7a704cfd9b.
+              # DECISIONS D300 (2026-11-16, round r2c): a lesion pair dropped for the bound names no claim (RF-L5) and a
+              # row without lesion_pairs reads it as the empty list (RF-L6: the field's default, described); restated by
+              # the same function, was 8a4213496d8533a860947b79a2623b6a461db2e50d30063db6f674d04b4ee581
+              PAIR_V3: '8aacd0456244521080c56296dda3ff85cd1b0be6c65a52470b511f55ca3fdccb'}
 
 
 # --- the synthetic settled inventory ----------------------------------------------------------------------------------

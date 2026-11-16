@@ -227,8 +227,10 @@ ADDON_CHECK = overlay.ADDON_CHECK
 # r2 (DECISIONS D294, member words; WORDS-F1, F3, F6 and their class): the code's qualification for an item of a member
 # form (wording.member_form) - its form's own sentence, the same words its details row says (answers.FORM_MISSING),
 # never its key's QUESTION_WORDS: ADDON_WORDS for the add-on row, "could not confirm" what the form's row asks otherwise
-FORM_WORDS = {form: (ADDON_WORDS if form == wording.FORM_ADDON
-                     else f'CPT Studio could not confirm from the document {missing}.')
+# r2b (DECISIONS D297, Q2): a form whose row states what CPT Studio's reading records (wording.FORM_RECORDED) says the
+# same here; a template form's acts are named per question (wording.form_text, ``_qualifications``)
+FORM_WORDS = {form: (ADDON_WORDS if form == wording.FORM_ADDON else wording.FORM_RECORDED[form]
+                     if form in wording.FORM_RECORDED else f'CPT Studio could not confirm from the document {missing}.')
               for form, missing in answers.FORM_MISSING.items()}
 
 
@@ -1165,8 +1167,11 @@ def _qualifications(proposal, status, view, code):
                 # the visit a reinstated same-day procedure holds (refutation round 3, B-05): the gate's own sentence
                 out.append(WITHHELD_WORDS[review.SAME_DAY_EM_GATE])
             elif wording.asked_form(question, support) in FORM_WORDS:
-                # D284 (B7) and r2 (D294): chosen by the item's message (its form), never by its key
-                out.append(FORM_WORDS[wording.asked_form(question, support)])
+                # D284 (B7) and r2 (D294): chosen by the item's message (its form), never by its key; r2b (D297, W2R-2):
+                # a template form names the acts its item records
+                named = wording.asked_act(question, support)
+                out.append(wording.form_text(FORM_WORDS[wording.asked_form(question, support)],
+                                             *((named[1], named[2]) if named is not None else ())))
             elif fact in QUESTION_WORDS:
                 out.append(QUESTION_WORDS[fact])
         if status == 'needs_detail' and not out:
@@ -1176,8 +1181,8 @@ def _qualifications(proposal, status, view, code):
             out.append(WITHHELD_WORDS[withheld])
         if view is not None and view.same_day_held:
             out.append(WITHHELD_WORDS['em.same_day_if_reinstated'])
-    if status == 'excluded' and proposal.bucket == Proposal.EXCLUDED and not (view is not None
-                                                                           and view.reason == review.DETAIL_UNAVAILABLE):
+    if status == 'excluded' and review.bucket_of(proposal, view) == Proposal.EXCLUDED and not (
+            view is not None and view.reason == review.DETAIL_UNAVAILABLE):
         out.append(_exclusion_reason(proposal))
     if view is not None and view.reason == review.DETAIL_UNAVAILABLE:
         out.append('A detail this code needs was answered as not documented or not confirmable, so it is excluded '
@@ -1208,7 +1213,9 @@ def _status(proposal, decision, view):
         return 'excluded', CONFIRMED_SUB_LABEL
     if view is not None and view.reason == review.DETAIL_UNAVAILABLE:
         return 'excluded', UNAVAILABLE_SUB_LABELS.get(view.answer, UNAVAILABLE_SUB_LABEL)
-    if proposal.bucket == Proposal.EXCLUDED and action != Decision.REINSTATE:
+    # r2b (DECISIONS D297, W2R-1): a code read as the selected code it was (review.reopened) is never "excluded by a
+    # documentation check": its status is its view's
+    if review.bucket_of(proposal, view) == Proposal.EXCLUDED and action != Decision.REINSTATE:
         return 'excluded', CHECK_EXCLUDED_SUB_LABEL
     status = view.status if view is not None else proposal.status
     if status == Proposal.NEEDS_CLARIFICATION:
@@ -1907,25 +1914,29 @@ def _row_facts(assessment):
     proposal (by creation order), else the first service-scoped clarification whose family is the proposal's. The
     clarification's own fact, never its state (a later assessment withdraws it). r2 (DECISIONS D294): with the member
     form of that question (wording.recorded_form of the proposal's item, when the item is of its fact), as (fact, form):
-    the detail a row asks is its fact AND its form."""
+    the detail a row asks is its fact AND its form. r2b (DECISIONS D297, W2R-2): with the kinds a template form names
+    (the item's act record), as (fact, form, act, whole)."""
     clarifications = list(assessment.clarifications.select_related('proposal').order_by('created_at', 'pk'))
     named, by_family = {}, {}
     for item in clarifications:
         if item.proposal_id is not None:
             support = item.proposal.support if isinstance(item.proposal.support, dict) else {}
             stored = support.get('item')
-            form = (wording.recorded_form(stored) if isinstance(stored, dict) and stored.get('fact') == item.fact
-                    else '')
-            named.setdefault(item.proposal_id, (item.fact, form))
+            own = isinstance(stored, dict) and stored.get('fact') == item.fact
+            form = wording.recorded_form(stored) if own else ''
+            act = wording.recorded_act(stored.get('act_ref')) if own and isinstance(stored, dict) else None
+            named.setdefault(item.proposal_id, (item.fact, form, *((act[1], act[2]) if act is not None else ('', ''))))
         elif item.scope == 'service':
-            by_family.setdefault(item.family, (item.fact, ''))
-    return lambda proposal: named.get(proposal.pk) or by_family.get(proposal.family) or ('', '')
+            by_family.setdefault(item.family, (item.fact, '', '', ''))
+    return lambda proposal: named.get(proposal.pk) or by_family.get(proposal.family) or ('', '', '', '')
 
 
-def _detail_prompt(fact, form='') -> str:
-    """The prompt of the detail a code needs: its member form's row (answers.FORM_PROMPTS) when it has one, else its
-    key's (answers.PROMPTS)."""
-    return answers.FORM_PROMPTS.get(form) or answers.PROMPTS.get(fact, answers.DEFAULT_PROMPT)
+def _detail_prompt(fact, form='', act='', whole='') -> str:
+    """The prompt of the detail a code needs: its member form's row (answers.FORM_PROMPTS) when it has one - r2b (D297):
+    a template form's acts named from the kinds its item records (wording.form_text) - else its key's
+    (answers.PROMPTS)."""
+    return (wording.form_text(answers.FORM_PROMPTS[form], act, whole) if form in answers.FORM_PROMPTS
+            else answers.PROMPTS.get(fact, answers.DEFAULT_PROMPT))
 
 
 def _what_changed_codes(earlier, now):

@@ -753,6 +753,16 @@ WND_PINS = {
         'record structure, never document text',
     ('engine/facts', '_pair_controls', "compares with 'pair_control'"): "a stored claim's role field against "
         "contract/types.ClaimRole's value (the store's closed vocabulary): record structure, never document text",
+    # DECISIONS D300 RF-L3 (round r2c): a stored lesion pair claim's form, read for the multiplicity it presumes
+    ('engine/facts', '_lesion_pair_presumes', "compares with 'lesion.distinct_from'"): "a stored lesion pair claim's "
+        "template field against contract/claims.LESION_PAIR_FORMS' id, which the store binds every stored pair to "
+        "(store._V2_LESION_PAIR_FORMS): record structure, never document text",
+    ('engine/facts', '_lesion_pair_presumes', "compares with 'lesion.not_member'"): "a stored lesion pair claim's "
+        "template field against contract/claims.LESION_PAIR_FORMS' id, which the store binds every stored pair to "
+        "(store._V2_LESION_PAIR_FORMS): record structure, never document text",
+    ('engine/facts', '_lesion_pair_presumes', "compares with 'lesion.not_member.any'"): "a stored lesion pair claim's "
+        "template field against contract/claims.LESION_PAIR_FORMS' id, which the store binds every stored pair to "
+        "(store._V2_LESION_PAIR_FORMS): record structure, never document text",
     ('engine/questions', '_named', 'compares with a string through UNLISTED'): "a held fact's cause against CPT Studio's "
         "own cause label ('unlisted', 3.2.6): never document text",
     ('engine/questions', 'fill', 'compares with a string through UNLISTED'): "a held fact's cause against CPT Studio's "

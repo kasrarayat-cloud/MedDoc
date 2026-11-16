@@ -1416,6 +1416,608 @@ class R2AKindDenialLeftOpenTests(SimpleTestCase):
                 self.assertEqual(by_code(run(exam.build(), ('45378', 1)))['45378'].status, status)
 
 
+# --- DECISIONS D297, repair round r2b (builder R2BA): ENGA-F1, ENGA-F2 and ENGA-F4 through the engine -----------------
+
+
+R2BA_E1_WORDS = EvidenceSpan(0, 100, 160, TEXT[100:160], True)  # E1's kind and status words
+R2BA_DIAGNOSTIC = (('43260', R2BA_E1_WORDS), ('43273', 3))
+
+
+def r2ba_two_ercps(device: Fact | None = None, *, statement: bool = True, examination: Fact | None = None) -> EF.Doc:
+    """An ERCP X1 told through its acts - a biliary cannulation E2 achieved and a cholangioscopy E3 (43273 on E3) - and
+    an ERCP X2 whose examination statement E1 is a denial (status negated performed, breadth all_of_kind, today, by the
+    team) whose kind and status words 43260 cites (R2BA_E1_WORDS), its device ``device`` (silent for None); with
+    ``examination``, an examination E9 of X2 done today by the team whose device is that fact."""
+    doc = EF.Doc()
+    doc.session(1, SessionKind.ERCP)
+    doc.session(2, SessionKind.ERCP)
+    if statement:
+        doc.exam(1, session=X(2), status=EF.neg(ct.Status.PERFORMED), breadth=sup(ct.Breadth.ALL_OF_KIND),
+                 device=device, kind_words=Span(100, 130), status_words=Span(130, 160))
+    doc.act(2, Kind.CANNULATION, access=sup(ct.AccessOutcome.ACHIEVED), duct=sup(ct.Duct.BILIARY))
+    doc.act(3, Kind.CHOLANGIOSCOPY, duct=sup(ct.Duct.BILIARY))
+    if examination is not None:
+        doc.exam(9, session=X(2), device=examination)
+    return doc
+
+
+def r2ba_addon_held(case: SimpleTestCase, found: AS.Assessed) -> None:
+    """43273 held by its ADDON row alone (coding_rule:ADDON, the row U)."""
+    case.assertEqual(found.status, Outcome.NEEDS_CLARIFICATION)
+    case.assertEqual([held.cause for held in found.held_facts], [AS.ADDON_CAUSE])
+    case.assertIn(('ADDON', 'U'), [(row.requirement, row.truth.value) for row in found.trace])
+
+
+def r2ba_uncounted(code: str, found: dict, R: FactSet) -> bool:
+    """engine/assess.addon_uncounted over the assessed primary ``code`` (its kept spans and runs), ``R`` dated as run
+    dates it."""
+    return AS.addon_uncounted(code, found[code].evidence.kept, dated(R), found[code].evidence.runs)
+
+
+class R2BADigitalStatementTests(SimpleTestCase):
+    """DECISIONS D297 ENGA-F1 (repair round r2b, builder R2BA): D294 RD-2's may_exclude reads FINAL 5.6 E13's digital
+    exception of a STATEMENT established (pairing.established_digital: kind supported examination, device supported
+    manual; D280.1/.2), never the claimed-manual reading (evaluate._digital). A 9.4 weakening that makes an excluding
+    examination statement's device CLAIM manual therefore never drops its examination kind from what it may be, and
+    never releases the add-on beside the primary it excluded (as built in r2, _may_concern subtracted the claimed
+    reading: 43273 READY under each weakening below; the r2 refuter's F1)."""
+
+    def test_a_device_weakened_into_a_manual_claim_never_releases_the_add_on(self):
+        """E1, X2's examination statement (a cited all_of_kind denial), excludes 43260 with its device manual negated or
+        an endoscope supported, 43273 held by ADDON alone. Each 9.4 weakening of that device that makes it claim manual
+        - manual negated unresolved, a stated or unclear doubt, a conflict doubt (the denial's state kept, as settle
+        keeps it); the endoscope beside pass 1's contradiction with manual, the overfilled view [endoscope stated,
+        manual stated], or a doubt reading manual - leaves 43260 unexcluded (held not_documented: a digital
+        examination's statement concerns no group, D265) and 43273 held, its primary one the statement may exclude."""
+        M, ENDO = Device.MANUAL, Device.ENDOSCOPE
+        for name, base in (('manual negated', EF.neg(M)), ('an endoscope supported', sup(ENDO))):
+            with self.subTest(base=name):
+                found = by_code(run(r2ba_two_ercps(base).build(), *R2BA_DIAGNOSTIC))
+                self.assertIsNotNone(found['43260'].evaluation.exclusion)
+                r2ba_addon_held(self, found['43273'])
+        overfilled = Fact(Res.UNRESOLVED, None, State.CONTRADICTED, (ENDO, M), (Reason.SLOT_OVERFULL,), ())
+        for name, device in (('manual negated, unresolved', r2a_weakened(EF.neg(M), 'unresolved')),
+                             ('manual negated, a stated doubt', r2a_weakened(EF.neg(M), 'stated')),
+                             ('manual negated, an unclear doubt',
+                              replace(EF.neg(M), result=Res.UNKNOWN, reasons=(Reason.DOUBT_UNCLEAR,))),
+                             ('manual negated, a conflict doubt', r2a_weakened(EF.neg(M), 'conflict')),
+                             ("pass 1's contradiction endoscope|manual", EF.contra(ENDO, M)),
+                             ('the overfilled view [endoscope S, manual S]', overfilled),
+                             ('an endoscope and a doubt reading manual', EF.doubted(ENDO, M))):
+            with self.subTest(name):
+                R = r2ba_two_ercps(device).build()
+                found = by_code(run(R, *R2BA_DIAGNOSTIC))
+                self.assertIsNone(found['43260'].evaluation.exclusion)
+                self.assertEqual([held.cause for held in found['43260'].held_facts], ['coding_rule:not_documented'])
+                r2ba_addon_held(self, found['43273'])
+                self.assertTrue(r2ba_uncounted('43260', found, R))
+
+    def test_an_established_digital_examination_statement_concerns_no_examination(self):
+        """The boundary the rule leaves alone, beside its twin: E1's device SUPPORTED manual - a digital examination
+        established as one ("No digital rectal examination was performed.") - never excludes 43260 and never may
+        (D265; D280.2): 43260 held not_documented, addon_uncounted False, 43273 READY, as built. The twin, the same
+        manual device only claimed (unresolved), holds 43273."""
+        R = r2ba_two_ercps(sup(Device.MANUAL)).build()
+        found = by_code(run(R, *R2BA_DIAGNOSTIC))
+        self.assertIsNone(found['43260'].evaluation.exclusion)
+        self.assertEqual([held.cause for held in found['43260'].held_facts], ['coding_rule:not_documented'])
+        self.assertFalse(r2ba_uncounted('43260', found, R))
+        self.assertEqual((found['43273'].status, found['43273'].held_facts), (Outcome.READY, ()))
+        twin = by_code(run(r2ba_two_ercps(r2a_weakened(sup(Device.MANUAL), 'unresolved')).build(), *R2BA_DIAGNOSTIC))
+        r2ba_addon_held(self, twin['43273'])
+
+
+class R2BADigitalPremiseTests(SimpleTestCase):
+    """DECISIONS D297 ENGA-F2 (repair round r2b, builder R2BA): a digital examination - its device claiming manual or
+    established manual (FINAL 5.6 E13; evaluate._digital_candidate) - is never 4.6's surely-positive act in RD-2's
+    may_exclude premise: its group is read as the same document without its lines (D265), as evaluate's decision reads
+    it (it never binds the group; 4.6's own item is asked). As built in r2, a digital rectal examination E9 beside the
+    examination statement that excludes 43260 turned the exclusion into a statement_scope question - the DRE holds the
+    code - and made 43273 READY, where the same document without the DRE's line holds it (D253: a fact E13 says never
+    counts can never release a code; the r2 refuter's F2)."""
+
+    def test_a_digital_examination_never_makes_its_primary_counted(self):
+        """E1, X2's cited all_of_kind examination denial (its device silent), beside an examination E9 of X2 done today
+        by the team whose device is manual - supported (established), unresolved, doubted, or pass 1's contradiction
+        manual|endoscope (claimed): 43260 is held by the statement_scope question (never excluded: the DRE holds it),
+        and 43273 is held by ADDON - as the same document without E9 holds it (as built in r2: READY in each)."""
+        M = Device.MANUAL
+        for name, device in (('manual supported (established)', sup(M)), ('manual unresolved', EF.unres(M)),
+                             ('manual doubted', EF.doubted(M)),
+                             ('manual|endoscope contradicted', EF.contra(M, Device.ENDOSCOPE))):
+            with self.subTest(name):
+                R = r2ba_two_ercps(examination=device).build()
+                found = by_code(run(R, *R2BA_DIAGNOSTIC))
+                self.assertIsNone(found['43260'].evaluation.exclusion)
+                self.assertIn('coding_rule:statement_scope', [held.cause for held in found['43260'].held_facts])
+                r2ba_addon_held(self, found['43273'])
+                self.assertTrue(r2ba_uncounted('43260', found, R))
+                without = by_code(run(EF.without_events(R, E(9)), *R2BA_DIAGNOSTIC))
+                self.assertIsNotNone(without['43260'].evaluation.exclusion)
+                self.assertEqual((found['43273'].status, found['43273'].held_facts),
+                                 (without['43273'].status, without['43273'].held_facts))
+
+    def test_an_examination_that_is_not_digital_stays_surely_positive(self):
+        """The boundary, beside its twin (E9's device manual: 43273 held): E9's device an endoscope supported, or silent
+        (an examination's usual filing) - an ordinary examination surely done today, so 4.6's premise can never hold
+        for 43260's group and no statement may exclude it: 43260 held by E1's contradiction, addon_uncounted False,
+        43273 READY, as built; and an established DRE E9 in a document with no statement - nothing may exclude 43260 -
+        leaves 43273 READY, as the same document without E9 does."""
+        for name, device in (('an endoscope supported', sup(Device.ENDOSCOPE)), ('silent', F.SILENT)):
+            with self.subTest(name):
+                R = r2ba_two_ercps(examination=device).build()
+                found = by_code(run(R, *R2BA_DIAGNOSTIC))
+                self.assertEqual(found['43260'].status, Outcome.NEEDS_CLARIFICATION)
+                self.assertFalse(r2ba_uncounted('43260', found, R))
+                self.assertEqual((found['43273'].status, found['43273'].held_facts), (Outcome.READY, ()))
+        twin = by_code(run(r2ba_two_ercps(examination=sup(Device.MANUAL)).build(), *R2BA_DIAGNOSTIC))
+        r2ba_addon_held(self, twin['43273'])
+        alone = r2ba_two_ercps(statement=False, examination=sup(Device.MANUAL)).build()
+        codes = (('43260', 9), ('43273', 3))
+        found, without = by_code(run(alone, *codes)), by_code(run(EF.without_events(alone, E(9)), *codes))
+        self.assertFalse(r2ba_uncounted('43260', found, alone))
+        self.assertEqual((found['43273'].status, found['43273'].held_facts), (Outcome.READY, ()))
+        self.assertEqual(without['43273'].status, Outcome.READY)
+
+
+class R2BAUncitedStatementScopeTests(SimpleTestCase):
+    """DECISIONS D297 ENGA-F4 (repair round r2b, builder R2BA; the r2 refuter's F4): D294 RD-2 names "a statement_scope
+    question" among the statements that may exclude a primary, and a primary the code does NOT cite is held by one when
+    a denial of its kind may be broad (4.10: all_of_kind, today, of its family) or may be of this session and today with
+    its session or date not established (4.6's last paragraph). Each such case is pinned beside its twin: an add-on
+    beside a primary an uncited denial may hold by that question stays held (the refuter's mutant making the uncited arm
+    False released 43273 and no test failed)."""
+
+    def assess_uncited(self, **over) -> tuple:
+        """test_assess's ERCP without a stone act and E6 a stone-extraction denial (negated performed, all_of_kind,
+        today, X1; ``over`` replaces its facts) that 43264 does not cite: 43264 on E4's unit, 43273 on E3's."""
+        doc = ercp(stone=False)
+        facts = dict(status=EF.neg(ct.Status.PERFORMED), breadth=sup(ct.Breadth.ALL_OF_KIND))
+        facts.update(over)
+        doc.act(6, Kind.STONE_EXTRACTION, **facts)
+        R = doc.build()
+        return by_code(run(R, ('43264', 4), ('43273', 3))), R
+
+    def test_an_uncited_denial_that_may_raise_the_scope_question_holds_the_add_on(self):
+        """E6 broad (all_of_kind, today, X1), broad by another performer (4.10 reads no performer), its breadth
+        unresolved (all_of_kind its claim), or single_target with its session or its date unresolved: 43264 is never
+        excluded (E6 is not cited) but a statement_scope question is, or may be, asked of E6 - addon_uncounted True, and
+        43273 held by ADDON."""
+        single = sup(ct.Breadth.SINGLE_TARGET)
+        for name, over, cause in (
+                ('broad', {}, 'coding_rule:statement_scope'),
+                ('broad, by another performer', dict(performer=sup(ct.Performer.OTHER_CLINICIAN)),
+                 'coding_rule:statement_scope'),
+                ('its breadth unresolved', dict(breadth=r2a_weakened(sup(ct.Breadth.ALL_OF_KIND), 'unresolved')),
+                 'coding_rule:not_documented'),
+                ('single_target, its session unresolved',
+                 dict(breadth=single, session=r2a_weakened(sup(X(1)), 'unresolved')), 'coding_rule:statement_scope'),
+                ('single_target, its date unresolved',
+                 dict(breadth=single, date=r2a_weakened(sup(ct.DateRelation.ON_DATE_OF_SERVICE), 'unresolved')),
+                 'coding_rule:statement_scope')):
+            with self.subTest(name):
+                found, R = self.assess_uncited(**over)
+                self.assertIsNone(found['43264'].evaluation.exclusion)
+                self.assertEqual([held.cause for held in found['43264'].held_facts], [cause])
+                self.assertTrue(r2ba_uncounted('43264', found, R))
+                r2ba_addon_held(self, found['43273'])
+
+    def test_an_uncited_statement_that_cannot_raise_it_leaves_the_add_on_ready(self):
+        """The boundary, beside its twin (the broad denial holds 43273): E6 single_target or exceptive with its session
+        and date established; a broad denial of an earlier date (never of the date of service); a broad denial in an
+        EGD session X2 (it never concerns 43264's family); a stone extraction PLANNED today whose session is unresolved
+        (a plan is no denial: K1, it raises no scope question) - 43264 held not_documented, addon_uncounted False and
+        43273 READY, as built."""
+        twin, _R = self.assess_uncited()
+        r2ba_addon_held(self, twin['43273'])
+        egd = ercp(stone=False)
+        egd.session(2, SessionKind.EGD, reached=[sup(Extent.SECOND_PORTION_DUODENUM)])
+        egd.exam(8, session=X(2))
+        egd.act(6, Kind.STONE_EXTRACTION, session=X(2), status=EF.neg(ct.Status.PERFORMED),
+                breadth=sup(ct.Breadth.ALL_OF_KIND))
+        R_egd = egd.build()
+        cases = [(name, *self.assess_uncited(**over)) for name, over in (
+            ('single_target, placed', dict(breadth=sup(ct.Breadth.SINGLE_TARGET))),
+            ('exceptive, placed', dict(breadth=sup(ct.Breadth.EXCEPTIVE))),
+            ('broad, of an earlier date', dict(date=sup(ct.DateRelation.EARLIER_DATE))),
+            ('a plan today, its session unresolved', dict(status=sup(ct.Status.PLANNED), breadth=None,
+                                                          session=r2a_weakened(sup(X(1)), 'unresolved'))))]
+        cases.append(("broad, in another family's session", by_code(run(R_egd, ('43264', 4), ('43273', 3))), R_egd))
+        for name, found, R in cases:
+            with self.subTest(name):
+                self.assertEqual([held.cause for held in found['43264'].held_facts], ['coding_rule:not_documented'])
+                self.assertFalse(r2ba_uncounted('43264', found, R))
+                self.assertEqual((found['43273'].status, found['43273'].held_facts), (Outcome.READY, ()))
+
+
+class R2BACitedDecidingFactBoundaryTests(SimpleTestCase):
+    """DECISIONS D297 ENGA-F3 (repair round r2b, builder R2BA), the boundary of the deciding-fact arms the ADDON P-MONO
+    fixtures guard: a cited statement may exclude only by a deciding fact 4.6 reads - a denial whose breadth may be
+    other than exceptive (condition 3), or a plan, another date or another performer, which carry no breadth (K1) - each
+    read with the possibility readers. A cited denial whose breadth is established exceptive, today, by the team, of a
+    supported status, decides nothing that excludes: the add-on beside its primary stays READY."""
+
+    def assess_cited(self, **over) -> tuple:
+        """test_assess's ERCP without a stone act and E6 a stone extraction of the bile duct, today, by the team, whose
+        kind and status words 43264 cites (R2A_CITED); ``over`` sets its facts."""
+        doc = ercp(stone=False)
+        doc.act(6, Kind.STONE_EXTRACTION, duct=sup(ct.Duct.BILIARY), kind_words=Span(600, 630),
+                status_words=Span(630, 660), **over)
+        R = doc.build()
+        return by_code(run(R, ('43264', R2A_CITED), ('43273', 3))), R
+
+    def test_a_cited_exceptive_denial_decides_nothing_beside_its_twins(self):
+        """E6 negated performed with its breadth established exceptive: 43264 held not_documented, addon_uncounted
+        False, 43273 READY. Its twins, each the rule's: the same statement a PLAN (K1: the plan alone excludes 43264,
+        the breadth unread) and the same denial with its status unresolved (it may be the plan) both hold 43273."""
+        exceptive = sup(ct.Breadth.EXCEPTIVE)
+        found, R = self.assess_cited(status=EF.neg(ct.Status.PERFORMED), breadth=exceptive)
+        self.assertIsNone(found['43264'].evaluation.exclusion)
+        self.assertEqual([held.cause for held in found['43264'].held_facts], ['coding_rule:not_documented'])
+        self.assertFalse(r2ba_uncounted('43264', found, R))
+        self.assertEqual((found['43273'].status, found['43273'].held_facts), (Outcome.READY, ()))
+        for name, status, excluded in (('a plan', sup(ct.Status.PLANNED), True),
+                                       ('the denial, its status unresolved',
+                                        r2a_weakened(EF.neg(ct.Status.PERFORMED), 'unresolved'), False)):
+            with self.subTest(name):
+                twin, R = self.assess_cited(status=status, breadth=exceptive)
+                self.assertIs(twin['43264'].evaluation.exclusion is not None, excluded)
+                self.assertTrue(r2ba_uncounted('43264', twin, R))
+                r2ba_addon_held(self, twin['43273'])
+
+
+# --- DECISIONS D301, repair round r2d (builder R2DA): RF-A2-1, -2, -3, -6 and -7 through the engine ------------------
+
+
+R2DA_PARTIAL = EvidenceSpan(0, 600, 700, TEXT[600:700], True)  # past E6's kind and status words: a partial cover
+R2DA_COVERS = (('cited', R2A_CITED), ('partly cited', R2DA_PARTIAL), ('not cited', 4))  # 4: E4's own unit
+R2DA_SCOPE = 'coding_rule:statement_scope'
+
+
+def r2da_ercp(*, egd: bool = False, **over) -> EF.Doc:
+    """test_assess's ERCP X1 without a stone act (43273 on E3's cholangioscopy) and E6 a stone-extraction denial (status
+    negated performed, breadth all_of_kind, today, X1, the team) whose kind and status words lie at 600-660; ``over``
+    replaces E6's facts (None leaves one out, EF.SILENT a silent session); with ``egd``, an EGD X2 beside the ERCP, its
+    examination E8."""
+    doc = ercp(stone=False)
+    if egd:
+        doc.session(2, SessionKind.EGD, reached=[sup(Extent.SECOND_PORTION_DUODENUM)])
+        doc.exam(8, session=X(2))
+    facts = dict(status=EF.neg(ct.Status.PERFORMED), breadth=sup(ct.Breadth.ALL_OF_KIND), kind_words=Span(600, 630),
+                 status_words=Span(630, 660))
+    facts.update(over)
+    doc.act(6, facts.pop('kind', Kind.STONE_EXTRACTION), **facts)
+    return doc
+
+
+def r2da_assess(doc: EF.Doc, where, primary: str = '43264') -> tuple:
+    """``primary`` on ``where`` (a cover of E6's words, or an event's unit) and 43273 on E3: the two assessed, and R."""
+    R = doc.build()
+    return by_code(run(R, (primary, where), ('43273', 3))), R
+
+
+def r2da_scope_on(case: SimpleTestCase, found: AS.Assessed, statement=E(6)) -> None:
+    """``found`` is not excluded and is held by 4.6's statement_scope question about ``statement``."""
+    case.assertIsNone(found.evaluation.exclusion)
+    case.assertIn((R2DA_SCOPE, statement), [(held.cause, held.subject) for held in found.held_facts])
+
+
+class R2DAStatementScopeWhateverTheCoverTests(SimpleTestCase):
+    """DECISIONS D301 RF-A2-1 (repair round r2d, builder R2DA): whenever 4.6 asks a statement_scope question of a
+    statement - its last paragraph, ``possibly_here``: a denial of the group's kinds whose session or date relation is
+    not established, ANY breadth - may_exclude reads that statement as one that may exclude, whatever the primary's
+    cover: for one statement the cited arm is never narrower than the uncited arm. As built in r2/r2b the cited arm did
+    not read 4.6's last paragraph, so an exceptive denial whose date or session is not established held the add-on when
+    the primary did not cite it and released it when the primary cited it or covered it partly (the r2b refuter's
+    RF-A2-1: 84 grid states)."""
+
+    def test_a_question_4_6_asks_holds_the_add_on_whatever_the_cover(self):
+        """E6 a denial whose breadth can only be exceptive (established exceptive, or unresolved claiming it) with its
+        date unresolved claiming today, its session unresolved claiming X1, or its date a stated doubt - and 43274
+        beside an exceptive stent-placement denial whose date is unresolved, so the rule is not keyed to one primary:
+        for each cover (cited, partly cited, not cited) the primary is held by the statement_scope question about E6,
+        addon_uncounted True and 43273 held by ADDON alone (as built: READY when cited or partly cited)."""
+        exceptive, ON = sup(ct.Breadth.EXCEPTIVE), sup(ct.DateRelation.ON_DATE_OF_SERVICE)
+        shapes = (('its date unresolved', dict(breadth=exceptive, date=r2a_weakened(ON, 'unresolved')), '43264'),
+                  ('its session unresolved', dict(breadth=exceptive, session=r2a_weakened(sup(X(1)), 'unresolved')),
+                   '43264'),
+                  ('its date a stated doubt', dict(breadth=exceptive, date=r2a_weakened(ON, 'stated')), '43264'),
+                  ('its breadth unresolved exceptive, its date unresolved',
+                   dict(breadth=r2a_weakened(exceptive, 'unresolved'), date=r2a_weakened(ON, 'unresolved')), '43264'),
+                  ('a stent placement denial, its date unresolved',
+                   dict(kind=Kind.STENT, breadth=exceptive, date=r2a_weakened(ON, 'unresolved')), '43274'))
+        for name, over, primary in shapes:
+            for cover, where in R2DA_COVERS:
+                with self.subTest(name, cover=cover):
+                    found, R = r2da_assess(r2da_ercp(**over), where, primary)
+                    r2da_scope_on(self, found[primary])
+                    self.assertTrue(r2ba_uncounted(primary, found, R))
+                    r2ba_addon_held(self, found['43273'])
+
+    def test_a_placed_exceptive_denial_asks_nothing_beside_its_twin(self):
+        """The boundary the rule leaves alone: the exceptive denial with its session and date established (X1, today) -
+        4.6 asks nothing (condition 3 fails, nothing is unplaced): 43264 held not_documented, addon_uncounted False and
+        43273 READY for every cover, as built. Its twin, the same denial with its date unresolved, holds 43273 for
+        every cover (the test above)."""
+        for cover, where in R2DA_COVERS:
+            with self.subTest(cover=cover):
+                found, R = r2da_assess(r2da_ercp(breadth=sup(ct.Breadth.EXCEPTIVE)), where)
+                self.assertEqual([held.cause for held in found['43264'].held_facts], ['coding_rule:not_documented'])
+                self.assertFalse(r2ba_uncounted('43264', found, R))
+                self.assertEqual((found['43273'].status, found['43273'].held_facts), (Outcome.READY, ()))
+                twin, R = r2da_assess(r2da_ercp(breadth=sup(ct.Breadth.EXCEPTIVE), date=r2a_weakened(
+                    sup(ct.DateRelation.ON_DATE_OF_SERVICE), 'unresolved')), where)
+                r2ba_addon_held(self, twin['43273'])
+
+
+class R2DAOneSessionReaderTests(SimpleTestCase):
+    """DECISIONS D301 RF-A2-2 (repair round r2d, builder R2DA): whenever a statement's session is not supported, 4.6's
+    last paragraph (``possibly_here``) and may_exclude read "possibly this session" with ONE reader
+    (evaluate.possibly_this_session: a session not supported is possibly this session, of the code's family - 4.6's own
+    reading, HO-2's "never not_documented"). As built in r2/r2b may_exclude read such a session through facts.possibly
+    (a negated session names none; one claimed only in an EGD names only the EGD), so 4.6 asked the primary its scope
+    while the ADDON row counted it (the r2b refuter's RF-A2-2: 540 grid states)."""
+
+    def test_a_denial_whose_session_is_not_supported_holds_the_add_on(self):
+        """A broad denial E6 beside the ERCP X1 and an EGD X2 whose session is NEGATED X1 (its date unresolved, or
+        silent), NEGATED X2 (its date unresolved), unresolved naming X2, or a stated doubt reading X2 - cited or not
+        cited: 4.6 holds 43264 by the statement_scope question about E6, addon_uncounted True and 43273 held by ADDON
+        alone (as built: READY in each)."""
+        ON = sup(ct.DateRelation.ON_DATE_OF_SERVICE)
+        shapes = (('its session negated X1, its date unresolved', dict(session=EF.neg(X(1)),
+                                                                        date=r2a_weakened(ON, 'unresolved'))),
+                  ('its session negated X1, its date silent', dict(session=EF.neg(X(1)), date=None)),
+                  ('its session negated X2, its date unresolved', dict(session=EF.neg(X(2)),
+                                                                        date=r2a_weakened(ON, 'unresolved'))),
+                  ('its session unresolved naming the EGD', dict(session=r2a_weakened(sup(X(2)), 'unresolved'))),
+                  ('its session a stated doubt reading the EGD', dict(session=EF.doubted(X(2), X(2)))),
+                  ('a single-target denial, its session unresolved naming the EGD',
+                   dict(breadth=sup(ct.Breadth.SINGLE_TARGET), session=r2a_weakened(sup(X(2)), 'unresolved'))))
+        for name, over in shapes:
+            for cover, where in (R2DA_COVERS[0], R2DA_COVERS[2]):
+                with self.subTest(name, cover=cover):
+                    found, R = r2da_assess(r2da_ercp(egd=True, **over), where)
+                    r2da_scope_on(self, found['43264'])
+                    self.assertTrue(r2ba_uncounted('43264', found, R))
+                    r2ba_addon_held(self, found['43273'])
+
+    def test_a_session_supported_in_another_family_beside_its_twin_and_the_readers_reach(self):
+        """The boundary the rule leaves alone, beside its twin: E6's session SUPPORTED X2 (the EGD: of another family,
+        it never concerns 43264) - 43264 held not_documented, addon_uncounted False, 43273 READY, cited or not, as
+        built; the twin, its session unresolved naming X2, holds 43273 (the test above). And the reach of the one
+        reader, pinned: a statement whose session is not supported is possibly this session for every arm may_exclude
+        reads - a CITED PLAN whose session is negated X1 (4.6 asks nothing: a plan is no denial, and a session not
+        supported concerns no code) leaves 43264 held not_documented and holds 43273 (as built: READY), while the same
+        plan supported in the EGD leaves 43273 READY."""
+        for cover, where in (R2DA_COVERS[0], R2DA_COVERS[2]):
+            with self.subTest(cover=cover):
+                found, R = r2da_assess(r2da_ercp(egd=True, session=sup(X(2))), where)
+                self.assertEqual([held.cause for held in found['43264'].held_facts], ['coding_rule:not_documented'])
+                self.assertFalse(r2ba_uncounted('43264', found, R))
+                self.assertEqual((found['43273'].status, found['43273'].held_facts), (Outcome.READY, ()))
+        plan = dict(status=sup(ct.Status.PLANNED), breadth=None)
+        for name, session, held in (('negated X1', EF.neg(X(1)), True), ('supported X2', sup(X(2)), False)):
+            with self.subTest('a cited plan', session=name):
+                found, R = r2da_assess(r2da_ercp(egd=True, session=session, **plan), R2A_CITED)
+                self.assertEqual([held.cause for held in found['43264'].held_facts], ['coding_rule:not_documented'])
+                self.assertIs(r2ba_uncounted('43264', found, R), held)
+                if held:
+                    r2ba_addon_held(self, found['43273'])
+                else:
+                    self.assertEqual((found['43273'].status, found['43273'].held_facts), (Outcome.READY, ()))
+
+
+class R2DAQuestionGridTests(SimpleTestCase):
+    """DECISIONS D301 RF-A2-1 and RF-A2-2 as one class property, over a grid of one statement E6 of the primary's kind
+    (status x breadth x date x session, beside the ERCP and an EGD): for every state and every cover (citation, partial,
+    none), whenever 4.6 (evaluate.decide) excludes the primary by E6 or asks a statement_scope question of E6,
+    evaluate.may_exclude is True; and for one statement the cited and partial arms are never narrower than the uncited
+    arm. Not keyed to one primary: 43264 over a stone-extraction statement and 43274 over a stent-placement one. As
+    built in r2/r2b, 258 states of 43264's grid failed the first and 48 the second."""
+
+    STATUS = {'negated': EF.neg(ct.Status.PERFORMED),
+              'negated, unresolved': r2a_weakened(EF.neg(ct.Status.PERFORMED), 'unresolved'),
+              'planned': sup(ct.Status.PLANNED)}
+    BREADTH = {'silent': None, 'all': sup(ct.Breadth.ALL_OF_KIND), 'exceptive': sup(ct.Breadth.EXCEPTIVE),
+               'single': sup(ct.Breadth.SINGLE_TARGET), 'all, unresolved': EF.unres(ct.Breadth.ALL_OF_KIND),
+               'exceptive, unresolved': EF.unres(ct.Breadth.EXCEPTIVE),
+               'exceptive negated': EF.neg(ct.Breadth.EXCEPTIVE)}
+    DATE = {'today': sup(ct.DateRelation.ON_DATE_OF_SERVICE), 'today, unresolved':
+            EF.unres(ct.DateRelation.ON_DATE_OF_SERVICE), 'silent': None, 'earlier': sup(ct.DateRelation.EARLIER_DATE),
+            'earlier, unresolved': EF.unres(ct.DateRelation.EARLIER_DATE)}
+    SESSION = {'X1': sup(X(1)), 'X1, unresolved': EF.unres(X(1)), 'X1 negated': EF.neg(X(1)), 'silent': EF.SILENT,
+               'X2, unresolved': EF.unres(X(2)), 'X2': sup(X(2)), 'X2, a doubt': EF.doubted(X(2), X(2)),
+               'X1|X2 contradicted': EF.contra(X(1), X(2)), 'X2 negated': EF.neg(X(2)), 'X99': sup(X(99))}
+    KEPT = {'citation': (Span(600, 660),), 'partial': (Span(600, 700),), 'none': (Span(400, 460),)}
+
+    def test_every_question_or_exclusion_4_6_gives_may_exclude_reads_for_every_cover(self):
+        from studio.interpretation.engine import evaluate as EV
+
+        missed, narrower, asked, states = [], [], 0, 0
+        for primary, kind in (('43264', Kind.STONE_EXTRACTION), ('43274', Kind.STENT)):
+            for (sn, status), (bn, breadth), (dn, date), (xn, session) in itertools.product(
+                    self.STATUS.items(), self.BREADTH.items(), self.DATE.items(), self.SESSION.items()):
+                R = dated(r2da_ercp(egd=True, kind=kind, status=status, breadth=breadth, date=date,
+                                    session=session).build())
+                may = {}
+                for cover, kept in self.KEPT.items():
+                    states += 1
+                    decided = EV.decide(primary, kept, R)
+                    excluded = decided.exclusion is not None and decided.exclusion.event == E(6)
+                    scope = any((held.cause, held.subject) == (R2DA_SCOPE, E(6)) for held in decided.held_facts)
+                    may[cover] = EV.may_exclude(primary, kept, R)
+                    asked += excluded or scope
+                    if (excluded or scope) and not may[cover]:
+                        missed.append((primary, sn, bn, dn, xn, cover))
+                narrower += [(primary, sn, bn, dn, xn, cover) for cover in ('citation', 'partial')
+                             if may['none'] and not may[cover]]
+        self.assertEqual(states, 2 * 3 * 7 * 5 * 10 * 3)
+        self.assertGreater(asked, 1000)  # the grid reaches 4.6's exclusions and every one of its questions
+        self.assertEqual(missed, [])
+        self.assertEqual(narrower, [])
+
+
+def r2da_exchange(*, plan: bool = True, **parts) -> EF.Doc:
+    """An ERCP X1 (examination E1, a biliary cannulation E2 achieved, a cholangioscopy E3 - 43273 on E3), a biliary
+    stent removal E5 and a biliary stent placement E6, both performed today by the team (``parts``: 'removal' /
+    'placement' map to facts replacing theirs), and with ``plan`` E9, a stent exchange PLANNED at a later date told in
+    E5's unit (its kind and status words inside it), which 43276 on E5's unit covers partly."""
+    doc = EF.Doc()
+    doc.session(1, SessionKind.ERCP)
+    doc.exam(1)
+    doc.act(2, Kind.CANNULATION, access=sup(ct.AccessOutcome.ACHIEVED), duct=sup(ct.Duct.BILIARY))
+    doc.act(3, Kind.CHOLANGIOSCOPY, duct=sup(ct.Duct.BILIARY))
+    doc.act(5, Kind.STENT_REMOVAL, **{'duct': sup(ct.Duct.BILIARY), **parts.get('removal', {})})
+    doc.act(6, Kind.STENT, **{'duct': sup(ct.Duct.BILIARY), **parts.get('placement', {})})
+    if plan:
+        doc.act(9, Kind.STENT_EXCHANGE, status=sup(ct.Status.PLANNED), date=sup(ct.DateRelation.LATER_DATE),
+                anchor=(EF.unit(5),), kind_words=Span(530, 545), status_words=Span(545, 560))
+    return doc
+
+
+R2DA_EXCHANGE_CODES = (('43276', 5), ('43273', 3))
+
+
+class R2DAExchangePairPremiseTests(SimpleTestCase):
+    """DECISIONS D301 RF-A2-3 (repair round r2d, builder R2DA): may_exclude skips a group 4.4 supports or holds under
+    every reading - a surely positive candidate, or 43276's removal and placement (XCHG), each surely positive and never
+    set apart (ducts and sessions both supported and the same), the placement one of the removal's counterparts: _decide
+    finds or holds that pair whatever is resolved and never reaches 4.6 for the group. As built in r2/r2b the premise
+    read the group's own candidates only, so a statement that may concern the stent_exchange group held 43273 beside a
+    READY 43276 that can never be excluded, where the same exchange filed as one stent_exchange act left it READY."""
+
+    def test_a_pair_surely_done_counts_its_primary_beside_a_statement(self):
+        """The pair E5 + E6 beside a planned exchange E9 told in E5's unit (43276 covers it partly), or beside a stent
+        exchange event E7 in E5's unit whose status pass 2 left unresolved: 43276 READY on the pair, addon_uncounted
+        False and 43273 READY (as built: held by ADDON in both)."""
+        doubtful = r2da_exchange(plan=False)
+        doubtful.act(7, Kind.STENT_EXCHANGE, status=EF.unres(ct.Status.PERFORMED), duct=sup(ct.Duct.BILIARY),
+                     anchor=(EF.unit(5),), kind_words=Span(500, 515), status_words=Span(515, 530))
+        for name, doc in (('a planned exchange in the removal unit', r2da_exchange()),
+                          ('a doubtful exchange event in the removal unit', doubtful)):
+            with self.subTest(name):
+                R = doc.build()
+                found = by_code(run(R, *R2DA_EXCHANGE_CODES))
+                self.assertEqual((found['43276'].status, found['43276'].evaluation.supporting), (Outcome.READY,
+                                                                                                (E(5), E(6))))
+                self.assertFalse(r2ba_uncounted('43276', found, R))
+                self.assertEqual((found['43273'].status, found['43273'].held_facts), (Outcome.READY, ()))
+
+    def test_a_pair_a_reading_may_set_apart_or_undo_stays_held_beside_its_twin(self):
+        """The boundary, beside the twin above: with the planned exchange in E5's unit, a pair 4.4 may not hold under
+        every reading - the removal's duct unresolved (claiming the bile duct), the placement's status a stated doubt,
+        the placement's date unresolved claiming an earlier date, the placement's session unresolved (claiming X1), or
+        the placement in another ERCP session X2 - leaves 43276 never READY and a statement that may exclude it:
+        addon_uncounted True and 43273 held by ADDON, as built.
+        (A date unresolved claiming today can only be read as today: such a part stays surely positive.)"""
+        ercp2 = r2da_exchange(placement=dict(session=X(2)))
+        ercp2.session(2, SessionKind.ERCP)
+        for name, doc in (('the removal duct unresolved',
+                           r2da_exchange(removal=dict(duct=EF.unres(ct.Duct.BILIARY)))),
+                          ('the placement status doubted',
+                           r2da_exchange(placement=dict(status=EF.doubted(ct.Status.PERFORMED)))),
+                          ('the placement date unresolved, an earlier date',
+                           r2da_exchange(placement=dict(date=EF.unres(ct.DateRelation.EARLIER_DATE)))),
+                          ('the placement session unresolved', r2da_exchange(placement=dict(session=EF.unres(X(1))))),
+                          ('the placement in another session', ercp2)):
+            with self.subTest(name):
+                R = doc.build()
+                found = by_code(run(R, *R2DA_EXCHANGE_CODES))
+                self.assertNotEqual(found['43276'].status, Outcome.READY)
+                self.assertTrue(r2ba_uncounted('43276', found, R))
+                r2ba_addon_held(self, found['43273'])
+
+
+class R2DAPremiseTermTests(SimpleTestCase):
+    """DECISIONS D301 RF-A2-6 (repair round r2d, builder R2DA): each term of may_exclude's premise
+    (evaluate._surely_positive: an act a positive candidate of the group whatever is resolved) pinned by a state only
+    that term holds, beside its twin: an act otherwise surely done today by the team - beside a statement that may
+    exclude the primary - whose kind, purpose, status, date (either other date) or performer (either other performer) is
+    not established holds the add-on; the same act with that fact established leaves it READY. As built, the kind term
+    and each one-value reading of the date and performer terms survived every test (the r2b refuter's S-KIND-ANY,
+    S-DATE-EARLIER-ONLY, S-PERF-FACILITY-ONLY). The digital examination term is R2BADigitalPremiseTests'."""
+
+    def test_an_act_with_one_premise_fact_not_established_holds_the_add_on(self):
+        """test_assess's ERCP with E5 a stone extraction of the bile duct performed today by the team, beside E6 a
+        cited broad stone-extraction denial: E5's kind unresolved (claiming stone extraction), its status unresolved
+        (claiming performed), its date unresolved claiming an earlier or a later date, or its performer unresolved
+        claiming another clinician or another facility - 43264 not excluded, addon_uncounted True, 43273 held by ADDON.
+        Its twin, E5 with every fact established (an act surely done), leaves 43273 READY."""
+        unres = EF.unres
+        cases = (('its kind unresolved', dict(kind=unres(Kind.STONE_EXTRACTION))),
+                 ('its status unresolved', dict(status=unres(ct.Status.PERFORMED))),
+                 ('its date unresolved, an earlier date', dict(date=unres(ct.DateRelation.EARLIER_DATE))),
+                 ('its date unresolved, a later date', dict(date=unres(ct.DateRelation.LATER_DATE))),
+                 ('its performer unresolved, another clinician', dict(performer=unres(ct.Performer.OTHER_CLINICIAN))),
+                 ('its performer unresolved, another facility', dict(performer=unres(ct.Performer.OTHER_FACILITY))))
+        twin = r2da_ercp()
+        twin.act(5, Kind.STONE_EXTRACTION, duct=sup(ct.Duct.BILIARY))
+        found, R = r2da_assess(twin, R2A_CITED)
+        self.assertFalse(r2ba_uncounted('43264', found, R))
+        self.assertEqual((found['43273'].status, found['43273'].held_facts), (Outcome.READY, ()))
+        for name, over in cases:
+            with self.subTest(name):
+                doc = r2da_ercp()
+                doc.act(5, over.pop('kind', Kind.STONE_EXTRACTION), duct=sup(ct.Duct.BILIARY), **over)
+                found, R = r2da_assess(doc, R2A_CITED)
+                self.assertIsNone(found['43264'].evaluation.exclusion)
+                self.assertTrue(r2ba_uncounted('43264', found, R))
+                r2ba_addon_held(self, found['43273'])
+
+    def test_a_clip_whose_purpose_is_not_established_is_no_act_surely_done(self):
+        """The purpose term, through evaluate.may_exclude (no ADDON primary has a bleeding-control or injection group,
+        so the add-on cannot show it): a colonoscopy with E2 a clip performed today by the team whose purpose is
+        unresolved claiming hemostasis, beside E3 a broad bleeding-control denial 45382 cites - E2 is a positive
+        candidate under one reading only, so the denial may exclude 45382: may_exclude True; its twin, E2's purpose
+        supported hemostasis (a bleeding control surely done), never: False."""
+        from studio.interpretation.engine import evaluate as EV
+
+        for name, purpose, may in (('unresolved', EF.unres(ct.Purpose.HEMOSTASIS), True),
+                                   ('supported', sup(ct.Purpose.HEMOSTASIS), False)):
+            with self.subTest(purpose=name):
+                doc = EF.Doc()
+                doc.session(1, SessionKind.COLONOSCOPY, reached=[sup(Extent.CECUM)])
+                doc.exam(1)
+                doc.act(2, Kind.CLIP, purpose=purpose, places=[sup(Landmark.SIGMOID_COLON)])
+                doc.act(3, Kind.BLEEDING_CONTROL, status=EF.neg(ct.Status.PERFORMED),
+                        breadth=sup(ct.Breadth.ALL_OF_KIND), kind_words=Span(300, 330), status_words=Span(330, 360))
+                R = dated(doc.build())
+                self.assertIs(EV.may_exclude('45382', (Span(300, 360),), R), may)
+
+
+class R2DAPartialCoverTests(SimpleTestCase):
+    """DECISIONS D301 RF-A2-7 (repair round r2d, builder R2DA): 4.6 condition 4's partial cover - "a partial cover gives
+    statement_scope", one of the statements D294 RD-2 names - pinned beside its twin, the citation that excludes: a
+    primary whose kept span reaches past a deciding statement's covering words is held by that question and its add-on
+    held. As built, reading a partial cover as no cover (the r2b refuter's M-PARTIAL-AS-NONE) survived every test."""
+
+    def test_a_partial_cover_holds_the_add_on_beside_the_citation_and_no_cover(self):
+        """E6 a stone extraction PLANNED today (no breadth: K1), one PERFORMED at an earlier date, or a single-target
+        denial placed today in X1 - none of which 4.6 asks about uncited (no denial broad or unplaced): partly cited
+        (600-700), 43264 is held by the statement_scope question about E6, addon_uncounted True, 43273 held by ADDON;
+        cited (600-660), 43264 is EXCLUDED by E6 and 43273 held; not cited, 43264 held not_documented, addon_uncounted
+        False and 43273 READY."""
+        shapes = (('a plan today', dict(status=sup(ct.Status.PLANNED), breadth=None)),
+                  ('an act of an earlier date', dict(status=sup(ct.Status.PERFORMED), breadth=None,
+                                                     date=sup(ct.DateRelation.EARLIER_DATE))),
+                  ('a single-target denial, placed', dict(breadth=sup(ct.Breadth.SINGLE_TARGET))))
+        for name, over in shapes:
+            with self.subTest(name, cover='partly cited'):
+                found, R = r2da_assess(r2da_ercp(**over), R2DA_PARTIAL)
+                r2da_scope_on(self, found['43264'])
+                self.assertTrue(r2ba_uncounted('43264', found, R))
+                r2ba_addon_held(self, found['43273'])
+            with self.subTest(name, cover='cited'):
+                found, R = r2da_assess(r2da_ercp(**over), R2A_CITED)
+                self.assertEqual(found['43264'].evaluation.exclusion.event, E(6))
+                r2ba_addon_held(self, found['43273'])
+            with self.subTest(name, cover='not cited'):
+                found, R = r2da_assess(r2da_ercp(**over), 4)
+                self.assertEqual([held.cause for held in found['43264'].held_facts], ['coding_rule:not_documented'])
+                self.assertFalse(r2ba_uncounted('43264', found, R))
+                self.assertEqual((found['43273'].status, found['43273'].held_facts), (Outcome.READY, ()))
+
+
 # --- the combination (4.7), member answers (4.8) and the second review (D10) ------------------------------------------
 
 

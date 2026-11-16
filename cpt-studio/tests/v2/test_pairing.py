@@ -2454,7 +2454,8 @@ class R2BDeviceClassTests(SimpleTestCase):
         always = {device for device, klass, _label in R2B_DEVICE_CLASSES if klass == 'always'}
         may = {device for device, klass, _label in R2B_DEVICE_CLASSES if klass == 'may'}
         self.assertEqual(P.DEVICE_CONTAINS[Device.ELECTROCAUTERY], frozenset(always - {Device.ELECTROCAUTERY}))
-        self.assertEqual(dict(P.DEVICE_MAY_BE), {Device.ELECTROCAUTERY: frozenset(may)})
+        # electrocautery's row; DECISIONS D297 adds a row per generic device (R2BBGenericDeviceTests pins them)
+        self.assertEqual(P.DEVICE_MAY_BE[Device.ELECTROCAUTERY], frozenset(may))
         # D294's own reading of the definitions
         self.assertLessEqual({Device.HOT_SNARE, Device.HOT_FORCEPS, Device.ARGON_PLASMA, Device.RADIOFREQUENCY}, always)
         self.assertLessEqual({Device.THERMAL_PROBE, Device.SPHINCTEROTOME, Device.CATHETER, Device.OTHER}, may)
@@ -2551,6 +2552,581 @@ class R2BDeviceClassTests(SimpleTestCase):
             with self.subTest(scene='the denial names the gastric antrum', device=device.value):
                 R = self.egd_bleeding(device, denial_place=Landmark.GASTRIC_ANTRUM)
                 self.assertEqual(_assessed(R, ('43255', 2))['43255'][0], 'ready')
+
+
+# DECISIONS D297 (eng-b's Q3 of repair round r2, built in round r2b) rules the condition ONLY, in these words, quoted
+# exactly (R2DB_D297_Q3): "a catheter may be a device delivered through a catheter, a needle may be an injection
+# device". The catheter's nine members below are BUILDER-CHOSEN - round r2b's eng-b2 read them from eng-b's r2
+# candidate list - and are never the ruling's words (DECISIONS D301's RB2-3 found them restated as quoted). Each member
+# sits beside the contract definition it is read from (contract/claims.py's label). DECISIONS D301 (RB2-1/2) reads every
+# pair whose definitions admit one physical device (R2DBDeviceRelationTests restates the whole relation); these rows are
+# its D297 part, kept.
+R2BB_GENERIC = {
+    Device.CATHETER: ('a catheter', {  # BUILDER-CHOSEN (round r2b's eng-b2): devices delivered through a catheter
+        Device.THERMAL_PROBE: 'a thermal probe', Device.ARGON_PLASMA: 'argon plasma coagulation',
+        Device.RADIOFREQUENCY: 'radiofrequency energy', Device.CRYOTHERAPY: 'cryotherapy',
+        Device.INJECTION: 'an injection device', Device.BALLOON: 'a dilating balloon',
+        Device.EXTRACTION_BALLOON: 'an extraction balloon', Device.SPHINCTEROTOME: 'a sphincterotome',
+        Device.CHOLANGIOSCOPE: 'a cholangioscope'}),
+    # RULED (D297 Q3): "a needle may be an injection device"
+    Device.NEEDLE: ('a needle', {Device.INJECTION: 'an injection device'}),
+}
+# DECISIONS D294 G2 (and its Q1, confirmed by D297): what electrocautery covers and what may be it; v1's own rows.
+R2BB_COVERS = {Device.SNARE: {Device.COLD_SNARE, Device.HOT_SNARE},
+               Device.FORCEPS: {Device.COLD_FORCEPS, Device.HOT_FORCEPS},
+               Device.ELECTROCAUTERY: {Device.HOT_SNARE, Device.HOT_FORCEPS, Device.ARGON_PLASMA,
+                                       Device.RADIOFREQUENCY}}
+R2BB_ELECTROCAUTERY_MAY = {Device.THERMAL_PROBE, Device.SPHINCTEROTOME, Device.CATHETER, Device.OTHER, Device.SNARE,
+                           Device.FORCEPS}
+# the pairs D294 G2's and D297's rows read as possibly one device (either order reads it); D301's are R2DB_MAY
+R2BB_MAY_PAIRS = ({frozenset({Device.ELECTROCAUTERY, device}) for device in R2BB_ELECTROCAUTERY_MAY}
+                  | {frozenset({generic, device}) for generic, (_label, may) in R2BB_GENERIC.items() for device in may})
+
+
+class R2BBGenericDeviceTests(SimpleTestCase):
+    """DECISIONS D297 (eng-b's Q3 of repair round r2, built in round r2b): the may-be relation beyond electrocautery,
+    "a catheter may be a device delivered through a catheter, a needle may be an injection device" - the catheter's nine
+    members (a thermal probe, argon plasma, radiofrequency, cryotherapy, an injection device, a dilating balloon, an
+    extraction balloon, a sphincterotome, a cholangioscope) are the BUILDER'S reading of that condition, not the
+    ruling's words. Amended in round r2d (DECISIONS D301): every member is read from its definition (pairing.ADMITS, or
+    pairing.ENERGIES for electrocautery and radiofrequency energy), DEVICE_MAY_BE holds D297's rows inside the wider
+    relation D301 rules (R2DBDeviceRelationTests checks every row and every pair), and a member a reading leaves out is
+    read as possibly every device. The technique row stays UNRESOLVED between the two - never covered, never
+    INDEPENDENT, and never set apart by a negation of either. The end-to-end scenes were written for round r2b, outside
+    every development set."""
+
+    def test_every_member_is_classified_against_each_generic_device(self):
+        """Amended in round r2d (D301): every member is read from its definition, and each generic device's row holds
+        D297's members (D301 adds more: R2DBDeviceRelationTests)."""
+        self.assertEqual(r2b_unclassified({**P.ADMITS, **P.ENERGIES}), set())
+        # the check's positive control: a reading missing a member names it
+        self.assertEqual(r2b_unclassified({**{device: row for device, row in P.ADMITS.items()
+                                              if device is not Device.CLIP}, **P.ENERGIES}), {Device.CLIP})
+        for generic, (_label, may) in R2BB_GENERIC.items():
+            with self.subTest(generic=generic.value):
+                self.assertLessEqual(set(may), set(P.DEVICE_MAY_BE[generic]))
+                self.assertNotIn(generic, P.DEVICE_MAY_BE[generic])
+
+    def test_each_class_is_read_beside_its_contract_definition(self):
+        """A changed label, or a member the contract adds, turns this red until the member is read again."""
+        from studio.interpretation.contract import extract_schema
+        for generic, (label, may) in R2BB_GENERIC.items():
+            with self.subTest(generic=generic.value):
+                self.assertEqual(contract_claims.LABELS[generic], label)
+                for device, device_label in may.items():
+                    self.assertEqual(contract_claims.LABELS[device], device_label)
+                self.assertEqual(set(P.ADMITS) | set(P.ENERGIES), set(Device))
+                for device in Device:
+                    self.assertIn(device.value, extract_schema.DEFINITIONS[Device])
+
+    def test_the_tables_derive_from_the_classes(self):
+        """DEVICE_MAY_BE: electrocautery's row (D294 G2) and D297's rows among every member's (D301: the whole relation
+        is R2DBDeviceRelationTests'); nothing D297 or D301 reads may-be is covered, so DEVICE_CONTAINS keeps exactly
+        v1's rows and electrocautery's; no device is both covered by a row's device and possibly it."""
+        self.assertEqual(P.DEVICE_MAY_BE[Device.ELECTROCAUTERY], frozenset(R2BB_ELECTROCAUTERY_MAY))
+        for generic, (_label, may) in R2BB_GENERIC.items():
+            with self.subTest(generic=generic.value):
+                self.assertLessEqual(frozenset(may), P.DEVICE_MAY_BE[generic])
+        self.assertEqual({device: set(covered) for device, covered in P.DEVICE_CONTAINS.items()}, R2BB_COVERS)
+        for device, may in P.DEVICE_MAY_BE.items():
+            with self.subTest(device=device.value):
+                self.assertFalse(P.DEVICE_CONTAINS.get(device, frozenset()) & may)
+
+    def test_a_member_a_generic_table_does_not_hold_reads_as_may(self):
+        """The engine's own default for a member its reading leaves out is the hold direction, as D294 G2's (amended in
+        round r2d: ADMITS replaces the generic tables)."""
+        trimmed = {device: row for device, row in P.ADMITS.items() if device is not Device.CLIP}
+        with mock.patch.object(P, 'ADMITS', trimmed):
+            self.assertTrue(P._one_device(Device.NEEDLE, Device.CLIP))
+            self.assertTrue(P._one_device(Device.CLIP, Device.BAND))
+        self.assertFalse(P._one_device(Device.NEEDLE, Device.CLIP))
+        self.assertFalse(P._one_device(Device.CLIP, Device.BAND))
+
+    @staticmethod
+    def technique(statement_device: Fact, act_device: Fact) -> P.RowResult:
+        R = build({E1: denial(kind=sup(Kind.ABLATION), device=statement_device),
+                   E2: act(kind=sup(Kind.ABLATION), device=act_device)})
+        return row_of(R, P.Row.TECHNIQUE)
+
+    def test_the_technique_row_over_every_device_pair(self):
+        """Every pair D294 G2 and D297's rows read as possibly one device stays UNRESOLVED, either way, and is never
+        INDEPENDENT when either side is negated instead. Amended in round r2d: the row over EVERY ordered pair is now
+        checked against D301's whole relation (R2DBDeviceRelationTests'
+        test_rdb_the_technique_row_over_every_device_pair) - D301 reads more pairs than D297's, so the r2b grid's
+        INDEPENDENT cells for them were RB2-1's defect."""
+        for pair in R2BB_MAY_PAIRS:
+            one, other = sorted(pair, key=lambda device: device.value)
+            for first, second in ((one, other), (other, one)):
+                with self.subTest(may_pair=(first.value, second.value)):
+                    self.assertEqual(self.technique(sup(first), sup(second)), UNRESOLVED)
+                    self.assertIsNot(self.technique(neg(first), sup(second)), INDEPENDENT)
+                    self.assertIsNot(self.technique(sup(first), neg(second)), INDEPENDENT)
+        self.assertEqual(len(R2BB_MAY_PAIRS), 16)
+
+    @staticmethod
+    def egd_bleeding(act_device, denial_device, *, denial_place=Landmark.DUODENAL_BULB):
+        """A bleeding duodenal bulb ulcer treated with ``act_device`` (its cause a lesion present before the session,
+        its purpose hemostasis) beside "No hemostasis with <denial_device> was performed in <denial_place>." - every
+        fact established; a denial of another place is asked of the act's place, and the act of its, each rejected."""
+        doc = _egd()
+        doc.act(2, Kind.BLEEDING_CONTROL, places=[sup(Landmark.DUODENAL_BULB)], device=sup(act_device),
+                cause=sup(ct.Cause.PRE_EXISTING_LESION), purpose=sup(ct.Purpose.HEMOSTASIS))
+        _denial(doc, 3, Kind.BLEEDING_CONTROL, places=(denial_place,), device=denial_device)
+        if denial_place is not Landmark.DUODENAL_BULB:
+            doc.controls.update({(E2, A.TARGET_PLACES, denial_place): True,
+                                 (E3, A.TARGET_PLACES, Landmark.DUODENAL_BULB): True})
+        return doc.build()
+
+    @staticmethod
+    def colon_ablation(act_device, denial_device):
+        """Transverse colon angioectasias ablated with ``act_device`` beside "No ablation with <denial_device> was
+        performed in the transverse colon." - every fact established."""
+        doc = _colon()
+        doc.act(2, Kind.ABLATION, places=[sup(Landmark.TRANSVERSE_COLON)], device=sup(act_device))
+        _denial(doc, 3, Kind.ABLATION, places=(Landmark.TRANSVERSE_COLON,), device=denial_device)
+        return doc.build()
+
+    def test_a_device_a_generic_device_may_be_beside_its_denial_holds_the_code(self):
+        """The rule must change these (READY before: INDEPENDENT on the technique row): an injection device beside a
+        denial naming a needle, a needle beside one naming an injection device, a thermal probe beside one naming a
+        catheter and a catheter beside one naming a thermal probe or argon plasma - 43255 held on the technique row;
+        argon plasma and cryotherapy beside "No ablation with a catheter ..." - 45388 held."""
+        for act_device, denial_device in ((Device.INJECTION, Device.NEEDLE), (Device.NEEDLE, Device.INJECTION),
+                                          (Device.THERMAL_PROBE, Device.CATHETER),
+                                          (Device.CATHETER, Device.THERMAL_PROBE),
+                                          (Device.CATHETER, Device.ARGON_PLASMA)):
+            with self.subTest(scene='EGD hemostasis', act=act_device.value, denial=denial_device.value):
+                R = self.egd_bleeding(act_device, denial_device)
+                self.assertEqual(_assessed(R, ('43255', 2))['43255'][0], 'needs_clarification')
+                pair = P.relation(R, E3, E2)
+                self.assertEqual((pair.relation, pair.row, pair.result(P.Row.TECHNIQUE)),
+                                 (P.Relation.UNRESOLVED, P.Row.TECHNIQUE, UNRESOLVED))
+        for act_device in (Device.ARGON_PLASMA, Device.CRYOTHERAPY):
+            with self.subTest(scene='colonoscopy ablation', act=act_device.value):
+                self.assertEqual(_assessed(self.colon_ablation(act_device, Device.CATHETER), ('45388', 2))['45388'][0],
+                                 'needs_clarification')
+
+    def test_a_device_no_definition_joins_or_a_denial_elsewhere_stays_ready(self):
+        """The boundary it must leave alone: a clip beside a denial naming a band or a needle, a needle beside one
+        naming a band (no definition joins them) - READY; a pair the definitions join beside a denial of another place
+        (the place row sets them apart) - READY; a hot snare's removal is no catheter's (INDEPENDENT). Amended in round
+        r2d: the clip beside a denial naming a catheter left this boundary - a clip is delivered on its catheter
+        (DECISIONS D301's RB2-1), and R2DBDeviceRelationTests holds that pair."""
+        for act_device, denial_device in ((Device.CLIP, Device.BAND), (Device.CLIP, Device.NEEDLE),
+                                          (Device.NEEDLE, Device.BAND)):
+            with self.subTest(scene='EGD hemostasis', act=act_device.value, denial=denial_device.value):
+                self.assertEqual(_assessed(self.egd_bleeding(act_device, denial_device), ('43255', 2))['43255'][0],
+                                 'ready')
+        for act_device, denial_device in ((Device.INJECTION, Device.NEEDLE), (Device.CATHETER, Device.THERMAL_PROBE)):
+            with self.subTest(scene='the denial names the gastric antrum', act=act_device.value):
+                R = self.egd_bleeding(act_device, denial_device, denial_place=Landmark.GASTRIC_ANTRUM)
+                self.assertEqual(_assessed(R, ('43255', 2))['43255'][0], 'ready')
+        self.assertEqual(self.technique(sup(Device.CATHETER), sup(Device.HOT_SNARE)), INDEPENDENT)
+
+
+# --- DECISIONS D301 (round r2d: RB2-1, RB2-2, RB2-3): every device pair classified from the contract definitions ------
+
+# The rulings restated below, each QUOTED EXACTLY from gemini-migration/DECISIONS.md (DECISIONS D301's RB2-3; round
+# r2d's probe r2db_p02_quotes finds every one, whitespace-normalised, in the record). Nothing else in this block is a
+# ruling's words: every other pair is named BUILDER-CHOSEN with the device the builder read both definitions to admit.
+R2DB_D294_G2 = ("every Device member is classified against electrocautery from its contract definition (claims.py's "
+                "labels and extract_schema's list) as always (covered: hot snare, hot forceps, argon plasma, "
+                'radiofrequency), may (thermal probe, sphincterotome, catheter, other) or never (the rest, needle '
+                'included: "a needle" carries no current)')
+R2DB_D297_Q1 = 'eng-b Q1 confirmed (snare and forceps not called cold or hot are "may")'
+R2DB_D297_Q3 = 'a catheter may be a device delivered through a catheter, a needle may be an injection device'
+R2DB_D301 = ('two Device members whose definitions both admit one physical device - an injection needle as a needle or '
+             'an injection device, a needle-knife as a needle or a sphincterotome, a device delivered through a '
+             "catheter - keep the technique row UNRESOLVED; classified from the definitions, the tests quoting the "
+             "ruling's words exactly")
+R2DB_D301_Q2 = "Q2 (more pairs) built under RB2-1's rule"
+R2DB_RULINGS = {'D294 G2': R2DB_D294_G2, 'D297 Q1': R2DB_D297_Q1, 'D297 Q3': R2DB_D297_Q3, 'D301': R2DB_D301,
+                'D301 Q2': R2DB_D301_Q2}
+R2DB_BUILDER = 'BUILDER-CHOSEN'
+_D = Device
+
+
+def r2db_pair(one: Device, other: Device) -> frozenset:
+    return frozenset({one, other})
+
+
+# EVERY pair of Device members whose contract definitions (contract/claims.py's labels, beside R2B_DEVICE_CLASSES) admit
+# one physical device, each as used in one act: (who names the pair, their words). RULED: the ruling's own words name
+# the pair (one of the quotes above). BUILDER-CHOSEN: the rulings state the condition ("a device delivered through a
+# catheter"; "two Device members whose definitions both admit one physical device"; D301 Q2) and the builder named read
+# both definitions to admit the device in the words given - never the ruling's words. The technique row between the two
+# is UNRESOLVED, never INDEPENDENT, either way; every pair not here is INDEPENDENT between two supported devices unless
+# one covers the other (R2BB_COVERS).
+R2DB_MAY = {
+    # RULED - D294 G2 and its Q1 (confirmed by D297): electrocautery and the members that may deliver current
+    **{r2db_pair(_D.ELECTROCAUTERY, device): ('D294 G2', R2DB_D294_G2)
+       for device in (_D.THERMAL_PROBE, _D.SPHINCTEROTOME, _D.CATHETER, _D.OTHER)},
+    **{r2db_pair(_D.ELECTROCAUTERY, device): ('D297 Q1', R2DB_D297_Q1) for device in (_D.SNARE, _D.FORCEPS)},
+    # RULED - D297 and D301's own examples: "an injection needle", "a needle-knife"
+    r2db_pair(_D.NEEDLE, _D.INJECTION): ('D297 Q3', R2DB_D297_Q3),
+    r2db_pair(_D.NEEDLE, _D.SPHINCTEROTOME): ('D301', R2DB_D301),
+    # BUILDER-CHOSEN (round r2b's eng-b2, from eng-b's r2 candidates): "a device delivered through a catheter"
+    r2db_pair(_D.CATHETER, _D.THERMAL_PROBE): (f'{R2DB_BUILDER} (r2b eng-b2)', 'a heater or bipolar probe'),
+    r2db_pair(_D.CATHETER, _D.ARGON_PLASMA): (f'{R2DB_BUILDER} (r2b eng-b2)', 'an argon plasma probe passed as one'),
+    r2db_pair(_D.CATHETER, _D.RADIOFREQUENCY): (f'{R2DB_BUILDER} (r2b eng-b2)', 'a radiofrequency ablation catheter'),
+    r2db_pair(_D.CATHETER, _D.CRYOTHERAPY): (f'{R2DB_BUILDER} (r2b eng-b2)', 'a cryotherapy spray or balloon catheter'),
+    r2db_pair(_D.CATHETER, _D.INJECTION): (f'{R2DB_BUILDER} (r2b eng-b2)', 'an injection catheter'),
+    r2db_pair(_D.CATHETER, _D.BALLOON): (f'{R2DB_BUILDER} (r2b eng-b2)', 'a dilating balloon on its catheter'),
+    r2db_pair(_D.CATHETER, _D.EXTRACTION_BALLOON): (f'{R2DB_BUILDER} (r2b eng-b2)', 'an extraction balloon catheter'),
+    r2db_pair(_D.CATHETER, _D.SPHINCTEROTOME): (f'{R2DB_BUILDER} (r2b eng-b2)', 'a catheter with a cutting wire'),
+    r2db_pair(_D.CATHETER, _D.CHOLANGIOSCOPE): (f'{R2DB_BUILDER} (r2b eng-b2)', 'a single-operator cholangioscope'),
+    # BUILDER-CHOSEN (round r2d's eng-b3, the members refutation RB2-1 named): "a device delivered through a catheter"
+    r2db_pair(_D.CATHETER, _D.NEEDLE): (f'{R2DB_BUILDER} (r2d eng-b3, RB2-1)', 'an injection needle in its sheath'),
+    r2db_pair(_D.CATHETER, _D.CLIP): (f'{R2DB_BUILDER} (r2d eng-b3, RB2-1)', 'a clip on its delivery catheter'),
+    r2db_pair(_D.CATHETER, _D.STENT): (f'{R2DB_BUILDER} (r2d eng-b3, RB2-1)', 'a stent on its delivery catheter'),
+    r2db_pair(_D.CATHETER, _D.BASKET): (f'{R2DB_BUILDER} (r2d eng-b3, RB2-1)', 'a basket catheter'),
+    r2db_pair(_D.CATHETER, _D.LITHOTRIPTER): (f'{R2DB_BUILDER} (r2d eng-b3, RB2-1)',
+                                              'an electrohydraulic probe or laser fibre through a catheter'),
+    r2db_pair(_D.CATHETER, _D.OTHER): (f'{R2DB_BUILDER} (r2d eng-b3, RB2-1)', 'a powder applicator on its catheter'),
+    r2db_pair(_D.CATHETER, _D.ENDOSCOPE): (f'{R2DB_BUILDER} (r2d eng-b3)', 'a single-operator cholangioscope, a scope'),
+    # BUILDER-CHOSEN (D301 Q2: eng-b2's other pairs, built under RB2-1's rule; and round r2d's eng-b3)
+    r2db_pair(_D.ENDOSCOPE, _D.CHOLANGIOSCOPE): (f'{R2DB_BUILDER} (eng-b2 Q2)', 'a cholangioscope is a scope'),
+    r2db_pair(_D.BASKET, _D.LITHOTRIPTER): (f'{R2DB_BUILDER} (eng-b2 Q2)', 'a mechanical lithotripsy basket'),
+    r2db_pair(_D.NEEDLE, _D.OTHER): (f'{R2DB_BUILDER} (r2d eng-b3)', 'a needle-type electrosurgical knife'),
+    r2db_pair(_D.INJECTION, _D.OTHER): (f'{R2DB_BUILDER} (r2d eng-b3)', 'a water-jet knife used to inject'),
+    r2db_pair(_D.CRYOTHERAPY, _D.OTHER): (f'{R2DB_BUILDER} (r2d eng-b3)', 'a cryoablation balloon'),
+    # BUILDER-CHOSEN (D301 Q2: eng-b2's radiofrequency pairs; D222's physics - high-frequency current is radiofrequency
+    # energy - read through D294 G2's classes: every member that always or may deliver current; round r2d's eng-b3)
+    r2db_pair(_D.RADIOFREQUENCY, _D.ARGON_PLASMA): (f'{R2DB_BUILDER} (eng-b2 Q2)', 'an argon plasma probe'),
+    r2db_pair(_D.RADIOFREQUENCY, _D.THERMAL_PROBE): (f'{R2DB_BUILDER} (eng-b2 Q2)', 'a bipolar probe'),
+    r2db_pair(_D.RADIOFREQUENCY, _D.HOT_SNARE): (f'{R2DB_BUILDER} (eng-b2 Q2)', 'a snare used with current'),
+    r2db_pair(_D.RADIOFREQUENCY, _D.HOT_FORCEPS): (f'{R2DB_BUILDER} (eng-b2 Q2)', 'forceps used with current'),
+    r2db_pair(_D.RADIOFREQUENCY, _D.SNARE): (f'{R2DB_BUILDER} (r2d eng-b3)', 'a snare used with current'),
+    r2db_pair(_D.RADIOFREQUENCY, _D.FORCEPS): (f'{R2DB_BUILDER} (r2d eng-b3)', 'forceps used with current'),
+    r2db_pair(_D.RADIOFREQUENCY, _D.SPHINCTEROTOME): (f'{R2DB_BUILDER} (r2d eng-b3)', 'a cutting wire with current'),
+    r2db_pair(_D.RADIOFREQUENCY, _D.OTHER): (f'{R2DB_BUILDER} (r2d eng-b3)', 'an electrosurgical knife'),
+}
+# Pairs the builder read APART although a refutation could read them as one device - each stays INDEPENDENT between
+# two supported devices (the boundary RB2-1/2's rule leaves alone), with the reason. BUILDER-CHOSEN, but the two needle
+# rows: D294 G2's words (R2DB_D294_G2: the needle "never"), against which D301's needle-knife is round r2d's question
+# Q1. A reason naming claims.ANOTHER_DEVICE cites the contrary table contract/claims.py built under D213's rule, never
+# D213's words.
+R2DB_APART = {
+    r2db_pair(_D.NEEDLE, _D.ELECTROCAUTERY): 'D294 G2: "a needle" carries no current (round r2d question Q1)',
+    r2db_pair(_D.NEEDLE, _D.RADIOFREQUENCY): 'D294 G2, as electrocautery covers radiofrequency (question Q1)',
+    r2db_pair(_D.BALLOON, _D.WIRE_BOUGIE): "the Device list's wire_bougie: bougies; FINAL-V2 3.2.3's sibling class",
+    r2db_pair(_D.BOUGIE, _D.WIRE_BOUGIE): 'passed without a guide wire, or over one: never both in one act',
+    r2db_pair(_D.THERMAL_PROBE, _D.INJECTION): "a bipolar probe's injection needle: two parts, two acts",
+    r2db_pair(_D.THERMAL_PROBE, _D.NEEDLE): "a bipolar probe's injection needle: two parts, two acts",
+    r2db_pair(_D.SPHINCTEROTOME, _D.EXTRACTION_BALLOON): "claims.ANOTHER_DEVICE's contrary (D213); two parts",
+    r2db_pair(_D.SPHINCTEROTOME, _D.BALLOON): 'a sphincterotome with a dilating balloon: two parts, two acts',
+    r2db_pair(_D.SPHINCTEROTOME, _D.BASKET): "claims.ANOTHER_DEVICE's contraries (D213), each of the other",
+    r2db_pair(_D.SPHINCTEROTOME, _D.OTHER): 'a needle-knife sphincterotome is of a listed kind',
+    r2db_pair(_D.CHOLANGIOSCOPE, _D.LITHOTRIPTER): "a scope is never the device passed through its channel",
+    r2db_pair(_D.CHOLANGIOSCOPE, _D.SPHINCTEROTOME): "claims.ANOTHER_DEVICE's contrary (D213)",
+    r2db_pair(_D.ENDOSCOPE, _D.CAPSULE): "claims.ANOTHER_DEVICE's contraries (D213): a scope against a capsule",
+    r2db_pair(_D.ENDOSCOPE, _D.NEEDLE): "a scope is never the device passed through its channel",
+    r2db_pair(_D.CATHETER, _D.SNARE): 'a snare is passed in its own sheath, never named a catheter',
+    r2db_pair(_D.CATHETER, _D.COLD_FORCEPS): 'forceps are passed in their own sheath, never named a catheter',
+    r2db_pair(_D.CATHETER, _D.BAND): "a band ligator is mounted on the scope's tip",
+    r2db_pair(_D.CATHETER, _D.WIRE_BOUGIE): 'a bougie is no catheter',
+    r2db_pair(_D.ARGON_PLASMA, _D.THERMAL_PROBE): 'an argon plasma probe is no heater or bipolar probe',
+    r2db_pair(_D.ARGON_PLASMA, _D.CRYOTHERAPY): "claims.ANOTHER_DEVICE's contraries (D213, D222): two energies",
+    r2db_pair(_D.RADIOFREQUENCY, _D.CRYOTHERAPY): 'cryotherapy carries no current (D294 G2)',
+    r2db_pair(_D.RADIOFREQUENCY, _D.COLD_SNARE): 'a cold snare carries no current (D294 G2)',
+    r2db_pair(_D.OTHER, _D.CLIP): 'a clip is a listed kind, an over-the-scope clip included',
+    r2db_pair(_D.OTHER, _D.BAND): "claims.ANOTHER_DEVICE's contrary (D213): a band is a listed kind",
+    r2db_pair(_D.OTHER, _D.STENT): 'a stent is a listed kind',
+    r2db_pair(_D.CLIP, _D.BAND): "claims.ANOTHER_DEVICE's contraries (D213), each of the other",
+    r2db_pair(_D.BASKET, _D.EXTRACTION_BALLOON): 'two devices',
+    r2db_pair(_D.MANUAL, _D.OTHER): 'manual pressure or handling is without a device',
+}
+# RB2-1's members and RB2-2's pair (refutation of round r2b's eng-b2), each in R2DB_MAY.
+R2DB_RB2_1 = (_D.NEEDLE, _D.CLIP, _D.STENT, _D.BASKET, _D.LITHOTRIPTER, _D.OTHER)
+R2DB_RB2_2 = r2db_pair(_D.NEEDLE, _D.SPHINCTEROTOME)
+
+
+def r2db_rows() -> dict:
+    """DEVICE_MAY_BE as R2DB_MAY restates it: every member's row (empty where it may be no other)."""
+    return {device: {other for other in Device if r2db_pair(device, other) in R2DB_MAY and other is not device}
+            for device in Device}
+
+
+def r2db_technique(statement_device: Device, act_device: Device) -> P.RowResult:
+    """4.5's technique row for two SUPPORTED devices as the rulings define it, restated without the engine's tables: a
+    device covers itself and its kinds (R2BB_COVERS); disjoint sets are UNRESOLVED where the definitions read the pair
+    as possibly one device (R2DB_MAY), else INDEPENDENT; overlapping sets are SAME when the act's are among the
+    statement's (two "other" devices never are the same one), else UNRESOLVED."""
+    covered = {statement_device} | R2BB_COVERS.get(statement_device, set())
+    used = {act_device} | R2BB_COVERS.get(act_device, set())
+    if not covered & used:
+        return UNRESOLVED if r2db_pair(statement_device, act_device) in R2DB_MAY else INDEPENDENT
+    return SAME if used <= covered and Device.OTHER not in used else UNRESOLVED
+
+
+class R2DBDeviceRelationTests(SimpleTestCase):
+    """DECISIONS D301 (round r2d; refutation RB2-1/2 of round r2b's eng-b2): "two Device members whose definitions both
+    admit one physical device - an injection needle as a needle or an injection device, a needle-knife as a needle or a
+    sphincterotome, a device delivered through a catheter - keep the technique row UNRESOLVED; classified from the
+    definitions". EVERY pair of Device members is classified from the two contract definitions: each member but the two
+    energies is read for the physical devices its definition admits as used in one act (pairing.ADMITS), the energies
+    through D294 G2's classes (pairing.ENERGIES); DEVICE_MAY_BE is that relation, row by row, and the technique row is
+    checked over every ordered pair (the totality test). RB2-3: the rulings are quoted exactly (R2DB_RULINGS) and every
+    member the builder chose is named so (R2DB_MAY's BUILDER-CHOSEN entries). The end-to-end scenes were written for
+    this round, outside every development set."""
+
+    def test_rdb_every_member_is_read_from_its_definition(self):
+        """Every member is read: by ADMITS (the instruments its definition admits, none empty, every instrument some
+        member's) or as one of the two energies (electrocautery, radiofrequency energy: read through DEVICE_CURRENT); a
+        reading missing a member names it; and each member's definition is the one R2B_DEVICE_CLASSES pins beside it - a
+        changed label or a member the contract adds turns this red until the member is read again."""
+        from studio.interpretation.contract import extract_schema
+        self.assertEqual(set(P.ADMITS) | set(P.ENERGIES), set(Device))
+        self.assertFalse(set(P.ADMITS) & set(P.ENERGIES))
+        self.assertEqual(dict(P.ENERGIES), {Device.ELECTROCAUTERY: frozenset({P.Current.MAY}),
+                                            Device.RADIOFREQUENCY: frozenset({P.Current.ALWAYS, P.Current.MAY})})
+        for device, row in P.ADMITS.items():
+            with self.subTest(device=device.value):
+                self.assertTrue(row)
+                self.assertTrue(all(isinstance(item, P.Instrument) for item in row))
+        self.assertEqual({item for row in P.ADMITS.values() for item in row}, set(P.Instrument))
+        # the check's positive control: a reading missing a member names it
+        self.assertEqual(r2b_unclassified({**{device: row for device, row in P.ADMITS.items()
+                                              if device is not Device.STENT}, **P.ENERGIES}), {Device.STENT})
+        for device, _klass, label in R2B_DEVICE_CLASSES:
+            with self.subTest(definition=device.value):
+                self.assertEqual(contract_claims.LABELS[device], label)
+                self.assertIn(device.value, extract_schema.DEFINITIONS[Device])
+
+    def test_rdb_a_member_no_reading_holds_may_be_every_device(self):
+        """The engine's own default, the hold direction: a member ADMITS does not read admits every instrument, so it
+        may be every other member it does not cover or is not covered by; one DEVICE_CURRENT does not classify either
+        may be each energy. Read as they stand, the same pairs are apart."""
+        others = [device for device in Device if device not in P.ENERGIES and device is not Device.STENT]
+        trimmed = {device: row for device, row in P.ADMITS.items() if device is not Device.STENT}
+        with mock.patch.object(P, 'ADMITS', trimmed):
+            for other in others:
+                with self.subTest(other=other.value):
+                    self.assertTrue(P._one_device(Device.STENT, other))
+                    self.assertTrue(P._one_device(other, Device.STENT))
+        current = {device: klass for device, klass in P.DEVICE_CURRENT.items() if device is not Device.STENT}
+        with mock.patch.object(P, 'DEVICE_CURRENT', current):
+            for energy in P.ENERGIES:
+                self.assertTrue(P._one_device(energy, Device.STENT))
+        self.assertEqual({other for other in Device if P._one_device(Device.STENT, other)}, {Device.CATHETER})
+
+    def test_rdb_each_row_is_the_definitions_relation(self):
+        """DEVICE_MAY_BE is R2DB_MAY row by row - every member's row, symmetric, covering nothing it may be - and
+        ``_one_device`` answers it for every ordered pair; no pair R2DB_APART reads apart is in it."""
+        self.assertEqual({device: set(row) for device, row in P.DEVICE_MAY_BE.items()}, r2db_rows())
+        for device, row in P.DEVICE_MAY_BE.items():
+            for other in row:
+                self.assertIn(device, P.DEVICE_MAY_BE[other], (device, other))
+            self.assertFalse(P.DEVICE_CONTAINS.get(device, frozenset()) & row, device)
+        for first in Device:
+            for second in Device:
+                with self.subTest(first=first.value, second=second.value):
+                    self.assertEqual(P._one_device(first, second), r2db_pair(first, second) in R2DB_MAY
+                                     and first is not second)
+        self.assertFalse(set(R2DB_APART) & set(R2DB_MAY))
+        self.assertEqual(len(R2DB_MAY), 37)
+
+    @staticmethod
+    def technique(statement_device: Fact, act_device: Fact) -> P.RowResult:
+        R = build({E1: denial(kind=sup(Kind.ABLATION), device=statement_device),
+                   E2: act(kind=sup(Kind.ABLATION), device=act_device)})
+        return row_of(R, P.Row.TECHNIQUE)
+
+    def test_rdb_the_technique_row_over_every_device_pair(self):
+        """The totality check: every ordered pair of Device members, both supported, gives the row the definitions give
+        (r2db_technique) - a pair two definitions join that the engine leaves INDEPENDENT, or one it holds that none
+        joins, fails here; every pair R2DB_MAY reads as possibly one device stays UNRESOLVED either way and is never
+        INDEPENDENT when either side is negated; every pair R2DB_APART reads apart stays INDEPENDENT either way."""
+        seen = {INDEPENDENT: 0, UNRESOLVED: 0, SAME: 0}
+        for statement_device in Device:
+            for act_device in Device:
+                expected = r2db_technique(statement_device, act_device)
+                with self.subTest(statement=statement_device.value, act=act_device.value):
+                    self.assertEqual(self.technique(sup(statement_device), sup(act_device)), expected)
+                seen[expected] += 1
+        self.assertEqual(sum(seen.values()), len(Device) ** 2)
+        self.assertTrue(all(seen.values()), seen)
+        for pair in R2DB_MAY:
+            one, other = sorted(pair, key=lambda device: device.value)
+            for first, second in ((one, other), (other, one)):
+                with self.subTest(may_pair=(first.value, second.value)):
+                    self.assertEqual(self.technique(sup(first), sup(second)), UNRESOLVED)
+                    self.assertIsNot(self.technique(neg(first), sup(second)), INDEPENDENT)
+                    self.assertIsNot(self.technique(sup(first), neg(second)), INDEPENDENT)
+        for pair in R2DB_APART:
+            one, other = sorted(pair, key=lambda device: device.value)
+            for first, second in ((one, other), (other, one)):
+                with self.subTest(apart_pair=(first.value, second.value)):
+                    self.assertEqual(self.technique(sup(first), sup(second)), INDEPENDENT)
+
+    def test_rdb_the_rulings_are_quoted_and_the_builders_choices_named(self):
+        """RB2-3: a test restating a ruling quotes its text exactly and names every member the builder chose. The RULED
+        pairs are exactly those the quoted words name - D294 G2's four and its Q1's two beside electrocautery, the
+        injection needle (D297 Q3; D301 names it too) and the needle-knife (D301) - and each one's words are a quote
+        that names it; every other pair is BUILDER-CHOSEN, its words never a ruling's; no quote carries a builder's list
+        (round r2b's "thermal probe, argon plasma, radiofrequency, cryotherapy, ..." was restated as D297's); RB2-1's
+        members and RB2-2's pair are in the relation."""
+        ruled = {pair: entry for pair, entry in R2DB_MAY.items() if not entry[0].startswith(R2DB_BUILDER)}
+        self.assertEqual(set(ruled), {r2db_pair(_D.ELECTROCAUTERY, device) for device in R2BB_ELECTROCAUTERY_MAY}
+                         | {r2db_pair(_D.NEEDLE, _D.INJECTION), R2DB_RB2_2})
+        for pair, (who, words) in ruled.items():
+            with self.subTest(ruled=sorted(device.value for device in pair)):
+                self.assertEqual(R2DB_RULINGS[who], words)
+        self.assertIn('may (thermal probe, sphincterotome, catheter, other)', R2DB_D294_G2)
+        self.assertIn('snare and forceps not called cold or hot are "may"', R2DB_D297_Q1)
+        self.assertIn('a needle may be an injection device', R2DB_D297_Q3)
+        self.assertIn('an injection needle as a needle or an injection device', R2DB_D301)
+        self.assertIn('a needle-knife as a needle or a sphincterotome', R2DB_D301)
+        for quote in (R2DB_D297_Q3, R2DB_D301):
+            self.assertIn('a device delivered through a catheter', quote)
+        self.assertNotIn('thermal probe, argon plasma', R2DB_D297_Q3)
+        builders = {pair: entry for pair, entry in R2DB_MAY.items() if entry[0].startswith(R2DB_BUILDER)}
+        self.assertEqual(len(ruled) + len(builders), len(R2DB_MAY))
+        for pair, (who, words) in builders.items():
+            with self.subTest(builder=sorted(device.value for device in pair)):
+                self.assertTrue(words)
+                self.assertFalse(any(words in quote for quote in R2DB_RULINGS.values()), words)
+        for generic, (_label, may) in R2BB_GENERIC.items():  # round r2b's nine: the builder's, named so
+            for device in may:
+                if r2db_pair(generic, device) not in ruled:
+                    self.assertIn('r2b eng-b2', R2DB_MAY[r2db_pair(generic, device)][0], device)
+        for device in R2DB_RB2_1:  # RB2-1's members: named the builder's, and in the engine's relation
+            self.assertIn(r2db_pair(_D.CATHETER, device), builders, device)
+            self.assertIn(device, P.DEVICE_MAY_BE[_D.CATHETER], device)
+        self.assertIn(R2DB_RB2_2, ruled)  # RB2-2's needle-knife: ruled by D301's own words, and in the relation
+        self.assertIn(_D.SPHINCTEROTOME, P.DEVICE_MAY_BE[_D.NEEDLE])
+        for pair in ruled:  # every pair a ruling's words name is in the engine's relation
+            one, other = sorted(pair, key=lambda device: device.value)
+            with self.subTest(ruled_in_engine=(one.value, other.value)):
+                self.assertIn(other, P.DEVICE_MAY_BE[one])
+
+    @staticmethod
+    def ercp_lithotripsy(act_device, denial_device):
+        """An ERCP X1 (its examination E1; an achieved biliary cannulation E4): a lithotripsy E2 done with
+        ``act_device`` beside E3 "No lithotripsy with <denial_device> was performed." (all of kind, every fact
+        established)."""
+        from tests.v2 import evaluate_fixtures as EF
+        doc = EF.Doc()
+        doc.session(1, SessionKind.ERCP)
+        doc.exam(1)
+        doc.act(2, Kind.LITHOTRIPSY, device=sup(act_device))
+        _denial(doc, 3, Kind.LITHOTRIPSY, breadth=Breadth.ALL_OF_KIND, device=denial_device)
+        doc.act(4, Kind.CANNULATION, duct=sup(ct.Duct.BILIARY), access=sup(ct.AccessOutcome.ACHIEVED))
+        return doc.build()
+
+    @staticmethod
+    def ercp_sphincterotomy(act_device, denial_device):
+        """An ERCP X1 (its examination E1; an achieved biliary cannulation E4): a sphincterotomy E2 done with
+        ``act_device`` beside E3 "No sphincterotomy with <denial_device> was performed." (all of kind)."""
+        from tests.v2 import evaluate_fixtures as EF
+        doc = EF.Doc()
+        doc.session(1, SessionKind.ERCP)
+        doc.exam(1)
+        doc.act(2, Kind.SPHINCTEROTOMY, device=sup(act_device))
+        _denial(doc, 3, Kind.SPHINCTEROTOMY, breadth=Breadth.ALL_OF_KIND, device=denial_device)
+        doc.act(4, Kind.CANNULATION, duct=sup(ct.Duct.BILIARY), access=sup(ct.AccessOutcome.ACHIEVED))
+        return doc.build()
+
+    @staticmethod
+    def egd_ablation(act_device, denial_device):
+        """Barrett mucosa of the distal esophagus ablated with ``act_device`` beside "No ablation with <denial_device>
+        was performed in the distal esophagus." - every fact established."""
+        doc = _egd()
+        doc.act(2, Kind.ABLATION, places=[sup(Landmark.DISTAL_ESOPHAGUS)], device=sup(act_device))
+        _denial(doc, 3, Kind.ABLATION, places=(Landmark.DISTAL_ESOPHAGUS,), device=denial_device)
+        return doc.build()
+
+    @staticmethod
+    def colon_snare(act_device, denial_device):
+        """A sigmoid colon polyp removed with ``act_device`` beside "No snare polypectomy with <denial_device> was
+        performed on that polyp." - every fact established."""
+        doc = _colon()
+        doc.lesion(1, lesion_places=[sup(Landmark.SIGMOID_COLON)], multiplicity=sup(ct.Multiplicity.SINGLE))
+        doc.act(2, Kind.SNARE, lesion=sup(L1), places=[sup(Landmark.SIGMOID_COLON)], device=sup(act_device))
+        _denial(doc, 3, Kind.SNARE, places=(Landmark.SIGMOID_COLON,), lesion_id=L1, device=denial_device)
+        return doc.build()
+
+    # (scene, code, builder, act device, denial device): RB2-1 (a device delivered through a catheter, and the
+    # injection needle catheter), RB2-2 (the needle-knife), D301 Q2 (eng-b2's pairs) and the other BUILDER-CHOSEN pairs
+    HOLDS = (
+        ('EGD hemostasis', '43255', 'egd', _D.NEEDLE, _D.CATHETER),
+        ('EGD hemostasis', '43255', 'egd', _D.CATHETER, _D.NEEDLE),
+        ('EGD hemostasis', '43255', 'egd', _D.CLIP, _D.CATHETER),
+        ('EGD hemostasis', '43255', 'egd', _D.CATHETER, _D.CLIP),
+        ('EGD hemostasis', '43255', 'egd', _D.OTHER, _D.CATHETER),
+        ('EGD hemostasis', '43255', 'egd', _D.CATHETER, _D.OTHER),
+        ('EGD hemostasis', '43255', 'egd', _D.NEEDLE, _D.OTHER),
+        ('EGD hemostasis', '43255', 'egd', _D.OTHER, _D.NEEDLE),
+        ('EGD hemostasis', '43255', 'egd', _D.INJECTION, _D.OTHER),
+        ('EGD hemostasis', '43255', 'egd', _D.OTHER, _D.INJECTION),
+        ('ERCP lithotripsy', '43265', 'litho', _D.BASKET, _D.LITHOTRIPTER),
+        ('ERCP lithotripsy', '43265', 'litho', _D.LITHOTRIPTER, _D.BASKET),
+        ('ERCP lithotripsy', '43265', 'litho', _D.LITHOTRIPTER, _D.CATHETER),
+        ('ERCP lithotripsy', '43265', 'litho', _D.BASKET, _D.CATHETER),
+        ('ERCP lithotripsy', '43265', 'litho', _D.CATHETER, _D.BASKET),
+        ('ERCP sphincterotomy', '43262', 'sphincterotomy', _D.NEEDLE, _D.SPHINCTEROTOME),
+        ('ERCP sphincterotomy', '43262', 'sphincterotomy', _D.SPHINCTEROTOME, _D.NEEDLE),
+        ('EGD ablation', '43270', 'ablation', _D.ARGON_PLASMA, _D.RADIOFREQUENCY),
+        ('EGD ablation', '43270', 'ablation', _D.RADIOFREQUENCY, _D.ARGON_PLASMA),
+        ('EGD ablation', '43270', 'ablation', _D.THERMAL_PROBE, _D.RADIOFREQUENCY),
+        ('EGD ablation', '43270', 'ablation', _D.CRYOTHERAPY, _D.OTHER),
+        ('colonoscopy snare', '45385', 'snare', _D.HOT_SNARE, _D.RADIOFREQUENCY),
+    )
+    # the boundary: pairs read apart (R2DB_APART; D294 G2's needle, question Q1) - READY as before
+    READY = (
+        ('EGD hemostasis', '43255', 'egd', _D.CLIP, _D.NEEDLE),
+        ('EGD hemostasis', '43255', 'egd', _D.CLIP, _D.OTHER),
+        ('EGD hemostasis', '43255', 'egd', _D.CLIP, _D.BAND),
+        ('EGD hemostasis', '43255', 'egd', _D.NEEDLE, _D.ELECTROCAUTERY),
+        ('EGD hemostasis', '43255', 'egd', _D.INJECTION, _D.THERMAL_PROBE),
+        ('EGD hemostasis', '43255', 'egd', _D.THERMAL_PROBE, _D.INJECTION),
+        ('ERCP sphincterotomy', '43262', 'sphincterotomy', _D.SPHINCTEROTOME, _D.BASKET),
+        ('ERCP sphincterotomy', '43262', 'sphincterotomy', _D.SPHINCTEROTOME, _D.EXTRACTION_BALLOON),
+        ('EGD ablation', '43270', 'ablation', _D.ARGON_PLASMA, _D.CRYOTHERAPY),
+        ('EGD ablation', '43270', 'ablation', _D.RADIOFREQUENCY, _D.CRYOTHERAPY),
+        ('EGD ablation', '43270', 'ablation', _D.ARGON_PLASMA, _D.THERMAL_PROBE),
+        ('colonoscopy snare', '45385', 'snare', _D.COLD_SNARE, _D.RADIOFREQUENCY),
+        ('EGD hemostasis', '43255', 'egd', _D.CATHETER, _D.BAND),
+        ('ERCP lithotripsy', '43265', 'litho', _D.BASKET, _D.EXTRACTION_BALLOON),
+        ('colonoscopy snare', '45385', 'snare', _D.COLD_SNARE, _D.CATHETER),
+    )
+
+    def scene(self, which, act_device, denial_device):
+        return {'egd': lambda: R2BBGenericDeviceTests.egd_bleeding(act_device, denial_device),
+                'litho': lambda: self.ercp_lithotripsy(act_device, denial_device),
+                'sphincterotomy': lambda: self.ercp_sphincterotomy(act_device, denial_device),
+                'ablation': lambda: self.egd_ablation(act_device, denial_device),
+                'snare': lambda: self.colon_snare(act_device, denial_device)}[which]()
+
+    def test_rdb_one_device_beside_its_denial_holds_the_code(self):
+        """The rule must change these (READY on round r2b's tree: INDEPENDENT on the technique row): an act done with
+        one member beside a denial of its kind, at its place, naming another whose definition admits the same device -
+        the code held on the technique row, the pair UNRESOLVED there."""
+        for name, code, which, act_device, denial_device in self.HOLDS:
+            with self.subTest(scene=name, act=act_device.value, denial=denial_device.value):
+                R = self.scene(which, act_device, denial_device)
+                found = _assessed(R, (code, 2))[code]
+                self.assertEqual(found[0], 'needs_clarification')
+                pair = P.relation(R, E3, E2)
+                self.assertEqual((pair.relation, pair.row, pair.result(P.Row.TECHNIQUE)),
+                                 (P.Relation.UNRESOLVED, P.Row.TECHNIQUE, UNRESOLVED))
+                self.assertEqual(found[2].held.fact, 'technique')
+
+    def test_rdb_a_pair_read_apart_or_a_denial_elsewhere_stays_ready(self):
+        """The boundary it must leave alone (READY on round r2b's tree and on this one): a pair the definitions read
+        apart (R2DB_APART; D294 G2's needle beside electrocautery, question Q1; a catheter beside a band, a snare beside
+        a catheter, a basket beside an extraction balloon) beside the same denial - READY, the technique row
+        INDEPENDENT; and a pair they join beside a denial of another place (the place row sets them apart) - READY."""
+        for name, code, which, act_device, denial_device in self.READY:
+            with self.subTest(scene=name, act=act_device.value, denial=denial_device.value):
+                R = self.scene(which, act_device, denial_device)
+                self.assertEqual(_assessed(R, (code, 2))[code][0], 'ready')
+                self.assertEqual(P.row(R, P.Row.TECHNIQUE, E3, E2), INDEPENDENT)
+        for act_device, denial_device in ((_D.NEEDLE, _D.CATHETER), (_D.CLIP, _D.CATHETER), (_D.INJECTION, _D.OTHER)):
+            with self.subTest(scene='the denial names the gastric antrum', act=act_device.value):
+                R = R2BBGenericDeviceTests.egd_bleeding(act_device, denial_device, denial_place=Landmark.GASTRIC_ANTRUM)
+                self.assertEqual(_assessed(R, ('43255', 2))['43255'][0], 'ready')
+                self.assertEqual(P.relation(R, E3, E2).relation, P.Relation.INDEPENDENT)
 
 
 # --- properties (9.4, at the pairing level; hypothesis) ----------------------------------------------------------------
@@ -3393,7 +3969,11 @@ class TableTests(SimpleTestCase):
         """v1's rows by value, and v2's table is v1's plus exactly E5j's electrocautery row (D292: "the v1-parity pin
         amended to v2's table with the departure named"); DEVICE_MAY_BE covers nothing - D292's thermal probe and
         sphincterotome, and since DECISIONS D294 G2 every may member of pairing.DEVICE_CURRENT (the catheter, the device
-        of another kind, and the snare and the forceps the document does not call cold or hot: R2BDeviceClassTests)."""
+        of another kind, and the snare and the forceps the document does not call cold or hot: R2BDeviceClassTests);
+        since DECISIONS D297 a row per generic device (the catheter's, the needle's: R2BBGenericDeviceTests), and since
+        DECISIONS D301 (round r2d) a row per member - every pair whose contract definitions admit one physical device
+        (R2DBDeviceRelationTests restates each row) - so "covers nothing" is read per row: no row's device covers a
+        device that may be it (a negation of the row's device leaves each possible)."""
         # v1's relations.DEVICE_CONTAINS (retired, 5.0), read here only: engine/ never imports it
         from studio.interpretation import relations as v1_relations
         ported = {device.value: frozenset(inner.value for inner in contained)
@@ -3402,11 +3982,19 @@ class TableTests(SimpleTestCase):
         self.assertEqual({key: value for key, value in ported.items() if key not in self.E5J_ROW}, v1)
         self.assertEqual(ported, {**v1, **self.E5J_ROW})
         self.assertFalse(set(self.E5J_ROW) & set(v1))  # the departure: a row v1 never had
-        self.assertEqual({key.value: frozenset(item.value for item in value) for key, value in P.DEVICE_MAY_BE.items()},
-                         {'electrocautery': frozenset({'thermal_probe', 'sphincterotome', 'catheter', 'other', 'snare',
-                                                       'forceps'})})  # DECISIONS D294 G2 (was D292's two)
-        covered = {device for value in P.DEVICE_CONTAINS.values() for device in value}
-        self.assertFalse(covered & {device for value in P.DEVICE_MAY_BE.values() for device in value})
+        may_be = {key.value: frozenset(item.value for item in value) for key, value in P.DEVICE_MAY_BE.items()}
+        self.assertEqual(may_be['electrocautery'], frozenset({'thermal_probe', 'sphincterotome', 'catheter', 'other',
+                                                              'snare', 'forceps'}))  # DECISIONS D294 G2 (was D292's two)
+        # DECISIONS D297's rows (the catheter's nine, the needle's injection device) inside DECISIONS D301's: every
+        # member's row (was the three rows electrocautery, catheter and needle), each restated by R2DBDeviceRelationTests
+        self.assertLessEqual(frozenset({'thermal_probe', 'argon_plasma', 'radiofrequency', 'cryotherapy', 'injection',
+                                        'balloon', 'extraction_balloon', 'sphincterotome', 'cholangioscope'}),
+                             may_be['catheter'])
+        self.assertIn('injection', may_be['needle'])
+        self.assertEqual(may_be, {device.value: frozenset(other.value for other in row)
+                                  for device, row in r2db_rows().items()})
+        for key, value in P.DEVICE_MAY_BE.items():  # per row since DECISIONS D297 (was over every row's union)
+            self.assertFalse(P.DEVICE_CONTAINS.get(key, frozenset()) & value, key)
 
     def test_the_segment_range_equals_contract_claims_by_value(self):
         # one rule, two places (the engine imports no claim builder); request R2 moves it into engine/anatomy.py
@@ -3418,7 +4006,7 @@ class TableTests(SimpleTestCase):
 
     def test_the_modules_collections_hold_enumeration_members_only(self):
         for name in ('DEVICE_CONTAINS', 'DEVICE_MAY_BE', 'OTHER_DATES', 'OTHER_PERFORMERS', 'TARGETED', 'UNTARGETED',
-                     'POSITIVE', 'TRACT_ORDER'):
+                     'POSITIVE', 'TRACT_ORDER', 'ADMITS', 'ENERGIES'):  # the last two since DECISIONS D301 (round r2d)
             table = getattr(P, name)
             values = list(table) + [item for value in getattr(table, 'values', lambda: [])() for item in value]
             with self.subTest(table=name):

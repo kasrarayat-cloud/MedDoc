@@ -1084,13 +1084,24 @@ class R2FFramePartTests(SimpleTestCase):
         self.assertEqual(self.links(src((ids['date'],), '03/14/2031', Link.DOCUMENT_FRAME), part=part,
                                     sections=broken), (Reason.GEOMETRY_DOCUMENT_FRAME,))
 
-    def test_an_empty_opening_part_leaves_no_frame_part(self):
-        # DECISIONS D199, unchanged: an N0 of length zero before a part at the first character has no span
+    def test_an_empty_opening_part_starts_the_frame_part_at_its_start(self):
+        # DECISIONS D300 (RBFX-FRAME-1, 2026-11-16), superseding D199's last bullet for the frame part: an N0 of length
+        # zero before a part at the first character has no span, yet it passes G2, so the frame part starts at its start
+        # and joins the leading parts as D295 states. Was (D199's reading, as D295 built it): None for any told offset.
         layout = Layout.of(E3_DOC)
         sections = Sections(layout, (Section('N0', src((), '', Link.SECTION), ()),
                                      Section('N1', src(('S1',), 'Per nursing note:', Link.SECTION), ()),
                                      Section('N2', src(('S2',), 'Endoscopist:', Link.SECTION), ())))
-        self.assertIsNone(geometry.frame_part(sections, len(E3_DOC)))
+        self.assertEqual((sections.opening.span, sections.opening.reasons), (None, ()))
+        self.assertEqual(geometry.frame_part(sections, len(E3_DOC)), Span(0, len(E3_DOC)))
+        # with the told offset the checks compute (the act is told in N1, the nursing part) the part is N0's alone, of
+        # length zero: it holds no source, so a document_frame source in N1 still fails
+        act = geometry.locate_anchor(layout, Anchor(('S1',), 'cold snare', 'removed'))
+        part = geometry.frame_part(sections, geometry.first_told(layout, [act]))
+        self.assertEqual(part, Span(0, 0))
+        self.assertEqual(geometry.link_reasons(layout, sections, geometry.unplaced_subject(),
+                                               src(('S1',), '', Link.DOCUMENT_FRAME), frozenset({'S1'}), part),
+                         (Reason.GEOMETRY_DOCUMENT_FRAME,))
 
     def test_the_walk_stops_at_the_part_an_event_is_told_in_and_at_a_gap(self):
         ends = (offset_of(HEADER, 'PATIENT INFORMATION'), offset_of(HEADER, 'PROCEDURE DETAILS'),

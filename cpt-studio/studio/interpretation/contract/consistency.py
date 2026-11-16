@@ -11,7 +11,8 @@ offers wherever its firing demotes another fact: its supported value, each side 
 value an overfilled slot's written facts that are not negated write, and for a rule reading two slots every combination
 (``_offered``; K1's status against timing, K2's arms, K3, K4's type and organ, K5's performer, person, role and
 documenting clinician, K7's role, L1's relations; an overfilled date has L1 run on each written date, and an act's date
-relation is judged with the words of every date its slot states or offers, ``_dates_read``). A rule that
+relation is judged with the words of every date its slot states or offers, ``_dates_read``) - gemini-inventory@3's
+reading; gemini-inventory@2 keeps the one it was recorded with (Versions, below). A rule that
 fires on an ABSENCE (no established value) reads the established value alone (``_value``), which the merged view never
 is - so it fires. K2's examination-link arm, which fires when the examination's session does NOT name the session,
 counts a session as named only when every written fact states it (``_names``: never a contradiction, never a denied
@@ -75,7 +76,9 @@ readings of waves 1 and 2, or in the ruling named beside it):
   (D193). Every date the slot states or offers is read into a relation - a supported one, each side of pass 1's own
   contradiction, each written date of an overfilled slot that is not negated (AMENDMENT-2 4.3.3 [R:truth-T3]
   [R:truth-T9]; ``_dates_read``) - so the relation fails when any of them, read with it alone, would; a negated date is
-  no evidence of when the act was done, and its words are never read. At claim time the
+  no evidence of when the act was done, and its words are never read. Under gemini-inventory@2 L1 reads as that label
+  was recorded (D193; Versions, below): a supported relation alone is judged, and a supported date alone is read into
+  a relation and makes an event with no relation of its own judge the occasion it inherits. At claim time the
   reference is the document's own date of service, pass 1's stated value when its own literal passes, never a member
   value, and a literal that meets no document date stops nothing [R:MO-5]. ``rejudge`` re-judges the stored literals at
   assess and read time against the effective date (member precedence is dates.py's), with no text, and can only add
@@ -102,10 +105,22 @@ collection holds enumeration members), and imports no regular-expression module 
 the inventory version (gemini-inventory@3 since AMENDMENT-2's stated-or-offered reading): a changed rule re-settles
 stored pass-1 bytes (1.1, 2.5). ``check`` is given the inventory version the findings are made for (the version the
 row they settle into is written at: gemini-inventory@3 on the current path, the default), and a label's rule does not
-change after its first recording (D202): K2's date arm reads the stated-or-offered reading under gemini-inventory@3,
-and under gemini-inventory@2, recorded before AMENDMENT-2, a contradicted date relation states no value and the arm
-reads the act's and the examination link's supported sessions, as that label always did (``_date_conflict``; DECISIONS
-D294 F2).
+change after its first recording (D202). So EVERY check AMENDMENT-2 4.3.3 changed reads a slot through the reading
+of that version (``_Reading``; DECISIONS D294 F2, D297 R2RX-1, D301 RBRX-1): under gemini-inventory@3 (and every label
+but @2) the stated-or-offered reading above; under gemini-inventory@2, recorded before AMENDMENT-2, the reading that
+label was recorded with, in each check AMENDMENT-2 4.3.3 widened - K1's status against timing, K2's examination-link,
+kind and date arms, K3, K4's type and organ, K5's performer, person, role and documenting clinician, and L1's judgment
+of a timing fact: the relation sides it judges, the dates it reads into an act's relation, and the condition on which
+an act with no relation of its own judges the occasion it inherits - where a fact states its value only when it is
+supported (a contradicted fact, pass 1's own contradiction, states no value: L1 judges a supported relation only, and
+only a supported date is read into a relation or makes an act judge its inherited occasion, D193's clause), K2's
+examination link is named by a supported session of that value or a contradiction offering it as a side, and two date
+relations conflict only when both are stated, or one states the value the other denies (``_RECORDED``). The checks
+AMENDMENT-2 changed only through the merged view of an overfilled slot (K1's other rules, K2's existence arm, K6, K7,
+K8, and L1's transcription of each written date of an overfilled date slot) read every fact pass 1 wrote alone exactly
+as before under both labels, and no answer read under gemini-events@2 holds a merged view (an overfilled slot is
+refused whole there, 4.3.1). D293 O3's contradicted-date clause (AMENDMENT-2 4.3.3 superseding D193's) is therefore
+gemini-inventory@3's; gemini-inventory@2 keeps D193's, as recorded (D301 RBRX-1).
 """
 from __future__ import annotations
 
@@ -114,7 +129,7 @@ from dataclasses import dataclass
 from datetime import date
 from enum import Enum, unique
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
 from studio import interpretation
 from studio.interpretation.contract import date_literals
@@ -371,6 +386,14 @@ def _states_or_offers(found: ReadFact | None, enumeration: type[_E], members: fr
     return any(member in members for member in _offered(found, enumeration))
 
 
+def _supported(found: ReadFact | None, enumeration: type[_E]) -> tuple[_E, ...]:
+    """The member a SUPPORTED fact holds, as a tuple of one or none (_value): gemini-inventory@2's read of a slot whose
+    value decides a K rule or the relation L1 judges, as that label was recorded - a contradicted fact (pass 1's own
+    contradiction) states no value (_RECORDED)."""
+    member = _value(found, enumeration)
+    return () if member is None else (member,)
+
+
 def _statement(answer: _Answer, event_id: str) -> bool:
     """K1's statement: an event whose status pass 1 stated negated, or which a well-formed doubt of basis stated names
     for its status (1.3: "the document itself states doubt")."""
@@ -429,21 +452,22 @@ def check(answer: ReadAnswer, vocabulary: Vocabulary, words: Words,
     it to find an examination's inherited date relation, and L1 to find the occasion an event with no date relation of
     its own inherits (DECISIONS D193). ``inventory_version``: the inventory version the findings are made for - the one
     the row they settle into is written at - whose rules they apply (gemini-inventory@3, the current path's, by
-    default; K2's date arm reads gemini-inventory@2's rule under that label: _stated_or_offered_dates, DECISIONS D294
-    F2). The answer is read, never changed, and no member value is read: the findings depend on the revision, pass 1's
-    bytes and the label alone."""
+    default): every K rule and L1 read a slot through that version's reading (``_reading``: under gemini-inventory@2
+    the reading it was recorded with; DECISIONS D294 F2, D297 R2RX-1, D301 RBRX-1). The answer is read, never changed,
+    and no member value is read: the findings depend on the revision, pass 1's bytes and the label alone."""
     indexed = _Answer(answer)
     out = _Out()
     sections = containing or {}
-    _k1(indexed, vocabulary, out)
-    _k2(indexed, vocabulary, sections, out, _stated_or_offered_dates(inventory_version))
-    _k3(indexed, vocabulary, out)
-    _k4(indexed, vocabulary, out)
-    _k5(indexed, out)
+    reading = _reading(inventory_version)
+    _k1(indexed, vocabulary, out, reading)
+    _k2(indexed, vocabulary, sections, out, reading)
+    _k3(indexed, vocabulary, out, reading)
+    _k4(indexed, vocabulary, out, reading)
+    _k5(indexed, out, reading)
     _k6(indexed, out)
     _k7(indexed, out)
     _k8(indexed, vocabulary, out)
-    reference = _l1(indexed, words, sections, out)
+    reference = _l1(indexed, words, sections, out, reading)
     _q1(indexed, out)
     order = indexed.order
     return Findings(
@@ -470,16 +494,16 @@ def _ordered(found: Iterable[Reason]) -> tuple[Reason, ...]:
 # --- K1: values allowed together ----------------------------------------------------------------------------------------
 
 
-def _k1(answer: _Answer, vocabulary: Vocabulary, out: _Out) -> None:
+def _k1(answer: _Answer, vocabulary: Vocabulary, out: _Out, reading: _Reading) -> None:
     for event_id in answer.ids[Family.EVENT]:
-        _k1_event(answer, vocabulary, event_id, out)
+        _k1_event(answer, vocabulary, event_id, out, reading)
     for session_id in answer.ids[Family.SESSION]:
         facets = [key for attribute in _SESSION_FACETS for key, _ in answer.facts(Family.SESSION, session_id, attribute)]
         if facets and _value(answer.one(Family.SESSION, session_id, A.KIND), SessionKind) not in vocabulary.endoscopic:
             out.rule(facets, Structure.ENDOSCOPIC)
 
 
-def _k1_event(answer: _Answer, vocabulary: Vocabulary, event_id: str, out: _Out) -> None:
+def _k1_event(answer: _Answer, vocabulary: Vocabulary, event_id: str, out: _Out, reading: _Reading) -> None:
     def keys(*attributes: Attribute) -> list[FactKey]:
         return [key for attribute in attributes for key, _ in answer.facts(Family.EVENT, event_id, attribute)]
 
@@ -509,11 +533,13 @@ def _k1_event(answer: _Answer, vocabulary: Vocabulary, event_id: str, out: _Out)
     if keys(A.OTHER_CLASS) and kind is not Kind.OTHER:
         out.rule(keys(A.OTHER_CLASS), Structure.OTHER_CLASS)
     timing = answer.one(Family.EVENT, event_id, A.DATE_RELATION)
-    # status against timing demotes both, so it fires on every value either states or offers ([R:truth-T3])
+    # status against timing demotes both, so it fires on every value either states or offers ([R:truth-T3]) - read as
+    # the findings' inventory version reads them (_Reading: gemini-inventory@2's supported values only)
     if timing is not None and status_found is not None and any(
             (stated in _POSITIVE and relation is DateRelation.LATER_DATE)
             or (stated is Status.PLANNED and relation is DateRelation.EARLIER_DATE)
-            for stated in _offered(status_found, Status) for relation in _offered(timing, DateRelation)):
+            for stated in reading.members(status_found, Status)
+            for relation in reading.members(timing, DateRelation)):
         out.rule([*status_found.keys, *timing.keys], Structure.STATUS_TIME)
     breadth = _value(breadth_found, Breadth)
     if breadth_found is not None and breadth is not None:
@@ -562,13 +588,13 @@ def _covered(vocabulary: Vocabulary, statement: Kind, act: Kind | None) -> bool:
 # --- K2: session consistency [R:HO-7] -------------------------------------------------------------------------------------
 
 
-def _k2(answer: _Answer, vocabulary: Vocabulary, containing: Mapping[str, str], out: _Out, offered_dates: bool) -> None:
-    """K2. Each read of a slot whose value decides the rule reads every value it states or offers (_offered,
-    [R:truth-T3]): the examination link, the act's session, its kind, the session's kind, and the date relations K2's
-    date arm compares - for two slots, every combination - so a contradicted or overfilled slot fires the rule on each
-    of its values instead of switching it off. The date arm (session_conflict) reads so only for findings made for
-    gemini-inventory@3 (``offered_dates``: _stated_or_offered_dates); under gemini-inventory@2 it reads as that label
-    was recorded (_date_conflict; DECISIONS D294 F2). What K2 demotes is unchanged: the act's session fact and the
+def _k2(answer: _Answer, vocabulary: Vocabulary, containing: Mapping[str, str], out: _Out, reading: _Reading) -> None:
+    """K2. Each read of a slot whose value decides the rule reads it as the findings' inventory version reads it
+    (``reading``): under gemini-inventory@3 every value it states or offers (_offered, [R:truth-T3]) - the examination
+    link, the act's session, its kind, the session's kind, and the date relations K2's date arm compares, for two slots
+    every combination - so a contradicted or overfilled slot fires the rule on each of its values instead of switching
+    it off; under gemini-inventory@2 as that label was recorded (_RECORDED; DECISIONS D294 F2, D297 R2RX-1). The
+    existence arm reads every id a fact names under both. What K2 demotes is unchanged: the act's session fact and the
     session's examination link, on every fact of an overfilled slot (ReadFact.keys)."""
     sessions = frozenset(answer.ids[Family.SESSION])
     events = frozenset(answer.ids[Family.EVENT])
@@ -578,64 +604,54 @@ def _k2(answer: _Answer, vocabulary: Vocabulary, containing: Mapping[str, str], 
             out.reason(found.keys, Reason.SESSION_INCONSISTENT)
     for session_id in answer.ids[Family.SESSION]:  # a session's examination names it
         link = answer.one(Family.SESSION, session_id, A.EXAMINATION)
-        for examination in _offered_ids(link):
+        for examination in reading.ids(link):
             theirs = answer.one(Family.EVENT, examination, A.SESSION) if examination in events else None
-            if link is not None and theirs is not None and not _names(theirs, session_id):
+            if link is not None and theirs is not None and not reading.names(theirs, session_id):
                 out.reason(link.keys, Reason.SESSION_INCONSISTENT)
     for event_id in answer.ids[Family.EVENT]:
         found = answer.one(Family.EVENT, event_id, A.SESSION)
         if found is None or not _act(answer, event_id):
             continue
-        kinds = _offered(answer.one(Family.EVENT, event_id, A.KIND), Kind)
-        for session in _offered_ids(found):
+        kinds = reading.members(answer.one(Family.EVENT, event_id, A.KIND), Kind)
+        for session in reading.ids(found):
             if session not in sessions:
                 continue
-            families = _offered(answer.one(Family.SESSION, session, A.KIND), SessionKind)
+            families = reading.members(answer.one(Family.SESSION, session, A.KIND), SessionKind)
             if any(not vocabulary.family_admits(family, kind) for kind in kinds for family in families):
                 out.reason(found.keys, Reason.SESSION_INCONSISTENT)  # an act's session kind admits its kind (D191)
-        if _date_conflict(answer, event_id, found, sessions, events, containing, offered_dates):
+        if _date_conflict(answer, event_id, found, sessions, events, containing, reading):
             out.reason(found.keys, Reason.SESSION_CONFLICT)  # the act's own other date: its session fact only
 
 
-def _stated_or_offered_dates(inventory_version: str) -> bool:
-    """Whether K2's date arm reads AMENDMENT-2's stated-or-offered reading (4.3.3 [R:truth-T3]) for findings made for
-    ``inventory_version``: it is gemini-inventory@3's rule, and gemini-inventory@2 - whose first recording (D1) was made
-    with the reading before AMENDMENT-2 - keeps the rule it was recorded with, since a label's rule never changes after
-    its first recording (D202; DECISIONS D294 F2). Every label but gemini-inventory@2 reads the newer rule, which only
-    demotes more (fail-closed)."""
-    return inventory_version != interpretation.INVENTORY_VERSION_V2
-
-
 def _date_conflict(answer: _Answer, event_id: str, found: ReadFact, sessions: frozenset[str], events: frozenset[str],
-                   containing: Mapping[str, str], offered: bool) -> bool:
+                   containing: Mapping[str, str], reading: _Reading) -> bool:
     """K2's date arm: whether the act's OWN date relation and its session examination's claimed one - the examination's
-    own, else the occasion of the section its anchor lies in (``containing``) - cannot both hold. ``offered``
-    (findings for gemini-inventory@3, _stated_or_offered_dates): every session the act's session fact states or
-    offers, every examination that session's link states or offers, and every value each relation states or offers
-    (_incompatible). Otherwise (findings for gemini-inventory@2, as that label was recorded): the act's supported
-    session, that session's supported examination, and a contradicted relation stating no value (_incompatible_stated).
-    The arm fires once whatever the number of conflicts (a finding is a reason on the act's session fact)."""
+    own, else the occasion of the section its anchor lies in (``containing``) - cannot both hold, read as ``reading``
+    reads them: under gemini-inventory@3 (_OFFERED) every session the act's session fact states or offers, every
+    examination that session's link states or offers, and every value each relation states or offers (_incompatible);
+    under gemini-inventory@2 (_RECORDED, as that label was recorded) the act's supported session, that session's
+    supported examination, and a contradicted relation stating no value (_incompatible_stated). The arm fires once
+    whatever the number of conflicts (a finding is a reason on the act's session fact)."""
     own = answer.one(Family.EVENT, event_id, A.DATE_RELATION)
     if own is None:
         return False
-    named = _offered_ids if offered else _supported_ids
-    incompatible = _incompatible if offered else _incompatible_stated
-    for session in named(found):
+    for session in reading.ids(found):
         if session not in sessions:
             continue
-        for examination in named(answer.one(Family.SESSION, session, A.EXAMINATION)):
+        for examination in reading.ids(answer.one(Family.SESSION, session, A.EXAMINATION)):
             if examination == event_id or examination not in events:
                 continue
             theirs = answer.one(Family.EVENT, examination, A.DATE_RELATION)
             if theirs is None and examination in containing:
                 theirs = answer.one(Family.SECTION, containing[examination], A.OCCASION)
-            if theirs is not None and incompatible(own, theirs):
+            if theirs is not None and reading.incompatible(own, theirs):
                 return True
     return False
 
 
 def _supported_ids(found: ReadFact | None) -> tuple[str, ...]:
-    """The id a SUPPORTED fact names, as a tuple of one or none (_id): gemini-inventory@2's read of K2's date arm."""
+    """The id a SUPPORTED fact names, as a tuple of one or none (_id): gemini-inventory@2's read of an id slot whose
+    value decides a K rule, as that label was recorded (_RECORDED)."""
     named = _id(found)
     return () if named is None else (named,)
 
@@ -658,6 +674,16 @@ def _names(found: ReadFact, object_id: str) -> bool:
     states that value (4.3.3 b, a denied value is never read as stated; 4.4, never stronger than one written fact read
     alone, a negated one included); a negated fact names nothing."""
     return set(found.asserted_values) == {object_id} and not found.negated_values
+
+
+def _names_recorded(found: ReadFact, object_id: str) -> bool:
+    """gemini-inventory@2's read of K2's examination-link arm, as that label was recorded (_RECORDED): the examination's
+    session fact names ``object_id`` when it states it (supported) or offers it as a side of pass 1's own
+    contradiction; a negated fact names nothing."""
+    fact = _fact(found)
+    if fact.state is FactState.SUPPORTED:
+        return fact.value == object_id
+    return fact.state is FactState.CONTRADICTED and any(option.value == object_id for option in fact.options)
 
 
 def _denied(found: ReadFact) -> tuple[str, ...]:
@@ -694,9 +720,10 @@ def _incompatible_stated(first: ReadFact, second: ReadFact) -> bool:
 # --- K3: place against session; K4: anatomy against places ------------------------------------------------------------
 
 
-def _k3(answer: _Answer, vocabulary: Vocabulary, out: _Out) -> None:
-    """K3, on every session the act's session fact states or offers and every family that session's kind states or
-    offers ([R:truth-T3]): a supported place in a region the family cannot reach demotes the act's session fact."""
+def _k3(answer: _Answer, vocabulary: Vocabulary, out: _Out, reading: _Reading) -> None:
+    """K3, on every session the act's session fact gives and every family that session's kind gives, as ``reading``
+    reads them (gemini-inventory@3: each it states or offers, [R:truth-T3]; gemini-inventory@2: the supported one, as
+    recorded): a supported place in a region the family cannot reach demotes the act's session fact."""
     sessions = frozenset(answer.ids[Family.SESSION])
     for event_id in answer.ids[Family.EVENT]:
         found = answer.one(Family.EVENT, event_id, A.SESSION)
@@ -708,16 +735,16 @@ def _k3(answer: _Answer, vocabulary: Vocabulary, out: _Out) -> None:
             region = vocabulary.region(place) if place is not None else None
             if region is not None:
                 regions.append(region)
-        for session_id in _offered_ids(found):
+        for session_id in reading.ids(found):
             if session_id not in sessions:
                 continue
-            families = _offered(answer.one(Family.SESSION, session_id, A.KIND), SessionKind)
+            families = reading.members(answer.one(Family.SESSION, session_id, A.KIND), SessionKind)
             reaches = [vocabulary.reach[family] for family in families if family in vocabulary.reach]
             if any(region not in reach for reach in reaches for region in regions):
                 out.reason(found.keys, Reason.SESSION_UNREACHABLE)  # nothing is ever moved
 
 
-def _k4(answer: _Answer, vocabulary: Vocabulary, out: _Out) -> None:
+def _k4(answer: _Answer, vocabulary: Vocabulary, out: _Out, reading: _Reading) -> None:
     places: list[tuple[FactKey, Place]] = []
     for session_id in answer.ids[Family.SESSION]:
         for attribute, enumeration in ((A.REACHED, Extent), (A.STATIONS, Station)):
@@ -725,14 +752,16 @@ def _k4(answer: _Answer, vocabulary: Vocabulary, out: _Out) -> None:
     for event_id in answer.ids[Family.EVENT]:
         if _act(answer, event_id):
             places += _supported_places(answer.facts(Family.EVENT, event_id, A.TARGET_PLACES), Landmark)
-    # the type and the organ on every value each states or offers ([R:truth-T3]): a contradicted or overfilled organ
-    # (several organs written for one entry) fires K4 on each, as a contradicted type offering surgically_absent does
+    # the type and the organ as ``reading`` reads them: under gemini-inventory@3 every value each states or offers
+    # ([R:truth-T3]) - a contradicted or overfilled organ (several organs written for one entry) fires K4 on each, as a
+    # contradicted type offering surgically_absent does; under gemini-inventory@2 the supported ones, as recorded
     for anatomy_id in answer.ids[Family.ANATOMY]:
         absent = answer.one(Family.ANATOMY, anatomy_id, A.TYPE)
         organ_found = answer.one(Family.ANATOMY, anatomy_id, A.ORGAN)
-        if absent is None or organ_found is None or AnatomyType.SURGICALLY_ABSENT not in _offered(absent, AnatomyType):
+        if (absent is None or organ_found is None
+                or AnatomyType.SURGICALLY_ABSENT not in reading.members(absent, AnatomyType)):
             continue
-        for organ in _offered(organ_found, Landmark):
+        for organ in reading.members(organ_found, Landmark):
             hits = [key for key, place in places if place.value == organ.value or vocabulary.contains(organ, place)]
             if hits:
                 out.reason([*absent.keys, *organ_found.keys, *hits], Reason.ANATOMY_CONFLICT)
@@ -745,12 +774,13 @@ def _supported_places(found: Sequence[Found], enumeration: type[Enum]) -> list[t
 # --- K5: person against performer; K6: instrument; K7: frame by role --------------------------------------------------
 
 
-def _k5(answer: _Answer, out: _Out) -> None:
+def _k5(answer: _Answer, out: _Out, reading: _Reading) -> None:
     """K5, on every combination of the performers, persons, the person's roles and documenting clinicians the facts
-    state or offer ([R:truth-T3]): a conflict in any demotes the performer and the person."""
-    roles = {person_id: _offered(answer.one(Family.PERSON, person_id, A.ROLE), PersonRole)
+    give, as ``reading`` reads them (gemini-inventory@3: each they state or offer, [R:truth-T3]; gemini-inventory@2: the
+    supported ones, as recorded): a conflict in any demotes the performer and the person."""
+    roles = {person_id: reading.members(answer.one(Family.PERSON, person_id, A.ROLE), PersonRole)
              for person_id in answer.ids[Family.PERSON]}
-    documenting = _offered_ids(answer.one(Family.ENCOUNTER, '', A.DOCUMENTING_CLINICIAN))
+    documenting = reading.ids(answer.one(Family.ENCOUNTER, '', A.DOCUMENTING_CLINICIAN))
     for family in (Family.EVENT, Family.SECTION):
         for object_id in answer.ids[family]:
             performer_found = answer.one(family, object_id, A.PERFORMER)
@@ -761,7 +791,8 @@ def _k5(answer: _Answer, out: _Out) -> None:
                     and any(role not in _TEAM_ROLES for role in roles.get(person, ())))
                    or (performer in _OTHER_PERFORMERS
                        and (PersonRole.DOCUMENTING_CLINICIAN in roles.get(person, ()) or person in documenting))
-                   for performer in _offered(performer_found, Performer) for person in _offered_ids(person_found)):
+                   for performer in reading.members(performer_found, Performer)
+                   for person in reading.ids(person_found)):
                 out.reason([*performer_found.keys, *person_found.keys], Reason.PERSON_CONFLICT)
 
 
@@ -838,10 +869,14 @@ def _components(edges: Sequence[tuple[FactKey, FactKey]]) -> list[set[FactKey]]:
 # --- L1: date literals [R:MO-5] ---------------------------------------------------------------------------------------
 
 
-def _l1(answer: _Answer, words: Words, containing: Mapping[str, str], out: _Out) -> date | None:
+def _l1(answer: _Answer, words: Words, containing: Mapping[str, str], out: _Out, reading: _Reading) -> date | None:
     """L1 at claim time. The date of service first: its value against the full dates in its words; the reference date
     is that value when its literal passes. Then each other date, each event's date, each event's effective date relation
-    and each section's occasion. Returns the reference date.
+    and each section's occasion. Returns the reference date. What an act's date slot gives its relation (``reading``'s
+    dates) and the relations judged (``reading``'s members) are read as the findings' inventory version reads them: the
+    paragraph below is gemini-inventory@3's reading; gemini-inventory@2 reads as recorded (_dates_supported: a supported
+    date alone is read into a relation, and alone makes an event with no relation of its own judge its inherited
+    occasion; a supported relation alone is judged; DECISIONS D301 RBRX-1).
 
     An event's effective date relation (1.5) is its own, read with the words of its own date; when pass 1 left its own
     slot silent and the event's date slot states or offers a date, it is the occasion of the section its anchor lies in
@@ -874,21 +909,23 @@ def _l1(answer: _Answer, words: Words, containing: Mapping[str, str], out: _Out)
             sides = ([(option.value, option.sources) for option in fact.options]
                      if fact.state is FactState.CONTRADICTED else [(fact.value, fact.sources)])
             _transcription(item.key, sides, words, out)
-        # the act's date relation is judged with the words of EVERY date the slot states or offers (_dates_read:
-        # each side of pass 1's own contradiction, each written fact of an overfilled slot that is not negated), so
-        # it fails whenever any one of those dates, read with it alone, would fail it ([R:truth-T3][R:truth-T9])
-        dates_stated, date_sources = _dates_read(dated)
+        # the act's date relation is judged with the words of EVERY date the slot states or offers (gemini-inventory@3,
+        # _dates_read: each side of pass 1's own contradiction, each written fact of an overfilled slot that is not
+        # negated), so it fails whenever any one of those dates, read with it alone, would fail it ([R:truth-T3]
+        # [R:truth-T9]); under gemini-inventory@2 with the words of a supported date alone, as recorded
+        # (_dates_supported)
+        dates_stated, date_sources = reading.dates(dated)
         own = answer.one(Family.EVENT, event_id, A.DATE_RELATION)
         if own is not None:
-            _timing(own.keys, own, date_sources, words, reference, out)
+            _timing(own.keys, own, date_sources, words, reference, out, reading)
         elif dates_stated and event_id in containing:
             occasion = answer.one(Family.SECTION, containing[event_id], A.OCCASION)
             if occasion is not None:
-                _timing((answer.inherited(event_id),), occasion, date_sources, words, reference, out)
+                _timing((answer.inherited(event_id),), occasion, date_sources, words, reference, out, reading)
     for section_id in answer.ids[Family.SECTION]:
         occasion = answer.one(Family.SECTION, section_id, A.OCCASION)
         if occasion is not None:
-            _timing(occasion.keys, occasion, (), words, reference, out)
+            _timing(occasion.keys, occasion, (), words, reference, out, reading)
     return reference
 
 
@@ -916,6 +953,18 @@ def _dates_read(dated: ReadFact | None) -> tuple[bool, tuple[Source, ...]]:
     return stated, tuple(dict.fromkeys(sources))
 
 
+def _dates_supported(dated: ReadFact | None) -> tuple[bool, tuple[Source, ...]]:
+    """What an act's date slot gives L1's judgment of the act's date relation under gemini-inventory@2, as that label
+    was recorded (_RECORDED; D193's clause, DECISIONS D301 RBRX-1): whether the slot holds a SUPPORTED date, and that
+    fact's sources as written. Only a supported date is read into a relation: a contradicted one (pass 1's own
+    contradiction) states no date, and a negated one is no evidence of when the act was done, so neither one's words are
+    read into the relation and neither makes an event with no relation of its own judge the occasion it inherits. (No
+    answer read under gemini-events@2 holds the merged view of an overfilled slot: module docstring, Versions.)"""
+    if dated is None or _fact(dated).state is not FactState.SUPPORTED:
+        return False, ()
+    return True, tuple(_fact(dated).sources)
+
+
 def _precision(value: str) -> Precision | None:
     return _PRECISION_OF_LENGTH.get(len(value))
 
@@ -940,20 +989,21 @@ def _transcription(key: FactKey, sides: Sequence[tuple[str, Sequence[Source]]], 
 
 
 def _timing(keys: Sequence[FactKey], found: ReadFact, date_sources: Sequence[Source], words: Words,
-            reference: date | None, out: _Out) -> None:
-    """L1 on a timing fact (an event's effective date relation, with the words of every date its own date slot states
-    or offers, _dates_read; a section's occasion), its findings and literals at ``keys`` (every fact of an overfilled
+            reference: date | None, out: _Out, reading: _Reading) -> None:
+    """L1 on a timing fact (an event's effective date relation, with the words of every date its own date slot gives,
+    ``reading``'s dates; a section's occasion), its findings and literals at ``keys`` (every fact of an overfilled
     slot, or an event's inherited key):
-    every literal read is stored; each relation the fact states or offers ([R:truth-T3]: a supported one, each side of
-    pass 1's own contradiction, each stated value of an overfilled slot) is judged against the claim-time reference
-    date, and a literal that meets no document date stops nothing."""
+    every literal read is stored; each relation ``reading`` reads the fact to state - under gemini-inventory@3 each it
+    states or offers ([R:truth-T3]: a supported one, each side of pass 1's own contradiction, each stated value of an
+    overfilled slot), under gemini-inventory@2 a supported one alone, as recorded (D301 RBRX-1) - is judged against the
+    claim-time reference date, and a literal that meets no document date stops nothing."""
     literals = _read([*_fact(found).sources, *date_sources], words, day_only=False)
     for key in keys:
         out.literals[key] = _stored(literals)
     if reference is None:
         return
     if any(not all(_holds(relation, literal.value, literal.precision, reference) for literal in literals)
-           for relation in _offered(found, DateRelation)):
+           for relation in reading.members(found, DateRelation)):
         for key in keys:
             out.literal.setdefault(key, set()).add(Reason.LITERAL_MISMATCH)
 
@@ -1004,6 +1054,46 @@ def rejudge(relation: DateRelation, literals: Sequence[StoredLiteral], effective
         if when is None or not _holds(relation, when, literal.precision.value, effective):
             reasons.add(Reason.LITERAL_MISMATCH)
     return _ordered(reasons)
+
+
+# --- the reading of each inventory version (DECISIONS D294 F2, D297 R2RX-1, D301 RBRX-1) ---------------------------
+
+
+class _Members(Protocol):
+    """How a K rule or L1 reads the members a slot gives it (_offered, or _supported)."""
+
+    def __call__(self, found: ReadFact | None, enumeration: type[_E], /) -> tuple[_E, ...]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class _Reading:
+    """How every check AMENDMENT-2 4.3.3 widened reads a slot whose value decides it, for the inventory version the
+    findings are made for (``_reading``; module docstring, Versions): ``members`` and ``ids`` give the members and ids a
+    slot gives a K rule (``members`` also the relations L1 judges on a timing fact), ``names`` whether an examination's
+    session fact names a session (K2's examination-link arm, the one negative trigger), ``incompatible`` whether two
+    date relations cannot both hold (K2's date arm), and ``dates`` what an act's date slot gives L1's judgment of its
+    date relation - whether it gives a date (the condition on which an act with no relation of its own judges the
+    occasion it inherits) and the sources of every date read into the relation. _OFFERED is AMENDMENT-2 4.3.3's
+    stated-or-offered reading; _RECORDED is gemini-inventory@2's, as that label was recorded (D202)."""
+    members: _Members
+    ids: Callable[[ReadFact | None], tuple[str, ...]]
+    names: Callable[[ReadFact, str], bool]
+    incompatible: Callable[[ReadFact, ReadFact], bool]
+    dates: Callable[[ReadFact | None], tuple[bool, tuple[Source, ...]]]
+
+
+_OFFERED = _Reading(members=_offered, ids=_offered_ids, names=_names, incompatible=_incompatible, dates=_dates_read)
+_RECORDED = _Reading(members=_supported, ids=_supported_ids, names=_names_recorded, incompatible=_incompatible_stated,
+                     dates=_dates_supported)
+
+
+def _reading(inventory_version: str) -> _Reading:
+    """The reading every K rule and L1 apply for findings made for ``inventory_version`` (DECISIONS D294 F2, D297
+    R2RX-1, D301 RBRX-1): gemini-inventory@2 - whose first recording (D1) was made before AMENDMENT-2 - keeps the
+    reading it was recorded with (_RECORDED), since a label's rule never changes after its first recording (D202);
+    every other label reads AMENDMENT-2 4.3.3's stated-or-offered reading (_OFFERED), which only demotes more
+    (fail-closed)."""
+    return _RECORDED if inventory_version == interpretation.INVENTORY_VERSION_V2 else _OFFERED
 
 
 # --- Q1: qualifiers -----------------------------------------------------------------------------------------------------

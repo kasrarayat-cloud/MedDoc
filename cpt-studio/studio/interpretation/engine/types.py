@@ -212,9 +212,11 @@ class FactSet:
     pair control (3.2.3 [R:SC-B]) - the object asked, the attribute (target.places or target.lesion) and the place or
     lesion asked - whether pass 2 rejected it, which apart_by_place and apart_by_lesion read (4.2); and, keyed (a
     lesion, distinct_from, another lesion), whether a lesion pair claim established the two distinct (DECISIONS D296:
-    its claim supported, its sameness control rejected), which apart_by_lesion reads as a written distinct_from
-    (facts.appraised_distinct). completeness: for an upper EUS session whose station list is empty, the settled result
-    of its completeness claim (3.2.2 [R:SC-B]; 4.3 STATIONS).
+    its claim supported, its sameness control rejected; DECISIONS D300: a membership claim's established non-membership
+    too, each form with the multiplicity it presumes established), which every reader of an established distinctness
+    reads as a written distinct_from (facts.appraised_distinct, through facts.established_distinct). completeness: for
+    an upper EUS session whose station list is empty, the settled result of its completeness claim (3.2.2 [R:SC-B]; 4.3
+    STATIONS).
 
     The row's doubts and claims are not here: each doubt has already acted on the facts it names (3.3 rows 1 and 2, a
     doubt's readings kept as options), and each appraisal on the fact it was about (result, options, pair_controls,

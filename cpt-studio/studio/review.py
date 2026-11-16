@@ -378,7 +378,8 @@ def stored_service_questions(assessment: Any) -> dict[tuple[str, str, str], str]
 
 def bound_fingerprints(assessment: Any, proposals: Iterable[Any],
                        pairs: Iterable[tuple[tuple[str, str, str], dict[str, Any]]],
-                       forms: Mapping[tuple[str, str, str], frozenset[str]] | None = None
+                       forms: Mapping[tuple[str, str, str], frozenset[str]] | None = None,
+                       live: Mapping[tuple[str, str, str], str] | None = None
                        ) -> dict[tuple[str, str, str], str]:
     """{member key: fingerprint} of ``pairs`` ((member key, questions.instance), as question_pairs and _closed_pairs give
     them): questions.group's, but a key a design v2 proposal's stored item names is bound by that item's stored
@@ -394,15 +395,42 @@ def bound_fingerprints(assessment: Any, proposals: Iterable[Any],
     live ADDON question beside a stored status item, a live item given way to by a released ADDON hold: D284, WORDS-F2),
     the key is bound by the shown question's own fingerprint, which the stored item's engine binding never takes - so an
     answer to the shown question is never recorded, nor bound, as an answer to the stored item. Without ``forms`` (the
-    questions an assessment closed: its stored items) as before."""
+    questions an assessment closed: its stored items) as before.
+
+    r2d (DECISIONS D301, RBWX-3): with ``live`` - live_questions of the views ``pairs`` were read from - a key the views
+    ask by a question read time words live (an item the counted set gives that is not the stored one) is bound by that
+    item's own fingerprint, the one engine/assess stores for that item (overlay.live_fingerprint): what the door records
+    with an answer to it, what read time binds it by and what the AGAIN binds it by when it presents the same item."""
     grouped = questions.group(pairs)
     stored = {**stored_service_questions(assessment), **stored_questions(assessment, proposals)}
     items = stored_forms(assessment, proposals) if forms is not None else {}
     out: dict[tuple[str, str, str], str] = {}
     for key, fingerprint in grouped.items():
+        if live and key in live:
+            out[key] = live[key]
+            continue
         shown = forms.get(key) if forms is not None else None
         asks_stored = key not in items or shown is None or shown == frozenset({items[key]})
         out[key] = stored.get(key, fingerprint) if asks_stored else fingerprint
+    return out
+
+
+def live_questions(proposals: Iterable[Any], views: Mapping[str, Any]) -> dict[tuple[str, str, str], str]:
+    """r2d (DECISIONS D301, RBWX-3): {member key: fingerprint} of each question ``views`` ask live (id '': a question
+    read time words for an item the counted set gives) whose view records its engine fingerprint (View.
+    live_fingerprints: overlay.live_fingerprint) - keyed as question_pairs keys it. {} where none does (a legacy
+    view, a question no engine item is)."""
+    out: dict[tuple[str, str, str], str] = {}
+    for proposal in proposals:
+        view = views.get(proposal.key)
+        if view is None:
+            continue
+        recorded = dict(getattr(view, 'live_fingerprints', ()) or ())
+        for item in (view.questions if recorded else ()):
+            fingerprint = recorded.get(item.get('fact')) if not item.get('id') else None
+            if fingerprint:
+                out.setdefault(questions.member_key(proposal.code, item.get('family') or proposal.family,
+                                                    item.get('fact')), fingerprint)
     return out
 
 
@@ -464,9 +492,48 @@ def answered_items(assessment: Any, proposals: Iterable[Any] | None = None) -> l
 
 
 def answer_states(assessment: Any, current: Mapping[Any, Any] | None = None,
-                  inputs: tuple[list[Any], list[Any], dict[str, Any], dict[str, Any]] | None = None
-                  ) -> tuple[list[Any], list[Any], list[tuple[Any, str]]]:
-    """(applied, bound, earlier) of the standing member answers of ``assessment``'s revision (completion repair
+                  inputs: tuple[list[Any], list[Any], dict[str, Any], dict[str, Any]] | None = None,
+                  views: Mapping[str, Any] | None = None) -> tuple[list[Any], list[Any], list[tuple[Any, str]]]:
+    """``_answer_states``, with r2b's (DECISIONS D297, W2R-1) listing: an answer the assessment read - one engine/assess
+    excluded a code by (answered_items) - that read time no longer applies, because its recount under the current
+    decisions releases the hold that answer's item rests on (the code's effective view: ``reopened``), is listed no
+    longer asked, never applied - whether it was given before or after the decision and whether or not the AGAIN has
+    run. ``views``: the assessment's effective views (effective_view), when the caller has them; read here otherwise,
+    only for an assessment with such a code."""
+    applied, bound, earlier, computed = _answer_reading(assessment, current, inputs)
+    if not applied:
+        return applied, bound, earlier
+    frozen = answered_items(assessment, inputs[0] if inputs is not None else None)
+    if not frozen:
+        return applied, bound, earlier
+    views = computed if views is None else views  # r2d (D301): the reading with exactly the bound answers, when made
+    if views is None:
+        from .interpretation import readers  # the one dispatch of read time (FINAL 8.2)
+
+        current = current_decisions(assessment) if current is None else current
+        _, stored, decided, kwargs = _overlay_inputs(assessment, current) if inputs is None else inputs
+        views = readers.for_assessment(assessment).views(assessment, stored, decided, kwargs,
+                                                         answers=[_answer_effect(answer) for answer in bound])
+    released = {answer_id for proposal, _, ids in frozen if reopened(proposal, views.get(proposal.key))
+                for answer_id in ids}
+    if not released:
+        return applied, bound, earlier
+    return ([answer for answer in applied if str(answer.pk) not in released], bound,
+            earlier + [(answer, questions.NO_LONGER_ASKED) for answer in applied if str(answer.pk) in released])
+
+
+def _answer_states(assessment: Any, current: Mapping[Any, Any] | None = None,
+                   inputs: tuple[list[Any], list[Any], dict[str, Any], dict[str, Any]] | None = None
+                   ) -> tuple[list[Any], list[Any], list[tuple[Any, str]]]:
+    """``_answer_reading``'s (applied, bound, earlier)."""
+    applied, bound, earlier, _ = _answer_reading(assessment, current, inputs)
+    return applied, bound, earlier
+
+
+def _answer_reading(assessment: Any, current: Mapping[Any, Any] | None = None,
+                    inputs: tuple[list[Any], list[Any], dict[str, Any], dict[str, Any]] | None = None
+                    ) -> tuple[list[Any], list[Any], list[tuple[Any, str]], dict[str, Any] | None]:
+    """(applied, bound, earlier, views) of the standing member answers of ``assessment``'s revision (completion repair
     2026-11-06, U11): ``applied``, those the assessment itself read - each closes a stored question of its
     (Clarification.answer: engine._MemberAnswers excluded the code it answers), or, on a design v2 assessment, a proposal
     records it in its support['answered'] (answered_items: engine/assess excluded that code by it; DECISIONS D270,
@@ -481,14 +548,26 @@ def answer_states(assessment: Any, current: Mapping[Any, Any] | None = None,
     question no longer asked, or asked differently). ([], [], []) for none. ``inputs``: _overlay_inputs(assessment,
     current), when the caller has them. On a design v2 assessment both readings bind a proposal's item by the
     fingerprint engine/assess stored for it, and a service question by the engine fingerprint its renderer recorded
-    (bound_fingerprints; DECISIONS D259, D270), so read time and the recompute apply a member's answer alike."""
+    (bound_fingerprints; DECISIONS D259, D270), so read time and the recompute apply a member's answer alike.
+
+    r2d (DECISIONS D301, RBWX-3): on an events-reader assessment an answer the binding reading leaves earlier (no
+    longer asked, or asked differently) is bound by the reading WITH THE STANDING ANSWERS - the views read with the
+    answers bound so far, as the review overlay's answer passes read them (D283: a "Cannot confirm" on a primary moves
+    its add-on's ADDON row, a question no reading without answers asks) - by the fingerprints of the questions those
+    views ask (bound_fingerprints with their forms and live questions: the fingerprint the details door records with an
+    answer to the question its row shows), again until nothing more binds (bounded by the answers): an answer is listed
+    no longer asked only when no reading with the standing answers asks its question. The overlay's passes then bind it
+    to the item its code presents (overlay._binds: an answer the engine reads only the item whose fingerprint it
+    carries), as engine/assess's passes do. (The legacy reader's answers move no other code's questions - its one
+    pass: review_view - so its binding reading is the only one.) ``views``: the views read with exactly ``bound``, when
+    this reading computed them (effective_view reads them), else None."""
     from .interpretation import readers  # the one dispatch of read time (FINAL 8.2)
 
     if assessment is None or not getattr(assessment, 'pk', None):
-        return [], [], []
+        return [], [], [], None
     standing = _standing(assessment)
     if not standing:
-        return [], [], []
+        return [], [], [], None
     current = current_decisions(assessment) if current is None else current
     read = {str(pk) for pk in assessment.clarifications.filter(state=Clarification.ANSWERED, answer__isnull=False)
             .values_list('answer_id', flat=True)}
@@ -497,12 +576,14 @@ def answer_states(assessment: Any, current: Mapping[Any, Any] | None = None,
     applied = [answer for answer in standing if str(answer.pk) in read]
     rest = [answer for answer in standing if str(answer.pk) not in read]
     if not rest:
-        return applied, [], []
+        return applied, [], [], None
     proposals, stored, decided, kwargs = _overlay_inputs(assessment, current) if inputs is None else inputs
-    views = readers.for_assessment(assessment).views(assessment, stored, decided, kwargs, answers=())
+    reader = readers.for_assessment(assessment)
+    views = reader.views(assessment, stored, decided, kwargs, answers=())
     bound, earlier = questions.bind(rest, bound_fingerprints(assessment, proposals,
                                                              question_pairs(assessment, proposals, views),
-                                                             question_forms(assessment, proposals, views)))
+                                                             question_forms(assessment, proposals, views),
+                                                             live_questions(proposals, views)))
     unasked = [answer for answer, why in earlier if why == questions.NO_LONGER_ASKED]
     if unasked:
         # refutation cycle 2 (answers W6; cycle 1's F5): an answer to a question the assessment closed with another
@@ -531,7 +612,28 @@ def answer_states(assessment: Any, current: Mapping[Any, Any] | None = None,
             bound = [answer for answer in bound if answer.pk not in ids]
             earlier = [(answer, why) for answer, why in earlier if answer.pk not in ids]
             earlier += [(answer, Unbound.NOT_APPLIED.value) for answer in competing]
-    return applied, bound, earlier
+    if reader.kind != readers.EVENTS:
+        return applied, bound, earlier, None
+    # r2d (DECISIONS D301, RBWX-3): the reading with the standing answers (the docstring)
+    with_answers: dict[str, Any] | None = None
+    pending = [answer for answer, why in earlier if why in (questions.NO_LONGER_ASKED, questions.ASKED_DIFFERENTLY)]
+    for _ in range(len(pending)):
+        with_answers = reader.views(assessment, stored, decided, kwargs,
+                                    answers=[_answer_effect(answer) for answer in bound])
+        more, _ = questions.bind(pending, bound_fingerprints(assessment, proposals,
+                                                             question_pairs(assessment, proposals, with_answers),
+                                                             question_forms(assessment, proposals, with_answers),
+                                                             live_questions(proposals, with_answers)))
+        if not more:
+            break
+        ids = {answer.pk for answer in more}
+        bound += more
+        earlier = [(answer, why) for answer, why in earlier if answer.pk not in ids]
+        pending = [answer for answer in pending if answer.pk not in ids]
+        with_answers = None
+        if not pending:
+            break
+    return applied, bound, earlier, with_answers
 
 
 def _closed_pairs(assessment: Any, proposals: Sequence[Any]) -> list[tuple[tuple[str, str, str], dict[str, Any]]]:
@@ -593,7 +695,9 @@ def asked_questions(assessment: Any, current: Mapping[Any, Any] | None = None
     proposals, stored, decided, kwargs = _overlay_inputs(assessment, current)
     views = readers.for_assessment(assessment).views(assessment, stored, decided, kwargs, answers=())
     forms = question_forms(assessment, proposals, views)
-    return bound_fingerprints(assessment, proposals, question_pairs(assessment, proposals, views), forms), forms
+    # r2d (DECISIONS D301, RBWX-3): a live question by its own engine fingerprint (live_questions)
+    return bound_fingerprints(assessment, proposals, question_pairs(assessment, proposals, views), forms,
+                              live_questions(proposals, views)), forms
 
 
 def _answer_effect(answer) -> dict:
@@ -604,7 +708,7 @@ def _answer_effect(answer) -> dict:
             'answer_id': str(answer.pk), 'question': str(getattr(answer, 'question', '') or '')}
 
 
-def _member_answers(assessment, current=None, inputs=None):
+def _member_answers(assessment, current=None, inputs=None, reading=None):
     """The member-answer effects the review overlay applies at read time (CORE-UX-DESIGN.md 6; P5's details flow):
     the standing answers of ``assessment``'s revision that answer a question it asks open, each bound to that question -
     its (code, family, fact) and fingerprint (answer_states' ``bound``; completion repair 2026-11-06), never to a
@@ -613,8 +717,15 @@ def _member_answers(assessment, current=None, inputs=None):
     already (engine._MemberAnswers), and one answered to another question is never applied. The overlay (review_view:
     a code's answered question makes it detail_unavailable - excluded, never approvable, nothing to decide - until the
     answer is withdrawn; a service's closes that question only) is read by every reader - the actions, readiness,
-    coding completeness, the encounter state, both APIs and the reports - so they all read the same answers."""
-    return [_answer_effect(answer) for answer in answer_states(assessment, current, inputs)[1]]
+    coding completeness, the encounter state, both APIs and the reports - so they all read the same answers.
+    r2d (DECISIONS D301, RBWX-3): ``reading``, a dict the caller gives (effective_view), receives under 'views' the
+    views the answers' reading with the standing answers read with exactly these answers (None when it read none), so
+    the effective view is not read twice."""
+    # the answers the overlay applies (``bound``) - which r2b's listing (answer_states) never moves - read without it
+    _, bound, _, views = _answer_reading(assessment, current, inputs)
+    if reading is not None:
+        reading['views'] = views
+    return [_answer_effect(answer) for answer in bound]
 
 
 def effective_view(assessment, current=None):
@@ -631,8 +742,13 @@ def effective_view(assessment, current=None):
     current = current_decisions(assessment) if current is None else current
     inputs = _overlay_inputs(assessment, current)
     _, stored, decided, kwargs = inputs
-    return readers.for_assessment(assessment).views(assessment, stored, decided, kwargs,
-                                                    answers=_member_answers(assessment, current, inputs))
+    # r2d (DECISIONS D301, RBWX-3): the views the answers' reading with the standing answers read, when it read them
+    # with exactly the answers bound (the same answers, decisions and inputs: one reading, not two)
+    reading: dict[str, Any] = {}
+    answers = _member_answers(assessment, current, inputs, reading)
+    if reading.get('views') is not None:
+        return reading['views']
+    return readers.for_assessment(assessment).views(assessment, stored, decided, kwargs, answers=answers)
 
 
 def open_questions_of(assessment, views=None):
@@ -767,7 +883,7 @@ def approved_items(assessment):
             'decided_at': root.created_at.isoformat() if root.created_at else None, 'note': decision.note,
             'evidence': evidence_spans(proposal, revision.text, revision.pages, acts),
             'summary': view.summary if view is not None else '',
-            'reinstated': proposal.bucket == EXCLUDED})
+            'reinstated': reinstated(proposal, decision, view)})  # r2d (D301, RBWX-4): the one reading
     return items
 
 
@@ -787,10 +903,11 @@ def _actions(proposal, current, text, same_day_held=False, view=None, named_riva
         return [REVOKE] if current else ([REJECT] if named_rival else [])
     status = proposal.status if view is None else view.status
     exact = bool(exact_evidence(proposal.evidence, text))
-    if proposal.bucket == SELECTED and status in BUCKET_STATUSES[SELECTED]:
+    bucket = bucket_of(proposal, view)  # r2b (D297, W2R-1): a reopened code is decided as the selected code it was
+    if bucket == SELECTED and status in BUCKET_STATUSES[SELECTED]:
         actions = [APPROVE] if status == Proposal.READY and exact and not same_day_held else []
         return actions + [REJECT] + ([REVOKE] if current else [])
-    if proposal.bucket == EXCLUDED and proposal.status == Proposal.STATUS_EXCLUDED:
+    if bucket == EXCLUDED and proposal.status == Proposal.STATUS_EXCLUDED:
         if current is None:
             # A documentation check's exclusion (reinstatable) is a recommendation: the reviewer confirms it or
             # reinstates the code, and the reviewed report waits for one of the two (round 4).
@@ -843,11 +960,12 @@ def _has_check(proposal, check_id):
     return any(c.get('id') == check_id for c in proposal.checks or [])
 
 
-def _reinstated_procedures(assessment, current):
-    """The marked same-day procedures with a current reinstate or approve decision: brought back by a reviewer."""
+def _reinstated_procedures(assessment, current, views=None):
+    """The marked same-day procedures with a current reinstate or approve decision: brought back by a reviewer
+    (``reinstated``, r2d D301 RBWX-4: read through bucket_of over the effective ``views`` when the caller has them)."""
     return [p for p in assessment.proposals.all()
-            if p.bucket == EXCLUDED and _has_check(p, SAME_DAY_PROCEDURE)
-            and p.pk in current and current[p.pk].action in (REINSTATE, APPROVE)]
+            if _has_check(p, SAME_DAY_PROCEDURE)
+            and reinstated(p, current.get(p.pk), (views or {}).get(p.key))]
 
 
 def _same_day_held(proposal, assessment):
@@ -1813,6 +1931,33 @@ def _unreconciled_unknown(encounter):
             or _orphaned_sending(encounter))
 
 
+def reopened(proposal, view) -> bool:
+    """r2b (DECISIONS D297, W2R-1): whether ``proposal`` - a code engine/assess excluded by a member's answer
+    (questions.answered_away) - is read as the selected code it was: its effective view (``view``) says read time's
+    recount releases the hold that answer's item rests on (View.released_answer), so the answer excludes nothing. Every
+    reader of the stored bucket reads the code through ``bucket_of``, so none disagrees with the view (the cycle-2
+    lesson, answers W1/W5/W6: one row read two ways)."""
+    return view is not None and bool(getattr(view, 'released_answer', '')) and questions.answered_away(proposal)
+
+
+def bucket_of(proposal, view) -> str:
+    """The bucket of ``proposal`` as the review reads it: SELECTED for a code read as the selected code it was
+    (``reopened``), else its stored bucket."""
+    return SELECTED if reopened(proposal, view) else proposal.bucket
+
+
+def reinstated(proposal: Any, decision: Any, view: Any = None) -> bool:
+    """r2d (DECISIONS D301, RBWX-4): whether ``proposal`` is a code a reviewer reinstated, as every reader that decides
+    it reads it (reinstated_codes: the reviewed coverage counts it as selected; approved_items; the same-day gate):
+    read through ``bucket_of`` over its effective view (``view``), an excluded code whose exclusion a reviewer can
+    reinstate - never a code read as the selected code it was (``reopened``), and never one engine/assess excluded by
+    a member's answer (questions.answered_away) once its answer excludes it again: an answer's exclusion is no
+    reinstatement, whatever the decision a reviewer took while it read as selected - with a current reinstatement, or
+    the approval that rests on one (``decision``: its current decision)."""
+    return (bucket_of(proposal, view) == EXCLUDED and not questions.answered_away(proposal)
+            and decision is not None and decision.action in (REINSTATE, APPROVE))
+
+
 def decidable(proposal) -> bool:
     """Whether a reviewer can decide ``proposal``, an engine ProposalAssessment or a stored Proposal (both carry its
     bucket and reinstatable): selected, or excluded and reinstatable - _reviewable's rule before any decision. Never an
@@ -1834,12 +1979,13 @@ def _reviewable(proposal, decision):
                                            and (decision is not None or proposal.reinstatable))
 
 
-def _could_bill(proposal, decision):
+def _could_bill(proposal, decision, view=None):
     """Whether a gated E/M is still on its way to a reviewed approval: selected and undecided, reinstated, or
     approved. A rejection, a confirmed exclusion and an exclusion nobody has decided yet bill nothing, so the same-day
-    rule has nothing to hold (round 5, bypass:0); the exclusion's own blocker covers the undecided one."""
+    rule has nothing to hold (round 5, bypass:0); the exclusion's own blocker covers the undecided one. ``view``: its
+    effective view (r2b, D297 W2R-1: a reopened code is the selected code it was, ``bucket_of``)."""
     if decision is None:
-        return proposal.bucket == SELECTED
+        return bucket_of(proposal, view) == SELECTED
     return decision.action in (APPROVE, REINSTATE)
 
 
@@ -1908,8 +2054,8 @@ def _assessment_blockers(encounter, assessment):
     # member answers leave them, and the blocker of a decision the view no longer supports (D14: an approval of a base
     # code a reinstatement holds again waits until it is revoked).
     views = effective_view(assessment, current)
-    reinstated = [p for p in _reinstated_procedures(assessment, current)
-                  if views.get(p.key) is None or views[p.key].active]
+    reinstated_now = [p for p in _reinstated_procedures(assessment, current, views)
+                      if views.get(p.key) is None or views[p.key].active]
     reviewable = 0
     for proposal in assessment.proposals.all():
         decision = current.get(proposal.pk)
@@ -1917,12 +2063,12 @@ def _assessment_blockers(encounter, assessment):
             continue
         reviewable += 1
         view = views.get(proposal.key)
-        if (reinstated and _has_check(proposal, SAME_DAY_EM_GATE) and _could_bill(proposal, decision)
+        if (reinstated_now and _has_check(proposal, SAME_DAY_EM_GATE) and _could_bill(proposal, decision, view)
                 and not (view is not None and view.reason == DETAIL_UNAVAILABLE)):
             # Also when this E/M was approved before the procedure was brought back. A visit a member's answer
             # excluded (its separate_em row answered 'Not documented' or 'Cannot confirm', refutation round 3 B-05) is
             # resolved (decision (f)): it names no same-day blocker, and its approval stays blocked by the view's own.
-            blockers.append(_same_day_blocker(proposal, reinstated))
+            blockers.append(_same_day_blocker(proposal, reinstated_now))
         if view is not None and view.blocker:
             blockers.append(view.blocker)
         if decision is not None and decision.action in (APPROVE, REJECT, CONFIRM):
@@ -1931,7 +2077,7 @@ def _assessment_blockers(encounter, assessment):
             continue  # a needed detail answered as unavailable: excluded, nothing to decide (P5's answers)
         if decision is not None:
             blockers.append(f'{proposal.code} was reinstated and has no decision')
-        elif proposal.bucket == EXCLUDED:
+        elif bucket_of(proposal, view) == EXCLUDED:  # r2b (D297, W2R-1): a reopened code is the selected code it was
             blockers.append(f'{proposal.code} was excluded by a documentation check: confirm the exclusion '
                             'or reinstate it')
         elif (bool(view.questions) if view is not None else proposal.pk in asked):
@@ -2041,13 +2187,16 @@ def _sentence(text):
     return plain if not plain or plain.endswith(('.', '!', '?')) else f'{plain}.'
 
 
-def reinstated_codes(assessment, current=None):
+def reinstated_codes(assessment, current=None, views=None):
     """(code, family) of the excluded proposals a reviewer reinstated and has not rejected (their current decision is
     the reinstatement, or an approval that rests on it): decided like selected codes, so counted as selected ones
-    wherever a documented service's code is stated (reviewed_completeness)."""
+    wherever a documented service's code is stated (reviewed_completeness). r2d (DECISIONS D301, RBWX-4): each read
+    through ``reinstated`` - bucket_of over its effective view (``views``, when the caller has them) - so a code read as
+    the selected code it was is never a reinstatement, and a code its answer excludes again is never counted as a
+    reinstated, selected one (an answer's exclusion is none)."""
     current = current_decisions(assessment) if current is None else current
     return [(proposal.code, proposal.family) for proposal in assessment.proposals.filter(bucket=EXCLUDED)
-            if current.get(proposal.pk) is not None and current[proposal.pk].action in (REINSTATE, APPROVE)]
+            if reinstated(proposal, current.get(proposal.pk), (views or {}).get(proposal.key))]
 
 
 def reviewed_completeness(assessment, current=None):

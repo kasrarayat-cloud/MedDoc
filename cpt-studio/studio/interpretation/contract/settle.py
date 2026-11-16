@@ -1129,7 +1129,12 @@ class _Settler:
         ``unresolved`` with the table's reasons. No other verdict pattern establishes it, so it is never a release: a
         claim rejected, an incoherent pair (both supported), an uninformative one (both rejected), a missing or unclear
         verdict all leave the two lesions not established apart. Health and the coherence counts read the fact pairs
-        only, as before."""
+        only, as before. Whatever the form (claims.LESION_PAIR_FORMS: D300 RF-L3's membership forms included), the table
+        reads the claim and its control alike; the engine reads each form against the multiplicity it presumes.
+
+        DECISIONS D300 RF-L5: each pair the claim set dropped to stay within its bound (ClaimSet.dropped_lesion_pairs)
+        is recorded too - no claim, no control, ``unresolved`` with the reason ``unappraised`` (3.3 row 6: nothing was
+        asked) - so the drop is in the stored row and a dropped pair releases nothing."""
         out: list[dict[str, object]] = []
         for pair in self.claim_set.lesion_pairs:
             read = self.verdicts.get(pair.claim)
@@ -1139,6 +1144,9 @@ class _Settler:
             result = Result.SUPPORTED if outcome is PairOutcome.ESTABLISHED else Result.UNRESOLVED
             out.append({'lesion': pair.lesion, 'other': pair.other, 'claim': pair.claim, 'control': pair.control,
                         'result': result.value, 'reasons': [reason.value for reason in reasons]})
+        for lesion, other in self.claim_set.dropped_lesion_pairs:
+            out.append({'lesion': lesion, 'other': other, 'claim': None, 'control': None,
+                        'result': Result.UNRESOLVED.value, 'reasons': [Reason.UNAPPRAISED.value]})
         return out
 
     def doubts(self) -> list[Doubt]:

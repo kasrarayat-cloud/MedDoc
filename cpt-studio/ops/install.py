@@ -132,12 +132,15 @@ PARTICIPANT_FILE_LIMIT = 32_000  # the size the application's loaders accept (HA
 # interpreter whatever its provider) and has no access check of its own. The web is given the mode and the path and no
 # file, as for Corti and the participants (a web that builds what the worker would send needs the worker's
 # configuration, and only the worker sends; service_problems refuses any bind in a web). A missing source leaves the
-# interpreter installable only disabled or replayed. Replay reads the recordings the image ships
-# (tests/fixtures/interpretation/: anthropic/ holds Fable's, gemini/ Gemini's; kept in the image by
-# deploy/.dockerignore) and sends nothing. The model and the endpoint are the adapter's constants
-# (studio/interpretation/fable_adapter.py), never the installer's. The installer no longer copies or mounts the earlier
-# interpreter's key copy, LEGACY_INTERPRETER_COPY: one left on a host stays untouched and is reported (preflight,
-# secrets), because deleting a key copy is the owner's decision (class d).
+# interpreter installable only disabled or replayed. Replay sends nothing and answers a reading only from a recording
+# in the replay directory the image ships (tests/fixtures/interpretation/, kept in the image by deploy/.dockerignore),
+# and the image ships no Fable recording: the Fable replay folder (anthropic/, its .sse streams) is not in the tree
+# (AMENDMENT-2 8.3: the connector's replay fixtures were to be made from D2/D3's frozen streams, which D277 does not
+# run), and the directory's gemini/ holds the v1 FRESH recordings (D274), which the Fable interpreter never reads - so
+# an interpreter installed replayed fails every reading unsent ("The replay directory is not available."). The model
+# and the endpoint are the adapter's constants (studio/interpretation/fable_adapter.py), never the installer's. The
+# installer no longer copies or mounts the earlier interpreter's key copy, LEGACY_INTERPRETER_COPY: one left on a host
+# stays untouched and is reported (preflight, secrets), because deleting a key copy is the owner's decision (class d).
 INTERPRETER = {'name': 'anthropic', 'source': f'{PROVIDER_SOURCES}/anthropic.env',
                'target': f'{ETC_DIR}/anthropic-credentials.env', 'mounted': '/run/cpt-studio/anthropic-credentials.env',
                'file_env': 'CPT_STUDIO_ANTHROPIC_CREDENTIALS_FILE', 'mode_env': 'CPT_STUDIO_GEMINI_MODE',
@@ -413,7 +416,8 @@ def parse_args(argv=None):
                         help='the interpreter (Claude Fable 5.2, AMENDMENT-2: the Fable participant\'s Anthropic key; '
                              'design/FINAL.md 13): disabled when not given, which pauses '
                              "every upload's reading (verify reports an app phase that did not give it); live sends "
-                             'under --authorization-ref; replay reads the recordings the image ships and sends nothing')
+                             'under --authorization-ref; replay sends nothing and answers only from a recording in '
+                             'the image, which ships no Fable recording, so every reading fails unsent')
     parser.add_argument('--access-check', action='store_true', default=None,
                         help='after the app phase, check each live participant with real requests: one coding '
                              'request for Corti, and for Astra and for Fable one run of the tool loop, one request '
@@ -1994,7 +1998,8 @@ def runtime_env(provider_mode, authorization_ref, *, credentials=False, particip
     """-e flags. Each harness participant is named with its mode - ``participants`` maps them; one not given is
     disabled, as in every one-shot - and a live one (or one in ``files``) with its credentials path. The interpreter is
     named with its mode (``interpreter``; disabled when not given, as in every one-shot), its credentials path when it
-    is live (or ``interpreter_file``), and the recordings the image ships when it replays."""
+    is live (or ``interpreter_file``), and the replay directory when it replays (tests/fixtures/interpretation/; the
+    image ships no Fable recording, so a replayed interpreter fails every reading unsent)."""
     values = {'CPT_STUDIO_DB_HOST': DB_CONTAINER, 'CPT_STUDIO_DB_PORT': '5432', 'CPT_STUDIO_DB_NAME': DB_NAME,
               'CPT_STUDIO_DB_USER': DB_USER, 'CPT_STUDIO_HTTPS': '1', 'CPT_STUDIO_TRUST_PROXY': '1',
               'CPT_STUDIO_PROVIDER_MODE': provider_mode, 'CPT_STUDIO_AUTHORIZATION_REF': authorization_ref}

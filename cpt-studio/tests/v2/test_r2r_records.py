@@ -166,13 +166,14 @@ class R2RInventoryGateTests(TC.Case):
         value = r2r_answer(kind=TC.contradicted(('snare', 'S4'), ('sphincterotomy', 'S4')))
         self.assertEqual(self.on(value, None), {'session_inconsistent'})
 
-    def test_the_gate_moves_the_date_arm_alone(self):
-        """K2's kind arm reads every offered kind under both labels: the gate names session_conflict's reading only
-        (D294 F2)."""
+    def test_the_gate_moves_the_kind_arm_too(self):
+        """AMENDED by repair round r2b (DECISIONS D297 R2RX-1, which widens D294 F2's gate from K2's date arm to every K
+        rule AMENDMENT-2 widened): K2's kind arm reads a contradicted kind as gemini-inventory@2 was recorded - no kind
+        stated, nothing found - and every offered kind under gemini-inventory@3 (tests/v2/test_r2br_records2.py pins
+        every widened rule)."""
         value = r2r_answer(kind=TC.contradicted(('snare', 'S4'), ('sphincterotomy', 'S4')))
-        for inventory in (INV2, INV3):
-            with self.subTest(inventory=inventory):
-                self.assertEqual(self.on(value, inventory), {'session_inconsistent'})
+        self.assertEqual(self.on(value, INV2), set())
+        self.assertEqual(self.on(value, INV3), {'session_inconsistent'})
 
     def test_the_orchestration_carries_the_label_and_defaults_to_the_current_one(self):
         """contract/checks.check, which builds the claim set and settle's input, makes its findings for the label it is
